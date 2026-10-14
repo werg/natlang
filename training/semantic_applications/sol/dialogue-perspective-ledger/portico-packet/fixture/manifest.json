@@ -1,0 +1,51 @@
+{
+  "caseId": "sol-dialogue-portico-v1",
+  "documents": [
+    {
+      "sourceId": "RULES",
+      "path": "controls/speech-model.md"
+    },
+    {
+      "sourceId": "FORMAT",
+      "path": "controls/propositions-and-format.md"
+    },
+    {
+      "sourceId": "PEOPLE",
+      "path": "participants/channels.md"
+    },
+    {
+      "sourceId": "D09",
+      "path": "conversation/original/day09.md"
+    },
+    {
+      "sourceId": "D10",
+      "path": "conversation/original/day10.md"
+    },
+    {
+      "sourceId": "D11",
+      "path": "conversation/original/day11.md"
+    },
+    {
+      "sourceId": "EVENTS",
+      "path": "events/verified.md"
+    },
+    {
+      "sourceId": "MPRIVATE",
+      "path": "conversation/private/mira.md"
+    },
+    {
+      "sourceId": "CORRECTION",
+      "path": "conversation/reports/correction.md"
+    },
+    {
+      "sourceId": "FORWARD",
+      "path": "conversation/forwards/packet.md"
+    },
+    {
+      "sourceId": "REMARKS",
+      "path": "conversation/framing/remarks.md"
+    }
+  ],
+  "scope": "Owner-authored closed fictional speech model; all times and knowledge rules explicit.",
+  "license": "Owner-authored synthetic source, repository license."
+}

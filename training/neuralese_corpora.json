@@ -66169,6 +66169,368 @@
       "review_status": "source/held-group, native oracle, action ledger, parent and decision materialization reviewed; see admission-review.json",
       "required_conversion": "render approved-turns.jsonl as model-template text with low recovery mixture weight; include in next broad target union",
       "notes": "Narrow service recovery family (dispatch, catalog, permits); retain alongside broad application-scale semantic programs rather than expanding its relative share."
+    },
+    {
+      "id": "harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1",
+      "include": [
+        "surface.json",
+        "prepared/*.summary.json",
+        "shards/*/records.jsonl",
+        "shards/*/pieces.jsonl",
+        "shards/*/summary.json",
+        "shards/*/prepared.jsonl",
+        "shards/*/replayed.jsonl",
+        "shards/*/replay.log"
+      ],
+      "split": "by repository, as harness-bench-swe-rebench-openhands-pi-records-20261010-v4: a repository S1 places keeps S1's split (cross-corpus-index-s1-full-final-20261003-v1), others split_of(repo, 5); source groups repository and instance; shards are disjoint sets of whole repositories, so per-shard placement equals whole-corpus placement, and repositories shared with v4 get v4's split",
+      "source_class": "teacher-agent-trajectories-normalized-to-pi-and-replayed-in-pi-tools",
+      "admission": "admitted (maximize-data rule); records are read directly only by the recurrence stage, which stays held as for v4; the text twins are the training input",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "review_status": "replay: 18168 fully verified, 9641 diverged (records up to the divergence), 140 failed (no records)",
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "nebius-swe-rebench-openhands-trajectories-20261009-v1"
+      ],
+      "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+      "build": {
+        "script": "training/neuralese/scripts/harness_bench_bulk.sh OUT 24 6 1000",
+        "code_commit": "f69f65b86b5931f0144d7a730e14b3c8c4f7c67e",
+        "builder": "natlang.harness_bench.records/1",
+        "dialect": "openhands-v0.54",
+        "mapping": "pi",
+        "surface_file_sha256": "bf007f819f00fb9107b687c38dcd82be391ab2a6261b4e0a06814ff2d22fa050 (identical to v4)",
+        "prepare": {
+          "seen": 66074,
+          "written": 31669,
+          "no_task": 0,
+          "unresolved_skipped": 34405
+        },
+        "replay": {
+          "fullyVerified": 18168,
+          "diverged": 9641,
+          "failed": 140,
+          "trajectories": 31669
+        },
+        "shards": 24,
+        "offset": 1000
+      },
+      "counts": {
+        "trajectories": 31529,
+        "records": 249094,
+        "by_split": {
+          "train": 192568,
+          "validation": 0,
+          "test": 56526
+        },
+        "view_parts": 1519630,
+        "repositories": 1437,
+        "repositories_by_split": {
+          "train": 1354,
+          "validation": 0,
+          "test": 83
+        },
+        "unplaceable_trajectories": 0
+      },
+      "notes": "D13 (plans/neuralese/DATA_INVENTORY_20261011.md): every resolved SWE-rebench OpenHands trajectory after parquet row 1000 (v4 is rows 0-999), normalized to pi transcripts, replayed in pi's tools and turned into native records (8 sampled targets per trajectory, the v4 default). Additive to v4: no trajectory in common. Built and stored on NVMe."
+    },
+    {
+      "id": "harness-bench-swe-rebench-openhands-pi-wholetraj-lfm25-350m-bulk-20261011-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-wholetraj-lfm25-350m-bulk-20261011-v1",
+      "include": [
+        "text.jsonl.zst",
+        "receipt.json",
+        "shards/*/receipt.json",
+        "shards/*/omissions.jsonl",
+        "shards/*/render-omissions.jsonl"
+      ],
+      "split": "inherited from the source records (by repository; source groups repository and instance)",
+      "source_class": "rendered-whole-trajectory-text-of-harness-bench-records",
+      "admission": "admitted-harness_bench-cohort-text-stages (LFM line); whole-trajectory documents, tool output at the shared feedback weight; test documents are a reported stratum, never qualification evidence",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1"
+      ],
+      "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+      "build": {
+        "script": "scripts/neuralese_data/swe_bulk_twins.py (render_native_turn_corpus.py --renderings program-header whole-trajectory --program-header-as-full per shard, concatenated)",
+        "code_commit": "f69f65b86b5931f0144d7a730e14b3c8c4f7c67e",
+        "renderer": "scripts/neuralese_data/render_native_turn_corpus.py whole-trajectory",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "7dc949b327fe11ff8660482e4dc580857aac68b925330477e1e5d65a3ddf3324",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "1f46d0c2d6e876ed7d2a5c00e384283bb805b8e283da617907cab45999bcd59d",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "tokenizer": {
+          "files": {
+            "chat_template.jinja": "ba551d58630afa3190b1be3602e28301f3d2e9bbac978dfc49d6d825171648b6",
+            "tokenizer.json": "df1d8d5ec5d091b460562ffd545e4a5e91d17d4a0db7ebe733be34ed374377bd",
+            "tokenizer_config.json": "3701f370c70034d06e28947ff51c1063983393319f429e3ce58f06a45fae67cc"
+          },
+          "history_reasoning": {
+            "backbone": "lfm2",
+            "policy": "last_turn_only",
+            "probe": "drops-history",
+            "template_kwargs": {
+              "preserve_thinking": false
+            }
+          },
+          "path": "/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f"
+        },
+        "rendering": "whole-trajectory",
+        "history_reasoning_policy": "last_turn_only",
+        "text_file": "text.jsonl.zst",
+        "text_jsonl_sha256": "d78059921ce30ef3cec27682bea255ea172e2c9cc2224db1d2500b3a9b952fb5",
+        "text_zst_sha256": "383d1918e0d6b956c058abd62b637e362ae581c9f0b7a388ba6498f6ed17d5db"
+      },
+      "tokens": {
+        "max_document_tokens": 149574,
+        "test": {
+          "assistant_tokens": 74415968,
+          "documents": 7120,
+          "opening_tokens": 0,
+          "supervised_tokens": 74415968,
+          "tokens": 276086118,
+          "tool_tokens": 186912751
+        },
+        "train": {
+          "assistant_tokens": 230587088,
+          "documents": 24386,
+          "opening_tokens": 0,
+          "supervised_tokens": 230587088,
+          "tokens": 904232159,
+          "tool_tokens": 625783766
+        }
+      },
+      "notes": "whole-trajectory text of harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1 (the system prompt is the pi harness's own, kept whole with its tool schemas). Chosen over v4's one document per decision, which repeats each trajectory's context per target: on 120 v4 trajectories (940 decisions) all 940 decisions are covered, and Mellum train text is 4.06M tokens with 817k supervised assistant tokens against 17.1M / 145k per decision. Per-shard receipts under shards/."
+    },
+    {
+      "id": "harness-bench-swe-rebench-openhands-pi-wholetraj-mellum21-12b-bulk-20261011-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-wholetraj-mellum21-12b-bulk-20261011-v1",
+      "include": [
+        "text.jsonl.zst",
+        "receipt.json",
+        "shards/*/receipt.json",
+        "shards/*/omissions.jsonl",
+        "shards/*/render-omissions.jsonl"
+      ],
+      "split": "inherited from the source records (by repository; source groups repository and instance)",
+      "source_class": "rendered-whole-trajectory-text-of-harness-bench-records",
+      "admission": "admitted-harness_bench-cohort-text-stages (Mellum line); whole-trajectory documents, tool output at the shared feedback weight; test documents are a reported stratum, never qualification evidence",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1"
+      ],
+      "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+      "build": {
+        "script": "scripts/neuralese_data/swe_bulk_twins.py (render_native_turn_corpus.py --renderings program-header whole-trajectory --program-header-as-full per shard, concatenated)",
+        "code_commit": "f69f65b86b5931f0144d7a730e14b3c8c4f7c67e",
+        "renderer": "scripts/neuralese_data/render_native_turn_corpus.py whole-trajectory",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "7dc949b327fe11ff8660482e4dc580857aac68b925330477e1e5d65a3ddf3324",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "1f46d0c2d6e876ed7d2a5c00e384283bb805b8e283da617907cab45999bcd59d",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "tokenizer": {
+          "files": {
+            "chat_template.jinja": "4593a34d52f3364ac13ce57f4bea5688924e8942da6df8201e411db17e729f48",
+            "tokenizer.json": "58548a346eb073e5132bf7d8ad17dc6971bca36ade378ca4d2bfbc49bf60da2a",
+            "tokenizer_config.json": "e2950960d2a3040a1938e6357c8c3628d531133c464286a7869b2e0504fcc59e"
+          },
+          "history_reasoning": {
+            "backbone": "mellum",
+            "policy": "keep",
+            "probe": "keep",
+            "template_kwargs": {}
+          },
+          "path": "/home/werg/data/models/mellum21-12b-a2.5b-thinking"
+        },
+        "rendering": "whole-trajectory",
+        "history_reasoning_policy": "keep",
+        "text_file": "text.jsonl.zst",
+        "text_jsonl_sha256": "e5fa3425958a22e9e2a1905a01c12ec82f4942a33e45098aa1195c6999bd872d",
+        "text_zst_sha256": "fdeb7ca448a2f7f449b32984d8150c1f648d2a1e9f7237c219fa6b4762273684"
+      },
+      "tokens": {
+        "max_document_tokens": 175489,
+        "test": {
+          "assistant_tokens": 84298075,
+          "documents": 7120,
+          "opening_tokens": 0,
+          "supervised_tokens": 84298075,
+          "tokens": 349250990,
+          "tool_tokens": 249614637
+        },
+        "train": {
+          "assistant_tokens": 262030232,
+          "documents": 24400,
+          "opening_tokens": 0,
+          "supervised_tokens": 262030232,
+          "tokens": 1199375013,
+          "tool_tokens": 887624492
+        }
+      },
+      "notes": "whole-trajectory text of harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1 (the system prompt is the pi harness's own, kept whole with its tool schemas). Chosen over v4's one document per decision, which repeats each trajectory's context per target: on 120 v4 trajectories (940 decisions) all 940 decisions are covered, and Mellum train text is 4.06M tokens with 817k supervised assistant tokens against 17.1M / 145k per decision. Per-shard receipts under shards/."
+    },
+    {
+      "id": "harness-bench-swe-rebench-openhands-pi-program-header-lfm25-350m-bulk-20261012-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-program-header-lfm25-350m-bulk-20261012-v1",
+      "include": [
+        "text.jsonl.zst",
+        "receipt.json",
+        "shards/*/receipt.json",
+        "shards/*/omissions.jsonl",
+        "shards/*/render-omissions.jsonl"
+      ],
+      "split": "inherited from the source records (by repository; source groups repository and instance)",
+      "source_class": "rendered-program-header-text-of-harness-bench-records",
+      "admission": "admitted-harness_bench-cohort-text-stages (LFM line); program-header documents, tool output at the shared feedback weight; test documents are a reported stratum, never qualification evidence",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1"
+      ],
+      "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+      "build": {
+        "script": "scripts/neuralese_data/swe_bulk_twins.py (render_native_turn_corpus.py --renderings program-header whole-trajectory --program-header-as-full per shard, concatenated)",
+        "code_commit": "f69f65b86b5931f0144d7a730e14b3c8c4f7c67e",
+        "renderer": "scripts/neuralese_data/render_native_turn_corpus.py program-header",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "7dc949b327fe11ff8660482e4dc580857aac68b925330477e1e5d65a3ddf3324",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "1f46d0c2d6e876ed7d2a5c00e384283bb805b8e283da617907cab45999bcd59d",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "tokenizer": {
+          "files": {
+            "chat_template.jinja": "ba551d58630afa3190b1be3602e28301f3d2e9bbac978dfc49d6d825171648b6",
+            "tokenizer.json": "df1d8d5ec5d091b460562ffd545e4a5e91d17d4a0db7ebe733be34ed374377bd",
+            "tokenizer_config.json": "3701f370c70034d06e28947ff51c1063983393319f429e3ce58f06a45fae67cc"
+          },
+          "history_reasoning": {
+            "backbone": "lfm2",
+            "policy": "last_turn_only",
+            "probe": "drops-history",
+            "template_kwargs": {
+              "preserve_thinking": false
+            }
+          },
+          "path": "/home/werg/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f"
+        },
+        "rendering": "program-header",
+        "history_reasoning_policy": "last_turn_only",
+        "text_file": "text.jsonl.zst",
+        "text_jsonl_sha256": "f0a0dc392d542c71c793339fc17a7e77e2125dfdeab3dd5ef030e4d415474418",
+        "text_zst_sha256": "4f7c4e382c6c5c693dcdbe50bcf29610a06ebc9bddbdd1355c1ab9d59051a484"
+      },
+      "tokens": {
+        "max_document_tokens": 149572,
+        "test": {
+          "assistant_tokens": 0,
+          "documents": 56514,
+          "supervised_tokens": 13287633,
+          "tokens": 1282143415,
+          "tool_tokens": 0
+        },
+        "train": {
+          "assistant_tokens": 0,
+          "documents": 192409,
+          "supervised_tokens": 45388989,
+          "tokens": 4206160053,
+          "tool_tokens": 0
+        }
+      },
+      "notes": "Program-header decisions of harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1, using the source pi harness's own system prompt and tool schemas. Suffix targets and balanced context supervision use the shared renderer; whole-trajectory twins separately cover complete clean assistant chains. Repository/source splits are inherited, not resampled."
+    },
+    {
+      "id": "harness-bench-swe-rebench-openhands-pi-program-header-mellum21-12b-bulk-20261012-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-program-header-mellum21-12b-bulk-20261012-v1",
+      "include": [
+        "text.jsonl.zst",
+        "receipt.json",
+        "shards/*/receipt.json",
+        "shards/*/omissions.jsonl",
+        "shards/*/render-omissions.jsonl"
+      ],
+      "split": "inherited from the source records (by repository; source groups repository and instance)",
+      "source_class": "rendered-program-header-text-of-harness-bench-records",
+      "admission": "admitted-harness_bench-cohort-text-stages (Mellum line); program-header documents, tool output at the shared feedback weight; test documents are a reported stratum, never qualification evidence",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "corpus_publication_for_training": false,
+      "derived_from": [
+        "harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1"
+      ],
+      "license": "CC-BY-4.0 (source dataset cards); repositories' own licences per instance",
+      "build": {
+        "script": "scripts/neuralese_data/swe_bulk_twins.py (render_native_turn_corpus.py --renderings program-header whole-trajectory --program-header-as-full per shard, concatenated)",
+        "code_commit": "f69f65b86b5931f0144d7a730e14b3c8c4f7c67e",
+        "renderer": "scripts/neuralese_data/render_native_turn_corpus.py program-header",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "7dc949b327fe11ff8660482e4dc580857aac68b925330477e1e5d65a3ddf3324",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "1f46d0c2d6e876ed7d2a5c00e384283bb805b8e283da617907cab45999bcd59d",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "tokenizer": {
+          "files": {
+            "chat_template.jinja": "4593a34d52f3364ac13ce57f4bea5688924e8942da6df8201e411db17e729f48",
+            "tokenizer.json": "58548a346eb073e5132bf7d8ad17dc6971bca36ade378ca4d2bfbc49bf60da2a",
+            "tokenizer_config.json": "e2950960d2a3040a1938e6357c8c3628d531133c464286a7869b2e0504fcc59e"
+          },
+          "history_reasoning": {
+            "backbone": "mellum",
+            "policy": "keep",
+            "probe": "keep",
+            "template_kwargs": {}
+          },
+          "path": "/home/werg/data/models/mellum21-12b-a2.5b-thinking"
+        },
+        "rendering": "program-header",
+        "history_reasoning_policy": "keep",
+        "text_file": "text.jsonl.zst",
+        "text_jsonl_sha256": "ef4b7248e8f027183e2922b081c4fa02446567c4070fc0df649a9d23900738e0",
+        "text_zst_sha256": "d82a841a8a95899d80850094ce5cd38d1185ec5503aad84e90cbfd954dc14382"
+      },
+      "tokens": {
+        "max_document_tokens": 175483,
+        "test": {
+          "assistant_tokens": 0,
+          "documents": 56517,
+          "supervised_tokens": 13580219,
+          "tokens": 1580776102,
+          "tool_tokens": 0
+        },
+        "train": {
+          "assistant_tokens": 0,
+          "documents": 192475,
+          "supervised_tokens": 46487491,
+          "tokens": 5467401762,
+          "tool_tokens": 0
+        }
+      },
+      "notes": "Program-header decisions of harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1, using the source pi harness's own system prompt and tool schemas. Suffix targets and balanced context supervision use the shared renderer; whole-trajectory twins separately cover complete clean assistant chains. Repository/source splits are inherited, not resampled."
     }
   ],
   "coverage_backlog": [

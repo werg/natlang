@@ -388,4 +388,16 @@ V15b's direct ScopeDecision, one-action named forwarding and first-folder NL gra
 
 ### 2026-10-14 — Serving free-text close control row stops generation
 
-The shared serving engine `training/neuralese/natlang_neuralese/serve/engine.py` now interprets the free-text close control row as a stop. This repairs the owner-localized serving control-row boundary; it changes executing-model-visible termination behavior and is not qualified by source inspection or unit checks alone. **Measurement debt:** approximately48 live cases against the exact corrected engine revision, retaining control-row termination, output completeness, task success and before/after evidence. Until measured, report the correction as unqualified model-facing behavior; do not infer training or backend qualification from its publication. Root owns the engine change and exact diagnostic evidence.
+The shared serving engine `training/neuralese/natlang_neuralese/serve/engine.py` now interprets a free-text close control row as a stop. This is a structural termination guard and changes executing-model-visible behavior. The striking R3 control-row divergence occurred only after a forced greedy EOS, so it does not establish a reachable task failure or an improvement from this guard. **Measurement debt:** approximately48 actual temperature-0.6 live cases against the exact corrected engine revision, retaining any before-stop control-row termination, output completeness, task success and matched before/after evidence. Until measured, report the guard as unqualified model-facing behavior; do not infer training or backend qualification from its publication. Root owns the engine change and exact diagnostic evidence.
+
+### 2026-10-14 — Dialogue Perspective Ledger initial connected NL source
+
+New application source has29 connected NL functions,195 numbered policy steps and57 type aliases over
+11documents/43connected clauses/16perspective-time queries. Typed quote-span and original-episode
+frontiers drive actual child contributions; quotation attribution, reference meaning, illocution,
+endorsement, condition channels and proof challenges use scoped NL judgments. Visible TS is declarations
+only. The source explicitly preserves performed versus depicted force and private availability versus
+global truth. Native loader/type checks pass; the private oracle currently contains projection invariants,
+not a full typed canonical report. **Measurement debt:**0/48 live samples, independent source review,
+full typed canonical/checker qualification and actual contribution-consumption trace review pending.
+Source size and projected expected answers grant no application execution or training admission.

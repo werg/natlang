@@ -119,3 +119,14 @@ Audit exact graders for hidden field-role conventions: focal subject, mother/fat
 Review posterior updates against complete joint state, not only the named target trait. A different measured quantity is not automatically uninformative. Verify that the actual compartment-specific prediction reaches the likelihood updater; neutral and unknown likelihoods have distinct source conditions and downstream readiness.
 
 Check collection iteration separately from semantic stage correctness. Bind fixed folder/source inventories outside a one-state step, carry its index and processed original IDs, and validate one visit per source record before merging returned contributions. Exact append/index/coverage mechanics may be crisp; interpretation remains in the called NL stages. A successful first folder is not evidence that later folders received distinct inputs or the actual accumulated state. Trace the cursor, original IDs and final completed-state return in the next pinned diagnostic.
+
+### Dialogue perspective application integration
+
+Preserve the original document IDs/paths/text and full actor/time view handoff for dialogue reducers.
+Keep performed and depicted speech distinct, and retain each scoped quotation/reference/endorsement/
+condition result in its actual parent-owned typed contribution. A proof challenge must reach the final
+answer; no wrapper may erase it or silently rebuild a preferred proof. Exact checks validate source
+span containment, original quotation bytes, clock arithmetic and actor-owned delta application; speech
+meaning, availability/adoption and commitment scope remain NL. Invalid source spans identify their
+original turn/range for repair; recover from that exact input. Inspect live nested literals and before/after
+view deltas before qualification. A projected query oracle is not a full typed report or executor replay.

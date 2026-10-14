@@ -1,0 +1,3 @@
+[N13] Authenticated turn N13: Neri, day13 hour11, to Mira: "Great, another flawless handover." Signed tone note: this is ironic complaint about the failed handover, not literal praise and not endorsement that the handover was flawless.
+[AMB13] Authenticated turn AMB13: Neri, day13 hour11.5, to Ada: "She said 'Excellent.'" Source-eligible she referents are Mira and Ada; no disambiguating intention is recorded. No tone or endorsement frame determines whether Excellent was sincere or ironic. Both referent and act ambiguity must remain.
+[H13] Mira directly heard N13 day13 hour11. Ada directly heard AMB13 day13 hour11.5. Neither private diary is thereby exposed.

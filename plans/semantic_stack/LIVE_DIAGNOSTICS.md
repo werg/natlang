@@ -113,3 +113,10 @@ observations do not grant training admission or count as model-negative rows.
   ID/path coverage, advance the index exactly once and finish on the exhausted
   folder frontier. The source's semantic graph decisions remain NL-owned.
 
+## Ecology, folder cursor v15c (2026-10-14)
+
+- Frozen source SHA-256 `3f23fea7f111753734b0e8196af75ea706ad69d28a406d6ed85fb32a904a9104`; one-case queue SHA-256 `198ac6025d30801185c878bd46581266a7e92cd633a58424ef816721f86d6fac`; runtime seal SHA-256 `27015132edd5c04bad5a7b01832259fbd5f8fc36cdf2e9c1368208763c33b4e7`. The source replay was 23/23, with zero failures, and only `solve.nl` and `types.ts` changed from v15b. This is source validity, not training admission.
+- The live root defined one-argument `stepFolder(state:FolderReductionState)` and selected `sortedDirs[state.nextFolderIndex]`; it used a decreasing measure. After evidence-1 (r1–r6) completed, turn 60 passed evidence-2 (r7–r12) to `readStudyPlots`. This closes v15b's repeated-folder defect in the observed transition.
+- A second source-contract defect became clear before a final answer. `auditEffectGraph.nl` step 6 says to return only current-batch Stage1–4 arrays plus a global `effectAudit`, but the generic footer says to return every earlier contribution. Live Stage5 turn 40 constructed cumulative assertions from `priorCompletedState` and current prior, and turn 59 returned those cumulative assertions. The root separately appends its previous state to the returned arrays, so the next folder would duplicate prior rows. The final stage must return current-batch arrays only, while still computing the global audit from prior and current state; exact root validation should reject returned prior source IDs. This is a contradictory presentation/state contract, not a model-negative example.
+- The exact `natlang-pop-semstack-v15c-ecology.service` unit stopped at 79 turns/162 request starts, with its partial retained solely for this source repair. No row was admitted. The medium GPU evaluation and ordinary Luna generation continued under the memory ledger.
+

@@ -15,7 +15,7 @@ A report must preserve unsupported or genuinely ambiguous meanings. It cannot re
 private note into a recipient's state just because the application sees the complete evidence folder.
 
 All semantic policy is numbered NL pseudocode. Parent stages consume actual typed child judgments and
-apply returned deltas. The implementation target is 28 connected NL functions with roughly650–850
+apply returned deltas. The implementation target is 29 connected NL functions with roughly650–850
 substantive lines. Source size is descriptive; no filler or template chain is credited as reasoning.
 
 ## Typed source and state
@@ -49,8 +49,9 @@ remain exact. Free explanation wording requires independent semantic review, not
 | analyzeConversation/intake/readParticipation.nl | Interpret speaker, addressee, channel and explicitly changing group scope | ParticipantIndex |
 | analyzeConversation/intake/readReceipts.nl | Distinguish dispatched, received, read, doubted and explicitly adopted evidence | ReceiptRegistry |
 | analyzeConversation/scopeTurns.nl | Combine actual quote trees, reference bindings and speech-act meanings | ScopedConversation |
-| analyzeConversation/scopeTurns/partitionQuotation.nl | Recurse on smaller original spans and preserve nested attribution | QuoteTree |
-| analyzeConversation/scopeTurns/partitionQuotation/judgeQuotationFrame.nl | Scoped NL judgment of one quotation's original author/time/reporting layer | QuoteFrameDecision |
+| analyzeConversation/scopeTurns/partitionQuotation.nl | Own the finite original-span frontier and consume actual typed frame judgments | QuoteTree |
+| analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan.nl | Consume one original span, judge its frame and activate strictly smaller disjoint quoted spans | Smaller QuoteSpanFrontier |
+| analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan/judgeQuotationFrame.nl | Scoped NL judgment of one quotation's original author/time/reporting layer | QuoteFrameDecision |
 | analyzeConversation/scopeTurns/resolveReferences.nl | Join one frame's person/place/time expressions to actual perspective | ReferenceBindings |
 | analyzeConversation/scopeTurns/resolveReferences/judgeDeixis.nl | Scoped NL literal binds one expression in its original quote frame | DeicticMeaning |
 | analyzeConversation/scopeTurns/classifySpeechActs.nl | Separate act units and consume actual illocution results | ActReading[] |
@@ -74,8 +75,12 @@ remain exact. Free explanation wording requires independent semantic review, not
 
 ## Different control paths
 
-1. Quotation parsing is structural recursion over a strictly smaller original span. A nested report has
-   another attributed frame; it does not become an assertion by the outside reporter.
+1. Quotation parsing uses a typed QuoteSpanFrontier and named advanceQuoteSpan.iterateOn; no NL
+   function calls itself or an ancestor. Each step consumes one original span and adds only strictly
+   smaller disjoint quoted spans whose combined character mass is less than that consumed span.
+   Pending character mass therefore decreases. A nested report has another attributed frame; it does
+   not become an assertion by the outside reporter. Exact original substring/range checks validate
+   the NL-chosen source spans without classifying their speaker or endorsement.
 2. Per-expression reference judgments use that actual frame. Exact day arithmetic follows the returned
    original temporal anchor; it never guesses which speaker's tomorrow was intended.
 3. Episode reduction calls different semantic children for assertion/adoption, conditional commitment

@@ -1,0 +1,3 @@
+[C01] Mira coordinates keys; Lea receives a key; Jon collects a crate; Neri relays transcripts; Ada keeps a private diary. These roles do not imply truthfulness or privileged knowledge.
+[C02] Direct conversation channel P includes Mira, Lea and Jon on days9 through13. Channel R is Neri to Ada forwarding only. Private diaries are available only to their named author until an explicit sharing event; none is shared here.
+[C03] All H receipts below are authenticated direct hearing of exactly their named turns. Forwarded packets can carry nested quotations of earlier turns without making their reporter the earlier speaker.

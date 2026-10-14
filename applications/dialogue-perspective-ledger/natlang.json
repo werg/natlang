@@ -1,0 +1,13 @@
+{
+  "schema": "natlang.package/1",
+  "name": "@natlang/dialogue-perspective-ledger",
+  "version": "0.1.0",
+  "description": "Derive perspective-scoped dialogue belief, quotation, knowledge and commitment state from original source.",
+  "include": [
+    "analyzeConversation.nl",
+    "analyzeConversation",
+    "types.ts",
+    "DECOMPOSITION.md",
+    "tsconfig.json"
+  ]
+}

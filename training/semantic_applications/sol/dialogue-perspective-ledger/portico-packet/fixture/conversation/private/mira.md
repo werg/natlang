@@ -1,0 +1,1 @@
+[M12_PRIVATE] Authenticated turn M12_PRIVATE: Mira, day12 hour8, private signed note: "Privately I want to cancel my conditional key promise. I have sent nobody a retraction." This changes her intention only; it does not communicate a cancellation.
