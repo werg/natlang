@@ -107,7 +107,7 @@ def plan(sources: list[Path], out: Path, part_decisions: int = PART_DECISIONS) -
 
 
 def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, corpus_id: str, unit_prefix: str,
-                cpus: int, budget_gb: int, docker_gb: int) -> None:
+                cpus: int, budget_gb: int, docker_gb: int, *, compress_all: bool = False) -> None:
     part = out / 'parts' / f'p{k:02d}'
     if (part / 'receipt.json').exists():
         return
@@ -147,6 +147,8 @@ def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, c
                    '--protected', str(REPO / PROTECTED),
                    '--reserved', str(REPO / 'training/source-split-reservations.json'),
                    '--held-text', *[str(REPO / p) for p in HELD_TEXT]]
+            if compress_all:
+                cmd.append('--compress-text')
             if subprocess.run(cmd).returncode == 0:
                 time.sleep(30)
                 while pending_units(unit):
@@ -326,7 +328,7 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
     cuts = plan(sources, out, part_decisions)
     receipts = []
     for k, (start, stop) in enumerate(zip(cuts, cuts[1:])):
-        render_part(sources, out, k, start, stop, corpus_id, unit_prefix, cpus, budget_gb, docker_gb)
+        render_part(sources, out, k, start, stop, corpus_id, unit_prefix, cpus, budget_gb, docker_gb, compress_all=compress_all)
         if compress_all:
             compress_part_views(out / 'parts' / f'p{k:02d}')
         receipts.append(load(out / 'parts' / f'p{k:02d}' / 'receipt.json'))

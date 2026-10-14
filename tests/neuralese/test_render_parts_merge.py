@@ -55,3 +55,28 @@ def test_cross_part_held_group_duplicate_and_twin_alignment(tmp_path, compress_a
             decoded = b''.join(line for line, _ in render_parts.read_rows(path))
             assert binding['decoded_text_data_sha256'] == hashlib.sha256(decoded).hexdigest()
             assert binding['decoded_text_data_bytes'] == len(decoded)
+
+
+def test_native_shard_merge_compression_keeps_held_closure_and_exact_bytes(tmp_path):
+    import importlib.util
+    from natlang_neuralese.common.jsonio import write_jsonl_text, open_jsonl_text
+    spec=importlib.util.spec_from_file_location('native_stream_renderer',Path(__file__).resolve().parents[2]/'scripts/neuralese_data/render_native_turn_corpus.py')
+    module=importlib.util.module_from_spec(spec);sys.modules[spec.name]=module;spec.loader.exec_module(module)
+    rows=[{'id':'held','split':'test','source_groups':['protected'],'text':'héld','token_ids':[1,2],'supervised_suffix_start':1},
+          {'id':'leak','split':'train','source_groups':['protected'],'text':'other','token_ids':[2],'supervised_suffix_start':0},
+          {'id':'good','split':'train','source_groups':['good'],'text':'你好','token_ids':[3,4],'supervised_suffix_start':1}]
+    outputs=[]
+    for compressed in (False,True):
+        root=tmp_path/str(compressed);src=root/'work/program-header/fixture';src.mkdir(parents=True)
+        for i,row in enumerate(rows):
+            path=src/(f'{i}.jsonl.zst' if i%2 else f'{i}.jsonl')
+            with write_jsonl_text(path) as stream:stream.write(json.dumps(row,ensure_ascii=False)+'\n')
+        result=module.merge(root,'program-header','fixture',['0','1','2'],set(),None,compress_text=compressed)
+        target=root/'program-header/fixture'/result.get('text_data_file','text-data.jsonl')
+        with open_jsonl_text(target) as stream:decoded=stream.read().encode()
+        outputs.append(decoded)
+        assert result['documents']==2 and result['merge_omissions']=={'train_document_shares_held_source_group':1}
+        if compressed:
+            assert result['decoded_text_data_sha256']==hashlib.sha256(decoded).hexdigest()
+            assert result['decoded_text_data_bytes']==len(decoded)
+    assert outputs[0]==outputs[1]
