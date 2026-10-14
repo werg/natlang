@@ -156,3 +156,5 @@ witness is not actual generated callable invocation or compiler execution.
 Connected extension implemented: 30 NL modules / 726 physical lines / 208 numbered steps, 47 aliases, 32 call edges. Native parser/type checks pass; full baseline witness replays and the internal closure witness coerces to EmittedClosure. Ten connected exact controls (3 equivalent positives, 7 corruptions) and32 baseline checker controls pass. Independent extension review and live consumption remain pending; no generated callable execution or admission credit.
 
 Peer precision repair: actual defining type-file declarations enter the dependency scope; resolved type references carry exact targetEvidence separately from caller spans. Eleven connected exact controls (3 positives/8 corruptions) pass; no original policy facts changed.
+
+The connected exact control now rejects empty caller-support collections as well as fabricated target-definition evidence:13controls (3positive/10negative) pass. Source policy instructions already required nonempty evidence; this closes verifier vacuity only.

@@ -10,7 +10,7 @@
     "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard.nl": "bf5cb8e90a3661892c75de475f147e7aebbb62219e4a22d083cac4f2ff7e0630",
     "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard/readEmittedClosure.nl": "be7362f4e66b6fc48cd8b784aed71940263f7f14ab1af1fc403720ada75a8a5c",
     "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard/readEmittedClosure/followCodeReference.nl": "b60884b259f89c67df8af310ce7291e673e4f9b96b2c4cb33eeb64ed097f4b8c",
-    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/check-control.mjs": "71c74979e889c4a398f096e0a785491b2f5543cbeb87cc8a101796e4429aae18",
+    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/check-control.mjs": "7da8578ee6f5cc85aac512403cf664f29ff7732010971439f50e78931ab1610c",
     "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/transitive-permission-bug.input.json": "e8655a8dcdc323f88899a7255edbd0722d21d3ec23ec93494765474d9561e6d3",
     "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/transitive-permission-bug.oracle.json": "57f5c22662a082223ef8ab39bec87ca3e9be0dcd0c23723a951ed3f369328de9",
     "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/transitive-permission-bug.reference.json": "066f94d28ebe93e41e829fa7c62c24e86bad28fe00cf9125a4a871a2573d0cf1"
@@ -38,10 +38,10 @@
     "scope": "Authored fullcompiler and closure witness type/source replay, not NL stage execution"
   },
   "connected_controls": {
-    "count": 11,
+    "count": 13,
     "passed": true,
     "positive": 3,
-    "negative": 8,
+    "negative": 10,
     "source_grounding": "Original N_BO has no personal acknowledgment underV2; actual transitive generated grandchild permission is unconditional true. Uncalled ideal decoys remain outside the actual closure.",
     "execution": "Authored witness exact control, no NL execution credit"
   },
