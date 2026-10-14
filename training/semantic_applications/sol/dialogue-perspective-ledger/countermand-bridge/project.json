@@ -1,0 +1,656 @@
+{
+  "schema": "natlang.semantic-application-source/1",
+  "id": "sol-app-dialogue-countermand-bridge-v1",
+  "source_root": "applications/dialogue-perspective-ledger",
+  "domain": "actor",
+  "semantic_domain": "dialogue-pragmatics-and-perspective-state",
+  "entry": "analyzeConversation.nl",
+  "entry_kind": "directory-reducer",
+  "request_type": "DialogueRequest",
+  "snapshot_type": "DialogueSnapshot",
+  "result_type": "PerspectiveReport",
+  "request_path": "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/request.json",
+  "snapshot_path": "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/snapshot.json",
+  "input_bindings": {
+    "request": {
+      "from": "request_path"
+    },
+    "snapshot": {
+      "from": "snapshot_path"
+    }
+  },
+  "fixture_root": "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture",
+  "fixture_files": [
+    "controls/format.md",
+    "controls/model.md",
+    "conversation/acknowledgments/versions.md",
+    "conversation/promises/fresh.md",
+    "conversation/promises/original.md",
+    "conversation/reports/collection.md",
+    "conversation/reports/issuer-and-forward.md",
+    "conversation/revisions/adoptions.md",
+    "conversation/revisions/withdrawal.md",
+    "events/complete-log.md",
+    "manifest.json",
+    "participants/channels.md"
+  ],
+  "oracle_path": "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/oracle.json",
+  "source_world_split_key": "sol-app-world:countermand-bridge-v1",
+  "program_files": [
+    "analyzeConversation/answerQuestions/joinProof/challengePerspective.nl",
+    "analyzeConversation/answerQuestions/joinProof.nl",
+    "analyzeConversation/answerQuestions/resolveQueryFocus.nl",
+    "analyzeConversation/answerQuestions.nl",
+    "analyzeConversation/assembleEpisodes/joinAvailability.nl",
+    "analyzeConversation/assembleEpisodes.nl",
+    "analyzeConversation/auditReport/checkNoKnowledgeLeak.nl",
+    "analyzeConversation/auditReport/replayAnswer.nl",
+    "analyzeConversation/auditReport.nl",
+    "analyzeConversation/evolveViews/advanceEpisode/judgeEndorsement.nl",
+    "analyzeConversation/evolveViews/advanceEpisode/resolveRetraction.nl",
+    "analyzeConversation/evolveViews/advanceEpisode/updateBelief.nl",
+    "analyzeConversation/evolveViews/advanceEpisode/updateCommitment/judgeCondition.nl",
+    "analyzeConversation/evolveViews/advanceEpisode/updateCommitment.nl",
+    "analyzeConversation/evolveViews/advanceEpisode.nl",
+    "analyzeConversation/evolveViews.nl",
+    "analyzeConversation/intake/readChronology.nl",
+    "analyzeConversation/intake/readParticipation.nl",
+    "analyzeConversation/intake/readReceipts.nl",
+    "analyzeConversation/intake.nl",
+    "analyzeConversation/scopeTurns/classifySpeechActs/judgeIllocution.nl",
+    "analyzeConversation/scopeTurns/classifySpeechActs.nl",
+    "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan/judgeQuotationFrame.nl",
+    "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan.nl",
+    "analyzeConversation/scopeTurns/partitionQuotation.nl",
+    "analyzeConversation/scopeTurns/resolveReferences/judgeDeixis.nl",
+    "analyzeConversation/scopeTurns/resolveReferences.nl",
+    "analyzeConversation/scopeTurns.nl",
+    "analyzeConversation.nl",
+    "types.ts",
+    "natlang.json",
+    "tsconfig.json"
+  ],
+  "typed_call_graph": {
+    "nodes": [
+      {
+        "path": "analyzeConversation/answerQuestions/joinProof/challengePerspective.nl",
+        "args": {
+          "focus": "QueryFocus",
+          "proof": "ProofGraph",
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation",
+          "evolution": "PerspectiveEvolution"
+        },
+        "returns": "PerspectiveChallenge",
+        "kind": "function",
+        "owned_delta": "Locally challenge a proof for quotation, privacy and temporal leakage."
+      },
+      {
+        "path": "analyzeConversation/answerQuestions/joinProof.nl",
+        "args": {
+          "focus": "QueryFocus",
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation",
+          "episodePlan": "EpisodePlan",
+          "evolution": "PerspectiveEvolution"
+        },
+        "returns": "ProofGraph",
+        "kind": "function",
+        "owned_delta": "Join actual availability and semantic deltas into source-linked query support."
+      },
+      {
+        "path": "analyzeConversation/answerQuestions/resolveQueryFocus.nl",
+        "args": {
+          "query": "DialogueQuery",
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation",
+          "evolution": "PerspectiveEvolution"
+        },
+        "returns": "QueryFocus",
+        "kind": "function",
+        "owned_delta": "Resolve a question without switching from requested perspective to global facts."
+      },
+      {
+        "path": "analyzeConversation/answerQuestions.nl",
+        "args": {
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation",
+          "episodePlan": "EpisodePlan",
+          "evolution": "PerspectiveEvolution",
+          "request": "DialogueRequest"
+        },
+        "returns": "QueryAnswers",
+        "kind": "function",
+        "owned_delta": "Answer every declared query from its actual dimension and historical view."
+      },
+      {
+        "path": "analyzeConversation/assembleEpisodes/joinAvailability.nl",
+        "args": {
+          "episode": "Episode",
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation"
+        },
+        "returns": "AvailabilityReading[]",
+        "kind": "function",
+        "owned_delta": "Judge source-established participant access for one episode only."
+      },
+      {
+        "path": "analyzeConversation/assembleEpisodes.nl",
+        "args": {
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation"
+        },
+        "returns": "EpisodePlan",
+        "kind": "function",
+        "owned_delta": "Join original event-time units and actual availability into a finite ordered plan."
+      },
+      {
+        "path": "analyzeConversation/auditReport/checkNoKnowledgeLeak.nl",
+        "args": {
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation",
+          "episodePlan": "EpisodePlan",
+          "evolution": "PerspectiveEvolution"
+        },
+        "returns": "LedgerFinding[]",
+        "kind": "function",
+        "owned_delta": "Inspect actual actor deltas against original privacy and access evidence."
+      },
+      {
+        "path": "analyzeConversation/auditReport/replayAnswer.nl",
+        "args": {
+          "answer": "QueryAnswer",
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation",
+          "episodePlan": "EpisodePlan",
+          "evolution": "PerspectiveEvolution"
+        },
+        "returns": "AnswerAudit",
+        "kind": "function",
+        "owned_delta": "Reconstruct one declared answer path from original evidence and actual historical deltas."
+      },
+      {
+        "path": "analyzeConversation/auditReport.nl",
+        "args": {
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation",
+          "episodePlan": "EpisodePlan",
+          "evolution": "PerspectiveEvolution",
+          "answers": "QueryAnswers",
+          "request": "DialogueRequest"
+        },
+        "returns": "PerspectiveReport",
+        "kind": "function",
+        "owned_delta": "Audit actual produced state without replacing it with a rebuilt ledger."
+      },
+      {
+        "path": "analyzeConversation/evolveViews/advanceEpisode/judgeEndorsement.nl",
+        "args": {
+          "act": "ActReading",
+          "episode": "Episode",
+          "view": "ParticipantView",
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation"
+        },
+        "returns": "EndorsementDecision",
+        "kind": "function",
+        "owned_delta": "Judge one actor posture without conflating receipt, quote and belief."
+      },
+      {
+        "path": "analyzeConversation/evolveViews/advanceEpisode/resolveRetraction.nl",
+        "args": {
+          "act": "ActReading",
+          "episode": "Episode",
+          "view": "ParticipantView",
+          "decision": "EndorsementDecision",
+          "views": "ParticipantView[]",
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation"
+        },
+        "returns": "RevisionDelta",
+        "kind": "function",
+        "owned_delta": "Target source-backed corrections in the actor who actually adopts them."
+      },
+      {
+        "path": "analyzeConversation/evolveViews/advanceEpisode/updateBelief.nl",
+        "args": {
+          "decision": "EndorsementDecision",
+          "act": "ActReading",
+          "episode": "Episode",
+          "view": "ParticipantView",
+          "source": "DialogueSource"
+        },
+        "returns": "BeliefDelta",
+        "kind": "function",
+        "owned_delta": "Transform actual endorsement into participant-owned belief evidence and defeats."
+      },
+      {
+        "path": "analyzeConversation/evolveViews/advanceEpisode/updateCommitment/judgeCondition.nl",
+        "args": {
+          "predicate": "ConditionPredicate",
+          "act": "ActReading",
+          "episode": "Episode",
+          "views": "ParticipantView[]",
+          "source": "DialogueSource"
+        },
+        "returns": "ConditionReading",
+        "kind": "function",
+        "owned_delta": "Judge actual fulfillment separately from issuer knowledge and beneficiary belief."
+      },
+      {
+        "path": "analyzeConversation/evolveViews/advanceEpisode/updateCommitment.nl",
+        "args": {
+          "act": "ActReading",
+          "episode": "Episode",
+          "view": "ParticipantView",
+          "views": "ParticipantView[]",
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation"
+        },
+        "returns": "CommitmentDelta",
+        "kind": "function",
+        "owned_delta": "Derive activation and timely promised-consequent fulfillment through actual typed child judgments."
+      },
+      {
+        "path": "analyzeConversation/evolveViews/advanceEpisode.nl",
+        "args": {
+          "frontier": "PerspectiveFrontier"
+        },
+        "returns": "PerspectiveFrontier",
+        "kind": "function",
+        "owned_delta": "Apply one source episode through separate endorsement, belief, commitment and revision deltas."
+      },
+      {
+        "path": "analyzeConversation/evolveViews.nl",
+        "args": {
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation",
+          "episodePlan": "EpisodePlan"
+        },
+        "returns": "PerspectiveEvolution",
+        "kind": "function",
+        "owned_delta": "Reduce actual episode deltas while retaining historical participant snapshots."
+      },
+      {
+        "path": "analyzeConversation/intake/readChronology.nl",
+        "args": {
+          "clauses": "SourceClause[]",
+          "turns": "TurnRecord[]"
+        },
+        "returns": "TemporalRegistry",
+        "kind": "function",
+        "owned_delta": "Separate utterance anchors from reporting and receipt dates."
+      },
+      {
+        "path": "analyzeConversation/intake/readParticipation.nl",
+        "args": {
+          "clauses": "SourceClause[]",
+          "turns": "TurnRecord[]"
+        },
+        "returns": "ParticipantIndex",
+        "kind": "function",
+        "owned_delta": "Interpret channel and private-note access without inferring belief."
+      },
+      {
+        "path": "analyzeConversation/intake/readReceipts.nl",
+        "args": {
+          "clauses": "SourceClause[]",
+          "turns": "TurnRecord[]",
+          "physicalFacts": "PhysicalFact[]"
+        },
+        "returns": "ReceiptRegistry",
+        "kind": "function",
+        "owned_delta": "Read delivery and attachment provenance while keeping adoption separate."
+      },
+      {
+        "path": "analyzeConversation/intake.nl",
+        "args": {
+          "snapshot": "DialogueSnapshot",
+          "request": "DialogueRequest"
+        },
+        "returns": "DialogueSource",
+        "kind": "function",
+        "owned_delta": "Interpret original source roles before joining chronology and participation."
+      },
+      {
+        "path": "analyzeConversation/scopeTurns/classifySpeechActs/judgeIllocution.nl",
+        "args": {
+          "unit": "SpeechUnit",
+          "node": "QuoteNode",
+          "turn": "TurnRecord",
+          "references": "ReferenceBindings",
+          "source": "DialogueSource"
+        },
+        "returns": "SpeechActMeaning",
+        "kind": "function",
+        "owned_delta": "Judge one locally framed illocution with source-defined adoption and condition rules."
+      },
+      {
+        "path": "analyzeConversation/scopeTurns/classifySpeechActs.nl",
+        "args": {
+          "turn": "TurnRecord",
+          "tree": "QuoteTree",
+          "references": "ReferenceBindings",
+          "source": "DialogueSource"
+        },
+        "returns": "ActReading[]",
+        "kind": "function",
+        "owned_delta": "Interpret owned speech units without promoting embedded quotes to new promises."
+      },
+      {
+        "path": "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan/judgeQuotationFrame.nl",
+        "args": {
+          "span": "QuoteSpan",
+          "turn": "TurnRecord",
+          "rules": "SourceClause[]",
+          "temporal": "TemporalRegistry"
+        },
+        "returns": "QuoteFrameDecision",
+        "kind": "function",
+        "owned_delta": "Judge one quotation frame from its actual source substring and attribution."
+      },
+      {
+        "path": "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan.nl",
+        "args": {
+          "frontier": "QuoteSpanFrontier"
+        },
+        "returns": "QuoteSpanFrontier",
+        "kind": "function",
+        "owned_delta": "Consume one span and bind a judged frame to strictly smaller child spans."
+      },
+      {
+        "path": "analyzeConversation/scopeTurns/partitionQuotation.nl",
+        "args": {
+          "turn": "TurnRecord",
+          "rules": "SourceClause[]",
+          "temporal": "TemporalRegistry"
+        },
+        "returns": "QuoteTree",
+        "kind": "function",
+        "owned_delta": "Reduce original quote spans with a decreasing character-mass frontier."
+      },
+      {
+        "path": "analyzeConversation/scopeTurns/resolveReferences/judgeDeixis.nl",
+        "args": {
+          "expression": "string",
+          "node": "QuoteNode",
+          "turn": "TurnRecord",
+          "source": "DialogueSource"
+        },
+        "returns": "DeicticMeaning",
+        "kind": "function",
+        "owned_delta": "Use a local NL judgment to bind one expression to its attributed original frame."
+      },
+      {
+        "path": "analyzeConversation/scopeTurns/resolveReferences.nl",
+        "args": {
+          "turn": "TurnRecord",
+          "tree": "QuoteTree",
+          "source": "DialogueSource"
+        },
+        "returns": "ReferenceBindings",
+        "kind": "function",
+        "owned_delta": "Resolve expressions using actual quote frames while preserving ambiguous pronouns."
+      },
+      {
+        "path": "analyzeConversation/scopeTurns.nl",
+        "args": {
+          "source": "DialogueSource"
+        },
+        "returns": "ScopedConversation",
+        "kind": "function",
+        "owned_delta": "Build actual quote, reference and illocution branches per original turn."
+      },
+      {
+        "path": "analyzeConversation.nl",
+        "args": {
+          "request": "DialogueRequest",
+          "snapshot": "DialogueSnapshot"
+        },
+        "returns": "PerspectiveReport",
+        "kind": "directory-reducer",
+        "owned_delta": "Derive time-scoped beliefs and commitments without leaking global truth into private views."
+      }
+    ],
+    "edges": [
+      {
+        "caller": "analyzeConversation/answerQuestions/joinProof.nl",
+        "callee": "analyzeConversation/answerQuestions/joinProof/challengePerspective.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/answerQuestions.nl",
+        "callee": "analyzeConversation/answerQuestions/joinProof.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/answerQuestions.nl",
+        "callee": "analyzeConversation/answerQuestions/resolveQueryFocus.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation.nl",
+        "callee": "analyzeConversation/answerQuestions.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/assembleEpisodes.nl",
+        "callee": "analyzeConversation/assembleEpisodes/joinAvailability.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation.nl",
+        "callee": "analyzeConversation/assembleEpisodes.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/auditReport.nl",
+        "callee": "analyzeConversation/auditReport/checkNoKnowledgeLeak.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/auditReport.nl",
+        "callee": "analyzeConversation/auditReport/replayAnswer.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation.nl",
+        "callee": "analyzeConversation/auditReport.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/evolveViews/advanceEpisode.nl",
+        "callee": "analyzeConversation/evolveViews/advanceEpisode/judgeEndorsement.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/evolveViews/advanceEpisode.nl",
+        "callee": "analyzeConversation/evolveViews/advanceEpisode/resolveRetraction.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/evolveViews/advanceEpisode.nl",
+        "callee": "analyzeConversation/evolveViews/advanceEpisode/updateBelief.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/evolveViews/advanceEpisode/updateCommitment.nl",
+        "callee": "analyzeConversation/evolveViews/advanceEpisode/updateCommitment/judgeCondition.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/evolveViews/advanceEpisode.nl",
+        "callee": "analyzeConversation/evolveViews/advanceEpisode/updateCommitment.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/evolveViews.nl",
+        "callee": "analyzeConversation/evolveViews/advanceEpisode.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation.nl",
+        "callee": "analyzeConversation/evolveViews.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/intake.nl",
+        "callee": "analyzeConversation/intake/readChronology.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/intake.nl",
+        "callee": "analyzeConversation/intake/readParticipation.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/intake.nl",
+        "callee": "analyzeConversation/intake/readReceipts.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation.nl",
+        "callee": "analyzeConversation/intake.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/scopeTurns/classifySpeechActs.nl",
+        "callee": "analyzeConversation/scopeTurns/classifySpeechActs/judgeIllocution.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/scopeTurns.nl",
+        "callee": "analyzeConversation/scopeTurns/classifySpeechActs.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan.nl",
+        "callee": "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan/judgeQuotationFrame.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/scopeTurns/partitionQuotation.nl",
+        "callee": "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/scopeTurns.nl",
+        "callee": "analyzeConversation/scopeTurns/partitionQuotation.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/scopeTurns/resolveReferences.nl",
+        "callee": "analyzeConversation/scopeTurns/resolveReferences/judgeDeixis.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/scopeTurns.nl",
+        "callee": "analyzeConversation/scopeTurns/resolveReferences.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation.nl",
+        "callee": "analyzeConversation/scopeTurns.nl",
+        "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      }
+    ]
+  },
+  "scoped_literals": [
+    {
+      "site": "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan/judgeQuotationFrame.nl",
+      "result_type": "QuoteFrameDecision",
+      "consumed_by": "advanceQuoteSpan.nodes and validated child frontier"
+    },
+    {
+      "site": "analyzeConversation/scopeTurns/resolveReferences/judgeDeixis.nl",
+      "result_type": "DeicticMeaning",
+      "consumed_by": "ReferenceBindings and original-anchored act due"
+    },
+    {
+      "site": "analyzeConversation/scopeTurns/classifySpeechActs/judgeIllocution.nl",
+      "result_type": "SpeechActMeaning",
+      "consumed_by": "ActReading performed/depicted semantics and state branch"
+    },
+    {
+      "site": "analyzeConversation/evolveViews/advanceEpisode/judgeEndorsement.nl",
+      "result_type": "EndorsementDecision",
+      "consumed_by": "Actual participant BeliefDelta"
+    },
+    {
+      "site": "analyzeConversation/evolveViews/advanceEpisode/updateCommitment/judgeCondition.nl",
+      "result_type": "ConditionReading",
+      "consumed_by": "Actual commitment truth/knowledge/belief channels"
+    },
+    {
+      "site": "analyzeConversation/answerQuestions/joinProof/challengePerspective.nl",
+      "result_type": "PerspectiveChallenge",
+      "consumed_by": "ProofGraph.challenge and QueryAnswer.challenge"
+    },
+    {
+      "site": "analyzeConversation/scopeTurns/classifySpeechActs.nl",
+      "result_type": "SpeechUnit[]",
+      "consumed_by": "Each actual unit.focus/support passed to named judgeIllocution; claims retain opposite values."
+    },
+    {
+      "site": "analyzeConversation/scopeTurns.nl",
+      "result_type": "LedgerFinding",
+      "consumed_by": "ScopedConversation.scopeFindings and final report findings distinguish valid perspective differences from inconsistent joins."
+    }
+  ],
+  "iteration_frontiers": [
+    {
+      "site": "analyzeConversation/scopeTurns/partitionQuotation.nl",
+      "step": "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan.nl",
+      "state_type": "QuoteSpanFrontier",
+      "measure": "Sum of original pending character lengths strictly decreases; proper disjoint interiors replace consumed span."
+    },
+    {
+      "site": "analyzeConversation/evolveViews.nl",
+      "step": "analyzeConversation/evolveViews/advanceEpisode.nl",
+      "state_type": "PerspectiveFrontier",
+      "measure": "Number of original pending episodes strictly decreases by one."
+    }
+  ],
+  "source_shape": {
+    "documents": 11,
+    "clauses": 46,
+    "participants": 5,
+    "queries": 16,
+    "nl_functions": 29,
+    "numbered_steps": 207
+  },
+  "provenance": {
+    "author": "semantic_slate_sol",
+    "kind": "Original fictional source world and natural-language application",
+    "license": "Repository license"
+  },
+  "readiness": {
+    "source_loader_checked": false,
+    "typed_declarations_checked": false,
+    "typed_reference_checked": false,
+    "independent_oracle_review": false,
+    "exact_result_replay": false,
+    "live_qualified": false,
+    "training_admitted": false
+  },
+  "reference_scope": "Full authored typed source-validity witness only; actual target-join branch and independent checker/source review pending",
+  "model_facing_debt": "0/48 live samples; baseline first-world source remains separately reviewed/frozen.",
+  "source_precision": "Actual per-proposition claims and focused speech units; attachment fact-ID preservation; private intention distinct from retraction; audience adoption/issuer effect ownership; terminal retraction preserved.",
+  "reference_path": "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/reference-report.json",
+  "reference_role": "One private authored full typed source certificate; not an NL execution or complete semantic oracle.",
+  "external_verifier_path": "training/semantic_applications/sol/dialogue-perspective-ledger/verify-result.mjs",
+  "generation_ready": false,
+  "readiness_scope": "Source-only connected world, no execution or live qualification.",
+  "fixture_document_count": 11,
+  "fixture_clause_count": 44,
+  "training_admission": false,
+  "independent_reviews": [],
+  "source_review_binding": {
+    "reviewed": false,
+    "scope": "Countermand source/projection/typed certificate pending added revision-target child and independent review"
+  },
+  "source_variant": {
+    "id": "countermand-target-lineage-v2",
+    "status": "connected world certificate draft; added target child pending"
+  }
+}

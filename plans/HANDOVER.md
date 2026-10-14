@@ -40,6 +40,20 @@ after Cave controls passed (2,037 tests, conformance 22/22) under
 `natlang-pop-ts-cave-full-check-20261014.service`. Its memory claim briefly
 preempted ordinary Luna/Gemini; the replenisher timers restore them.
 
+An hourly look at recent ordinary Luna cases found 98 accepted and 16
+answer-rejected terminal outputs; no supervisor/resource failures among the
+114 completed cases inspected. One rejected MuSiQue source revealed a source
+contract problem rather than a trustworthy model error: case
+`2hop__731960_634446` asks for the county of Suzanne Reynolds's birthplace,
+while its provided decomposition asks `#1 >> capital of` and its cited second
+sentence only locates Churchland southwest of Lexington in Davidson County.
+Neither the relation nor the location of Lexington is established by that
+support. `training/source-reviews/holds.jsonl` now holds this exact source
+across derived variants before future generation/admission; do not use its
+rejected trajectory as a model or DPO negative. Existing frozen corpora need
+source-review filtering at their next declared union, rather than assuming
+the source change retroactively rewrites old artifacts.
+
 ## 06:16 CEST: deep-source audit and Pop check status
 
 Polyphonic Edition Workshop is a 27-callable, 651-physical-line source tree, not a
