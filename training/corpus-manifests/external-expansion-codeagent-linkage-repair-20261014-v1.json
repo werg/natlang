@@ -1,0 +1,19 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-codeagent-linkage-repair-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-codeagent-linkage-repair-20261014-v1",
+  "files": [
+    {
+      "path": "repair-proof.json",
+      "bytes": 532,
+      "sha256": "8b3cc87b220bba8556e90d3264007163eff61a214b745b84b0d3107808856d25"
+    },
+    {
+      "path": "repair.turns.jsonl.zst",
+      "bytes": 87704,
+      "sha256": "377426df4236ff57c5dde3336279b84586818cc14ebfdfc3580443a92f961852"
+    }
+  ],
+  "bytes": 88236
+}
