@@ -418,8 +418,8 @@
   "services": [],
   "composition": {
     "nl_files": 27,
-    "physical_lines": 626,
-    "numbered_steps": 172,
+    "physical_lines": 651,
+    "numbered_steps": 173,
     "type_aliases": 51
   },
   "comparison_spec": {
@@ -448,17 +448,17 @@
     "training_admitted": false
   },
   "source_variant": {
-    "id": "initial-deep-source-v1",
-    "status": "source_reviewed_live_pending",
+    "id": "authority-depth-v2",
+    "status": "focused_source_review_passed_live_pending",
     "independent_source_review": true,
     "review_receipt": {
-      "path": "plans/semantic_stack/POLYPHONIC_EDITION_REVIEW_POP.json",
-      "sha256": "55f06c3c787116336791c64d683b90373421ce8bb9e8e468ee3e5d214b6e45f3",
-      "reviewer": "pop-semantic-curriculum",
-      "scope": "Independent source reconstruction, typed flow and finite verifier controls; no live or training credit"
+      "path": "plans/semantic_stack/POLYPHONIC_AUTHORITY_DEPTH_REVIEW_ASTRA.json",
+      "sha256": "24e1c5e367da312f2d82c10d4aa7d81280b673ec76f6adf95d8ee829b7672638",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Focused parent-to-child evidence reachability and authority-branch pseudocode review; prior full source/oracle review remains POLYPHONIC_EDITION_REVIEW_POP.json; no live or training credit"
     }
   },
-  "model_facing_debt": "initial-deep-source-v1:0/48 live samples; independent source/reference/checker review passed; actual NL execution and admission pending",
+  "model_facing_debt": "authority-depth-v2:0/48 live samples; prior full source/reference/checker review and focused authority source review passed; actual NL execution and admission pending",
   "provenance": {
     "author": "semantic_slate_astra",
     "kind": "Original fictional notation archive and NL application",
@@ -505,6 +505,12 @@
       "sha256": "55f06c3c787116336791c64d683b90373421ce8bb9e8e468ee3e5d214b6e45f3",
       "reviewer": "pop-semantic-curriculum",
       "scope": "Independent source reconstruction, typed flow and finite verifier controls; no live or training credit"
+    },
+    {
+      "path": "plans/semantic_stack/POLYPHONIC_AUTHORITY_DEPTH_REVIEW_ASTRA.json",
+      "sha256": "24e1c5e367da312f2d82c10d4aa7d81280b673ec76f6adf95d8ee829b7672638",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Focused source delta review of parent evidence reachability and typed authority pseudocode; no live or training credit"
     }
   ]
 }
