@@ -59,9 +59,16 @@ def open_jsonl_text(path: str | Path):
         with path.open(encoding='utf-8', newline='\n') as stream:
             yield stream
         return
+    try:
+        target = path.resolve(strict=True)
+    except FileNotFoundError as error:
+        raise FileNotFoundError(f'JSONL file {path} has no existing target: {error.filename}') from error
     import tempfile
     with tempfile.TemporaryFile() as errors:
-        proc = subprocess.Popen(['zstd', '-dcq', '--long=27', '--', str(path)],
+        # Corpus registry paths may be file symlinks. zstd skips them unless
+        # forced; bind the existing file instead of treating a skipped input
+        # as an empty corpus (and suppressing its warning with -q).
+        proc = subprocess.Popen(['zstd', '-dcq', '--long=27', '--', str(target)],
                                 stdout=subprocess.PIPE, stderr=errors)
         complete = False
         try:
