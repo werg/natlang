@@ -73364,6 +73364,30 @@
       ],
       "license": "Pinned upstream source-card facts retained in source manifests.",
       "notes": "Upstream success labels retained as provenance; independent task execution not claimed. Failed sessions excluded explicitly. Native replay/render and recipe bindings are separate steps."
+    },
+    {
+      "id": "qad-r8-student-root-recovery-v4-20261014-v1",
+      "owner": "pop",
+      "path": "runs/qad-r8-student-root-recovery-v4-20261014-v1",
+      "include": [
+        "selected.ir.jsonl",
+        "selected.ir.manifest.json",
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "native-turns.review-candidates.jsonl",
+        "semantic-holds.json",
+        "admission-review.json",
+        "approved-turns.jsonl"
+      ],
+      "source_class": "student-root Luna teacher recovery from train-only natlang curriculum",
+      "license": "source-row licenses; mixed project-generated and AG News academic-use",
+      "split": "train only; exact accepted source program, source group and source ID disjoint from protected held48",
+      "admission": "4 of 10 exact accepted parents, 24 native successful teacher decisions; six semantic parent holds and 144 child decisions held",
+      "training_admission": true,
+      "training_admission_reason": "Exact source/outcome checks, reviewed semantic holds, native decision selection, and protected held48 source separation; admission-review.json binds exact source and output hashes. No DPO pairs admitted.",
+      "review_status": "Parent and tool-action semantic review, source-group protection and native decision checks completed",
+      "required_conversion": "render LFM and Mellum twins; include in a later protected target-union delta after global held/source-quality checks",
+      "notes": "Only approved-turns.jsonl is training input. Held exact-success parents bypass required iterateOn, hardcode filenames, or perform wasteful abandoned pairwise search. One rejected actor route had unsupported overcautious stop; it remains out."
     }
   ],
   "coverage_backlog": [
