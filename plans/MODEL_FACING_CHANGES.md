@@ -523,6 +523,7 @@ The v18 first attempt blocked before reading code. A fresh-seed retry read the n
 ### 2026-10-14 — Ecology joined seed coverage v18c
 
 The v18b live trace called the named stages but its folder-two audit selected candidate SeedDecision judgments only from current-batch assertions, omitting a prior-folder intervention available in typed context. V18c retains every model-visible ecology file byte-for-byte and adds an opt-in host-only capture/check: candidate IDs are drawn from perturbation/unresolved assertions in completed and current typed state, and each must have one direct completed scoped SeedDecision child with matching original ID. The child still owns semantic seed classification. Missing immutable captures leave an unverified hold. The frozen v18b runtime did not capture these Stage5 inputs, so its result cannot certify this check retrospectively. **Measurement debt:** v18b source wording remains 0/48; v18c adds no new model-facing text and needs a fresh runtime-bound diagnostic to establish capture and lineage behavior before any row review.
+For a record declaring this check, failed or unverified binding now sets a collector rejection and, when capture is missing, a quality-pending reason; a matching answer cannot silently bypass it. This changes collection qualification only and gives no training admission without separate semantic/trajectory review.
 
 ### 2026-10-14 — Field Gloss Reed Court source world and authority handoff
 

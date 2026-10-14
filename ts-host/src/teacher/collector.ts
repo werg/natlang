@@ -1533,11 +1533,19 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
         ...(hostInputs ? { host_inputs: hostInputs } : {}) }];
     });
     const itemResultBinding = bindingSpec ? checkItemResultBinding(bindingSpec, invocationLedger) : undefined;
+    const bindingAccepted = !bindingSpec || itemResultBinding?.status === 'pass';
+    const outcomeChecks = bindingSpec ? { ...checks, item_result_binding: bindingAccepted } : checks;
+    const outcomeRejections = bindingAccepted ? rejectionReasons : [...rejectionReasons, 'item_result_binding'];
+    const qualityPending = [...(filesCheck?.pending ?? []),
+      ...(oracle.needs_review ? ['answer_needs_review'] : []),
+      ...(itemResultBinding?.status === 'unverified_hold' ? ['item_result_binding_unverified'] : [])];
     return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
       effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}),
       ...(worldScore ? { world: worldScore } : {}),
       ...(hostCertificateRequired ? { host_completion_certificate: hostCertificateReadOk ? hostCertificate ?? null : { read_error: true } } : {}),
-      ...(!filesCheck && oracle.needs_review ? { quality_pending: ['answer_needs_review'] } : {}), ...(filesCheck ? { files_check: filesCheck, quality_pending: [...filesCheck.pending, ...(oracle.needs_review ? ['answer_needs_review'] : [])] } : {}), oracle, accepted, checks, rejection_reasons: rejectionReasons,
+      ...(filesCheck ? { files_check: filesCheck } : {}),
+      ...(qualityPending.length || filesCheck ? { quality_pending: qualityPending } : {}),
+      oracle, accepted: accepted && bindingAccepted, checks: outcomeChecks, rejection_reasons: outcomeRejections,
       ...(seededFailure ? { seeded_failure: { observed: seededFailureObserved, replaced_by_handoff: replacesSeed } } : {}),
       // Every call's actions, children included: a child nl call runs in its own runtime and reports its trace to
       // the task (call_id tells them apart), so its decisions can be linked to what they did.
