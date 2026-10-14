@@ -3,7 +3,7 @@ Description=Keep Pop Luna generation supplied with decontaminated cases
 
 [Timer]
 OnBootSec=3min
-OnUnitInactiveSec=10min
+OnUnitInactiveSec=1min
 Persistent=true
 Unit=natlang-pop-luna-replenish.service
 
