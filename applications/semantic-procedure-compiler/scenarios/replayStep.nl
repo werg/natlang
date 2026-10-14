@@ -8,7 +8,7 @@ returns: ScenarioFrontier
    source history does not order them. Remove this event ID from a copied finite frontier exactly once.
 2. Find generated modules/branches responsible for that event's actor/action. Read the actual emitted
    body together with its ModulePlan; an emitted unconditional effect cannot be hidden by a correct model.
-3. For each relevant rule call judgeGuard(event, atoms, sourceAtoms, branch, model, generatedModule). Consume the
+3. For each relevant rule call judgeGuard(event, atoms, sourceAtoms, branch, model, generatedModule, program). Consume the
    actual emitted value/effects and the separate sourceRequiredValue/sourceRequiredEffects,
    matchesSource, original and generated evidence, and both returned local decisions.
 4. Apply the actual emitted effects on this private symbolic atoms state, even when they violate

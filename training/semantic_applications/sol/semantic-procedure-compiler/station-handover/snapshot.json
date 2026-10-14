@@ -1,5 +1,5 @@
 {
-  "revision": "03b011cd334717c0ff444d877ee64b5de4850ff9ea9f09ba19be20ff76c95bea",
+  "revision": "e79116b338284ec80b5bf99414b3c257f9842934877209f13af4fa328a0811e5",
   "records": [
     {
       "id": "AUTH",
@@ -40,8 +40,8 @@
     {
       "id": "OUTPUT",
       "path": "controls/output.md",
-      "text": "ID OUTPUT. Compile the selected procedure into a callable NL application and return full typed CompilePacket.\n[O01] Keep historical permission before day5 and revised permission from day5. Generate substantive named functions and invoked scoped rule literals, with typed actor/time/custody/readiness/queue/hazard state and concrete returned consumers.\n[O02] Return actual generated module texts, rule/source-to-module mapping, scenario guard decisions and before/after state traces. A final label alone is insufficient.\n[O03] Exact source IDs are AUTH,E1,E2,EM,HABIT,IDENT,OUTPUT and scenario source IDs. Clause IDs,actors,ST/RT,scenario/event IDs are exact. Generated module/proof/decision IDs can differ with consistent references and source-grounded behavior.\n[O04] Permission is true when all active necessary conditions hold, false with an affirmative failed condition, and null when an otherwise decisive condition is genuinely unknown. Preserve false vs null in emitted guards and traces.\n[O05] Unchanged independent facts survive a transfer: the new holder does not inherit another person's acknowledgment or queue turn. No external broadcasting law applies to this closed fictional world.\n",
-      "sha256": "424ddaabb4fcfbaa9bf8d3f328f85c2a4f91a08c172b1d133bda0082e574607c"
+      "text": "ID OUTPUT. Compile the selected procedure into a callable NL application and return full typed CompilePacket.\n[O01] Keep historical permission before day5 and revised permission from day5. Generate substantive named functions and invoked scoped rule literals, with typed actor/time/custody/readiness/queue/hazard state and concrete returned consumers.\n[O02] Return actual generated module texts, rule/source-to-module mapping, scenario guard decisions and before/after state traces. A final label alone is insufficient.\n[O03] Exact source IDs are AUTH,E1,E2,EM,HABIT,IDENT,OUTPUT and scenario source IDs. Clause IDs,actors,ST/RT,scenario/event IDs are exact. Generated module/proof/decision IDs can differ with consistent references and source-grounded behavior.\n[O04] Permission is true when all active necessary conditions hold, false with an affirmative failed condition, and null when an otherwise decisive condition is genuinely unknown. Preserve false vs null in emitted guards and traces.\n[O05] Unchanged independent facts survive a transfer: the new holder does not inherit another person's acknowledgment or queue turn. No external broadcasting law applies to this closed fictional world.\n[O06] Public traced state keys are custody,queueAccepted,briefAcknowledged,unclearedHazard,emergencyConfirmed,permission. Custody,queue,brief and permission subjects are exact actor IDs; emergencyConfirmed uses its exact named attempt ID. The single station uses ST as its global hazard state tag. Preserve known:false,value:null for unknown, known:true,value:false for affirmative false, and exact establishedAt event time on newly changed atoms. Generated internal rule IDs may vary consistently; original clause references remain exact.\n",
+      "sha256": "7a523f39be38869990e7d52357427d41bfb25a68fc2eef93723e3173c038b076"
     },
     {
       "id": "SN",

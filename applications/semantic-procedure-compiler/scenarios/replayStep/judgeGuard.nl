@@ -7,21 +7,30 @@ args:
   branch: BranchPlan
   model: ProcedureModel
   module: GeneratedModule
+  program: GeneratedProgram
 returns: GuardDecision
 ---
-1. Prepare emittedContext containing only the actual generated module text, its schema, actual atoms
-   and original scenario event evidence. Exclude ideal BranchPlan meanings and governing model rules
-   from this literal's context. It must interpret what the emitted body does, including wrong effects.
+1. Prepare emittedContext from the actual module text and generated callee/type-file closure in
+   program as exact {path,text} records, excluding ModulePlans/contribution audits. Include actual
+   atoms and original event evidence. Supply selected clause definitions only as
+   runtime data when the emitted body explicitly reads them; do not supply ideal BranchPlan guidance,
+   sourceAtoms, expected decisions or model.schema's normative invariants as interpretation rules.
+   The actual body controls which runtime data are read and which calls/effects occur.
 2. In eval declare StateEffect as {key:string;subject:string;value:string|number|boolean|null;
    known:boolean;establishedAt:number|null;witnesses:{sourceId:string;path:string;quote:string}[]}.
    Declare EmittedJudgment with value:boolean|null, effects:StateEffect[], reason:string,
-   generatedQuotes:string[], witnesses:{sourceId:string;path:string;quote:string}[]. Construct a
+   generatedSpans:{path:string;quote:string}[], witnesses:{sourceId:string;path:string;quote:string}[]. Construct a
    scoped NL emitted-behavior literal over emittedContext and directly await it on event.
 3. Its instructions are: symbolically interpret the actual emitted guard/effect wording against
-   this event and actual state; preserve unconditional permissions or lost prerequisites exactly as
-   emitted; return resulting effects and exact generated text quotes, without repairing the body.
-4. Bind its generatedQuotes to module.path as GeneratedSpan evidence and validate each quote against
-   module.text. Require at least one nonempty exact generated quote for every decided emitted
+   this event and actual state, following actual generated child bodies in the supplied code closure;
+   preserve unconditional permissions, wrong clause selection or lost prerequisites exactly as emitted.
+   Missing actual callee/data is unresolved rather than guessed from the ideal source behavior. Return
+   resulting effects and exact path-keyed generated text spans from the supplied code closure,
+   without repairing the body.
+4. Consume its generatedSpans as GeneratedSpan evidence. For each span require its path to identify
+   an actual supplied emittedContext code-closure record and its nonempty quote to occur exactly in
+   that record text. Preserve a child-file span at that actual child path. Require at least one
+   nonempty exact generated span for every decided emitted
    permission or nonempty effect collection. Missing or invalid support leaves that emitted decision
    unresolved and cannot certify a match. Keep original event/state quotations in the original Witness
    domain; emitted code is not an original source record.

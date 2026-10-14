@@ -223,7 +223,8 @@
         "path": "model/inferState.nl",
         "args": {
           "requirements": "RequirementSet",
-          "scenarios": "ScenarioInput[]"
+          "scenarios": "ScenarioInput[]",
+          "goal": "CompilationGoal"
         },
         "returns": "StateSchema",
         "kind": "function",
@@ -309,7 +310,8 @@
           "branch": "BranchPlan",
           "model": "ProcedureModel",
           "module": "GeneratedModule",
-          "sourceAtoms": "StateAtom[]"
+          "sourceAtoms": "StateAtom[]",
+          "program": "GeneratedProgram"
         },
         "returns": "GuardDecision",
         "kind": "function",
@@ -550,6 +552,9 @@
   "generation_ready": false,
   "training_admission": false,
   "model_facing_debt": "0live samples; source, generatedpolicy and callable interface variant need roughly48live samples after source qualification.",
-  "nl_line_count": 656,
-  "scenario_execution_scope": "Symbolic NL interpretation of actual generated bodies; generated callable runtime invocation remains pending."
+  "nl_line_count": 666,
+  "scenario_execution_scope": "Symbolic NL interpretation of actual generated bodies; generated callable runtime invocation remains pending.",
+  "reference_path": "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/reference-packet.json",
+  "reference_role": "One authored full typed generated-program and symbolic scenario witness, not compiler execution or generated-callable trajectory.",
+  "external_verifier_path": "training/semantic_applications/sol/semantic-procedure-compiler/verify-result.mjs"
 }
