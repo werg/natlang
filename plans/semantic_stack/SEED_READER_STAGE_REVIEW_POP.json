@@ -1,0 +1,28 @@
+{
+  "application": "astra-app-seed-lineage-v1",
+  "date": "2026-10-14",
+  "independent_scope": "Manual source/type/dataflow review of the four listed files against the prior 102-turn diagnostic. This receipt does not claim canonical reference replay, live success, model-facing variant measurement or training admission.",
+  "live_failure_reproduced_in_prior_trace": [
+    "judgeObservationScope child used undeclared ScopeMeaning and retried after unknown type name",
+    "readBank/readStocks interpreted BankSource/StockIndex as requiring downstream posterior, partition and adaptive policy outputs"
+  ],
+  "live_qualified": false,
+  "open_findings": [],
+  "predecessor_live_source_sha256": "03c6f6c0bde1e47dfc549fec5c011e3524154568d4b48e046c5f3d5f46ecd59a",
+  "result": "passed_focused_source_boundary_review",
+  "reviewed_file_sha256": {
+    "applications/seed-lineage-laboratory/designExperiments/readBank.nl": "c93cf503b8aa6b17632d852d5775569716ac17d5b7a19d0db130004e1bcf53a6",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readAssays/judgeObservationScope.nl": "77ac229553a2aa3bedefc6df2d111fe5c69bb10bad47b656b36e0e79634b936f",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readStocks.nl": "b8c2d6c7bc658ded202727ede3f4b869e9a2397d1b59a5512da628fbac8112d1",
+    "applications/seed-lineage-laboratory/types.ts": "41b395ff6e1436441d5f9ac150d48eb05b231099f0fa7277112c92714ec219b6"
+  },
+  "reviewer": "pop-semantic-curriculum",
+  "schema": "natlang.semantic-application-independent-source-delta-review/1",
+  "source_fixture_oracle_changed": false,
+  "source_semantics": [
+    "ScopeMeaning now has a concrete declared shape and a same-action direct awaited scoped judgment over actual observation clauses with actual protocol clauses captured. The parent matches each returned clause-keyed quote to original evidence and copies the returned semantic fields into ScopeDecision.",
+    "readBank explicitly ends at the four typed source-reader contributions and complete BankSource inventory. reconstructBelief, predictExperiments and planPolicy own later posterior, answer and cost outputs.",
+    "readStocks explicitly returns offered stock, ExperimentPlans, source consumption rules and unresolved source roles; it does not calculate future policy cost or prediction branches."
+  ],
+  "training_admission": false
+}
