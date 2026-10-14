@@ -10,12 +10,17 @@ success cannot substitute for that source property.
 - `training/semantic_stack/sol_programs.json` (100 designs) and
   `plans/semantic_stack/astra-programs.json` (120 designs) remain useful task and
   fixture sources. They are not 220 qualified application-scale programs.
-  The sampled Sol entries 001–007 use the same four-stage call path and the
-  same finite-frontier/literal scaffold with a short domain-specific objective.
+  All 100 Sol entries have exactly four named functions. After replacing each
+  entry's repeated `semantic_rule` with one placeholder, the instructions after
+  the first step are identical at every stage across all 100 entries (100/100
+  in each of the four stages, counted on the committed catalog). The first
+  step and the evidence worlds vary, so these remain useful small cases, but
+  the repeated stage text does not describe 100 deep semantic procedures.
   That scaffold needs authored, domain-specific `.nl` procedures and a live
   typed-handoff trace before any such entry earns the application-scale label.
-  The Astra designs specify more distinct stage outlines and source worlds,
-  but the catalog itself is still a design rather than a completed source tree.
+  The Astra designs specify more distinct stage outlines and source worlds;
+  only 13/120 carry the fuller `stage_specs` contribution descriptions. The
+  catalog itself is still a design rather than a completed source tree.
 - Seed Lineage Laboratory and Cave Mission are authored source trees with
   different branches and typed semantic handoffs. Their exact source replays
   and independent reviews establish source readiness, not live or training
