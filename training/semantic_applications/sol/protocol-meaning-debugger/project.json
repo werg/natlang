@@ -74,7 +74,9 @@
     "types.ts",
     "services.d.ts",
     "natlang.json",
-    "tsconfig.json"
+    "tsconfig.json",
+    "readEvidence/advanceDefinitionUnit.nl",
+    "readEvidence/advanceDefinitionUnit/interpretDefinition.nl"
   ],
   "typed_call_graph": {
     "nodes": [
@@ -323,6 +325,26 @@
         "returns": "TimingView",
         "kind": "function",
         "owned_delta": "Bind exact event-relative windows without substituting a convenient timestamp."
+      },
+      {
+        "path": "readEvidence/advanceDefinitionUnit.nl",
+        "args": {
+          "state": "DefinitionFrontier"
+        },
+        "returns": "DefinitionFrontier",
+        "kind": "function",
+        "owned_delta": "Preserve original per-unit successes, uncertainty and actual failures while reducing pending units."
+      },
+      {
+        "path": "readEvidence/advanceDefinitionUnit/interpretDefinition.nl",
+        "args": {
+          "unit": "DefinitionReadingUnit",
+          "record": "ProtocolRecord",
+          "supportingRecords": "ProtocolRecord[]"
+        },
+        "returns": "DefinitionInterpretation",
+        "kind": "function",
+        "owned_delta": "Scoped original owner/role/meaning judgment; source permission classifies as probe."
       }
     ],
     "edges": [
@@ -433,6 +455,14 @@
       {
         "caller": "debug/repair/auditRepair.nl",
         "callee": "probes/predict.nl"
+      },
+      {
+        "caller": "readEvidence.nl",
+        "callee": "readEvidence/advanceDefinitionUnit.nl"
+      },
+      {
+        "caller": "readEvidence/advanceDefinitionUnit.nl",
+        "callee": "readEvidence/advanceDefinitionUnit/interpretDefinition.nl"
       }
     ]
   },
@@ -460,6 +490,14 @@
     {
       "site": "metrics.nl",
       "consumed_by": "MetricView numeratorOutcome/counting meaning/display compatibility; plans executable numerator and semantic contrast"
+    },
+    {
+      "site": "readEvidence.nl",
+      "consumed_by": "Actual original DefinitionReadingUnit inventory seeds finite pendingUnits; unresolved inventory preserved."
+    },
+    {
+      "site": "readEvidence/advanceDefinitionUnit/interpretDefinition.nl",
+      "consumed_by": "Returned owner/kind/meaning/support bound to original DefinitionClause then actual EvidenceIndex."
     }
   ],
   "iteration_reducers": [
@@ -470,6 +508,13 @@
       "state": "InvestigationState",
       "measure": "pendingSeedIds.length",
       "termination": "All hypotheses and required controls settled, or finite seed universe exhausted."
+    },
+    {
+      "caller": "readEvidence.nl",
+      "step": "readEvidence/advanceDefinitionUnit.nl",
+      "state": "DefinitionFrontier",
+      "measure": "pendingUnits.length",
+      "termination": "All original units have one actual accepted/unresolved/failed result."
     }
   ],
   "services": [
@@ -494,15 +539,49 @@
   "readiness": {
     "source_loader_checked": true,
     "typed_declarations_checked": true,
-    "independent_oracle_review": false,
-    "exact_result_replay": false,
+    "independent_oracle_review": true,
+    "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false,
-    "metric_transformation_revision": "Typed source/canonical delta pending independent and live review; numeric fixture facts unchanged."
+    "metric_transformation_revision": "Independent current-source metric handoff review passes; actual runtime/live consumption remains pending.",
+    "typed_reference_checked": true
   },
-  "generation_ready": false,
+  "generation_ready": true,
   "training_admission": false,
-  "model_facing_debt": "All23NL bodies/types unmeasured; first full-project diagnostic and about48samples per adopted presentation pending.",
-  "nl_line_count": 593,
-  "external_verifier_path": "training/semantic_applications/sol/protocol-meaning-debugger/verify-result.mjs"
+  "model_facing_debt": "Reader-progress v2:0/48 live samples; require actual per-unit progress, probe-role literal classification and consumed typed question prerequisites. Frozen v1 failure is source diagnosis/no model-negative.",
+  "nl_line_count": 675,
+  "external_verifier_path": "training/semantic_applications/sol/protocol-meaning-debugger/verify-result.mjs",
+  "independent_reviews": [
+    {
+      "path": "plans/semantic_stack/PROTOCOL_APPLICATION_REVIEW_ASTRA.json",
+      "sha256": "f81239d9913f96565b982bbf695ee951ca7931908314fdb645564c0514a259a5",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Original source/oracle,36raw plans and corrected exact seam review; later metric handoff receipt supersedes overlapping source/reference hashes."
+    },
+    {
+      "path": "plans/semantic_stack/PROTOCOL_METRIC_HANDOFF_REVIEW_ASTRA.json",
+      "sha256": "c83fe7c25b2ee6b946142a99891894b469cce0a933d4ae1cc12864b893aa5409",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Current typed symbolic metric/operational outcome handoff, raw reference recalculation and current verifier/reference hashes."
+    },
+    {
+      "path": "plans/semantic_stack/PROTOCOL_READER_PROGRESS_V2_REVIEW_ASTRA.json",
+      "sha256": "d9e1f45a9d63c7c2a41a8df6941e0a74f9e209e891ae1c1c5a5e78fa75eddfab",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Reader-progress v2 original unit/literal ownership, prior progress and exact parent-index binding;18controls/native independently reproduced. Source-only/no live."
+    }
+  ],
+  "readiness_scope": "Pinned one-case v2 diagnostic preparation only; new reader source peer accepted, original oracle/current metric full reference unchanged. Live-qualified and training-admitted false.",
+  "current_reference_preflight": {
+    "source_sha256": "b01f3e134dac4aeccf4d0b8c42e8c0bbf661bf4d598ae89da9024142083794ee",
+    "reference_ok": true,
+    "verifier_sha256": "eeab3cf4bd8ecb6561e319ab3ffd7a4c18d6f6652be2bd1d5d72bdb97f98b562",
+    "scope": "Curriculum current-source canonical typed reference preflight; not actual app execution."
+  },
+  "source_variant": {
+    "id": "typed-reader-progress-v2",
+    "parent_source_sha256": "b01f3e134dac4aeccf4d0b8c42e8c0bbf661bf4d598ae89da9024142083794ee",
+    "independent_source_review": true,
+    "fixture_oracle_reference_unchanged": true
+  }
 }

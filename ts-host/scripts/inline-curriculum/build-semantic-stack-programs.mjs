@@ -623,6 +623,7 @@ function render(entry, provider) {
   const graphFrontier = stageSpec && variant?.program_id === id ? variant.graph_audit_frontier : null;
   if (graphFrontier) {
     const child = graphFrontier.step_name;
+    const nodeJudgment = graphFrontier.node_judgment;
     const expectedPath = `${graphFrontier.owner_stage}/${child}.nl`;
     if (graphFrontier.schema !== 'semantic-named-graph-frontier/1' ||
         graphFrontier.owner_stage !== steps.at(-1)?.name ||
@@ -641,11 +642,23 @@ function render(entry, provider) {
         !Array.isArray(crossFolder?.stage5_numbered_plan) ||
         !crossFolder.stage5_numbered_plan.some(step => step.includes(`${child}.iterateOn`)))
       throw Error(`${id}: invalid named graph frontier contract`);
+    if (nodeJudgment && (nodeJudgment.schema !== 'semantic-scoped-node-judgment/1' ||
+        nodeJudgment.input_type !== 'NodeJudgmentInput' ||
+        nodeJudgment.output_type !== 'EffectNodeFinding' ||
+        typeof stageSpec.types?.NodeJudgmentInput !== 'string' ||
+        !nodeJudgment.invocation_site?.startsWith(`${child} step5`) ||
+        typeof nodeJudgment.idiom_preconditions !== 'string' ||
+        !nodeJudgment.idiom_preconditions.trim() ||
+        typeof nodeJudgment.direct_await_idiom !== 'string' ||
+        !nodeJudgment.direct_await_idiom.includes('await judgeNode(nodeInput)') ||
+        !nodeJudgment.direct_await_idiom.includes('next.nodeFindings.push(nodeFinding)')))
+      throw Error(`${id}: invalid scoped node-judgment contract`);
     const path = `${stageFolder}/${child}.nl`;
     if (Object.hasOwn(files, path)) throw Error(`${id}: duplicate named graph frontier path`);
     files[path] = nlFile({ args: graphFrontier.args,
       returns: graphFrontier.output_type, description: graphFrontier.description,
       instructions: graphFrontier.numbered_plan.join('\n') + '\n' +
+        (nodeJudgment ? `${nodeJudgment.idiom_preconditions}\n${nodeJudgment.direct_await_idiom}\n` : '') +
         `This callable performs one frontier step and returns EffectFrontier. ` +
         `${graphFrontier.owner_stage} owns iterateOn with measure ` +
         `${graphFrontier.iteration.measure} and finished predicate ` +

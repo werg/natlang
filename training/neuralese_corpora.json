@@ -66171,6 +66171,26 @@
       "notes": "Narrow service recovery family (dispatch, catalog, permits); retain alongside broad application-scale semantic programs rather than expanding its relative share."
     },
     {
+      "id": "luna-service-result-recovery-s52054-lfm-render-v1",
+      "owner": "pop",
+      "path": "runs/luna-service-result-recovery-s52054-v1/lfm25-render-v1",
+      "include": [
+        "receipt.json",
+        "full/lfm25/text-data.jsonl",
+        "program-header/lfm25/text-data.jsonl",
+        "whole-trajectory/lfm25/text-data.jsonl"
+      ],
+      "source_class": "derived-lfm25-training-render",
+      "license": "inherited project-generated source provenance",
+      "split": "train only; inherited from the admitted native decisions",
+      "admission": "derived LFM rendering of luna-service-result-recovery-s52054-v1; no independent source credit",
+      "training_admission": true,
+      "training_admission_reason": "58/58 admitted decisions rendered, zero reservation or decontamination omissions, 58/58 program-header serving token boundaries exact; whole trajectory has 47 source parents",
+      "derived_from": "luna-service-result-recovery-s52054-v1",
+      "review_status": "shared renderer receipt pinned; full is a 5% program sample, program-header and whole-trajectory cover the full source",
+      "required_conversion": "include with a low recovery mixture weight in the next declared LFM target union; Mellum twin is DGX-owned"
+    },
+    {
       "id": "harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1",
       "owner": "dgx",
       "path": "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1",

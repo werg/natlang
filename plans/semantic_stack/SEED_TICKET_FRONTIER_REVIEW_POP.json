@@ -1,0 +1,26 @@
+{
+  "schema": "semantic-application-independent-source-review/1",
+  "application": "seed-lineage-laboratory",
+  "source_variant": "joint-ticket-frontier-v4",
+  "reviewer": "pop-semantic-curriculum",
+  "scope": "Source and typed handoff only; no live semantic execution or training admission",
+  "files_sha256": {
+    "applications/seed-lineage-laboratory/types.ts": "8a143ea3566a18886ca9d53192a6b1c467e958872f3f9f92e475dea0d06bdefb",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readTheories.nl": "fd31ad87058a46e3b8bacb9d257ee456b167589be82eba5b54f59ae5d2ac9628",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readTheories/readTheoryContext.nl": "fa118062e03480c69bb20c1f76d66642f6e62e9bef09c66a73864740b4fe23fa",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readTheories/advanceTicket.nl": "3f4eb02066db667551b504576c7c2e9a41fd5aee3aa6b9c473671f39babeac1b",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readTheories/advanceTicket/interpretTicket.nl": "c1a6108c2c0b168fc5f2964dd4140e6ff47a4041a2983ca95a557eb87ab150f5"
+  },
+  "source_findings": [
+    "The reader separates theory and prior convention inventory from one complete joint-ticket interpretation per original ticket ID; it does not infer posterior selection during reading.",
+    "The finite frontier consumes one pending unit per step and preserves completed accepted, unresolved, and failed results, so a later defective ticket cannot erase prior successes.",
+    "The scoped literal owns ticket-specific theory, correlated assignments and positive joint mass; the parent binds exact clause witnesses and retains the actual returned tuple.",
+    "The reader checks original ID coverage exactly once and carries unresolved evidence forward without treating missing data as a zero-mass world.",
+    "The host types and named callable signatures agree; complete tickets flow to reconstructBelief through TheoryIndex."
+  ],
+  "open_source_findings": [],
+  "source_review_passed": true,
+  "canonical_reference_replay_performed_by_reviewer": false,
+  "live_samples": 0,
+  "training_admitted": false
+}

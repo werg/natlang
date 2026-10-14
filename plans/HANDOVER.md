@@ -1,5 +1,85 @@
 # Continuation guide — updated 2026-10-14
 
+## 05:25 CEST: recovery render synced and deep-source criterion
+
+The owner clarified again that new application-scale examples must put substantive
+semantic decisions in deep, numbered natural-language pseudocode, not in crisp
+JS. Keep valid shallow rows in the ordinary mix, but do not count a catalog
+design or a thin wrapper as a completed large application. The source authors
+and live curriculum reviewer have this instruction. Inspect live code for
+case-specific answer tables and verify typed child results actually change
+later state; repair source ergonomics before admitting such a row.
+
+The 47-parent/58-decision Luna service-result recovery source now has an LFM
+native render, `luna-service-result-recovery-s52054-lfm-render-v1`, registered
+under immutable manifest in `f74b1b36`. It selected all 58 approved decisions,
+with 58 exact program-header serving boundaries and no split/decontam omissions.
+The 2.03 MB render and receipt were synced to canonical DGX and SSH-verified
+(manifest object SHA `18ad0b56`). It is a narrow low-weight candidate for the
+next LFM training union, not part of the current QAD checkpoint. DGX has been
+briefed to render a Mellum twin if useful. A four-seed QAD self-trajectory probe
+on two of those later decisions got final return 4/4 but valid eval code 0/4;
+this diagnoses generalization and pipeline compatibility, not failure to learn
+those exact examples. See `plans/neuralese/QAD_ACTION_TARGET_DRAGNET_20261014.md`.
+
+Ecology v16 live diagnostic stopped after 81 turns with useful typed child
+consumption but three source/agent-ergonomics defects (interaction-edge scope,
+one JS semantic edge materialization, and an unfinished/repeated child).
+Curriculum is preparing v17. Seed v4 live retry is active and has passed the
+earlier monolithic TheoryIndex failure point with scoped ticket accumulation;
+Cave v7 and Protocol v2b remain queued for matched live retries. No partial
+diagnostic is an admitted training or model-negative row.
+
+## 05:15 CEST: deep pseudocode source cohort and QAD action audit
+
+Owner clarified that the new corpus should resemble sizable natlang
+applications whose numbered natural-language procedures own the substantive
+semantic decisions. The 100 Sol and 120 Astra catalog entries remain useful
+small cases and source/fixture seeds, but are not counted as 220 qualified
+application-scale projects (`plans/semantic_stack/DEPTH_AUDIT.md`). Keep those
+valid rows in the ordinary mix while building deeper source trees. Review
+actual typed state changes and child-result consumption, not file/step count.
+
+Protocol Meaning Debugger live stopped at turn 19: `readEvidence` produced 22
+definitions but one invalid union label caused the parent to discard all, and
+`interpretQuestion` replaced source interpretation with a 7.4KB case-specific
+JS table (`a8504e19`). Seed v3 got a typed StockIndex through but tried to
+return a monolithic TheoryIndex with `_etc`, rejected at turn 13 (`462f74ce`).
+Neither is a model-negative/admitted row. Seed v4 source (`02f926fe`) now uses
+typed per-ticket NL accumulation, 30 NL/183 numbered steps; sealed matched
+retry is queued behind Ecology. Cave v7 (`ffd75e38`, peer receipt `4fb18c5a`)
+passes original global anchor/support into scoped convention judgments and
+preserves alternatives; live repeat pending. Ecology v16 (`ea7e20c8`,
+`30fd6dc3`) moves per-node effect status/reason from case-specific JS into a
+consumed scoped NL judgment. Its bounded one-case Luna diagnostic is active
+under `natlang-pop-semstack-v16-ecology.service`, admission false. Polyphonic
+Edition Workshop is the next distinct application source; DECOMPOSITION first.
+
+QAD step-15000 correct-action audit is on main (`fbdc6c76`, correction
+`5ec7ef88`, region split `24b94ccd`). Exact local receipt:
+`runs/qad-action-target-mask-audit-20261014-v1/report.json`. Two admitted
+train-only Luna recovery decisions have complete, unmasked 100/65-token gold
+actions; full and runtime-equivalent program-header prefixes match serving
+token-for-token. Preliminary program-header mismatch was a diagnostic error
+(native tools passed as externally supplied) and its artifact was deleted.
+Under gold history, tool names/arguments have high argmax agreement while
+earlier reasoning spans are harder (full reasoning NLL 2.38/2.41, 45%/44%
+argmax). This does not prove own-trajectory action behavior; inspect sampled
+reasoning-to-action transitions and repetition. QAD close48 remains eligible
+4/48. Pop has no active GPU trainer after its step-15600 stop; do not relabel
+this audit as a new training qualification.
+
+Pop root has about 23 GiB free and `/srv/storage` about 13 GiB. DGX's 50.65
+GiB D13 raw SWE record snapshot cannot be mirrored uncompressed with its 8 GiB
+floor yet; the four text variants (3.56 GiB) are verified on Pop. DGX request
+`2026-10-14T02:52:40.589255Z-dgx-01f3` remains open. Audit exact discarded
+or redundant provider artifacts before pruning, or arrange a lossless
+compressed/staged sync with DGX; preserve active/held data and the run-v13
+prepared teacher symlink target. The old run-v11 has large files but its
+source/provenance dependency audit is unfinished, so do not delete it on size
+alone. Ordinary Luna generation replenishes every 10 minutes to six workers;
+Gemini CLINC generation continues.
+
 ## 04:05 CEST: rich-source revisions, live diagnostics, corpus mirror
 
 Seed and Cave source refinements now deepen existing semantic consumers rather

@@ -1,0 +1,46 @@
+{
+  "schema": "natlang.independent-semantic-source-review/1",
+  "reviewer": "semantic_slate_astra",
+  "source_commits": [
+    "198d9a15",
+    "7f5f80dd"
+  ],
+  "reviewed_file_sha256": {
+    "applications/protocol-meaning-debugger/DECOMPOSITION.md": "7289a0f5b1be4d11c879c74e938ef490d60aca917f6e767c93532d8848f13cf7",
+    "applications/protocol-meaning-debugger/types.ts": "afefc80cc0086699d43c11b78f7d5aa2d3253580a7d2029956a362dfb0e65c71",
+    "applications/protocol-meaning-debugger/readEvidence.nl": "92d47271a4798e56a1c9f04ebc81394d0feaf83c9910146fa4713356ad556065",
+    "applications/protocol-meaning-debugger/readEvidence/advanceDefinitionUnit.nl": "147f558ff6a6ef0196f4646e2d6bb99e4ef3b04ac5904f1024962eccadf6b776",
+    "applications/protocol-meaning-debugger/readEvidence/advanceDefinitionUnit/interpretDefinition.nl": "f94c4e9227c1708ab483b42adcbcbaf9973499eaafb5300a910ed1f248f47fb4",
+    "applications/protocol-meaning-debugger/debug/intake/interpretQuestion.nl": "2a96e346f10c653a9e42adc2211142498c1f8ea95eb0dbaa2663dec41f93f4a4",
+    "training/semantic_applications/sol/protocol-meaning-debugger/reader-progress-controls/check-controls.mjs": "62b3cce62bc9b1ab892dd8d85f12ebb5f2cbffeb525deb3bd339a959eea9a3fe",
+    "applications/protocol-meaning-debugger/debug/intake.nl": "f93bc1c7911e74f88cad24a84d2a339d51bb5d705ce643b1d85b47991fc7504a"
+  },
+  "findings": [
+    {
+      "id": "actual-index-binding",
+      "status": "closed",
+      "finding": "intake named actual child evidenceIndex but later instructions used index",
+      "closure": "Steps6/7 now use evidenceIndex.documents and explicitly assign Intake.index=evidenceIndex"
+    }
+  ],
+  "accepted_source_flow": [
+    "Original source unit inventory scopes definition interpretation and preserves provenance",
+    "One finite reducer step directly awaits actual typed interpretation and retains accepted/unresolved/failed progress",
+    "Scoped NL literal owns role/owner/meaning; probe is explicit supported role",
+    "Parent exact quote/identity binding consumes returned meaning rather than replacing it",
+    "Question consumes actual typed definitions and reports missing prerequisites; raw documents are provenance-only at this boundary"
+  ],
+  "policy_location_review": "The revised graph structurally directs meaning extraction to scoped NL unit children. Exact code binds original evidence and carries typed progress. A live trace is still needed to establish that the executor follows this source ownership rather than assembling a source-case table.",
+  "reproduced_controls": {
+    "passed": true,
+    "positive": 5,
+    "negative": 13,
+    "scope": "Author exact type/progress/provenance controls"
+  },
+  "native_loader_types": {
+    "ok": true
+  },
+  "fixture_oracle_reference_unchanged": true,
+  "live_samples": 0,
+  "training_admitted": false
+}

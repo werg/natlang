@@ -1,0 +1,41 @@
+{
+  "schema": "natlang.independent-source-review/1",
+  "reviewer": "semantic_slate_astra",
+  "variant": "cave-global-anchor-support-v7",
+  "reviewed_file_sha256": {
+    "applications/cave-mission/planMission/survey/readFrames.nl": "9ec0fe0c900ba539307f973f0de7e2d4760f34ec49e61e2ca50a021001e333c6",
+    "applications/cave-mission/planMission/survey/readFrames/interpretConvention.nl": "2caeeed963c07a937ce9d7b3cc633e24d7b43fb66f0f7df266efbe9214866129",
+    "training/semantic_applications/astra/cave-mission/survey-v5-controls/check-controls.mjs": "280c9f04a4e90d0e09c4352bcfb7e1c635070b5343dcf05fb3bf37b12c32f6df",
+    "training/semantic_applications/astra/cave-mission/survey-v5-controls/item-witnesses.json": "7db88adec59151c9e93741e20529495d941b348a34359de5e37c1bce6502ca06"
+  },
+  "source_reconstruction": [
+    "F03 locates Amber local origin at the three-hole disk but supplies no global numeric coordinate",
+    "L03 identifies that disk with global junction J; F01 gives J=(0,1)",
+    "F04 leaves exactly two u-axis conventions; completing global support resolves origin without resolving handedness"
+  ],
+  "typed_handoff_review": [
+    "NL support selection reads original unit/primary/all clauses and changes only supporting IDs",
+    "Parent preserves actual unit role and original identifiers and gathers selected original support clauses",
+    "interpretConvention actual scoped literal input includes supportingClauses",
+    "Every complete alternative carries exact local origin plus global/identity evidence; parent binds original witness identity",
+    "Actual returned origin/basis alternatives remain downstream alignment inputs"
+  ],
+  "native_loader_types": {
+    "ok": true
+  },
+  "reproduced_exact_controls": {
+    "passed": true,
+    "positive": 13,
+    "negative": 15,
+    "scope": "Authored item type/provenance and invariant controls; not NL execution"
+  },
+  "source_fixture_oracle_reference_unchanged": true,
+  "blocking_findings": [],
+  "live_samples": 0,
+  "training_admitted": false,
+  "limitations": [
+    "Source selection and actual support consumption still require live measurement",
+    "Exact controls check the declared authored source witness; they do not prove NL entailment or full mission execution"
+  ],
+  "source_commit": "ffd75e38"
+}

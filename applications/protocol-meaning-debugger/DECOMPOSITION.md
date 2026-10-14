@@ -70,3 +70,16 @@ label remains diagnosable without silently changing the implementation's executa
 The service still only filters supplied numeric rows and computes supplied polarity arithmetic.
 Canonical witness fields and exact invariant checks are updated; original numeric/source facts
 remain unchanged. Both scoped results require live consumption proof before model-facing adoption.
+
+## Source reader progress revision
+
+The first diagnostic lost the entire interpreted index when one clause returned an invalid role;
+question interpretation then rebuilt a case-specific answer table. The replacement has a typed NL
+inventory, a finite original-unit frontier and two nested reader functions. `readEvidence` owns original
+unit coverage, `advanceDefinitionUnit` owns durable-in-value per-unit progress/provenance, and
+`interpretDefinition` owns the scoped semantic owner/role/meaning judgment. Successful rows survive
+a later failed unit. `interpretQuestion` consumes that actual typed index; missing required meanings
+stay unknown and are repaired in the reader rather than reclassified from raw documents downstream.
+Inventory/classification/recovery policy remains numbered NL. Crisp operations only check source IDs,
+exact quote substrings, immutable records and one-unit frontier reduction. The existing numerical
+fixture, report type and oracle are preserved. New source is held for independent/live review.

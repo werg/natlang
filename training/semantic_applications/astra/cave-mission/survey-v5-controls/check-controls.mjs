@@ -21,4 +21,10 @@ check('glow-scope','source sensor identity replaced',false,v=>v.meaning.sensorId
 check('full-carrier-tunnel-scope','missing item evidence',false,v=>v.evidence=[]);
 check('present-forward-gate','wrong quote identity',false,v=>v.evidence[0].clauseId='NO_CLAUSE');
 check('global-junction','invented supporting quote',false,v=>v.evidence[0].exactQuote='Not in source');
+check('frame-source-support-input','support clause collection may permute',true,v=>v.supportingClauses.reverse());
+check('frame-source-support-input','support argument omitted at literal boundary',false,v=>delete v.supportingClauses);
+check('frame-source-support-input','global numeric anchor omitted',false,v=>v.supportingClauses=v.supportingClauses.filter(c=>c.id!=='F01'));
+check('frame-source-support-input','source identity bridge omitted',false,v=>v.supportingClauses=v.supportingClauses.filter(c=>c.id!=='L03'));
+check('frame-source-support-input','frame role changed during support selection',false,v=>v.unit.kind='landmark');
+check('closed-frame-supported-origin','global origin replaced by local zero',false,v=>v.alternatives[0].origin={x:0,y:0});
 console.log(JSON.stringify({scope:'Authored per-item type/provenance/declared invariant controls; no NL execution or semantic-entailment proof',passed:checks.every(x=>x.passed),positive:checks.filter(x=>x.expected).length,negative:checks.filter(x=>!x.expected).length,checks},null,2));if(checks.some(x=>!x.passed))process.exitCode=1;

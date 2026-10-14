@@ -354,6 +354,254 @@
         "/meaning/cost": 1
       },
       "semantic_review_required": true
+    },
+    {
+      "id": "frame-source-support-input",
+      "type": "{unit:SurveyReadingUnit;frameClauses:SourceClause[];supportingClauses:SourceClause[]}",
+      "value": {
+        "unit": {
+          "unitId": "frame-Amber-conventions",
+          "kind": "frame",
+          "sourceFrame": "Amber",
+          "primaryClauseIds": [
+            "F03",
+            "F04"
+          ],
+          "supportingClauseIds": [
+            "F05",
+            "F01",
+            "L03"
+          ],
+          "focus": "Which complete origin/basis alternatives do these original frame statements license?"
+        },
+        "frameClauses": [
+          {
+            "id": "F03",
+            "text": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost.",
+            "witnesses": [
+              {
+                "sourceId": "AMBER-FRAME",
+                "path": "surveys/amber/frame.md",
+                "quote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+              }
+            ]
+          },
+          {
+            "id": "F04",
+            "text": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin.",
+            "witnesses": [
+              {
+                "sourceId": "AMBER-FRAME",
+                "path": "surveys/amber/frame.md",
+                "quote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+              }
+            ]
+          }
+        ],
+        "supportingClauses": [
+          {
+            "id": "F05",
+            "text": "[F05] Neither surviving export metadata nor the other survey notes determine which convention was used for this Amber scan. Both conventions must remain possible until a listed observation distinguishes them.",
+            "witnesses": [
+              {
+                "sourceId": "AMBER-FRAME",
+                "path": "surveys/amber/frame.md",
+                "quote": "[F05] Neither surviving export metadata nor the other survey notes determine which convention was used for this Amber scan. Both conventions must remain possible until a listed observation distinguishes them."
+              }
+            ]
+          },
+          {
+            "id": "F01",
+            "text": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1).",
+            "witnesses": [
+              {
+                "sourceId": "GLOBAL",
+                "path": "surveys/global/frame.md",
+                "quote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+              }
+            ]
+          },
+          {
+            "id": "L03",
+            "text": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area.",
+            "witnesses": [
+              {
+                "sourceId": "BLUE-LANDMARKS",
+                "path": "surveys/blue/landmarks.md",
+                "quote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+              }
+            ]
+          }
+        ]
+      },
+      "exact_invariants": {
+        "/unit/kind": "frame",
+        "/unit/sourceFrame": "Amber"
+      },
+      "unordered_projections": [
+        {
+          "path": "/frameClauses",
+          "fields": [
+            "id"
+          ],
+          "expected": [
+            {
+              "id": "F03"
+            },
+            {
+              "id": "F04"
+            }
+          ]
+        },
+        {
+          "path": "/supportingClauses",
+          "fields": [
+            "id"
+          ],
+          "expected": [
+            {
+              "id": "F01"
+            },
+            {
+              "id": "L03"
+            },
+            {
+              "id": "F05"
+            }
+          ]
+        }
+      ],
+      "semantic_review_required": true
+    },
+    {
+      "id": "closed-frame-supported-origin",
+      "type": "ConventionInterpretation",
+      "value": {
+        "alternatives": [
+          {
+            "sourceFrame": "Amber",
+            "origin": {
+              "x": 0,
+              "y": 1
+            },
+            "uVector": {
+              "x": 1,
+              "y": 0
+            },
+            "vVector": {
+              "x": 0,
+              "y": 1
+            },
+            "evidence": [
+              {
+                "clauseId": "F01",
+                "exactQuote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+              },
+              {
+                "clauseId": "F03",
+                "exactQuote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+              },
+              {
+                "clauseId": "F04",
+                "exactQuote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+              },
+              {
+                "clauseId": "L03",
+                "exactQuote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+              }
+            ]
+          },
+          {
+            "sourceFrame": "Amber",
+            "origin": {
+              "x": 0,
+              "y": 1
+            },
+            "uVector": {
+              "x": -1,
+              "y": 0
+            },
+            "vVector": {
+              "x": 0,
+              "y": 1
+            },
+            "evidence": [
+              {
+                "clauseId": "F01",
+                "exactQuote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+              },
+              {
+                "clauseId": "F03",
+                "exactQuote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+              },
+              {
+                "clauseId": "F04",
+                "exactQuote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+              },
+              {
+                "clauseId": "L03",
+                "exactQuote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+              }
+            ]
+          }
+        ],
+        "unresolved": []
+      },
+      "exact_invariants": {
+        "/unresolved": [],
+        "/alternatives/0/origin": {
+          "x": 0,
+          "y": 1
+        },
+        "/alternatives/1/origin": {
+          "x": 0,
+          "y": 1
+        }
+      },
+      "semantic_review_required": true,
+      "unordered_projections": [
+        {
+          "path": "/alternatives",
+          "fields": [
+            "sourceFrame",
+            "origin",
+            "uVector",
+            "vVector"
+          ],
+          "expected": [
+            {
+              "sourceFrame": "Amber",
+              "origin": {
+                "x": 0,
+                "y": 1
+              },
+              "uVector": {
+                "x": 1,
+                "y": 0
+              },
+              "vVector": {
+                "x": 0,
+                "y": 1
+              }
+            },
+            {
+              "sourceFrame": "Amber",
+              "origin": {
+                "x": 0,
+                "y": 1
+              },
+              "uVector": {
+                "x": -1,
+                "y": 0
+              },
+              "vVector": {
+                "x": 0,
+                "y": 1
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

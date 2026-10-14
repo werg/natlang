@@ -16,7 +16,15 @@ returns: FrameSurvey
    Visit every
    actual unit once. Gather its original primary/supporting clauses by those checked IDs; no guessed
    source or coordinate value may replace a missing inventory contribution.
-4. For a frame unit, call interpretConvention(unit, primaryClauses, supportingClauses). Consume its actual
+4. For each frame unit directly invoke a scoped NL SurveyReadingUnit support-selection literal on
+   {unit, primaryClauses, clauses}, preserving that actual unit identity/frame/focus. Its numbered policy
+   first identifies named origin/basis references, then follows source-established anchor identity links,
+   then selects every fixed global coordinate/orientation definition needed to interpret those references.
+   Global point and unique-anchor bridge clauses can lie outside the frame's own file. They are context,
+   not another handedness hypothesis. The literal changes only supportingClauseIds; require unchanged
+   every other SurveyReadingUnit field including kind, primary IDs and unit/frame/focus. Require every returned support ID to name an existing original clause. Name the returned supported unit supportedUnit, combine its support IDs with original supports,
+   bind unit to that actual supportedUnit, then gather the actual source clauses and call interpretConvention(unit, primaryClauses, supportingClauses).
+   Consume its actual
    ConventionInterpretation: bind generated alternative IDs, original sourceFrame, origin and basis
    from the returned meanings, then attach only parent-validated original clause-keyed quotations.
 5. For a landmark unit, call interpretLandmark(unit, primaryClauses, supportingClauses). Consume its

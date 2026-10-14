@@ -1,0 +1,38 @@
+{
+  "schema": "natlang.application-source-support-author-review/1",
+  "author": "semantic_slate_sol",
+  "application": "cave-mission",
+  "parent_source_sha256": "f990a454e08dbbd5c574ad94c61e4f36e7f5231beec8104e371a520143c92b0d",
+  "hashes": {
+    "applications/cave-mission/planMission/survey/readFrames.nl": "9ec0fe0c900ba539307f973f0de7e2d4760f34ec49e61e2ca50a021001e333c6",
+    "applications/cave-mission/planMission/survey/readFrames/interpretConvention.nl": "2caeeed963c07a937ce9d7b3cc633e24d7b43fb66f0f7df266efbe9214866129",
+    "training/semantic_applications/astra/cave-mission/survey-v5-controls/item-witnesses.json": "7db88adec59151c9e93741e20529495d941b348a34359de5e37c1bce6502ca06",
+    "training/semantic_applications/astra/cave-mission/survey-v5-controls/check-controls.mjs": "280c9f04a4e90d0e09c4352bcfb7e1c635070b5343dcf05fb3bf37b12c32f6df"
+  },
+  "diagnostic": {
+    "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/cave-app-consumer-depth-v6-diagnostic-v1/worker-01/case-000/jobs/000000-d34210105103cfd6.partial.json",
+    "locations": [
+      "turn12invocation/6literal omitted supportingClauses",
+      "turn13child/7lacked numeric global origin",
+      "turn15readFrames returned alternatives empty"
+    ],
+    "classification": "Source-support handoff bug; frozen diagnostic, no model-negative/admission."
+  },
+  "source_change": [
+    "Per-frame scoped NL support selection follows named origin/basis references to original fixed global definition and anchor identity clauses.",
+    "All other original unit fields including kind remain unchanged; only support IDs may be extended.",
+    "Actual unit/frameClauses/supportingClauses are passed to the convention literal.",
+    "Each complete alternative retains local-origin/global-definition/identity support; handedness remains two alternatives."
+  ],
+  "controls": {
+    "item_passed": true,
+    "item_positive": 13,
+    "item_negative": 15,
+    "baseline_passed": true,
+    "baseline_count": 22
+  },
+  "type_loader": "pass",
+  "scope": "Typed input/origin witness and exact certificate controls; not actual NL literal execution or entailment proof.",
+  "live_qualified": false,
+  "training_admission": false
+}

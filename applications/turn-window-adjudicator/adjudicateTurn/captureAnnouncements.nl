@@ -9,7 +9,7 @@ returns: CapturedTurn
 1. Start from the actual returned initialBoard and submitted IntentReadings. Preserve this original
    revision as immutable; the listed responses are not applied until their later interrupt windows.
 2. For each announced part, identify rules that will consume its target or controller reference.
-   Call bindReference(part, consumerRule, initialBoard, source.clauses) for each such concrete consumer.
+   Call bindReference(part, consumerRule, initialBoard, source.rules.contexts) for each such concrete consumer.
    Keep the returned bindings separate when consumers use captured, current or last-known control.
 3. Build each Announcement from its original intent and parts plus these actual bindings. A captured
    controller is copied now from the original target; a live or last-known reference remains a typed

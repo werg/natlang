@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.application-source-readiness/1",
+  "author": "semantic_slate_astra",
+  "variant": "source-reader-scope-v3",
+  "metrics": {
+    "nl_files": 27,
+    "physical_lines": 584,
+    "numbered_steps": 165
+  },
+  "independent_review": {
+    "path": "plans/semantic_stack/SEED_READER_STAGE_REVIEW_POP.json",
+    "sha256": "3e468400bc67a9ed9f2ae51bce303a80d8eb0511d135dca9174937799f614b97"
+  },
+  "manifest_sha256": "06a87ac61569a272fba457d49ed2fbae7649f4fac36d1858a321c0696e269130",
+  "source_sha256": "623fb3e37150c35969a88a1a4a3613197d3bbe102ae1948f9385ff8fd48644ca",
+  "package_path": "/tmp/astra-seed-reader-v3-final",
+  "checks": {
+    "native_parser_types": true,
+    "canonical_reference_replay": true,
+    "exact_controls": {
+      "positive": 8,
+      "negative": 35,
+      "passed": true
+    }
+  },
+  "source_fixture_oracle_final_report_unchanged": true,
+  "changed_internal_type": "ScopeMeaning",
+  "scope": "Declared literal result and positive local inventory responsibilities. Existing exact reference remains source evidence, not an application execution.",
+  "live_samples": 0,
+  "training_admitted": false
+}

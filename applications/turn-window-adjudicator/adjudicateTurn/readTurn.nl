@@ -18,6 +18,8 @@ returns: TurnSource
    responses. A hypothetical consequence or a rejected alternative remains source context.
 6. Cross-check each submitted target against original instance identities. Preserve the distinction
    between a card template, a current garden instance and an explicitly permitted future instance.
-7. Return the original documents/clauses, actual child results and one sourceCoverage row per listed
+7. Check every original clause ID is covered by actual rules.contexts clauseIds or rules.unitResults
+   primaryClauseIds. Failed/unresolved unit results retain coverage but not semantic success. Return the
+   original documents/clauses, actual child results and one sourceCoverage row per listed
    document containing every inventoried clause ID. Propagate child unresolved findings with their source
    identities. This stage cannot settle controller changes or apply replacement effects during inventory.

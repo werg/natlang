@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-service-result-recovery-s52054-lfm-render-v1",
+  "owner": "pop",
+  "path": "runs/luna-service-result-recovery-s52054-v1/lfm25-render-v1",
+  "files": [
+    {
+      "path": "full/lfm25/text-data.jsonl",
+      "bytes": 174476,
+      "sha256": "c779b816b922fb4c9f4d29a2453f4e14b74d6a1b0f629924bb50e4f368dd8858",
+      "lines": 3
+    },
+    {
+      "path": "program-header/lfm25/text-data.jsonl",
+      "bytes": 1020697,
+      "sha256": "80aa91f03f5b8eb2ddbbbee4373fd56cf2bad457e2a116a8ac23f5e555b7038e",
+      "lines": 58
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 7817,
+      "sha256": "361d82214d607d715cf9a1a08a12c527ae322f255e0a91685120f60648c38739"
+    },
+    {
+      "path": "whole-trajectory/lfm25/text-data.jsonl",
+      "bytes": 829651,
+      "sha256": "316518ef35a6fd030f7d1d81a98060c1f07e9933ee74a0d5f2ced64b99f8eba4",
+      "lines": 47
+    }
+  ],
+  "bytes": 2032641
+}

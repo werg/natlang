@@ -5,7 +5,8 @@ args:
   index: EvidenceIndex
 returns: Question
 ---
-1. Select clauses controlling request.targetProtocolId under explicit authority and revision rules.
+1. Consume actual index.definitions and index.unitResults as the interpreted prerequisite. Select clauses
+   controlling request.targetProtocolId under explicit authority and revision rules.
    Read their references to population, temporal anchor, measurement interval and outcome coding.
 2. State populationMeaning as a predicate over trial units, not over available reading rows. Distinguish
    commissioned equipment from equipment that happened to transmit data by the launch timestamp.
@@ -19,5 +20,9 @@ returns: Question
    restrictions as requirements even when they do not contribute directly to a baseline denominator.
 7. Record missing or conflicting target meanings in unknowns. Do not make the better-looking
    implementation into the intended protocol merely because its narrative explanation sounds plausible.
-8. Return the typed question. This proposition is the reference for all contrast and repair judgments;
+8. Missing accepted definitions stay in unknowns with their actual failed/unresolved unit identities.
+   Original documents verify provenance only in this stage; role/owner/meaning extraction belongs to the
+   readEvidence frontier. A missing typed prerequisite is repaired there, not synthesized from raw documents
+   as a new semantic index inside this function.
+9. Return the typed question. This proposition is the reference for all contrast and repair judgments;
    the baseline number is never its definition.

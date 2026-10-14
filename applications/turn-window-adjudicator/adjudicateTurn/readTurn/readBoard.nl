@@ -5,7 +5,8 @@ args:
   rules: RuleIndex
 returns: BoardSnapshot
 ---
-1. Select explicit before-announcement declarations. Inventory current instanceId/cardId pairs,
+1. Consume rules.contexts identity, initial-state and capacity readings with their source witnesses.
+   Use their actual scope to select explicit before-announcement declarations. Inventory current instanceId/cardId pairs,
    creature versus artifact kind, zone and controller. A later return rule describes a permitted future
    instance and must remain separate from an object currently present in the garden.
 2. For each current instance, join its integrity, damage, growth and attachment declarations. Keep
