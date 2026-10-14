@@ -504,3 +504,24 @@ def test_api_transport_is_the_default_without_a_bucket():
     assert job.bootstrap_env(job.validate(base_job()))['NATLANG_CW_TRANSPORT'] == 'api'
     with pytest.raises(job.JobError, match='transport'):
         job.validate(base_job(transport='bucket'))
+
+
+def test_read_sandbox_bounds_sdk_future_by_existing_patience(monkeypatch):
+    from types import SimpleNamespace
+    now = [0.0]
+    observed = []
+
+    class StuckFuture:
+        def result(self, timeout=None):
+            observed.append(timeout)
+            now[0] += timeout + 0.01
+            raise TimeoutError('SDK read did not complete')
+
+    fake = SimpleNamespace(from_id=lambda *args, **kwargs: StuckFuture())
+    monkeypatch.setitem(sys.modules, 'cwsandbox', SimpleNamespace(Sandbox=fake))
+    monkeypatch.setattr(cwctl, 'sdk_auth', lambda: None)
+    monkeypatch.setattr(cwctl.time, 'time', lambda: now[0])
+    monkeypatch.setattr(cwctl.time, 'sleep', lambda seconds: pytest.fail('expired read must not sleep'))
+    with pytest.raises(TimeoutError, match='did not complete'):
+        cwctl.read_sandbox('existing-id', patience=10)
+    assert observed == [10]

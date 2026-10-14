@@ -468,12 +468,14 @@ def read_sandbox(sandbox_id: str, patience: float = 900):
     deadline = time.time() + patience
     while True:
         try:
-            return Sandbox.from_id(sandbox_id, auth=sdk_auth(), data_plane_mode='gateway').result()
+            return Sandbox.from_id(sandbox_id, auth=sdk_auth(), data_plane_mode='gateway').result(
+                timeout=min(60, max(1, deadline - time.time())))
         except Exception as error:
-            transient = type(error).__name__ in ('SandboxUnavailableError', 'SandboxRequestTimeoutError')
+            transient = isinstance(error, TimeoutError) or type(error).__name__ in (
+                'SandboxUnavailableError', 'SandboxRequestTimeoutError')
             if not transient or time.time() > deadline:
                 raise
-            time.sleep(30)
+            time.sleep(min(30, max(0, deadline - time.time())))
 
 
 TERMINAL = ('completed', 'failed', 'terminated')
