@@ -494,15 +494,37 @@
   "readiness": {
     "source_loader_checked": true,
     "typed_declarations_checked": true,
-    "independent_oracle_review": false,
-    "exact_result_replay": false,
+    "independent_oracle_review": true,
+    "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false,
-    "metric_transformation_revision": "Typed source/canonical delta pending independent and live review; numeric fixture facts unchanged."
+    "metric_transformation_revision": "Independent current-source metric handoff review passes; actual runtime/live consumption remains pending.",
+    "typed_reference_checked": true
   },
-  "generation_ready": false,
+  "generation_ready": true,
   "training_admission": false,
   "model_facing_debt": "All23NL bodies/types unmeasured; first full-project diagnostic and about48samples per adopted presentation pending.",
   "nl_line_count": 593,
-  "external_verifier_path": "training/semantic_applications/sol/protocol-meaning-debugger/verify-result.mjs"
+  "external_verifier_path": "training/semantic_applications/sol/protocol-meaning-debugger/verify-result.mjs",
+  "independent_reviews": [
+    {
+      "path": "plans/semantic_stack/PROTOCOL_APPLICATION_REVIEW_ASTRA.json",
+      "sha256": "f81239d9913f96565b982bbf695ee951ca7931908314fdb645564c0514a259a5",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Original source/oracle,36raw plans and corrected exact seam review; later metric handoff receipt supersedes overlapping source/reference hashes."
+    },
+    {
+      "path": "plans/semantic_stack/PROTOCOL_METRIC_HANDOFF_REVIEW_ASTRA.json",
+      "sha256": "c83fe7c25b2ee6b946142a99891894b469cce0a933d4ae1cc12864b893aa5409",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Current typed symbolic metric/operational outcome handoff, raw reference recalculation and current verifier/reference hashes."
+    }
+  ],
+  "readiness_scope": "Generation preparation/one-case diagnostic only: independent source/oracle/current metric handoff, full typed canonical replay and exact grader controls. No actual application execution or training admission.",
+  "current_reference_preflight": {
+    "source_sha256": "b01f3e134dac4aeccf4d0b8c42e8c0bbf661bf4d598ae89da9024142083794ee",
+    "reference_ok": true,
+    "verifier_sha256": "eeab3cf4bd8ecb6561e319ab3ffd7a4c18d6f6652be2bd1d5d72bdb97f98b562",
+    "scope": "Curriculum current-source canonical typed reference preflight; not actual app execution."
+  }
 }
