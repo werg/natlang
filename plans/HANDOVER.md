@@ -15,6 +15,16 @@ training-admitted.
 Dialogue's two-layer quotation and timed promise refinement is on main; its
 canonical/checker and independent review remain active.
 
+Turn Window Mirror Garden v3 used the Codex-capped frozen runtime and reached
+the `readRules` child. It stopped at about 73 turns after the source directed
+identity-only and timing-only clause groups into `interpretAbility`, whose
+required ability fields those groups cannot supply; a batched child failure
+then caused successful groups to be recomputed. Exact hashes and trace are in
+`plans/semantic_stack/LIVE_DIAGNOSTICS.md` (`3e9d962a`). The source should
+separate ability units from typed identity/timing context and preserve
+completed child results in a finite iteration. No teacher row is admitted or
+model-negative label assigned. The bounded Codex output transport worked.
+
 The v15d ecology diagnostic stopped after Stage 5 made case-specific graph
 status decisions in generated JS; v16 must move each node finding into a
 scoped typed NL decision while exact graph traversal remains mechanical.
