@@ -75033,6 +75033,26 @@
           }
         }
       }
+    },
+    {
+      "id": "greenhouse-iterated-measured-20261015-v1",
+      "owner": "pop",
+      "path": "runs/greenhouse-iterated-measured-20261015-v1",
+      "include": [
+        "selected.ir.jsonl",
+        "accepted-parents.jsonl",
+        "selection-review.json",
+        "approved-turns.jsonl"
+      ],
+      "source_class": "measured-Luna-greenhouse-iterateOn-teacher-decisions",
+      "license": "project-generated",
+      "split": "train only; fresh s52086 and s52087 source groups disjoint from protected held packet and target-r3 groups; global union held filter still required",
+      "admission": "48 matched family-version-3 trials, 38 exact outcomes with recorded iteration_step events; 168 approved native decisions after 21 failed/unexecuted proposals removed",
+      "training_admission": true,
+      "training_admission_reason": "Constructed-world exact/status oracle and recorded iterateOn execution; source and held IDs/groups checked, per-decision native materializer approval and immutable review hashes; materializer intermediate pruned",
+      "review_status": "Exact/status and executed-process parent review plus native decision review complete; later global held/source-quality filter required at union build",
+      "required_conversion": "Render LFM and Mellum full, program-header and whole-trajectory twins; include in later protected union after global held/source-quality checks",
+      "notes": "Only approved-turns.jsonl is training input. Normal/sun/long 36/36 exact and iterative; broken heater 2/12 exact/blocked, remaining failures excluded. plans/neuralese/GREENHOUSE_ITERATION_CORPUS_20261015.md."
     }
   ],
   "coverage_backlog": [

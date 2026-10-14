@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "greenhouse-iterated-measured-20261015-v1",
+  "owner": "pop",
+  "path": "runs/greenhouse-iterated-measured-20261015-v1",
+  "files": [
+    {
+      "path": "accepted-parents.jsonl",
+      "bytes": 13870856,
+      "sha256": "2dec9882a44466fdfc51097db6ce3230aff0333d32d8a00ddbd2547afd157c43",
+      "lines": 38
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 12461751,
+      "sha256": "0360ba40a2b30e0a74ffc60bb88244031fe249452146a89087842c2122bbaf38",
+      "lines": 168
+    },
+    {
+      "path": "selected.ir.jsonl",
+      "bytes": 178662,
+      "sha256": "b430a3aa2376b4a34abe5e8835e77263871820b15ad30710ecdfbd065cf72485",
+      "lines": 38
+    },
+    {
+      "path": "selection-review.json",
+      "bytes": 15736,
+      "sha256": "fa67483ee87c4a2074fc31adf0f2349d28e3aa53e2f8fb2521775fe6f87eefaf"
+    }
+  ],
+  "bytes": 26527005
+}
