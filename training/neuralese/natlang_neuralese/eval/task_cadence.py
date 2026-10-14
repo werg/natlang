@@ -200,8 +200,7 @@ class TaskEval:
                                 'transport_retries': 0,
                                 'seed': 400000 + self.spec['cases'][index] + (100000 * repeat if self.spec.get('temperature') else 0),
                                 'text_neuralese_emulation': False,
-                                **({'temperature': self.spec['temperature']}
-                                   if self.spec.get('temperature') else {})})
+                                'temperature': self.spec['temperature']})
             queue = directory / 'queue.jsonl'
             queue.write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries), encoding='utf-8')
             queues.append((queue, directory / 'journal.jsonl', entries))
