@@ -1,0 +1,96 @@
+{
+  "schema": "natlang.semantic-source-repair-author-quality/1",
+  "author": "semantic_slate_sol",
+  "application": "cave-mission",
+  "variant": "survey-item-nl-v5",
+  "diagnosis": {
+    "frozen_partial": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/cave-app-physical-v4-diagnostic-v1/worker-01/case-000/jobs/000000-4cdbdb9578ac8aaa.partial.json",
+    "trace_scope": "Stoppedv4diagnostic; no final result, no model-negative/admission",
+    "source_problem": "Extraction functions permittedwholecase JS tables instead ofactualper-itemNL judgments; equipment-wide literal repeatedtablepattern.",
+    "table_observations": [
+      {
+        "turn_index": 12,
+        "invocation_id": "task-1-93a1f125-1167-47ea-95f9-5355a749f193/3",
+        "eval_utf8_bytes": 2711,
+        "nl_constructor_sites": 0,
+        "code_sha256": "62bbed67c28cc356e61e3a91014d427502e7a66025f107abc4f0c8784df1dd41"
+      },
+      {
+        "turn_index": 16,
+        "invocation_id": "task-1-93a1f125-1167-47ea-95f9-5355a749f193/2",
+        "eval_utf8_bytes": 2098,
+        "nl_constructor_sites": 0,
+        "code_sha256": "413dc83b7856121b2c712f54c9af58cb4d24c87857dafb147d0b83a15a0e2aab"
+      },
+      {
+        "turn_index": 17,
+        "invocation_id": "task-1-93a1f125-1167-47ea-95f9-5355a749f193/6",
+        "eval_utf8_bytes": 3123,
+        "nl_constructor_sites": 0,
+        "code_sha256": "916f282e81ccb88e2ac8d7222a9edd2976351ade5a1a0e7dc24e674a0ff93b41"
+      },
+      {
+        "turn_index": 19,
+        "invocation_id": "task-1-93a1f125-1167-47ea-95f9-5355a749f193/6",
+        "eval_utf8_bytes": 2933,
+        "nl_constructor_sites": 0,
+        "code_sha256": "5645d1464d44d085a53de2a089f8cf4020c50501224030cdb223034793b835dc"
+      }
+    ]
+  },
+  "files": {
+    "applications/cave-mission/types.ts": "bf9e7d8d1253b71363601abf4a2ff9ec5b44cabeed48f4e0539dddee583aefb6",
+    "applications/cave-mission/planMission/survey.nl": "9c717d50c4ca69a2e78127689de29f575eb0c8b0cc383229d4438a2e2de69d77",
+    "applications/cave-mission/planMission/survey/readFrames.nl": "6c3f33f3ef92d6fe443550f7dee309c58a271eea30ca46e2d3dcc5c3134a12e0",
+    "applications/cave-mission/planMission/survey/readFrames/interpretConvention.nl": "d18872408f62eda60c8ccdddd6a09681ea30954f1f513f18645f9a4473a72acf",
+    "applications/cave-mission/planMission/survey/readFrames/interpretLandmark.nl": "6875217ae979cc171857c406b7213c00ef37d328b5836b26e110ce7a3104bc8b",
+    "applications/cave-mission/planMission/survey/readPassages.nl": "ce66c0fa4e060ebaecc49268401fca20ce3cc409e29409f5da0d3d76bb63f17e",
+    "applications/cave-mission/planMission/survey/readPassages/interpretPassage.nl": "fbb0e79ba141c0e1a15d65ece456349423ce11309abda5e5e17bc1ad59b48739",
+    "applications/cave-mission/planMission/survey/readEquipment.nl": "a1de7ea2e5ecdce57e275c5581eaa52b246aaef0ede6990d9cc6d3ff720fd8fd",
+    "applications/cave-mission/planMission/survey/readEquipment/interpretGear.nl": "c7d240d17cb7538ddf61c909180bf12b2291e6b9105c8da02815e6eca6ca1bb1",
+    "applications/cave-mission/planMission/survey/readEquipment/interpretSensor.nl": "e15714e0821ce87b26b06401337d594eb4d69435f585139f743e65528f1a110a",
+    "applications/cave-mission/planMission/reconcileMaps/buildWorlds/extendHypothesis.nl": "2c04063a25ac7ac9f3cda025085a0f4d92409d4562c04c3aabf16187031b4bbe"
+  },
+  "composition": {
+    "nl_files": 29,
+    "nl_total_lines": 728,
+    "nl_body_lines": 509,
+    "numbered_steps": 207,
+    "type_aliases": 57,
+    "visible_crisp_policy_lines": 0
+  },
+  "typed_dataflow": [
+    "NL inventory selectsoriginalsourceunits withprimary/supportingclause IDs only.",
+    "Per-unitNL children ownactualsemanticassertions; parents copyreturnedfields andbindoriginalquotes.",
+    "ActualFrameSurvey feeds passage reader; originlocalzero distinctfromglobalanchorpoint.",
+    "Nullable absent/unknown route costs retainuncertainty; executableWorldPassage requiresknownsourcecost.",
+    "Conditionalbindingpair-vs-transformpolicy unchanged."
+  ],
+  "crisp_policy_helpers": 0,
+  "controls": {
+    "item_controls": 20,
+    "positive": 10,
+    "negative": 10,
+    "passed": true,
+    "baseline_policy_controls": 22,
+    "baseline_passed": true,
+    "scope": "Authored item type/provenance/invariants and existing canonical policy mechanism, not NL execution"
+  },
+  "canonical_reference_replay": {
+    "path": "training/semantic_applications/astra/cave-mission/mirrored-vault/reference-report.json",
+    "sha256": "3f2efe03c7e7b14608a0fa336ec8b43a3d890ebb3796b8136afa91c450713f90",
+    "reference_ok": true,
+    "reference_problems": [],
+    "opening_sha256": "cbc3d5183bc0558dc3393713a7241d0efb5f76a04fc299a77303e26d2c333f8c",
+    "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
+  },
+  "source_package": {
+    "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/cave-survey-v5-author-final",
+    "source_sha256": "e8834ab768b5ad79b721578a5eb104288b1ae4ffb2677b9048d3a6f273cd0039"
+  },
+  "fixture_oracle_reference_changed": false,
+  "independent_review": "Astra source/control peer pass; final inventory-integrity wording receipt being pinned",
+  "live_samples": 0,
+  "training_admission": false,
+  "inventory_integrity": "NonemptyprimaryIDs,reader-domainkind,originalIDmembership,uniquegeneratedunit IDs; invalidresultreportsoriginalunitforrepair"
+}
