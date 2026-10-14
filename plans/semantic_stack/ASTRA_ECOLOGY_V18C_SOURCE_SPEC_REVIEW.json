@@ -1,0 +1,50 @@
+{
+  "schema": "natlang.semantic-variant-independent-render-review/1",
+  "reviewer": "semantic_slate_astra",
+  "variant": "astra-ecology01-joined-seed-coverage-v18c",
+  "proposal": {
+    "path": "plans/semantic_stack/ASTRA_ECOLOGY_JOINED_SEED_COVERAGE_V18C_PROPOSAL.json",
+    "sha256": "8fc70c3570ba9905acfb1327b91fce5431bf339eed4d40df0bf7a6141e06a98d"
+  },
+  "source": {
+    "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/ecology-v18c-source-v1/source-candidates.ir.jsonl",
+    "sha256": "9ec6a0e9688e077fb10df4b62acf598f0c059e05af73cf57eb31b069d3a55845"
+  },
+  "base_source": {
+    "path": "/tmp/semstack-v18b-render-preflight-a-20261014/source-candidates.ir.jsonl",
+    "sha256": "512201aadbc2c2b2bc5dbef8dfcb7d5a0ba7963dace1da657d7cedc5c39ffd44"
+  },
+  "status": "source_and_diagnostic_spec_pass",
+  "verified_checks": {
+    "program_identity_sets_equal": true,
+    "all_220_semantics_objects_equal": true,
+    "ecology_fixture_oracle_types_callable_bytes_unchanged": true,
+    "source_ir_binding_equals_proposal": true,
+    "model_facing_delta": false
+  },
+  "pointer_and_lineage_review": [
+    "The owner path resolves to auditEffectGraph.nl, whose argument is input:StageInput5. candidate_array_pointers are relative to that captured argument value, not the enclosing named-argument object.",
+    "The two arrays select context.priorCompletedState.interactionAssertions and prior.interactionAssertions. Their InteractionAssertion elements declare sourceRole and sourceId; the selected perturbation/unresolved roles exactly match existing authored stage5 step2.",
+    "The child receives SeedInput with assertion.sourceId. Its SeedDecision sourceId must preserve that selected original identity. Only direct completed child calls under the actual audit invocation count.",
+    "Exact unique source-ID coverage catches an omitted prior-folder candidate, a duplicated candidate or a child for a different source role. It does not infer whether a candidate is semantically a seed or dictate any entity/change/result label.",
+    "The actual checked owner argument is captured as input; missing or truncated durable capture remains unverified_hold. Model-authored provenance claims cannot replace runtime lineage."
+  ],
+  "no_gold_policy": "The added specification contains source paths, typed field pointers, declared role labels and original-ID coverage only. It has no case-specific IDs, expected species effects, seed signs or oracle-derived answers.",
+  "observed_source_review_report": {
+    "programs": 220,
+    "runnable_candidates": 23,
+    "reference_verified_candidates": 23,
+    "held_other_presentations": 197,
+    "reference_failures": 0,
+    "scope": "Report inspection and exact rendered identity comparison; canonical replay is not actual NL execution."
+  },
+  "limitations": [
+    "This focused contract checks source-ID coverage, not complete child assertion-payload equality. A fabricated assertion with a reused original ID needs a separate exact input projection check.",
+    "It does not prove that every returned kind=seed value is copied into the initial EffectFrontier; that producer-to-consumer projection remains separate.",
+    "This receipt reviews metadata/render semantics and the stated pointer conventions; it does not independently qualify all runtime capture/checker implementation paths.",
+    "No live task success or training admission follows from unchanged source, canonical replay or this diagnostic coverage verdict."
+  ],
+  "open_source_spec_blockers": [],
+  "live_samples": 0,
+  "training_admission": false
+}
