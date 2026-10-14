@@ -73852,6 +73852,24 @@
         "receipt": "runs/natlang-target-union-20261014-r8/receipt.json"
       },
       "notes": "Complete protected R8 union: filtered R7 source snapshot plus admitted external static first wave. All six views closed; full/PH/whole independent audits establish global held group/text and removed-source quarantine protection and exact tokenizer twins. No older aggregate weights resumed; no new source admission inferred. Whole audit audit-r8-whole-prefix-2234 exited0. Clef/backlog/recovery additions belong to later separately reviewed delta."
+    },
+    {
+      "id": "external-expansion-gatc-handoffs-20261014-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-gatc-handoffs-20261014-v1",
+      "include": [
+        "*.port-records.jsonl",
+        "manifest.json",
+        "admission-review.json"
+      ],
+      "source_class": "external-static-typed-handoff",
+      "training_admission": true,
+      "training_admission_reason": "Owner authorizes static natlang-like external coding and Neuralese teacher data.",
+      "derived_from": [
+        "external-expansion-d03-source-20261014-v1"
+      ],
+      "license": "Pinned upstream source-card facts retained in source manifests.",
+      "notes": "Upstream success labels retained as provenance; independent task execution not claimed. Producer flags and train-only quality exclusions retained as provenance. Native replay/render and recipe bindings are separate steps."
     }
   ],
   "coverage_backlog": [

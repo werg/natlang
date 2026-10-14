@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-gatc-handoffs-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-gatc-handoffs-20261014-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 818,
+      "sha256": "03478db459f541264367386b10a591ce169b0d71497cba942bd76f16c7761738"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 2581,
+      "sha256": "29012816a0fa47da71bd2670e14e26d93e62b1fae4619e5684fc44d472a98d20"
+    },
+    {
+      "path": "trajectory_continuation_coding.port-records.jsonl",
+      "bytes": 237218503,
+      "sha256": "0fbaa9818eaeb71ec47985ebec24d1afe7c6e6184f4861732d45f68b74c4b382",
+      "lines": 4048
+    }
+  ],
+  "bytes": 237221902
+}
