@@ -157,3 +157,38 @@ handoff; do not copy executable source trees from the old sandbox or omit this
 check. Stage current code separately, then let existing handoff replace and
 record the frozen runtime. Ledgered recipe/code-only validation passed; actual
 replacement restore/update remains unexecuted.
+
+## Public raw survival before migration
+
+The supervisor admitted the code-only recipe and requested evaluating direct
+private-cloud preservation of the sixteen acquired pinned public sources before
+releasing the old root. Preserve each source as one exact archive with its
+acquisition receipt and catalog identity, and independently verify the private
+object SHA before declaring that source durable. Keep four access-blocked
+sources explicit. No raw survival result grants training admission.
+
+**Decomposition:** source selection is this natural-language instruction;
+archive formation is crisp byte-preserving durability, checking every file
+against its recorded size/full SHA during the copy; transfer is the existing
+scoped private GCS exporter; the independent full-object readback is an exact
+verifier. Temporary archives are removed only after a verified private receipt.
+Use a single bounded nice19 archive/export stream beside the existing trainers;
+checkpoint exports retain their independent lifecycle. Isolate scoped capability
+filenames by object identity to avoid races. No account credentials enter cloud,
+no gateway bulk download and no third GPU allocation. If the mechanism fails,
+retain exact acquisition evidence and report the concrete reacquisition need
+before migration, prioritizing the supervisor's D02/D21/D30/D34 conversions.
+
+D17 direct raw survival passed at22:21:28UTC: seven files,
+1,510,451,739rawbytes; tar1,510,471,680bytes, SHA
+`8e25eec49234a493a3f2bbd108d83d4c31963df1c79e979dcf8d3d4accf52044`.
+Private GCS PUT took14.95seconds (~101MB/s); independent full-object readback
+verified the same SHA in5.25seconds. The temporary archive was removed only
+after verification. The remaining fifteen acquired sources entered one
+sequential nice19/ionice stream; this is not a claim that they are all durable.
+Per-source receipts and terminal state are kept in
+`/home/werg/data/dgxops/coreweave-mellum-raw-survival-state-20261014.json`.
+Checkpoint exporter capability files now use object-SHA-specific names, and raw
+receipts use separate explicit paths, preventing overlap with periodic model
+exports. Latest checkpoint selection remains separate and must be refreshed
+before any stop. Both existing trainers continue; no replacement allocation.
