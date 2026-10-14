@@ -107,5 +107,6 @@
     "Approximately48 live samples per model-facing variant before adoption"
   ],
   "live_samples": 0,
-  "training_admission": false
+  "training_admission": false,
+  "final_precision_commit": "66cb0894"
 }

@@ -1,0 +1,61 @@
+{
+  "schema": "natlang.semantic-variant-independent-render-review/1",
+  "reviewer": "semantic_slate_astra",
+  "variant": "astra-ecology01-callable-discovery-v18b",
+  "proposal": {
+    "path": "plans/semantic_stack/ASTRA_ECOLOGY_CALLABLE_DISCOVERY_V18B_PROPOSAL.json",
+    "sha256": "b1a6548b3b6ab4991aeaa718cd76d7cdafc2179677c0cac93b6905fe20f2ff81"
+  },
+  "reviewed_program_root": "/tmp/semstack-v18b-render-preflight-a-20261014/programs/astra/astra-ecology-01",
+  "reviewed_file_hashes": {
+    "data/input/ecology/astra-ecology-01/evidence-1/record-01.txt": "f6052b74e5c70c7e299a4e2a55dd978ffaa3674d6cca1f4561780912a6be15dd",
+    "data/input/ecology/astra-ecology-01/evidence-1/record-02.txt": "c593588d448d0960990b68c9fa19e997ea8c405d0188cacf052aa2c2d180fec2",
+    "data/input/ecology/astra-ecology-01/evidence-1/record-03.txt": "76c41aa63c5bd139c4a58d8dd1e15f4de1ecbe816ad7c95bd10ac50e933de0fa",
+    "data/input/ecology/astra-ecology-01/evidence-1/record-04.txt": "f9bc61319c610f6120e139830a55e941671a2394566c43df5990571a288069e6",
+    "data/input/ecology/astra-ecology-01/evidence-1/record-05.txt": "6f0bd766b8cddb31ec00f8eb6c8f705ac0c26d8ae69447eaa41f1474dff55d26",
+    "data/input/ecology/astra-ecology-01/evidence-1/record-06.txt": "e0099d09cf9934f40278c621b98b189fd067863483f5dc8b1ecb686a023f0249",
+    "data/input/ecology/astra-ecology-01/evidence-2/record-07.txt": "d632999cf9a42bd79e5f518b2ef9955be9df5f039b18e18c3f2b15ce9427099e",
+    "data/input/ecology/astra-ecology-01/evidence-2/record-08.txt": "fe75a769042bf07ac400f73cf64ccc91ef9f0fd928e8d94f978c7f7a227c490c",
+    "data/input/ecology/astra-ecology-01/evidence-2/record-09.txt": "82645d879c1b367155f67412ef59b26dc328740391d7db4de258447a3b963da9",
+    "data/input/ecology/astra-ecology-01/evidence-2/record-10.txt": "ee782a6fdeeba49ff009995746225045922f645745b591657381138c263d3a41",
+    "data/input/ecology/astra-ecology-01/evidence-2/record-11.txt": "0a5b5e3ac48a2e49bac662f43675068d468c3ec935b1daab8af552adc88f4029",
+    "data/input/ecology/astra-ecology-01/evidence-2/record-12.txt": "27fcdfa8e82c85fcc73991e3ffacadeeacf9521d955d2d0343debf41554c1549",
+    "data/input/ecology/astra-ecology-01/evidence-3/record-13.txt": "1376381996e63fefcd5acfeae18c76f211e9a3bdf65014cd8f60c3b2ae5f0db6",
+    "data/input/ecology/astra-ecology-01/evidence-3/record-14.txt": "a40e21fe47ac3f81edb7069e784e0938cc7955d91b9bf1bf6e8c33f13990565c",
+    "data/input/ecology/astra-ecology-01/evidence-3/record-15.txt": "75a848795b6d61378b39007f1ec52fddda63b799cca85ecac0f966dc2f035efc",
+    "data/input/ecology/astra-ecology-01/evidence-3/record-16.txt": "c165bbab3e414e24d78982d3e80d7dc369298f9faa2b0a32073d309f34de11c4",
+    "data/input/ecology/astra-ecology-01/evidence-3/record-17.txt": "7dab49496bf8c5363f430c567edd9bb5ec3ea72525f3eef32294387145bf4c13",
+    "data/input/ecology/astra-ecology-01/evidence-3/record-18.txt": "b8eaeceb106b436e04d3b82220c5e44a65abd3afee345794fe5992b9f885a7b3",
+    "data/input/ecology/astra-ecology-01/evidence-4/record-19.txt": "dbfa62c45412fbc220ff6bdac0ebe1f6badd6888e7b4fc8c727e36d8e8d4963a",
+    "data/input/ecology/astra-ecology-01/evidence-4/record-20.txt": "b83f8f9cd757b03da29a050a875b150340a729e5884d6343dd77e5db28b2c741",
+    "data/input/ecology/astra-ecology-01/evidence-4/record-21.txt": "aed25f2804a88c51e3fb59acfd1d149c63f9ced9115a3f6b1b720b346f2a34e8",
+    "data/input/ecology/astra-ecology-01/evidence-4/record-22.txt": "60b73b8f95a5e61f16c69b0c23db5bcac3980821ebaf4cc9a4177fadb9bb81fb",
+    "data/input/ecology/astra-ecology-01/evidence-4/record-23.txt": "d30d2e6ce03d14d7c0deb29511855e10e5f0d44211e10fadec79c3655f1ed332",
+    "data/input/ecology/astra-ecology-01/evidence-4/record-24.txt": "c151553a64f0d3198d43e50f2a607a8e1f51f4b4b4b4b95502eddf6246150935",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope/advanceScopeFrontier.nl": "b58d066db4b9b740a84b7ac84196ea6e1461700ead47443d53da8b2fc2d882e0",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope/auditEffectGraph/advanceEffectFrontier.nl": "84520420b6ef57530586ad61e6804950ee9fd252ad48d6a864409a68f5e2873c",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope/auditEffectGraph.nl": "2a689c7607967152643a761577e2a9b72a4d5ef5b8d336cc8091bf9a450ad33b",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope.nl": "8aa188a30421b4098cda730f92c7498a2b5c33d69e164fe441baa4d8d1524c34",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink.nl": "e050430ca6ca5c2bed7a02969037742e5e0c1fbb3ea51ecf3c314135305cc579",
+    "solve/readStudyPlots/buildInteractionGraph.nl": "a242c5234616d941fdcfebca1b7ad5a8059566314f921f9d9d5d8b2d678c075f",
+    "solve/readStudyPlots.nl": "cecca746b20a2e07702fafcf830efd6a3854c07b68b28fe7d6856f00abb55ff1",
+    "solve.nl": "864ff7e33b883a3b63eb1a1d763fbe473deaccc6f4fc81cd21195f9fd83f0e99",
+    "types.ts": "27a2e9fbf4c18a1785b8e8be752ea8245de77a8c5a1eb9a28d360c23b80f88b0"
+  },
+  "base_review": "plans/semantic_stack/ASTRA_ECOLOGY_V18_RENDER_REVIEW.json",
+  "status": "narrow_rendered_source_delta_pass",
+  "checks": [
+    "Complete rendered ecology tree comparison against frozen v18 preflight-c has no added or removed files; only solve.nl differs.",
+    "The new root instruction positively separates named callable/type access through read_code(name) from source evidence in the directory. It directs a call to readStudyPlots with actual StageInput1 and explains active child callable scope.",
+    "The replacement introduces no new API, semantic decision, fixture fact, answer or crisp domain policy. Typed frontier bodies, source evidence, oracle contracts and result-binding metadata retain frozen v18 meanings.",
+    "Metadata comparison changes only variant identity/status, diagnostic rationale and root_callable_discovery. No producer/consumer or witness comparison field changes."
+  ],
+  "whole_build_reference_replay": "Final220-program rerender was still in progress at this narrow receipt seal; curriculum must bind its final whole-source hash and replay report before queue freeze. Exact program file hashes above independently bind the source actually reviewed.",
+  "open_source_contract_findings": [],
+  "limitations": [
+    "This source clarification addresses callable discovery only; it does not establish that the executing model follows the named stages or consumes actual scoped child results.",
+    "Runtime provenance checking, full execution and approximately48 live samples per model-facing variant remain separate gates."
+  ],
+  "live_samples": 0,
+  "training_admission": false
+}
