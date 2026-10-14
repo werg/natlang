@@ -38,7 +38,7 @@ import { createTextNeuraleseEmulation, TEXT_NEURALESE_EMULATION_PROMPT,
   TEXT_NEURALESE_WIDTH } from '../model/text-neuralese-emulation.js';
 import { registerTrace, releaseTrace } from '../native/graph.js';
 import { NATIVE_TOOL_SCHEMA } from '../native/tool-surface.js';
-import { hostCaptures, type CaptureSource } from '../calls/host-capture.js';
+import { hostCaptures, type CaptureSource } from '../exact-capture/host-capture.js';
 import { checkItemResultBinding, type ItemResultBindingSpec } from './item-result-binding.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
