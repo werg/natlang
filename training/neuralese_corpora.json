@@ -70229,6 +70229,25 @@
         "held_text": {}
       },
       "notes": "540 approved train decisions from81 exact curated parents; semantic folder/process holds excluded by source review. Source admission preserved, no oversampling."
+    },
+    {
+      "id": "luna-held-shapes-s52052-folder-shallow-20261014-v1",
+      "owner": "pop",
+      "path": "runs/luna-held-shapes-s52052-folder-shallow-20261014-v1",
+      "include": [
+        "semantic-holds.json",
+        "approved-turns.jsonl",
+        "admission-review.json"
+      ],
+      "source_class": "project-generated inline natlang curriculum teacher trajectories",
+      "license": "project-generated",
+      "split": "train only; source-bound exact accepted parents and protected held48 program/source/group exclusion inherited and rechecked",
+      "admission": "Seven exact-success five-ticket folder snapshots; 29 approved native teacher decisions. Each read criteria and ticket contents, then made correct named-file moves. They are admitted as valid small episodic tool use; they do not count as reusable per-file-lambda examples. Two arbitrary-loop-cap process parents remain held.",
+      "training_admission": true,
+      "training_admission_reason": "Source-bound exact oracle and checks, native successful decision admission, protected held48 checks; additive row IDs are disjoint from the prior 540-decision s52052 corpus. admission-review.json binds original 90-parent candidate, native preview, selection and output hashes.",
+      "review_status": "All seven first actions read criterion and ticket contents; moves and returns match exact file/answer oracle. One enumerated five names from the visible folder listing rather than using a glob, still a valid snapshot solution.",
+      "required_conversion": "render LFM and Mellum twins; include additively in next broad train union without duplicate targets",
+      "notes": "Only approved-turns.jsonl is a training input. semantic-holds.json excludes 81 already admitted parents and two genuine loop-cap holds from the shared 90-parent candidate; original parent/native evidence resides in luna-held-shapes-s52052-curated-native-turns-20261014-v1. This shallow slice is not credited to lambda-depth curriculum."
     }
   ],
   "coverage_backlog": [

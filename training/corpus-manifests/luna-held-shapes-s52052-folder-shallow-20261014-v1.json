@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-held-shapes-s52052-folder-shallow-20261014-v1",
+  "owner": "pop",
+  "path": "runs/luna-held-shapes-s52052-folder-shallow-20261014-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 1887,
+      "sha256": "7f2940604f26fd2b073508fc29ec5f199762f9b9c0439bcafe5325b125e6c501"
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 2615245,
+      "sha256": "c0a223af4690398ec6dd203e59cb9cb01183cbac21c899aadfa4e9fa999414e3",
+      "lines": 29
+    },
+    {
+      "path": "semantic-holds.json",
+      "bytes": 26103,
+      "sha256": "6d3a69c3d5615eb7ce497b5994cd3fac5d5a35871e5c260c1c071a0315e129c9"
+    }
+  ],
+  "bytes": 2643235
+}
