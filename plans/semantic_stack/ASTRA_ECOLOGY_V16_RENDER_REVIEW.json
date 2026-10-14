@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.semantic-source-render-review/1",
+  "reviewer": "semantic_slate_astra",
+  "variant": "ecology-node-judgment-v16",
+  "proposal": "plans/semantic_stack/ASTRA_ECOLOGY_NODE_JUDGMENT_V16_PROPOSAL.json",
+  "proposal_sha256": "b8e9b5e39b680b70d48649c7bae0c0fc3ef17428fdb5a0873d6579d2d6a1a89e",
+  "render_root": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/ecology-v16-preflight-b/programs/astra/astra-ecology-01",
+  "whole_source_sha256": "295d2ae102798a822bd23d8a09fc170b4e54ff46d12936c983d82afc1d5f5d96",
+  "reviewed_files": {
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope/auditEffectGraph/advanceEffectFrontier.nl": "08d6a1a38b9bf767a2e9c16078aa16045abe324d608a4e73f29944ee5f9dc625",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope/auditEffectGraph.nl": "30f6ef136eec648019a30f40b5e00556b008f90085210697516743f249415d74",
+    "types.ts": "1e54b6841439690ac2a75e91a14389b7af6f9b34159954cb3ef2710a3c8d6639"
+  },
+  "accepted_findings": [
+    "One current entity NodeJudgmentInput contains actual signed paths, unresolved parent findings and original witnesses",
+    "Direct awaited EffectNodeFinding owns status and reason; exact parent validates entity/witness membership and inserts actual returned finding once",
+    "Exact path extension/sign arithmetic remains separate from net-effect interpretation",
+    "Fixed entity universe uses only edge endpoints and seeds; incoming/outgoing incident witnesses cover unperturbed source nodes",
+    "Named child returns one shorter EffectFrontier; parent audit owns iterateOn and consumes actual returned state",
+    "Current-batch contribution arrays remain separate from cumulative global audit"
+  ],
+  "source_reference_replay": {
+    "candidates": 23,
+    "passed": 23,
+    "designs": 220,
+    "scope": "Builder source/type reference evidence; not executing NL"
+  },
+  "live_samples": 0,
+  "required_live_samples_approx": 48,
+  "training_admitted": false,
+  "limitations": [
+    "Requires live proof that semantic classification consumes actual typed paths instead of fixture-specific tables",
+    "Blocked cycle/missing-dependency finding remains a named NL frontier decision",
+    "All original fixture and gold bytes unchanged"
+  ]
+}
