@@ -55,7 +55,7 @@ const choiceConfidenceContract = 'natlang.choice-label-confidence/1';
 const satisfactionEstimateFamily = 'decision:review-satisfaction-estimate-v1';
 const reviewedSourceFields = new Set(['id', 'family', 'kind', 'role', 'source', 'group', 'license', 'state',
   'question', 'options', 'levels', 'criteria', 'version', 'answer', 'source_refs',
-  'identity_state_sha256', 'full_state_sha256']);
+  'identity_state_sha256', 'full_state_sha256', 'license_provenance']);
 const pubmedReferenceFields = ['config', 'dataset', 'local_file_sha256', 'local_path', 'physical_row', 'pubmed_id',
   'row_group', 'row_in_group', 'source_row_sha256', 'split', 'upstream', 'upstream_metadata_status'];
 const pubmedUpstreamFields = ['config', 'lfs_sha256', 'path', 'revision'];
@@ -85,7 +85,37 @@ function validateSourceProvenance(source) {
   if (hasIdentityHash !== hasFullHash) return { error: 'incomplete_state_hash_provenance' };
   if (hasIdentityHash && (!sha256Hex(source.identity_state_sha256) || !sha256Hex(source.full_state_sha256) ||
       source.full_state_sha256 !== sha(source.state))) return { error: 'invalid_state_hash_provenance' };
+  if (Object.hasOwn(source, 'license_provenance')) {
+    const license = source.license_provenance;
+    if (!exactSet(license, ['catalog_path', 'catalog_sha256', 'legacy_catalog_value', 'status', 'upstream_license_status']) ||
+        !nonempty(license.catalog_path) || !sha256Hex(license.catalog_sha256) ||
+        license.legacy_catalog_value !== source.license ||
+        license.status !== 'local_catalog_value_not_bound_to_upstream_revision' ||
+        license.upstream_license_status !== 'unknown')
+      return { error: 'invalid_license_provenance' };
+  }
   if (!Object.hasOwn(source, 'source_refs')) return {};
+  if (source.source === 'clinc/clinc_oos') {
+    if (!Array.isArray(source.source_refs) || source.source_refs.length !== 1)
+      return { error: 'invalid_clinc_source_reference_provenance' };
+    const ref = source.source_refs[0];
+    if (!exactSet(ref, ['dataset', 'local_file_sha256', 'local_path', 'physical_row', 'row_group',
+      'row_in_group', 'split', 'upstream', 'upstream_metadata_status']) ||
+        ref.dataset !== source.source || ref.split !== source.role ||
+        ref.upstream_metadata_status !== 'pinned_and_byte_bound' ||
+        !sha256Hex(ref.local_file_sha256) ||
+        ref.local_path !== 'clinc__clinc_oos/plus/train/train-00000-of-00001.parquet' ||
+        !Number.isSafeInteger(ref.physical_row) || ref.physical_row < 0 ||
+        !Number.isSafeInteger(ref.row_group) || ref.row_group < 0 ||
+        !Number.isSafeInteger(ref.row_in_group) || ref.row_in_group < 0 ||
+        !exactSet(ref.upstream, ['config', 'lfs_sha256', 'path', 'revision']) ||
+        ref.upstream.config !== 'plus' ||
+        ref.upstream.path !== 'plus/train-00000-of-00001.parquet' ||
+        ref.upstream.lfs_sha256 !== ref.local_file_sha256 ||
+        !/^[a-f0-9]{40}$/.test(ref.upstream.revision ?? ''))
+      return { error: 'invalid_clinc_source_reference_provenance' };
+    return {};
+  }
   if (source.source !== 'qiaojin/PubMedQA' || !Array.isArray(source.source_refs) || source.source_refs.length !== 1)
     return { error: 'unsupported_source_reference_provenance' };
   for (const ref of source.source_refs) {
@@ -306,9 +336,12 @@ function createRecord(contract, batch, sourceMeta) {
     scorer_dist_sha256: sourceMeta.scorer_dist_sha256,
     transformations,
     source_provenance_receipts: records.filter(row => Object.hasOwn(row, 'source_refs') ||
+      Object.hasOwn(row, 'license_provenance') ||
       Object.hasOwn(row, 'identity_state_sha256') || Object.hasOwn(row, 'full_state_sha256')).map(row => ({
       source_id: row.id,
       ...(Object.hasOwn(row, 'source_refs') ? { source_refs: structuredClone(row.source_refs) } : {}),
+      ...(Object.hasOwn(row, 'license_provenance') ? {
+        license_provenance: structuredClone(row.license_provenance) } : {}),
       ...(Object.hasOwn(row, 'identity_state_sha256') ? {
         identity_state_sha256: row.identity_state_sha256, full_state_sha256: row.full_state_sha256,
       } : {}),

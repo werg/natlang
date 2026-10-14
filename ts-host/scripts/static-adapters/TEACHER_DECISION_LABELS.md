@@ -30,6 +30,13 @@ row's teacher is retained and checked against its actual listed model. The
 output directory must be empty. Output files are created
 exclusively, so a review snapshot is not silently overwritten.
 
+CLINC plus/train cases with a pinned parquet revision and byte digest are
+accepted as source references. Their separate catalog license provenance is
+validated against the row's recorded license and preserved in the generated
+source receipts. This adds no licensing admission gate. It permits the fresh
+Gemini CLINC batches to enter static conversion while retaining the exact
+dataset row and label receipts.
+
 Only source `train` rows are candidates. A candidate is retained only when the
 answer payload has exactly the expected probability keys, numeric finite values
 in `[0,1]`, and a total within `1e-4` of one; `scoreGraded` reports every gate
