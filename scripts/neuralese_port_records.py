@@ -143,6 +143,9 @@ def cmd_convert_agents(args):
         sink = Sink(args.out, f"upstream.{name}")
         try:
             for row, traj in adapter(args.limit):
+                if getattr(args, 'exclude_failed', False) and traj.outcome.get('label') == 'failed':
+                    sink.reject(name, row, 'upstream-reported-failure: excluded from positive conversion')
+                    continue
                 trajectory.records_for(traj, args.windows or windows, sink, name, row)
         except Reject as exc:  # an adapter-level rejection ends the corpus with a recorded reason
             sink.reject(name, "adapter", str(exc))
@@ -435,6 +438,7 @@ def main(argv=None):
     p.add_argument("--corpora", nargs="*", choices=list(agents.CORPORA))
     p.add_argument("--limit", type=int, default=None, help="trajectories per corpus; default all")
     p.add_argument("--windows", type=int, default=None, help="windows per trajectory; default per corpus")
+    p.add_argument("--exclude-failed", action="store_true", help="record and omit upstream-reported failed trajectories")
     p.add_argument("--out", type=Path, default=sample_root)
     p.set_defaults(func=cmd_convert_agents)
     p = sub.add_parser("convert-turns")
