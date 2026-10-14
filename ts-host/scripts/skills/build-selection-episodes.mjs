@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 /** Build selection episodes from frozen crisp-task episodes without moving case data across roles. */
-import { createReadStream } from 'node:fs';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
-import { createInterface } from 'node:readline';
+import { jsonlRows } from '../jsonl-stream.mjs';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { validateEpisode, SKILL_EPISODE_SCHEMA, AUTHORING_OPERATIONS } from '../../dist/skills/episode.js';
@@ -15,7 +14,7 @@ const SELECTED_SLATE = new Set(['active-urgency', 'explicit-consent', 'completed
   'exact-multi-edit', 'identity-join', 'latest-revision', 'ranked-selection']);
 
 async function* jsonl(path) {
-  for await (const line of createInterface({ input: createReadStream(path), crlfDelay: Infinity })) if (line.trim()) yield JSON.parse(line);
+  yield* jsonlRows(path);
 }
 const frontmatter = (name, description, body, summary = '') => `---\nname: ${name}\ndescription: ${description}\n${summary ? `summary: ${summary}\n` : ''}natlang:\n  provenance:\n    author: project-generated\n---\n\n${body}\n`;
 function taskSkill(family) {

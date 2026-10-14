@@ -13,10 +13,9 @@
  *   node scripts/skills/build-episodes.mjs --slate ../data/teacher/self-improvement/task-slate-v1/cases.jsonl \
  *     --program ../data/teacher/source-cases-s909.ir.jsonl --out <dir> [--limit N]
  */
-import { createReadStream } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { createInterface } from 'node:readline';
+import { jsonlRows } from '../jsonl-stream.mjs';
 import { AUTHORING_OPERATIONS, SKILL_EPISODE_SCHEMA, validateEpisode } from '../../dist/skills/episode.js';
 import { hexDigest } from '../../dist/native/hash.js';
 
@@ -33,8 +32,7 @@ export function relatedFamily(family) {
 }
 
 async function* jsonl(path) {
-  const lines = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
-  for await (const line of lines) if (line.trim()) yield JSON.parse(line);
+  yield* jsonlRows(path);
 }
 
 const pick = ({ id, group, args, folder, expected, expectedFiles }) =>

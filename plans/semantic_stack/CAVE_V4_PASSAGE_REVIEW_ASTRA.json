@@ -1,0 +1,45 @@
+{
+  "schema": "natlang.semantic-application-live-source-review/1",
+  "reviewer": "semantic_slate_astra",
+  "application": "astra-app-cave-mission-v1",
+  "variant": "physical-existence-v4",
+  "parent_source_commit": "521a4891",
+  "source_defect": "Frozen v3 correctly consumed conditional named bindings but conflated outward physical gate presence with forbidden reverse traversal; retry filtered negative claims.",
+  "repair": "Typed physicalExistence is distinct from ordered direction and carried-state condition. NL reader owns each interpretation; builder keeps complete negative evidence and adds only permitted directions of physically present connections.",
+  "changed_source_hashes": {
+    "applications/cave-mission/types.ts": "fd6d89548ffa8a8d35cbd27464485b08a60089554e4e3057544515541f41acbf",
+    "applications/cave-mission/planMission/survey/readPassages.nl": "cb09c226b8d9262d23275575003bfe43f7e817eb01e612ef5f5ea20e419f4b73",
+    "applications/cave-mission/planMission/reconcileMaps/buildWorlds/extendHypothesis.nl": "f721a9d49b220aff464cb8ad6d1aa963d4c51fcc37daf4cc1dd6a9260a36d480",
+    "applications/cave-mission/planMission/reconcileMaps/buildWorlds/extendHypothesis/resolveContradiction.nl": "d9ab6a77ca2ac3522b17e5c57b6715146efa6d5dbf7b060ce0167128d9be1016"
+  },
+  "composition": {
+    "nl_files": 25,
+    "nl_total_lines": 599,
+    "nl_body_lines": 415,
+    "numbered_steps": 182,
+    "type_aliases": 44,
+    "visible_crisp_policy_lines": 0
+  },
+  "peer_review": {
+    "reviewer": "semantic_slate_sol",
+    "verdict": "Four-file delta accepted; source-world has needed positive connection facts and no false-rejection/completeness blocker.",
+    "live_credit": false
+  },
+  "canonical_replay": {
+    "path": "training/semantic_applications/astra/cave-mission/mirrored-vault/reference-report.json",
+    "sha256": "3f2efe03c7e7b14608a0fa336ec8b43a3d890ebb3796b8136afa91c450713f90",
+    "reference_ok": true,
+    "reference_problems": [],
+    "opening_sha256": "8b45c75555d6c532e97209b3ba5ae4db4eb69f0da13c69e3684949f3d62f3355",
+    "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
+  },
+  "source_sha256": "71914a32c3cce14a491b73046749e9c34f5284a2c3c694661fab2fe14e9eb3ca",
+  "original_controls": {
+    "passed": true,
+    "count": 22
+  },
+  "fixture_oracle_reference_changed": false,
+  "live_qualified": false,
+  "training_admitted": false,
+  "remaining_gate": "Fresh pinned diagnostic must preserve reverse-prohibition evidence while constructing both supported worlds and consuming their actual planning state."
+}

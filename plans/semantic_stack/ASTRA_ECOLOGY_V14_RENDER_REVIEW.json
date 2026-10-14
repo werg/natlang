@@ -1,0 +1,75 @@
+{
+  "schema": "natlang.semantic-source-render-review/1",
+  "reviewer": "semantic_slate_astra",
+  "proposal": "plans/semantic_stack/ASTRA_ECOLOGY_ENTITY_SURFACES_V14_PROPOSAL.json",
+  "reviewed_source_sha256": "18eaa77244e0d94c9ebd96cc17f68c83291183ea79e1b83b5b411877776f7e60",
+  "rendered_packet": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/owned-stage-v14-ecology-source-final/source-candidates.ir.jsonl",
+  "verdict": "Final source retains coherent typed surfaces, exact span/key and endpoint checks, primary assertion ownership and actual per-edge decisions. No remaining canonical naming or verifyResult text; final audit name and parent ownership consistent. Live qualification pending.",
+  "lexical_controls": {
+    "passed": true,
+    "controls": [
+      {
+        "name": "plural source copied",
+        "expected": true,
+        "actual": true,
+        "passed": true
+      },
+      {
+        "name": "singular prefix rejected",
+        "expected": false,
+        "actual": false,
+        "passed": true
+      },
+      {
+        "name": "inflected key rejected",
+        "expected": false,
+        "actual": false,
+        "passed": true
+      },
+      {
+        "name": "multiword source copied",
+        "expected": true,
+        "actual": true,
+        "passed": true
+      },
+      {
+        "name": "empty span rejected",
+        "expected": false,
+        "actual": false,
+        "passed": true
+      },
+      {
+        "name": "absent span rejected",
+        "expected": false,
+        "actual": false,
+        "passed": true
+      },
+      {
+        "name": "casefold only",
+        "expected": true,
+        "actual": true,
+        "passed": true
+      },
+      {
+        "name": "later complete occurrence",
+        "expected": true,
+        "actual": true,
+        "passed": true
+      }
+    ]
+  },
+  "comparison_scope": "Controls validate declared lexical spans and key copying, not semantic noun-phrase or referent selection.",
+  "live_qualified": false,
+  "training_admitted": false,
+  "control_script": "plans/semantic_stack/check-astra-ecology-entity-surfaces.mjs",
+  "file_hashes": {
+    "solve.nl": "2598ebc1bca7a2387fc243a8e65fa777d8782218b36fe58e4a82155ea501106a",
+    "types.ts": "019730ede90140814b0a462054ab66eaf44689c525fc26c55f9fcdb5d50f1c08",
+    "solve/readStudyPlots.nl": "966a97c47905b0c6f593b0446c7e425160c2139d062ea2065760fb74f23f5c33",
+    "solve/readStudyPlots/buildInteractionGraph.nl": "25cbe24637af32bef248089f86e8d4591cebe29bda13813554563caf2fb574b6",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink.nl": "d6a9ab22b7ef306dd05c35a164f59caa705d1ad719791a5e35cc7bff31d6dab8",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope.nl": "8bdfe4b9531d65c374a215255e1504b8a572f2787d5bf8fdee08258663f79978",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope/auditEffectGraph.nl": "411da8d09a0719edea9a15c92a8654c9509f16f052293d2e14d8540e65b70d68"
+  },
+  "proposal_sha256": "6d20b6acd947555a2ed4c3791a1fb276e2cb1cd344d5ba8ef0cd51fff181820b"
+}

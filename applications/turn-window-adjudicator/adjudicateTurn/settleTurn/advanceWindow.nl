@@ -25,7 +25,8 @@ returns: WindowState
 7. After a resolved event batch, call collectTriggers with the actual bundle, replacements, BatchDelta,
    beforeBoard and afterBoard, plus this actual state. Consume every returned decision,
    including ineligible ones. Spend only newly emitted trigger tokens and activate their existing slots.
-8. Append a WindowTrace containing actual before/after boards, bundle, replacement decisions, batch
+8. Append a WindowTrace copying sourceIdentity from the selected WorkSlot and containing actual
+   before/after boards, bundle, replacement decisions, batch
    and trigger judgments. For a trigger window, retain its causal parent slot from the originating
    batch; its consequence never becomes an unsubmitted player announcement.
 9. Mark this selected slot consumed and remove its identity once from remainingWorkSlotIds and pending

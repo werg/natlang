@@ -8,8 +8,8 @@
  * objects (`{events:[...]}`) or bare events; when given, each repair must be confirmed by a failing then passing
  * `refinement_check`. Reads files only: no model, no network. An existing output is not overwritten.
  */
-import { createReadStream, writeFileSync, existsSync, readFileSync } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { jsonlLines } from '../jsonl-stream.mjs';
 import { parseArgs } from 'node:util';
 import { collectRefineRepairs } from '../../dist/teacher/refine-repair.js';
 
@@ -22,7 +22,7 @@ const trace = values.trace ? readFileSync(values.trace, 'utf8').split('\n').filt
 }) : undefined;
 const out = [];
 let rows = 0, accepted = 0;
-for await (const line of createInterface({ input: createReadStream(values.in) })) {
+for await (const line of jsonlLines(values.in)) {
   if (!line.trim()) continue;
   rows++;
   const row = JSON.parse(line);

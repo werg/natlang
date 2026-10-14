@@ -3,8 +3,7 @@ import { readFile,writeFile,mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import YAML from 'yaml';
 import { parseType,formatType } from '../../dist/native/types.js';
-import { createReadStream } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { jsonlLines } from '../jsonl-stream.mjs';
 import { createHash } from 'node:crypto';
 const [index,output]=process.argv.slice(2);if(!output)throw Error('usage: reconstruct-targets.mjs INDEX_DIR OUTPUT_DIR');
 await mkdir(output,{recursive:true});
@@ -20,7 +19,7 @@ const inventory=JSON.parse(await readFile(join(index,'inventory.json'),'utf8'));
 for(const artifact of inventory) {
   if(artifact.duplicate || artifact.error)continue;
   async function* records() {
-    if(artifact.file.endsWith('.jsonl')) {for await(const text of createInterface({input:createReadStream(artifact.file),crlfDelay:Infinity})){if(text.trim()){try{yield JSON.parse(text);}catch{}}}}
+    if(artifact.file.endsWith('.jsonl')) {for await(const text of jsonlLines(artifact.file)){if(text.trim()){try{yield JSON.parse(text);}catch{}}}}
     else {try{yield JSON.parse(await readFile(artifact.file,'utf8'));}catch{}}
   }
   for await(const row of records()) {

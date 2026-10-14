@@ -1,8 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { createReadStream } from 'node:fs';
 import { mkdir, open, link, rename, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { createInterface } from 'node:readline';
+import { jsonlRows } from '../jsonl-stream.mjs';
 
 export function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -12,14 +11,11 @@ export function canonical(value) {
 export const digest = value => createHash('sha256').update(canonical(value)).digest('hex');
 export async function readJsonl(path, { limit = Infinity } = {}) {
   if (!(limit > 0)) throw new Error('limit must be positive');
-  const stream = createReadStream(path, { encoding: 'utf8' });
-  const lines = createInterface({ input: stream, crlfDelay: Infinity });
   const rows = [];
-  try { for await (const line of lines) {
-    if (!line.trim()) continue;
-    rows.push(JSON.parse(line));
+  for await (const row of jsonlRows(path)) {
+    rows.push(row);
     if (rows.length >= limit) break;
-  } } finally { lines.close(); stream.destroy(); }
+  }
   return rows;
 }
 export async function writeJsonl(path, rows, { replace = false } = {}) {

@@ -1,0 +1,333 @@
+{
+  "schema": "natlang.semantic-application-author-check/1",
+  "author": "semantic_slate_astra",
+  "application": "astra-app-turn-window-v1",
+  "composition": {
+    "nl_files": 26,
+    "nl_total_lines": 646,
+    "nl_body_lines": 464,
+    "numbered_steps": 162,
+    "type_aliases": 43,
+    "visible_crisp_policy_lines": 0
+  },
+  "source_sha256": "d7b79ccfd35a32deae7edead61602fe97b2fb74204cc4d808b808669a0ee76f0",
+  "hashes": {
+    "training/semantic_applications/astra/turn-window-adjudicator/project.json": "9b069550443d65fc007a5b166e9b0baaf80f0580f726d6a91831911837d892e9",
+    "training/semantic_applications/astra/turn-window-adjudicator/verify-result.mjs": "4164af5ee62ffc87316dd710cc10e621efeb78d799a8be25e5fd75eb7a8b517c",
+    "training/semantic_applications/astra/turn-window-adjudicator/check-verifier.mjs": "b7bb1bf4274b90e40faec19abdcc442afac5889b713502a3d0b4bd90ebf9374f",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/reference-report.json": "eac47c1e8a3fbe0252b612fe3bb1bdda24d5189a96c233659240c7e45c5c1aa5",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/oracle.json": "13838a9bc142fbb28f425cf1a221b55cc40403b1e5017daa94725be2b3bc616b"
+  },
+  "canonical_replay": {
+    "path": "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/reference-report.json",
+    "sha256": "eac47c1e8a3fbe0252b612fe3bb1bdda24d5189a96c233659240c7e45c5c1aa5",
+    "reference_ok": true,
+    "reference_problems": [],
+    "opening_sha256": "3438ff05ffc02da923de70ebdbcea9f67a15566777b2bbdfa16ae1416e9ba6e6",
+    "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
+  },
+  "exact_controls": {
+    "scope": "External exact certificate controls; no application or NL literal execution",
+    "passed": true,
+    "checks": [
+      {
+        "name": "full canonical certificate",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "unordered boards witnesses and sibling parts",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "consistent generated trace and revision IDs",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "consistent internal rule IDs",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "independent reason wording",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "wrong case identity",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "case identity"
+        ]
+      },
+      {
+        "name": "captured controller replaced by live controller",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "captured controller PA"
+        ]
+      },
+      {
+        "name": "announced damage altered",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "announced parts",
+          "rewrite actual before lineage"
+        ]
+      },
+      {
+        "name": "source window order changed",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "source-governed window chronology",
+          "initial source board",
+          "window state continuity",
+          "window state continuity"
+        ]
+      },
+      {
+        "name": "source identity mislabeled",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "source-governed window chronology",
+          "source-governed window delta MOVE"
+        ]
+      },
+      {
+        "name": "initial controller corrupted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "initial source board"
+        ]
+      },
+      {
+        "name": "common before revision corrupted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "common before-batch revision"
+        ]
+      },
+      {
+        "name": "Cover reduction omitted on second part",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "Cover exact reduction",
+          "rewrite actual before lineage"
+        ]
+      },
+      {
+        "name": "Mantle converts original rather than reduced quantity",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "Mantle exact conversion",
+          "rewrite final lineage coverage"
+        ]
+      },
+      {
+        "name": "wrong actual damage",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "resolved actual quantity"
+        ]
+      },
+      {
+        "name": "replacement capacity omitted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual declared deltas applied",
+          "replacement capacity spent once"
+        ]
+      },
+      {
+        "name": "last known departing controller corrupted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "simultaneous departure provenance"
+        ]
+      },
+      {
+        "name": "declared object delta unapplied",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual declared deltas applied"
+        ]
+      },
+      {
+        "name": "Scribe recipient is source controller",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "scribe binding",
+          "actual trigger decisions retained"
+        ]
+      },
+      {
+        "name": "Mirror falsely emits",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "trigger eligibility MIRROR",
+          "actual trigger decisions retained"
+        ]
+      },
+      {
+        "name": "negative trigger loses capacity owner",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "trigger capacity ownership",
+          "trigger capacity domain",
+          "actual trigger decisions retained"
+        ]
+      },
+      {
+        "name": "missing printed trigger judgment",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "four printed trigger judgments",
+          "trigger capacity domain",
+          "actual trigger decisions retained"
+        ]
+      },
+      {
+        "name": "returned instance reuses departed identity",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "delta object identity",
+          "actual declared deltas applied"
+        ]
+      },
+      {
+        "name": "return refreshes spent token",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual declared deltas applied",
+          "source-governed window delta RETURN",
+          "window state continuity"
+        ]
+      },
+      {
+        "name": "return inherits departed damage",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual declared deltas applied",
+          "source-governed window delta RETURN",
+          "window state continuity"
+        ]
+      },
+      {
+        "name": "final ink paid to wrong player",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual final board"
+        ]
+      },
+      {
+        "name": "invented source quotation",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "exact source witness"
+        ]
+      },
+      {
+        "name": "missing relevant source clause",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "complete original clause coverage"
+        ]
+      }
+    ]
+  },
+  "semantic_policy_location": "All rule interpretation, reference binding, replacement applicability/order, simultaneous outcome joins, trigger eligibility and timing challenges are numbered NL functions. Declarations and external exact certificate verification are crisp.",
+  "literal_consumers": [
+    {
+      "site": "adjudicateTurn/readTurn/readRules/interpretAbility.nl",
+      "result_type": "RuleMeaning",
+      "consumed_by": "RuleReading kind, timing, controller basis and capacity"
+    },
+    {
+      "site": "adjudicateTurn/captureAnnouncements/bindReference.nl",
+      "result_type": "ReferenceBinding",
+      "consumed_by": "Announcement captured vs deferred controller fields"
+    },
+    {
+      "site": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/applyReplacement.nl",
+      "result_type": "ReplacementDecision",
+      "consumed_by": "Actual next rewritten lineage and reserved tokens"
+    },
+    {
+      "site": "adjudicateTurn/settleTurn/advanceWindow/collectTriggers/interpretTrigger.nl",
+      "result_type": "TriggerDecision",
+      "consumed_by": "Actual queue recipient, consequence and one-use capacity"
+    },
+    {
+      "site": "adjudicateTurn/auditTurn/challengeTiming.nl",
+      "result_type": "TimingJudgment",
+      "consumed_by": "Defended/defect/unresolved certificate findings"
+    }
+  ],
+  "independent_review": "Requested from semantic_slate_sol; not yet granted.",
+  "known_verifier_limits": [
+    "Exact quote membership does not prove semantic support.",
+    "Declared rule grouping, completeness of rejected proposals and effects entailed by arbitrary rule wording require independent semantic review.",
+    "The canonical packet is authored, not an observed application trace.",
+    "Per-part proposed object/resource collections remain diagnostic; the verifier checks actual merged deltas, final parts, exact authored outcome invariants and state application."
+  ],
+  "live_qualified": false,
+  "training_admitted": false
+}

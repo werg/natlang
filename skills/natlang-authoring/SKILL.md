@@ -99,3 +99,17 @@ In numbered pseudocode, perform all required evidence/state/comparison checks be
 ## Interpret simultaneous events with owned snapshots
 
 Separate announcement-captured references, resumed current state and departure last-known state in typed fields. Replacement judgments consume the actual current rewritten parts while sibling eligibility reads one immutable before-batch snapshot. A separate NL join reconciles simultaneous proposals before exact application. Trigger judgments consume resolved quantities and departures, returning a recipient and consequence that remain fixed after queueing. For finite closed turns, inventory source-authorized work capacities first: consuming an active slot decreases remaining capacity even when it activates another existing slot. Missing source choices remain unresolved rather than being resolved by storage order.
+
+## Bind semantic entity names to source forms
+
+For a casefold-only identity contract, let the NL reader select complete source noun phrases and return sourceForm/key pairs. The parent verifies reported lexical spans and lowercase equality; it does not infer nouns, singularize terms or resolve synonyms. Derive downstream entity keys from those verified forms and preserve grammatical number. Related assertions may resolve the primary claim's referents or conditions while retaining their own independent edge ownership. A narrow scoped judgment returns its own typed decision; its named parent owns subsequent full-state calls.
+
+A symbolic generated-code interpreter needs the actual callee/type-file closure and actual runtime data referenced by the emitted body. It follows that body to select/read data; ideal branch guidance, expected results and reference-state atoms are excluded. A missing actual callee or input is unresolved, never reconstructed from what the source procedure ought to do.
+
+## Separate object existence from directed permission
+
+When a source describes a physical connection and travel restrictions, give existence an explicitly physical typed meaning. NL interpretation owns whether a connection exists, which ordered direction is allowed and which carried-state conditions apply. Attach reverse-prohibition witnesses to the present one-way connection. Compare physical identity separately from directed traversal; preserve all negative evidence while reconciling a candidate world. A failed comparison calls for a scope repair, not deletion of inconvenient claims.
+
+For event certificates, distinguish generated work-slot identifiers from the original source identity that authorized the slot. A rejected one-use trigger still reports its source-owned capacity; consumption is a separate returned field. The parent copies these identities from the selected typed rule/slot before consuming the NL applicability result.
+
+Procedure Compiler code-closure attribution: an emitted-behavior literal returns generated spans with the actual closure file path and exact nonempty quote. The parent checks closure membership and quote bytes before consuming a decided permission/effect. Keep original source witnesses in their separate domain. If a quoted callee is absent, retain unresolved behavior and recover by supplying the actual emitted callee file; source-required policy remains in the independent judgment.

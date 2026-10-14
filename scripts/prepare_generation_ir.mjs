@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /** Upgrade reviewed task contracts before assigning IR from an older snapshot. */
-import {createReadStream} from 'node:fs';
-import {createInterface} from 'node:readline';
+import {jsonlLines} from '../ts-host/scripts/jsonl-stream.mjs';
 import {open,rename,unlink,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {createHash} from 'node:crypto';
@@ -81,7 +80,7 @@ const invariants=ir=>sourceConversionDigest({expected:ir.semantics?.expected,
 try{
   stream=await open(temporary,'wx');
   temporaryOwned=true;
-  for await(const line of createInterface({input:createReadStream(input),crlfDelay:Infinity})){
+  for await(const line of jsonlLines(input)){
     if(!line.trim())continue;
     sourceHash.update(line+'\n');
     const ir=JSON.parse(line),beforeRecord=structuredClone(ir),before=sourceConversionDigest(ir),fixed=invariants(ir);

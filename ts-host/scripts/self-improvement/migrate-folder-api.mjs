@@ -1,8 +1,8 @@
 /** Syntax-aware reducer call migration. Altered recorded observations must be replayed. */
 import ts from 'typescript';
 import YAML from 'yaml';
-import { createReadStream,createWriteStream } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { createWriteStream } from 'node:fs';
+import { jsonlLines } from '../jsonl-stream.mjs';
 import { writeFile } from 'node:fs/promises';
 import { once } from 'node:events';
 import {migrateRevisionCode} from './migrate-revision-code.mjs';
@@ -65,7 +65,7 @@ export function migrateRow(row) {
 if(process.argv[1]?.endsWith('migrate-folder-api.mjs')) {
   const [input,output]=process.argv.slice(2);if(!output)throw Error('usage: migrate-folder-api.mjs INPUT_JSONL OUTPUT_JSONL');
   const stream=createWriteStream(output);let count=0,changes=0,replay=0;
-  for await(const line of createInterface({input:createReadStream(input),crlfDelay:Infinity})) {
+  for await(const line of jsonlLines(input)) {
     if(!line.trim())continue;
     const result=migrateRow(JSON.parse(line));count++;changes+=result.changes;if(result.row.migration?.disposition==='replay-required')replay++;
     if(!stream.write(JSON.stringify(result.row)+'\n'))await once(stream,'drain');

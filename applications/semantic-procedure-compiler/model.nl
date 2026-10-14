@@ -5,7 +5,7 @@ args:
   requirements: RequirementSet
 returns: ProcedureModel
 ---
-1. Call inferState(requirements, intake.scenarios). Consume typed fields, owner roles, identity rules
+1. Call inferState(requirements, intake.scenarios, intake.goal). Consume typed fields, owner roles, identity rules
    and source-backed uncertainty invariants. Later branches need these exact state responsibilities.
 2. Call orderDependencies(requirements, schema). Consume source-backed requires/invalidates/alternative
    edges and actual component settlement, including unresolved negative cycles.

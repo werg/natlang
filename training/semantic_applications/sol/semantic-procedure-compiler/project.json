@@ -223,7 +223,8 @@
         "path": "model/inferState.nl",
         "args": {
           "requirements": "RequirementSet",
-          "scenarios": "ScenarioInput[]"
+          "scenarios": "ScenarioInput[]",
+          "goal": "CompilationGoal"
         },
         "returns": "StateSchema",
         "kind": "function",
@@ -309,7 +310,8 @@
           "branch": "BranchPlan",
           "model": "ProcedureModel",
           "module": "GeneratedModule",
-          "sourceAtoms": "StateAtom[]"
+          "sourceAtoms": "StateAtom[]",
+          "program": "GeneratedProgram"
         },
         "returns": "GuardDecision",
         "kind": "function",
@@ -541,15 +543,31 @@
   "readiness": {
     "source_loader_checked": true,
     "typed_declarations_checked": true,
-    "full_typed_reference": "pending",
-    "independent_oracle_review": false,
-    "exact_result_replay": false,
+    "full_typed_reference": "passed_authored_source_type_replay",
+    "independent_oracle_review": true,
+    "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
   },
   "generation_ready": false,
   "training_admission": false,
   "model_facing_debt": "0live samples; source, generatedpolicy and callable interface variant need roughly48live samples after source qualification.",
-  "nl_line_count": 656,
-  "scenario_execution_scope": "Symbolic NL interpretation of actual generated bodies; generated callable runtime invocation remains pending."
+  "nl_line_count": 669,
+  "scenario_execution_scope": "Symbolic NL interpretation of actual generated bodies; generated callable runtime invocation remains pending.",
+  "reference_path": "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/reference-packet.json",
+  "reference_role": "One authored full typed generated-program and symbolic scenario witness, not compiler execution or generated-callable trajectory.",
+  "external_verifier_path": "training/semantic_applications/sol/semantic-procedure-compiler/verify-result.mjs",
+  "independent_reviews": [
+    {
+      "path": "plans/semantic_stack/PROCEDURE_COMPILER_SOURCE_REVIEW_ASTRA.json",
+      "sha256": "d97576a4a0b58fa9f2a03795cfce498351f81774eae22d7ede4aab718ce75a3c",
+      "scope": "Source/oracle and authored canonical/checker review, no live qualification"
+    },
+    {
+      "path": "plans/semantic_stack/PROCEDURE_COMPILER_REFERENCE_REVIEW_ASTRA.json",
+      "sha256": "daba516b630362e3f5216308d1b74d3be5002f5467aececaf7e7e4f3da3b1129",
+      "scope": "Source/oracle and authored canonical/checker review, no live qualification"
+    }
+  ],
+  "diagnostic_readiness": "Source/type/canonical/exact peer checks passed; eligible separately pinned one-case diagnostic, training admission false."
 }

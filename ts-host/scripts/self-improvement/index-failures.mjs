@@ -2,7 +2,7 @@
 import { readdir, readFile, mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve, dirname, basename } from 'node:path';
 import { createReadStream } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { jsonlLines } from '../jsonl-stream.mjs';
 import { createHash } from 'node:crypto';
 const [output, ...roots] = process.argv.slice(2);
 if (!output || !roots.length) throw Error('usage: index-failures.mjs OUTPUT RUN_OR_DATA_ROOT...');
@@ -27,7 +27,7 @@ for (const root of roots) for await (const file of files(resolve(root))) {
   if(seen.has(hash)){inventory.push({file,hash,duplicate:true});continue;}seen.add(hash);
   async function* rows() {
     if(file.endsWith('.jsonl')) {
-      let line=0;for await(const text of createInterface({input:createReadStream(file),crlfDelay:Infinity})) {
+      let line=0;for await(const text of jsonlLines(file)) {
         if(text.trim()) {try{yield [line,JSON.parse(text)];}catch(error){inventory.push({file,hash,line,error:String(error)});}}line++;
       }
     } else {try{yield [0,JSON.parse(await readFile(file,'utf8'))];}catch(error){inventory.push({file,hash,error:String(error)});}}

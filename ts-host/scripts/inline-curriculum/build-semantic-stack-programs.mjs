@@ -165,6 +165,16 @@ function stages(entry) {
     instructions: String(step).replace(/^\s*\d+\.\s*/, ''),
   }));
 }
+function renameVariantStage(value, rename) {
+  if (!rename) return value;
+  if (typeof value === 'string')
+    return value.replace(new RegExp(`\\b${rename.from}\\b`, 'g'), rename.to);
+  if (Array.isArray(value)) return value.map(item => renameVariantStage(item, rename));
+  if (value && typeof value === 'object')
+    return Object.fromEntries(Object.entries(value).map(([key, item]) =>
+      [key, renameVariantStage(item, rename)]));
+  return value;
+}
 function stageBody(step) {
   // Authored catalog steps describe a parent's action: "Call inspect to ...".
   // Repeating that line inside inspect asks the child to invoke itself, which
@@ -232,8 +242,9 @@ function stageSpecTypeFile(entry, spec) {
   return source;
 }
 function checkedStageSpecs(entry, steps) {
+  const rename = variant?.program_id === entry.id ? variant.stage_rename : null;
   const spec = entry.stage_specs && variant?.program_id === entry.id ?
-    structuredClone(entry.stage_specs) : entry.stage_specs;
+    renameVariantStage(structuredClone(entry.stage_specs), rename) : entry.stage_specs;
   if (!spec || spec.schema_version !== 'semantic-stage-contributions/1' ||
       !Array.isArray(spec.stages) || spec.stages.length !== steps.length)
     return null;
@@ -275,6 +286,16 @@ function checkedStageSpecs(entry, steps) {
       if (!name.startsWith('StageInput')) spec.types[name] = body;
     }
     if (handoff) {
+      if (variant.entity_surface_contract &&
+          (typeof variant.types.EntitySurface !== 'string' ||
+           !/\bsourceForm\s*:\s*string\b/.test(variant.types.EntitySurface) ||
+           !/\bkey\s*:\s*string\b/.test(variant.types.EntitySurface) ||
+           !/\bentitySurfaces\s*:\s*EntitySurface\[\]/.test(variant.types.AssertionContent ?? '') ||
+           !/\bentitySurfaces\s*:\s*EntitySurface\[\]/.test(variant.types.InteractionAssertion ?? '') ||
+           !/sourceForm\.toLowerCase\(\)/.test(handoff.stage1?.direct_await_idiom ?? '') ||
+           !/allowedKeys\.has\(edge\.cause\)/.test(handoff.stage2?.direct_await_idiom ?? '') ||
+           !/allowedKeys\.has\(edge\.effect\)/.test(handoff.stage2?.direct_await_idiom ?? '')))
+        throw Error(`${entry.id}: entity surfaces need exact source-span, casefold and endpoint binding`);
       if (handoff.schema !== 'semantic-typed-evidence-handoff/1' ||
           !['readStudyPlots', 'buildInteractionGraph'].every((name, index) =>
             spec.stages[index]?.name === name && handoff[`stage${index + 1}`]?.name === name) ||
@@ -408,10 +429,19 @@ function render(entry, provider) {
   const title = shortText(entry.title, 'title', id);
   const objective = shortText(entry.objective, 'objective', id);
   const rule = shortText(entry.semantic_rule, 'semantic_rule', id);
-  const steps = stages(entry);
+  const rename = variant?.program_id === id ? variant.stage_rename : null;
+  if (rename && (typeof rename.from !== 'string' || typeof rename.to !== 'string' ||
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(rename.from) ||
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(rename.to) ||
+      rename.from === rename.to ||
+      stages(entry).filter(stage => stage.name === rename.from).length !== 1 ||
+      stages(entry).some(stage => stage.name === rename.to)))
+    throw Error(`${id}: invalid stage rename`);
+  const steps = renameVariantStage(stages(entry), rename);
   if (steps.length < 3) throw Error(`${id}: need at least three distinct stages`);
   const stageSpec = stageSpecsMode ? checkedStageSpecs(entry, steps) : null;
-  const crossFolder = stageSpec && variant?.program_id === id ? variant.cross_folder_accumulation : null;
+  const crossFolder = stageSpec && variant?.program_id === id ?
+    renameVariantStage(variant.cross_folder_accumulation, rename) : null;
   const typedHandoff = stageSpec?.typedEvidenceHandoff;
   const entityIdentity = stageSpec && variant?.program_id === id ? variant.entity_identity_contract : null;
   if (entityIdentity && ['join_key', 'source_quotes', 'scope'].some(key =>

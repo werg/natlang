@@ -1,0 +1,118 @@
+{
+  "schema": "natlang.semantic-application-author-quality/1",
+  "author": "semantic_slate_sol",
+  "date": "2026-10-14",
+  "application": "semantic-procedure-compiler",
+  "scope": "Author source audit and exact qualification, independently reviewed source and canonical/checker; live qualification pending.",
+  "source_files": {
+    "applications/semantic-procedure-compiler/audit/checkInterfaces.nl": "be61f3ea5a888c73be09ed9429227bf3b64590130de2ef4d90b90bfec60619f9",
+    "applications/semantic-procedure-compiler/audit.nl": "7335c22946482b83f3b21c17dcfe51f442e05d53afac434591a0148dd509017a",
+    "applications/semantic-procedure-compiler/compileProcedure/intake/interpretGoal.nl": "68cf6c0ad4b9050652e0528470c8e34c784ce37e4f638f5ee51108fa40f954ed",
+    "applications/semantic-procedure-compiler/compileProcedure/intake.nl": "23f1bebfed2dedb32abfa2822705cd17244a08c1d988a3c7fed61864cee08c9d",
+    "applications/semantic-procedure-compiler/compileProcedure/packageProgram.nl": "67f38b3f9b36c4d4f4140e3fd8f489efe85de5731362e6e88297fe8e457de193",
+    "applications/semantic-procedure-compiler/compileProcedure/reviseStep/explainCounterexample.nl": "e857babdab1a682ee827295ef6cc1a516a272d50614eb5556e3da6f7be507b0b",
+    "applications/semantic-procedure-compiler/compileProcedure/reviseStep.nl": "9b47c0b6eff837dc6b57fba53cf4577a5455e4b65c7fa180bc00eeb0be31dea1",
+    "applications/semantic-procedure-compiler/compileProcedure.nl": "d778e57c64ba11303d7910a9b1b09c677932125fc837deae82788eebbc3f9f7d",
+    "applications/semantic-procedure-compiler/editions/resolveSupersession.nl": "7a3c8dbfb0fc8d7b72927dc6af25cb7e45481bd3a9d4c7cfcc6eda69a1aefaa5",
+    "applications/semantic-procedure-compiler/editions/selectAuthority.nl": "fe8a77ce80dfdd59febd984e7c47fc29547e62f79f299511cac64b7dc5455d5c",
+    "applications/semantic-procedure-compiler/editions.nl": "3fe520ff9c5a56f9b60cd7beb680664bbc50921b7f4d3c257d1703798abbcc87",
+    "applications/semantic-procedure-compiler/lowering/chooseBoundary.nl": "de2bfd1f483e375b3f21a98a169fe0ae540b4d4904d12d9f4749c2e008db1220",
+    "applications/semantic-procedure-compiler/lowering/planBranch.nl": "841279faab44115dad69a697e79432d9379684d92ad46e0aa38020340c9bedcc",
+    "applications/semantic-procedure-compiler/lowering.nl": "b40c966246a160cd598d239144f3f8ea53ea0750d730db8c4e56cebe72fd3748",
+    "applications/semantic-procedure-compiler/model/inferState.nl": "c764816aad7e37df2ce68971fcbf9a8c06353588e54831dc4db82667b235d36a",
+    "applications/semantic-procedure-compiler/model/orderDependencies/settleComponent.nl": "36dd91c2a44d2788e2e8f6d4ef29b43819a05570c8d77d5e7080ec77ddd8feec",
+    "applications/semantic-procedure-compiler/model/orderDependencies.nl": "9e7919a781bfed9636547a52bc7e1e8231f4c41af8c90b450512c0ab72210d90",
+    "applications/semantic-procedure-compiler/model.nl": "2921b9c3eb0dc37a66e63d7ca8ef3ebe295f05087d48528dfda59286861368bf",
+    "applications/semantic-procedure-compiler/requirements/interpretRule.nl": "10c2ebb2221208dcb51fd1508cd8d94b5eff8232ce0cc5d3cea66d69594c4f8a",
+    "applications/semantic-procedure-compiler/requirements/resolveException.nl": "26b48e6fb780000b46d4ef7b6c56296136ec2c2e7051acbaa8b00c0c5d1b1bde",
+    "applications/semantic-procedure-compiler/requirements.nl": "e3b13ec03e8dce07824b893ac4b71cf1eb6e3d1c230a82484ae89c99906c2c65",
+    "applications/semantic-procedure-compiler/scenarios/checkOutcome.nl": "abbdbafaaee2a2282afc2ce58f54c2a36f00c46c0f54cc93abed74be7c7cc3f7",
+    "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard.nl": "5c35efce9d3e7e299610b99872a185a7c3a7e910646a16e477f50f1ec1d252bf",
+    "applications/semantic-procedure-compiler/scenarios/replayStep.nl": "a1c1010d3a13dbbd08841658c36fc6656c3f4a67c76f7c04331148d1b7cc64fd",
+    "applications/semantic-procedure-compiler/scenarios.nl": "091a5084f68144d2b004db6063535864af7770531f4c5604099344ffc2d8c527",
+    "applications/semantic-procedure-compiler/writing/writeModule/auditContribution.nl": "b2377f39e5e3445cfc63703268b74c1d298877c0901f4b4362f5a7ed7c6692d4",
+    "applications/semantic-procedure-compiler/writing/writeModule.nl": "0692c0a239d57c65c35fb7c34f3594b69ad9b04e5ad319f4c4f4202b51480f38",
+    "applications/semantic-procedure-compiler/writing.nl": "83999bc07fc71b568711ca9a5730be1c86dc9b0e27117b1286f34ef041041f2f",
+    "applications/semantic-procedure-compiler/types.ts": "a9bfb7b7363d1666dc828ea2772dcb413a53df98f8799d6268db5b4bbff5f06c"
+  },
+  "typed_aliases": 41,
+  "nl_modules": 28,
+  "physical_nl_lines": 669,
+  "numbered_policy_steps": 194,
+  "typed_graph_edges": 30,
+  "literal_sites": 5,
+  "literal_roles": 6,
+  "semantic_stage_audit": [
+    "Edition authority and supersession derive adopted temporal scope rather than choosing latest filename.",
+    "Rule interpretation and exception judgment return precisely waived/retained predicates consumed by model and guard planning.",
+    "State schema separates actual custody,personal brief/queue,station-global hazard and event-time permission; dependencycomponents settlefiniteunknowncycles.",
+    "Boundary and source-writing stages choose realowned fields/calls and check returnedchild/literalconsumption; nofixeduniformchain.",
+    "Emitted interpretation and source-required judgment have independent contexts,typedvalues/effects/statechannels and actuallocaldecisions; mismatchesremaincounterexamples.",
+    "Generated span provenance is separate fromoriginal sourceWitness; nonempty evidence validation precedes return.",
+    "Revision localizes earliestdivergence andrepairs generatedpolicy/statehandoff only, preserving originalsourceauthority."
+  ],
+  "packaging_stage_credit": "PackageProgram aggregates exact source/report/plumbing; not counted as a new semantic decision.",
+  "crisp_policy_audit": {
+    "model_visible_ts": [
+      "types.ts"
+    ],
+    "model_visible_js_helpers": [],
+    "decision_helper_count": 0,
+    "justification": "Allpolicy/semanticbranching isnumberedNL; TSdefinesinterfaces only. Externalverifier onlycompares declaredinvariants, exactfields/source spans/compilermechanisms."
+  },
+  "fixture": {
+    "files": 13,
+    "connected_clauses": 34,
+    "independent_scenarios": 6,
+    "permission_observations": 9
+  },
+  "canonical": {
+    "path": "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/reference-packet.json",
+    "sha256": "5211946782d4202bcdfc2c62ba9b8c9bc38e10bcfbd89ce36d70abbdc9b22e57",
+    "typed_source_replay": {
+      "path": "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/reference-packet.json",
+      "sha256": "5211946782d4202bcdfc2c62ba9b8c9bc38e10bcfbd89ce36d70abbdc9b22e57",
+      "reference_ok": true,
+      "reference_problems": [],
+      "opening_sha256": "548f9d811ee6f8eb20c55d70a7ad86e4e4651c13429a9df16892aae8967ca0ad",
+      "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
+    },
+    "generated_modules": 11,
+    "generated_nl_lines": 130,
+    "symbolic_event_traces": 14,
+    "role": "Authored fulltyped witness, not compilerexecution or generated-callable runtime execution.",
+    "package_path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/sol-procedure-compiler-final-freeze-20261014",
+    "source_sha256": "8850888a5f2b5ef62ee43c8e837ee9681f24fc973f8b849d6e09585c0538b540"
+  },
+  "exact_checker": {
+    "path": "training/semantic_applications/sol/semantic-procedure-compiler/verify-result.mjs",
+    "sha256": "d2b57060e484632d3d615c697b680b3443a3b994d0fecfc063203e1d5105879c",
+    "positive_controls": 7,
+    "negative_controls": 25,
+    "all_passed": true,
+    "semantics": "Exactsource/hash/path/type/effectapplication/reference anddeclaredscenario invariantchecks; NLentailment independent."
+  },
+  "independent_source_receipt": "plans/semantic_stack/PROCEDURE_COMPILER_SOURCE_REVIEW_ASTRA.json",
+  "source_quality_findings_resolved": [
+    "Idealmodelcouldsilentlycorrectemittedbehavior; fixedindependentchannels.",
+    "Generatedquotesevidence domainseparate fromoriginalrecords.",
+    "Explicitchecks beforefunctionreturn; nonempty exactsupport.",
+    "StationglobalhazardtypedownerST.",
+    "Actual callee/type closure and explicitly referenced runtime input data supplied to emitted interpreter; no ideal branch/audit/expected guidance.",
+    "Code-closure spans retain actual callee path rather than attributing every quote to the parent module.",
+    "Visible goal output responsibilities flow to schema inference, preserving O06 declared state format."
+  ],
+  "training_admission": false,
+  "generation_ready": false,
+  "live_execution": false,
+  "remaining_gates": [
+    "One separately pinned fullcompiler live diagnostic; inspect actual meaningful stages/literal effects and generated output semantics.",
+    "Actual generatedcallable runtime invocation remains separatefromsymbolicreplay.",
+    "About48 reviewedlive samples per adopted model-facingvariant."
+  ],
+  "checker_peer_findings_resolved": [
+    "Per-rule guard decisions are not aggregate event permission: aggregate permission compared once in each final event state, individual rule decisions retain channel consistency/effects. Equivalent custody=true plus acknowledgment-dependent permission=false is accepted."
+  ],
+  "public_format_repair": "O06 explicitly declares traced state keys/subjects/unknown conventions; internal rule IDs may vary consistently, source clause IDs exact. Normative outcomes unchanged.",
+  "independent_reference_receipt": "plans/semantic_stack/PROCEDURE_COMPILER_REFERENCE_REVIEW_ASTRA.json"
+}

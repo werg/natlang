@@ -26,5 +26,21 @@
   "limitations": [
     "Authored row/state handoff is not proof of model consumption; inspect fresh pinned live parent/child trace.",
     "Source/type/canonical controls do not qualify generated world semantics or live mission policy."
-  ]
+  ],
+  "physical_permission_v4_review": {
+    "result": "passed_authored_source_peer_review_no_live_credit",
+    "files": {
+      "applications/cave-mission/types.ts": "fd6d89548ffa8a8d35cbd27464485b08a60089554e4e3057544515541f41acbf",
+      "applications/cave-mission/planMission/survey/readPassages.nl": "cb09c226b8d9262d23275575003bfe43f7e817eb01e612ef5f5ea20e419f4b73",
+      "applications/cave-mission/planMission/reconcileMaps/buildWorlds/extendHypothesis.nl": "f721a9d49b220aff464cb8ad6d1aa963d4c51fcc37daf4cc1dd6a9260a36d480",
+      "applications/cave-mission/planMission/reconcileMaps/buildWorlds/extendHypothesis/resolveContradiction.nl": "d9ab6a77ca2ac3522b17e5c57b6715146efa6d5dbf7b060ce0167128d9be1016"
+    },
+    "findings": [
+      "physicalExistence is separate from allowed ordered traversal and carried-state conditions.",
+      "One-way present gate is oriented forward with reverse prohibition retained as evidence, never physical absence.",
+      "Complete positive/negative claim groups reach conditional contradiction assessment; no negative filtering to force compatibility.",
+      "Physical identity/time scope compare separately from ordered movement; present forward plus forbidden reverse is coherent, physically present narrow tunnel remains present while full-carrier travel is blocked."
+    ],
+    "fixture_oracle_reference_delta": "none"
+  }
 }

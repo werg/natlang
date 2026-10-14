@@ -6,10 +6,15 @@ returns: WorldFrontier
 ---
 1. If pending is empty, return state. Otherwise take its first hypothesis and remove it from a copy
    of pending. Translate each local passage endpoint through that hypothesis's bindings.
-2. Expand two-way passages into two directed WorldPassage entries; keep one-way gates and chimneys
-   directed. Attach source conditions, exact costs and all supporting witnesses.
+2. Read each assertion's physicalExistence before constructing travel edges. Present connections
+   contribute allowed directions: two-way gives both, one-way gives only its declared from-to direction.
+   Retain reverse-forbidden witnesses and carried-state conditions on those actual edges. Absent physical
+   connections contribute negative facts without a travel edge; unknown physical existence remains an
+   explicit unresolved premise wherever it could affect this mission.
 3. When global and local assertions describe the same passage, join their evidence. If direction,
-   existence, cost or applicable scope conflicts, call resolveContradiction(claims, hypothesis, survey).
+   physicalExistence, allowed direction, cost or applicable scope appears inconsistent, call
+   resolveContradiction with the complete witnessed claim group, hypothesis and survey. Preserve all
+   negative claims during that assessment; a repeated comparison uses the same complete evidence.
 4. Consume that assessment: compatible=true scope differences can coexist; compatible=false rejects this hypothesis.
    compatible=null appends a witnessed missing premise to state.unresolved and leaves the hypothesis
    unclaimed rather than treating it as disproved. A blocked source model cannot justify a successful plan.

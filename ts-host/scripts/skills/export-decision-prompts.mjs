@@ -8,9 +8,8 @@
  * type is its options (choice), `boolean` (noul) or its level names (score). Training on these rows
  * (scripts/train_decision_readout.py) trains the same readout the runtime uses, prompt for prompt.
  */
-import { createReadStream } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { createInterface } from 'node:readline';
+import { jsonlRows } from '../jsonl-stream.mjs';
 import { createNatlangRuntime, loadVirtualNatlang } from '../../dist/index.js';
 
 const args = { roles: 'train,heldout', 'per-family': '0', labels: [] };
@@ -20,7 +19,7 @@ for (let i = 2; i < process.argv.length; i += 2) {
     throw Error('Usage: export-decision-prompts.mjs --cases FILE --out FILE [--labels FILE]... [--roles R] [--per-family N]');
   if (key === 'labels') args.labels.push(value); else args[key] = value;
 }
-const lines = async function* (path) { for await (const line of createInterface({ input: createReadStream(path) })) if (line.trim()) yield JSON.parse(line); };
+const lines = jsonlRows;
 const roles = new Set(args.roles.split(',')), perFamily = Number(args['per-family']);
 
 /** The case's result values (JSON-able) and its gold distribution over them. */

@@ -4,17 +4,24 @@ args:
   clauses: SourceClause[]
 returns: PassageAssertion[]
 ---
-1. Read every passage assertion with its survey frame and current-state qualifiers. Identify its
-   endpoints without replacing local labels with a guessed global side.
-2. Separate geometry from travel permission: a physical gate can exist while reverse movement is
-   forbidden. An observed surface or line of sight does not create a traversable corridor.
-3. For each described passage, record kind, direction, cost, condition and existence. Preserve an
-   explicit absent connection as absent; a merely unobserved connection is unknown.
-4. A two-way tunnel supplies travel in both directions subject to its carried-state condition. A
-   one-way water gate or upward chimney must not inherit an unmentioned reverse direction.
-5. Join exact cost clauses to the passage they govern, including equipment clauses that give the
-   chimney's ascent cost. Do not use geometric grid distance as a replacement for stated action cost.
-6. Keep condition as source-grounded language: it will be interpreted against each current robot
-   state by judgeCrossing. A narrow tunnel is not unconditionally unusable just because a later load is bulky.
-7. Return every relevant assertion with witnesses, including negative evidence needed to reject
-   tempting return routes. Duplicate descriptions retain witnesses rather than multiplying passages.
+1. Read every passage assertion with its survey frame and current-state qualifiers. Identify endpoint
+   source IDs separately from descriptive prose, preserving local labels until frame alignment supplies
+   global identities. Keep the exact endpoint keys used by the interpreted source landmark inventory.
+2. Interpret physicalExistence as whether the physical connection exists, independently of allowed
+   travel direction or carried-state permission. Assign present to a source-established gate, tunnel,
+   corridor or chimney, absent to an explicitly missing physical connection, and unknown to unestablished
+   physical existence. Preserve the exact clause supporting that particular meaning.
+3. For each present one-way connection, orient from and to in the allowed movement direction. Attach
+   source statements forbidding reverse traversal to that same assertion's witnesses and condition.
+   Direction records its one-way permission; physicalExistence remains present for that physical gate.
+4. A present two-way tunnel supplies travel in both directions subject to its carried-state condition.
+   Keep a restriction on a full carrier in condition while retaining the actual tunnel's physical presence.
+   Explicitly absent physical routes retain absent and their negative witnesses for later graph audit.
+5. Join repeated local descriptions only when source identity and scope establish the same connection.
+   Keep global and local-frame assertions available for later hypothesis-specific reconciliation. A
+   source description of an outward gate and its forbidden return jointly supports one oriented row.
+6. Join exact movement costs to the passage they govern, including equipment clauses defining chimney
+   ascent. Preserve conditions as source-grounded language for the later current-robot-state judgment.
+7. Return every relevant PassageAssertion with physicalExistence, direction, endpoints, cost, condition
+   and exact witnesses. Preserve negative route evidence in these meanings and source clauses; an absence
+   of physical connection, a forbidden direction and an unmet load condition remain different claims.
