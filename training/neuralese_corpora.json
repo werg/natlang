@@ -67075,6 +67075,135 @@
         "held_text": {}
       },
       "notes": "LFM-only render of approved closed Luna backlog; 23,644 program-header decisions and 12,777 whole trajectories. Five protected test-text collisions excluded; two decisions with unbound Neuralese references and one whole trajectory filtered, not repaired by inventing source values."
+    },
+    {
+      "id": "luna-held-shapes-closed-backlog-v5-mellum-render-20261014-v1",
+      "owner": "dgx",
+      "path": "runs/luna-held-shapes-closed-backlog-v5-native-turns-20261014-v1/mellum21-render-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: luna-held-shapes-closed-backlog-v5-native-turns-20261014-v1; variants: full/mellum21, program-header/mellum21, whole-trajectory/mellum21; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "luna-held-shapes-closed-backlog-v5-native-turns-20261014-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "70100bc1399fb16bcc30e561ccabb55c3e52f1f81495ec48c55a5c1eee9b8e43",
+            "documents": 1188,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1188,
+                "supervised_tokens": 150221,
+                "tokens": 10419725,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 38486,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "bc5e701fdedc8ebd84e70a4e140b79446b6e5b60c3f1f1b9785be46d96cf7b2c",
+            "documents": 23644,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 23644,
+                "supervised_tokens": 2846917,
+                "tokens": 59874993,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 34143,
+            "merge_omissions": {}
+          }
+        },
+        "whole-trajectory": {
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "9a3bd0db92f52ae5d317ef7b424bb9ab197f6e892534a472aa2e34aba6a96405",
+            "documents": 12777,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 9491323,
+                "documents": 12777,
+                "opening_tokens": 6385499,
+                "supervised_tokens": 3105824,
+                "tokens": 28672049,
+                "tool_tokens": 3557542
+              }
+            },
+            "max_document_tokens": 34143,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "omitted:jeff_reserved_test_text": 5,
+        "reserved_groups": 2,
+        "reserved_programs_hit": 1,
+        "selected": 23646,
+        "selected:train": 23646,
+        "source_rows": 23651
+      },
+      "render_omissions": {
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 22456,
+        "mellum21/full/unresolved_or_malformed_crisp_reference": 2,
+        "mellum21/program-header/unresolved_or_malformed_crisp_reference": 2,
+        "mellum21/whole-trajectory/native_chat_render_failed": 1
+      },
+      "program_header_parity": {
+        "equal_text_serving_token_boundaries": 23644,
+        "retokenization_checked": 0
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "8c7b964bc1fec0169e3a2bb80e462a8e26f15837b3de0e4ecbb4c65b62c2bc40",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/luna-held-shapes-closed-backlog-v5-native-turns-20261014-v1/mellum21-render-v1/receipt.json",
+        "sources": {
+          "runs/luna-held-shapes-closed-backlog-v5-native-turns-20261014-v1/approved-turns.jsonl": {
+            "bytes": 1894508227,
+            "sha256": "6ab5c37b559aa00c461ba253d2c241810950fa1e93dfb4fd0db27aaa94fa3cd2"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {}
+      },
+      "notes": "Mellum twin of admitted closed Luna backlog; same5 split-reservation collisions excluded,2 unresolved direct source references omitted. Wholetrajectory has1 unresolved hash-bound Neuralese message body; omission retained for source repair, no guessed source. No new examples admitted."
     }
   ],
   "coverage_backlog": [
