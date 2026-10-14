@@ -620,9 +620,11 @@ Both passed default/gateway exec and file roundtrips. Scratch-only control
 `7c62f59b-8ba3-4719-aa58-489fa7123d31` remained creating through a four-minute
 observation window and was explicitly stopped. Rich requests with scratch
 volumes, including default-image `941d1bb3-fb75-4be2-8b6a-079e83ff4e18`,
-are being observed to a 15-minute bound. A quiet creating status is not a
-terminal platform failure. These controls isolate scratch-volume provisioning
-as the remaining suspected blocker.
+remained creating for about 11 minutes and was explicitly stopped. The rich
+PyTorch volume request remained creating for 15 minutes, then was explicitly
+stopped. Neither produced a vendor terminal failure or useful state reason.
+These controls isolate scratch-volume provisioning as the remaining suspected
+blocker, without treating an observation timeout as a platform terminal error.
 
 Use an explicit job declaration `"scratch": {"path": "/work", "size":
 "50Gi", "storage": "root"}` to omit the vendor volume and retain the existing
@@ -636,3 +638,32 @@ Reproducible bounded diagnostics and JSON receipts are in
 `coreweave-{pytorch-root,controls}-20261014.json`; their local units run through
 the memory ledger. HF, PyPI, Node and GitHub HTTPS egress each returned 200.
 No credentials were placed in a sandbox or output record.
+
+
+The existing `cwctl.launch` -> bundle streaming -> bootstrap -> `cwctl.collect`
+path also passed using root storage in sandbox
+`46fad1e7-7cea-4c74-9b67-ded7ca43e829` (running after 19.9 seconds).
+The code snapshot was 60,948,359 bytes. The job repeated the 30 CUDA updates,
+then exported checkpoint and result JSON to DGX with per-file SHA-256 verification:
+130,671 bytes, output bundle
+`4d3c5c50dd8f8d88e0f3af4dd2d0f8b8213adfcd4fe18a731acd7f581ee93313`.
+After sandbox stop, a separate ledgered DGX check loaded the model and optimizer,
+verified all optimizer states at step 30, and ran finite CPU inference.
+Local artifact directory: `/home/werg/data/dgxops/coreweave-native-loop-output-20261014`.
+Repeat the exact loop with
+`memory_ledger.py run --unit <unique-unit> --budget-gb 2 --priority medium --no-resumable -- /home/werg/.local/share/natlang/cw-venv/bin/python -u /home/werg/data/dgxops/coreweave-native-loop-20261014.py`.
+
+All seven test sandbox IDs in this section were independently re-read after
+cleanup and were terminal `completed` (user-requested stop). Exact cleanup
+receipt: `/home/werg/data/dgxops/coreweave-cleanup-audit-20261014.json`.
+No allocated diagnostic sandbox remains. The first malformed local mounted-file
+request failed SDK validation before creating a sandbox; it used the documented
+list keys rather than the installed SDK's mapping form, and was corrected locally.
+
+Validation: 45 CoreWeave tests passed, two optional SDK tests skipped in the
+local training environment; the actual SDK launch/stream/collect loop passed
+remotely. Ledgered quick-main checks passed. The full-main run for commit
+`65e8a69135` was preempted during the test suite by training admission and remains
+pending; its partial output is not a full-main pass. NGC CUDA 13.4 kernels,
+large-model training/resume, production teacher serving and actual filesystem
+snapshot restore still need their declared benchmark/qualification jobs.
