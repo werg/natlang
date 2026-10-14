@@ -229,7 +229,8 @@ function stageSpecTypeFile(entry, spec) {
   const names = new Set([...authored.matchAll(/export type ([A-Za-z_][A-Za-z0-9_]*)\s*=/g)].map(match => match[1]));
   let source = authored;
   for (const [name, body] of Object.entries(spec.types ?? {})) {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || typeof body !== 'string' || !body.startsWith('{') ||
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || typeof body !== 'string' ||
+        !(body.startsWith('{') || (name === 'SourceRole' && /^'(?:[a-z]+)'(?:\|'[a-z]+')+$/.test(body))) ||
         names.has(name)) throw Error(`${entry.id}: invalid or duplicate stage type ${name}`);
     names.add(name); source += `export type ${name} = ${body};\n`;
   }
@@ -281,7 +282,8 @@ function checkedStageSpecs(entry, steps) {
       'StageInput3', 'StageInput4', 'StageInput5']) : new Set();
     for (const [name, body] of Object.entries(variant.types)) {
       if ((Object.hasOwn(spec.types, name) && !overriddenTypes.has(name)) ||
-          typeof body !== 'string' || !body.startsWith('{'))
+          typeof body !== 'string' ||
+          !(body.startsWith('{') || (name === 'SourceRole' && /^'(?:[a-z]+)'(?:\|'[a-z]+')+$/.test(body))))
         throw Error(`${entry.id}: invalid variant type ${name}`);
       if (!name.startsWith('StageInput')) spec.types[name] = body;
     }
@@ -336,7 +338,8 @@ function checkedStageSpecs(entry, steps) {
           replacement.direct_await_idiom, handoff.exact_vs_semantic];
         stage.owned_contribution.type = index === 0 ? 'InteractionAssertion[]' : index === 1 ?
           'InteractionEdge[] with one source-bound EdgeDecision per assertion' :
-          '{cause:string;effect:string;signedEffect:number;direct:boolean;witnesses:Witness[]}[]';
+          variant.types.CausalAssessment ? 'CausalAssessment[] with actual CausalDecision and sourceIds' :
+            '{cause:string;effect:string;signedEffect:number;direct:boolean;witnesses:Witness[]}[]';
         stage.no_op_policy = index === 0 ?
           'Only an empty source folder has no assertion decision; every actual record has one source-bound assertion, including background or unresolved.' :
           index === 1 ?
@@ -450,6 +453,19 @@ function render(entry, provider) {
   const typedHandoff = stageSpec?.typedEvidenceHandoff;
   const rootFolder = stageSpec && variant?.program_id === id ? variant.root_folder_iteration : null;
   const batchDelta = stageSpec && variant?.program_id === id ? variant.batch_delta_contract : null;
+  const seedJudgment = stageSpec && variant?.program_id === id ? variant.seed_judgment : null;
+  if (seedJudgment && (seedJudgment.schema !== 'semantic-source-role-seed/1' ||
+      seedJudgment.owner_stage !== steps.at(-1)?.name ||
+      seedJudgment.input_type !== 'SeedInput' || seedJudgment.output_type !== 'SeedDecision' ||
+      !/sourceRole\s*:\s*SourceRole/.test(stageSpec.types.InteractionAssertion ?? '') ||
+      !/decision\s*:\s*CausalDecision/.test(stageSpec.types.CausalAssessment ?? '') ||
+      !/sourceIds\s*:\s*string\[\]/.test(stageSpec.types.CausalAssessment ?? '') ||
+      !/sourceId\s*:\s*string/.test(stageSpec.types.EffectSeed ?? '') ||
+      !seedJudgment.direct_await_idiom?.includes('await judgeSeed(') ||
+      !seedJudgment.direct_await_idiom?.includes('seeds.push(') ||
+      !Array.isArray(crossFolder?.stage5_numbered_plan) ||
+      !crossFolder.stage5_numbered_plan.some(step => step.includes('SeedDecision'))))
+    throw Error(`${id}: invalid source-role seed judgment contract`);
   if (rootFolder) {
     if (!forwarding || !crossFolder || !typedHandoff ||
         rootFolder.state_type_name !== 'FolderReductionState' ||
@@ -581,6 +597,8 @@ function render(entry, provider) {
       const handoffPlan = typedHandoff ?
         `\nTyped evidence boundary: ${index === 0 ? 'Only this stage reads EvidenceRecord.text. Bind source ID/path in parent scope and pass actual returned InteractionAssertion objects to the child.' :
           'Use BatchIdentity and prior typed contributions with exact witness snippets.'} ${typedHandoff.exact_vs_semantic}\n` : '';
+      const seedPlan = isGraphAudit && seedJudgment ?
+        `\nSource-role seed judgment: ${seedJudgment.idiom_preconditions}\n${seedJudgment.direct_await_idiom}\n${seedJudgment.unresolved_plan}\n` : '';
       files[`${stageFolder}.nl`] = nlFile({ args: { input: `StageInput${index + 1}` },
         returns: 'FinalSemanticState', description: `${title}: ${name}`,
         instructions: `${plan}\nOwned new semantic contribution: ${owned.owned_contribution.field}: ${owned.owned_contribution.type}.\n` +
@@ -589,7 +607,7 @@ function render(entry, provider) {
             identityInstruction) +
           `Transformation: ${owned.new_semantic_transformation}\n` +
           `Evidence: ${owned.source_evidence_obligation}\nInvariant: ${owned.invariant}\n` +
-          `No applicable evidence: ${owned.no_op_policy}${literalPlan}${carriedPlan}${handoffPlan}${batchDelta ? `\nCurrent-batch typed handoff: ${batchDelta.stage_plan}${next ? ` ${batchDelta.forwarding_plan}` : ''}\n` : ''}\n` +
+          `No applicable evidence: ${owned.no_op_policy}${literalPlan}${carriedPlan}${handoffPlan}${seedPlan}${batchDelta ? `\nCurrent-batch typed handoff: ${batchDelta.stage_plan}${next ? ` ${batchDelta.forwarding_plan}` : ''}\n` : ''}\n` +
           (next && forwarding ?
             `After binding nextStageInput with this stage's completed typed contribution, finish this call in one eval action: eval({code:"return await ${next}(nextStageInput);",finish:true}). This returns the child's ${batchDelta ? 'current-batch contribution arrays and global audit' : 'complete FinalSemanticState'}.\n` :
             next ? `Pass the accumulated typed contributions to child ${next} within this active call and return its ${batchDelta ? 'current-batch contribution arrays and global audit' : 'complete FinalSemanticState'}.\n` :
@@ -653,6 +671,12 @@ function render(entry, provider) {
         !nodeJudgment.direct_await_idiom.includes('await judgeNode(nodeInput)') ||
         !nodeJudgment.direct_await_idiom.includes('next.nodeFindings.push(nodeFinding)')))
       throw Error(`${id}: invalid scoped node-judgment contract`);
+    const finishContract = graphFrontier.finish_contract;
+    if (finishContract && (finishContract.schema !== 'semantic-frontier-final-return/1' ||
+        typeof finishContract.instruction !== 'string' ||
+        finishContract.positive_idiom !== 'eval({code:"return next;",finish:true})' ||
+        !finishContract.precondition?.includes('actual consumed child result')))
+      throw Error(`${id}: invalid one-action frontier return contract`);
     const path = `${stageFolder}/${child}.nl`;
     if (Object.hasOwn(files, path)) throw Error(`${id}: duplicate named graph frontier path`);
     files[path] = nlFile({ args: graphFrontier.args,
@@ -663,7 +687,8 @@ function render(entry, provider) {
         `${graphFrontier.owner_stage} owns iterateOn with measure ` +
         `${graphFrontier.iteration.measure} and finished predicate ` +
         `${graphFrontier.iteration.finished_predicate}. ` +
-        `Preserve earlier paths, findings and witnesses in the returned state.` });
+        `Preserve earlier paths, findings and witnesses in the returned state.` +
+        (finishContract ? `\n${finishContract.instruction}\n${finishContract.precondition}\n${finishContract.positive_idiom}` : '') });
   }
   const filePaths = fixture ? Object.keys(fixture) : [];
   const hasScopedCollection = filePaths.length >= 3 &&
