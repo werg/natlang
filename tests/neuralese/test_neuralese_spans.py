@@ -241,3 +241,17 @@ def test_json_escaped_surrogate_pair_has_one_decoded_character_offset():
     assert len(bounds) == len(value)
     assert rendered[bounds[1][0]:bounds[1][1]] == '\\ud83d\\ude00'
     assert rendered[bounds[2][0]:bounds[2][1]] == '\\n'
+
+
+def test_compact_history_note_uses_declared_tool_and_argument_path():
+    import json
+    note = "Customer's request\nKeep the original question."
+    escaped = note.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '\\n')
+    site = {'tool': 'compact_history', 'value_path': ['note'], 'source_kind': 'json-write-marker'}
+    targets = ["compact_history(note='" + escaped + "')",
+               '<tool_call>' + json.dumps({'name': 'compact_history', 'arguments': {'note': note}}) + '</tool_call>']
+    for target in targets:
+        spans, missing = spans_module.spans_for_row(row('', target), [('note', note, True, site)], CharTokenizer())
+        assert missing == 0 and len(spans) == 1
+        begin, end = spans[0][:2]
+        assert target[begin:end].startswith('Customer') and target[begin:end].endswith('question.')

@@ -290,10 +290,12 @@ def spans_for_row(row: dict, writes: list[tuple[str, str, bool]], tokenizer) -> 
             else:
                 missing += 1
             continue
-        path = tuple(site.get('value_path', ('value',))) if site.get('tool', 'return_result') == 'return_result' else ('value',)
-        if path not in literal_cache:
-            literal_cache[path] = return_value_literals(text, supervised_from, path)
-        literals = literal_cache[path]
+        path = tuple(site.get('value_path', ('value',)))
+        tool = site.get('tool', 'return_result')
+        key = (tool, path)
+        if key not in literal_cache:
+            literal_cache[key] = return_value_literals(text, supervised_from, path, tool)
+        literals = literal_cache[key]
         if not isinstance(value, str) or not value:
             missing += 1
             continue
