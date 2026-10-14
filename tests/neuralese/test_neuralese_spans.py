@@ -81,3 +81,63 @@ def test_the_mixed_loader_rejects_a_changed_pinned_span_sidecar(tmp_path):
     path.write_text(json.dumps({'id': 'r', 'spans': [[7, 9, 'a', True]]}) + '\n')
     with pytest.raises(ValueError, match='span hash mismatch'):
         neuralese_spans({'neuralese_spans': binding}, tmp_path)
+
+
+def test_native_return_values_do_not_mask_status_words_identifiers_or_partial_numbers():
+    target = "return_result(status='success', value='success')"
+    r = row('user: x\n', target)
+    spans, missing = spans_module.spans_for_row(r, [('result:a', 'success', True)], CharTokenizer())
+    begin = r['text'].rindex('success')
+    assert missing == 0 and spans == [[begin, begin + 7, 'result:a', True]]
+    for target in ["return_result(status='success', value=done1)", 'return_result(value=10)']:
+        assert spans_module.spans_for_row(row('', target), [('result:a', '1', True)], CharTokenizer()) == ([], 1)
+
+
+def test_native_literal_offsets_cover_unicode_and_multiline_json_boolean_values():
+    target = 'return_result(status="é", value={\n"flag": true, "text": "café"\n})'
+    r = row('', target)
+    value = '{"text":"café","flag":true}'
+    spans, missing = spans_module.spans_for_row(r, [('result:a', value, True)], CharTokenizer())
+    begin, end = target.index('{'), target.rindex('}') + 1
+    assert missing == 0 and spans == [[begin, end, 'result:a', True]]
+
+
+def test_single_quoted_native_strings_with_apostrophes_and_newlines_map_to_gold_content():
+    value = "Karl Jaspers' theory\nAmerica'en"
+    rendered = "'Karl Jaspers\\' theory\\nAmerica\\'en'"
+    target = "return_result(status='success', value=" + rendered + ')'
+    spans, missing = spans_module.spans_for_row(row('', target), [('result:a', value, True)], CharTokenizer())
+    begin = target.index(rendered) + 1
+    assert missing == 0 and spans == [[begin, begin + len(rendered) - 2, 'result:a', True]]
+
+
+def test_a_quoted_example_call_is_not_a_native_return_value():
+    text = 'eval(code="return_result(value=42)")'
+    assert spans_module.return_value_literals(text, 0) is None
+
+
+def test_mellum_tool_call_value_location_is_exact_and_not_the_status_or_a_partial_number():
+    import json
+    call = {'name': 'return_result', 'arguments': {'status': 'success', 'value': 'success'}}
+    target = '<tool_call>\n' + json.dumps(call) + '\n</tool_call>'
+    spans, missing = spans_module.spans_for_row(row('', target), [('result:a', 'success', True)], CharTokenizer())
+    begin = target.rindex('success')
+    assert missing == 0 and spans == [[begin, begin + 7, 'result:a', True]]
+    call['arguments']['value'] = 10
+    target = '<tool_call>' + json.dumps(call) + '</tool_call>'
+    assert spans_module.spans_for_row(row('', target), [('result:a', '1', True)], CharTokenizer()) == ([], 1)
+
+
+def test_mellum_tool_call_unicode_nested_value_and_escaped_string_offsets():
+    import json
+    for value in [{'é': [True, {'x': 'café'}]}, 'say "hi"\nthen go']:
+        call = {'name': 'return_result', 'arguments': {'status': 'success', 'value': value}}
+        target = '<tool_call>' + json.dumps(call, ensure_ascii=False) + '</tool_call>'
+        expected = json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
+        spans, missing = spans_module.spans_for_row(row('', target), [('result:a', expected, True)], CharTokenizer())
+        rendered = json.dumps(value, ensure_ascii=False)
+        begin = target.index(rendered)
+        end = begin + len(rendered)
+        if isinstance(value, str):
+            begin, end = begin + 1, end - 1
+        assert missing == 0 and spans == [[begin, end, 'result:a', True]]
