@@ -112,8 +112,30 @@ The v4 exact replay produced 43 handoff sites (25 failed actions, 18 wrong
 results), skipped four whose replay diverged, and selected 11 distinct
 train-only source groups for teacher continuation. The selected source SHA is
 `08ee65459f6a59f91413fc99607ea63c91682260af0684d73c62ea0c37c70aac`.
-The earlier v3 produced 27 exact sites and selected 11. Their Luna outputs
-remain review candidates; successful continuation, source exclusion and
-native decision quality must be checked before corpus admission. The PH
-CoreWeave continuation should be judged stage by stage against this exact
-behavior baseline, including action diagnostics and post-observation recovery.
+The earlier v3 produced 27 exact sites and selected 11. The PH CoreWeave
+continuation should be judged stage by stage against this exact behavior
+baseline, including action diagnostics and post-observation recovery.
+
+## Recovery review and continuation feed, 2026-10-14
+
+The v3 Luna correction campaign yielded 11/11 exact-accepted parent outcomes.
+Native decision review admitted eight parents and 42 successful teacher turns
+as `qad-r8-student-root-recovery-v3-20261014-v1` (approved-turns SHA-256
+`3cddaa3ad86df4e2fde8090925996539ae7b8687ad8c479f5477cd3ec1e35c5b`).
+The protected held-48 program, source ID and source-group intersections are
+empty. Three exact-answer parents are held: composed process used an arbitrary
+10,000-step loop instead of required `iterateOn`; edit stream bypassed the
+required one-instruction-at-a-time `iterateOn` and NL edit; counterexample
+revision hardcoded a record ID instead of expressing a reusable identity rule.
+Unapproved student-prefix and failed decisions are not training targets. The
+LFM render `qad-r8-student-root-recovery-v3-lfm-render-20261014-v1` contains
+42 program-header, 23 whole-trajectory and three sampled full train documents,
+with no local render omissions. Source and render manifests were verified after
+sync to DGX. The Mellum tokenizer twin and global held/source-quality proof
+remain before a later protected data continuation; the active PH snapshot is
+unchanged.
+
+The v4 campaign has 11 distinct replay-checked train-only handoffs. Two Luna
+correction workers started on Pop; the replenisher now grants them first claim
+on openings within the same six-worker cap (`466eebf4`). Their outputs have no
+training admission yet.
