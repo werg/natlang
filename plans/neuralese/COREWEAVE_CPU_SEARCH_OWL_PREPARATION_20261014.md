@@ -37,3 +37,32 @@ LFM and must be staged with SHA
 585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf.
 The existing Node dependencies are present; compile the isolated Git snapshot's
 own TypeScript dist without changing the active trainer source/runtime.
+
+## Actual staged job
+
+The isolated snapshot is Gitddbebe9a121ccfe4c2db7ae68b45e2f45f476611,
+61,109,391bytes, SHA
+b36dd8ece8324a77bf60beb379dde94d9fc7aa1ad330173686b399537e2b0f84.
+Runtime `/work/cpu-runtime/search-owl-ddbebe9a121c`; job
+`/work/datajobs/search-owl-native`; owner spec
+`/home/werg/data/dgxops/coreweave-search-owl-cpu-spec-20261014.json`.
+Protected index and JeFF reservations were remotely SHA-verified before launch;
+reservations SHA2ec7845cd19d9b42c504f2ac7535c3bc23510b913b03f5b76b6da911fd2b84c7.
+
+First isolated build failed to resolve hoisted Node modules: the snapshot needed
+both root and ts-host dependency directories. Linking both existing dependency
+locations fixed the build; no active source/runtime was changed. Both public
+source pins then downloaded and passed size/full-SHA checks. First conversion
+stopped because the shared adapter's relative data alias was absent from a
+Git-only snapshot; adding that isolated alias to the actual pinned raw root
+fixed the binding. These setup failures did not produce admitted data.
+
+At22:40UTC, actual runner28555/converter28671 are alive, exit receipt absent,
+and `convert-agents searchswarm owl-sft` is running. Existing native shell's
+EXIT cleanup signals its process group, so the external task launcher gives
+phases independent sessions and records each phase PID. This preserves the
+shell's existing child cleanup while keeping the outer durable exit receipt.
+The generic submit helper refuses duplicate live workers and clears an obsolete
+exit marker only after verifying the prior worker is gone. Poll reads are
+bounded to64KiB; old setup traces in cumulative logs are historical, not newly
+failed conversion results. Closure, native replay and admission remain pending.
