@@ -51,6 +51,17 @@ deleted, reclaiming 20,771,869,649 logical bytes (root free 24→43 GiB).
 The current v13 prepared corpus and its `native-sft-v13-r2` symlink remain
 present and readable. This supersedes the older v11 warning below.
 
+At 10:17 CEST the Pop Luna timer exposed a masked s52046 backlog:
+`worker-04` case016 had advanced to 245 durable turns, but its 0.9-GiB
+collector cgroup was OOM-killed repeatedly. The replenisher counted only
+terminal cases, mislabeled the four relaunches as no progress, and held later
+campaigns. `scripts/replenish_luna_held_shapes.py` now counts saved turns as
+durable progress and grants a 2.0-GiB ledger budget when resuming a partial
+of at least 8 MB. Focused tests and quick gate passed; the full main gate
+remains to run after the ongoing Pop GPU evaluation and semantic source edits.
+Run the replenisher once after this change to relaunch case016 and confirm
+the ledger admits it; continue monitoring its real progress and memory.
+
 ## 09:12 CEST: Pop GPU handoff, deterministic Flash and FP8 repeat
 
 The Pop GPU had an avoidable idle handoff after QAD v14's hard drift stop at
