@@ -1,0 +1,46 @@
+{
+  "schema": "natlang.semantic-variant-independent-render-review/1",
+  "reviewer": "semantic_slate_astra",
+  "variant": "astra-ecology01-item-result-binding-v18",
+  "proposal": {
+    "path": "plans/semantic_stack/ASTRA_ECOLOGY_ITEM_RESULT_V18_PROPOSAL.json",
+    "sha256": "3b787001f36a81d14e4d31ca516537e93f2c9f55f58eba126b418f065c4b8891"
+  },
+  "rendered_source": {
+    "path": "/tmp/semstack-v18-render-preflight-c-20261014/source-candidates.ir.jsonl",
+    "sha256": "0611d96dca02ac273e4d7e2b60d7afc08ef800d1abaa0be355102398d14a0e4a",
+    "case_id": "semantic-stack:astra:astra-ecology-01"
+  },
+  "reviewed_file_hashes": {
+    "types.ts": "27a2e9fbf4c18a1785b8e8be752ea8245de77a8c5a1eb9a28d360c23b80f88b0",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope.nl": "8aa188a30421b4098cda730f92c7498a2b5c33d69e164fe441baa4d8d1524c34",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope/advanceScopeFrontier.nl": "b58d066db4b9b740a84b7ac84196ea6e1461700ead47443d53da8b2fc2d882e0",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope/auditEffectGraph/advanceEffectFrontier.nl": "84520420b6ef57530586ad61e6804950ee9fd252ad48d6a864409a68f5e2873c"
+  },
+  "status": "source_render_contract_pass",
+  "checks": [
+    "Stage4 constructs the fixed actual ScopeInput universe and calls the named one-item reducer with decreasing pending count; completed inputs preserve original order and multiplicity.",
+    "The nested reducer awaits the actual scoped ScopeDecision, validates endpoints/source support, appends the unchanged returned judgment, removes one pending item and finishes the actual next frontier in the same action.",
+    "Stage4 consumes the returned decisions and applies only the declared owner witness union before forwarding the current-batch delta. Earlier folders remain in priorCompletedState.",
+    "ScopeFrontier, ScopeInput, ScopeDecision, NodeJudgmentInput and EffectFrontier declarations match the callable signatures and actual producer/consumer plans.",
+    "Effect frontier preserves the actual scoped EffectNodeFinding and uses same-action completion; path extension and sign arithmetic are exact mechanics, semantic status and reason are the NL child contribution.",
+    "Both item_result_binding owner paths exist in the rendered callable-folder graph. Source IR carries the exact frozen metadata unchanged. Scope witness projection preserves child support plus permitted owner evidence; effect result remains exact.",
+    "Only advanceScopeFrontier.nl differs from preflight-b, replacing ambiguous iterator-owner wording with the correct parent ownership sentence."
+  ],
+  "reference_replay": {
+    "reported_by": "semantic_stack_curriculum",
+    "programs": 220,
+    "passed": 220,
+    "candidates": 23,
+    "failures": 0,
+    "qualification": "Canonical source/type replay; not actual execution of the semantic program."
+  },
+  "open_source_contract_findings": [],
+  "limitations": [
+    "Runtime-owned durable input/output capture and post-run binding checks must still qualify actual child-result consumption; source wording is not evidence that a model obeyed it.",
+    "Missing or truncated capture yields unverified_hold. This receipt does not install model-facing runtime recovery.",
+    "No live or training admission is granted; the approximately48-sample model-facing qualification remains outstanding."
+  ],
+  "live_samples": 0,
+  "training_admission": false
+}
