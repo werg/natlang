@@ -79467,6 +79467,27 @@
         "external-expansion-evidence-terminal-handoffs-20261014-v1"
       ],
       "license": "Facts retained in pinned original source snapshot and port records"
+    },
+    {
+      "id": "luna-held-shapes-s52071-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52071-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and required-process review",
+      "license": "project-generated; CC-BY-SA-4.0 (HotpotQA source)",
+      "split": "train only; source IDs/groups checked against held packet and preceding seeds52067/52068/52069/52070; global union held/source-quality filters still required",
+      "admission": "99 selected jobs, 91 exact accepted roots, eight wrong-answer rejections; seven dataset-workbench semantic-label holds and one missing-iterate research hold; 83 admitted parents and 544 approved native decisions",
+      "training_admission": true,
+      "training_admission_reason": "Exact accepted roots and verified pinned source, explicit semantic/process holds, protected source-group check, native per-decision approval; only approved-turns.jsonl is a training input",
+      "review_status": "Seven exact dataset-workbench label cases and one missing-iterate research case held; other exact train parents curated",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory, then add to a protected union",
+      "notes": "Seed52071 source-pinned exact/process curation. Selection and curation reviews bind exact files; next protected union applies global quality and held filters."
     }
   ],
   "coverage_backlog": [
