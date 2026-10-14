@@ -30,9 +30,18 @@ sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 
 
 def value_forms(value: str) -> list[str]:
-    """The written value as it can appear in a rendered row: raw, or JSON-escaped inside a string argument."""
-    escaped = json.dumps(value, ensure_ascii=False)[1:-1]
-    return [value] if escaped == value else [value, escaped]
+    """Equivalent JSON rendering spacings, raw or escaped inside a string argument."""
+    forms = [value]
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        pass
+    else:
+        for ascii_only in (False, True):
+            for separators in ((',', ':'), (', ', ': ')):
+                forms.append(json.dumps(parsed, ensure_ascii=ascii_only, separators=separators))
+    return list(dict.fromkeys(form for raw in forms
+                             for form in (raw, json.dumps(raw, ensure_ascii=False)[1:-1])))
 
 
 def token_offsets(token_ids, text, tokenizer):
@@ -57,6 +66,12 @@ def spans_for_row(row: dict, writes: list[tuple[str, str, bool]], tokenizer) -> 
     offsets, text = token_offsets(token_ids, row['text'], tokenizer)
     start_token = int(row.get('supervised_suffix_start') or 0)
     supervised_from = offsets[start_token][0] if start_token < len(offsets) else len(text)
+    target_start = supervised_from + len(text[supervised_from:]) - len(text[supervised_from:].lstrip())
+    if text.startswith('<think>', target_start):
+        end_think = text.find('</think>', target_start + len('<think>'))
+        if end_think < 0:
+            return [], len(writes)
+        supervised_from = end_think + len('</think>')
     spans, missing = [], 0
     for name, value, has_edge in writes:
         if not isinstance(value, str) or not value:
@@ -112,8 +127,9 @@ def main(argv=None):
     stats = collections.Counter()
     a.out.parent.mkdir(parents=True, exist_ok=True)
     partial = a.out.with_name(a.out.name + '.partial')
-    with open(partial, 'w') as out:
-        for line in open(a.rows):
+    from natlang_neuralese.common.jsonio import open_jsonl_text
+    with open_jsonl_text(a.rows) as rows, open(partial, 'w') as out:
+        for line in rows:
             row = json.loads(line)
             stats['rows'] += 1
             writes = [w for rid in (row.get('source_record_ids') or [row.get('id')]) for w in writers.get(rid, ())]

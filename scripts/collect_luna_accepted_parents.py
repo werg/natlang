@@ -7,8 +7,10 @@ training admission; native turn approval and an explicit corpus decision follow.
 import argparse
 import collections
 import json
+import os
 from pathlib import Path
 import sys
+import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,8 +50,6 @@ def main():
     parser.add_argument('--held', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
     args = parser.parse_args()
-    if args.out.exists():
-        raise FileExistsError(args.out)
     held_rows = rows(args.held)
     seen_worlds = {world(row) for row in held_rows}
     held_groups = {group for row in held_rows for group in row.get('source_groups', [])}
@@ -68,6 +68,11 @@ def main():
     for campaign in args.campaign:
         manifest_path = campaign / 'campaign-manifest.json'
         manifest = json.loads(manifest_path.read_text())
+        exclusions_path = campaign / 'reviewed-exclusions.json'
+        exclusions = json.loads(exclusions_path.read_text()) if exclusions_path.exists() else {}
+        if exclusions and exclusions.get('schema') != 'natlang.generation-reviewed-exclusions/1':
+            raise ValueError(f'unrecognized reviewed exclusions: {exclusions_path}')
+        excluded = exclusions.get('cases', {})
         sources = source_bindings(manifest)
         for path, expected in sources.items():
             if sha256(path) != expected:
@@ -77,11 +82,13 @@ def main():
             queues = rows(worker / 'queue.jsonl')
             journals = [worker / 'journal.jsonl', *(p / 'journal.jsonl' for p in worker.glob('retry-*'))]
             finishes = {}
+            finish_history = collections.defaultdict(list)
             for journal in journals:
                 if journal.exists():
                     for event in rows(journal):
                         if event.get('event') == 'finish':
                             finishes[event['key']] = event
+                            finish_history[event['key']].append(event)
             if set(finishes) != {job['key'] for job in queues}:
                 raise ValueError(f'campaign worker not terminal: {worker}')
             for job in queues:
@@ -94,6 +101,18 @@ def main():
                         result_paths.append(retry / 'results.jsonl')
                 results = [row for path in result_paths if path.exists() for row in rows(path)]
                 finish = finishes[job['key']]
+                review = excluded.get(job['key'])
+                if review is not None:
+                    if not (review.get('reason') and any(
+                            event.get('status') == review.get('finish_status') and
+                            event.get('output_accounting', {}).get('exact_result_rows') == 0 and
+                            event.get('output_accounting', {}).get('output_sha256') == review.get('output_sha256')
+                            for event in finish_history[job['key']])):
+                        raise ValueError(f'reviewed exclusion no longer matches an exact zero-result finish: {job["key"]}')
+                    if any(result.get('outcome', {}).get('accepted') is True for result in results):
+                        raise ValueError(f'reviewed exclusion has an accepted retry requiring new review: {job["key"]}')
+                    outcomes['reviewed_exclusion'] += 1
+                    continue
                 if finish.get('status') not in ('complete', 'complete_with_skips') or not finish.get('output_accounting', {}).get('complete'):
                     raise ValueError(f'noncomplete job: {job["key"]}')
                 if len(results) != 1:
@@ -122,19 +141,40 @@ def main():
             evidence.append({'campaign': str(campaign), 'worker': worker.name,
                              'queue_sha256': sha256(worker / 'queue.jsonl')})
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    with args.out.open('x') as stream:
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=args.out.parent,
+                                     prefix=args.out.name + '.', suffix='.building', delete=False) as stream:
+        temporary = Path(stream.name)
         for parent in chosen:
             stream.write(json.dumps(parent, ensure_ascii=False, separators=(',', ':')) + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+    candidate_hash = sha256(temporary)
+    if args.out.exists():
+        if sha256(args.out) != candidate_hash:
+            temporary.unlink()
+            raise ValueError(f'existing candidate differs from current exact selection: {args.out}')
+        temporary.unlink()
+    else:
+        os.replace(temporary, args.out)
     review = {'schema': 'natlang.luna-parent-candidate-review/1', 'training_admission': False,
               'held_sha256': sha256(args.held),
               'previous_parent_sha256': {str(p): sha256(p) for p in args.previous_parents},
               'sources_sha256': {str(p): sha256(p) for p in source_files},
               'campaign_manifests_sha256': {str(p / 'campaign-manifest.json'): sha256(p / 'campaign-manifest.json')
                                             for p in args.campaign},
+              'reviewed_exclusions_sha256': {str(p / 'reviewed-exclusions.json'): sha256(p / 'reviewed-exclusions.json')
+                                             for p in args.campaign if (p / 'reviewed-exclusions.json').exists()},
               'workers': evidence, 'counts': dict(outcomes),
-              'candidate_sha256': sha256(args.out),
+              'candidate_sha256': candidate_hash,
               'decision': 'Exact source and outcome checks only; native materialization and semantic review pending.'}
-    args.out.with_suffix('.review.json').write_text(json.dumps(review, indent=2) + '\n')
+    review_path = args.out.with_suffix('.review.json')
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=review_path.parent,
+                                     prefix=review_path.name + '.', suffix='.building', delete=False) as stream:
+        temporary_review = Path(stream.name)
+        stream.write(json.dumps(review, indent=2) + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary_review, review_path)
     print(json.dumps({'out': str(args.out), 'counts': dict(outcomes)}))
 
 

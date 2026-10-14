@@ -408,8 +408,12 @@ def neuralese_spans(mix, repo):
         return None
     path = Path(binding['path'] if isinstance(binding, dict) else binding)
     path = path if path.is_absolute() else Path(repo) / path
+    if isinstance(binding, dict):
+        from ..common.hashing import sha256_file_hex
+        if sha256_file_hex(path) != binding.get('sha256'):
+            raise ValueError('mixed Neuralese span hash mismatch: ' + str(path))
     edges, plain = {}, 0
-    with path.open() as stream:
+    with open_jsonl_text(path) as stream:
         for line in stream:
             if not line.strip():
                 continue
