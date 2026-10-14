@@ -1,0 +1,212 @@
+{
+  "schema": "natlang.application-independent-source-oracle-review/1",
+  "reviewer": "semantic_slate_sol",
+  "date": "2026-10-14",
+  "application": "astra-turn-window-adjudicator",
+  "source_commit": "c3fd2000",
+  "result": "passed_source_oracle_exact_seam_review",
+  "files": {
+    "applications/turn-window-adjudicator/adjudicateTurn/auditTurn/challengeTiming.nl": "895fdf583a4c90a66405b527882f82fa21d8c7d0d8200cdc95315373ceb2e575",
+    "applications/turn-window-adjudicator/adjudicateTurn/auditTurn/replayIdentity.nl": "d46685b6c36f10777711100d63c9c3e22cc04cc79ca76cfd0b5005018803bf78",
+    "applications/turn-window-adjudicator/adjudicateTurn/auditTurn.nl": "73eb7eb9c700e173dd6325baf4b5b996950905f5dac2c9e5190cbce8204dfd55",
+    "applications/turn-window-adjudicator/adjudicateTurn/captureAnnouncements/bindReference.nl": "3e4f4d5bb39210e58a3bfd7a08f99476cd0b981430c064d78bb4866636b294bf",
+    "applications/turn-window-adjudicator/adjudicateTurn/captureAnnouncements.nl": "47ae89a03c2fc363578424fe9146f3f342936df8d7af112d9f726af7636df01f",
+    "applications/turn-window-adjudicator/adjudicateTurn/compileWindows/checkWindowDependencies.nl": "1c8d598641a633c3431987e2548921131ee2d0bc32c47697f0d99664202af97d",
+    "applications/turn-window-adjudicator/adjudicateTurn/compileWindows/classifyTiming.nl": "74f8a85d2e81e20b6e88983c6803864f8c93f0dbdd71c5cb6f40ddd031e5d7e6",
+    "applications/turn-window-adjudicator/adjudicateTurn/compileWindows.nl": "8246630df6a55b057bbcb135ed5447017a3ce00bb2b8b0be210919c121f35309",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn/readBoard.nl": "46056746a76c9352030b2c68d99c50cbb40400229120fec73983cb1ef30e4d43",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn/readIntents.nl": "23e51cb430763a88296327fb024c2de8a38ddd9d1288de03316ff655166d0fe7",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn/readRules/interpretAbility.nl": "4bc15d4fd1f2b6e56f0981364c4851633cba15953084ad3bf09cd3cc36f466c5",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn/readRules.nl": "446f7887c5a7e43c713d3b22fe3ed5c23f7dfebd5973b9e71b036dd57017bcdc",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn.nl": "90554cf0ed3f5c66c932174e5626f5b0f561336b243250901c4535e44cf2b320",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/collectTriggers/interpretTrigger.nl": "0cdd3e2a86c30978f1dd11940cfab834f342f1cf429b5e941781c62f7874b6d4",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/collectTriggers.nl": "aa9de21c74e70260a4343c2b773ddf2bbe6f0c0cb6f189c87bfc9263ca674126",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/prepareBundle.nl": "df30b3c5acf65c699599c73fc8930b1d91c89e2127d5ecd703277de263dabfc1",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/resolveBatch/judgeOutcome.nl": "b6ee4c63882bff8f2787e5da93a8d4fc27b673611893d048a22887b08faacee8",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/resolveBatch/reconcileDeltas.nl": "f4dd40d494aaf9ed61b8440057d05df7c94a0de99640d79e48814c970cbb34a3",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/resolveBatch.nl": "18416d66444ce600724f01a25f89a1a2e18cbc8ebf046eb5814b8736323217f1",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/resolveInterrupts.nl": "756aafe0b33aa0cdafc167dedf4b53959e41ca8bfd44116fcfd139ec07131c2a",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/applyReplacement.nl": "6fa31f23a381acd4b5dcc5268fe0f44102ccfe87eab4497fa4bdb023939787bb",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl": "847180ef4d7fe1067984bc1af0d315199675365e1eec77b85e153b46897a8a8d",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl": "4bf26242def7ca3f23eaaf943d49da462ab965c7ffc0dbea8a561d235b8a8618",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn/advanceWindow.nl": "243c37b203d848f24674eb33acdd2664ae4175aba6583580313047cd3e4c1fd9",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn.nl": "8df3a5995fa45608bfc545888ee648f62273f4a623f270512493c7ed45548e8d",
+    "applications/turn-window-adjudicator/adjudicateTurn.nl": "91c8af7b7f9677764eb6bb1465a6c9c121ad155dabfca48e44d8ca341f67706a",
+    "applications/turn-window-adjudicator/types.ts": "56ab82fe8e3287e6e61ab09db090d5a7c56b0b80c135fc364dda58a58a8cf293",
+    "applications/turn-window-adjudicator/natlang.json": "70225ae785a23ff3db37e76bb45474961719026fbfeb00f9f0c6a682b65097a4",
+    "applications/turn-window-adjudicator/tsconfig.json": "56df78c376d04fdd1dec2a9d1b87b7b55c096ff24b84c9db209f97f47a7dadf4",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/fixture/abilities/other.md": "cddd8eac58b94cc12deb5a57a7221239ad3b2d5a0d90427487b3c5f5dca7c7c3",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/fixture/abilities/return.md": "fd31c768e864beb8baef34db300c5255bf2a5b5200e5201dcee62cb3fcef3149",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/fixture/abilities/scribe.md": "eec0a41893a3c67b347268f1acd63b74c35607ad21a0e1505f476726c39650d7",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/fixture/announcements/fork.md": "6eec0f84eff5749f92588df9b83192c9a52658ccd1b1ae8984cc207cba4538bc",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/fixture/board/before.md": "33c865446024a8cda916c5add50f4be2ccfdbb7ddcf89ba051c022668b2702ee",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/fixture/contracts/result.md": "557478d55fc57b716c51599b53ab481fa6a20643064038698b721b892a01bbe3",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/fixture/manifest.json": "ae1a075fc3f5e6f157d67a1f3e27571a494e897faabb88ec9cc4f562a52ec536",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/fixture/responses/submitted.md": "6bedbe35bc3659b1c23a2db3a4f2427157ab75db755ed59ba8f782df0b351e06",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/fixture/rules/identity.md": "f3511e682db70dd45a0066654db150c257cb5dfff87b0dd6a5e798d308489576",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/fixture/rules/replacements.md": "23899827e4660ca4aa0a6878f4528c6cba5f2aac00c6b3b6c9ca03ffc95500e8",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/fixture/rules/windows.md": "319eca276be515cfdea131466ac0b8836816bece1c0236adccbb59d6e25f4318",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/request.json": "0c866d20c7243f1e53a2996f0b56d636b558e48abe7d5661136aa7a23127c912",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/oracle.json": "13838a9bc142fbb28f425cf1a221b55cc40403b1e5017daa94725be2b3bc616b",
+    "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/reference-report.json": "eac47c1e8a3fbe0252b612fe3bb1bdda24d5189a96c233659240c7e45c5c1aa5",
+    "training/semantic_applications/astra/turn-window-adjudicator/verify-result.mjs": "4164af5ee62ffc87316dd710cc10e621efeb78d799a8be25e5fd75eb7a8b517c"
+  },
+  "reconstruction": {
+    "ordered_windows": [
+      "TAKE",
+      "MOVE",
+      "FORK",
+      "RETURN",
+      "SCRIBE"
+    ],
+    "captured_controllers": {
+      "PA": "Ilex",
+      "PM": "Rowan"
+    },
+    "resumed": {
+      "A1": "Rowan",
+      "M1": "Rowan",
+      "W1_attachment": "M1"
+    },
+    "PA": {
+      "after_cover": 2,
+      "actual_damage": 2,
+      "departing_last_known_controller": "Rowan"
+    },
+    "PM": {
+      "after_cover": 1,
+      "actual_damage": 0,
+      "growth": 1
+    },
+    "triggers": {
+      "RETURN": "A2 distinct instance,Rowan,zero damage/growth",
+      "SCRIBE": "Ilex ink+1 from PA captured controller",
+      "MIRROR": "ineligible current converted quantity1 below2",
+      "REPRISAL": "ineligible already spent token"
+    }
+  },
+  "source_audit": {
+    "all_nl_modules_read": 26,
+    "numbered_steps": 162,
+    "scoped_literal_roles": [
+      "RuleMeaning joins coherent original clauses",
+      "ReferenceBinding chooses captured/current/last-known",
+      "ReplacementDecision consumes actual current lineage and shared reservations",
+      "TriggerDecision binds actual resolved quantity and controller provenance",
+      "TimingJudgment independently audits actual windows"
+    ],
+    "crisp_policy_lines": 0,
+    "findings": [
+      "All sibling Cover conditions read one immutable resumed board; PA departure cannot remove PM Cover eligibility.",
+      "Finite original work slots and rule/lineage application frontier establish structural termination.",
+      "Parent-owned sourceIdentity and capacityTokenIds preserve original intent/token domains while generated trace and internal rule IDs may vary.",
+      "Returned semantic changes are proposals; parent exact commit applies complete before-checked deltas.",
+      "No source/oracle ambiguity or exact-equivalence blocker found in reviewed closed world."
+    ]
+  },
+  "author_controls": {
+    "passed": true,
+    "count": 28
+  },
+  "independent_controls": {
+    "passed": true,
+    "controls": [
+      {
+        "name": "canonical independently reconstructed turn",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "independent PA and PM histories interleaved after both Cover steps",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "full exact clause quotations may replace supporting substrings",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "unrelated artifact controller change rejected",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "source-governed window delta MOVE",
+          "window state continuity"
+        ]
+      },
+      {
+        "name": "new instance wrongly copies old damage rejected",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "source-governed window delta RETURN",
+          "window state continuity"
+        ]
+      },
+      {
+        "name": "shared before state bypass rejected",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "common before-batch revision"
+        ]
+      },
+      {
+        "name": "source token holder tamper rejected",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "initial source board",
+          "source-governed window delta TAKE"
+        ]
+      },
+      {
+        "name": "fabricated source identity rejected",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "exact source witness"
+        ]
+      },
+      {
+        "name": "double spent trigger capacity rejected",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "one-use token RETURN",
+          "return effect domain"
+        ]
+      },
+      {
+        "name": "negative Mirror consumes token rejected",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "trigger consumption MIRROR",
+          "actual trigger decisions retained"
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "No application execution or live literal consumption proof.",
+    "Exact checker verifies source IDs/quotes and declared state/provenance invariants; rule entailment and missing-proposal reasoning require semantic trace review.",
+    "Size counts are descriptive, not training admission."
+  ],
+  "live_qualified": false,
+  "training_admission": false
+}
