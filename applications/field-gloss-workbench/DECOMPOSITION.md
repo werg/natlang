@@ -16,7 +16,19 @@ It must preserve genuine alternative analyses and distinguish unattested from co
 No answer gloss table enters an executing callable. The first world will use explicitly closed
 candidate inventories so finite coverage is verifiable; those are candidate spaces, not gold labels.
 
-## Connected call graph: 34 authored NL functions
+## Original connected call graph: 34 authored NL functions
+
+The first live Reed Court intake completed all 67 source-role judgments, then stopped at the
+large inline `CandidateSlot[]` and `StemReading[]` judgments in `intake`. The next source variant
+makes these source-meaning tasks named, typed readers. `readCandidateDomains` selects source
+definitions using the actual inventory and original clauses, advances one definition at a time,
+and retains the returned candidate-slot meanings. `readStemDefinitions` does the same for
+original stem/entity definitions. Each reader has one named one-item reducer whose scoped NL
+judgment owns meaning, uncertainty and exact source witnesses. `intake` consumes the actual
+returned arrays before session and correction interpretation. Finite pending-ID removal,
+original ID/path membership and quote substring checks are exact plumbing; deciding that a
+source clause defines a candidate value or a stem meaning remains in NL. Both readers retain
+unresolved original units instead of fabricating a complete candidate domain.
 
 Each row denotes a separate typed callable and the semantic contribution it owns. Paths are
 relative to the application. Stages are numbered NL pseudocode; crisp policy is absent.
@@ -27,6 +39,10 @@ relative to the application. Stages are numbered NL pseudocode; crisp policy is 
 | analyzeCorpus/intake | CorpusSource with original sessions, observations, note versions and visible candidate domains. |
 | intake/inventoryCorpus | Actual original per-clause role inventory with completed/failed/unresolved entries; no linguistic answers. |
 | intake/inventoryCorpus/advanceClause | One actual typed ClauseRoleReading, original quote binding and immediate shorter frontier handoff. |
+| intake/readCandidateDomains | CandidateDomainIndex from original definition clauses, with actual per-clause returns and unresolved units. |
+| intake/readCandidateDomains/advanceDomainClause | One scoped DomainClauseReading, source-bound slot values and immediate shorter frontier handoff. |
+| intake/readStemDefinitions | StemDefinitionIndex from original stem/entity clauses, with actual per-clause returns and unresolved units. |
+| intake/readStemDefinitions/advanceStemClause | One scoped StemClauseReading, source-bound stem meaning and immediate shorter frontier handoff. |
 | intake/readSessions | SessionIndex: consultant, time, elicitation frame and actual access/context. |
 | intake/readSessions/readSituation | SituationReading: depicted roles, named entities and known contrast; no gloss inference. |
 | intake/readUtterances | UtteranceIndex: exact surface units and original utterance/record identity. |

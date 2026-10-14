@@ -76,7 +76,11 @@
     "analyzeCorpus.nl",
     "types.ts",
     "natlang.json",
-    "tsconfig.json"
+    "tsconfig.json",
+    "analyzeCorpus/intake/readCandidateDomains.nl",
+    "analyzeCorpus/intake/readCandidateDomains/advanceDomainClause.nl",
+    "analyzeCorpus/intake/readStemDefinitions.nl",
+    "analyzeCorpus/intake/readStemDefinitions/advanceStemClause.nl"
   ],
   "typed_call_graph": {
     "nodes": [
@@ -430,6 +434,41 @@
         },
         "returns": "LinguisticReport",
         "owned_delta": "Infer source-grounded grammar alternatives, target meanings and an authorized note repair."
+      },
+      {
+        "path": "analyzeCorpus/intake/readCandidateDomains.nl",
+        "args": {
+          "clauses": "SourceClause[]",
+          "inventory": "CorpusInventory",
+          "rules": "SourceClause[]"
+        },
+        "returns": "CandidateDomainIndex",
+        "owned_delta": "Reduce original domain clauses to actual finite candidate-slot meanings without choosing a winner."
+      },
+      {
+        "path": "analyzeCorpus/intake/readCandidateDomains/advanceDomainClause.nl",
+        "args": {
+          "state": "CandidateDomainFrontier"
+        },
+        "returns": "CandidateDomainFrontier",
+        "owned_delta": "Judge one original domain clause, retain its actual typed meaning and finish the shorter frontier."
+      },
+      {
+        "path": "analyzeCorpus/intake/readStemDefinitions.nl",
+        "args": {
+          "clauses": "SourceClause[]",
+          "inventory": "CorpusInventory"
+        },
+        "returns": "StemDefinitionIndex",
+        "owned_delta": "Reduce original stem/entity definitions to actual source-backed stem readings."
+      },
+      {
+        "path": "analyzeCorpus/intake/readStemDefinitions/advanceStemClause.nl",
+        "args": {
+          "state": "StemDefinitionFrontier"
+        },
+        "returns": "StemDefinitionFrontier",
+        "owned_delta": "Judge one original stem clause, retain its actual typed meaning and finish the shorter frontier."
       }
     ],
     "edges": [
@@ -607,6 +646,26 @@
         "caller": "analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase.nl",
         "callee": "analyzeCorpus/interpretRoles.nl",
         "reason": "Shared actual candidate-specific linguistic interpretation; raw returned contribution retained."
+      },
+      {
+        "caller": "analyzeCorpus/intake.nl",
+        "callee": "analyzeCorpus/intake/readCandidateDomains.nl",
+        "reason": "Actual named child contribution is consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/intake.nl",
+        "callee": "analyzeCorpus/intake/readStemDefinitions.nl",
+        "reason": "Actual named child contribution is consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/intake/readCandidateDomains.nl",
+        "callee": "analyzeCorpus/intake/readCandidateDomains/advanceDomainClause.nl",
+        "reason": "Actual named child contribution is consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/intake/readStemDefinitions.nl",
+        "callee": "analyzeCorpus/intake/readStemDefinitions/advanceStemClause.nl",
+        "reason": "Actual named child contribution is consumed as described by its NL parent."
       }
     ]
   },
@@ -615,16 +674,6 @@
       "site": "analyzeCorpus/intake/inventoryCorpus/advanceClause.nl",
       "result_type": "ClauseRoleReading",
       "consumed_by": "Actual CorpusInventory.entries retained by CorpusSource; original scope only"
-    },
-    {
-      "site": "analyzeCorpus/intake.nl",
-      "result_type": "CandidateSlot[]",
-      "consumed_by": "Actual source-domain cross-product; no winner selection"
-    },
-    {
-      "site": "analyzeCorpus/intake.nl",
-      "result_type": "StemReading[]",
-      "consumed_by": "Actual original stem/entity definitions in segmentation and role prediction"
     },
     {
       "site": "analyzeCorpus/intake/readSessions/readSituation.nl",
@@ -675,6 +724,16 @@
       "site": "analyzeCorpus/auditReport/challengeReading.nl",
       "result_type": "ReadingChallenge",
       "consumed_by": "Actual final per-reading semantic challenge, not a rewritten reading"
+    },
+    {
+      "site": "analyzeCorpus/intake/readCandidateDomains/advanceDomainClause.nl",
+      "result_type": "DomainClauseReading",
+      "consumed_by": "Actual per-clause domain reading retained; source-backed slots reach CorpusSource and candidate seeding"
+    },
+    {
+      "site": "analyzeCorpus/intake/readStemDefinitions/advanceStemClause.nl",
+      "result_type": "StemClauseReading",
+      "consumed_by": "Actual per-clause stem reading retained; source-backed stems reach CorpusSource and interpretation"
     }
   ],
   "iteration_frontiers": [
@@ -695,13 +754,25 @@
       "step": "analyzeCorpus/translateHeldOut/advanceTranslation.nl",
       "state_type": "TranslationFrontier",
       "measure": "One original target removed; every actual completed survivor interpretation retained"
+    },
+    {
+      "site": "analyzeCorpus/intake/readCandidateDomains.nl",
+      "step": "analyzeCorpus/intake/readCandidateDomains/advanceDomainClause.nl",
+      "state_type": "CandidateDomainFrontier",
+      "measure": "One original candidate-domain clause removed; actual semantic reading or unresolved/failed result retained"
+    },
+    {
+      "site": "analyzeCorpus/intake/readStemDefinitions.nl",
+      "step": "analyzeCorpus/intake/readStemDefinitions/advanceStemClause.nl",
+      "state_type": "StemDefinitionFrontier",
+      "measure": "One original stem/entity clause removed; actual semantic reading or unresolved/failed result retained"
     }
   ],
   "composition": {
-    "nl_files": 34,
-    "nl_total_lines": 525,
-    "numbered_steps": 239,
-    "type_aliases": 55,
+    "nl_files": 38,
+    "nl_total_lines": 580,
+    "numbered_steps": 267,
+    "type_aliases": 63,
     "visible_crisp_policy_lines": 0
   },
   "source_shape": {
@@ -720,19 +791,19 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_source_review": true,
-    "independent_oracle_review": true,
+    "independent_source_review": false,
+    "independent_oracle_review": false,
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
   },
   "source_review_binding": {
-    "reviewed": true,
-    "scope": "Independent source/fixture constraints plus full authored typed certificate and exact comparator; diagnostic preparation only, actual linguistic entailment/literal execution/whole-task live outcome held",
-    "source_commit": "66cb0894",
-    "typed_certificate_review_commit": "45e6f43a"
+    "reviewed": false,
+    "scope": "Current named domain/stem reader source awaits independent delta review; prior source and oracle receipts remain historical",
+    "source_commit": null
   },
-  "independent_reviews": [
+  "independent_reviews": [],
+  "historical_reviews_for_prior_source": [
     {
       "path": "plans/semantic_stack/FIELD_GLOSS_REED_SOURCE_REVIEW_ASTRA.json",
       "sha256": "eca49f324dcb0892416f1cca92b0188f6b9915093c1ccc80d9729bf484f39d63",
@@ -758,9 +829,10 @@
       "scope": "Current private exact certificate: original64 plus four adversarial controls all pass; session context, correction attribution/exclusions and scope disjointness bound; linguistic entailment/live execution unqualified"
     }
   ],
-  "generation_ready": true,
+  "source_variant": "named-domain-stem-readers-v3",
+  "generation_ready": false,
   "training_admission": false,
-  "model_facing_debt": "0/48 initial-source samples; actual scoped judgments/child returns/frontier consumption and whole-task outcome unmeasured",
+  "model_facing_debt": "0/48 named-domain-stem-reader live samples; actual per-clause scoped returns, finished frontiers, intake consumption and whole-task correctness unmeasured",
   "reference_scope": "One full typed privately authored source-validity witness plus qualified declared exact comparator; not execution of the NL application, a complete linguistic classifier or a teaching trajectory",
   "reference_path": "training/semantic_applications/sol/field-gloss-workbench/reed-court/reference-report.json",
   "external_verifier_path": "training/semantic_applications/sol/field-gloss-workbench/verify-result.mjs",

@@ -3,6 +3,12 @@
 Source/reference replay establishes type and fixture validity only. These live
 observations do not grant training admission or count as model-negative rows.
 
+## Field Gloss v2 intake frontier diagnostic (2026-10-14)
+
+- Frozen source SHA-256 `e2fdfb75a02e6bbd1ab4cc1fb0899b00bc52df2a80c5e0cb30b3b1dc69762c73`, queue SHA-256 `dbeffa5e2df91f5943f8f276349716d8b23e0df7d4ea66ad17706a9a32ceb01e`, runtime manifest SHA-256 `c3090a2791ca0cb819c82555fd5a0d430ad8191c04a088818e13d6bb76708a1c`. Low-priority unit `natlang-pop-field-gloss-v2-diag.service` finished a durable 264-turn one-case result at `/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/field-gloss-certificate-v2-onecase-v1/worker-01/case-000/results.jsonl`, SHA-256 `e4fbe32e18d421ada93b6699f99e76fe6fe2b44cfb2ec92689e4ae85f7eb6cf8`.
+- `intake/inventoryCorpus/advanceClause.nl` completed all 67 original clause units. Intake action seq 24 bound the actual inventory; seq 32 selected candidate-domain and stem source clauses from its typed role entries. Seq 40 then returned blocked, saying it could not produce `CorpusSource` because it lacked executable source-selection APIs for `CandidateSlot[]` and `StemReading[]`. The source `intake.nl` step 3 requested two broad inline array judgments, and neither was invoked. No grammar or held-out translation stage ran. The final trusted checker rejected the null result; `accepted=false`, `status=quiesced`.
+- This is a named-source/typed-handoff ergonomics defect after a productive inventory, not a failure of the field-linguistic approach or a model-negative row. The assigned repair is to make candidate-domain and stem-definition interpretation named typed readers with source-scoped NL decisions, exact original quote binding and actual returned arrays consumed by intake. The v2 row is held as repair evidence; no training admission or full application success is claimed.
+
 ## Ecology v18c joined-seed first live result (2026-10-14)
 
 - One-case queue SHA-256 `73f081511f6ede42affd9784668db621daff35e8c0c395eac959bef396bbe360`, selected source SHA-256 `e093673539fe3b6489221c22163781b83b2d30fe79a4298f30c93b5f8458109e`, frozen runtime manifest SHA-256 `c3090a2791ca0cb819c82555fd5a0d430ad8191c04a088818e13d6bb76708a1c`. The explicit compiled dist snapshot followed the green Pop full gate at `d66766a8`; its source checker is pinned in the runtime manifest. Unit `natlang-pop-semstack-ecology-v18c-diag.service` finished 21 turns with one exported row, result SHA-256 `89353949650c9204b32884f8a42a771b7c38df2a38349c17b848769fcc9a7f1d`.
