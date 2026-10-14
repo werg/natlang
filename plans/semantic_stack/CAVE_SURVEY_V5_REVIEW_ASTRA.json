@@ -1,0 +1,51 @@
+{
+  "schema": "natlang.independent-source-review/1",
+  "reviewer": "semantic_slate_astra",
+  "application": "cave-mission",
+  "variant": "survey-item-nl-v5",
+  "reviewed_at": "2026-10-14T01:02:22.184512+00:00",
+  "files": {
+    "applications/cave-mission/types.ts": "bf9e7d8d1253b71363601abf4a2ff9ec5b44cabeed48f4e0539dddee583aefb6",
+    "applications/cave-mission/planMission/survey.nl": "9c717d50c4ca69a2e78127689de29f575eb0c8b0cc383229d4438a2e2de69d77",
+    "applications/cave-mission/planMission/survey/readFrames.nl": "6c3f33f3ef92d6fe443550f7dee309c58a271eea30ca46e2d3dcc5c3134a12e0",
+    "applications/cave-mission/planMission/survey/readFrames/interpretConvention.nl": "d18872408f62eda60c8ccdddd6a09681ea30954f1f513f18645f9a4473a72acf",
+    "applications/cave-mission/planMission/survey/readFrames/interpretLandmark.nl": "6875217ae979cc171857c406b7213c00ef37d328b5836b26e110ce7a3104bc8b",
+    "applications/cave-mission/planMission/survey/readPassages.nl": "ce66c0fa4e060ebaecc49268401fca20ce3cc409e29409f5da0d3d76bb63f17e",
+    "applications/cave-mission/planMission/survey/readPassages/interpretPassage.nl": "fbb0e79ba141c0e1a15d65ece456349423ce11309abda5e5e17bc1ad59b48739",
+    "applications/cave-mission/planMission/survey/readEquipment.nl": "a1de7ea2e5ecdce57e275c5581eaa52b246aaef0ede6990d9cc6d3ff720fd8fd",
+    "applications/cave-mission/planMission/survey/readEquipment/interpretGear.nl": "c7d240d17cb7538ddf61c909180bf12b2291e6b9105c8da02815e6eca6ca1bb1",
+    "applications/cave-mission/planMission/survey/readEquipment/interpretSensor.nl": "e15714e0821ce87b26b06401337d594eb4d69435f585139f743e65528f1a110a",
+    "applications/cave-mission/planMission/reconcileMaps/buildWorlds/extendHypothesis.nl": "2c04063a25ac7ac9f3cda025085a0f4d92409d4562c04c3aabf16187031b4bbe"
+  },
+  "findings": [],
+  "source_review_passed": true,
+  "reviewed_contracts": [
+    "Actual returned SurveyUnitInventory selects original primary/supporting units without supplying prepared semantic assertions.",
+    "Four new named children directly consume scoped NL meanings; reader parents bind clause-keyed nonempty quotes to immutable source ID/path.",
+    "FrameSurvey is an actual argument to passage reading, preserving local/global names and local-origin coordinates.",
+    "Multiple semantic units in one clause and explicit physical absence remain inventoried; one-way prohibition stays with present physical connection.",
+    "Nullable passage cost represents absent/unknown cost; world projection requires an established source-compatible cost, preserving final WorldPassage numeric type.",
+    "Final three-reader delta requires nonempty primary IDs, reader-specific unit kinds, existing originals and unique generated unit IDs before child invocation.",
+    "Conditional alignment policy and existing fixture/oracle/reference remain unchanged."
+  ],
+  "controls": {
+    "item": {
+      "passed": true,
+      "positive": 10,
+      "negative": 10,
+      "output_sha256": "7c4e120b01ff1f1d662a755b1ce87e652d9be3b0bb4a68477df5c6639c0fbc09"
+    },
+    "baseline": {
+      "count": 22,
+      "exit_code": 0,
+      "output_sha256": "a9f66d0b5b22999e8687169fcc48790f5f395b1eada1c413d589af1021866e1a"
+    }
+  },
+  "limitations": [
+    "Exact item controls validate types, declared fixture invariants and quote membership, not independent semantic entailment.",
+    "A provenance subset-quote positive need not support every field; live/source entailment remains separate.",
+    "Inventory completeness and actual parent consumption need live trace qualification."
+  ],
+  "live_qualified": false,
+  "training_admitted": false
+}
