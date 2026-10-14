@@ -1,0 +1,128 @@
+{
+  "schema": "natlang.semantic-application-independent-reference-review/1",
+  "reviewer": "semantic_slate_astra",
+  "application": "semantic-procedure-compiler",
+  "source_review": "plans/semantic_stack/PROCEDURE_COMPILER_SOURCE_REVIEW_ASTRA.json",
+  "scope": "Full authored generated-source canonical witness and trusted exact-checker review; no actual compiler or generated callable execution.",
+  "hashes": {
+    "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/reference-packet.json": "5211946782d4202bcdfc2c62ba9b8c9bc38e10bcfbd89ce36d70abbdc9b22e57",
+    "training/semantic_applications/sol/semantic-procedure-compiler/verify-result.mjs": "d2b57060e484632d3d615c697b680b3443a3b994d0fecfc063203e1d5105879c",
+    "training/semantic_applications/sol/semantic-procedure-compiler/check-verifier.mjs": "624b98cc7563af1189e96a6a48a482bd9d02593a4a36a4f1d1843b82c4b997da",
+    "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/oracle.json": "dcacf37a77c6ba36445d50834f04702059571c8231ede7c97d4d999009c67616",
+    "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/snapshot.json": "f950294f61379ccbf74987d5f105fbf44a8ab993758d85cffeef800f863eb68a"
+  },
+  "canonical": {
+    "generated_modules": 11,
+    "symbolic_event_traces": 14,
+    "source_semantics": "Read all11 generated NL modules. Historical edition boundary, source-scoped queue exception, actual unique-token custody, personal acknowledgment and station-global hazard semantics agree with original fixture. The nine reconstructed attempt outcomes in source receipt remain consistent.",
+    "qualification": "This is an authored typed witness. Actual generated body execution and semantic fidelity of candidate certificates remain independent gates."
+  },
+  "finding": {
+    "id": "per-rule-value-forced-to-aggregate-permission",
+    "status": "closed_exact_control_verified",
+    "original_defect": "Checker demanded each GuardDecision.value equal final permission even for independently satisfied prerequisite rules.",
+    "fix": "Check final actor/event permission atom once per attempt in both state channels against oracle. Keep per-rule emitted/required value and effect equality independently.",
+    "control": "A satisfied custody=true/no-effect decision can coexist with N_BO overall permission=false; old form rejected, revised checker accepts."
+  },
+  "independent_controls": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "canonical source witness",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "scenario and module set permutations",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "satisfied custody predicate with denied overall attempt",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "bad original quote",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "exact original witness"
+        ]
+      },
+      {
+        "name": "separate reference channel corrupted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "aggregate permission state:N_BO",
+          "exact returned-effect application"
+        ]
+      },
+      {
+        "name": "missing source to module coverage",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "source/module coverage"
+        ]
+      },
+      {
+        "name": "foreign generated span path",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "exact generated span"
+        ]
+      },
+      {
+        "name": "clearance timestamp moved before actual event",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "exact returned-effect application",
+          "independent state continuity",
+          "station-global clearance time"
+        ]
+      }
+    ]
+  },
+  "author_controls_reproduced": {
+    "count": 32,
+    "positive": 7,
+    "negative": 25,
+    "all_passed": true
+  },
+  "exact_scope": [
+    "Original source hash/ID/path/quote membership and generated path/span domains.",
+    "Generated parser/type validity, declared module/call/source mapping and interface coverage.",
+    "Per-event independent channel continuity and actual declared effect application.",
+    "Nine aggregate permission outcomes, custody transfer, readiness independence, queue waiver non-effect and exact station clearance time."
+  ],
+  "semantic_review_still_required": [
+    "Noncanonical generated policy meaning and completeness.",
+    "Whether declared guard effects follow the actual generated body and original source.",
+    "LocalDecision prose/input attribution and claimed contribution substance are not runtime evidence.",
+    "Equivalent decomposition may use multiple rule decisions and arbitrary consistent generated IDs; do not compare full reference bytes."
+  ],
+  "live_qualified": false,
+  "training_admitted": false,
+  "final_delta_review": [
+    "Public traced state conventions are visible in O06 and reach inferState through goal.outputResponsibilities.",
+    "Exact rule references use actual model RuleMeaning IDs; original source clauses remain exact, consistent internal rule alpha-renaming passes.",
+    "Actual generated code closure and explicitly read runtime data permit symbolic callee interpretation without ideal-model correction.",
+    "Path-keyed generated spans now preserve and validate actual callee provenance."
+  ],
+  "final_source_commit": "da705265"
+}

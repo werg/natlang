@@ -2,7 +2,7 @@
   "schema": "natlang.semantic-application-independent-review/1",
   "reviewer": "semantic_slate_astra",
   "application": "semantic-procedure-compiler",
-  "review_scope": "All28 authored NL modules and13 original fixture documents reviewed; source/oracle and typed semantic handoff audit. Full canonical/checker under separate author construction, not accepted by this receipt.",
+  "review_scope": "All28 authored NL modules and13 original fixture documents reviewed, including O06 public representation clause; source/oracle and typed semantic handoff audit. Canonical/checker qualification is recorded in PROCEDURE_COMPILER_REFERENCE_REVIEW_ASTRA.json.",
   "base_source_commit": "6527cd45",
   "channel_revision_commit": "13c632bc",
   "source_status": "peer_source_semantics_pass_no_live_or_admission",
@@ -21,25 +21,25 @@
     "applications/semantic-procedure-compiler/lowering/chooseBoundary.nl": "de2bfd1f483e375b3f21a98a169fe0ae540b4d4904d12d9f4749c2e008db1220",
     "applications/semantic-procedure-compiler/lowering/planBranch.nl": "841279faab44115dad69a697e79432d9379684d92ad46e0aa38020340c9bedcc",
     "applications/semantic-procedure-compiler/lowering.nl": "b40c966246a160cd598d239144f3f8ea53ea0750d730db8c4e56cebe72fd3748",
-    "applications/semantic-procedure-compiler/model/inferState.nl": "bc5c3cfa7238a29626656f6ffd7500921c77f72bc5bf4bf7f2ba1914e8deb4ba",
+    "applications/semantic-procedure-compiler/model/inferState.nl": "c764816aad7e37df2ce68971fcbf9a8c06353588e54831dc4db82667b235d36a",
     "applications/semantic-procedure-compiler/model/orderDependencies/settleComponent.nl": "36dd91c2a44d2788e2e8f6d4ef29b43819a05570c8d77d5e7080ec77ddd8feec",
     "applications/semantic-procedure-compiler/model/orderDependencies.nl": "9e7919a781bfed9636547a52bc7e1e8231f4c41af8c90b450512c0ab72210d90",
-    "applications/semantic-procedure-compiler/model.nl": "e7e1fc0ce640ba2edca58c16bf6afc3e5d3edf1a8995c4e6d8244cdd01df1991",
+    "applications/semantic-procedure-compiler/model.nl": "2921b9c3eb0dc37a66e63d7ca8ef3ebe295f05087d48528dfda59286861368bf",
     "applications/semantic-procedure-compiler/requirements/interpretRule.nl": "10c2ebb2221208dcb51fd1508cd8d94b5eff8232ce0cc5d3cea66d69594c4f8a",
     "applications/semantic-procedure-compiler/requirements/resolveException.nl": "26b48e6fb780000b46d4ef7b6c56296136ec2c2e7051acbaa8b00c0c5d1b1bde",
     "applications/semantic-procedure-compiler/requirements.nl": "e3b13ec03e8dce07824b893ac4b71cf1eb6e3d1c230a82484ae89c99906c2c65",
     "applications/semantic-procedure-compiler/scenarios/checkOutcome.nl": "abbdbafaaee2a2282afc2ce58f54c2a36f00c46c0f54cc93abed74be7c7cc3f7",
-    "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard.nl": "324aad491c231007dcf2103f68d0327fc9169cd2ee88bb78c92180316643a9d7",
-    "applications/semantic-procedure-compiler/scenarios/replayStep.nl": "b42af9e96b3b1909170baabda6a2e4a2b83e75220295e0026bf7737307263314",
+    "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard.nl": "5c35efce9d3e7e299610b99872a185a7c3a7e910646a16e477f50f1ec1d252bf",
+    "applications/semantic-procedure-compiler/scenarios/replayStep.nl": "a1c1010d3a13dbbd08841658c36fc6656c3f4a67c76f7c04331148d1b7cc64fd",
     "applications/semantic-procedure-compiler/scenarios.nl": "091a5084f68144d2b004db6063535864af7770531f4c5604099344ffc2d8c527",
     "applications/semantic-procedure-compiler/writing/writeModule/auditContribution.nl": "b2377f39e5e3445cfc63703268b74c1d298877c0901f4b4362f5a7ed7c6692d4",
     "applications/semantic-procedure-compiler/writing/writeModule.nl": "0692c0a239d57c65c35fb7c34f3594b69ad9b04e5ad319f4c4f4202b51480f38",
     "applications/semantic-procedure-compiler/writing.nl": "83999bc07fc71b568711ca9a5730be1c86dc9b0e27117b1286f34ef041041f2f",
     "applications/semantic-procedure-compiler/types.ts": "a9bfb7b7363d1666dc828ea2772dcb413a53df98f8799d6268db5b4bbff5f06c",
-    "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/snapshot.json": "2689db7f89f5594fd2abca1d78cb8143a1c35854624689719f3abe951131200a",
+    "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/snapshot.json": "f950294f61379ccbf74987d5f105fbf44a8ab993758d85cffeef800f863eb68a",
     "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/oracle.json": "dcacf37a77c6ba36445d50834f04702059571c8231ede7c97d4d999009c67616",
     "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/fixture/authority/charter.md": "826c70d05826d74056085bf77548dddc043f97d6c36ccb29948b909a01e8a5a6",
-    "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/fixture/controls/output.md": "424ddaabb4fcfbaa9bf8d3f328f85c2a4f91a08c172b1d133bda0082e574607c",
+    "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/fixture/controls/output.md": "7a523f39be38869990e7d52357427d41bfb25a68fc2eef93723e3173c038b076",
     "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/fixture/definitions/identity.md": "68d4fd1c20ef4527b9420f8a875e03f10a155b3907c5f2e075f7ff2f797256b4",
     "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/fixture/procedures/edition-one.md": "c6d62352a4ef170bd18190e858382b98b117ea6cde00a0c8ce0e8bd6870d6dfb",
     "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/fixture/procedures/edition-two.md": "031571cb66960410a56452fc9b896d33fc1c21c876d4107d02ef7bb5b712ad0a",
@@ -68,7 +68,8 @@
     "DC authority waives only the emergency queue prerequisite, not acknowledgment/custody/hazard and not queue-state effects.",
     "Authentic custody receipt does not establish personal acknowledgment; received/forwarded brief is distinct from explicit acknowledgment.",
     "Hazard clearance at8 does not authorize the attempt at7. Actual ST handover and merely proposed transfer differ; RT resemblance gives no custody.",
-    "All six initial hazard atoms now belong to station ST and duplicate global atoms are removed; actor-local readiness/queue fields remain separate."
+    "All six initial hazard atoms now belong to station ST and duplicate global atoms are removed; actor-local readiness/queue fields remain separate.",
+    "O06 fixes exact public state keys and subjects; model passes outputResponsibilities to inferState as representation constraints, with nine normative outcomes unchanged."
   ],
   "stage_audit": {
     "substantive_nl": [
@@ -100,7 +101,7 @@
     {
       "id": "ideal-model-silently-repairs-emitted-body",
       "status": "source_fix_verified",
-      "resolution": "Emitted literal receives actual module/schema/atoms/event only; source-required literal has independent governed model/sourceAtoms; actual and required value/effects remain distinct and checkOutcome exposes mismatches."
+      "resolution": "Emitted literal receives actual generated module/callee/type-file closure, actual atoms/event, and runtime clause data only when read by actual code; ideal BranchPlan, reference atoms and normative schema invariants are excluded. Source-required judgment remains separate."
     },
     {
       "id": "generated-source-witness-domain",
@@ -116,14 +117,20 @@
       "id": "empty-generated-support",
       "status": "source_fix_verified",
       "resolution": "A decided emitted permission or nonempty effects requires nonempty exact generated support; missing/invalid support remains unresolved and cannot certify a match."
+    },
+    {
+      "id": "callee-span-attributed-to-caller",
+      "status": "source_fix_verified",
+      "resolution": "EmittedJudgment returns generatedSpans with actual path and quote; parent requires closure path membership and nonempty exact quote in that file, preserving child evidence rather than binding all quotes to the caller."
     }
   ],
   "remaining_gates": [
-    "Independent full canonical/reference and exact verifier controls after author freezes them.",
-    "Actual NL literal invocation and two-channel result consumption require live trace.",
-    "Symbolic NL interpretation of generated bodies is not invocation of generated runtime callables."
+    "Actual NL literal invocation and independent emitted/source-required result consumption require live trace.",
+    "Symbolic NL interpretation of generated bodies is not invocation of generated runtime callables.",
+    "Noncanonical generated semantics and completeness remain independent semantic review."
   ],
   "live_qualified": false,
   "training_admitted": false,
-  "attestation": "Independent agent-authored source review pinned by content hashes; not cryptographic signer authentication."
+  "attestation": "Independent agent-authored source review pinned by content hashes; not cryptographic signer authentication.",
+  "final_source_commit": "da705265"
 }
