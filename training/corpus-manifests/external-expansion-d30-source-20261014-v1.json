@@ -1,0 +1,49 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-d30-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D30",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2294,
+      "sha256": "d6cc83a3d584b4b31f6cc00a4e7a4a46725538065749a67d9755420dc52aef4d"
+    },
+    {
+      "path": "acquisition.json",
+      "bytes": 2403,
+      "sha256": "077e2087a4570c05b4678db456914dbe0f34247b74bc3b3f971370ca00b49bae"
+    },
+    {
+      "path": "data/train-00000-of-00006.parquet",
+      "bytes": 52531173,
+      "sha256": "e8fbb5b3708992117b858f5087aabb982f3dd58a853f6cb50da645017e23555b"
+    },
+    {
+      "path": "data/train-00001-of-00006.parquet",
+      "bytes": 52594049,
+      "sha256": "0048ae379195dfc090951df8e72699b115f5a3be7dccf37f83b7662ae63f40d9"
+    },
+    {
+      "path": "data/train-00002-of-00006.parquet",
+      "bytes": 52560094,
+      "sha256": "5fa9c7006f01bccd94274852966a1a860bec25c06e780fe38f8851ae99e98cdf"
+    },
+    {
+      "path": "data/train-00003-of-00006.parquet",
+      "bytes": 52758015,
+      "sha256": "99eb293f7e9d28b3cc7e5a70cd147d95230aae4e6919dabaf747c1dc8e813934"
+    },
+    {
+      "path": "data/train-00004-of-00006.parquet",
+      "bytes": 52483577,
+      "sha256": "6e1cec7cd1191d2471ed7fc7e2e01e201b832011aa36e7b84a994d6c396a1559"
+    },
+    {
+      "path": "data/train-00005-of-00006.parquet",
+      "bytes": 526120217,
+      "sha256": "fe1617d264aea898d5059a693c0c8533411d229349be69f6bb045e02c28369ca"
+    }
+  ],
+  "bytes": 789051822
+}

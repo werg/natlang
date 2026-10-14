@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-d05-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D05",
+  "files": [
+    {
+      "path": "CodeAgentSFTDataset.json",
+      "bytes": 565627289,
+      "sha256": "331bca84f1828d364dcf782f9feb22fa45e62104fa44d1f454d9f7d3638edccb"
+    },
+    {
+      "path": "README.md",
+      "bytes": 5304,
+      "sha256": "4c75622c895633d9a2e870b45d48046ca1a1d3bdfdd6178ef91cb2f72664b72e"
+    },
+    {
+      "path": "acquisition.json",
+      "bytes": 797,
+      "sha256": "69647abddbecdc7736fb11114885d928f3292d042150bc9e88d0f62cf1e57609"
+    }
+  ],
+  "bytes": 565633390
+}
