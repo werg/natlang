@@ -9,7 +9,10 @@ from natlang_neuralese.serve.chat import (
     BACKBONE_HISTORY_REASONING, bind_history_reasoning, history_reasoning_kwargs, probe_history_reasoning,
 )
 
-LFM = sorted(glob(str(Path.home() / '.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/*')))
+LFM = sorted({snapshot for cache in (Path.home() / '.cache/huggingface/hub',
+                                    resolve('repo', 'models/hf/hub'), resolve('models', 'hf/hub'))
+              for snapshot in glob(str(cache / 'models--LiquidAI--LFM2.5-350M/snapshots/*'))
+              if (Path(snapshot) / 'tokenizer.json').is_file()})
 MELLUM = resolve('models', 'mellum21-12b-a2.5b-thinking')
 HISTORY = [{'role': 'user', 'content': 'task'},
            {'role': 'assistant', 'reasoning_content': 'EARLIER-THOUGHT', 'content': 'step'},
