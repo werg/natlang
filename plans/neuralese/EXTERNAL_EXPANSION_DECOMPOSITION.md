@@ -129,4 +129,20 @@ explicitly declares0.6 and is unaffected; compare its base and trained weights
 with that same sampling and runtime before a qualification verdict. This
 changes no prompt or data-selection policy.
 
+GOAT GATC messages become the existing typed coding-session continuation.
+Preserve dispatch IDs, tool schemas, observations, reasoning and source facts.
+Resolve parent and template components across the complete pinned sample before
+selecting windows; any prepared evaluation session protects its entire component,
+including links through producer-quality-flagged rows. Producer flags are an
+explicit optional exclusion for positive train conversion, with omissions logged;
+keep flagged held rows for protection. A last failed test is provenance, not a
+claim that the whole session failed. Other sample views are alternate projections
+of the same sessions and must not be mixed as independent additional trajectories.
+Session fragments without a final answer or initial user turn, and unnormalized
+foreign tool dialects, remain useful continuation data and are not excluded just
+for those flags. Only incomplete arguments and withheld text trigger the initial
+positive-source omission; keep their originals and explicit omissions for later
+valid-prefix extraction. Task grouping uses the first non-wrapper user message,
+so generic harness wrappers do not collapse independent sessions into one group.
+
 A held/source-quality corpus can be removed from training while its original source identities remain protected. The next union must retain test-group/text exclusions from removed references and quarantine derivatives sharing their source groups in either split. This is the owner's explicit MuSiQue quality hold, not new inferred source approval. Extend the shared union planner with hash-bound reference files; exact set joins and omission receipts are crisp verifiers. Read the already compressed R7 aggregate as a source snapshot, apply these restrictions, and add the finished external static render. Preserve all original evidence and publish a new immutable union.
