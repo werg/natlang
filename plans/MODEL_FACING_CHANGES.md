@@ -559,3 +559,7 @@ The labeled curriculum source loader filters rows whose same visible text has co
 ### 2026-10-14 — Static external trajectory handoffs retain structured messages
 
 The external expansion reuses typed SessionHistory continuation records and the existing native call builder. For assistant messages with reasoning or tool calls, the builder now requests and returns the complete JSON message instead of dropping those fields; evidence transcripts also preserve those fields. Plain content-only targets keep the existing wording. This preserves acquired teacher payloads and makes tool-only targets usable. **Measurement debt:** 0/48 live executor samples for the structured-message instruction; source/build fidelity tests are exact mechanism checks, not behavioral qualification. Owner explicitly authorized static lowering and broad coding/tool training; do not describe these external teacher targets as independently verified native task successes.
+
+### 2026-10-14 — CodeAgent static task-background handoffs
+
+Alpaca-style CodeAgent problems and prior history become the existing typed Background source; the consumer requests completion of the coding task using its requested format. The acquired output is preserved as an external teacher response with unknown execution outcome. **Measurement debt:** 0/48 live samples for this static request. This is owner-authorized general coding/Neuralese training expansion; exact source/consumer separation checks do not establish live task success.
