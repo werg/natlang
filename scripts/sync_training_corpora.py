@@ -394,18 +394,21 @@ def local_references(paths, proc_root=Path('/proc')):
         # A file operand's lexical parent is not an implicit directory use.
         operands = list(path_operands(argv, cwd, equals=True))
         resource_argv = argv
-        if argv and Path(argv[0]).name == 'docker':
-            # Docker's working directory is execution context, like PWD. A
-            # repo-wide -w must not mark every inactive artifact below the
-            # checkout as an input to that container. Explicit input/output
-            # operands, the exact cwd parent and open descriptors still count.
+        docker_command = bool(argv and Path(argv[0]).name == 'docker')
+        ledger_command = any(Path(value).name == 'memory_ledger.py' for value in argv[:3])
+        if docker_command or ledger_command:
+            # A wrapper's working directory is execution context, like PWD.
+            # A repo-wide --workdir on a queued ledger waiter must not mark
+            # every inactive corpus under the checkout as a live input.
+            # Explicit artifact operands, the exact cwd parent and open
+            # descriptors still protect files in use.
             resource_argv = []
             skip_workdir_value = False
             for value in argv:
                 if skip_workdir_value:
                     skip_workdir_value = False
                     continue
-                if value in {'-w', '--workdir'}:
+                if value == '--workdir' or (docker_command and value == '-w'):
                     skip_workdir_value = True
                     continue
                 if value.startswith('--workdir='):
