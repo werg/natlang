@@ -726,12 +726,12 @@ def render_shard(job):
     from natlang_neuralese.train.trajectories import crisp_messages, handover_notes
     tok = _G['tok'][tok_name]
     records = []
-    with open(shard_path, 'rb') as f:
+    with open_jsonl_text(shard_path) as f:
         for line in f:
             row = json.loads(line)
-            row['_source_record_sha256'] = sha(line.rstrip(b'\n'))
+            row['_source_record_sha256'] = sha(line.rstrip('\n').encode('utf-8'))
             records.append(row)
-    stem = Path(shard_path).stem
+    stem = Path(shard_path).name.removesuffix('.zst').removesuffix('.jsonl')
     result = {'shard': stem, 'tokenizer': tok_name, 'records': len(records)}
     omissions = []
     # Source-group-disjoint decontamination: a train decision sharing a source group with any held document (this
@@ -1103,18 +1103,22 @@ def main(argv=None):
     held_groups = test_groups | held_external | reserved_groups
     print(json.dumps({'selection': counts, 'internal_held_groups': len(test_groups),
                       'external_held_groups': len(held_external), 'seconds': round(time.time() - t0)}), flush=True)
-    shards = sorted(f.stem for f in shard_dir.glob('*.jsonl'))
+    if a.compress_text:
+        for selected in sorted(shard_dir.glob('*.jsonl')):
+            subprocess.run(['zstd', '-q', '-3', '-T1', '--rm', '-f', str(selected)], check=True)
+    shard_paths = {f.name.removesuffix('.jsonl').removesuffix('.jsonl.zst'): f for f in shard_dir.iterdir() if f.name.endswith(('.jsonl', '.jsonl.zst'))}
+    shards = sorted(shard_paths)
     decision_exclude = set()
     for path in a.decision_exclude_ids:
         decision_exclude.update(json.loads(line)['id'] for line in jsonl_lines(path) if line.strip())
     full_set = None if full_programs is None else set(full_programs)
-    jobs = [(str(shard_dir / f'{s}.jsonl'), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
+    jobs = [(str(shard_paths[s]), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
              a.program_header_as_full, full_set, tuple(a.renderings), a.compress_text)
             for s in shards for name in tokenizers]
     results = []
     pending = []
     for job in jobs:
-        done = out / 'work' / 'done' / job[2] / f'{Path(job[0]).stem}.json'
+        done = out / 'work' / 'done' / job[2] / f"{Path(job[0]).name.removesuffix('.zst').removesuffix('.jsonl')}.json"
         if done.exists():
             results.append(json.loads(done.read_text()))
         else:
