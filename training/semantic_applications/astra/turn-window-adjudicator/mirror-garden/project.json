@@ -577,7 +577,7 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": false,
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
@@ -589,14 +589,14 @@
   "source_variant": {
     "id": "rule-role-frontier-v4",
     "supersedes": "mirror-ordering-v3",
-    "status": "source_peer_review_pending",
+    "status": "source_peer_reviewed_live_pending",
     "fixture_oracle_reference_unchanged": true,
     "changes": [
       "Ability-only scoped interpretation with nullable typed unresolved result",
       "Typed context roles consumed by board/reference/timing stages",
       "Finite sequential RuleReadingFrontier retains accepted/unresolved/failed unit attempts separately"
     ],
-    "independent_source_review": false
+    "independent_source_review": true
   },
   "prior_frozen_source": {
     "commit": "c3fd2000",
@@ -620,7 +620,12 @@
       "path": "plans/semantic_stack/TURN_WINDOW_MIRROR_CASES_REVIEW_SOL.json",
       "sha256": "258064cc2618ed44749c1d0b8589919019912cdb87c745c286b56de23ddfdec6",
       "reviewer": "semantic_slate_sol"
+    },
+    {
+      "path": "plans/semantic_stack/TURN_WINDOW_RULE_FRONTIER_V4_REVIEW_SOL.json",
+      "sha256": "9e6cf4f1a809b06776c26a6f6fbf93f074375f93fe3c3442c006e45ac36eb4eb",
+      "reviewer": "semantic_slate_sol"
     }
   ],
-  "readiness_scope": "Original fixture/oracle and external controls unchanged and previously reviewed. Current v4 source/type and canonical replay pass; independent source delta review pending, so combined source/oracle readiness held. No live/admission."
+  "readiness_scope": "Original fixture/oracle and external controls unchanged and independently reviewed. Current v4 source/type and all three canonical references pass an independent source delta review; live execution and training admission remain pending."
 }
