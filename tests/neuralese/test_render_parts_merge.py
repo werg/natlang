@@ -57,7 +57,8 @@ def test_cross_part_held_group_duplicate_and_twin_alignment(tmp_path, compress_a
             assert binding['decoded_text_data_bytes'] == len(decoded)
 
 
-def test_native_shard_merge_compression_keeps_held_closure_and_exact_bytes(tmp_path):
+@pytest.mark.parametrize('whole_trajectory', [False, True])
+def test_native_shard_merge_compression_keeps_held_closure_and_exact_bytes(tmp_path, whole_trajectory):
     import importlib.util
     from natlang_neuralese.common.jsonio import write_jsonl_text, open_jsonl_text
     spec=importlib.util.spec_from_file_location('native_stream_renderer',Path(__file__).resolve().parents[2]/'scripts/neuralese_data/render_native_turn_corpus.py')
@@ -65,13 +66,16 @@ def test_native_shard_merge_compression_keeps_held_closure_and_exact_bytes(tmp_p
     rows=[{'id':'held','split':'test','source_groups':['protected'],'text':'héld','token_ids':[1,2],'supervised_suffix_start':1},
           {'id':'leak','split':'train','source_groups':['protected'],'text':'other','token_ids':[2],'supervised_suffix_start':0},
           {'id':'good','split':'train','source_groups':['good'],'text':'你好','token_ids':[3,4],'supervised_suffix_start':1}]
+    if whole_trajectory:
+        for row in rows:
+            row.pop('supervised_suffix_start')
     outputs=[]
     for compressed in (False,True):
         root=tmp_path/str(compressed);src=root/'work/program-header/fixture';src.mkdir(parents=True)
         for i,row in enumerate(rows):
             path=src/(f'{i}.jsonl.zst' if i%2 else f'{i}.jsonl')
             with write_jsonl_text(path) as stream:stream.write(json.dumps(row,ensure_ascii=False)+'\n')
-        result=module.merge(root,'program-header','fixture',['0','1','2'],set(),None,compress_text=compressed)
+        result=module.merge(root,'program-header','fixture',['0','1','2'],set(),lambda ids: (__import__('collections').Counter(assistant_reply=len(ids)), [5]*len(ids)),compress_text=compressed)
         target=root/'program-header/fixture'/result.get('text_data_file','text-data.jsonl')
         with open_jsonl_text(target) as stream:decoded=stream.read().encode()
         outputs.append(decoded)
