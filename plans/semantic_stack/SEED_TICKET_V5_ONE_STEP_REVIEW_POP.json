@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.semantic-source-peer-review/1",
+  "reviewer": "pop-semantic-curriculum",
+  "variant": "seed-ticket-one-step-v5",
+  "source_files": {
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readTheories.nl": "a43fdd0301c13555b4be6baca9795a2b18e22699774a5f563eac6ad4701a1aa4",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readTheories/advanceTicket.nl": "b0145f511dbef03c50b12e283a0bf042540a195845c7d4021d93614cdf194b8a"
+  },
+  "finding": "The prior v4 live advanceTicket invocation kept iterating inside one child; after history compaction it reused its original immutable state and reprocessed D_Aa instead of the latest M_Aa.",
+  "reviewed_contract": [
+    "readTheories alone owns repeat invocation via advanceTicket.iterateOn and uses each returned frontier as the next input",
+    "advanceTicket removes exactly its current first pending unit and appends one accepted, unresolved or failed typed result",
+    "advanceTicket completes the same invocation with the actual next TicketReadingFrontier via eval({code:\"return next;\",finish:true})",
+    "Source interpretation remains in interpretTicket; exact coverage and ID/quote checks remain mechanism"
+  ],
+  "source_review": "accepted",
+  "fixture_oracle_changed": false,
+  "live_samples": 0,
+  "training_admitted": false,
+  "limitations": [
+    "Native/type and canonical replay are author preflights, not independent semantic execution",
+    "Matched v5 live run must verify one returned step per ticket and no post-compaction regression"
+  ]
+}
