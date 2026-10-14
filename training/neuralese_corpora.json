@@ -74258,6 +74258,145 @@
         "receipt": "runs/natlang-r8-teacher-additions-delta-20261014-v1/receipt.json"
       },
       "notes": "Protected R8 teacher-only delta. Global held and source-review filtering plus six MuSiQue, SST, and canonical backlog-v5-v2 source-quality quarantines; 1072 full, 20237 program-header, 13176 whole-trajectory matching LFM/Mellum documents. No overlapping R8 corpus rows admitted."
+    },
+    {
+      "id": "external-expansion-agentic-coding-repeated-id-repair-20261014-v1-render",
+      "owner": "dgx",
+      "path": "runs/external-expansion-agentic-coding-repeated-id-repair-render-20261014-v1",
+      "include": [
+        "receipt.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "parts/*/receipt.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+      "admission": "renders of external-expansion-agentic-coding-repeated-id-repair-20261014-v1 in parts (scripts/neuralese_data/render_parts.py): program-header and whole-trajectory for every program, full only for the 5% warm-up sample (zstd); LFM2.5 and Mellum2.1 twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+      "derived_from": [
+        "external-expansion-agentic-coding-repeated-id-repair-20261014-v1"
+      ],
+      "license": "facts from the source rows",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "documents": 10,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 10,
+                "supervised_tokens": 1313,
+                "tokens": 109282,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 15328,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "8d131df63c4b4dc24ad77bc0fb7d4f17f66e35626f191fdf70e264a6a252c994",
+            "decoded_text_data_sha256": "636404548ba438ccb800ddea290188319fc4063fc1d7ab305a7efad22c66a017",
+            "decoded_text_data_bytes": 986524
+          },
+          "mellum21": {
+            "documents": 10,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 10,
+                "supervised_tokens": 1416,
+                "tokens": 110835,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 15564,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "288b98918a840d3b9e6c9e97e79c562e7b3842e1c4de090825bbd1457a052e7d",
+            "decoded_text_data_sha256": "02ae9efe8d98b93e5ea9f9795a16ff4430583741debc868f63c39004b8e50dac",
+            "decoded_text_data_bytes": 941920
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "documents": 10,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 10,
+                "supervised_tokens": 1313,
+                "tokens": 63670,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 11257,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "08f5569d639c11db9c93336ff9faaa24d74dce01996c6039eb363fb0a10ccc92",
+            "decoded_text_data_sha256": "1960446a1b353416e9cf7196ade159a73ac9124ec9cc6a0b64f769bc454aaece",
+            "decoded_text_data_bytes": 552492
+          },
+          "mellum21": {
+            "documents": 10,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 10,
+                "supervised_tokens": 1416,
+                "tokens": 65003,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 11461,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "5e31b101307e2e33f9694fe24b9a963fb74984b5c9940ddb5a85c558242817ae",
+            "decoded_text_data_sha256": "6c40e8a3abc6f6d923cf9090508742567bab2d8e7a67c5e9b1d86294b64400b1",
+            "decoded_text_data_bytes": 521634
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "documents": 5,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 2059,
+                "documents": 5,
+                "opening_tokens": 705,
+                "supervised_tokens": 1354,
+                "tokens": 40732,
+                "tool_tokens": 37302
+              }
+            },
+            "max_document_tokens": 11248,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "733b4f58af70f0a3e822f0da3dceda56b0552894cafd18151653c90e5367b916",
+            "decoded_text_data_sha256": "4404bd357451e4d768bfed397aa5e76840b5eda4b22a280be78313f483718509",
+            "decoded_text_data_bytes": 353115
+          },
+          "mellum21": {
+            "documents": 5,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 2361,
+                "documents": 5,
+                "opening_tokens": 783,
+                "supervised_tokens": 1578,
+                "tokens": 41781,
+                "tool_tokens": 38033
+              }
+            },
+            "max_document_tokens": 11467,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "abe33c7c243c098ac32d1c0c13568405b4f02aabc7c48e3eee9453a20eba30ce",
+            "decoded_text_data_sha256": "e090bf4ac15d2863edb7ba676e4ed59ef174a815cb1ee23544aa5a060b5f51b2",
+            "decoded_text_data_bytes": 334391
+          }
+        }
+      }
     }
   ],
   "coverage_backlog": [

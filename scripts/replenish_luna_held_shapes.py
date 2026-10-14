@@ -63,9 +63,11 @@ PER_FAMILY.update(actor_greenhouse=10, dataset_workbench=10,
 # successes show the same pattern. The wider scan also found greenhouse and
 # schedule repair almost never used iterateOn. Hold *new* teacher allocation until the
 # visible task and source oracle enforce the process, then measure the changed
-# task live. Existing campaigns still finish and remain available for review.
+# task live. Folder criteria version 2 passed the 48-case live shape trial, so
+# its new allocation resumes behind exact-oracle and action-shape review.
+# Existing campaigns still finish and remain available for review.
 PER_FAMILY.update(actor_greenhouse=0, composed_process=0,
-                  edit_stream=0, folder_criteria_reducer=0,
+                  edit_stream=0, folder_criteria_reducer=10,
                   counterexample_revision=0, iterate_schedule_repair=0)
 PER_FAMILY['inline_review_each'] = 4
 PER_FAMILY.update(recurrence_inline_graphs=12, knowledge_research=10)
