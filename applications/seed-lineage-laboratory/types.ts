@@ -16,6 +16,7 @@ export type Observation = { observationId: string; accessionId: string; reported
 export type Assay = { assayId: string; readout: string; compartment: string; stage: string; regime: string; usable: boolean | null; answerGrammar: string; witnesses: Witness[] };
 export type AssayIndex = { assays: Assay[]; observations: Observation[]; unresolved: string[] };
 export type StockAmount = { materialId: string; quantity: number };
+/** subjectId is the focal accession under investigation; oriented parents have separate fields. */
 export type ExperimentPlan = { experimentId: string; slotId: string; kind: 'cross' | 'probe' | 'image'; motherId: string | null; fatherId: string | null; subjectId: string; assayId: string; cost: Fraction; materials: StockAmount[]; witnesses: Witness[] };
 export type StockIndex = { stock: StockAmount[]; experiments: ExperimentPlan[]; rules: SourceClause[]; unresolved: string[] };
 export type BankSource = { manifest: BankManifest; documents: SourceDocument[]; clauses: SourceClause[]; pedigree: PedigreeReading; theories: TheoryIndex; assays: AssayIndex; stocks: StockIndex; coverage: { sourceId: string; clauseIds: string[] }[]; unresolved: string[] };

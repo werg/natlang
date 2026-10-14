@@ -587,12 +587,12 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": false,
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "exact_checker_controls_passed": 22,
     "live_qualified": false,
     "training_admitted": false,
-    "source_variant_review": "pending v5 peer review; unchanged fixture/oracle previously independently reviewed"
+    "source_variant_review": "Passed v5 source/control peer review; original fixture/oracle/canonical unchanged"
   },
   "fixture_document_count": 10,
   "fixture_clause_count": 31,
@@ -625,7 +625,22 @@
       "Nullable internal passage cost preserves absent/unknown route evidence; present projection requires source-permitted known cost."
     ],
     "fixture_oracle_reference_changed": false,
-    "independent_source_review": false,
-    "live_qualified": false
-  }
+    "independent_source_review": true,
+    "live_qualified": false,
+    "review_receipt": "plans/semantic_stack/CAVE_SURVEY_V5_REVIEW_ASTRA.json"
+  },
+  "independent_reviews": [
+    {
+      "path": "plans/semantic_stack/CAVE_SURVEY_V5_REVIEW_ASTRA.json",
+      "sha256": "bdfe2102c1b6aeac9c3b81b83aedfdc9609852566d8db048f3b25d6a162fb843",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Independent v5 NL source/type/per-item control handoff review, no live credit"
+    },
+    {
+      "path": "plans/semantic_stack/CAVE_CONDITIONAL_BINDING_REVIEW_SOL.json",
+      "sha256": "775f92dc4210d5df4de73534578a501fd7e6730d46d398f0ea5589244a9d3292",
+      "reviewer": "semantic_slate_sol",
+      "scope": "Existing conditional binding and physical-direction source review; initial source-world oracle linked in receipt"
+    }
+  ]
 }

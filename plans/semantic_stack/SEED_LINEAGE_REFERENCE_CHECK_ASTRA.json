@@ -1,0 +1,140 @@
+{
+  "schema": "natlang.application-author-reference-review/1",
+  "author": "semantic_slate_astra",
+  "application": "seed-lineage-laboratory",
+  "source_commit": "30c4d001",
+  "source_fixture_changes": {
+    "scope": "Format precision only after first source freeze",
+    "source_files": [
+      "applications/seed-lineage-laboratory/types.ts"
+    ],
+    "fixture_files": [
+      "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/fixture/controls/request-and-output.md"
+    ],
+    "meaning": "Q05 makes focal subject independent of oriented parents and leaves compartment descriptions free. Biological facts and predicted outcomes unchanged; coverage now42clauses."
+  },
+  "private_files": {
+    "training/semantic_applications/astra/seed-lineage-laboratory/verify-result.mjs": "1259c2a11aa81aacbdcd1b6b3b0f39a01ae55f1b521b7669c6f35fa70c48807f",
+    "training/semantic_applications/astra/seed-lineage-laboratory/check-verifier.mjs": "2a87b2393b143fe0ec7031a694530c828a50668fbce89096982423ebfc286069",
+    "training/semantic_applications/astra/seed-lineage-laboratory/project.json": "c8ccd5113ae6c75d4dcb007bf001021aae4b214fc0c3c179e33ce3523f61f0ef",
+    "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/oracle.json": "61e6626d368dcdb2e2cfb46cccb2acb4fa672bfae3da8fdd3759980deb711df0",
+    "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/reference-certificate.json": "e98e9480191b6edde3a1b63cf7f842abc8253f0d9c2847e8ffd7cb8bcfd04fe1",
+    "training/semantic_applications/astra/seed-lineage-laboratory/derive-reference.py": "4b50b5dd13bc7369f62d1d542ddca542c57b0a8131e7e9959aaee9bf7d440fcc"
+  },
+  "package": {
+    "path": "/tmp/astra-seed-lineage-source-v3",
+    "source_sha256": "7f08efaa7e55ccb828a70d3e87fc314119108183270c00e6cbcb8296deda1c62",
+    "reference": {
+      "path": "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/reference-certificate.json",
+      "sha256": "e98e9480191b6edde3a1b63cf7f842abc8253f0d9c2847e8ffd7cb8bcfd04fe1",
+      "reference_ok": true,
+      "reference_problems": [],
+      "opening_sha256": "b38ce2f49096c6de80ca0ab0fda6fbaeddb633928290e2ac40862ee4fc80139e",
+      "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
+    },
+    "quality": {
+      "schema": "natlang.semantic-application-quality-observations/1",
+      "gating": false,
+      "nl_lines": 558,
+      "numbered_policy_steps": 159,
+      "callable_nodes": 27,
+      "call_graph_edges": 26,
+      "declared_max_call_depth": 3,
+      "graph_cycle_suspected": false,
+      "declared_scoped_literal_sites": 6,
+      "sites_with_nl_instruction": 2,
+      "declared_literal_consumers": 6,
+      "crisp_policy_displacement": "manual_review_pending",
+      "live_literal_consumption": "unmeasured",
+      "note": "These are static observations and authored claims; live semantic work and policy location require trace review. Scale and depth are mix labels, never admission limits."
+    }
+  },
+  "independent_finite_reconstruction": {
+    "initial_joint_mass": 31,
+    "surviving_mass": 16,
+    "survivors": {
+      "D_Aa": 12,
+      "R_aa": 2,
+      "M_Aa": 1,
+      "M_aa": 1
+    },
+    "belief_states": 38,
+    "candidate_transitions": 25,
+    "chosen_reachable_nodes": 5,
+    "root_candidates": {
+      "S": {
+        "expected": {
+          "numerator": 7,
+          "denominator": 4
+        },
+        "worst": {
+          "numerator": 4,
+          "denominator": 1
+        }
+      },
+      "C": {
+        "expected": {
+          "numerator": 3,
+          "denominator": 1
+        },
+        "worst": {
+          "numerator": 3,
+          "denominator": 1
+        }
+      },
+      "G": {
+        "expected": {
+          "numerator": 27,
+          "denominator": 8
+        },
+        "worst": {
+          "numerator": 5,
+          "denominator": 1
+        }
+      },
+      "F": {
+        "expected": {
+          "numerator": 11,
+          "denominator": 4
+        },
+        "worst": {
+          "numerator": 5,
+          "denominator": 1
+        }
+      }
+    },
+    "method": "Private source-world enumeration of finite gamete combinations, source assay resolution, source stock capacities and recursively smaller remaining experiment slots; full typed witness is not application execution."
+  },
+  "controls": {
+    "passed": true,
+    "positive": 7,
+    "negative": 29,
+    "output_sha256": "80be630fa834142c239438c3db1f8ad33f6f04c638696ec0d2d3991e4a9a3ea7"
+  },
+  "equivalences_checked": [
+    "Unordered collections",
+    "Consistent generated world/node alpha-renaming",
+    "Unreduced rational representation",
+    "Proportional internal carried masses preserving posterior",
+    "Free explanation prose",
+    "Equivalent compartment prose; exact source output convention fixes focal subject role"
+  ],
+  "exact_scope": [
+    "Original source IDs/nonempty exact quotations and coverage",
+    "Joint posterior and complete observed likelihood ledger",
+    "Every offered experiment and source-derived per-world outcome",
+    "Complete feasible transition/answer branches",
+    "Actual conditional posterior, original slot consumption and isolated stock subtraction",
+    "Actual candidate expected/worst arithmetic and source objective",
+    "Residual genotype alternatives at chosen mechanism leaves"
+  ],
+  "remaining_gates": [
+    "Independent biological/source semantic review",
+    "Independent exact comparator false-positive/false-negative audit",
+    "Live actual NL execution and scoped result consumption",
+    "Approximately48 samples for adopted presentation"
+  ],
+  "independent_review": false,
+  "live_qualified": false,
+  "training_admitted": false
+}

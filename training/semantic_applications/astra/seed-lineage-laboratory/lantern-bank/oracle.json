@@ -1,0 +1,103 @@
+{
+  "schema": "natlang.seed-lineage-oracle/1",
+  "caseId": "astra-seed-lantern-v1",
+  "source_scope": "Closed fictional Lantern bank; independent finite reconstruction outside model-visible roots.",
+  "surviving_ticket_masses": {
+    "D_Aa": 12,
+    "R_aa": 2,
+    "M_Aa": 1,
+    "M_aa": 1
+  },
+  "rejected_ticket_ids": [
+    "D_AA",
+    "D_aa",
+    "R_AA",
+    "R_Aa",
+    "M_AA"
+  ],
+  "experiment_answers": {
+    "S": {
+      "D_Aa": "mixed",
+      "R_aa": "uniform",
+      "M_Aa": "uniform",
+      "M_aa": "uniform"
+    },
+    "C": {
+      "D_Aa": "bright:1/2",
+      "R_aa": "bright:1/1",
+      "M_Aa": "bright:0/1",
+      "M_aa": "bright:0/1"
+    },
+    "G": {
+      "D_Aa": "genotype:Aa",
+      "R_aa": "genotype:aa",
+      "M_Aa": "genotype:Aa",
+      "M_aa": "genotype:aa"
+    },
+    "F": {
+      "D_Aa": "coat:amber",
+      "R_aa": "coat:amber",
+      "M_Aa": "coat:amber",
+      "M_aa": "coat:amber"
+    },
+    "W": {
+      "D_Aa": null,
+      "R_aa": null,
+      "M_Aa": null,
+      "M_aa": null
+    }
+  },
+  "expected_root_cost": {
+    "numerator": 7,
+    "denominator": 4
+  },
+  "expected_worst_cost": {
+    "numerator": 4,
+    "denominator": 1
+  },
+  "selected_root_experiment": "S",
+  "root_candidate_costs": {
+    "S": {
+      "expected": {
+        "numerator": 7,
+        "denominator": 4
+      },
+      "worst": {
+        "numerator": 4,
+        "denominator": 1
+      }
+    },
+    "C": {
+      "expected": {
+        "numerator": 3,
+        "denominator": 1
+      },
+      "worst": {
+        "numerator": 3,
+        "denominator": 1
+      }
+    },
+    "G": {
+      "expected": {
+        "numerator": 27,
+        "denominator": 8
+      },
+      "worst": {
+        "numerator": 5,
+        "denominator": 1
+      }
+    },
+    "F": {
+      "expected": {
+        "numerator": 11,
+        "denominator": 4
+      },
+      "worst": {
+        "numerator": 5,
+        "denominator": 1
+      }
+    }
+  },
+  "semantic_review_required": true,
+  "training_admitted": false
+}
