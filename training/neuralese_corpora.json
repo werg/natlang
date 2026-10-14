@@ -73883,8 +73883,8 @@
         "admission-review.json"
       ],
       "source_class": "statically-lowered-external-native-teacher-turns",
-      "training_admission": true,
-      "training_admission_reason": "Owner2026-10-14 static natlang-like conversion and general coding/Neuralese training",
+      "training_admission": false,
+      "training_admission_reason": "Superseded by exact content-identity repaired v2; reused upstream IDs caused42 parent collisions in downstream selection.",
       "admission": "External teacher targets unknown; static native plumbing exact. One wrong-return omission assigned repair.",
       "derived_from": [
         "external-expansion-agentic-coding-handoffs-20261014-v1"
@@ -74614,6 +74614,27 @@
         "held_text": {}
       },
       "notes": "48 measured exact folder reducer trajectories with runtime chosen per-ticket inline Boolean judges; 973 approved turns; both tokenizer twins; train only, final union holds still applied."
+    },
+    {
+      "id": "external-expansion-agentic-coding-native-20261014-v2",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-agentic-coding-native-20261014-v2",
+      "include": [
+        "turns/**/*.turns.jsonl.zst",
+        "identity-repair/turns/**/*.turns.jsonl.zst",
+        "identity-repair/turns/**/*.summary.json",
+        "identity-repair/repair-preparation.json",
+        "runtime-page.json",
+        "admission-review.json",
+        "source-build/**/*"
+      ],
+      "source_class": "statically-lowered-external-native-teacher-turns",
+      "training_admission": true,
+      "training_admission_reason": "Owner-authorized static natlang-like general coding and Neuralese expansion. Exact content identity repair, no source/target edits.",
+      "derived_from": [
+        "external-expansion-agentic-coding-handoffs-20261014-v1"
+      ],
+      "license": "Pinned original D40 source card facts and per-row provenance retained."
     }
   ],
   "coverage_backlog": [
