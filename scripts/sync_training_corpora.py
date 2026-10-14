@@ -80,6 +80,13 @@ def manifest_path(repo, identity):
     return repo / 'training/corpus-manifests' / (identity + '.json')
 
 
+def status_admission(entry):
+    """Report the explicit training decision even for corpora without legacy `admission` prose."""
+    return {'admission': entry.get('admission', entry.get('training_admission_reason')),
+            'training_admission': entry.get('training_admission'),
+            'training_admission_reason': entry.get('training_admission_reason')}
+
+
 def require_committed_offload_snapshot(repo, identity):
     """Require the selected registry entry and immutable manifest at HEAD."""
     registry_path = repo / 'training/neuralese_corpora.json'
@@ -676,7 +683,7 @@ def main():
         path = manifest_path(args.repo, entry['id'])
         if not path.exists():
             if args.action == 'status':
-                print(json.dumps({'id': entry['id'], 'status': 'unpublished', 'admission': entry['admission']}))
+                print(json.dumps({'id': entry['id'], 'status': 'unpublished', **status_admission(entry)}))
                 continue
             raise ValueError(f'missing manifest: {path}; owner must publish and push it first')
         manifest = json.loads(path.read_text())
@@ -696,7 +703,7 @@ def main():
         else:
             missing = [x['path'] for x in manifest['files'] if not (args.repo / entry['path'] / x['path']).is_file()]
             print(json.dumps({'id': entry['id'], 'status': 'missing' if missing else ('verified' if current_receipt(args.repo, manifest) else 'present_unverified'),
-                              'missing': len(missing), 'bytes': manifest['bytes'], 'admission': entry['admission']}))
+                              'missing': len(missing), 'bytes': manifest['bytes'], **status_admission(entry)}))
 
 
 if __name__ == '__main__':

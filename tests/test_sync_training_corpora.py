@@ -15,6 +15,26 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 
+class StatusAdmissionTests(unittest.TestCase):
+    def test_new_registry_entry_without_legacy_admission(self):
+        status = module.status_admission({
+            'training_admission': False,
+            'training_admission_reason': 'held-group overlap requires a rebuilt union',
+        })
+        self.assertFalse(status['training_admission'])
+        self.assertEqual(status['admission'], status['training_admission_reason'])
+
+    def test_legacy_and_explicit_decisions_are_both_reported(self):
+        status = module.status_admission({
+            'admission': 'historical note',
+            'training_admission': False,
+            'training_admission_reason': 'withdrawn after held-group audit',
+        })
+        self.assertEqual(status['admission'], 'historical note')
+        self.assertFalse(status['training_admission'])
+        self.assertEqual(status['training_admission_reason'], 'withdrawn after held-group audit')
+
+
 class RestoreTests(unittest.TestCase):
     def test_selected_owner_restore_pulls_and_uses_subset_receipt(self):
         entry = {'id': 'sample', 'path': 'runs/sample', 'owner': 'pop'}
