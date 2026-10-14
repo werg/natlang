@@ -82,11 +82,13 @@ def main():
             queues = rows(worker / 'queue.jsonl')
             journals = [worker / 'journal.jsonl', *(p / 'journal.jsonl' for p in worker.glob('retry-*'))]
             finishes = {}
+            finish_history = collections.defaultdict(list)
             for journal in journals:
                 if journal.exists():
                     for event in rows(journal):
                         if event.get('event') == 'finish':
                             finishes[event['key']] = event
+                            finish_history[event['key']].append(event)
             if set(finishes) != {job['key'] for job in queues}:
                 raise ValueError(f'campaign worker not terminal: {worker}')
             for job in queues:
@@ -99,19 +101,20 @@ def main():
                         result_paths.append(retry / 'results.jsonl')
                 results = [row for path in result_paths if path.exists() for row in rows(path)]
                 finish = finishes[job['key']]
+                review = excluded.get(job['key'])
+                if review is not None:
+                    if not (review.get('reason') and any(
+                            event.get('status') == review.get('finish_status') and
+                            event.get('output_accounting', {}).get('exact_result_rows') == 0 and
+                            event.get('output_accounting', {}).get('output_sha256') == review.get('output_sha256')
+                            for event in finish_history[job['key']])):
+                        raise ValueError(f'reviewed exclusion no longer matches an exact zero-result finish: {job["key"]}')
+                    if any(result.get('outcome', {}).get('accepted') is True for result in results):
+                        raise ValueError(f'reviewed exclusion has an accepted retry requiring new review: {job["key"]}')
+                    outcomes['reviewed_exclusion'] += 1
+                    continue
                 if finish.get('status') not in ('complete', 'complete_with_skips') or not finish.get('output_accounting', {}).get('complete'):
-                    review = excluded.get(job['key'])
-                    accounting = finish.get('output_accounting', {})
-                    if (review is not None and not results and
-                            finish.get('status') == review.get('finish_status') and
-                            accounting.get('exact_result_rows') == 0 and
-                            accounting.get('output_sha256') == review.get('output_sha256') and
-                            review.get('reason')):
-                        outcomes['reviewed_exclusion'] += 1
-                        continue
                     raise ValueError(f'noncomplete job: {job["key"]}')
-                if job['key'] in excluded:
-                    raise ValueError(f'reviewed exclusion has become complete: {job["key"]}')
                 if len(results) != 1:
                     raise ValueError(f'expected one result: {job["key"]}: {len(results)}')
                 result = results[0]
