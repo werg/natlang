@@ -1,0 +1,48 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "qad-r8-student-root-recovery-v3-20261014-v1",
+  "owner": "pop",
+  "path": "runs/qad-r8-student-root-recovery-v3-20261014-v1",
+  "files": [
+    {
+      "path": "accepted-parents.jsonl",
+      "bytes": 3727972,
+      "sha256": "bf2f1f024d17998250384aaa483683e590d715c311336b7d89eec5386e0275e0",
+      "lines": 11
+    },
+    {
+      "path": "accepted-parents.review.json",
+      "bytes": 1496,
+      "sha256": "e712681296c3587c827e6bf1967048e326e0935c7a0c991d24e12f11a3a3b74c"
+    },
+    {
+      "path": "admission-review.json",
+      "bytes": 2570,
+      "sha256": "20770137dff11532cded5b4d63c26a4746b67ad37bc10db78ac444f05ff8e00d"
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 3507961,
+      "sha256": "3cddaa3ad86df4e2fde8090925996539ae7b8687ad8c479f5477cd3ec1e35c5b",
+      "lines": 42
+    },
+    {
+      "path": "native-turns.review-candidates.jsonl",
+      "bytes": 4620798,
+      "sha256": "c637e576e595bf27b4e6d5035f1258f51cf6c05c43ae9407956b7f7bf7a5419a",
+      "lines": 57
+    },
+    {
+      "path": "selected.ir.jsonl",
+      "bytes": 83148,
+      "sha256": "46df9e9adc25208dc1d5ee5c3aed10a14b2acecaa2875fec22051969d700c099",
+      "lines": 11
+    },
+    {
+      "path": "selected.ir.manifest.json",
+      "bytes": 1275,
+      "sha256": "797532bace902615b1c6f0d45fe2164fe082edcb6231acade4dd97486e1923d9"
+    }
+  ],
+  "bytes": 11945220
+}
