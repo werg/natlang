@@ -1,0 +1,4 @@
+[C1] During S2 Reni explicitly rejects only N1's NA_GLOSS proposal that na marks the event agent. She explains that its referent is the contrastive topic, which can be agent or patient. She leaves N2/SURFACE_U1 accepted and unchanged. This rejection targets gloss, not U1 surface acceptability.
+[N1R] Replacement note N1R for N1/NA_GLOSS states "contrastive topic; may coincide with agent or patient". This original replacement note says nothing about mi or future expectation.
+[C2] Belo explicitly adopts C1 and N1R as the replacement of N1/NA_GLOSS. N2/SURFACE_U1 and N3/REMINDER are excluded from this notebook replacement. C2 occurs in S2 after the S1 notes were written.
+[C3] Reni does not adopt Belo's guessed mi gloss and makes no mi future-expectation judgment in this correction. The authority of C1/C2 cannot be propagated to that independent slot.

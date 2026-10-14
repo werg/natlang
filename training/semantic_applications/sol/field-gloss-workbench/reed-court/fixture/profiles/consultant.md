@@ -1,0 +1,2 @@
+[A01] Consultant Reni actually conducts sessions S1,S2,S3 and sees their depicted situations. Her attributed explicit judgments are authenticated here. Researcher Belo's proposed glosses are hypotheses, not consultant judgments.
+[A02] A notebook replacement becomes effective only through an explicit adopted correction targeting its actual original slot. Keep original, replacement and adoption separately. A later quotation or copied phrase alone is not adoption.

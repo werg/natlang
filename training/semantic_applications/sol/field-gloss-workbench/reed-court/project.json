@@ -1,0 +1,737 @@
+{
+  "schema": "natlang.semantic-application-source/1",
+  "id": "sol-app-field-reed-court-v1",
+  "source_root": "applications/field-gloss-workbench",
+  "domain": "actor",
+  "semantic_domain": "field-linguistics-segmentation-discourse-and-correction-authority",
+  "entry": "analyzeCorpus.nl",
+  "entry_kind": "directory-reducer",
+  "request_type": "LinguisticRequest",
+  "snapshot_type": "CorpusSnapshot",
+  "result_type": "LinguisticReport",
+  "request_path": "training/semantic_applications/sol/field-gloss-workbench/reed-court/request.json",
+  "snapshot_path": "training/semantic_applications/sol/field-gloss-workbench/reed-court/snapshot.json",
+  "input_bindings": {
+    "request": {
+      "from": "request_path"
+    },
+    "snapshot": {
+      "from": "snapshot_path"
+    }
+  },
+  "fixture_root": "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture",
+  "fixture_files": [
+    "controls/grammar.md",
+    "controls/output-and-repair.md",
+    "lexicon/candidates.md",
+    "lexicon/stems.md",
+    "manifest.json",
+    "notes/correction.md",
+    "notes/draft-gloss.md",
+    "profiles/consultant.md",
+    "sessions/s1/scene-a.md",
+    "sessions/s1/scene-b.md",
+    "sessions/s2/stacking.md",
+    "sessions/s3/negation.md",
+    "sessions/s3/order.md",
+    "sessions/s3/productivity.md",
+    "targets/discourse.md"
+  ],
+  "oracle_path": "training/semantic_applications/sol/field-gloss-workbench/reed-court/oracle.json",
+  "source_world_split_key": "sol-app-world:field-reed-court-v1",
+  "program_files": [
+    "analyzeCorpus/auditReport/challengePatch.nl",
+    "analyzeCorpus/auditReport/challengeReading.nl",
+    "analyzeCorpus/auditReport.nl",
+    "analyzeCorpus/buildEvidence/alignElicitation/judgeResponseScope.nl",
+    "analyzeCorpus/buildEvidence/alignElicitation.nl",
+    "analyzeCorpus/buildEvidence/resolveNoteVersion.nl",
+    "analyzeCorpus/buildEvidence.nl",
+    "analyzeCorpus/inferGrammar/advanceHypothesis/compareJudgment/judgeCompatibility.nl",
+    "analyzeCorpus/inferGrammar/advanceHypothesis/compareJudgment.nl",
+    "analyzeCorpus/inferGrammar/advanceHypothesis.nl",
+    "analyzeCorpus/inferGrammar/closeEvidenceRound.nl",
+    "analyzeCorpus/inferGrammar/seedCandidates.nl",
+    "analyzeCorpus/inferGrammar.nl",
+    "analyzeCorpus/intake/inventoryCorpus/advanceClause.nl",
+    "analyzeCorpus/intake/inventoryCorpus.nl",
+    "analyzeCorpus/intake/readCorrections/judgeCorrectionScope.nl",
+    "analyzeCorpus/intake/readCorrections.nl",
+    "analyzeCorpus/intake/readSessions/readSituation.nl",
+    "analyzeCorpus/intake/readSessions.nl",
+    "analyzeCorpus/intake/readUtterances/interpretNote.nl",
+    "analyzeCorpus/intake/readUtterances.nl",
+    "analyzeCorpus/intake.nl",
+    "analyzeCorpus/interpretRoles/judgeDiscourseRole.nl",
+    "analyzeCorpus/interpretRoles.nl",
+    "analyzeCorpus/interpretSegmentation/judgeBoundary.nl",
+    "analyzeCorpus/interpretSegmentation.nl",
+    "analyzeCorpus/repairGlossNotes/judgePatch.nl",
+    "analyzeCorpus/repairGlossNotes.nl",
+    "analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase/judgeContext.nl",
+    "analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase.nl",
+    "analyzeCorpus/translateHeldOut/advanceTranslation.nl",
+    "analyzeCorpus/translateHeldOut/compareReadings.nl",
+    "analyzeCorpus/translateHeldOut.nl",
+    "analyzeCorpus.nl",
+    "types.ts",
+    "natlang.json",
+    "tsconfig.json"
+  ],
+  "typed_call_graph": {
+    "nodes": [
+      {
+        "path": "analyzeCorpus/auditReport/challengePatch.nl",
+        "args": {
+          "patch": "PatchProposal",
+          "source": "CorpusSource",
+          "graph": "EvidenceGraph",
+          "grammar": "GrammarReport",
+          "translations": "TranslationReport"
+        },
+        "returns": "string[]",
+        "owned_delta": "Challenge scoped repair policy and preservation against actual evidence."
+      },
+      {
+        "path": "analyzeCorpus/auditReport/challengeReading.nl",
+        "args": {
+          "reading": "MeaningReading",
+          "source": "CorpusSource",
+          "graph": "EvidenceGraph",
+          "grammar": "GrammarReport"
+        },
+        "returns": "ReadingChallenge",
+        "owned_delta": "Challenge one actual meaning against source scope and candidate lineage."
+      },
+      {
+        "path": "analyzeCorpus/auditReport.nl",
+        "args": {
+          "request": "LinguisticRequest",
+          "source": "CorpusSource",
+          "graph": "EvidenceGraph",
+          "grammar": "GrammarReport",
+          "translations": "TranslationReport",
+          "patch": "PatchProposal"
+        },
+        "returns": "LinguisticReport",
+        "owned_delta": "Challenge actual inferred readings and repair without rebuilding a preferred corpus."
+      },
+      {
+        "path": "analyzeCorpus/buildEvidence/alignElicitation/judgeResponseScope.nl",
+        "args": {
+          "utterance": "UtteranceReading",
+          "session": "SessionReading | null",
+          "situation": "SituationReading | null",
+          "notes": "NoteReading[]",
+          "rules": "SourceClause[]"
+        },
+        "returns": "ResponseScope",
+        "owned_delta": "Judge asserted versus merely depicted fields for a scoped elicitation."
+      },
+      {
+        "path": "analyzeCorpus/buildEvidence/alignElicitation.nl",
+        "args": {
+          "utterance": "UtteranceReading",
+          "source": "CorpusSource",
+          "effective": "EffectiveNoteSet"
+        },
+        "returns": "ElicitationAlignment",
+        "owned_delta": "Join one actual response to its prompted field and consultant judgment."
+      },
+      {
+        "path": "analyzeCorpus/buildEvidence/resolveNoteVersion.nl",
+        "args": {
+          "notes": "NoteReading[]",
+          "corrections": "CorrectionIndex",
+          "rules": "SourceClause[]"
+        },
+        "returns": "EffectiveNoteSet",
+        "owned_delta": "Resolve authoritative note slots without erasing original alternatives."
+      },
+      {
+        "path": "analyzeCorpus/buildEvidence.nl",
+        "args": {
+          "source": "CorpusSource"
+        },
+        "returns": "EvidenceGraph",
+        "owned_delta": "Build actual prompt-response and note-lineage constraints."
+      },
+      {
+        "path": "analyzeCorpus/inferGrammar/advanceHypothesis/compareJudgment/judgeCompatibility.nl",
+        "args": {
+          "hypothesis": "GrammarHypothesis",
+          "segmentation": "SegmentationReading",
+          "roles": "RoleAssignment",
+          "evidence": "EvidenceUnit",
+          "rules": "SourceClause[]"
+        },
+        "returns": "CompatibilityJudgment",
+        "owned_delta": "Independently judge licensed semantic fit without repairing a candidate prediction."
+      },
+      {
+        "path": "analyzeCorpus/inferGrammar/advanceHypothesis/compareJudgment.nl",
+        "args": {
+          "hypothesis": "GrammarHypothesis",
+          "segmentation": "SegmentationReading",
+          "roles": "RoleAssignment",
+          "evidence": "EvidenceUnit",
+          "source": "CorpusSource"
+        },
+        "returns": "CompatibilityJudgment",
+        "owned_delta": "Compare actual candidate prediction against the licensed evidence scope."
+      },
+      {
+        "path": "analyzeCorpus/inferGrammar/advanceHypothesis.nl",
+        "args": {
+          "state": "GrammarFrontier"
+        },
+        "returns": "GrammarFrontier",
+        "owned_delta": "Consume one original hypothesis-evidence pair through distinct actual linguistic judgments."
+      },
+      {
+        "path": "analyzeCorpus/inferGrammar/closeEvidenceRound.nl",
+        "args": {
+          "state": "GrammarFrontier"
+        },
+        "returns": "GrammarReport",
+        "owned_delta": "Close actual attempted evidence prefixes while preserving surviving ambiguity."
+      },
+      {
+        "path": "analyzeCorpus/inferGrammar/seedCandidates.nl",
+        "args": {
+          "source": "CorpusSource",
+          "graph": "EvidenceGraph"
+        },
+        "returns": "CandidateInventory",
+        "owned_delta": "Interpret source-visible finite choice domains without selecting a winner."
+      },
+      {
+        "path": "analyzeCorpus/inferGrammar.nl",
+        "args": {
+          "source": "CorpusSource",
+          "graph": "EvidenceGraph"
+        },
+        "returns": "GrammarReport",
+        "owned_delta": "Reduce a finite actual candidate-evidence frontier."
+      },
+      {
+        "path": "analyzeCorpus/intake/inventoryCorpus/advanceClause.nl",
+        "args": {
+          "state": "CorpusReadFrontier"
+        },
+        "returns": "CorpusReadFrontier",
+        "owned_delta": "Judge one original clause scope and preserve the actual typed inventory result."
+      },
+      {
+        "path": "analyzeCorpus/intake/inventoryCorpus.nl",
+        "args": {
+          "clauses": "SourceClause[]"
+        },
+        "returns": "CorpusInventory",
+        "owned_delta": "Inventory original clause roles with actual one-item progress and no linguistic conclusions."
+      },
+      {
+        "path": "analyzeCorpus/intake/readCorrections/judgeCorrectionScope.nl",
+        "args": {
+          "unit": "SourceClause",
+          "clauses": "SourceClause[]",
+          "notes": "NoteReading[]",
+          "sessions": "SessionIndex",
+          "rules": "SourceClause[]"
+        },
+        "returns": "CorrectionMeaning",
+        "owned_delta": "Interpret original correction scope, exclusions and adopted replacement."
+      },
+      {
+        "path": "analyzeCorpus/intake/readCorrections.nl",
+        "args": {
+          "clauses": "SourceClause[]",
+          "notes": "NoteReading[]",
+          "sessions": "SessionIndex",
+          "rules": "SourceClause[]"
+        },
+        "returns": "CorrectionIndex",
+        "owned_delta": "Retain targeted correction and actual note-version adoption separately."
+      },
+      {
+        "path": "analyzeCorpus/intake/readSessions/readSituation.nl",
+        "args": {
+          "session": "SessionReading",
+          "clauses": "SourceClause[]"
+        },
+        "returns": "SituationReading",
+        "owned_delta": "Interpret depicted event roles and discourse context without supplying a grammar."
+      },
+      {
+        "path": "analyzeCorpus/intake/readSessions.nl",
+        "args": {
+          "clauses": "SourceClause[]"
+        },
+        "returns": "SessionIndex",
+        "owned_delta": "Separate elicitation situations from utterance meaning and actual consultant access."
+      },
+      {
+        "path": "analyzeCorpus/intake/readUtterances/interpretNote.nl",
+        "args": {
+          "clauses": "SourceClause[]",
+          "sessions": "SessionIndex",
+          "rules": "SourceClause[]"
+        },
+        "returns": "NoteReading",
+        "owned_delta": "Judge what a note asserts and who owns its authority."
+      },
+      {
+        "path": "analyzeCorpus/intake/readUtterances.nl",
+        "args": {
+          "clauses": "SourceClause[]",
+          "sessions": "SessionIndex",
+          "rules": "SourceClause[]"
+        },
+        "returns": "UtteranceIndex",
+        "owned_delta": "Recover exact surfaces and distinct field-note speech roles."
+      },
+      {
+        "path": "analyzeCorpus/intake.nl",
+        "args": {
+          "snapshot": "CorpusSnapshot",
+          "request": "LinguisticRequest"
+        },
+        "returns": "CorpusSource",
+        "owned_delta": "Recover original corpus roles and finite candidate domains before grammatical interpretation."
+      },
+      {
+        "path": "analyzeCorpus/interpretRoles/judgeDiscourseRole.nl",
+        "args": {
+          "hypothesis": "GrammarHypothesis",
+          "segmentation": "SegmentationReading",
+          "evidence": "EvidenceUnit",
+          "source": "CorpusSource"
+        },
+        "returns": "DiscourseRoleJudgment",
+        "owned_delta": "Interpret event roles and topic scope under a supplied actual grammar hypothesis."
+      },
+      {
+        "path": "analyzeCorpus/interpretRoles.nl",
+        "args": {
+          "hypothesis": "GrammarHypothesis",
+          "segmentation": "SegmentationReading",
+          "evidence": "EvidenceUnit",
+          "source": "CorpusSource"
+        },
+        "returns": "RoleAssignment",
+        "owned_delta": "Predict event and discourse roles from actual candidate segmentation."
+      },
+      {
+        "path": "analyzeCorpus/interpretSegmentation/judgeBoundary.nl",
+        "args": {
+          "tokenStart": "number",
+          "tokenEnd": "number",
+          "hypothesis": "GrammarHypothesis",
+          "utterance": "UtteranceReading",
+          "source": "CorpusSource",
+          "graph": "EvidenceGraph"
+        },
+        "returns": "BoundaryJudgment",
+        "owned_delta": "Judge one candidate-specific boundary using actual productive and note evidence."
+      },
+      {
+        "path": "analyzeCorpus/interpretSegmentation.nl",
+        "args": {
+          "hypothesis": "GrammarHypothesis",
+          "utterance": "UtteranceReading",
+          "source": "CorpusSource",
+          "graph": "EvidenceGraph"
+        },
+        "returns": "SegmentationReading",
+        "owned_delta": "Predict morpheme boundaries from one actual candidate and original surface."
+      },
+      {
+        "path": "analyzeCorpus/repairGlossNotes/judgePatch.nl",
+        "args": {
+          "request": "RepairRequest",
+          "originalNote": "NoteReading",
+          "source": "CorpusSource",
+          "graph": "EvidenceGraph",
+          "grammar": "GrammarReport",
+          "translations": "TranslationReport"
+        },
+        "returns": "PatchMeaning",
+        "owned_delta": "Judge a scoped gloss replacement that preserves actual supported uncertainty."
+      },
+      {
+        "path": "analyzeCorpus/repairGlossNotes.nl",
+        "args": {
+          "request": "RepairRequest",
+          "source": "CorpusSource",
+          "graph": "EvidenceGraph",
+          "grammar": "GrammarReport",
+          "translations": "TranslationReport"
+        },
+        "returns": "PatchProposal",
+        "owned_delta": "Propose only source-authorized slot repairs from actual analysis results."
+      },
+      {
+        "path": "analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase/judgeContext.nl",
+        "args": {
+          "target": "TargetRequest",
+          "hypothesis": "GrammarHypothesis",
+          "roles": "RoleAssignment",
+          "source": "CorpusSource"
+        },
+        "returns": "ContextMeaning",
+        "owned_delta": "Resolve actual discourse context while preserving candidate semantic differences."
+      },
+      {
+        "path": "analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase.nl",
+        "args": {
+          "target": "TargetRequest",
+          "hypothesis": "GrammarHypothesis",
+          "source": "CorpusSource",
+          "graph": "EvidenceGraph"
+        },
+        "returns": "MeaningReading",
+        "owned_delta": "Produce one candidate-specific held-out meaning and retain real child analyses."
+      },
+      {
+        "path": "analyzeCorpus/translateHeldOut/advanceTranslation.nl",
+        "args": {
+          "state": "TranslationFrontier"
+        },
+        "returns": "TranslationFrontier",
+        "owned_delta": "Consume one original target and every actual survivor interpretation."
+      },
+      {
+        "path": "analyzeCorpus/translateHeldOut/compareReadings.nl",
+        "args": {
+          "target": "TargetRequest",
+          "readings": "MeaningReading[]",
+          "rules": "SourceClause[]"
+        },
+        "returns": "TranslationAlternatives",
+        "owned_delta": "Group semantically equivalent target readings without losing different analyses."
+      },
+      {
+        "path": "analyzeCorpus/translateHeldOut.nl",
+        "args": {
+          "targets": "TargetRequest[]",
+          "source": "CorpusSource",
+          "graph": "EvidenceGraph",
+          "grammar": "GrammarReport"
+        },
+        "returns": "TranslationReport",
+        "owned_delta": "Interpret actual held-out targets through retained grammar alternatives."
+      },
+      {
+        "path": "analyzeCorpus.nl",
+        "args": {
+          "request": "LinguisticRequest",
+          "snapshot": "CorpusSnapshot"
+        },
+        "returns": "LinguisticReport",
+        "owned_delta": "Infer source-grounded grammar alternatives, target meanings and an authorized note repair."
+      }
+    ],
+    "edges": [
+      {
+        "caller": "analyzeCorpus/auditReport.nl",
+        "callee": "analyzeCorpus/auditReport/challengePatch.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/auditReport.nl",
+        "callee": "analyzeCorpus/auditReport/challengeReading.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus.nl",
+        "callee": "analyzeCorpus/auditReport.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/buildEvidence/alignElicitation.nl",
+        "callee": "analyzeCorpus/buildEvidence/alignElicitation/judgeResponseScope.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/buildEvidence.nl",
+        "callee": "analyzeCorpus/buildEvidence/alignElicitation.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/buildEvidence.nl",
+        "callee": "analyzeCorpus/buildEvidence/resolveNoteVersion.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus.nl",
+        "callee": "analyzeCorpus/buildEvidence.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/inferGrammar/advanceHypothesis/compareJudgment.nl",
+        "callee": "analyzeCorpus/inferGrammar/advanceHypothesis/compareJudgment/judgeCompatibility.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/inferGrammar/advanceHypothesis.nl",
+        "callee": "analyzeCorpus/inferGrammar/advanceHypothesis/compareJudgment.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/inferGrammar.nl",
+        "callee": "analyzeCorpus/inferGrammar/advanceHypothesis.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/inferGrammar.nl",
+        "callee": "analyzeCorpus/inferGrammar/closeEvidenceRound.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/inferGrammar.nl",
+        "callee": "analyzeCorpus/inferGrammar/seedCandidates.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus.nl",
+        "callee": "analyzeCorpus/inferGrammar.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/intake/inventoryCorpus.nl",
+        "callee": "analyzeCorpus/intake/inventoryCorpus/advanceClause.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/intake.nl",
+        "callee": "analyzeCorpus/intake/inventoryCorpus.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/intake/readCorrections.nl",
+        "callee": "analyzeCorpus/intake/readCorrections/judgeCorrectionScope.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/intake.nl",
+        "callee": "analyzeCorpus/intake/readCorrections.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/intake/readSessions.nl",
+        "callee": "analyzeCorpus/intake/readSessions/readSituation.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/intake.nl",
+        "callee": "analyzeCorpus/intake/readSessions.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/intake/readUtterances.nl",
+        "callee": "analyzeCorpus/intake/readUtterances/interpretNote.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/intake.nl",
+        "callee": "analyzeCorpus/intake/readUtterances.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus.nl",
+        "callee": "analyzeCorpus/intake.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/interpretRoles.nl",
+        "callee": "analyzeCorpus/interpretRoles/judgeDiscourseRole.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/interpretSegmentation.nl",
+        "callee": "analyzeCorpus/interpretSegmentation/judgeBoundary.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/repairGlossNotes.nl",
+        "callee": "analyzeCorpus/repairGlossNotes/judgePatch.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus.nl",
+        "callee": "analyzeCorpus/repairGlossNotes.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase.nl",
+        "callee": "analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase/judgeContext.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/translateHeldOut/advanceTranslation.nl",
+        "callee": "analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/translateHeldOut.nl",
+        "callee": "analyzeCorpus/translateHeldOut/advanceTranslation.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/translateHeldOut.nl",
+        "callee": "analyzeCorpus/translateHeldOut/compareReadings.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus.nl",
+        "callee": "analyzeCorpus/translateHeldOut.nl",
+        "reason": "Actual named child contribution consumed as described by its NL parent."
+      },
+      {
+        "caller": "analyzeCorpus/inferGrammar/advanceHypothesis.nl",
+        "callee": "analyzeCorpus/interpretSegmentation.nl",
+        "reason": "Shared actual candidate-specific linguistic interpretation; raw returned contribution retained."
+      },
+      {
+        "caller": "analyzeCorpus/inferGrammar/advanceHypothesis.nl",
+        "callee": "analyzeCorpus/interpretRoles.nl",
+        "reason": "Shared actual candidate-specific linguistic interpretation; raw returned contribution retained."
+      },
+      {
+        "caller": "analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase.nl",
+        "callee": "analyzeCorpus/interpretSegmentation.nl",
+        "reason": "Shared actual candidate-specific linguistic interpretation; raw returned contribution retained."
+      },
+      {
+        "caller": "analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase.nl",
+        "callee": "analyzeCorpus/interpretRoles.nl",
+        "reason": "Shared actual candidate-specific linguistic interpretation; raw returned contribution retained."
+      }
+    ]
+  },
+  "scoped_literals": [
+    {
+      "site": "analyzeCorpus/intake/inventoryCorpus/advanceClause.nl",
+      "result_type": "ClauseRoleReading",
+      "consumed_by": "Actual CorpusInventory.entries retained by CorpusSource; original scope only"
+    },
+    {
+      "site": "analyzeCorpus/intake.nl",
+      "result_type": "CandidateSlot[]",
+      "consumed_by": "Actual source-domain cross-product; no winner selection"
+    },
+    {
+      "site": "analyzeCorpus/intake.nl",
+      "result_type": "StemReading[]",
+      "consumed_by": "Actual original stem/entity definitions in segmentation and role prediction"
+    },
+    {
+      "site": "analyzeCorpus/intake/readSessions/readSituation.nl",
+      "result_type": "SituationReading",
+      "consumed_by": "Actual scoped elicitation comparison, separately from candidate predictions"
+    },
+    {
+      "site": "analyzeCorpus/intake/readUtterances/interpretNote.nl",
+      "result_type": "NoteReading",
+      "consumed_by": "Actual proposed/judged/adopted authority and note-version applicability"
+    },
+    {
+      "site": "analyzeCorpus/intake/readCorrections/judgeCorrectionScope.nl",
+      "result_type": "CorrectionMeaning",
+      "consumed_by": "Actual effective note slot and exclusions; separate repair scope"
+    },
+    {
+      "site": "analyzeCorpus/buildEvidence/alignElicitation/judgeResponseScope.nl",
+      "result_type": "ResponseScope",
+      "consumed_by": "Actual asserted/excluded compared fields per evidence attempt"
+    },
+    {
+      "site": "analyzeCorpus/interpretSegmentation/judgeBoundary.nl",
+      "result_type": "BoundaryJudgment",
+      "consumed_by": "Actual candidate-specific segmentation and licensing"
+    },
+    {
+      "site": "analyzeCorpus/interpretRoles/judgeDiscourseRole.nl",
+      "result_type": "DiscourseRoleJudgment",
+      "consumed_by": "Actual role contributions/licensed verdict and predicted meaning before comparison"
+    },
+    {
+      "site": "analyzeCorpus/inferGrammar/advanceHypothesis/compareJudgment/judgeCompatibility.nl",
+      "result_type": "CompatibilityJudgment",
+      "consumed_by": "Actual status/rejection-prefix update, prediction not repaired"
+    },
+    {
+      "site": "analyzeCorpus/translateHeldOut/advanceTranslation/interpretPhrase/judgeContext.nl",
+      "result_type": "ContextMeaning",
+      "consumed_by": "Actual target semantic equivalence and consequential prospective ambiguity"
+    },
+    {
+      "site": "analyzeCorpus/repairGlossNotes/judgePatch.nl",
+      "result_type": "PatchMeaning",
+      "consumed_by": "Actual source-authorized note/slot patch with retained alternatives"
+    },
+    {
+      "site": "analyzeCorpus/auditReport/challengeReading.nl",
+      "result_type": "ReadingChallenge",
+      "consumed_by": "Actual final per-reading semantic challenge, not a rewritten reading"
+    }
+  ],
+  "iteration_frontiers": [
+    {
+      "site": "analyzeCorpus/intake/inventoryCorpus.nl",
+      "step": "analyzeCorpus/intake/inventoryCorpus/advanceClause.nl",
+      "state_type": "CorpusReadFrontier",
+      "measure": "One original pending clause removed; actual role reading/failure and prior successes retained"
+    },
+    {
+      "site": "analyzeCorpus/inferGrammar.nl",
+      "step": "analyzeCorpus/inferGrammar/advanceHypothesis.nl",
+      "state_type": "GrammarFrontier",
+      "measure": "One original candidate/evidence pair removed; actual attempt or rejection-linked skip retained"
+    },
+    {
+      "site": "analyzeCorpus/translateHeldOut.nl",
+      "step": "analyzeCorpus/translateHeldOut/advanceTranslation.nl",
+      "state_type": "TranslationFrontier",
+      "measure": "One original target removed; every actual completed survivor interpretation retained"
+    }
+  ],
+  "composition": {
+    "nl_files": 34,
+    "nl_total_lines": 524,
+    "numbered_steps": 239,
+    "type_aliases": 55,
+    "visible_crisp_policy_lines": 0
+  },
+  "source_shape": {
+    "documents": 14,
+    "clauses": 67,
+    "candidate_hypotheses": 16,
+    "tested_utterances": 6,
+    "heldout_targets": 3
+  },
+  "provenance": {
+    "author": "semantic_slate_sol",
+    "kind": "Original authored fictional language and fieldwork; no external material",
+    "license": "Repository license"
+  },
+  "readiness": {
+    "source_loader_checked": true,
+    "typed_declarations_checked": true,
+    "typed_reference_checked": false,
+    "independent_source_review": false,
+    "independent_oracle_review": false,
+    "exact_result_replay": false,
+    "live_qualified": false,
+    "training_admitted": false
+  },
+  "source_review_binding": {
+    "reviewed": false,
+    "scope": "Initial connected corpus and invariant landscape; full typed witness/checker and independent review pending"
+  },
+  "independent_reviews": [],
+  "generation_ready": false,
+  "training_admission": false,
+  "model_facing_debt": "0/48 initial-source samples; actual scoped judgments/child returns/frontier consumption and whole-task outcome unmeasured",
+  "reference_scope": "Invariant landscape draft outside visible roots; not full typed reference or actual NL execution"
+}

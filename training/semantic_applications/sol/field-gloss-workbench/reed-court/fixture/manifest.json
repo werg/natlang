@@ -1,0 +1,23 @@
+{
+  "schema": "natlang.original-fictional-source/1",
+  "caseId": "sol-field-reed-court-v1",
+  "source_world_split_key": "sol-app-world:field-reed-court-v1",
+  "license": "Repository license",
+  "provenance": "Original authored fictional fieldwork, no external material",
+  "files": {
+    "controls/grammar.md": "55f86dbfa0de9dfe1061f1e03e1a1ace1adfa4d39cdd0d0634f0c1cdaf7441ef",
+    "controls/output-and-repair.md": "f96c51931e73eedf243691555ea94b82c212eef40b8ed3095cd6f4eaf1f92702",
+    "lexicon/candidates.md": "771ebbcf019d54324739a9d88bccc8b62fce265f0059dabb53e2385898ee799e",
+    "lexicon/stems.md": "ef5efd2b084eced825aa951f064635c025483f21d24977155d3f10d84a412d16",
+    "notes/correction.md": "404793c28a16d7f6470046b95a209f2ee8b4b4e2380b6fbeec6f61c02c78d3fb",
+    "notes/draft-gloss.md": "debed51abe3bb28b7cd76644108de15f80e16ef042d496e2982a498590e0c3b5",
+    "profiles/consultant.md": "3a782785884351ffe56ad4665b515c096cf749323e58fa7215b3be2bbef3b1eb",
+    "sessions/s1/scene-a.md": "ddca4e9df364a2c1a32aaf10a2836cf858a57a234cadd8793571984dd35de1bd",
+    "sessions/s1/scene-b.md": "0f202ccbc9fece4c866fba400c0b75d6efcb9598d942a78d1a42c60eb3b25e6a",
+    "sessions/s2/stacking.md": "ef82a5a25be28bd2c31ed18161368e1a914dbb962c6225358082d61ff38de7c8",
+    "sessions/s3/negation.md": "953277dc9b21e0b38669cdbde8f692b1d28104075f1cf2bb2c8f630c35155d79",
+    "sessions/s3/order.md": "2e7b3e8e82270f4ed8f0aacdd524a8142bdf3c061853ff763304a528cd97c3cc",
+    "sessions/s3/productivity.md": "650c0febe021150848b3a41a8bf1751423da9428e3d8debec86b378cf80f8a2a",
+    "targets/discourse.md": "7c533c813712ba46787441104c395f06a5d9969f78efa688d779add5520e50a8"
+  }
+}
