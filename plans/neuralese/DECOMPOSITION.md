@@ -233,3 +233,7 @@ invalid JSON still receives the existing unreadable accounting. The framing
 and UTF-8 decoding are exact crisp mechanisms, with no policy or model change.
 Node 24 readline treats U+2028/U+2029 as line endings; those are valid JSON
 string contents and must not fragment a trajectory row.
+
+The same exact LF reader serves native SFT export and the trajectory rewrite
+stage. Both retain their current malformed-JSON behavior and rendering/rewrite
+policy; this only prevents valid Unicode-bearing records from being fragmented.
