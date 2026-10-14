@@ -479,8 +479,11 @@ test('a session moves its state only when a turn commits, and refuses a turn dec
   const session = new Session(createEconomy(MERCHANTS, { seed: 33 }), crispSettings, async (scene, settings) => (await play(scene, settings)).report);
   const first = session.turn();
   const second = session.turn();
-  await first;
-  await assert.rejects(second, /stale turn/);
+  const turns = await Promise.allSettled([first, second]);
+  assert.equal(turns.filter(turn => turn.status === 'fulfilled').length, 1);
+  const rejected = turns.filter(turn => turn.status === 'rejected');
+  assert.equal(rejected.length, 1);
+  assert.match(rejected[0].reason.message, /stale turn/);
   assert.equal(session.state.tick, 1);
   assert.equal(session.events.at(-1).operation, 'economy.settle');
   const village = new Session(VILLAGE(), crispSettings, async (scene, settings) => (await play(scene, settings, { respond: { say: 'Hi', action: 'none' } })).report);
