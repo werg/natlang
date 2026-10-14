@@ -14,7 +14,7 @@ export type FrameSurvey = { alternatives: FrameAlternative[]; landmarks: Landmar
 export type PassageAssertion = {
   from: string; to: string; frame: string; direction: 'one-way' | 'two-way';
   kind: 'corridor' | 'water-gate' | 'tunnel' | 'chimney'; cost: number;
-  condition: string; existence: 'present' | 'absent' | 'unknown'; witnesses: Witness[];
+  condition: string; physicalExistence: 'present' | 'absent' | 'unknown'; witnesses: Witness[];
 };
 export type GearRule = { ruleId: string; subject: string; condition: string; consequence: string; witnesses: Witness[] };
 export type SensorRule = { sensorId: string; availableAt: string; cost: number; answerDescriptions: { answer: string; meaning: string }[]; scope: string; witnesses: Witness[] };

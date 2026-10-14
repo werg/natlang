@@ -279,7 +279,7 @@
   "live_execution": false,
   "training_admitted": false,
   "hashes": {
-    "training/semantic_applications/astra/cave-mission/project.json": "dcf1201177e9cbe1dd22dcc34510b8054a4af7969653f7b826742e3a37baaf03",
+    "training/semantic_applications/astra/cave-mission/project.json": "90e0e9ab487c3f7f3cd153a06bf292f423014613002d69d731c0973ce6a1ed50",
     "training/semantic_applications/astra/cave-mission/verify-result.mjs": "5be4d8fa2c646d9c73d96adbf8fd2c9991c7b8f40ae04a36ce4f3ed779ea9737",
     "training/semantic_applications/astra/cave-mission/check-verifier.mjs": "2976ae764e730533cfda88e6a55cb902171107606aa40e0c35a9725966d15db1",
     "training/semantic_applications/astra/cave-mission/mirrored-vault/reference-report.json": "3f2efe03c7e7b14608a0fa336ec8b43a3d890ebb3796b8136afa91c450713f90",
@@ -302,7 +302,7 @@
     "scope": "Independent source/oracle, exact lower-bound and policy-equivalence review. No actual application execution or training admission."
   },
   "source_variant_check": {
-    "id": "conditional-binding-table-v3",
+    "id": "physical-existence-v4",
     "source_loader_checked": true,
     "canonical_typed_reference_replay": true,
     "independent_source_review_pending": false,
@@ -310,13 +310,13 @@
     "fixture_oracle_reference_changed": false,
     "composition": {
       "nl_files": 25,
-      "nl_total_lines": 585,
-      "nl_body_lines": 401,
+      "nl_total_lines": 599,
+      "nl_body_lines": 415,
       "numbered_steps": 182,
       "type_aliases": 44,
       "visible_crisp_policy_lines": 0
     },
     "reviewer": "semantic_slate_sol",
-    "receipt": "plans/semantic_stack/CAVE_V3_BINDING_REVIEW_ASTRA.json"
+    "receipt": "plans/semantic_stack/CAVE_V4_PASSAGE_REVIEW_ASTRA.json"
   }
 }
