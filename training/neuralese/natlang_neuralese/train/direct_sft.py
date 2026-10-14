@@ -1799,7 +1799,8 @@ def main(argv=None):
         # declared phase geometry knob: context capacity and masking stay fixed, the new phase rebases held metrics
         # and the memory estimator uses a distinct target-size bin. It changes window grouping, so never an exact
         # in-place resume. Everything else must match.
-        phase_keys = {'text_data', 'records', 'pieces', 'epochs', 'quantization', 'family', 'batch', 'batch_tokens',
+        # The base-heads artifact may be staged at a new path for this phase. Its content identity was checked above.
+        phase_keys = {'heads', 'text_data', 'records', 'pieces', 'epochs', 'quantization', 'family', 'batch', 'batch_tokens',
                       'target_tokens', 'fp8_training', 'fp8_recipe', 'fp8_amax_history_len'}
         # The mixed run (NEURALESE_DIRECT_V1.md "The mixed run") continues a direct lineage: it adds the e2e updates,
         # the TokenChoiceProjection (identity-initialised, its optimizer state fresh) and the projections' own rates.
