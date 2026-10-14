@@ -118,8 +118,40 @@ corrected source-disjoint train packet has 12 rows, two seeds each, source SHA-2
 `63d3ce7ffdd1af6dd46ad282b40d0485111c04f715e3707bcac34f9694a8aa44`,
 packet SHA-256 `52dbe9ae7878bc53f559f8abb89e71f096395a87c0fe111568a169fc34044f9d`,
 and lives under `/home/werg/natlang-artifacts/qad-student-train-rollouts-20261014-v1/round1-student-root`.
-The first complete cases contain nonzero root model tokens and no authored-action
-provenance. They already expose wrong answers after real tool work, including
-syntax repair, wrong field recovery and a wrong schedule result; do not rank or
-train from the partial batch. Score the full packet, review first failed actions
-and produce replay-checked teacher handoffs from these train sources only.
+The selected programs were checked against the actual protected 48 packet
+(SHA-256 `63fc865bfdb666d3dbfe43b229708ed6469741eb532eafb1d9cd49894313d96e`):
+zero shared program IDs, source IDs or source groups (19 train groups versus
+44 held groups). The local `selection.json` records those counts and hashes.
+The 24 train-only student-root rollouts are now terminal and scored: two exact
+successes, ten semantic mismatches, nine invalid actions and three budget
+exhaustions. Two cases hit the declared model-request budget with no result;
+both have exact terminal journal evidence. There are no missing finishes or
+transport errors. Two of twelve groups have success/failure spread (schedule
+repair and composed process); the other ten require teacher seeding or
+rejection sampling. The score is in `round1-student-root/score.json`; no
+training admission has yet been made. The collector wrapper originally treated
+the two declared budget exits as a fatal shard and skipped scoring; Pop merged
+the complete journals and scored them, then changed the wrapper to accept only
+exactly covered, declared model-request-budget exits when a collector returns
+nonzero. Unexpected or missing finishes still fail closed. The wrapper also
+stops its named Docker server before waiting for the Docker CLI, avoiding a
+GPU-claim hang seen at the end of this run.
+
+The actual failures include wrong answers after real tool work, syntax repair,
+wrong field recovery, wrong schedule results and invalid world receipt calls.
+Next review first failed actions and produce replay-checked teacher handoffs
+from these train sources only. The held48 remains entirely outside the train
+packet and all recovery queues.
+
+Separate Luna generation triage: `s52048/worker-06/case-009` is an eight-message
+dataset workbench program. Its first run exhausted the model-request budget;
+the retry reached 824 model replies, about 95,000 completion tokens and 433
+invocations without an exact output. Some child calls answered `blocked` when
+no routing rule applied, although the root specifies the `editorial` fallback.
+The reference has only 24 child judgments and all eight expected routes are
+`editorial`. This is an extreme model/source interaction, not a hung provider:
+request hashes were unique, responses and durable checkpoints advanced, and
+the collection budget ended it. It stays out of training and automatic retries.
+The failed attempt's redundant partial/evidence files have no repair or DPO
+consumer; keep the compact review and queue status, prune those large files,
+and review this task shape before producing another variant.
