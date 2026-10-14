@@ -1,6 +1,35 @@
 # Continuation guide — updated 2026-10-14
 
-## 03:29 CEST: long QAD parity exposed a serving control-token boundary
+## 03:50 CEST: deep NL source bar, ecology state repair, live QAD evaluation
+
+The owner clarified that the new source cohort should resemble substantial
+natlang applications: connected typed functions and deep numbered
+natural-language pseudocode own policy, with crisp code confined to exact
+mechanism and verification. The 220 earlier simpler reviewed programs remain
+eligible. Source authors are auditing Seed, Cave and Dialogue for thin stages
+and accidental crisp policy. Dialogue's first committed source has 29 connected
+NL functions and 195 numbered steps (`09cf4833`); its canonical and checker
+are still being built, so it has no live or training admission. Seed is sealed
+as a reviewed source package; its one-case live queue is unlaunched.
+
+Ecology v15c was stopped after 79 turns/162 requests once it proved the folder
+cursor advances from evidence-1 to evidence-2. Its Stage1 input and Stage5
+footer mix prior completed rows into a purported current-batch return; the
+root would append those prior rows again. This is a source contract bug, not a
+negative teacher result. The curriculum team is repairing the boundary and
+adding exact source-ID ownership guards for v15d before a fresh live run.
+
+Pop's QAD step-15000, 48-case sampled held evaluation is running in ledger unit
+`natlang-pop-qad15000-close-live48-r2.service` with four workers. It uses the
+shared close-boundary serving fix. Early results are answer mismatches; defer
+rate or causal conclusions until the set finishes and matched baselines are
+available. At 03:50 the GPU was busy (100% sampled utilization, 6759/8188 MiB
+VRAM), alongside five ordinary Luna workers and Gemini collection. DGX added a
+dedicated sampled/greedy close-boundary regression (`39bdcd5d`); it proves the
+serving stop rule, not that marker emission causes the task failures. The
+pre-stop QAD parity correction is in `df21f4bd`, merged/pushed as `86e68b72`.
+
+## 03:29 CEST: long QAD parity characterized a post-EOS control-token difference
 
 The exact step-15000 QAD HF/serving-port comparison now covers four captured
 task prompts, 64 forced continuation positions each, and a two-request
