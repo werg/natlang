@@ -64,3 +64,21 @@ function applied to each ticket and the criteria. Both use the same 48
 source cases and request seeds. The campaign is evaluation-only and has no
 training admission. Measure exact task success, actual NL-per-ticket use,
 requests, and latency before adopting B or changing the source builder.
+
+The completed paired A/B/C live trial used 48 identical cases per arm. A
+returned exact results on 48/48 but used an inline NL call on only 5/48.
+B returned exact results on 45/48 and used NL on 48/48; median 52 model
+requests, 3,350 completion tokens and 116.4 seconds per case. C asks for one
+reusable inline Boolean ticket judge and returned exact results on 44/48,
+with NL on 48/48; median 46 requests, 3,039 completion tokens and 104.6
+seconds. A used median 6 requests, 433 completion tokens and 14.1 seconds.
+The B/C failures were semantic ticket misclassifications, not transport or
+runtime errors. In inspected successful C trajectories, the root awaited
+the per-ticket judgments and moved files based on those returned Booleans.
+The observed exact-success difference between B and C is one case; C has a
+simpler reusable function shape and lower median cost, so `folder_criteria_reducer`
+family version 2 adopts C's wording and marks inline use required. Its
+reference now expresses the same NL judgment flow rather than hardcoded
+filename moves. All generated results still need exact oracle and action-shape
+review before training admission. A separate medium-reasoning Luna repair
+targets the one case both B and C missed.

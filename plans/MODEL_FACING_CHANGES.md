@@ -572,3 +572,7 @@ Dolci and Cognitive Kernel reuse the task-background instruction above for short
 ### 2026-10-14 — Repeated external source IDs
 
 Static native item files qualify a repeated upstream source_record_id with the existing item filename stem, so scripted child answers cannot select a sibling target. Unique IDs and original source provenance stay intact. Measurement debt: 0/48 live samples for this identifier serialization; exact duplicate-ID replay checks verify mechanism only. Owner-authorized static external lowering continues under the existing expansion policy.
+
+### 2026-10-14 — Folder criterion reducer inline judge, measured
+
+`folder_criteria_reducer` family version 2 asks the root to define one inline natural-language Boolean judge from each ticket's text and the criterion, call it for each ticket, and move files using the returned judgments. On 48 matched live Luna cases per arm, the original instruction gave 48/48 exact outcomes but only 5/48 used NL. A first explicit-inline wording gave 45/48 exact and 48/48 NL; the adopted reusable-judge wording gave 44/48 exact and 48/48 NL, with median 46 rather than 52 model requests and 3,039 rather than 3,350 completion tokens. Its exact errors were semantic ticket misclassifications, so generated trajectories remain subject to oracle and action-shape admission. The paired trial paths and review are in `plans/neuralese/BACKLOG_V5_SHAPE_REVIEW_20261014.md`. Measurement debt: none for this source wording.

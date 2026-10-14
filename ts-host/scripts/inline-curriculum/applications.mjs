@@ -202,18 +202,24 @@ export function folderCriteria(seed, index) {
     const expectedFiles = Object.fromEntries(Object.entries({ 'criteria.md': c.text, ...tickets })
       .map(([path, text]) => [moved.includes(path) ? path.replace('tickets/', 'archive/') : path, text]));
     const result = moved.map(path => path.split('/').pop()).sort();
-    const moves = moved.map(path => `await folder.file(${JSON.stringify(path)}).moveTo(${JSON.stringify(path.replace('tickets/', 'archive/'))});`).join('\n');
-    return curriculumCase({ family: 'folder_criteria_reducer', shape, variant, pairGroup: `folder:${shape}`,
-      slice: 'folder_failure', domain: 'other', mode: 'followup',
+    const judgeCode = `const criteriaText = await folder.file('criteria.md').readText();
+const ticketFiles = await folder.files('tickets/*.md');
+const judge = nl.with<boolean>({ criteriaText })\`Decide whether this ticket satisfies criteriaText from its own text.\`;
+const verdicts = await Promise.all(ticketFiles.map(async file => ({ file, qualifies: await judge(await file.readText()) })));
+const moved: string[] = [];
+for (const { file, qualifies } of verdicts) if (qualifies) { await file.moveTo(folder.dir('archive')); moved.push(file.name); }
+moved.sort()`;
+    return curriculumCase({ family: 'folder_criteria_reducer', familyVersion: 2, shape, variant, pairGroup: `folder:${shape}`,
+      slice: 'folder_failure', domain: 'other', mode: 'followup', inline: 'required',
       evidence: { world: [c.text, ...Object.entries(tickets).map(([p, t]) => `${p}: ${t.trim()}`)], retrieved: [c.text], background: [] },
       decisive: [{ marker: c.text.trim(), source: 'file', note: 'the archiving criteria' }],
       plausibleActions: ['archive every resolved ticket', 'archive only confirmed ones', 'also archive agreed closures'],
-      minimumSequence: ['read criteria.md', 'read each ticket', 'move the matching tickets'],
-      reference: { root: [['read_file', { path: 'criteria.md' }],
-        evalCall(`const texts: Record<string, string> = {};\nfor (const f of await folder.files('tickets/*.md')) texts[f.relativePath] = await f.readText();\ntexts`),
-        evalCall(moves || '0'), returnCall(result)] },
+      minimumSequence: ['read criteria.md and each ticket', 'define one inline natural-language Boolean judge from the criterion and ticket text',
+        'call that judge for each ticket', 'move only qualifying tickets and return their names'],
+      reference: { root: [evalCall(judgeCode), returnCall(result)],
+        children: Object.entries(tickets).map(([path, text]) => ({ match: text.trim().slice(0, 48), value: moved.includes(path) })) },
       root: { name: 'archive_tickets', kind: 'directory-reducer', args: {}, returns: 'string[]',
-        instructions: 'Move the tickets in tickets/ that criteria.md says to archive into archive/, keeping their file names. Return the file names you moved, sorted alphabetically.' },
+        instructions: 'Read criteria.md and each ticket in tickets/. Define one inline natural-language function whose instruction judges whether a single ticket satisfies the criteria from that ticket text and the criteria text. The function returns its Boolean judgment. Call it once for each ticket. Move the qualifying tickets into archive/, keeping their file names. Return the file names you moved, sorted alphabetically.' },
       folderFiles: { 'criteria.md': c.text, ...tickets }, expectedFiles, inputs: {}, expected: result });
   });
 }
