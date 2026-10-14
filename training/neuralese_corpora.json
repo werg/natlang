@@ -74635,6 +74635,26 @@
         "external-expansion-agentic-coding-handoffs-20261014-v1"
       ],
       "license": "Pinned original D40 source card facts and per-row provenance retained."
+    },
+    {
+      "id": "mellum-train-only-recovery-proxy-20261014-v1",
+      "owner": "pop",
+      "path": "runs/mellum-train-only-recovery-proxy-20261014-v1",
+      "include": [
+        "selected.ir.jsonl",
+        "accepted-parents.jsonl",
+        "selection-review.json",
+        "approved-turns.jsonl"
+      ],
+      "source_class": "measured-Luna-train-only-Mellum-recovery-proxy-decisions",
+      "license": "project-generated",
+      "split": "train only; new s52082-s52085 source groups disjoint from held task packet; global union held filter still required",
+      "admission": "144 new constructed-world cases measured live across three failure-family proxies; 142 exact/process-following parents, 495 approved native decisions; two stale-roster failures and nine failed/unexecuted native proposals excluded",
+      "training_admission": true,
+      "training_admission_reason": "Exact constructed-world oracles, executed pending-event and fact-page reads, recorded frontier iteration steps, source-group disjointness from held task packet, and per-decision native materializer approval; review bound by SHA-256. Rejected intermediate pruned.",
+      "review_status": "Parent exact/action and native decision review completed; later global held/source-quality filter required at union build",
+      "required_conversion": "Render LFM and Mellum full, program-header and whole-trajectory twins; include in later protected union after global held/source-quality checks",
+      "notes": "Only approved-turns.jsonl is training input. Two failed roster trajectories retained separately for assigned child-capture dataflow repair. Measured instruction surfaces remain trial-only until canonical source generator adoption. plans/neuralese/MELLUM_RECOVERY_PROXY_20261014.md."
     }
   ],
   "coverage_backlog": [
