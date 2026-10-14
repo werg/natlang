@@ -21,6 +21,7 @@ from .optim_restore import optimizer_param_names
 from .trajectory_state import (AsyncAtomicCheckpointWriter, atomic_checkpoint,
                                available_system_memory_bytes, clip_finite_gradients,
                                drop_file_cache, gradient_norm, immutable_cpu_snapshot)
+from ..common.jsonio import open_jsonl_text
 from .foundation_schedule import ProjectionFirstSchedule
 from . import warmup_export
 from .backbone_policy import plain_named_tensors
@@ -1336,7 +1337,7 @@ def load_text_rows(records, pieces=None, text_data=None, *, tokenizer=None):
     """Explicit train/test and factual provenance; exact duplicates stay held out."""
     if text_data:
         rows=[]
-        with Path(text_data).open() as source:
+        with open_jsonl_text(text_data) as source:
             for line in source:
                 row=json.loads(line)
                 if 'token_ids' in row:
