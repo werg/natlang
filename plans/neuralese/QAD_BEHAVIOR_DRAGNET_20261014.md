@@ -66,13 +66,17 @@ different mechanisms. Inspect action traces before interpreting outcome counts.
 - **Done:** the image-backed full gate passed end to end at `be4d58c9`:
   Python general 962 pass, Neuralese 1290 pass, GPU 14 pass, TS and
   conformance green. Host/image isolation fixes are on main.
-- **In progress:** a fresh clean-QAD-base direct lineage on corrected shared
-  code and admitted, SHA-verified filtered R7 union started under Pop ledger
-  unit `natlang-pop-qad-r7-clean-main-v2` on 2026-10-14. Its first container
-  attempt lacked `zstd`, stopped before any optimizer update, and its
-  incomplete output was deleted. The corrected launch mounts verified host
-  `zstd` and pins the actual installed image in recipe commit `b4b5e06e`.
-  Compare held response CE/KL, repetition, exact
+- **Held:** DGX's post-build audit found that excluding MuSiQue from R7 also
+  released held-group protection on 409 header, 104 whole-trajectory and four
+  full examples. Pop had started fresh clean-QAD-base R7 training before
+  receiving the hold, but stopped exact unit `natlang-pop-qad-r7-clean-main-v2`
+  after 38 warm-up updates, deleted its optimizer checkpoint and other run
+  artifacts, and withdrew the R7 recipe. Do not use its weights. DGX is
+  rebuilding a new immutable union with excluded-source held references.
+  The container also required host-mounted `zstd` for compressed data; the
+  corrected launch verified it, and future launches need the same facility.
+  Once the replacement union passes source and hash review, compare held
+  response CE/KL, repetition, exact
   task behavior, and the mask/gradient receipts stage by stage. Do not restore
   optimizer or weights from the old step-15000 checkpoint.
 
