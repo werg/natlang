@@ -18,6 +18,18 @@ def test_tagged_dispatch_keeps_arguments_and_reasoning():
     assert '<tool_call>' not in (message['content'] or '')
 
 
+def test_evidence_function_role_is_a_dispatch_when_it_contains_a_call():
+    raw = [{'role': 'function', 'content': '<think>Search the source.</think>\n'
+            '{"name":"google_search","arguments":{"arguments":[{"query":"evidence"}]}}'},
+           {'role': 'tool', 'content': 'Observed evidence'},
+           {'role': 'assistant', 'content': 'Final report'}]
+    messages = expansion_messages(raw)
+    assert [m['role'] for m in messages] == ['assistant', 'tool', 'assistant']
+    assert messages[0]['reasoning'] == 'Search the source.'
+    assert messages[0]['tool_calls'][0]['function']['name'] == 'google_search'
+    assert messages[1]['content'] == 'Observed evidence'
+
+
 def test_sibling_sessions_share_task_group_and_no_future_enters_inputs():
     receipt = {'repo': 'test/source', 'revision': 'abc', 'card': {'license': 'apache-2.0'}}
     messages = [{'role': 'user', 'content': 'Solve the shared task'}] + [
