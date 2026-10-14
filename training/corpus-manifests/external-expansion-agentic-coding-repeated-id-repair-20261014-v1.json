@@ -1,0 +1,34 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-agentic-coding-repeated-id-repair-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-agentic-coding-repeated-id-repair-20261014-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 447,
+      "sha256": "7f6524136f6e3874c8595f54a37dbeb99cd6396b1c24faa9b9ee7e4519b8cfb9"
+    },
+    {
+      "path": "ir/trajectory_continuation_coding/build.json",
+      "bytes": 744,
+      "sha256": "7244146ae8472309a2a2e722d5389319aac23a247771c16aa39f372feb37451c"
+    },
+    {
+      "path": "runtime-page.json",
+      "bytes": 113,
+      "sha256": "814dad314ede1e73b05f8b3a34a0e1f206c242bfccfa0177193fb2f6404e6300"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00000.summary.json",
+      "bytes": 248,
+      "sha256": "556e7dd66c69507a87d0e7637a6097842b156e7ea21345a6912f1e2cfe20c4a6"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+      "bytes": 30842,
+      "sha256": "03dca5e512ffeec9564b44715574db97469a961d9ff9e7dcf2455b7b7365399d"
+    }
+  ],
+  "bytes": 32394
+}
