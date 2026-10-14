@@ -13,4 +13,8 @@ returns: NotationFrontier
 4. Construct WrittenEvent by copying actual semantic fields and adding original eventId/sourceId and
    a unique generated readingId. Retain incompatible readings as separate events for later arbitration.
 5. Append this actual reading or unresolved issue and mark only this unit completed. Remove exactly
-   that unit from pending and preserve all other state. Return the strictly smaller original frontier.
+   that unit from pending and preserve all other state. Bind the resulting strictly smaller frontier
+   as next: NotationFrontier.
+6. Finish this one-unit call with the already bound frontier in the same action:
+   eval({code:"return next;",finish:true}). The parent reducer owns selection of the next original
+   unit. Keep the completed child's actual reading and earlier completed results in next.
