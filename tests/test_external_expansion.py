@@ -7,6 +7,49 @@ from neuralese_data.agents import expansion_messages, expansion_trajectory
 from neuralese_data.trajectory import record
 
 
+def test_coding_sessions_preserve_dispatch_outcome_and_shared_benchmark_group(tmp_path, monkeypatch):
+    import json
+    from neuralese_data import agents
+    from neuralese_data.records import group_key
+    root = tmp_path / 'D40'
+    root.mkdir()
+    (root / 'acquisition.json').write_text(json.dumps({'repo':'fixture/coding', 'revision':'abc'}))
+    calls = [{'id':'call-1','function':{'name':'edit','arguments':'{"path":"a.py"}'}}]
+    row = {'session_id':'session-1','source_id':'instance-1','recorded_model':'teacher',
+           'messages_json':json.dumps([
+               {'role':'user','content':'Repair the file.'},
+               {'role':'assistant','content':'Apply edit','tool_calls_json':json.dumps(calls)},
+               {'role':'tool','content':'Observed edit','tool_call_id':'call-1'},
+               {'role':'assistant','content':'Done'}]),
+           'ground_truth_meta_json':json.dumps({'instance_id':'instance-1','resolved':False})}
+    monkeypatch.setattr(agents, 'EXPANSION_ROOT', tmp_path)
+    monkeypatch.setattr(agents, '_parquet_groups', lambda path: iter([(0,row)]))
+    monkeypatch.setattr(agents, '_bench_ids', lambda: {'instance-1'})
+    _, t = next(agents.agentic_coding_sessions())
+    assert t.messages[1]['tool_calls'] == [{'type':'function', **calls[0]}]
+    assert t.messages[2]['tool_call_id'] == 'call-1'
+    assert t.outcome['label'] == 'failed' and t.outcome['checked'] is None
+    assert t.split == 'test'
+    assert group_key('swe-instance','instance-1') in t.split_groups
+    assert 'Repair the file.' in json.dumps(record(t, t.head, 1)['sources'])
+
+
+def test_excluding_failed_conversion_records_omission_and_continues(tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+    import neuralese_port_records as cli
+    failed = SimpleNamespace(outcome={'label':'failed'})
+    good = SimpleNamespace(outcome={'label':'teacher'})
+    monkeypatch.setitem(cli.agents.CORPORA, 'fixture', (lambda limit: iter([('bad',failed),('good',good)]), 4))
+    seen = []
+    monkeypatch.setattr(cli.trajectory, 'records_for', lambda t,*args: seen.append(t))
+    cli.cmd_convert_agents(SimpleNamespace(corpora=['fixture'],limit=None,out=tmp_path,
+                                          windows=None,exclude_failed=True))
+    assert seen == [good]
+    omitted = json.loads((tmp_path/'upstream.fixture.rejects.jsonl').read_text())
+    assert omitted['row'] == 'bad' and omitted['reason'].startswith('upstream-reported-failure')
+
+
 def test_literal_function_dispatch_never_executes_nonliteral_arguments():
     from neuralese_data.agents import _literal_function_calls
     import json
