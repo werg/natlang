@@ -131,10 +131,10 @@ validation and prefix-map scans. No data admission or model code changes.
 Mellum full checkpoints170 and400 are durably PRIVATE and independently
 re-read from GCS with full SHA equality:
 
--170:46,821,474,583bytes, SHA
+- 170:46,821,474,583bytes, SHA
 `93737f4e87454a3f07c642bec2fe36e5d9fcb8fa0b8e8027d4999c363f442381`,
 verified19:37:29; full readback201.882seconds.
--400:46,821,477,015bytes, SHA
+- 400:46,821,477,015bytes, SHA
 `f598a6598293ad14df4b18012377fb25992c794921454ee28ec55451fdf93276`,
 verified20:11:26; PUT868.177seconds, full readback151.959seconds.
 
@@ -169,3 +169,21 @@ assigned diagnosis inputs, never training admission. Final/noise evidence must
 be collected after completion. Progress collectors now read growing logs via
 bounded≤1MiB tails. Mellum root CPU runs only owner-selected bounded public
 source acquisition, with no parsing/model work; raw sources remain unadmitted.
+
+At20:37:51 the properly held LFM relaunch reached its continuation check and
+failed before any update: `--continue-from training options differ: heads`.
+The predecessor names `/srv/storage/natlang-artifacts/lfm25-qad-clean-head-v1/clean-base-untrained-heads.pt`;
+cloud staging names the same SHA19bfa7 artifact under the Pop handoff directory.
+The exact base-head content check passed; a second literal-path objective
+comparison incorrectly rejected this valid relocation. Pop published the shared
+content-guard-preserving fix `fad309e5`. No optimizer or checkpoint was mutated.
+The holder retained central traceback, exit1 and outputs-ready, with zero OOM
+counters and29,235,720,192byte peak. Prior restart cause remains unproven.
+Failed diagnostic output is retained only for this assigned repair at
+`/work/production/failed-heads-binding-output-20261014`; proven row caches and
+verified parent remain available for a corrected same-sandbox relaunch.
+
+At20:42 the shared scorer reports first task400 pass16finished/5success,
+2invalid-action/4repetition/5semantic-mismatch; it still reports incomplete
+accounting. Noise repeat1 has14finished/3success,2unresolved. These are partial
+investigation results, not a final noise estimate or qualification.
