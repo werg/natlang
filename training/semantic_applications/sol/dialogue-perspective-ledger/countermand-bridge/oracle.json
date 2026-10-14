@@ -1,7 +1,7 @@
 {
   "schema": "natlang.dialogue-query-invariants/1",
   "caseId": "sol-dialogue-countermand-v1",
-  "scope": "Original source-derived projection draft; full typed witness/checker and independent review pending.",
+  "scope": "Source-visible query invariants plus exact original identity/availability bounds; full authored typed source witness, no application execution.",
   "query_observables": {
     "Q01": {
       "commitmentStatus": "conditional"
@@ -63,5 +63,893 @@
   },
   "source_world_split_key": "sol-app-world:countermand-bridge-v1",
   "generation_ready": false,
-  "training_admission": false
+  "training_admission": false,
+  "exact_source_contract": {
+    "participantIds": [
+      "Oren",
+      "Sada",
+      "Tavi",
+      "Noor",
+      "Remy"
+    ],
+    "propositionIds": [
+      "P_COLLECT18",
+      "P_COLLECT20",
+      "P_ACK_B2",
+      "P_ACK_B3",
+      "P_KEY19",
+      "P_KEY20",
+      "P_CODE20",
+      "P_ALL_ADOPT",
+      "P_WITHDRAW_RECEIVED_TAVI"
+    ],
+    "turns": [
+      {
+        "turnId": "P17",
+        "clauseId": "P17",
+        "speaker": "Oren",
+        "occurredAt": {
+          "day": 17,
+          "hour": 10
+        },
+        "audienceIds": [
+          "Sada",
+          "Tavi"
+        ],
+        "channelId": "P",
+        "visibility": "shared"
+      },
+      {
+        "turnId": "W18",
+        "clauseId": "W18",
+        "speaker": "Oren",
+        "occurredAt": {
+          "day": 18,
+          "hour": 0
+        },
+        "audienceIds": [
+          "Sada",
+          "Tavi"
+        ],
+        "channelId": null,
+        "visibility": "shared"
+      },
+      {
+        "turnId": "S18",
+        "clauseId": "S18",
+        "speaker": "Sada",
+        "occurredAt": {
+          "day": 18,
+          "hour": 2
+        },
+        "audienceIds": [],
+        "channelId": null,
+        "visibility": "private"
+      },
+      {
+        "turnId": "T18_DOUBT",
+        "clauseId": "T18_DOUBT",
+        "speaker": "Tavi",
+        "occurredAt": {
+          "day": 18,
+          "hour": 2.5
+        },
+        "audienceIds": [],
+        "channelId": null,
+        "visibility": "private"
+      },
+      {
+        "turnId": "T18_ADOPT",
+        "clauseId": "T18_ADOPT",
+        "speaker": "Tavi",
+        "occurredAt": {
+          "day": 18,
+          "hour": 4
+        },
+        "audienceIds": [],
+        "channelId": null,
+        "visibility": "private"
+      },
+      {
+        "turnId": "N18",
+        "clauseId": "N18",
+        "speaker": "Oren",
+        "occurredAt": {
+          "day": 18,
+          "hour": 5
+        },
+        "audienceIds": [
+          "Sada"
+        ],
+        "channelId": "P",
+        "visibility": "shared"
+      },
+      {
+        "turnId": "B18",
+        "clauseId": "B18",
+        "speaker": "Sada",
+        "occurredAt": {
+          "day": 18,
+          "hour": 6
+        },
+        "audienceIds": [
+          "Oren"
+        ],
+        "channelId": "P",
+        "visibility": "shared"
+      },
+      {
+        "turnId": "B19",
+        "clauseId": "B19",
+        "speaker": "Sada",
+        "occurredAt": {
+          "day": 19,
+          "hour": 9
+        },
+        "audienceIds": [
+          "Oren"
+        ],
+        "channelId": "P",
+        "visibility": "shared"
+      },
+      {
+        "turnId": "C18",
+        "clauseId": "C18",
+        "speaker": "Noor",
+        "occurredAt": {
+          "day": 18,
+          "hour": 8
+        },
+        "audienceIds": [
+          "Sada"
+        ],
+        "channelId": null,
+        "visibility": "shared"
+      },
+      {
+        "turnId": "S19_EARLY",
+        "clauseId": "S19_EARLY",
+        "speaker": "Sada",
+        "occurredAt": {
+          "day": 19,
+          "hour": 8
+        },
+        "audienceIds": [],
+        "channelId": null,
+        "visibility": "private"
+      },
+      {
+        "turnId": "C19",
+        "clauseId": "C19",
+        "speaker": "Noor",
+        "occurredAt": {
+          "day": 19,
+          "hour": 10.5
+        },
+        "audienceIds": [
+          "Sada"
+        ],
+        "channelId": null,
+        "visibility": "shared"
+      },
+      {
+        "turnId": "O19_REPORT",
+        "clauseId": "O19_REPORT",
+        "speaker": "Oren",
+        "occurredAt": {
+          "day": 19,
+          "hour": 12
+        },
+        "audienceIds": [
+          "Remy"
+        ],
+        "channelId": null,
+        "visibility": "shared"
+      },
+      {
+        "turnId": "REM19",
+        "clauseId": "REM19",
+        "speaker": "Remy",
+        "occurredAt": {
+          "day": 19,
+          "hour": 13
+        },
+        "audienceIds": [
+          "Tavi"
+        ],
+        "channelId": null,
+        "visibility": "shared"
+      },
+      {
+        "turnId": "O19_ADOPT",
+        "clauseId": "O19_ADOPT",
+        "speaker": "Oren",
+        "occurredAt": {
+          "day": 19,
+          "hour": 12.5
+        },
+        "audienceIds": [],
+        "channelId": null,
+        "visibility": "private"
+      }
+    ],
+    "physicalFacts": [
+      {
+        "factId": "F_COLLECTION",
+        "propositionId": "P_COLLECT18",
+        "value": false,
+        "occurredAt": null,
+        "completenessThrough": {
+          "day": 21,
+          "hour": 12
+        }
+      },
+      {
+        "factId": "F_COLLECTION",
+        "propositionId": "P_COLLECT20",
+        "value": true,
+        "occurredAt": {
+          "day": 19,
+          "hour": 10
+        },
+        "completenessThrough": {
+          "day": 21,
+          "hour": 12
+        }
+      },
+      {
+        "factId": "F_KEY",
+        "propositionId": "P_KEY19",
+        "value": true,
+        "occurredAt": {
+          "day": 19,
+          "hour": 11
+        },
+        "completenessThrough": {
+          "day": 21,
+          "hour": 12
+        }
+      },
+      {
+        "factId": "F_KEY",
+        "propositionId": "P_KEY20",
+        "value": false,
+        "occurredAt": null,
+        "completenessThrough": {
+          "day": 21,
+          "hour": 12
+        }
+      },
+      {
+        "factId": "F_CODE",
+        "propositionId": "P_CODE20",
+        "value": false,
+        "occurredAt": null,
+        "completenessThrough": {
+          "day": 21,
+          "hour": 12
+        }
+      },
+      {
+        "factId": "F_BRIEF",
+        "propositionId": "P_ACK_B2",
+        "value": true,
+        "occurredAt": {
+          "day": 18,
+          "hour": 6
+        },
+        "completenessThrough": {
+          "day": 21,
+          "hour": 12
+        }
+      },
+      {
+        "factId": "F_BRIEF",
+        "propositionId": "P_ACK_B3",
+        "value": true,
+        "occurredAt": {
+          "day": 19,
+          "hour": 9
+        },
+        "completenessThrough": {
+          "day": 21,
+          "hour": 12
+        }
+      },
+      {
+        "factId": "F_ADOPTIONS",
+        "propositionId": "P_ALL_ADOPT",
+        "value": true,
+        "occurredAt": {
+          "day": 18,
+          "hour": 4
+        },
+        "completenessThrough": {
+          "day": 21,
+          "hour": 12
+        }
+      }
+    ],
+    "receiptIds": [
+      "HP17",
+      "HW18_S",
+      "RW18_T",
+      "HN18",
+      "HB19",
+      "HC18",
+      "RC19_S",
+      "RADOPT_O",
+      "HREM19"
+    ],
+    "receipts": [
+      {
+        "receiptId": "HP17",
+        "turnIds": [
+          "P17"
+        ],
+        "recipientId": "Sada",
+        "dispatchedAt": {
+          "day": 17,
+          "hour": 10
+        },
+        "receivedAt": {
+          "day": 17,
+          "hour": 10
+        },
+        "readAt": {
+          "day": 17,
+          "hour": 10
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "HP17",
+        "turnIds": [
+          "P17"
+        ],
+        "recipientId": "Tavi",
+        "dispatchedAt": {
+          "day": 17,
+          "hour": 10
+        },
+        "receivedAt": {
+          "day": 17,
+          "hour": 10
+        },
+        "readAt": {
+          "day": 17,
+          "hour": 10
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "HW18_S",
+        "turnIds": [
+          "W18"
+        ],
+        "recipientId": "Sada",
+        "dispatchedAt": {
+          "day": 18,
+          "hour": 0
+        },
+        "receivedAt": {
+          "day": 18,
+          "hour": 1
+        },
+        "readAt": {
+          "day": 18,
+          "hour": 1
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "RW18_T",
+        "turnIds": [
+          "W18"
+        ],
+        "recipientId": "Tavi",
+        "dispatchedAt": {
+          "day": 18,
+          "hour": 0
+        },
+        "receivedAt": {
+          "day": 18,
+          "hour": 3
+        },
+        "readAt": {
+          "day": 18,
+          "hour": 3
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "HN18",
+        "turnIds": [
+          "N18"
+        ],
+        "recipientId": "Sada",
+        "dispatchedAt": {
+          "day": 18,
+          "hour": 5
+        },
+        "receivedAt": {
+          "day": 18,
+          "hour": 5
+        },
+        "readAt": {
+          "day": 18,
+          "hour": 5
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "HB19",
+        "turnIds": [
+          "B18"
+        ],
+        "recipientId": "Oren",
+        "dispatchedAt": {
+          "day": 18,
+          "hour": 6
+        },
+        "receivedAt": {
+          "day": 18,
+          "hour": 6
+        },
+        "readAt": {
+          "day": 18,
+          "hour": 6
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "HB19",
+        "turnIds": [
+          "B19"
+        ],
+        "recipientId": "Oren",
+        "dispatchedAt": {
+          "day": 19,
+          "hour": 9
+        },
+        "receivedAt": {
+          "day": 19,
+          "hour": 9
+        },
+        "readAt": {
+          "day": 19,
+          "hour": 9
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "HC18",
+        "turnIds": [
+          "C18"
+        ],
+        "recipientId": "Sada",
+        "dispatchedAt": {
+          "day": 18,
+          "hour": 8
+        },
+        "receivedAt": {
+          "day": 18,
+          "hour": 8
+        },
+        "readAt": {
+          "day": 18,
+          "hour": 8
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "RC19_S",
+        "turnIds": [
+          "C19"
+        ],
+        "recipientId": "Sada",
+        "dispatchedAt": {
+          "day": 19,
+          "hour": 10.5
+        },
+        "receivedAt": {
+          "day": 20,
+          "hour": 1
+        },
+        "readAt": {
+          "day": 20,
+          "hour": 1
+        },
+        "verifiedEvidence": true,
+        "verifiedFactIds": [
+          "F_COLLECTION"
+        ]
+      },
+      {
+        "receiptId": "RADOPT_O",
+        "turnIds": [
+          "S18",
+          "T18_ADOPT"
+        ],
+        "recipientId": "Oren",
+        "dispatchedAt": {
+          "day": 19,
+          "hour": 12
+        },
+        "receivedAt": {
+          "day": 19,
+          "hour": 12
+        },
+        "readAt": {
+          "day": 19,
+          "hour": 12
+        },
+        "verifiedEvidence": true,
+        "verifiedFactIds": [
+          "F_ADOPTIONS"
+        ]
+      },
+      {
+        "receiptId": "HREM19",
+        "turnIds": [
+          "REM19",
+          "W18"
+        ],
+        "recipientId": "Tavi",
+        "dispatchedAt": {
+          "day": 19,
+          "hour": 13
+        },
+        "receivedAt": {
+          "day": 19,
+          "hour": 13
+        },
+        "readAt": {
+          "day": 19,
+          "hour": 13
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      }
+    ],
+    "availability": [
+      {
+        "at": {
+          "day": 17,
+          "hour": 10
+        },
+        "participantId": "Oren",
+        "turnIds": [
+          "P17"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 17,
+          "hour": 10
+        },
+        "participantId": "Sada",
+        "turnIds": [
+          "P17"
+        ],
+        "receiptIds": [
+          "HP17"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 17,
+          "hour": 10
+        },
+        "participantId": "Tavi",
+        "turnIds": [
+          "P17"
+        ],
+        "receiptIds": [
+          "HP17"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 18,
+          "hour": 0
+        },
+        "participantId": "Oren",
+        "turnIds": [
+          "W18"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 18,
+          "hour": 1
+        },
+        "participantId": "Sada",
+        "turnIds": [
+          "W18"
+        ],
+        "receiptIds": [
+          "HW18_S"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 18,
+          "hour": 2
+        },
+        "participantId": "Sada",
+        "turnIds": [
+          "S18"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 18,
+          "hour": 2.5
+        },
+        "participantId": "Tavi",
+        "turnIds": [
+          "T18_DOUBT"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 18,
+          "hour": 3
+        },
+        "participantId": "Tavi",
+        "turnIds": [
+          "W18"
+        ],
+        "receiptIds": [
+          "RW18_T"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 18,
+          "hour": 4
+        },
+        "participantId": "Tavi",
+        "turnIds": [
+          "T18_ADOPT"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 18,
+          "hour": 5
+        },
+        "participantId": "Oren",
+        "turnIds": [
+          "N18"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 18,
+          "hour": 5
+        },
+        "participantId": "Sada",
+        "turnIds": [
+          "N18"
+        ],
+        "receiptIds": [
+          "HN18"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 18,
+          "hour": 6
+        },
+        "participantId": "Sada",
+        "turnIds": [
+          "B18"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 18,
+          "hour": 6
+        },
+        "participantId": "Oren",
+        "turnIds": [
+          "B18"
+        ],
+        "receiptIds": [
+          "HB19"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 18,
+          "hour": 8
+        },
+        "participantId": "Noor",
+        "turnIds": [
+          "C18"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 18,
+          "hour": 8
+        },
+        "participantId": "Sada",
+        "turnIds": [
+          "C18"
+        ],
+        "receiptIds": [
+          "HC18"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 19,
+          "hour": 8
+        },
+        "participantId": "Sada",
+        "turnIds": [
+          "S19_EARLY"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 19,
+          "hour": 9
+        },
+        "participantId": "Sada",
+        "turnIds": [
+          "B19"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 19,
+          "hour": 9
+        },
+        "participantId": "Oren",
+        "turnIds": [
+          "B19"
+        ],
+        "receiptIds": [
+          "HB19"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 19,
+          "hour": 10.5
+        },
+        "participantId": "Noor",
+        "turnIds": [
+          "C19"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 19,
+          "hour": 12
+        },
+        "participantId": "Oren",
+        "turnIds": [
+          "O19_REPORT"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 19,
+          "hour": 12
+        },
+        "participantId": "Oren",
+        "turnIds": [
+          "S18",
+          "T18_ADOPT"
+        ],
+        "receiptIds": [
+          "RADOPT_O"
+        ],
+        "verifiedFactIds": [
+          "F_ADOPTIONS"
+        ]
+      },
+      {
+        "at": {
+          "day": 19,
+          "hour": 12.5
+        },
+        "participantId": "Oren",
+        "turnIds": [
+          "O19_ADOPT"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 19,
+          "hour": 13
+        },
+        "participantId": "Remy",
+        "turnIds": [
+          "REM19"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 19,
+          "hour": 13
+        },
+        "participantId": "Tavi",
+        "turnIds": [
+          "REM19",
+          "W18"
+        ],
+        "receiptIds": [
+          "HREM19"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 20,
+          "hour": 1
+        },
+        "participantId": "Sada",
+        "turnIds": [
+          "C19"
+        ],
+        "receiptIds": [
+          "RC19_S"
+        ],
+        "verifiedFactIds": [
+          "F_COLLECTION"
+        ]
+      }
+    ]
+  },
+  "query_constraints": {}
 }
