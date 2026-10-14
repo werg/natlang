@@ -50,10 +50,14 @@ different mechanisms. Inspect action traces before interpreting outcome counts.
   as a proxy for relation entailment. Both hop families are held and DGX is
   rebuilding the target union without their rendered member.
 - **Open:** quantify the program-header versus full-prompt serving effect on
-  the exact checkpoint with the same 20 tasks and seeds. The PH rollout is
-  queued as `natlang-pop-qad-trained-program-header20-v1`. A large lift under
-  PH would implicate training/serving context mismatch; no lift would narrow
-  that hypothesis, not prove that the prompt is irrelevant.
+  the exact checkpoint with the same 20 tasks and seeds. The first PH rollout
+  (`natlang-pop-qad-trained-program-header20-v1`) finished 2/38 scored, but
+  used the preparer's 1,000-per-row seed stride while the full/base arms used
+  3,000 per row. Only the first task's two samples had the same seed. This is
+  exploratory, not a matched ablation; its two source-held MuSiQue samples
+  remain unscored. A new preparation copies seeds by task ID and sample from
+  the clean-base reference and verifies all 40 mappings plus identical packet
+  SHA. Rerun the PH arm on those exact seeds before interpreting rendering.
 - **Open:** run the current-main full gate with the pinned training-image
   interpreter; the first Pop attempt lacked a host Python 3.11+ torch stack.
   The image-backed run is queued under the ledger.
