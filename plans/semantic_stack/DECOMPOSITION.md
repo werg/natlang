@@ -13,6 +13,14 @@ Two independent authored slates provide at least 200 distinct, substantial natur
 5. **Build a case (crisp source adapter).** The adapter checks IDs, types, file paths, nonempty evidence, source identity, split and provenance, then emits Program/2 JSONL. It does not decide a semantic answer or fabricate a teacher trajectory.
 6. **Review and generation (existing teacher pipeline).** A generated case goes through source validation, independent exact/semantic checks, held-source decontamination and teacher collection. A passing execution is not automatically admitted as training data.
 
+For the typed ecology variant, an intermediate named stage owns and checks its
+semantic contribution, then calls the next named `.nl` function and returns
+the child's complete typed state in the same final eval action. The source
+adapter renders the actual child name and typed input binding; it does not
+decide the contribution or substitute a case-specific answer. This source
+presentation follows a live staged-result recomputation and remains diagnostic
+until its model-facing measurement is complete.
+
 ## Why the crisp pieces exist
 
 JSONL construction, SHA-256 provenance, deterministic source grouping, type/schema validation, source-decontamination and exact file/oracle comparisons require exactness. They do not choose domain policy or replace the natural-language functions. The builder extends existing `curriculumCase` and collection contracts; it does not add a second runtime or a separate evaluation mechanism.

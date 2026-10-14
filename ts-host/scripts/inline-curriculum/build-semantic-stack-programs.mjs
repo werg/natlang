@@ -440,6 +440,11 @@ function render(entry, provider) {
   const steps = renameVariantStage(stages(entry), rename);
   if (steps.length < 3) throw Error(`${id}: need at least three distinct stages`);
   const stageSpec = stageSpecsMode ? checkedStageSpecs(entry, steps) : null;
+  const forwarding = stageSpec && variant?.program_id === id ? variant.stage_forwarding_contract : null;
+  if (forwarding && (!Array.isArray(forwarding.applies_to) ||
+      JSON.stringify(forwarding.applies_to) !== JSON.stringify(steps.slice(0, -1).map(step => step.name)) ||
+      typeof forwarding.instruction !== 'string' || !forwarding.instruction.includes('finish:true')))
+    throw Error(`${id}: invalid one-action child-forwarding contract`);
   const crossFolder = stageSpec && variant?.program_id === id ?
     renameVariantStage(variant.cross_folder_accumulation, rename) : null;
   const typedHandoff = stageSpec?.typedEvidenceHandoff;
@@ -560,7 +565,9 @@ function render(entry, provider) {
           `Transformation: ${owned.new_semantic_transformation}\n` +
           `Evidence: ${owned.source_evidence_obligation}\nInvariant: ${owned.invariant}\n` +
           `No applicable evidence: ${owned.no_op_policy}${literalPlan}${carriedPlan}${handoffPlan}\n` +
-          (next ? `Pass the accumulated typed contributions to child ${next} within this active call and return its complete FinalSemanticState.\n` :
+          (next && forwarding ?
+            `After binding nextStageInput with this stage's completed typed contribution, finish this call in one eval action: eval({code:"return await ${next}(nextStageInput);",finish:true}). This returns the child's complete FinalSemanticState.\n` :
+            next ? `Pass the accumulated typed contributions to child ${next} within this active call and return its complete FinalSemanticState.\n` :
             `Return the complete FinalSemanticState with every earlier contribution preserved.\n`) });
       continue;
     }
