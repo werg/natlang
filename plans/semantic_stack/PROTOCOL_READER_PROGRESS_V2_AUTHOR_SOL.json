@@ -10,7 +10,7 @@
     "applications/protocol-meaning-debugger/readEvidence/advanceDefinitionUnit/interpretDefinition.nl": "f94c4e9227c1708ab483b42adcbcbaf9973499eaafb5300a910ed1f248f47fb4",
     "applications/protocol-meaning-debugger/debug/intake/interpretQuestion.nl": "2a96e346f10c653a9e42adc2211142498c1f8ea95eb0dbaa2663dec41f93f4a4",
     "training/semantic_applications/sol/protocol-meaning-debugger/reader-progress-controls/check-controls.mjs": "62b3cce62bc9b1ab892dd8d85f12ebb5f2cbffeb525deb3bd339a959eea9a3fe",
-    "applications/protocol-meaning-debugger/debug/intake.nl": "6a07849c30bf7069667d00b4140c7e4175ffe6ad060e09ca07b4dea76f6822d7"
+    "applications/protocol-meaning-debugger/debug/intake.nl": "f93bc1c7911e74f88cad24a84d2a339d51bb5d705ce643b1d85b47991fc7504a"
   },
   "diagnostic": {
     "source_sha256": "b01f3e134dac4aeccf4d0b8c42e8c0bbf661bf4d598ae89da9024142083794ee",
@@ -43,7 +43,8 @@
     "reference_ok": true,
     "source_sha256": "77da96d484e71d0bd5ac329988f7c1b43c586a2e827499a50fc36b3c8b131778",
     "reference_sha256": "27fd0fa62dd31c58e81f5eec7568251c6d5b9c2cab485c69d88d27002ecd2eab",
-    "scope": "One unchanged full typed witness; no actual app execution."
+    "scope": "One unchanged full typed witness; no actual app execution.",
+    "note": "Parent local-field binding clarification is not a reference/result type change; final source reseal required."
   },
   "counts": {
     "schema": "natlang.semantic-application-quality-observations/1",
