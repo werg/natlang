@@ -1,0 +1,1 @@
+{"id":"inline-curriculum:s52040:dataset_workbench:dataset7:a","reason_code":"conflicting_visible_source_labels","source_sha256":"27c3e1b66b6b3d61e981ea8cd1a32b6d439371db17abb08cb23bcd7d2a9e9192","reason":"The pinned SST-2 source assigns opposing labels to the same film comment after punctuation normalization; this program uses the conflicted negative copy."}

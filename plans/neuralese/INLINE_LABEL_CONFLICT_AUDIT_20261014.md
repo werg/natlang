@@ -28,6 +28,12 @@ closed-backlog v5, exactly one contains a conflicting record:
 and its source group from new renders and unions. DGX was asked to inspect
 whether its current immutable union already includes it and to omit it from
 the corrected next union; published manifests are not silently rewritten.
+The exact render exclusion input is
+`training/source-reviews/inline-labeled-conflict-exclude-20261014.jsonl`.
+Pass it via `render_native_turn_corpus.py --exclude-programs` when rendering
+closed-backlog v5; it targets this one program and leaves every other
+accepted trajectory intact. Its `source_sha256` binds the accepted-parent
+snapshot, and the renderer records the exclusion file hash in its receipt.
 
 Other s52052 rejections remain separate: three Musique answers contain the
 correct short gold phrase inside an overlong sentence, and a ham-labeled
