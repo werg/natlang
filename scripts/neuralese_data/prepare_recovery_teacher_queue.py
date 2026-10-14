@@ -12,6 +12,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
 from natlang_neuralese.common.hashing import sha256_file_hex
+from natlang_neuralese.common.jsonio import read_jsonl
 
 
 def prepare(source, output, *, line, workers, case_seconds):
@@ -20,7 +21,7 @@ def prepare(source, output, *, line, workers, case_seconds):
         raise ValueError(f'output already exists: {output}')
     if line not in ('lfm25', 'mellum21') or not 1 <= workers <= 6:
         raise ValueError('line must be lfm25 or mellum21; workers must be 1..6')
-    rows = [json.loads(s) for s in source.read_text().splitlines() if s.strip()]
+    rows = read_jsonl(source)
     if not rows:
         raise ValueError('empty recovery source')
     ids = set()
