@@ -1,0 +1,66 @@
+{
+  "schema": "natlang.semantic-source-peer-review/1",
+  "reviewer": "pop-semantic-curriculum",
+  "variant": "cave-frame-original-name-frontier-v8",
+  "source_commit": "0288c3fa",
+  "live_parent": "fad44b36",
+  "source_files": {
+    "applications/cave-mission/DECOMPOSITION.md": "afd0afa5a37cbb35fd9d32a6f1bfc8fae0a55e40cf283117071be55d1732de9b",
+    "applications/cave-mission/types.ts": "81650ac5f94b9a7f7433cd3544d07db87da52f56a0fe40f180795cd7c86c7149",
+    "applications/cave-mission/planMission/survey/readFrames.nl": "1b9f0cf90630dcfa90ec80858e83c97b131bfd161c0a1629f065dae59b8b8da6",
+    "applications/cave-mission/planMission/survey/readFrames/advanceFrameUnit.nl": "6a95e425cee3e911877b0063a3016044455e5b9b550d635b8e7023ff67ca682b",
+    "applications/cave-mission/planMission/survey/readFrames/interpretLandmark.nl": "953c7374406c1f622df1b7159dd635fcf3bb3483c8824dba5c831c9fc6adc061",
+    "applications/cave-mission/planMission/survey/readPassages.nl": "dad6356afd5fa26eaa7a4932d8567d253718c4bcc030f7a75e3c128ebbdb108f",
+    "applications/cave-mission/planMission/survey/readEquipment.nl": "03b4974c22aa0f45265667332f2707cc4408a9f5a318de610b7c7af1af9ae265",
+    "training/semantic_applications/astra/cave-mission/project.json": "9a430a28fda00afb519b2dbd16fb57832ff27995bc111fb370e72d7981c62bfd",
+    "training/semantic_applications/astra/cave-mission/frame-v8-controls/progress-witness.json": "67b050c13936ce4be64f70c9ab8e455590820466ae8af3085228868998721167",
+    "training/semantic_applications/astra/cave-mission/frame-v8-controls/check-controls.mjs": "f08ea9be6dda9398038bb911883c14c1630f5d84590602e5e394a4e56ca05d18",
+    "training/semantic_applications/astra/cave-mission/survey-v5-controls/item-witnesses.json": "ddeac9fd3d94d2a4cc17a4c1665fa8d171e21876549e4a8aab94f7bb0dd9439d"
+  },
+  "source_package_sha256": "5feb77fce81170aa08a9970d847aa6de5c690ff8479c5deecffd5f24d4c6c620",
+  "manifest_sha256": "9a430a28fda00afb519b2dbd16fb57832ff27995bc111fb370e72d7981c62bfd",
+  "independent_source_reconstruction": [
+    "The original F01 global grid and L03 unique three-hole disk place Amber origin at J=(0,1); F03 fixes positive v north while F04 explicitly leaves two u signs. The frame transition carries both alternatives and does not silently choose a physical world.",
+    "L01/L02 name Amber local X; the selected inventory unit preserves originalLocalName X. Invented landmark-amber-X is absent as a complete source token and cannot become its localId merely by matching (-2,0).",
+    "The original source identity, quote, and clause-domain checks bind projected witnesses to F01/F03/F04/L03 or the landmark primary/support clauses. Physical counterpart and route-direction judgments remain in later NL modules."
+  ],
+  "typed_handoff_review": [
+    "readFrames inventories original units, validates nonempty sourceFrame and complete local-name tokens, and delegates one current unit through advanceFrameUnit.iterateOn with pendingUnits.length as a decreasing measure.",
+    "advanceFrameUnit keeps prior completed results, refines support only for frame units, awaits the selected convention or landmark child, stores its actual nullable raw return, then projects source-bound alternatives/landmarks. Landmark units retain original support unchanged.",
+    "The step returns the actual shorter frontier with finish:true; readFrames gathers only accepted actual projections, preserving unresolved and failed units for repair without replaying earlier child work."
+  ],
+  "semantic_policy_location_audit": {
+    "survey": "Source reading and frame/landmark interpretation are numbered NL functions and scoped literals; exact clause parsing, name-token and quote membership are mechanics.",
+    "reconciliation": "Physical anchor identity, optional pair compatibility and frame hypotheses remain NL modules assessAnchorPair, alignFrames and buildWorlds; v8 adds no TS helper for them.",
+    "planning": "Available actions, sensor scope, all-world branch valuation and policy choice remain numbered NL modules including settleValue; arithmetic and finite state keys are exact mechanics.",
+    "audit": "Per-world replay and challengeAssumption remain NL modules; the external verifyCandidate checks returned structure, source identity and bounded arithmetic only.",
+    "visible_crisp_policy_helper_added": false,
+    "live_eval_js_displacement": "unmeasured for v8; v7 teacher had case-specific coordinate checks and repeated convention judgments, so final row admission requires direct child-consumption inspection"
+  },
+  "checks": {
+    "independently_ran_frame_progress_controls": {
+      "passed": true,
+      "positive": 7,
+      "negative": 20
+    },
+    "canonical_typed_reference_replay": {
+      "path": "training/semantic_applications/astra/cave-mission/mirrored-vault/reference-report.json",
+      "sha256": "3f2efe03c7e7b14608a0fa336ec8b43a3d890ebb3796b8136afa91c450713f90",
+      "reference_ok": true,
+      "reference_problems": [],
+      "opening_sha256": "b72b63ef1b49b92d6dca56cb0d1a906659c9f3ed0a681b5715979e2a33516569",
+      "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
+    },
+    "native_and_types": "Author passed; peer inspected generated graph and typed aliases, not an independent live execution"
+  },
+  "source_review": "accepted_for_one_case_diagnostic",
+  "fixture_oracle_changed": false,
+  "live_samples": 0,
+  "training_admitted": false,
+  "limitations": [
+    "Authored progress controls use synthetic actual-child witnesses; they prove exact handoff invariants, not that a live model will invoke or consume the child.",
+    "The canonical reference replay proves source/type transport only; independent semantic execution and ~48 model-facing samples remain.",
+    "A live diagnostic must check per-unit child provenance, no repeated completed units, both convention alternatives, source name binding, and downstream policy location."
+  ],
+  "manifest_sha256_scope": "Author frozen manifest before adding this independent review binding; later metadata-only receipt binding does not change the reviewed NL, types, fixture, oracle, or verifier bytes."
+}
