@@ -507,11 +507,11 @@ def expansion_trajectory(ref, receipt, rid, row):
     metadata = row.get("metadata") or {}
     if isinstance(metadata, str):
         metadata = json.loads(metadata)
-    msgs = expansion_messages(row.get("messages") or [])
+    msgs = expansion_messages(row.get("messages") or row.get("conversations") or [])
     if not msgs:
         raise Reject("empty-trajectory")
     request = next((m.get("content") or "" for m in msgs if m["role"] == "user"), "")
-    trajectory_id = metadata.get("trajectory_id") or metadata.get("source_trajectory_id")
+    trajectory_id = metadata.get("trajectory_id") or metadata.get("source_trajectory_id") or row.get("task_id")
     source = str(metadata.get("source") or "")
     if not trajectory_id and source:
         trajectory_id = source.rsplit("/", 1)[0]
@@ -522,10 +522,11 @@ def expansion_trajectory(ref, receipt, rid, row):
     license_name = card.get("license") or "LicenseRef-upstream-unspecified"
     if not isinstance(license_name, str):
         license_name = "LicenseRef-upstream-custom"
+    research = ref in ("D01", "D02", "D21")
     return Trajectory(
         id=f"upstream:expansion:{ref}:{trajectory_id}:{session_id}",
-        family="trajectory_continuation_research" if ref == "D01" else "trajectory_continuation_coding",
-        messages=msgs, head=_head(msgs), noun="research session" if ref == "D01" else "coding session",
+        family="trajectory_continuation_research" if research else "trajectory_continuation_coding",
+        messages=msgs, head=_head(msgs), noun="research session" if research else "coding session",
         lineage=_lineage(repo, rid, repo, upstream_id=session_id, revision=receipt["revision"],
                          teacher="unknown", notes={"metadata": metadata, "communication": "derived-history",
                             "observed_graph_snapshot": str(EXPANSION_ROOT / ref),
@@ -551,7 +552,21 @@ def _expansion(ref, limit=None):
             for i, row in _parquet_groups(path):
                 yield f"{path.relative_to(root)}:{i}", row
     for rid, row in _limited(rows(), limit):
-        yield rid, expansion_trajectory(ref, receipt, rid, row)
+        if ref == "D02":
+            # Nested workers are original sessions, not synthesized by the adapter.
+            # Keep their common root identity even when each worker asks a different question.
+            root_id = task_hash(row["question"])
+            parent = {**row, "metadata": {"trajectory_id": root_id, "session_id": "planner",
+                      "source": row.get("source"), "nested_workers": len(row.get("subagents") or [])}}
+            yield rid, expansion_trajectory(ref, receipt, rid, parent)
+            for index, worker in enumerate(row.get("subagents") or []):
+                child_id = f"{rid}:worker:{index}"
+                child = {**worker, "metadata": {"trajectory_id": root_id, "session_id": f"worker:{index}",
+                         "parent_session_id": "planner", "original_worker_index": index,
+                         "relationship": "observed-nested-session"}}
+                yield child_id, expansion_trajectory(ref, receipt, child_id, child)
+        else:
+            yield rid, expansion_trajectory(ref, receipt, rid, row)
 
 
 def wideseek(limit=None):
@@ -562,4 +577,13 @@ def cooperator_dual_policy(limit=None):
     yield from _expansion("D08", limit)
 
 
-CORPORA.update({"wideseek": (wideseek, 4), "cooperator-dual-policy": (cooperator_dual_policy, 4)})
+def searchswarm(limit=None):
+    yield from _expansion("D02", limit)
+
+
+def owl_sft(limit=None):
+    yield from _expansion("D21", limit)
+
+
+CORPORA.update({"wideseek": (wideseek, 4), "cooperator-dual-policy": (cooperator_dual_policy, 4),
+                "searchswarm": (searchswarm, 4), "owl-sft": (owl_sft, 4)})
