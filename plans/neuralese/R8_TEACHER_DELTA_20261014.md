@@ -41,13 +41,13 @@ drops every document sharing this group and records the omission. The
 MuSiQue render from the R8 build remains a quarantine reference in all six
 views. Keep the same tokenizer revisions and source-review registry as R8.
 
-The backlog-v5 structural review found 614 exact-answer parents whose actions
+The backlog-v5 structural review found 1,012 exact-answer parents whose actions
 did not follow the required process (notably missing `iterateOn` or natural
 language per-item decisions, and hardcoded ticket filenames). Its pinned
 source-group witness is
-`training/source-quarantines/backlog-v5-teacher-shape-20261014.jsonl`
-(SHA-256 `5d87e164347a44c71fb7b56ab2b2cd289fcc012b7c3bad91c0c6bfa0606602ca`).
-It contains 1,136 groups; 25 otherwise unflagged parents share a held group
+`training/source-quarantines/backlog-v5-teacher-shape-20261014-v2.jsonl`
+(SHA-256 `29470612eecd21953f11282aa4e23dc0e9677df81123dde77807722f03bd0d68`).
+It contains 1,877 groups; 28 otherwise unflagged parents share a held group
 and are conservatively excluded. The exact audit is in
 `plans/neuralese/BACKLOG_V5_SHAPE_REVIEW_20261014.md`. This witness is required
 for the delta, even though the source and renders predate the review and still
