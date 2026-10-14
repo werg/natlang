@@ -3,6 +3,12 @@
 Source/reference replay establishes type and fixture validity only. These live
 observations do not grant training admission or count as model-negative rows.
 
+## Ecology v18c joined-seed first live result (2026-10-14)
+
+- One-case queue SHA-256 `73f081511f6ede42affd9784668db621daff35e8c0c395eac959bef396bbe360`, selected source SHA-256 `e093673539fe3b6489221c22163781b83b2d30fe79a4298f30c93b5f8458109e`, frozen runtime manifest SHA-256 `c3090a2791ca0cb819c82555fd5a0d430ad8191c04a088818e13d6bb76708a1c`. The explicit compiled dist snapshot followed the green Pop full gate at `d66766a8`; its source checker is pinned in the runtime manifest. Unit `natlang-pop-semstack-ecology-v18c-diag.service` finished 21 turns with one exported row, result SHA-256 `89353949650c9204b32884f8a42a771b7c38df2a38349c17b848769fcc9a7f1d`.
+- Root turn 1 read the named `readStudyPlots` source. Turn 2 read all 24 evidence texts directly; turn 3 hand-wrote a 21-edge case table and invoked one ad hoc final NL synthesis rather than calling the named stage. Nested invocations `/1`–`/6` then performed generic iteration and progress judgments, not the authored assertion, edge, scope or effect handoffs. The model-visible root plan did call for typed `readStudyPlots` and four-folder accumulation, but the simple final return type still let the root propose an answer without executing that graph.
+- The final value placed `grass` in both `increase` and `unresolved`; the declared answer comparator rejected it. The opt-in item-result binding also rejected the row because no required producer/consumer lineage existed. Outcome `accepted=false`, with `answer=false` and `item_result_binding=false`. This is a direct-return/source-ergonomics and trajectory-quality finding; it does not disprove the source world or grant model-negative or training credit. A structural next variant should make the final typed state depend on named child results and give an immediate exact recovery signal when a required child is skipped. Compare it live before adoption; the approximately 48-sample model-facing measurement remains open.
+
 ## Ecology v18 callable-location diagnostic (2026-10-14)
 
 - Frozen source SHA-256 `0611d96dca02ac273e4d7e2b60d7afc08ef800d1abaa0be355102398d14a0e4a`, runtime manifest SHA-256 `4ccdba896236e1ecbda87386808ba38f3b426fb3c934f3387d0a8e04bd97bc1a`. Case-000 queue SHA-256 `641f675850d98207d39b3c1a5541d1d919536a5128ae16539983024558d06563`; same-source fresh-seed case-001 queue SHA-256 `24db9d1e2b2952d720a7dd4a4cf0e43eeb78c2d7036aa26636dc96d3f53d63c9`.

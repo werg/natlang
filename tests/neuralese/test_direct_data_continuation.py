@@ -317,6 +317,31 @@ def test_compressed_text_matches_plain_eager_and_cached_streams(tmp_path, monkey
     assert load_text_rows(None, text_data=plain) == load_text_rows(None, text_data=packed)
 
 
+def test_edged_value_masks_precede_prefix_merge_and_have_distinct_cache_identity(tmp_path, monkeypatch):
+    import hashlib
+    from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
+    tokenizer = _FingerprintTokenizer()
+    base = list(range(10, 130))
+    rows = [{'id': f'r{i}', 'text': f't{i}', 'split': 'train', 'source_groups': [f'g{i}'],
+             'token_ids': base[:n], 'tokenizer_sha256': tokenizer_fingerprint(tokenizer),
+             'supervised_suffix_start': n - 2} for i, n in enumerate((70, 90, 110))]
+    data = tmp_path / 'data.jsonl'
+    data.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    a = SimpleNamespace(merge_prefix_rows=True, recovery_selection=None, e2e_mix=None, out=tmp_path)
+    assert len(list(trainer.stage_rows(a, data, tokenizer))) == 1
+    for index in (0, 1):
+        path = tmp_path / f'mask{index}.jsonl'
+        path.write_text(json.dumps({'id': f'r{index}', 'spans': [[65, 70, 'value', True]]}) + '\n')
+        a.e2e_mix = {'neuralese_spans': {'path': str(path),
+                                       'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}}
+        cold = list(trainer.stage_rows(a, data, tokenizer))
+        warm = list(trainer.stage_rows(a, data, tokenizer))
+        assert cold == warm and len(cold) == 2
+        assert {r['id'] for r in cold} == {f'r{index}', 'r2'}
+        assert next(r for r in cold if r['id'] == f'r{index}')['context_only_spans'] == [[65, 70]]
+
+
 def test_the_prefix_merge_decisions_are_cached_under_their_key(tmp_path, monkeypatch):
     from natlang_neuralese.train.text_warmup import stream_merge_prefix_rows
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
