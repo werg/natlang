@@ -189,7 +189,8 @@
           "act": "ActReading",
           "episode": "Episode",
           "view": "ParticipantView",
-          "source": "DialogueSource"
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation"
         },
         "returns": "EndorsementDecision",
         "kind": "function",
@@ -202,7 +203,9 @@
           "episode": "Episode",
           "view": "ParticipantView",
           "decision": "EndorsementDecision",
-          "source": "DialogueSource"
+          "views": "ParticipantView[]",
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation"
         },
         "returns": "RevisionDelta",
         "kind": "function",
@@ -312,6 +315,7 @@
       {
         "path": "analyzeConversation/scopeTurns/classifySpeechActs/judgeIllocution.nl",
         "args": {
+          "unit": "SpeechUnit",
           "node": "QuoteNode",
           "turn": "TurnRecord",
           "references": "ReferenceBindings",
@@ -581,6 +585,16 @@
       "site": "analyzeConversation/answerQuestions/joinProof/challengePerspective.nl",
       "result_type": "PerspectiveChallenge",
       "consumed_by": "ProofGraph.challenge and QueryAnswer.challenge"
+    },
+    {
+      "site": "analyzeConversation/scopeTurns/classifySpeechActs.nl",
+      "result_type": "SpeechUnit[]",
+      "consumed_by": "Each actual unit.focus/support passed to named judgeIllocution; claims retain opposite values."
+    },
+    {
+      "site": "analyzeConversation/scopeTurns.nl",
+      "result_type": "LedgerFinding",
+      "consumed_by": "ScopedConversation.scopeFindings and final report findings distinguish valid perspective differences from inconsistent joins."
     }
   ],
   "iteration_frontiers": [
@@ -603,7 +617,7 @@
     "participants": 5,
     "queries": 16,
     "nl_functions": 29,
-    "numbered_steps": 200
+    "numbered_steps": 206
   },
   "provenance": {
     "author": "semantic_slate_sol",
@@ -621,5 +635,5 @@
   },
   "reference_scope": "Full typed canonical report pending. Projection oracle is not a complete result and grants no runtime replay credit.",
   "model_facing_debt": "Initial29NL source requires independent review, full typed witness/checker and approximately48 live samples before adoption.",
-  "source_precision": "Actual two-layer quoted archive chain; activation versus consequent predicates and source-bounded fulfillment; corroboration must match endorsed value."
+  "source_precision": "Actual per-proposition claims and focused speech units; attachment fact-ID preservation; private intention distinct from retraction; audience adoption/issuer effect ownership; terminal retraction preserved."
 }

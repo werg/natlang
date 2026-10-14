@@ -10,7 +10,8 @@ returns: ProofGraph
 ---
 1. Select the actual statement/atom/commitment/fact readings relevant to this focus. Follow their original
    act, source clause, episode and availability IDs rather than reconstructing an answer-shaped proof.
-2. Create generated ProofNodes for actual original evidence, availability, endorsement, condition and
+2. Create actualGraph with empty nodes/edges/rootProofIds, challenge null and explicit unresolved
+   reasons, then add generated ProofNodes for actual original evidence, availability, endorsement, condition and
    revisions. Edges name supports/defeats/available-to/anchored-at/conditions/quotes with real endpoint IDs.
 3. For belief preserve any current active false endorsement and its support. For knowledge additionally
    join actual available corroborating verified evidence; a global fact without an actor receipt has no

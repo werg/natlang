@@ -4,22 +4,30 @@ args:
   frontier: PerspectiveFrontier
 returns: PerspectiveFrontier
 ---
-1. Remove the next original episode and copy current participant views. Apply its actual availability
+1. Bind source to frontier.source and scoped to frontier.scoped, preserving those actual original
+   objects. Remove the next original episode as episode and copy current participant views as currentViews. Apply its actual availability
    rows first, adding only returned turn/act/verified-fact IDs to the named participant's access sets.
 2. For each actual episode act and relevant named participant call judgeEndorsement(act, episode,
-   that view, frontier.source). Relevant means actual speaker or an access-bearing participant, not everybody.
-3. Call updateBelief(actualDecision, act, episode, view, source). Consume its add/defeat arrays. Apply
+   that view, source, scoped). Name the actual returned decision actualDecision, and preserve this
+   accessed actor view as beforeBeliefView before belief changes. Relevant means actual speaker or an access-bearing participant, not everybody.
+3. From actualDecision.adoptsActIds retain only actual correction/retraction acts from scoped, then add
+   those exact IDs to that actor's adoptedRevisionActIds after checking source
+   access and actual scoped ID membership. Call updateBelief(actualDecision, act, episode, beforeBeliefView, source). Consume its add/defeat arrays. Apply
    exactly those actor-owned belief effects, preserving independent contradictory beliefs unless defeated.
 4. For performed promise acts at their actual original event, call updateCommitment(act, episode,
-   issuerView, currentViews, source, scoped). Only the actual issuer view owns this commitment. For previously
+   issuerView, currentViews, source, scoped). Only the actual issuer view owns this commitment; preserve already retracted original commitments
+   when later facts or due boundaries are reevaluated. For previously
    established commitments whose condition facts changed or whose source due boundary this episode crosses, call the same stage with their original act.
    Consume actual commitment additions/replacements; report-only acts cannot invent a new issuer promise.
-5. For an actual correction or explicit adopted retraction call resolveRetraction(act, episode, view,
-   actualDecision, source). Consume targeted defeat/retraction IDs; a sender's private intention does not
+5. For an actual correction or explicit adopted retraction call resolveRetraction(act, episode, beforeBeliefView,
+   actualDecision, currentViews, source, scoped). Consume targeted defeat/retraction IDs; a sender's private intention does not
    cancel another audience's communicated commitment. Receipt alone does not apply adoption effects.
 6. Each child sees the relevant original evidence and the actual current view. Do not pass a fabricated
    empty source or a synthetic participant who conveniently already knows the complete physical record.
-7. Check every returned participantId and target ID belongs to this original view/act domain. Apply
+7. Belief defeats apply to RevisionDelta.participantId. Commitment retraction effects apply only to
+   its returned commitmentOwnerId, whose actual issuer ledger contains those exact commitment IDs.
+   This cross-view effect requires actual audience adoption evidence; recipient access alone is insufficient.
+   Check every returned participantId and target ID belongs to this original view/act domain. Apply
    only typed effects to that participant; copy source witness identity exactly without semantic re-judgment.
 8. Record EpisodeDelta containing the actual endorsement/belief/commitment/revision results and access.
    Append an immutable ViewSnapshot after all this episode's independent effects have been applied.

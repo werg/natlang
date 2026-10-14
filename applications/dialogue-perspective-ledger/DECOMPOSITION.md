@@ -24,10 +24,12 @@ substantive lines. Source size is descriptive; no filler or template chain is cr
   chronology and receipt records. Exact framing preserves IDs/paths/text; interpreting content is NL.
 - `QuoteTree` contains original span identity, nesting, attributed speaker, original temporal frame,
   reported/endorsed scope and unresolved attribution. A forwarded quote keeps its original speaker/day.
-- `ActReading` retains illocution, referent bindings, proposition, conditional predicates, deadlines,
+- `ActReading` retains focused speech units, illocution, referent bindings, per-proposition claim values,
+  separate activation/consequent predicates, deadlines,
   audience and exact original support. Unknown irony or pronoun scope is explicit alternatives/unresolved.
 - `ParticipantView` contains available event IDs, endorsed belief atoms, conditional commitments and
-  revision lineage. Every derived atom identifies its participant perspective and supporting availability.
+  revision lineage and actual adopted revision act IDs. Commitment effects retain separate issuer-owner
+  and adopting-audience scope. Every derived atom identifies its participant perspective and supporting availability.
 - `PerspectiveFrontier` owns the finite ordered original episode IDs, current views, actual deltas,
   physical-event facts and accumulated trace. Each step consumes one original episode.
 - `ProofGraph` separates original evidence from derived belief/commitment/query nodes. Directed edges
@@ -121,3 +123,13 @@ No executable TypeScript semantic helper, regex act classifier or case-specific 
 No effect leaves the snapshot. No runtime call budget is a termination proof. Source/model-facing changes
 update both repository authoring/integration skills and record approximately48-sample live debt until
 measured. Independent source/oracle/checker review and full live trace qualification precede admission.
+
+## Source handoff audit before canonical sealing
+
+Per-proposition claims replace the single aggregate endorsement value: version acknowledgment and
+collection correction contain opposite values. Typed SpeechUnit focus/support is passed to the actual
+illocution child, so separate force units are not identical whole-node calls. ReceiptReading carries
+actual verifiedFactIds into participant availability. Private intention has its own act kind and visible
+proposition; it supplies no communicated cancellation. Adoption IDs are actual scoped act identities.
+Retraction joins real beneficiary views and issuer-owned commitments, with separate owner/adopter fields
+in the returned delta; later fact/deadline recomputation preserves terminal retraction.

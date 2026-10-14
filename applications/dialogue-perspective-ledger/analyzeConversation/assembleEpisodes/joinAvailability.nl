@@ -12,7 +12,8 @@ returns: AvailabilityReading[]
    Its local policy identifies owner access, directed recipient delivery and the exact content carried.
 3. Original speakers know their own utterance. Private notes reach their owner only. An explicitly
    received forwarded quotation makes its carried content available without exposing unrelated diaries.
-4. For a verified report identify the actual attached fact IDs and receiving participant/time. Knowledge
+4. For a verified report copy the actual receipt.verifiedFactIds and receiving participant/time after validating their original
+   fact domain. Keep that actual child contribution; do not rederive a different attachment inventory. Knowledge
    still needs later endorsement; this stage adds access to evidence, not an endorsed belief atom.
 5. A dispatch that arrives tomorrow does not grant today's recipient access. A receipt with an opaque
    date-like ID uses its stated moment. No channel membership alone substitutes for actual hearing.
