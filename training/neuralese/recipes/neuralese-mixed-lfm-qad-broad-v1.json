@@ -12,11 +12,11 @@
    ],
    "fraction": 0.25,
    "records": {
-    "path": "runs/neuralese-e2e-cohort-20261013-v3/records.jsonl",
-    "sha256": "0f197b3aa5973dd87239de53630024ffa8ab2d816a44ff9d23a671d21ef8db2f"
+    "path": "runs/neuralese-e2e-cohort-20261014-v4/records.jsonl",
+    "sha256": "150e5e107a0f108c2137a1f88f67b6ae5bf0adeb7e715297f1a27ab9f3dbca4e"
    },
    "pieces": {
-    "path": "runs/neuralese-e2e-cohort-20261013-v3/pieces.jsonl",
+    "path": "runs/neuralese-e2e-cohort-20261014-v4/pieces.jsonl",
     "sha256": "b7157f97012b669548ea35a42304bb09be572cd8b36ab207249b17912e9c7431"
    },
    "options": {
