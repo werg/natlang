@@ -18,9 +18,13 @@ check('immutable source text rewritten',false,v=>v.source.clauses[0].text='A rew
 check('missing original source coverage',false,v=>v.sourceCoverage.pop());
 check('foreign original witness quote',false,v=>v.patch.patches[0].meaning.witnesses[0].quote='This sentence is absent from the source');
 check('source scene silently changes agent to fit a bad candidate',false,v=>v.source.sessions.situations[0].agentId='Ema');
+check('original S2 correction context is omitted',false,v=>v.source.sessions.sessions.find(s=>s.sessionId==='S2').contextClauseIds=[]);
+check('original correction judgment is attributed to a different consultant',false,v=>v.source.corrections.corrections.find(c=>c.correctionId==='C1').consultantId='Belo');
+check('original protected correction slots are omitted',false,v=>v.source.corrections.corrections.find(c=>c.correctionId==='C2').excludedSlotIds=[]);
 check('original stem nara falsely treated as entity Ila',false,v=>v.source.stems.find(s=>s.surface==='nara').entityId='Ila');
 check('original utterance changes its exact surface',false,v=>v.source.utteranceIndex.utterances.find(u=>u.utteranceId==='U4').surface='emana emara taku');
 check('unasked future becomes an asserted P5 field',false,v=>scope(v,'U5').assertedFields.push('futureExpected'));
+check('response scope cannot both assert and exclude the same field',false,v=>scope(v,'U1').excludedFields.push('agentId'));
 check('P5 future exclusion is erased',false,v=>scope(v,'U5').excludedFields=scope(v,'U5').excludedFields.filter(f=>f!=='futureExpected'));
 check('held-out target acquires an invented consultant judgment',false,v=>{scope(v,'X1').status='usable';scope(v,'X1').judgmentNoteIds=['J5'];});
 check('N1 original correction lineage erased',false,v=>{const e=v.graph.effectiveNotes.entries.find(e=>e.originalNoteId==='N1');e.correctionIds=[];});

@@ -1,0 +1,39 @@
+{
+  "schema": "natlang.semantic-application-independent-typed-certificate-review/2",
+  "case_id": "sol-field-reed-court-v1",
+  "reviewer": "semantic_stack_curriculum",
+  "source_package": "/tmp/sol-field-full-certificate-v2",
+  "source_sha256": "e2fdfb75a02e6bbd1ab4cc1fb0899b00bc52df2a80c5e0cb30b3b1dc69762c73",
+  "visible_sha256": "c5c9b99651f2e0dd99437f804734259709e2c4c22a8016149cee3511460892c5",
+  "oracle_sha256": "88096a9df70f790ed1a27d68dd41ba3211b9613392440c218478001551facec9",
+  "reference_sha256": "11680502ee3c5f79832f726240894e2a898e8c1f40a7c50129e26898dc51c1b1",
+  "verifier_sha256": "178a1f8d4ef92ea3cf9d5d1313ddbb1f63e7a6b43ec8c475bba30af49b3082a6",
+  "control_sha256": "2e0135a896f5a1e0635bd2b42fd1dd5415c5925020ed7c4090f4c168c50e9dc8",
+  "prior_certificate": "plans/semantic_stack/FIELD_GLOSS_TYPED_CERTIFICATE_REVIEW_CURRICULUM.json",
+  "source_delta": "Public NL files, fixture, request and full typed reference are unchanged. The private oracle now declares exact original session context IDs and correction attribution/exclusion fields; the verifier checks those fields and asserted/excluded scope disjointness.",
+  "controls": {
+    "original": 64,
+    "additional_adversarial": 4,
+    "positive": 10,
+    "negative": 58,
+    "passed": 68,
+    "new_rejections": [
+      "Omitted S2 correction context clauses",
+      "Changed C1 consultant attribution",
+      "Omitted C2 protected excluded slots",
+      "The same response field asserted and excluded"
+    ]
+  },
+  "canonical_reference_replay": {
+    "typed_result": "LinguisticReport",
+    "reference_ok": true,
+    "reference_problems": []
+  },
+  "limits": [
+    "The exact certificate does not execute the NL application or establish linguistic entailment of candidate judgments.",
+    "The private verifier retains semantic_review_required=true; live qualification and training admission remain held."
+  ],
+  "source_and_exact_certificate_review_passed": true,
+  "live_qualified": false,
+  "training_admission": false
+}

@@ -763,6 +763,10 @@
           "SA1",
           "SA2"
         ],
+        "contextClauseIds": [
+          "A01",
+          "A02"
+        ],
         "occurredOrder": 1
       },
       {
@@ -773,6 +777,12 @@
         ],
         "situationIds": [
           "SA3"
+        ],
+        "contextClauseIds": [
+          "C1",
+          "N1R",
+          "C2",
+          "A01"
         ],
         "occurredOrder": 2
       },
@@ -789,7 +799,32 @@
           "SA5",
           "SA6"
         ],
+        "contextClauseIds": [
+          "A01"
+        ],
         "occurredOrder": 3
+      }
+    ],
+    "corrections": [
+      {
+        "correctionId": "C1",
+        "consultantId": "Reni",
+        "scope": "gloss",
+        "adopted": true,
+        "targetNoteIds": ["N1"],
+        "targetSlotIds": ["NA_GLOSS"],
+        "replacementNoteIds": ["N1R"],
+        "excludedSlotIds": ["SURFACE_U1", "REMINDER", "F_MI"]
+      },
+      {
+        "correctionId": "C2",
+        "consultantId": "Reni",
+        "scope": "gloss",
+        "adopted": true,
+        "targetNoteIds": ["N1"],
+        "targetSlotIds": ["NA_GLOSS"],
+        "replacementNoteIds": ["N1R"],
+        "excludedSlotIds": ["SURFACE_U1", "REMINDER", "F_MI"]
       }
     ],
     "notes": [

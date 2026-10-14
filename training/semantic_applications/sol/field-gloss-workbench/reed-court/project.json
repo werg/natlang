@@ -750,6 +750,12 @@
       "sha256": "4080bff4bbc0fee705ce2442097f4455b350b26dd0315ee627b2175689b7b2d9",
       "reviewer": "semantic_stack_curriculum",
       "scope": "Full authored typed source witness and exact checker:64controls10positive54negative; original field/domain/span/prefix constraints independently reviewed; semantic entailment/live execution unqualified"
+    },
+    {
+      "path": "plans/semantic_stack/FIELD_GLOSS_TYPED_CERTIFICATE_REVIEW_CURRICULUM_V2.json",
+      "sha256": "443504170b5beab723fffab6e3516f694a6db0bf8bdc85e17968abb6f6b22b1e",
+      "reviewer": "semantic_stack_curriculum",
+      "scope": "Current private exact certificate: original64 plus four adversarial controls all pass; session context, correction attribution/exclusions and scope disjointness bound; linguistic entailment/live execution unqualified"
     }
   ],
   "generation_ready": true,
