@@ -91,7 +91,7 @@ def test_sampled_evaluations_send_their_temperature_and_repeat_runs_draw_new_see
         evaluator.subset = tmp_path / 'subset.jsonl'
         return [[(e.get('temperature'), e['seed']) for e in entries]
                 for repeat in (0, 1) for _, _, entries in evaluator._queues(tmp_path / f'r{repeat}', repeat)]
-    assert queues() == [[(None, 400003)], [(None, 400007)], [(None, 400003)], [(None, 400007)]]
+    assert queues() == [[(0, 400003)], [(0, 400007)], [(0, 400003)], [(0, 400007)]]
     assert queues(temperature=0.6) == [[(0.6, 400003)], [(0.6, 400007)], [(0.6, 500003)], [(0.6, 500007)]]
     with pytest.raises(ValueError):
         parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'temperature': 3})
