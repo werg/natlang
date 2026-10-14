@@ -51,6 +51,18 @@ Record the source-neutral graph and every omission or outstanding conversion.
 
 ## Completion evidence
 
+### Coding session source with explicit outcomes
+
+Treat D40 agentic coding sessions as typed continuation handoffs through the
+existing trajectory stages. Preserve serialized messages, tool calls and exact
+upstream instance identifiers; share `swe-instance` groups with existing SWE
+sources and keep known benchmark instances held. Preserve reported failure
+labels without claiming execution here. For positive static training conversion,
+explicitly exclude failed trajectories and record every exclusion in the
+converter's rejection ledger; their original source remains available. Unknown
+outcomes stay explicitly unknown. JSON decoding and outcome selection under this
+declared policy are crisp source plumbing, not a new model-facing interface.
+
 Pinned catalog and acquired SHA manifests; converted unique sessions/targets and
 communication edges with their provenance; protected splits; both tokenizer views;
 actual shared recipe bindings and sampler exposure; consumer-to-producer gradients

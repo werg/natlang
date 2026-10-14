@@ -711,8 +711,40 @@ def cognitive_kernel(limit=None):
         yield rid, _initial_request_background(trajectory)
 
 
+def agentic_coding_sessions(limit=None):
+    """D40's serialized coding sessions, retaining reported outcomes and SWE grouping."""
+    root = EXPANSION_ROOT / 'D40'
+    receipt = json.loads((root / 'acquisition.json').read_text())
+    bench = _bench_ids()
+    for index, row in _limited(_parquet_groups(root / 'sessions.parquet'), limit):
+        raw = json.loads(row['messages_json'])
+        messages = []
+        for original in raw:
+            msg = dict(original)
+            if msg.get('tool_calls_json'):
+                msg['tool_calls'] = json.loads(msg['tool_calls_json'])
+            messages.append(msg)
+        meta = json.loads(row.get('ground_truth_meta_json') or '{}')
+        instance = meta.get('instance_id') or row.get('source_id')
+        normalized = {'messages':messages, 'metadata':{
+            'trajectory_id':instance, 'session_id':row['session_id'],
+            'source_dataset':row.get('source_dataset'), 'ground_truth':meta}}
+        t = expansion_trajectory('D40', receipt, str(index), normalized)
+        t.split_groups.append(group_key('swe-instance', instance))
+        if instance in bench:
+            t.split = 'test'
+        resolved = meta.get('resolved')
+        t.outcome = {'label':'failed' if resolved is False else 'teacher', 'checked':None,
+                     'details':{'reported_resolved':resolved, 'origin':'upstream_metadata',
+                                'executed_locally':False}}
+        t.lineage['teacher'] = _teacher(row.get('recorded_model'))
+        t.lineage['notes']['benchmark_protected'] = instance in bench
+        yield str(index), _initial_request_background(t)
+
+
 CORPORA.update({"wideseek": (wideseek, 4), "cooperator-dual-policy": (cooperator_dual_policy, 4),
                 "searchswarm": (searchswarm, 4), "owl-sft": (owl_sft, 4), "codeagent-sft": (codeagent_sft, 1),
                 'evidence-subagent': (evidence_subagent, 4), 'openthoughts-agent': (openthoughts_agent, 4),
                 'terminaltraj': (terminaltraj, 4), 'dolci-tool-use': (dolci_tool_use, 4),
-                'cognitive-kernel': (cognitive_kernel, 4)})
+                'cognitive-kernel': (cognitive_kernel, 4),
+                'agentic-coding-sessions': (agentic_coding_sessions, 4)})
