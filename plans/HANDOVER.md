@@ -15,13 +15,13 @@ training-admitted.
 Dialogue's two-layer quotation and timed promise refinement is on main; its
 canonical/checker and independent review remain active.
 
-The v15d ecology diagnostic is active under
-`natlang-pop-semstack-v15d-ecology.service` with current-batch return and
-source-ID guards. Cave v5 was stopped after about 34 turns when one teacher
-request streamed over 86 KB of partial tool-call deltas without completing;
-its `action_max_tokens:4096` transport path is under investigation. The Cave
-trace is diagnostic for the earlier frozen source only. The refined source
-requires a separately sealed run. Pop's QAD held48 GPU evaluation continues.
+The v15d ecology diagnostic stopped after Stage 5 made case-specific graph
+status decisions in generated JS; v16 must move each node finding into a
+scoped typed NL decision while exact graph traversal remains mechanical.
+Cave v5 stopped after a Codex teacher request ignored its configured output
+ceiling. The shared Pi Codex payload fix and authenticated ceiling proof are
+published (`edfb67e6`, `f2f15d2a`); the revised Cave source still needs a
+separately sealed live run. Pop's QAD held48 evaluation has completed.
 
 DGX's new bulk SWE cohort was merged to main. All four text training manifests
 (two whole-trajectory and two program-header views, about 3.56 GiB total) are
@@ -47,6 +47,11 @@ repetition/budget cases lack result exports but have exact terminal queue
 receipts; the original report remains unchanged. The close marker did not
 appear visibly in any completed response; this does not prove it was never
 sampled as an invisible stop. No matched 48-case base comparison exists.
+The older step-15000 full-rendering 16-case run shares the same packet hash
+but only 12 IDs with the new 48-case set. Both runs pass one of those 12,
+on different cases. A corrected-classifier rescore of the original 16 receipts
+is adjacent to the immutable original report; its outcome counts did not
+change. The owner's earlier decision waives a separate 48-case QAD-base run.
 
 ## 03:50 CEST: deep NL source bar, ecology state repair, live QAD evaluation
 
