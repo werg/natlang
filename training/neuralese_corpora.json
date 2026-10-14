@@ -73890,6 +73890,26 @@
         "external-expansion-agentic-coding-handoffs-20261014-v1"
       ],
       "license": "Facts retained in pinned original source snapshot and port records"
+    },
+    {
+      "id": "external-expansion-gatc-native-20261014-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-gatc-native-20261014-v1",
+      "include": [
+        "turns/**/*.turns.jsonl.zst",
+        "turns/**/*.summary.json",
+        "ir/**/build.json",
+        "runtime-page.json",
+        "admission-review.json"
+      ],
+      "source_class": "statically-lowered-external-native-teacher-turns",
+      "training_admission": true,
+      "training_admission_reason": "Owner2026-10-14 static natlang-like conversion and general coding/Neuralese training",
+      "admission": "External teacher targets unknown; static native plumbing exact. All replay cases admitted; oversized input conversions remain explicit build omissions.",
+      "derived_from": [
+        "external-expansion-gatc-handoffs-20261014-v1"
+      ],
+      "license": "Facts retained in pinned original source snapshot and port records"
     }
   ],
   "coverage_backlog": [

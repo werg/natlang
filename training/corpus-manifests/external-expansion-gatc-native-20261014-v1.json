@@ -1,0 +1,64 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-gatc-native-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-gatc-native-20261014-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 459,
+      "sha256": "428d25fb25053b6cd0aff55eac5b9edab4a9975fc5adf38f5dfde9074631ff6b"
+    },
+    {
+      "path": "ir/trajectory_continuation_coding/build.json",
+      "bytes": 804,
+      "sha256": "3e53f79a00c49c036389829085076eab344105efaf7cc2bb1696edd0e7cf575d"
+    },
+    {
+      "path": "runtime-page.json",
+      "bytes": 113,
+      "sha256": "814dad314ede1e73b05f8b3a34a0e1f206c242bfccfa0177193fb2f6404e6300"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00000.summary.json",
+      "bytes": 256,
+      "sha256": "424860c62b02da518e03cf257a87fef9195eadaa139d4a3be9d6959027109813"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+      "bytes": 19674108,
+      "sha256": "913f480adf6586ee26eb8a26c351f76bf7d03e1edc3a9f5b005b9dc1bf06c220"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00001.summary.json",
+      "bytes": 256,
+      "sha256": "b877441f31e13ecfdda847e86fd9f05d3a2ced8517a9afbfec0251340fa7b976"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00001.turns.jsonl.zst",
+      "bytes": 10348268,
+      "sha256": "6600b8eb092d4a4d518e5a9032669c050c6b87772181eda3b3a4683026f31d72"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00002.summary.json",
+      "bytes": 256,
+      "sha256": "2edf05aa77d4cfca8126b269fd0352b963a67b00c83f9d7932f7c0fce287959a"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00002.turns.jsonl.zst",
+      "bytes": 12027602,
+      "sha256": "bb0dc4c75ba811ea1f7cb60dad80aa646c02dea4a2a1fea89a97ddd068c1460d"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00003.summary.json",
+      "bytes": 256,
+      "sha256": "5f0a1c2dfbd1e3dbd388ac6083282557c1ec350c6ed08faefb27c41b90fe0f65"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00003.turns.jsonl.zst",
+      "bytes": 10399020,
+      "sha256": "1c5778ff24791a84cc13e3170f48cd08fc108fb26c84be01a6146685014614e5"
+    }
+  ],
+  "bytes": 52451398
+}
