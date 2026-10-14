@@ -815,7 +815,10 @@ def adopt(args):
 
 def status(args):
     with ledger() as state:
-        free, live = headroom(state, gpu_usage())
+        gpu = gpu_usage()
+        free, live = headroom(state, gpu)
+        driver_cuda_free = cuda_free_bytes()
+        cuda_free = cuda_headroom(live, gpu) if driver_cuda_free is not None else None
         queue = waiting_order(state)
         graces = {}
         plans = {}
@@ -829,9 +832,14 @@ def status(args):
                       **({'fixed_claim': True} if fixed_claim(c) else {}),
                       'command': shlex.join(c['command'])[:160]} for u, c in live.items()}
     print(json.dumps({'available_gb': round(mem_available() / GIB, 1), 'headroom_gb': round(free / GIB, 1),
+                      **({'driver_cuda_free_gb': round(driver_cuda_free / GIB, 1),
+                          'cuda_headroom_gb': round(cuda_free / GIB, 1)} if cuda_free is not None else {}),
                       'claims': claims,
                       'waiting': [{'position': n + 1, 'unit': name, 'priority': w['priority'],
                                    'budget_gb': round(w['budget'] / GIB, 1), 'requeued': bool(w.get('requeued')),
+                                   **({'cuda_budget_gb': round((w.get('cuda_budget') or w.get('spec', {}).get('cuda_budget')) / GIB, 1),
+                                       'cuda_fits': cuda_fits_entry(w, cuda_free)}
+                                      if w.get('cuda_budget') or w.get('spec', {}).get('cuda_budget') else {}),
                                    'would_preempt': plans[name],
                                    'blocked_by': non_preemptible(live, w),
                                    **({'cannot_fit': why} if (why := unreachable(live, free, w)) else {})}
