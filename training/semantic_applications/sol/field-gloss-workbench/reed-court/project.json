@@ -719,20 +719,45 @@
   "readiness": {
     "source_loader_checked": true,
     "typed_declarations_checked": true,
-    "typed_reference_checked": false,
-    "independent_source_review": false,
-    "independent_oracle_review": false,
-    "exact_result_replay": false,
+    "typed_reference_checked": true,
+    "independent_source_review": true,
+    "independent_oracle_review": true,
+    "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
   },
   "source_review_binding": {
-    "reviewed": false,
-    "scope": "Initial connected corpus and invariant landscape; full typed witness/checker and independent review pending"
+    "reviewed": true,
+    "scope": "Independent source/fixture constraints plus full authored typed certificate and exact comparator; diagnostic preparation only, actual linguistic entailment/literal execution/whole-task live outcome held",
+    "source_commit": "66cb0894",
+    "typed_certificate_review_commit": "45e6f43a"
   },
-  "independent_reviews": [],
-  "generation_ready": false,
+  "independent_reviews": [
+    {
+      "path": "plans/semantic_stack/FIELD_GLOSS_REED_SOURCE_REVIEW_ASTRA.json",
+      "sha256": "eca49f324dcb0892416f1cca92b0188f6b9915093c1ccc80d9729bf484f39d63",
+      "scope": "Original source/world constraints only; new private exact tables and certificate/verifier require separate delta review",
+      "reviewer": "semantic_slate_astra"
+    },
+    {
+      "path": "plans/semantic_stack/FIELD_GLOSS_REED_CONSTRAINT_REVIEW_CURRICULUM.json",
+      "sha256": "c2cbc326dc3d842c4de6873fc06f6df1c094fbc0dca8e39e59e636d243ca54d5",
+      "scope": "Original source/world constraints only; new private exact tables and certificate/verifier require separate delta review",
+      "reviewer": "semantic_stack_curriculum"
+    },
+    {
+      "path": "plans/semantic_stack/FIELD_GLOSS_TYPED_CERTIFICATE_REVIEW_CURRICULUM.json",
+      "sha256": "4080bff4bbc0fee705ce2442097f4455b350b26dd0315ee627b2175689b7b2d9",
+      "reviewer": "semantic_stack_curriculum",
+      "scope": "Full authored typed source witness and exact checker:64controls10positive54negative; original field/domain/span/prefix constraints independently reviewed; semantic entailment/live execution unqualified"
+    }
+  ],
+  "generation_ready": true,
   "training_admission": false,
   "model_facing_debt": "0/48 initial-source samples; actual scoped judgments/child returns/frontier consumption and whole-task outcome unmeasured",
-  "reference_scope": "Invariant landscape draft outside visible roots; not full typed reference or actual NL execution"
+  "reference_scope": "One full typed privately authored source-validity witness plus qualified declared exact comparator; not execution of the NL application, a complete linguistic classifier or a teaching trajectory",
+  "reference_path": "training/semantic_applications/sol/field-gloss-workbench/reed-court/reference-report.json",
+  "external_verifier_path": "training/semantic_applications/sol/field-gloss-workbench/verify-result.mjs",
+  "external_verifier_export": "verifyCandidate",
+  "preparation_readiness_scope": "Pinned source diagnostic generation only; semantic_review_required always true, no live or training qualification"
 }
