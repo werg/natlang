@@ -1,0 +1,62 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-target-union-20261014-r8",
+  "owner": "dgx",
+  "path": "runs/natlang-target-union-20261014-r8",
+  "files": [
+    {
+      "path": "full/lfm25/text-data.jsonl.zst",
+      "bytes": 41260744,
+      "sha256": "b73e8a1fa9a198ed48f6c89faba562dea968a06e4728e8a927b1baa83c98c809"
+    },
+    {
+      "path": "full/mellum21/text-data.jsonl.zst",
+      "bytes": 40484527,
+      "sha256": "5a6d54f526c8259e255ae45408d9257c880bd5051c0bd092227cb65393af39c5"
+    },
+    {
+      "path": "full/omissions.jsonl",
+      "bytes": 58009,
+      "sha256": "968d997f9a3c636f90b5f2c1915f654833bf5c1421aa0aa4e15aa6b004d28e57",
+      "lines": 117
+    },
+    {
+      "path": "program-header/lfm25/text-data.jsonl.zst",
+      "bytes": 1426502107,
+      "sha256": "60c69c269ac7cfc6ee26cbc5d5c78c2d72e98d14ed8370027fe9e800b5c3edf8"
+    },
+    {
+      "path": "program-header/mellum21/text-data.jsonl.zst",
+      "bytes": 1442068099,
+      "sha256": "a6e297d75f3b3054843cb05eb3f8319fc22c106d5d6e870ce8d0a3067a7ab331"
+    },
+    {
+      "path": "program-header/omissions.jsonl",
+      "bytes": 1313097,
+      "sha256": "a3558e8852e16291ec9e3d7034b119f4be6b5a8adf6d3223ee090b95b8198e17",
+      "lines": 2595
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 18883,
+      "sha256": "db4f47c216b7495767f412cfb8f9f9dfa41077f83dec5627da08a33cf3fc75d1"
+    },
+    {
+      "path": "whole-trajectory/lfm25/text-data.jsonl.zst",
+      "bytes": 1049574008,
+      "sha256": "e967d0d39d3cc495193d1585e6bf3ef3bf547ed4b91b7dca7012bbf594540e6b"
+    },
+    {
+      "path": "whole-trajectory/mellum21/text-data.jsonl.zst",
+      "bytes": 1100022740,
+      "sha256": "2b1edf959aeda126f32e5d6170fc590eb7f0916d59351d529a0c23fdb7a52fea"
+    },
+    {
+      "path": "whole-trajectory/omissions.jsonl",
+      "bytes": 361207,
+      "sha256": "d163e5e423b02e8fa4db4d58cb273148c08c8b60b26e7301f86a942b4fa6648d",
+      "lines": 691
+    }
+  ],
+  "bytes": 5101663421
+}
