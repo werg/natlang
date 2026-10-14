@@ -6,7 +6,7 @@ returns: EquipmentSurvey
 ---
 1. Capture immutable original clauses. Create a scoped NL inventory literal returning SurveyUnitInventory
    and directly await it. It identifies individual gear condition/transition and sensor reading units,
-   primary/supporting original clause IDs and focus questions; it supplies no prepared semantic rows.
+   primary/supporting original clause IDs and focus questions, with originalLocalName:null for these nonlandmark units; it supplies no prepared semantic rows.
 2. Include initial resources, sample restrictions, rope rigging/reuse, permitted recovery and distinct
    sensor capabilities. Split several semantic items in one clause when their ownership differs; join
    one sensor's complementary answer/scope/cost clauses by actual source identity, not file adjacency.

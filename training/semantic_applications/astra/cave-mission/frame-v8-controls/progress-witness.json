@@ -1,0 +1,1128 @@
+{
+  "schema": "natlang.cave-frame-progress-controls/1",
+  "role": "Authored exact type/provenance/progress witness; not application execution or semantic entailment",
+  "source_world_split_key": "astra-application-cave-mirrored-vault-v1",
+  "before": {
+    "clauses": [
+      {
+        "id": "M01",
+        "text": "[M01] The robot starts at entrance E with energy9, an empty sample carrier and one unused rope spool. The mission is complete only when it returns to E carrying the sealed sample from chamber V.",
+        "witnesses": [
+          {
+            "sourceId": "MISSION",
+            "path": "contracts/mission.md",
+            "quote": "[M01] The robot starts at entrance E with energy9, an empty sample carrier and one unused rope spool. The mission is complete only when it returns to E carrying the sealed sample from chamber V."
+          }
+        ]
+      },
+      {
+        "id": "M02",
+        "text": "[M02] Every listed action has its stated positive integer energy cost, charged when performed. Energy may reach zero on successful return. No recharging, external intervention or unlisted action is available in this closed fictional world.",
+        "witnesses": [
+          {
+            "sourceId": "MISSION",
+            "path": "contracts/mission.md",
+            "quote": "[M02] Every listed action has its stated positive integer energy cost, charged when performed. Energy may reach zero on successful return. No recharging, external intervention or unlisted action is available in this closed fictional world."
+          }
+        ]
+      },
+      {
+        "id": "M03",
+        "text": "[M03] A policy must succeed in every map consistent with the complete supplied evidence. Minimize worst-case energy among such policies; use fewer observations to break an equal-energy tie. Generated world and policy-node identifiers may be any unique strings.",
+        "witnesses": [
+          {
+            "sourceId": "MISSION",
+            "path": "contracts/mission.md",
+            "quote": "[M03] A policy must succeed in every map consistent with the complete supplied evidence. Minimize worst-case energy among such policies; use fewer observations to break an equal-energy tie. Generated world and policy-node identifiers may be any unique strings."
+          }
+        ]
+      },
+      {
+        "id": "F01",
+        "text": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1).",
+        "witnesses": [
+          {
+            "sourceId": "GLOBAL",
+            "path": "surveys/global/frame.md",
+            "quote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+          }
+        ]
+      },
+      {
+        "id": "F02",
+        "text": "[F02] Global observations call sides east and west from the fixed map frame, regardless of the direction the robot faces. From E the robot approaches J facing north; looking back toward E does not rename map east or west.",
+        "witnesses": [
+          {
+            "sourceId": "GLOBAL",
+            "path": "surveys/global/frame.md",
+            "quote": "[F02] Global observations call sides east and west from the fixed map frame, regardless of the direction the robot faces. From E the robot approaches J facing north; looking back toward E does not rename map east or west."
+          }
+        ]
+      },
+      {
+        "id": "F03",
+        "text": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-FRAME",
+            "path": "surveys/amber/frame.md",
+            "quote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+          }
+        ]
+      },
+      {
+        "id": "F04",
+        "text": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-FRAME",
+            "path": "surveys/amber/frame.md",
+            "quote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+          }
+        ]
+      },
+      {
+        "id": "F05",
+        "text": "[F05] Neither surviving export metadata nor the other survey notes determine which convention was used for this Amber scan. Both conventions must remain possible until a listed observation distinguishes them.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-FRAME",
+            "path": "surveys/amber/frame.md",
+            "quote": "[F05] Neither surviving export metadata nor the other survey notes determine which convention was used for this Amber scan. Both conventions must remain possible until a listed observation distinguishes them."
+          }
+        ]
+      },
+      {
+        "id": "L01",
+        "text": "[L01] Amber labels A at local (1,0) and B at local (-1,0). A is a landing with a two-step ribbed approach to V at local (2,0); B is a landing with a smooth approach to sealed dead-end X at local (-2,0). A and B each bear a blue circular survey mark.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-CHAMBERS",
+            "path": "surveys/amber/chambers.md",
+            "quote": "[L01] Amber labels A at local (1,0) and B at local (-1,0). A is a landing with a two-step ribbed approach to V at local (2,0); B is a landing with a smooth approach to sealed dead-end X at local (-2,0). A and B each bear a blue circular survey mark."
+          }
+        ]
+      },
+      {
+        "id": "L02",
+        "text": "[L02] V is the chamber containing the single sealed sample and a ribbed wall niche. X contains a painted imitation of that niche but no sample. The two niches are not the same chamber.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-CHAMBERS",
+            "path": "surveys/amber/chambers.md",
+            "quote": "[L02] V is the chamber containing the single sealed sample and a ribbed wall niche. X contains a painted imitation of that niche but no sample. The two niches are not the same chamber."
+          }
+        ]
+      },
+      {
+        "id": "P01",
+        "text": "[P01] There is a one-way water gate from the junction origin to each landing A and B. Both gates currently permit movement away from J; neither permits a return from a landing toward J.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-CHAMBERS",
+            "path": "surveys/amber/chambers.md",
+            "quote": "[P01] There is a one-way water gate from the junction origin to each landing A and B. Both gates currently permit movement away from J; neither permits a return from a landing toward J."
+          }
+        ]
+      },
+      {
+        "id": "P02",
+        "text": "[P02] There is a narrow two-way tunnel between A and V, and a narrow two-way tunnel between B and X. Tunnel traversal costs1 energy per passage.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-CHAMBERS",
+            "path": "surveys/amber/chambers.md",
+            "quote": "[P02] There is a narrow two-way tunnel between A and V, and a narrow two-way tunnel between B and X. Tunnel traversal costs1 energy per passage."
+          }
+        ]
+      },
+      {
+        "id": "P03",
+        "text": "[P03] A wide vertical chimney connects V back to J, usable upward from V only when its J-side anchor has been rigged with the rope spool. X has no chimney or other exit beyond its B tunnel.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-CHAMBERS",
+            "path": "surveys/amber/chambers.md",
+            "quote": "[P03] A wide vertical chimney connects V back to J, usable upward from V only when its J-side anchor has been rigged with the rope spool. X has no chimney or other exit beyond its B tunnel."
+          }
+        ]
+      },
+      {
+        "id": "L03",
+        "text": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area.",
+        "witnesses": [
+          {
+            "sourceId": "BLUE-LANDMARKS",
+            "path": "surveys/blue/landmarks.md",
+            "quote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+          }
+        ]
+      },
+      {
+        "id": "L04",
+        "text": "[L04] Blue sees a blue circular mark at both EW and WW. Such marks were reused by the survey crew. A matching blue circle alone cannot bind Amber A to EW rather than WW.",
+        "witnesses": [
+          {
+            "sourceId": "BLUE-LANDMARKS",
+            "path": "surveys/blue/landmarks.md",
+            "quote": "[L04] Blue sees a blue circular mark at both EW and WW. Such marks were reused by the survey crew. A matching blue circle alone cannot bind Amber A to EW rather than WW."
+          }
+        ]
+      },
+      {
+        "id": "L05",
+        "text": "[L05] The ribbed approach and actual sample niche distinguish Amber A/V from B/X, but Blue did not observe which global side has those features. Blue therefore supplies no missing u-axis sign.",
+        "witnesses": [
+          {
+            "sourceId": "BLUE-LANDMARKS",
+            "path": "surveys/blue/landmarks.md",
+            "quote": "[L05] The ribbed approach and actual sample niche distinguish Amber A/V from B/X, but Blue did not observe which global side has those features. Blue therefore supplies no missing u-axis sign."
+          }
+        ]
+      },
+      {
+        "id": "P04",
+        "text": "[P04] The E-J corridor is wide and traversable in both directions, cost1 per movement. It remains usable with the sample carrier full.",
+        "witnesses": [
+          {
+            "sourceId": "GLOBAL-ROUTES",
+            "path": "surveys/global/routes.md",
+            "quote": "[P04] The E-J corridor is wide and traversable in both directions, cost1 per movement. It remains usable with the sample carrier full."
+          }
+        ]
+      },
+      {
+        "id": "P05",
+        "text": "[P05] The global J-EW and J-WW water gates each cost1 energy to cross outward. The current survey is complete about these gates: there is no reverse traversal even with a rope or empty carrier.",
+        "witnesses": [
+          {
+            "sourceId": "GLOBAL-ROUTES",
+            "path": "surveys/global/routes.md",
+            "quote": "[P05] The global J-EW and J-WW water gates each cost1 energy to cross outward. The current survey is complete about these gates: there is no reverse traversal even with a rope or empty carrier."
+          }
+        ]
+      },
+      {
+        "id": "P06",
+        "text": "[P06] The chimney anchor at J lies on the same global side as the sample chamber V. Rig-east attaches the sole spool to the eastern anchor; rig-west attaches it to the western anchor. The other anchor terminates in a blind shaft and cannot bring the robot back from V.",
+        "witnesses": [
+          {
+            "sourceId": "GLOBAL-ROUTES",
+            "path": "surveys/global/routes.md",
+            "quote": "[P06] The chimney anchor at J lies on the same global side as the sample chamber V. Rig-east attaches the sole spool to the eastern anchor; rig-west attaches it to the western anchor. The other anchor terminates in a blind shaft and cannot bring the robot back from V."
+          }
+        ]
+      },
+      {
+        "id": "P07",
+        "text": "[P07] Rigging can be performed only at J and costs1 energy. Once rigged, the spool cannot be recovered, transferred or rigged again. Rigging an anchor is possible on either side but does not reveal whether that side reaches V.",
+        "witnesses": [
+          {
+            "sourceId": "GLOBAL-ROUTES",
+            "path": "surveys/global/routes.md",
+            "quote": "[P07] Rigging can be performed only at J and costs1 energy. Once rigged, the spool cannot be recovered, transferred or rigged again. Rigging an anchor is possible on either side but does not reveal whether that side reaches V."
+          }
+        ]
+      },
+      {
+        "id": "G01",
+        "text": "[G01] With an empty carrier the robot fits every listed narrow tunnel. Picking up the sealed sample in V costs1 energy and fills the carrier; the robot then cannot traverse any narrow tunnel, in either direction.",
+        "witnesses": [
+          {
+            "sourceId": "CARRIER",
+            "path": "equipment/carrier.md",
+            "quote": "[G01] With an empty carrier the robot fits every listed narrow tunnel. Picking up the sealed sample in V costs1 energy and fills the carrier; the robot then cannot traverse any narrow tunnel, in either direction."
+          }
+        ]
+      },
+      {
+        "id": "G02",
+        "text": "[G02] The sealed sample may not be opened, cached, discarded or passed separately through a tunnel. A mission arrival without the sealed sample fails.",
+        "witnesses": [
+          {
+            "sourceId": "CARRIER",
+            "path": "equipment/carrier.md",
+            "quote": "[G02] The sealed sample may not be opened, cached, discarded or passed separately through a tunnel. A mission arrival without the sealed sample fails."
+          }
+        ]
+      },
+      {
+        "id": "G03",
+        "text": "[G03] The wide chimney fits the full carrier. If the correct anchor is rigged, ascent V-to-J costs2 energy and uses the fixed rope without consuming another spool. The chimney is not an available descent route from J.",
+        "witnesses": [
+          {
+            "sourceId": "CARRIER",
+            "path": "equipment/carrier.md",
+            "quote": "[G03] The wide chimney fits the full carrier. If the correct anchor is rigged, ascent V-to-J costs2 energy and uses the fixed rope without consuming another spool. The chimney is not an available descent route from J."
+          }
+        ]
+      },
+      {
+        "id": "Q01",
+        "text": "[Q01] ECHO can be used at J for cost1 energy. It reports the east-facing chamber structure: answer ribbed means the sample-side ribbed approach lies to global east; answer smooth means that approach lies to global west. These are the only answers in this complete world.",
+        "witnesses": [
+          {
+            "sourceId": "ECHO",
+            "path": "sensors/echo.md",
+            "quote": "[Q01] ECHO can be used at J for cost1 energy. It reports the east-facing chamber structure: answer ribbed means the sample-side ribbed approach lies to global east; answer smooth means that approach lies to global west. These are the only answers in this complete world."
+          }
+        ]
+      },
+      {
+        "id": "Q02",
+        "text": "[Q02] ECHO resolves the deep chamber structure beyond the water gates and is unaffected by the repeated blue circles. The probe faces fixed global east, not robot-relative right. Its answer therefore changes between the two surviving Amber export conventions.",
+        "witnesses": [
+          {
+            "sourceId": "ECHO",
+            "path": "sensors/echo.md",
+            "quote": "[Q02] ECHO resolves the deep chamber structure beyond the water gates and is unaffected by the repeated blue circles. The probe faces fixed global east, not robot-relative right. Its answer therefore changes between the two surviving Amber export conventions."
+          }
+        ]
+      },
+      {
+        "id": "Q03",
+        "text": "[Q03] An ECHO observation leaves location, gear and the physical map unchanged. Repeating it returns the same answer and incurs its cost again.",
+        "witnesses": [
+          {
+            "sourceId": "ECHO",
+            "path": "sensors/echo.md",
+            "quote": "[Q03] An ECHO observation leaves location, gear and the physical map unchanged. Repeating it returns the same answer and incurs its cost again."
+          }
+        ]
+      },
+      {
+        "id": "Q04",
+        "text": "[Q04] GLOW can be used at J for cost1 energy. It reports the surface blue-circle pigment at the eastern landing and returns answer blue under either Amber export convention.",
+        "witnesses": [
+          {
+            "sourceId": "GLOW",
+            "path": "sensors/glow.md",
+            "quote": "[Q04] GLOW can be used at J for cost1 energy. It reports the surface blue-circle pigment at the eastern landing and returns answer blue under either Amber export convention."
+          }
+        ]
+      },
+      {
+        "id": "Q05",
+        "text": "[Q05] GLOW cannot inspect deep ribs, sample presence or anchor termination; its surface detection does not prove that the eastern landing is Amber A. It leaves location and gear unchanged.",
+        "witnesses": [
+          {
+            "sourceId": "GLOW",
+            "path": "sensors/glow.md",
+            "quote": "[Q05] GLOW cannot inspect deep ribs, sample presence or anchor termination; its surface detection does not prove that the eastern landing is Amber A. It leaves location and gear unchanged."
+          }
+        ]
+      },
+      {
+        "id": "B01",
+        "text": "[B01] These files describe the complete current passage, gear and sensor rules. No water-gate reversal, map change, battery recharge or sample relocation occurs during the mission.",
+        "witnesses": [
+          {
+            "sourceId": "BOUNDARY",
+            "path": "operations/closed-world.md",
+            "quote": "[B01] These files describe the complete current passage, gear and sensor rules. No water-gate reversal, map change, battery recharge or sample relocation occurs during the mission."
+          }
+        ]
+      },
+      {
+        "id": "B02",
+        "text": "[B02] Exactly one of the two Amber export conventions describes the physical world. An unobserved convention is not a third map, and lack of a branch observation does not mean that the branch is blocked or absent.",
+        "witnesses": [
+          {
+            "sourceId": "BOUNDARY",
+            "path": "operations/closed-world.md",
+            "quote": "[B02] Exactly one of the two Amber export conventions describes the physical world. An unobserved convention is not a third map, and lack of a branch observation does not mean that the branch is blocked or absent."
+          }
+        ]
+      },
+      {
+        "id": "B03",
+        "text": "[B03] A policy may make different moves after ECHO answers, but it must include every possible answer. An action before observation must be legal and preserve possible mission success in both supported worlds.",
+        "witnesses": [
+          {
+            "sourceId": "BOUNDARY",
+            "path": "operations/closed-world.md",
+            "quote": "[B03] A policy may make different moves after ECHO answers, but it must include every possible answer. An action before observation must be legal and preserve possible mission success in both supported worlds."
+          }
+        ]
+      }
+    ],
+    "pendingUnits": [
+      {
+        "unitId": "amber-X",
+        "kind": "landmark",
+        "primaryClauseIds": [
+          "L01",
+          "L02"
+        ],
+        "supportingClauseIds": [
+          "L05"
+        ],
+        "sourceFrame": "Amber",
+        "focus": "Original X landmark",
+        "originalLocalName": "X"
+      }
+    ],
+    "completed": [
+      {
+        "unit": {
+          "unitId": "amber-convention",
+          "kind": "frame",
+          "primaryClauseIds": [
+            "F03",
+            "F04"
+          ],
+          "supportingClauseIds": [
+            "F05",
+            "F01",
+            "L03"
+          ],
+          "sourceFrame": "Amber",
+          "focus": "Original frame convention",
+          "originalLocalName": null
+        },
+        "status": "accepted",
+        "convention": {
+          "alternatives": [
+            {
+              "sourceFrame": "Amber",
+              "origin": {
+                "x": 0,
+                "y": 1
+              },
+              "uVector": {
+                "x": 1,
+                "y": 0
+              },
+              "vVector": {
+                "x": 0,
+                "y": 1
+              },
+              "evidence": [
+                {
+                  "clauseId": "F01",
+                  "exactQuote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+                },
+                {
+                  "clauseId": "F03",
+                  "exactQuote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+                },
+                {
+                  "clauseId": "F04",
+                  "exactQuote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+                },
+                {
+                  "clauseId": "L03",
+                  "exactQuote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+                }
+              ]
+            },
+            {
+              "sourceFrame": "Amber",
+              "origin": {
+                "x": 0,
+                "y": 1
+              },
+              "uVector": {
+                "x": -1,
+                "y": 0
+              },
+              "vVector": {
+                "x": 0,
+                "y": 1
+              },
+              "evidence": [
+                {
+                  "clauseId": "F01",
+                  "exactQuote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+                },
+                {
+                  "clauseId": "F03",
+                  "exactQuote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+                },
+                {
+                  "clauseId": "F04",
+                  "exactQuote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+                },
+                {
+                  "clauseId": "L03",
+                  "exactQuote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+                }
+              ]
+            }
+          ],
+          "unresolved": []
+        },
+        "landmark": null,
+        "alternatives": [
+          {
+            "alternativeId": "actual-frame-1",
+            "sourceFrame": "Amber",
+            "origin": {
+              "x": 0,
+              "y": 1
+            },
+            "uVector": {
+              "x": 1,
+              "y": 0
+            },
+            "vVector": {
+              "x": 0,
+              "y": 1
+            },
+            "witnesses": [
+              {
+                "sourceId": "GLOBAL",
+                "path": "surveys/global/frame.md",
+                "quote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+              },
+              {
+                "sourceId": "AMBER-FRAME",
+                "path": "surveys/amber/frame.md",
+                "quote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+              },
+              {
+                "sourceId": "AMBER-FRAME",
+                "path": "surveys/amber/frame.md",
+                "quote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+              },
+              {
+                "sourceId": "BLUE-LANDMARKS",
+                "path": "surveys/blue/landmarks.md",
+                "quote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+              }
+            ]
+          },
+          {
+            "alternativeId": "actual-frame-2",
+            "sourceFrame": "Amber",
+            "origin": {
+              "x": 0,
+              "y": 1
+            },
+            "uVector": {
+              "x": -1,
+              "y": 0
+            },
+            "vVector": {
+              "x": 0,
+              "y": 1
+            },
+            "witnesses": [
+              {
+                "sourceId": "GLOBAL",
+                "path": "surveys/global/frame.md",
+                "quote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+              },
+              {
+                "sourceId": "AMBER-FRAME",
+                "path": "surveys/amber/frame.md",
+                "quote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+              },
+              {
+                "sourceId": "AMBER-FRAME",
+                "path": "surveys/amber/frame.md",
+                "quote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+              },
+              {
+                "sourceId": "BLUE-LANDMARKS",
+                "path": "surveys/blue/landmarks.md",
+                "quote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+              }
+            ]
+          }
+        ],
+        "landmarks": [],
+        "failure": null,
+        "unresolved": []
+      }
+    ],
+    "unresolved": []
+  },
+  "after": {
+    "clauses": [
+      {
+        "id": "M01",
+        "text": "[M01] The robot starts at entrance E with energy9, an empty sample carrier and one unused rope spool. The mission is complete only when it returns to E carrying the sealed sample from chamber V.",
+        "witnesses": [
+          {
+            "sourceId": "MISSION",
+            "path": "contracts/mission.md",
+            "quote": "[M01] The robot starts at entrance E with energy9, an empty sample carrier and one unused rope spool. The mission is complete only when it returns to E carrying the sealed sample from chamber V."
+          }
+        ]
+      },
+      {
+        "id": "M02",
+        "text": "[M02] Every listed action has its stated positive integer energy cost, charged when performed. Energy may reach zero on successful return. No recharging, external intervention or unlisted action is available in this closed fictional world.",
+        "witnesses": [
+          {
+            "sourceId": "MISSION",
+            "path": "contracts/mission.md",
+            "quote": "[M02] Every listed action has its stated positive integer energy cost, charged when performed. Energy may reach zero on successful return. No recharging, external intervention or unlisted action is available in this closed fictional world."
+          }
+        ]
+      },
+      {
+        "id": "M03",
+        "text": "[M03] A policy must succeed in every map consistent with the complete supplied evidence. Minimize worst-case energy among such policies; use fewer observations to break an equal-energy tie. Generated world and policy-node identifiers may be any unique strings.",
+        "witnesses": [
+          {
+            "sourceId": "MISSION",
+            "path": "contracts/mission.md",
+            "quote": "[M03] A policy must succeed in every map consistent with the complete supplied evidence. Minimize worst-case energy among such policies; use fewer observations to break an equal-energy tie. Generated world and policy-node identifiers may be any unique strings."
+          }
+        ]
+      },
+      {
+        "id": "F01",
+        "text": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1).",
+        "witnesses": [
+          {
+            "sourceId": "GLOBAL",
+            "path": "surveys/global/frame.md",
+            "quote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+          }
+        ]
+      },
+      {
+        "id": "F02",
+        "text": "[F02] Global observations call sides east and west from the fixed map frame, regardless of the direction the robot faces. From E the robot approaches J facing north; looking back toward E does not rename map east or west.",
+        "witnesses": [
+          {
+            "sourceId": "GLOBAL",
+            "path": "surveys/global/frame.md",
+            "quote": "[F02] Global observations call sides east and west from the fixed map frame, regardless of the direction the robot faces. From E the robot approaches J facing north; looking back toward E does not rename map east or west."
+          }
+        ]
+      },
+      {
+        "id": "F03",
+        "text": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-FRAME",
+            "path": "surveys/amber/frame.md",
+            "quote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+          }
+        ]
+      },
+      {
+        "id": "F04",
+        "text": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-FRAME",
+            "path": "surveys/amber/frame.md",
+            "quote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+          }
+        ]
+      },
+      {
+        "id": "F05",
+        "text": "[F05] Neither surviving export metadata nor the other survey notes determine which convention was used for this Amber scan. Both conventions must remain possible until a listed observation distinguishes them.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-FRAME",
+            "path": "surveys/amber/frame.md",
+            "quote": "[F05] Neither surviving export metadata nor the other survey notes determine which convention was used for this Amber scan. Both conventions must remain possible until a listed observation distinguishes them."
+          }
+        ]
+      },
+      {
+        "id": "L01",
+        "text": "[L01] Amber labels A at local (1,0) and B at local (-1,0). A is a landing with a two-step ribbed approach to V at local (2,0); B is a landing with a smooth approach to sealed dead-end X at local (-2,0). A and B each bear a blue circular survey mark.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-CHAMBERS",
+            "path": "surveys/amber/chambers.md",
+            "quote": "[L01] Amber labels A at local (1,0) and B at local (-1,0). A is a landing with a two-step ribbed approach to V at local (2,0); B is a landing with a smooth approach to sealed dead-end X at local (-2,0). A and B each bear a blue circular survey mark."
+          }
+        ]
+      },
+      {
+        "id": "L02",
+        "text": "[L02] V is the chamber containing the single sealed sample and a ribbed wall niche. X contains a painted imitation of that niche but no sample. The two niches are not the same chamber.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-CHAMBERS",
+            "path": "surveys/amber/chambers.md",
+            "quote": "[L02] V is the chamber containing the single sealed sample and a ribbed wall niche. X contains a painted imitation of that niche but no sample. The two niches are not the same chamber."
+          }
+        ]
+      },
+      {
+        "id": "P01",
+        "text": "[P01] There is a one-way water gate from the junction origin to each landing A and B. Both gates currently permit movement away from J; neither permits a return from a landing toward J.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-CHAMBERS",
+            "path": "surveys/amber/chambers.md",
+            "quote": "[P01] There is a one-way water gate from the junction origin to each landing A and B. Both gates currently permit movement away from J; neither permits a return from a landing toward J."
+          }
+        ]
+      },
+      {
+        "id": "P02",
+        "text": "[P02] There is a narrow two-way tunnel between A and V, and a narrow two-way tunnel between B and X. Tunnel traversal costs1 energy per passage.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-CHAMBERS",
+            "path": "surveys/amber/chambers.md",
+            "quote": "[P02] There is a narrow two-way tunnel between A and V, and a narrow two-way tunnel between B and X. Tunnel traversal costs1 energy per passage."
+          }
+        ]
+      },
+      {
+        "id": "P03",
+        "text": "[P03] A wide vertical chimney connects V back to J, usable upward from V only when its J-side anchor has been rigged with the rope spool. X has no chimney or other exit beyond its B tunnel.",
+        "witnesses": [
+          {
+            "sourceId": "AMBER-CHAMBERS",
+            "path": "surveys/amber/chambers.md",
+            "quote": "[P03] A wide vertical chimney connects V back to J, usable upward from V only when its J-side anchor has been rigged with the rope spool. X has no chimney or other exit beyond its B tunnel."
+          }
+        ]
+      },
+      {
+        "id": "L03",
+        "text": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area.",
+        "witnesses": [
+          {
+            "sourceId": "BLUE-LANDMARKS",
+            "path": "surveys/blue/landmarks.md",
+            "quote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+          }
+        ]
+      },
+      {
+        "id": "L04",
+        "text": "[L04] Blue sees a blue circular mark at both EW and WW. Such marks were reused by the survey crew. A matching blue circle alone cannot bind Amber A to EW rather than WW.",
+        "witnesses": [
+          {
+            "sourceId": "BLUE-LANDMARKS",
+            "path": "surveys/blue/landmarks.md",
+            "quote": "[L04] Blue sees a blue circular mark at both EW and WW. Such marks were reused by the survey crew. A matching blue circle alone cannot bind Amber A to EW rather than WW."
+          }
+        ]
+      },
+      {
+        "id": "L05",
+        "text": "[L05] The ribbed approach and actual sample niche distinguish Amber A/V from B/X, but Blue did not observe which global side has those features. Blue therefore supplies no missing u-axis sign.",
+        "witnesses": [
+          {
+            "sourceId": "BLUE-LANDMARKS",
+            "path": "surveys/blue/landmarks.md",
+            "quote": "[L05] The ribbed approach and actual sample niche distinguish Amber A/V from B/X, but Blue did not observe which global side has those features. Blue therefore supplies no missing u-axis sign."
+          }
+        ]
+      },
+      {
+        "id": "P04",
+        "text": "[P04] The E-J corridor is wide and traversable in both directions, cost1 per movement. It remains usable with the sample carrier full.",
+        "witnesses": [
+          {
+            "sourceId": "GLOBAL-ROUTES",
+            "path": "surveys/global/routes.md",
+            "quote": "[P04] The E-J corridor is wide and traversable in both directions, cost1 per movement. It remains usable with the sample carrier full."
+          }
+        ]
+      },
+      {
+        "id": "P05",
+        "text": "[P05] The global J-EW and J-WW water gates each cost1 energy to cross outward. The current survey is complete about these gates: there is no reverse traversal even with a rope or empty carrier.",
+        "witnesses": [
+          {
+            "sourceId": "GLOBAL-ROUTES",
+            "path": "surveys/global/routes.md",
+            "quote": "[P05] The global J-EW and J-WW water gates each cost1 energy to cross outward. The current survey is complete about these gates: there is no reverse traversal even with a rope or empty carrier."
+          }
+        ]
+      },
+      {
+        "id": "P06",
+        "text": "[P06] The chimney anchor at J lies on the same global side as the sample chamber V. Rig-east attaches the sole spool to the eastern anchor; rig-west attaches it to the western anchor. The other anchor terminates in a blind shaft and cannot bring the robot back from V.",
+        "witnesses": [
+          {
+            "sourceId": "GLOBAL-ROUTES",
+            "path": "surveys/global/routes.md",
+            "quote": "[P06] The chimney anchor at J lies on the same global side as the sample chamber V. Rig-east attaches the sole spool to the eastern anchor; rig-west attaches it to the western anchor. The other anchor terminates in a blind shaft and cannot bring the robot back from V."
+          }
+        ]
+      },
+      {
+        "id": "P07",
+        "text": "[P07] Rigging can be performed only at J and costs1 energy. Once rigged, the spool cannot be recovered, transferred or rigged again. Rigging an anchor is possible on either side but does not reveal whether that side reaches V.",
+        "witnesses": [
+          {
+            "sourceId": "GLOBAL-ROUTES",
+            "path": "surveys/global/routes.md",
+            "quote": "[P07] Rigging can be performed only at J and costs1 energy. Once rigged, the spool cannot be recovered, transferred or rigged again. Rigging an anchor is possible on either side but does not reveal whether that side reaches V."
+          }
+        ]
+      },
+      {
+        "id": "G01",
+        "text": "[G01] With an empty carrier the robot fits every listed narrow tunnel. Picking up the sealed sample in V costs1 energy and fills the carrier; the robot then cannot traverse any narrow tunnel, in either direction.",
+        "witnesses": [
+          {
+            "sourceId": "CARRIER",
+            "path": "equipment/carrier.md",
+            "quote": "[G01] With an empty carrier the robot fits every listed narrow tunnel. Picking up the sealed sample in V costs1 energy and fills the carrier; the robot then cannot traverse any narrow tunnel, in either direction."
+          }
+        ]
+      },
+      {
+        "id": "G02",
+        "text": "[G02] The sealed sample may not be opened, cached, discarded or passed separately through a tunnel. A mission arrival without the sealed sample fails.",
+        "witnesses": [
+          {
+            "sourceId": "CARRIER",
+            "path": "equipment/carrier.md",
+            "quote": "[G02] The sealed sample may not be opened, cached, discarded or passed separately through a tunnel. A mission arrival without the sealed sample fails."
+          }
+        ]
+      },
+      {
+        "id": "G03",
+        "text": "[G03] The wide chimney fits the full carrier. If the correct anchor is rigged, ascent V-to-J costs2 energy and uses the fixed rope without consuming another spool. The chimney is not an available descent route from J.",
+        "witnesses": [
+          {
+            "sourceId": "CARRIER",
+            "path": "equipment/carrier.md",
+            "quote": "[G03] The wide chimney fits the full carrier. If the correct anchor is rigged, ascent V-to-J costs2 energy and uses the fixed rope without consuming another spool. The chimney is not an available descent route from J."
+          }
+        ]
+      },
+      {
+        "id": "Q01",
+        "text": "[Q01] ECHO can be used at J for cost1 energy. It reports the east-facing chamber structure: answer ribbed means the sample-side ribbed approach lies to global east; answer smooth means that approach lies to global west. These are the only answers in this complete world.",
+        "witnesses": [
+          {
+            "sourceId": "ECHO",
+            "path": "sensors/echo.md",
+            "quote": "[Q01] ECHO can be used at J for cost1 energy. It reports the east-facing chamber structure: answer ribbed means the sample-side ribbed approach lies to global east; answer smooth means that approach lies to global west. These are the only answers in this complete world."
+          }
+        ]
+      },
+      {
+        "id": "Q02",
+        "text": "[Q02] ECHO resolves the deep chamber structure beyond the water gates and is unaffected by the repeated blue circles. The probe faces fixed global east, not robot-relative right. Its answer therefore changes between the two surviving Amber export conventions.",
+        "witnesses": [
+          {
+            "sourceId": "ECHO",
+            "path": "sensors/echo.md",
+            "quote": "[Q02] ECHO resolves the deep chamber structure beyond the water gates and is unaffected by the repeated blue circles. The probe faces fixed global east, not robot-relative right. Its answer therefore changes between the two surviving Amber export conventions."
+          }
+        ]
+      },
+      {
+        "id": "Q03",
+        "text": "[Q03] An ECHO observation leaves location, gear and the physical map unchanged. Repeating it returns the same answer and incurs its cost again.",
+        "witnesses": [
+          {
+            "sourceId": "ECHO",
+            "path": "sensors/echo.md",
+            "quote": "[Q03] An ECHO observation leaves location, gear and the physical map unchanged. Repeating it returns the same answer and incurs its cost again."
+          }
+        ]
+      },
+      {
+        "id": "Q04",
+        "text": "[Q04] GLOW can be used at J for cost1 energy. It reports the surface blue-circle pigment at the eastern landing and returns answer blue under either Amber export convention.",
+        "witnesses": [
+          {
+            "sourceId": "GLOW",
+            "path": "sensors/glow.md",
+            "quote": "[Q04] GLOW can be used at J for cost1 energy. It reports the surface blue-circle pigment at the eastern landing and returns answer blue under either Amber export convention."
+          }
+        ]
+      },
+      {
+        "id": "Q05",
+        "text": "[Q05] GLOW cannot inspect deep ribs, sample presence or anchor termination; its surface detection does not prove that the eastern landing is Amber A. It leaves location and gear unchanged.",
+        "witnesses": [
+          {
+            "sourceId": "GLOW",
+            "path": "sensors/glow.md",
+            "quote": "[Q05] GLOW cannot inspect deep ribs, sample presence or anchor termination; its surface detection does not prove that the eastern landing is Amber A. It leaves location and gear unchanged."
+          }
+        ]
+      },
+      {
+        "id": "B01",
+        "text": "[B01] These files describe the complete current passage, gear and sensor rules. No water-gate reversal, map change, battery recharge or sample relocation occurs during the mission.",
+        "witnesses": [
+          {
+            "sourceId": "BOUNDARY",
+            "path": "operations/closed-world.md",
+            "quote": "[B01] These files describe the complete current passage, gear and sensor rules. No water-gate reversal, map change, battery recharge or sample relocation occurs during the mission."
+          }
+        ]
+      },
+      {
+        "id": "B02",
+        "text": "[B02] Exactly one of the two Amber export conventions describes the physical world. An unobserved convention is not a third map, and lack of a branch observation does not mean that the branch is blocked or absent.",
+        "witnesses": [
+          {
+            "sourceId": "BOUNDARY",
+            "path": "operations/closed-world.md",
+            "quote": "[B02] Exactly one of the two Amber export conventions describes the physical world. An unobserved convention is not a third map, and lack of a branch observation does not mean that the branch is blocked or absent."
+          }
+        ]
+      },
+      {
+        "id": "B03",
+        "text": "[B03] A policy may make different moves after ECHO answers, but it must include every possible answer. An action before observation must be legal and preserve possible mission success in both supported worlds.",
+        "witnesses": [
+          {
+            "sourceId": "BOUNDARY",
+            "path": "operations/closed-world.md",
+            "quote": "[B03] A policy may make different moves after ECHO answers, but it must include every possible answer. An action before observation must be legal and preserve possible mission success in both supported worlds."
+          }
+        ]
+      }
+    ],
+    "pendingUnits": [],
+    "completed": [
+      {
+        "unit": {
+          "unitId": "amber-convention",
+          "kind": "frame",
+          "primaryClauseIds": [
+            "F03",
+            "F04"
+          ],
+          "supportingClauseIds": [
+            "F05",
+            "F01",
+            "L03"
+          ],
+          "sourceFrame": "Amber",
+          "focus": "Original frame convention",
+          "originalLocalName": null
+        },
+        "status": "accepted",
+        "convention": {
+          "alternatives": [
+            {
+              "sourceFrame": "Amber",
+              "origin": {
+                "x": 0,
+                "y": 1
+              },
+              "uVector": {
+                "x": 1,
+                "y": 0
+              },
+              "vVector": {
+                "x": 0,
+                "y": 1
+              },
+              "evidence": [
+                {
+                  "clauseId": "F01",
+                  "exactQuote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+                },
+                {
+                  "clauseId": "F03",
+                  "exactQuote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+                },
+                {
+                  "clauseId": "F04",
+                  "exactQuote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+                },
+                {
+                  "clauseId": "L03",
+                  "exactQuote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+                }
+              ]
+            },
+            {
+              "sourceFrame": "Amber",
+              "origin": {
+                "x": 0,
+                "y": 1
+              },
+              "uVector": {
+                "x": -1,
+                "y": 0
+              },
+              "vVector": {
+                "x": 0,
+                "y": 1
+              },
+              "evidence": [
+                {
+                  "clauseId": "F01",
+                  "exactQuote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+                },
+                {
+                  "clauseId": "F03",
+                  "exactQuote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+                },
+                {
+                  "clauseId": "F04",
+                  "exactQuote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+                },
+                {
+                  "clauseId": "L03",
+                  "exactQuote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+                }
+              ]
+            }
+          ],
+          "unresolved": []
+        },
+        "landmark": null,
+        "alternatives": [
+          {
+            "alternativeId": "actual-frame-1",
+            "sourceFrame": "Amber",
+            "origin": {
+              "x": 0,
+              "y": 1
+            },
+            "uVector": {
+              "x": 1,
+              "y": 0
+            },
+            "vVector": {
+              "x": 0,
+              "y": 1
+            },
+            "witnesses": [
+              {
+                "sourceId": "GLOBAL",
+                "path": "surveys/global/frame.md",
+                "quote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+              },
+              {
+                "sourceId": "AMBER-FRAME",
+                "path": "surveys/amber/frame.md",
+                "quote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+              },
+              {
+                "sourceId": "AMBER-FRAME",
+                "path": "surveys/amber/frame.md",
+                "quote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+              },
+              {
+                "sourceId": "BLUE-LANDMARKS",
+                "path": "surveys/blue/landmarks.md",
+                "quote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+              }
+            ]
+          },
+          {
+            "alternativeId": "actual-frame-2",
+            "sourceFrame": "Amber",
+            "origin": {
+              "x": 0,
+              "y": 1
+            },
+            "uVector": {
+              "x": -1,
+              "y": 0
+            },
+            "vVector": {
+              "x": 0,
+              "y": 1
+            },
+            "witnesses": [
+              {
+                "sourceId": "GLOBAL",
+                "path": "surveys/global/frame.md",
+                "quote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+              },
+              {
+                "sourceId": "AMBER-FRAME",
+                "path": "surveys/amber/frame.md",
+                "quote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+              },
+              {
+                "sourceId": "AMBER-FRAME",
+                "path": "surveys/amber/frame.md",
+                "quote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+              },
+              {
+                "sourceId": "BLUE-LANDMARKS",
+                "path": "surveys/blue/landmarks.md",
+                "quote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+              }
+            ]
+          }
+        ],
+        "landmarks": [],
+        "failure": null,
+        "unresolved": []
+      },
+      {
+        "unit": {
+          "unitId": "amber-X",
+          "kind": "landmark",
+          "primaryClauseIds": [
+            "L01",
+            "L02"
+          ],
+          "supportingClauseIds": [
+            "L05"
+          ],
+          "sourceFrame": "Amber",
+          "focus": "Original X landmark",
+          "originalLocalName": "X"
+        },
+        "status": "accepted",
+        "convention": null,
+        "landmark": {
+          "meaning": {
+            "localId": "X",
+            "frame": "Amber",
+            "position": {
+              "x": -2,
+              "y": 0
+            },
+            "description": "Painted imitation without the actual sample."
+          },
+          "evidence": [
+            {
+              "clauseId": "L01",
+              "exactQuote": "[L01] Amber labels A at local (1,0) and B at local (-1,0). A is a landing with a two-step ribbed approach to V at local (2,0); B is a landing with a smooth approach to sealed dead-end X at local (-2,0). A and B each bear a blue circular survey mark."
+            },
+            {
+              "clauseId": "L02",
+              "exactQuote": "[L02] V is the chamber containing the single sealed sample and a ribbed wall niche. X contains a painted imitation of that niche but no sample. The two niches are not the same chamber."
+            }
+          ],
+          "unresolved": []
+        },
+        "alternatives": [],
+        "landmarks": [
+          {
+            "localId": "X",
+            "position": {
+              "x": -2,
+              "y": 0
+            },
+            "description": "Painted imitation without the actual sample.",
+            "witnesses": [
+              {
+                "sourceId": "AMBER-CHAMBERS",
+                "path": "surveys/amber/chambers.md",
+                "quote": "[L01] Amber labels A at local (1,0) and B at local (-1,0). A is a landing with a two-step ribbed approach to V at local (2,0); B is a landing with a smooth approach to sealed dead-end X at local (-2,0). A and B each bear a blue circular survey mark."
+              },
+              {
+                "sourceId": "AMBER-CHAMBERS",
+                "path": "surveys/amber/chambers.md",
+                "quote": "[L02] V is the chamber containing the single sealed sample and a ribbed wall niche. X contains a painted imitation of that niche but no sample. The two niches are not the same chamber."
+              }
+            ],
+            "frame": "Amber"
+          }
+        ],
+        "failure": null,
+        "unresolved": []
+      }
+    ],
+    "unresolved": []
+  }
+}

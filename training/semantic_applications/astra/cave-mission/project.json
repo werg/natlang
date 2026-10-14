@@ -45,7 +45,8 @@
     "planMission/survey/readFrames/interpretLandmark.nl",
     "planMission/survey/readPassages/interpretPassage.nl",
     "planMission/survey/readEquipment/interpretGear.nl",
-    "planMission/survey/readEquipment/interpretSensor.nl"
+    "planMission/survey/readEquipment/interpretSensor.nl",
+    "planMission/survey/readFrames/advanceFrameUnit.nl"
   ],
   "fixture_files": [
     "contracts/mission.md",
@@ -340,6 +341,14 @@
         },
         "returns": "SensorItemMeaning",
         "owned_delta": "Actual per-unit scoped NL meaning and original clause-keyed evidence"
+      },
+      {
+        "path": "planMission/survey/readFrames/advanceFrameUnit.nl",
+        "args": {
+          "state": "FrameReadFrontier"
+        },
+        "returns": "FrameReadFrontier",
+        "owned_delta": "One original unit actual child judgment, original-name/quote binding, preserved prior results and one shorter pending frontier."
       }
     ],
     "edges": [
@@ -424,10 +433,6 @@
         "callee": "planMission/survey/readEquipment.nl"
       },
       {
-        "caller": "planMission/survey/readFrames.nl",
-        "callee": "planMission/survey/readFrames/interpretConvention.nl"
-      },
-      {
         "caller": "planMission/survey.nl",
         "callee": "planMission/survey/readFrames.nl"
       },
@@ -440,10 +445,6 @@
         "callee": "planMission/survey.nl"
       },
       {
-        "caller": "planMission/survey/readFrames.nl",
-        "callee": "planMission/survey/readFrames/interpretLandmark.nl"
-      },
-      {
         "caller": "planMission/survey/readPassages.nl",
         "callee": "planMission/survey/readPassages/interpretPassage.nl"
       },
@@ -454,6 +455,20 @@
       {
         "caller": "planMission/survey/readEquipment.nl",
         "callee": "planMission/survey/readEquipment/interpretSensor.nl"
+      },
+      {
+        "caller": "planMission/survey/readFrames.nl",
+        "callee": "planMission/survey/readFrames/advanceFrameUnit.nl"
+      },
+      {
+        "caller": "planMission/survey/readFrames/advanceFrameUnit.nl",
+        "callee": "planMission/survey/readFrames/interpretConvention.nl",
+        "resolution": "explicit uses"
+      },
+      {
+        "caller": "planMission/survey/readFrames/advanceFrameUnit.nl",
+        "callee": "planMission/survey/readFrames/interpretLandmark.nl",
+        "resolution": "explicit uses"
       }
     ]
   },
@@ -527,9 +542,9 @@
       "consumed_by": "Actual inventory selects original reading units; actual child meanings supply typed survey fields and original source evidence."
     },
     {
-      "site": "planMission/survey/readFrames.nl",
+      "site": "planMission/survey/readFrames/advanceFrameUnit.nl",
       "result_type": "SurveyReadingUnit",
-      "consumed_by": "Actual supported unit and original source clauses passed to interpretConvention, including global anchor/identity support."
+      "consumed_by": "Actual supportedUnit and original supporting clauses enter the one selected convention child; raw returned meaning enters completed FrameUnitResult."
     }
   ],
   "iteration_reducers": [
@@ -558,6 +573,14 @@
       "step": "planMission/designPolicy/evaluateBranches/settleValue.nl",
       "measure": "remainingStateIds.length",
       "owned_delta": "One AND/OR minimax value in increasing-energy dependency order"
+    },
+    {
+      "caller": "planMission/survey/readFrames.nl",
+      "kind": "iterateOn",
+      "step": "planMission/survey/readFrames/advanceFrameUnit.nl",
+      "measure": "next.pendingUnits.length",
+      "until": "next.pendingUnits.length === 0",
+      "owned_delta": "One actual typed unit return retained; completed unit IDs never replayed."
     }
   ],
   "comparison_spec": {
@@ -592,25 +615,25 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": true,
+    "independent_oracle_review": false,
     "exact_result_replay": true,
     "exact_checker_controls_passed": 22,
     "live_qualified": false,
     "training_admitted": false,
-    "source_variant_review": "Consumer-depth and actual typed input-scope follow-up independently reviewed; live pending."
+    "source_variant_review": "Held for focused v8 independent typed input/progress/source review"
   },
   "fixture_document_count": 10,
   "fixture_clause_count": 31,
   "composition": {
-    "nl_files": 29,
-    "nl_total_lines": 745,
-    "nl_body_lines": 526,
-    "numbered_steps": 210,
-    "type_aliases": 57,
+    "nl_files": 30,
+    "nl_total_lines": 797,
+    "nl_body_lines": 601,
+    "numbered_steps": 219,
+    "type_aliases": 59,
     "visible_crisp_policy_lines": 0
   },
   "reference_scope": "Full typed canonical source-validity witness, separate from actual callable execution. Equivalent policies are replayed rather than compared bytewise.",
-  "model_facing_debt": "Survey-v5 diagnostic stopped on a provider output-ceiling transport bug; it supplies no semantic or training credit. Consumer-depth v6 source (including settleValue's complete outcome dependencies) remains 0/48 live samples and requires its own result and literal-consumption review.",
+  "model_facing_debt": "Cave v7 stopped at80 turns with invented localId and re-solved frame values (fad44b36). v8 correction remains 0/48 measured live samples; source/check controls grant no live/training credit.",
   "source_replay": {
     "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/cave-app-consumer-depth-v6-package-v1",
     "scope": "Current consumer-depth v6 shared-loader full typed canonical source-validity replay only"
@@ -622,10 +645,16 @@
     "scope": "Independent source/oracle, exact lower-bound and policy-equivalence review. No actual application execution or training admission."
   },
   "source_variant": {
-    "id": "frame-support-v7",
-    "parent_source_sha256": "f990a454e08dbbd5c574ad94c61e4f36e7f5231beec8104e371a520143c92b0d",
-    "meaning": "Source-selected named-anchor/global-point support retained in actual convention literal input and returned evidence.",
-    "independent_source_review": true
+    "id": "frame-original-name-frontier-v8",
+    "parent_review": "fad44b36",
+    "meaning": "Complete original source-local token names and one-unit actual child-result frontier replace replayed frame extraction; physical alignment/direction policy unchanged.",
+    "independent_source_review": false,
+    "author_controls": {
+      "frame_progress": 20,
+      "item_witness": 28,
+      "mission_mechanism": 22,
+      "scope": "Exact authored controls only; no NL execution"
+    }
   },
   "independent_reviews": [
     {
@@ -669,8 +698,9 @@
       "scope": "Focused consumer-depth and actual Assay/input-scope follow-up; no live credit"
     }
   },
-  "readiness_scope": "Pinned one-case diagnostic preparation only; focused v7 independent source support review and exact controls. Live-qualified/training-admitted false.",
-  "generation_ready": true,
+  "readiness_scope": "v8 source-only; prior fixture/oracle/reference review remains valid, current reader variant awaits independent peer/package and live review.",
+  "generation_ready": false,
   "training_admission": false,
-  "pending_independent_source_review": "Two-file frame/support delta; prior fixture/oracle/reference remain unchanged."
+  "pending_independent_source_review": "Current original-name/token boundary and one-item actual FrameReadFrontier consumer delta; prior fixture/oracle/reference unchanged.",
+  "historical_source_world_review_status": "Original mirrored-vault oracle remains independently reviewed; current v8 source handoff has not yet been independently reviewed."
 }

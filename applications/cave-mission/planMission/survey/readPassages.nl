@@ -8,6 +8,7 @@ returns: PassageAssertion[]
 1. Capture original clauses and actual FrameSurvey. Construct a scoped NL inventory literal returning
    SurveyUnitInventory and directly await it on these originals. It identifies each physical-connection
    reading unit with source primary/supporting clause IDs and a focus, including negative claims.
+   These nonlandmark units preserve originalLocalName:null.
 2. Its inventory joins descriptions only when source scope establishes the same connection. A source
    clause with several endpoint pairs yields several units. Reverse prohibition is supporting evidence
    for the same present one-way route; explicit absence remains a distinct physical claim.

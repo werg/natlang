@@ -1,0 +1,90 @@
+{
+  "schema": "natlang.cave-frame-frontier-author-review/1",
+  "author": "semantic_slate_sol",
+  "source_variant": "frame-original-name-frontier-v8",
+  "status": "author_source_checks_pass_independent_review_pending",
+  "live_diagnostic_parent": "fad44b36",
+  "live_findings": [
+    "Invented landmark localId passed coordinate-only parent check",
+    "Frame reader re-solved completed convention returns into fixture-specific JS bases"
+  ],
+  "changed_paths": {
+    "applications/cave-mission/DECOMPOSITION.md": "afd0afa5a37cbb35fd9d32a6f1bfc8fae0a55e40cf283117071be55d1732de9b",
+    "applications/cave-mission/types.ts": "81650ac5f94b9a7f7433cd3544d07db87da52f56a0fe40f180795cd7c86c7149",
+    "applications/cave-mission/planMission/survey/readFrames.nl": "1a3678c6c4af52826506be23368b552e8d03f4650f556652e40b8614e6b2d983",
+    "applications/cave-mission/planMission/survey/readFrames/advanceFrameUnit.nl": "167826d498e2736340434a52cd5ada432e3d0007167c2e33fc9f22435e8ca214",
+    "applications/cave-mission/planMission/survey/readFrames/interpretLandmark.nl": "953c7374406c1f622df1b7159dd635fcf3bb3483c8824dba5c831c9fc6adc061",
+    "applications/cave-mission/planMission/survey/readPassages.nl": "dad6356afd5fa26eaa7a4932d8567d253718c4bcc030f7a75e3c128ebbdb108f",
+    "applications/cave-mission/planMission/survey/readEquipment.nl": "03b4974c22aa0f45265667332f2707cc4408a9f5a318de610b7c7af1af9ae265",
+    "training/semantic_applications/astra/cave-mission/project.json": "90bc5dd69cdf0829538422eabc78fc7f3631cd09f17d6f9b1336af63312cac8c",
+    "training/semantic_applications/astra/cave-mission/survey-v5-controls/item-witnesses.json": "ddeac9fd3d94d2a4cc17a4c1665fa8d171e21876549e4a8aab94f7bb0dd9439d",
+    "training/semantic_applications/astra/cave-mission/frame-v8-controls/progress-witness.json": "07af977a6fb4c52a4a67ca4795bdefe2fccac2de6387449996e828e548538961",
+    "training/semantic_applications/astra/cave-mission/frame-v8-controls/check-controls.mjs": "6844663ddb0bcf60849f520fea8abf2de83ac28ec33b56d574834ce51dddf49b"
+  },
+  "source_mechanism_audit": {
+    "semantic_policy": "Numbered NL inventory, support selection, convention/landmark interpretation and actual nullable-result handling. Existing physical/directional/conditional alignment policy unchanged.",
+    "exact_mechanisms": [
+      "Complete lexical-token and exact source name equality",
+      "Original clause/quote identity binding",
+      "One pending unit removal and immutable earlier completed results",
+      "Typed raw return to projection copy",
+      "iterateOn count measure, empty predicate and final typed state return"
+    ],
+    "crisp_semantic_helper_added": false,
+    "private_controls": "Authored exact type/provenance/progress witnesses, not source interpretation or evidence entailment"
+  },
+  "composition": {
+    "nl_files": 30,
+    "nl_total_lines": 797,
+    "nl_body_lines": 601,
+    "numbered_steps": 219,
+    "type_aliases": 59,
+    "visible_crisp_policy_lines": 0
+  },
+  "controls": {
+    "frame_progress": {
+      "passed": true,
+      "positive": 5,
+      "negative": 15
+    },
+    "survey_item": {
+      "passed": true,
+      "positive": 13,
+      "negative": 15
+    },
+    "mission_verifier": {
+      "passed": true,
+      "positive": 5,
+      "negative": 17
+    }
+  },
+  "preflight": {
+    "native_loader": true,
+    "typescript": true,
+    "canonical_reference_replay": {
+      "path": "training/semantic_applications/astra/cave-mission/mirrored-vault/reference-report.json",
+      "sha256": "3f2efe03c7e7b14608a0fa336ec8b43a3d890ebb3796b8136afa91c450713f90",
+      "reference_ok": true,
+      "reference_problems": [],
+      "opening_sha256": "b72b63ef1b49b92d6dca56cb0d1a906659c9f3ed0a681b5715979e2a33516569",
+      "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
+    },
+    "package_path": "/tmp/sol-cave-v8-source-held-preflight",
+    "source_sha256": "5a779db50c56020371ffca198ebc436d9a8beaa26147430b15653dfcc7b16b5c",
+    "package_source_status": "held_exact_verifier_bound_semantic_review_pending",
+    "reviewed": false
+  },
+  "unchanged_private_oracle": {
+    "training/semantic_applications/astra/cave-mission/mirrored-vault/oracle.json": "652c18267e79c61c0b2b12d4626e979578a880b81f2c03c955e0248f2036c786",
+    "training/semantic_applications/astra/cave-mission/mirrored-vault/reference-report.json": "3f2efe03c7e7b14608a0fa336ec8b43a3d890ebb3796b8136afa91c450713f90",
+    "training/semantic_applications/astra/cave-mission/verify-result.mjs": "5be4d8fa2c646d9c73d96adbf8fd2c9991c7b8f40ae04a36ce4f3ed779ea9737"
+  },
+  "measurement": {
+    "live_samples": 0,
+    "planned_samples": 48,
+    "semantic_entailment_review": false,
+    "actual_literal_consumption_review": false
+  },
+  "generation_ready": false,
+  "training_admission": false
+}

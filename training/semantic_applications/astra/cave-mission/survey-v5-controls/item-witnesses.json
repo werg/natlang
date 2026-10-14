@@ -372,7 +372,8 @@
             "F01",
             "L03"
           ],
-          "focus": "Which complete origin/basis alternatives do these original frame statements license?"
+          "focus": "Which complete origin/basis alternatives do these original frame statements license?",
+          "originalLocalName": null
         },
         "frameClauses": [
           {
