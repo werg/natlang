@@ -7,6 +7,9 @@
 # architecture digest while keeping one shared implementation on both machines.
 ARG BASE_IMAGE=nvcr.io/nvidia/pytorch:26.09-py3
 FROM ${BASE_IMAGE}
+# The shared text reader verifies zstd streams through the command-line decoder.
+RUN apt-get update && apt-get install -y --no-install-recommends zstd \
+ && rm -rf /var/lib/apt/lists/*
 # Every GPU this image serves: Pop (8.9), CoreWeave RTX PRO 6000 (12.0), DGX GB10 (12.1). Read by JIT extension builds
 # (torch.utils.cpp_extension); Triton kernels compile per device at run time. plans/COREWEAVE_HARDWARE_OPTIMIZATION.md.
 ARG TORCH_CUDA_ARCH_LIST="8.9 12.0 12.1"
