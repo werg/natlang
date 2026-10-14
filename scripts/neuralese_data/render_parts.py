@@ -77,7 +77,10 @@ def wait_for_disk(path: Path) -> None:
 def stream(sources: list[Path]):
     """The decisions of all sources in order, one raw line each."""
     for source in sources:
-        proc = subprocess.Popen(['zstd', '-dcq', '--long=27', str(source)], stdout=subprocess.PIPE)
+        # Storage relocation preserves logical source paths with symlinks. zstd
+        # refuses symlink arguments by default; resolve only its read argument,
+        # keeping the logical path in manifests and errors.
+        proc = subprocess.Popen(['zstd', '-dcq', '--long=27', str(source.resolve(strict=True))], stdout=subprocess.PIPE)
         yield from proc.stdout
         if proc.wait():
             raise RuntimeError(f'zstd failed on {source}')
