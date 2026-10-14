@@ -12,6 +12,7 @@ exec docker run --rm --name "$unit" --gpus all --network host \
   --user "$(id -u):$(id -g)" \
   --volume "$repo:$repo" \
   --volume /srv/storage:/srv/storage \
+  --volume /tmp:/tmp \
   --volume /usr/bin/node:/usr/bin/node:ro \
   --workdir "$repo" \
   --env "PYTHONPATH=$repo/training/neuralese:$repo" \
