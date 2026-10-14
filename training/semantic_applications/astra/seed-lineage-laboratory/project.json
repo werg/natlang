@@ -1,0 +1,495 @@
+{
+  "schema": "natlang.semantic-application-source/1",
+  "id": "astra-app-seed-lineage-v1",
+  "source_root": "applications/seed-lineage-laboratory",
+  "entry": "designExperiments.nl",
+  "entry_kind": "directory-reducer",
+  "request_type": "LaboratoryRequest",
+  "result_type": "LaboratoryCertificate",
+  "program_files": [
+    "designExperiments.d.nl.ts",
+    "designExperiments.nl",
+    "designExperiments/auditCertificate.nl",
+    "designExperiments/auditCertificate/challengeCompartment.nl",
+    "designExperiments/auditCertificate/checkBranchStock.nl",
+    "designExperiments/auditCertificate/explainResidualUncertainty.nl",
+    "designExperiments/planPolicy.nl",
+    "designExperiments/planPolicy/expandBeliefNode.nl",
+    "designExperiments/planPolicy/expandBeliefNode/judgeExperimentUse.nl",
+    "designExperiments/planPolicy/valueBeliefNode.nl",
+    "designExperiments/planPolicy/valueBeliefNode/compareCandidates.nl",
+    "designExperiments/predictExperiments.nl",
+    "designExperiments/predictExperiments/deriveOffspring.nl",
+    "designExperiments/predictExperiments/interpretCross.nl",
+    "designExperiments/predictExperiments/partitionAnswers.nl",
+    "designExperiments/predictExperiments/readOffspring.nl",
+    "designExperiments/readBank.nl",
+    "designExperiments/readBank/readAssays.nl",
+    "designExperiments/readBank/readAssays/judgeObservationScope.nl",
+    "designExperiments/readBank/readPedigree.nl",
+    "designExperiments/readBank/readPedigree/judgeParentage.nl",
+    "designExperiments/readBank/readStocks.nl",
+    "designExperiments/readBank/readTheories.nl",
+    "designExperiments/reconstructBelief.nl",
+    "designExperiments/reconstructBelief/assessObservation.nl",
+    "designExperiments/reconstructBelief/assessObservation/predictObservedTrait.nl",
+    "designExperiments/reconstructBelief/expandAssignment.nl",
+    "designExperiments/reconstructBelief/updatePosterior.nl",
+    "natlang.json",
+    "tsconfig.json",
+    "types.ts"
+  ],
+  "fixture_root": "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/fixture",
+  "fixture_files": [
+    "assays/protocols.md",
+    "controls/request-and-output.md",
+    "conventions/inheritance.md",
+    "experiments/offered.md",
+    "hypotheses/prior-tickets.md",
+    "hypotheses/theories.md",
+    "manifest.json",
+    "observations/recorded.md",
+    "pedigree/accessions.md",
+    "stocks/living-material.md"
+  ],
+  "request_path": "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/request.json",
+  "oracle_path": "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/oracle.json",
+  "reference_path": "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/reference-certificate.json",
+  "external_verifier_path": "training/semantic_applications/astra/seed-lineage-laboratory/verify-result.mjs",
+  "external_verifier_export": "verifyCandidate",
+  "source_world_split_key": "astra-seed-lantern-bank-v1",
+  "metadata_files": [
+    "DECOMPOSITION.md"
+  ],
+  "typed_call_graph": {
+    "nodes": [
+      {
+        "path": "designExperiments/auditCertificate/challengeCompartment.nl",
+        "args": {
+          "source": "BankSource",
+          "posterior": "Posterior",
+          "predictions": "PredictionIndex"
+        },
+        "returns": "AuditFinding[]",
+        "owned_delta": "Challenge shortcuts that confuse tissue ownership, reciprocal crosses and assay answers."
+      },
+      {
+        "path": "designExperiments/auditCertificate/checkBranchStock.nl",
+        "args": {
+          "stocks": "StockIndex",
+          "policy": "PolicyResult"
+        },
+        "returns": "AuditFinding[]",
+        "owned_delta": "Check each chosen policy branch against original material and experiment capacities."
+      },
+      {
+        "path": "designExperiments/auditCertificate/explainResidualUncertainty.nl",
+        "args": {
+          "posterior": "Posterior",
+          "policy": "PolicyResult",
+          "request": "LaboratoryRequest"
+        },
+        "returns": "ResidualUncertainty[]",
+        "owned_delta": "Expose uncertainty that remains after the requested mechanism is identified."
+      },
+      {
+        "path": "designExperiments/auditCertificate.nl",
+        "args": {
+          "source": "BankSource",
+          "posterior": "Posterior",
+          "predictions": "PredictionIndex",
+          "policy": "PolicyResult",
+          "request": "LaboratoryRequest"
+        },
+        "returns": "LaboratoryCertificate",
+        "owned_delta": "Audit the actual belief updates, experiment predictions and chosen policy."
+      },
+      {
+        "path": "designExperiments/planPolicy/expandBeliefNode/judgeExperimentUse.nl",
+        "args": {
+          "node": "BeliefNode",
+          "partition": "ExperimentPartition",
+          "stockRules": "SourceClause[]",
+          "goal": "string"
+        },
+        "returns": "ExperimentUse",
+        "owned_delta": "Judge material feasibility and goal relevance using actual typed predictions."
+      },
+      {
+        "path": "designExperiments/planPolicy/expandBeliefNode.nl",
+        "args": {
+          "state": "PolicyClosure"
+        },
+        "returns": "PolicyClosure",
+        "owned_delta": "Expand one actual posterior-and-stock state through source experiment choices."
+      },
+      {
+        "path": "designExperiments/planPolicy/valueBeliefNode/compareCandidates.nl",
+        "args": {
+          "candidates": "CandidateValue[]",
+          "objective": "string",
+          "witnesses": "Witness[]"
+        },
+        "returns": "CandidateComparison",
+        "owned_delta": "Compare exact candidate cost vectors under the source objective."
+      },
+      {
+        "path": "designExperiments/planPolicy/valueBeliefNode.nl",
+        "args": {
+          "state": "ValuationFrontier"
+        },
+        "returns": "ValuationFrontier",
+        "owned_delta": "Value one dependency-ready belief state from actual returned child values."
+      },
+      {
+        "path": "designExperiments/planPolicy.nl",
+        "args": {
+          "source": "BankSource",
+          "posterior": "Posterior",
+          "predictions": "PredictionIndex",
+          "request": "LaboratoryRequest"
+        },
+        "returns": "PolicyResult",
+        "owned_delta": "Build and value a finite adaptive belief-and-material policy closure."
+      },
+      {
+        "path": "designExperiments/predictExperiments/deriveOffspring.nl",
+        "args": {
+          "world": "JointWorld",
+          "cross": "CrossReading",
+          "inheritanceRules": "SourceClause[]"
+        },
+        "returns": "OffspringDistribution",
+        "owned_delta": "Derive source-permitted offspring classes from one joint world and oriented cross."
+      },
+      {
+        "path": "designExperiments/predictExperiments/interpretCross.nl",
+        "args": {
+          "experiment": "ExperimentPlan",
+          "pedigree": "PedigreeReading",
+          "assay": "Assay"
+        },
+        "returns": "CrossReading",
+        "owned_delta": "Resolve the actual parents and material compartment of one experiment."
+      },
+      {
+        "path": "designExperiments/predictExperiments/partitionAnswers.nl",
+        "args": {
+          "experiment": "ExperimentPlan",
+          "cross": "CrossReading",
+          "predictions": "WorldPrediction[]",
+          "posterior": "Posterior"
+        },
+        "returns": "ExperimentPartition",
+        "owned_delta": "Form observational equivalence branches from actual world predictions."
+      },
+      {
+        "path": "designExperiments/predictExperiments/readOffspring.nl",
+        "args": {
+          "world": "JointWorld",
+          "experiment": "ExperimentPlan",
+          "assay": "Assay",
+          "cross": "CrossReading",
+          "offspring": "OffspringDistribution",
+          "theory": "ExpressionTheory"
+        },
+        "returns": "WorldPrediction",
+        "owned_delta": "Map actual biological classes through a theory and the assay resolution."
+      },
+      {
+        "path": "designExperiments/predictExperiments.nl",
+        "args": {
+          "source": "BankSource",
+          "posterior": "Posterior"
+        },
+        "returns": "PredictionIndex",
+        "owned_delta": "Predict every supplied experiment across the actual surviving joint worlds."
+      },
+      {
+        "path": "designExperiments/readBank/readAssays/judgeObservationScope.nl",
+        "args": {
+          "observationClauses": "SourceClause[]",
+          "protocolClauses": "SourceClause[]"
+        },
+        "returns": "ScopeDecision",
+        "owned_delta": "Decide what one observation can establish under its actual protocol."
+      },
+      {
+        "path": "designExperiments/readBank/readAssays.nl",
+        "args": {
+          "clauses": "SourceClause[]"
+        },
+        "returns": "AssayIndex",
+        "owned_delta": "Bind observations to the tissue, stage, regime and resolution they actually measure."
+      },
+      {
+        "path": "designExperiments/readBank/readPedigree/judgeParentage.nl",
+        "args": {
+          "relationClauses": "SourceClause[]",
+          "context": "SourceClause[]"
+        },
+        "returns": "ParentageDecision",
+        "owned_delta": "Judge the identity and authority of one proposed biological parental relation."
+      },
+      {
+        "path": "designExperiments/readBank/readPedigree.nl",
+        "args": {
+          "clauses": "SourceClause[]"
+        },
+        "returns": "PedigreeReading",
+        "owned_delta": "Infer admissible accession assignments from established genetic relations."
+      },
+      {
+        "path": "designExperiments/readBank/readStocks.nl",
+        "args": {
+          "clauses": "SourceClause[]"
+        },
+        "returns": "StockIndex",
+        "owned_delta": "Interpret material capacities and source-defined experiment slots."
+      },
+      {
+        "path": "designExperiments/readBank/readTheories.nl",
+        "args": {
+          "clauses": "SourceClause[]"
+        },
+        "returns": "TheoryIndex",
+        "owned_delta": "Interpret competing expression mechanisms and correlated prior tickets."
+      },
+      {
+        "path": "designExperiments/readBank.nl",
+        "args": {
+          "request": "LaboratoryRequest"
+        },
+        "returns": "BankSource",
+        "owned_delta": "Read original nested bank records and preserve their biological source roles."
+      },
+      {
+        "path": "designExperiments/reconstructBelief/assessObservation/predictObservedTrait.nl",
+        "args": {
+          "world": "JointWorld",
+          "observation": "Observation",
+          "theory": "ExpressionTheory",
+          "inheritanceRules": "SourceClause[]"
+        },
+        "returns": "WorldPrediction",
+        "owned_delta": "Interpret one theory against the observed accession and biological scope."
+      },
+      {
+        "path": "designExperiments/reconstructBelief/assessObservation.nl",
+        "args": {
+          "world": "JointWorld",
+          "observation": "Observation",
+          "theories": "ExpressionTheory[]",
+          "inheritanceRules": "SourceClause[]"
+        },
+        "returns": "ObservationAssessment",
+        "owned_delta": "Compare one actual observation with a theory-conditioned prediction."
+      },
+      {
+        "path": "designExperiments/reconstructBelief/expandAssignment.nl",
+        "args": {
+          "state": "AssignmentFrontier"
+        },
+        "returns": "AssignmentFrontier",
+        "owned_delta": "Consume one joint ticket under actual pedigree constraints."
+      },
+      {
+        "path": "designExperiments/reconstructBelief/updatePosterior.nl",
+        "args": {
+          "posterior": "Posterior",
+          "assessments": "ObservationAssessment[]"
+        },
+        "returns": "Posterior",
+        "owned_delta": "Apply actual observation likelihoods to joint world masses."
+      },
+      {
+        "path": "designExperiments/reconstructBelief.nl",
+        "args": {
+          "source": "BankSource"
+        },
+        "returns": "Posterior",
+        "owned_delta": "Construct joint worlds and consume observed evidence into a posterior."
+      },
+      {
+        "path": "designExperiments.nl",
+        "args": {
+          "request": "LaboratoryRequest"
+        },
+        "returns": "LaboratoryCertificate",
+        "owned_delta": "Reconstruct joint inheritance beliefs and design a stock-feasible adaptive experiment policy."
+      }
+    ],
+    "edges": [
+      {
+        "caller": "designExperiments/auditCertificate.nl",
+        "callee": "designExperiments/auditCertificate/challengeCompartment.nl"
+      },
+      {
+        "caller": "designExperiments/auditCertificate.nl",
+        "callee": "designExperiments/auditCertificate/checkBranchStock.nl"
+      },
+      {
+        "caller": "designExperiments/auditCertificate.nl",
+        "callee": "designExperiments/auditCertificate/explainResidualUncertainty.nl"
+      },
+      {
+        "caller": "designExperiments.nl",
+        "callee": "designExperiments/auditCertificate.nl"
+      },
+      {
+        "caller": "designExperiments/planPolicy/expandBeliefNode.nl",
+        "callee": "designExperiments/planPolicy/expandBeliefNode/judgeExperimentUse.nl"
+      },
+      {
+        "caller": "designExperiments/planPolicy.nl",
+        "callee": "designExperiments/planPolicy/expandBeliefNode.nl"
+      },
+      {
+        "caller": "designExperiments/planPolicy/valueBeliefNode.nl",
+        "callee": "designExperiments/planPolicy/valueBeliefNode/compareCandidates.nl"
+      },
+      {
+        "caller": "designExperiments/planPolicy.nl",
+        "callee": "designExperiments/planPolicy/valueBeliefNode.nl"
+      },
+      {
+        "caller": "designExperiments.nl",
+        "callee": "designExperiments/planPolicy.nl"
+      },
+      {
+        "caller": "designExperiments/predictExperiments.nl",
+        "callee": "designExperiments/predictExperiments/deriveOffspring.nl"
+      },
+      {
+        "caller": "designExperiments/predictExperiments.nl",
+        "callee": "designExperiments/predictExperiments/interpretCross.nl"
+      },
+      {
+        "caller": "designExperiments/predictExperiments.nl",
+        "callee": "designExperiments/predictExperiments/partitionAnswers.nl"
+      },
+      {
+        "caller": "designExperiments/predictExperiments.nl",
+        "callee": "designExperiments/predictExperiments/readOffspring.nl"
+      },
+      {
+        "caller": "designExperiments.nl",
+        "callee": "designExperiments/predictExperiments.nl"
+      },
+      {
+        "caller": "designExperiments/readBank/readAssays.nl",
+        "callee": "designExperiments/readBank/readAssays/judgeObservationScope.nl"
+      },
+      {
+        "caller": "designExperiments/readBank.nl",
+        "callee": "designExperiments/readBank/readAssays.nl"
+      },
+      {
+        "caller": "designExperiments/readBank/readPedigree.nl",
+        "callee": "designExperiments/readBank/readPedigree/judgeParentage.nl"
+      },
+      {
+        "caller": "designExperiments/readBank.nl",
+        "callee": "designExperiments/readBank/readPedigree.nl"
+      },
+      {
+        "caller": "designExperiments/readBank.nl",
+        "callee": "designExperiments/readBank/readStocks.nl"
+      },
+      {
+        "caller": "designExperiments/readBank.nl",
+        "callee": "designExperiments/readBank/readTheories.nl"
+      },
+      {
+        "caller": "designExperiments.nl",
+        "callee": "designExperiments/readBank.nl"
+      },
+      {
+        "caller": "designExperiments/reconstructBelief/assessObservation.nl",
+        "callee": "designExperiments/reconstructBelief/assessObservation/predictObservedTrait.nl"
+      },
+      {
+        "caller": "designExperiments/reconstructBelief.nl",
+        "callee": "designExperiments/reconstructBelief/assessObservation.nl"
+      },
+      {
+        "caller": "designExperiments/reconstructBelief.nl",
+        "callee": "designExperiments/reconstructBelief/expandAssignment.nl"
+      },
+      {
+        "caller": "designExperiments/reconstructBelief.nl",
+        "callee": "designExperiments/reconstructBelief/updatePosterior.nl"
+      },
+      {
+        "caller": "designExperiments.nl",
+        "callee": "designExperiments/reconstructBelief.nl"
+      }
+    ]
+  },
+  "services": [],
+  "composition": {
+    "nl_files": 27,
+    "physical_lines": 531,
+    "body_lines": 328,
+    "numbered_steps": 159,
+    "type_aliases": 46
+  },
+  "comparison_spec": {
+    "mode": "exact-source-world-and-adaptive-policy-replay",
+    "unordered_collections": [
+      "Worlds and tickets",
+      "Witnesses and coverage",
+      "Nodes and values",
+      "Sibling answer branches and genotype alternatives"
+    ],
+    "generated_identifiers": "World and policy node IDs may be consistently alpha-renamed. Source accession/theory/ticket/experiment/slot/material IDs remain exact.",
+    "semantic_fields": "Biological scope, parentage authority, interpretation completeness and audit entailment require independent source review."
+  },
+  "provenance": {
+    "author": "semantic_slate_astra",
+    "kind": "Original fictional evidence and NL application",
+    "license": "Repository license"
+  },
+  "readiness": {
+    "source_loader_checked": true,
+    "typed_declarations_checked": true,
+    "typed_reference_checked": true,
+    "independent_oracle_review": false,
+    "exact_result_replay": true,
+    "live_qualified": false,
+    "training_admitted": false
+  },
+  "model_facing_debt": "Initial27NL source unmeasured. Fullsource/control review and approximately48 live samples required before adoption; no training admission.",
+  "scoped_literals": [
+    {
+      "site": "designExperiments/readBank/readPedigree/judgeParentage.nl",
+      "result_type": "ParentageMeaning",
+      "consumed_by": "Established relation narrows joint ticket assignments"
+    },
+    {
+      "site": "designExperiments/readBank/readAssays/judgeObservationScope.nl",
+      "result_type": "ScopeMeaning",
+      "consumed_by": "Observed likelihood applicability"
+    },
+    {
+      "site": "designExperiments/predictExperiments/interpretCross.nl",
+      "result_type": "CrossMeaning",
+      "consumed_by": "Oriented parents and assayed compartment"
+    },
+    {
+      "site": "designExperiments/predictExperiments/readOffspring.nl",
+      "result_type": "ReadoutMeaning",
+      "consumed_by": "Actual world answer probabilities and partitions"
+    },
+    {
+      "site": "designExperiments/planPolicy/expandBeliefNode/judgeExperimentUse.nl",
+      "result_type": "UseMeaning",
+      "consumed_by": "Executable stock-feasible transition"
+    },
+    {
+      "site": "designExperiments/auditCertificate/challengeCompartment.nl",
+      "result_type": "ChallengeMeaning",
+      "consumed_by": "Certificate audit findings"
+    }
+  ]
+}
