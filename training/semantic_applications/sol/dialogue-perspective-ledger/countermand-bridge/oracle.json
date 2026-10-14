@@ -1,0 +1,67 @@
+{
+  "schema": "natlang.dialogue-query-invariants/1",
+  "caseId": "sol-dialogue-countermand-v1",
+  "scope": "Original source-derived projection draft; full typed witness/checker and independent review pending.",
+  "query_observables": {
+    "Q01": {
+      "commitmentStatus": "conditional"
+    },
+    "Q02": {
+      "commitmentStatus": "conditional"
+    },
+    "Q03": {
+      "commitmentStatus": "retracted"
+    },
+    "Q04": {
+      "knowledgeValue": false
+    },
+    "Q05": {
+      "commitmentStatus": "retracted"
+    },
+    "Q06": {
+      "commitmentStatus": "conditional"
+    },
+    "Q07": {
+      "commitmentStatus": "active",
+      "actorIds": [
+        "Oren"
+      ]
+    },
+    "Q08": {
+      "commitmentStatus": "fulfilled"
+    },
+    "Q09": {
+      "commitmentStatus": "retracted"
+    },
+    "Q10": {
+      "truthValue": false
+    },
+    "Q11": {
+      "beliefValue": true
+    },
+    "Q12": {
+      "knowledgeValue": false
+    },
+    "Q13": {
+      "beliefValue": true
+    },
+    "Q14": {
+      "knowledgeValue": false
+    },
+    "Q15": {
+      "knowledgeValue": true
+    },
+    "Q16": {
+      "performed": false
+    },
+    "Q17": {
+      "truthValue": true
+    },
+    "Q18": {
+      "truthValue": false
+    }
+  },
+  "source_world_split_key": "sol-app-world:countermand-bridge-v1",
+  "generation_ready": false,
+  "training_admission": false
+}

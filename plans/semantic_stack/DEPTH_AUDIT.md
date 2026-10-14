@@ -39,3 +39,36 @@ JS in the live trace: exact mechanics are fine; a case-specific answer table or
 domain status assignment is a source/agent ergonomics failure to repair.
 Preserve correct small examples in the ordinary mix. Record the live trace and
 independent semantic witness before training admission.
+
+## Deep pseudocode criterion
+
+For an application-scale example, the `.nl` files must contain the actual
+domain procedure, not merely a chain of stages named after that procedure. A
+good numbered step names the source evidence it reads, the alternative or
+state it distinguishes, the rule for accepting, rejecting or keeping an
+unknown, and the typed contribution it returns. Its parent names the actual
+child field it consumes and the next decision or state change that depends on
+it. The source should expose several different forms of work (for example,
+reading, semantic classification, iterative revision, cross-item joining and
+final explanation), with task-specific state passing between them. Repeating
+the same generic six instructions across four renamed stages does not meet
+this criterion, even when the fixture and answer are valid.
+
+During review, follow at least one positive, one negative and one ambiguous
+branch through the *whole* source tree. A reviewer should be able to answer
+from the `.nl` source which evidence changes the result and where that change
+is carried. Check the implemented controls on both child-result preservation
+and downstream use; an exact checker that only accepts a final answer cannot
+establish either. A crisp helper may bind IDs, quotes, arithmetic, iteration
+state or immutable writes. If it selects the meaning of a claim, chooses a
+scope, ranks explanations, repairs a semantic answer or supplies a case's
+correct status, move that decision into a typed NL stage. Do not pad the tree
+with wrappers or boilerplate to reach a file or step count.
+
+The 220 catalog designs remain ordinary valid small-case material until each
+has its own authored source and evidence. Do not withhold those useful rows
+because they are small; do not count them as 220 deep applications. Cave v7's
+hard-coded coordinate support and Ecology v17's JS-created scoped decisions
+are concrete examples of the shortcut this review must catch. Their repaired
+successors need matched live traces before an application-scale label or
+training admission.

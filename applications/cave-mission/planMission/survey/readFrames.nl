@@ -1,45 +1,35 @@
 ---
-description: Consume typed per-unit NL frame and landmark meanings before choosing physical alignment.
+description: Reduce original frame units and preserve each actual returned convention or landmark contribution.
 args:
   clauses: SourceClause[]
 returns: FrameSurvey
 ---
-1. Capture the immutable original clauses. In eval construct a scoped NL inventory literal returning
-   SurveyUnitInventory and directly await it on these clauses. Its task is to identify local-frame
-   convention units and individual landmark units, with original primary/supporting clause IDs and
-   a focus question. Several named locations in one clause yield several reading units.
-2. Inventory source scope only: sourceFrame uses the original survey name consistently across its
-   units. Fixed global definitions support coordinates and landmarks, not another uncertain physical
-   world. Unit focus must not preselect a position, basis alternative or physical identity relation.
-3. Require nonempty original primaryClauseIds, only frame/landmark kinds, existing clause IDs and
-   unique generated unitIds. An invalid inventory reports its unit and expected source/kind for repair.
-   Visit every
-   actual unit once. Gather its original primary/supporting clauses by those checked IDs; no guessed
-   source or coordinate value may replace a missing inventory contribution.
-4. For each frame unit directly invoke a scoped NL SurveyReadingUnit support-selection literal on
-   {unit, primaryClauses, clauses}, preserving that actual unit identity/frame/focus. Its numbered policy
-   first identifies named origin/basis references, then follows source-established anchor identity links,
-   then selects every fixed global coordinate/orientation definition needed to interpret those references.
-   Global point and unique-anchor bridge clauses can lie outside the frame's own file. They are context,
-   not another handedness hypothesis. The literal changes only supportingClauseIds; require unchanged
-   every other SurveyReadingUnit field including kind, primary IDs and unit/frame/focus. Require every returned support ID to name an existing original clause. Name the returned supported unit supportedUnit, combine its support IDs with original supports,
-   bind unit to that actual supportedUnit, then gather the actual source clauses and call interpretConvention(unit, primaryClauses, supportingClauses).
-   Consume its actual
-   ConventionInterpretation: bind generated alternative IDs, original sourceFrame, origin and basis
-   from the returned meanings, then attach only parent-validated original clause-keyed quotations.
-5. For a landmark unit, call interpretLandmark(unit, primaryClauses, supportingClauses). Consume its
-   actual nullable LandmarkItemMeaning. If established, construct LandmarkMention from the returned
-   localId, frame, position and description; attach original witnesses after exact quote validation.
-6. Require returned frame keys to match the original unit.sourceFrame when supplied. For every
-   established alternative or mention require nonempty evidence. Match each clauseId to its
-   actual supplied original clause and each nonempty exactQuote to an original witness substring;
-   copy sourceId/path from that matched witness. A missing quote fails the contribution for repair.
-7. Keep a local frame's origin mention and local zero position separate from the global named anchor
-   and its global position. Never merge frame names or replace a local point with a global point here.
-   Physical anchor identity and repeated visual marks remain questions for later reconciliation.
-8. Preserve different evidence-backed meanings and contradictions. Merge exact duplicate rows only;
-   semantically disputed rows remain explicit unresolved interpretation rather than a last-row override.
-   A complete finite convention ambiguity is represented by alternatives, not a blocking unknown.
-9. Return actual alternatives and landmarks plus inventory/child unresolved premises. All semantic
-   row fields came from awaited NL children. Conditional alignment consumes those exact typed values
-   and still chooses no actual handedness until independent evidence supplies that distinction.
+1. Capture immutable original clauses. Directly await a scoped NL SurveyUnitInventory literal on them.
+   Its numbered inventory policy identifies frame-convention units and individual landmark units,
+   original primary/supporting IDs, consistent sourceFrame and each local interpretation focus.
+2. For every landmark unit return originalLocalName as the exact source-local name identifying that
+   item, with its original primary clause. Several named items in one clause require distinct units.
+   For frame units originalLocalName is null. Names and source scope are inventory data; position,
+   basis alternative, descriptive meaning and physical identity remain the later children's judgments.
+3. Consume the actual inventory. Require unique original unit IDs, frame/landmark kinds, nonempty
+   existing primary IDs and existing support IDs. Each unit must carry a nonempty sourceFrame grounded
+   in its original frame context; missing frame scope remains an explicit unresolved inventory premise. A landmark name must be a nonempty complete lexical
+   token in its primary clause text, preserving case: adjacent letters, digits or underscore belong to
+   the same token. A frame name slot is null. Retain exact failed inventory identities for repair.
+4. Initialize FrameReadFrontier with original clauses, actual validated pending units, completed:[]
+   and inventory findings. Name this initialState; directly await
+   advanceFrameUnit.iterateOn(initialState).withMeasure(next => next.pendingUnits.length)
+   .until(next => next.pendingUnits.length === 0). The original-unit count decreases structurally.
+   Each invocation consumes one original unit and carries
+   completed actual returns forward; continuing a partial frontier does not revisit completed units.
+5. Consume the actual settled frontier. Every original unit has exactly one completed result. Accepted
+   results retain their actual child meaning and checked projection; semantic uncertainty retains its
+   actual nullable child return/reason; execution/provenance failure retains its precise failure.
+   Preserve successful earlier contributions when a later unit fails, with exact unit coverage.
+6. Form alternatives and landmarks only by collecting those actual completed projections. Generated
+   alternative IDs are unique across units. Merge exact duplicate semantic rows only, retaining their
+   original evidence; disputed interpretations remain separate. Exhaustive convention alternatives are
+   complete source ambiguity, not unfinished interpretation. This stage performs no new convention judgment.
+7. Return those actual alternatives/landmarks, completed as unitResults, and carried unresolved/failure
+   premises. Downstream physical alignment receives those values and original names. Its actual
+   reflection choice and optional-pair consistency remain distinct later NL decisions.

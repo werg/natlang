@@ -1,0 +1,49 @@
+{
+  "caseId": "sol-dialogue-countermand-v1",
+  "documents": [
+    {
+      "sourceId": "CB01",
+      "path": "controls/model.md"
+    },
+    {
+      "sourceId": "CB02",
+      "path": "controls/format.md"
+    },
+    {
+      "sourceId": "CB03",
+      "path": "participants/channels.md"
+    },
+    {
+      "sourceId": "CB04",
+      "path": "conversation/promises/original.md"
+    },
+    {
+      "sourceId": "CB05",
+      "path": "conversation/revisions/withdrawal.md"
+    },
+    {
+      "sourceId": "CB06",
+      "path": "conversation/revisions/adoptions.md"
+    },
+    {
+      "sourceId": "CB07",
+      "path": "conversation/promises/fresh.md"
+    },
+    {
+      "sourceId": "CB08",
+      "path": "conversation/acknowledgments/versions.md"
+    },
+    {
+      "sourceId": "CB09",
+      "path": "conversation/reports/collection.md"
+    },
+    {
+      "sourceId": "CB10",
+      "path": "conversation/reports/issuer-and-forward.md"
+    },
+    {
+      "sourceId": "CB11",
+      "path": "events/complete-log.md"
+    }
+  ]
+}

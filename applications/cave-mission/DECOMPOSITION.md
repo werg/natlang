@@ -118,3 +118,18 @@ review and roughly48 live samples; none of those preparation receipts is trainin
 ## Connected value-consumer depth revision
 
 The audit found no visible executable TypeScript policy. Survey-v5 already obtains actual per-unit NL meanings; its frozen package stays separately reviewed. settleValue expands seven steps to ten, making the action-choice versus uncontrollable-observation distinction explicit, joining every actual world/outcome dependency, separating missing graph evidence from a losing world, valuing both worst-case coordinates and retaining tied optimal witnesses. It consumes existing typed expansions and child StateValues without reselecting routes or rebuilding source assertions. No new leaf or crisp decision helper is added. Exact maxima/arithmetic project already established policy alternatives. Fixture, report types and canonical policy remain unchanged; the source delta needs its own peer/live qualification.
+
+## Original local names and one-unit frame progress v8
+
+The v7 live reader accepted a generated landmark name because SurveyReadingUnit lacked the original
+local name; it then repeated an already returned convention judgment. V8 gives inventory an exact
+originalLocalName for each landmark, preserves null for other unit kinds, and validates the complete
+original name token before interpretation. The child judges position/description/uncertainty while
+copying that supplied name; physical identity still belongs to reconciliation.
+
+A named advanceFrameUnit consumes one original unit in FrameReadFrontier, retaining actual nullable
+child results, source-bound projected rows and accepted/unresolved/failed outcomes. readFrames folds
+those actual completed projections into FrameSurvey.unitResults/alternatives/landmarks. Support
+selection remains scoped NL in the single-unit step; exact provenance/progress checks are mechanism.
+Existing convention/landmark helpers are reused through explicit uses, without duplicate implementations.
+Fixture/oracle/final mission reference and downstream physical/directional policy remain unchanged.

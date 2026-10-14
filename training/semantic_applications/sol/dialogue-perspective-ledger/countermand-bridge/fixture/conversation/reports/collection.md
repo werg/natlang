@@ -1,0 +1,5 @@
+[C18] Authenticated turn C18: Noor, day18 hour8, to Sada: "I collected the crate today." This is Noor's asserted claim; the complete physical log supplies actual timing separately.
+[HC18] Sada directly hears C18 at day18 hour8. No verified log accompanies this assertion.
+[S19_EARLY] Signed private note S19_EARLY: Sada, day19 hour8: "I believe Noor's C18 claim that the crate was collected on day18; therefore I also believe it was collected before day20 noon." This endorses both named propositions but has no verified corroboration yet.
+[C19] Authenticated correction C19: Noor, day19 hour10.5, to Sada: "Correct C18: I first collected at day19 hour10, not on day18." A verified collection log is attached. This is a correction of the collection claim, not a withdrawal of either Oren promise.
+[RC19_S] C19 with verified F_COLLECTION is dispatched at day19 hour10.5 and received/read by Sada only at day20 hour1. Receipt makes evidence available but supplies no adoption; no signed Sada correction-adoption note exists in this packet.

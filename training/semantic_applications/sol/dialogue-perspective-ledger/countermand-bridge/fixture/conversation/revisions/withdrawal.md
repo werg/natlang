@@ -1,0 +1,3 @@
+[W18] Authenticated original turn W18: Oren, day18 hour0, addressed to Sada and Tavi: "I withdraw my original promise P17. This withdrawal names P17 only; no later new promise is withdrawn." It is dispatched separately to both named beneficiaries at that time.
+[HW18_S] Sada receives and reads W18 at day18 hour1. Oren directly knows only Sada's arrival at this point; no evidence of Tavi arrival or adoption has reached Oren.
+[RW18_T] W18 is dispatched to Tavi at day18 hour0 but arrives and is read by Tavi only at day18 hour3. Its opaque receipt identifier is not a date or a statement of adoption.

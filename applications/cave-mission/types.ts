@@ -10,7 +10,7 @@ export type FrameAlternative = {
   uVector: Point; vVector: Point; witnesses: Witness[];
 };
 export type LandmarkMention = { localId: string; frame: string; position: Point | null; description: string; witnesses: Witness[] };
-export type FrameSurvey = { alternatives: FrameAlternative[]; landmarks: LandmarkMention[]; unresolved: string[] };
+export type FrameSurvey = { alternatives: FrameAlternative[]; landmarks: LandmarkMention[]; unitResults: FrameUnitResult[]; unresolved: string[] };
 export type PassageAssertion = {
   from: string; to: string; frame: string; direction: 'one-way' | 'two-way';
   kind: 'corridor' | 'water-gate' | 'tunnel' | 'chimney'; cost: number | null;
@@ -73,7 +73,7 @@ export type PlanningResult = { graph: BeliefGraph; values: StateValue[]; policy:
 
 /** Survey v5: NL-owned reading units and meanings; original provenance is bound by the parent. */
 export type SurveyQuote = { clauseId: string; exactQuote: string };
-export type SurveyReadingUnit = { unitId: string; kind: 'frame' | 'landmark' | 'passage' | 'gear' | 'sensor'; sourceFrame: string | null; primaryClauseIds: string[]; supportingClauseIds: string[]; focus: string };
+export type SurveyReadingUnit = { unitId: string; kind: 'frame' | 'landmark' | 'passage' | 'gear' | 'sensor'; sourceFrame: string | null; originalLocalName: string | null; primaryClauseIds: string[]; supportingClauseIds: string[]; focus: string };
 export type SurveyUnitInventory = { units: SurveyReadingUnit[]; unresolved: string[] };
 export type LandmarkMeaning = { localId: string; frame: string; position: Point | null; description: string };
 export type LandmarkItemMeaning = { meaning: LandmarkMeaning | null; evidence: SurveyQuote[]; unresolved: string[] };
@@ -85,3 +85,7 @@ export type GearMeaning = { ruleId: string; subject: string; condition: string; 
 export type GearItemMeaning = { meaning: GearMeaning | null; evidence: SurveyQuote[]; unresolved: string[] };
 export type SensorMeaning = { sensorId: string; availableAt: string; cost: number; answerDescriptions: { answer: string; meaning: string }[]; scope: string };
 export type SensorItemMeaning = { meaning: SensorMeaning | null; evidence: SurveyQuote[]; unresolved: string[] };
+
+/** Frame v8: actual per-unit returns and checked projections survive later failures. */
+export type FrameUnitResult = { unit: SurveyReadingUnit; status: 'accepted' | 'unresolved' | 'failed'; convention: ConventionInterpretation | null; landmark: LandmarkItemMeaning | null; alternatives: FrameAlternative[]; landmarks: LandmarkMention[]; failure: string | null; unresolved: string[] };
+export type FrameReadFrontier = { clauses: SourceClause[]; pendingUnits: SurveyReadingUnit[]; completed: FrameUnitResult[]; unresolved: string[] };

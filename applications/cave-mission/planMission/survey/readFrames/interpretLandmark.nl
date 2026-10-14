@@ -7,10 +7,11 @@ args:
 returns: LandmarkItemMeaning
 ---
 1. Require this original unit to be a landmark reading. Preserve its sourceFrame and source clause
-   identities. Capture supporting clauses and that declared frame; the varying input is the unit's
-   focus with its original primary clauses, not a prepared coordinate or description row.
-2. In eval create a scoped NL literal returning LandmarkItemMeaning and directly await it on that
-   changing input. It judges the local name, frame-owned position, descriptive features and uncertainty
+   identities and exact originalLocalName. Bind the actual literal input as
+   {unit,primaryClauses,supportingClauses}; it contains original names/scope rather than prepared geometry.
+2. In eval create a scoped NL literal returning LandmarkItemMeaning and directly await it on
+   {unit,primaryClauses,supportingClauses}. Copy unit.originalLocalName unchanged into meaning.localId;
+   judge frame-owned position, descriptive features and uncertainty
    in this one source scope; it does not decide which reflection or global landing is actual.
 3. A stated point belongs to its stated frame. A local origin is local zero, while its globally named
    physical anchor keeps a separate global point. A missing point stays null. Preserve original source
