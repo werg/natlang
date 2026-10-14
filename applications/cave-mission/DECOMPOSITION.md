@@ -133,3 +133,19 @@ those actual completed projections into FrameSurvey.unitResults/alternatives/lan
 selection remains scoped NL in the single-unit step; exact provenance/progress checks are mechanism.
 Existing convention/landmark helpers are reused through explicit uses, without duplicate implementations.
 Fixture/oracle/final mission reference and downstream physical/directional policy remain unchanged.
+
+## Support dependency closure v9
+
+The v8 live Amber selector returned the local origin and identity bridge but omitted the actual
+fixed global point definition. Its convention child correctly preserved that blocker instead of
+inventing a point. Keep the same named one-unit frontier and helper graph. The scoped support
+literal now returns FrameSupportClosure with separate original local-origin, identity-bridge,
+fixed-point and orientation clause groups, exact evidence and unresolved premises. Its numbered
+NL steps follow actual source dependencies; reused marks and missing selectors retain alternatives.
+An unstated local origin stays unresolved even if another landmark has a known global point.
+
+The parent validates original IDs/quotes, unions every actual group into supportingClauses,
+retains raw supportClosure in FrameUnitResult, and consumes the actual convention child as before.
+Exact union/projection/progress remains mechanism. No numeric fallback, hidden point dictionary,
+new alignment policy or extra forwarding callable is introduced. The full mission oracle/reference
+are unchanged; current v9 independent source and live qualification remain pending.

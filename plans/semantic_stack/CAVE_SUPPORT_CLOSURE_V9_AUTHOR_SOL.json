@@ -1,0 +1,76 @@
+{
+  "schema": "natlang.cave-fixed-point-closure-author/1",
+  "reviewer": "semantic_slate_sol",
+  "source_variant": "fixed-point-support-closure-v9",
+  "status": "author_source_checks_pass_independent_review_pending",
+  "source_bug": {
+    "partial": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/cave-app-frame-frontier-v8-diagnostic-v1/worker-01/case-000/jobs/000000-d4c1f8eeec32a515.partial.json",
+    "sha256_prefix": "be16f95d",
+    "observed_turns": [
+      "106 support selector omitted fixed-point clause",
+      "114 actual convention child retained missing-point blocker"
+    ],
+    "scope": "Diagnostic source-repair evidence, not model-negative/admission"
+  },
+  "changed_paths": {
+    "applications/cave-mission/types.ts": "acc8adfd192c1da4d1d54499522bbfb82d17a647d5ad64daa886008096831e7d",
+    "applications/cave-mission/DECOMPOSITION.md": "22d9ff1a3ddb6c00b487e2ae219430c33ac8923b363923922f4a5e5b6364f809",
+    "applications/cave-mission/planMission/survey/readFrames/advanceFrameUnit.nl": "4d1573ecd9f6b66b58b4005d2af0d5e3a59569e444463b3c8f070cefec70c1cd",
+    "training/semantic_applications/astra/cave-mission/frame-v8-controls/check-controls.mjs": "498a5c293b0d46f1041177495d34dd5ad59f87bb2e640c03d85bfcb28cd1e7dc",
+    "training/semantic_applications/astra/cave-mission/frame-v8-controls/progress-witness.json": "420edd0aec2df1c2391a9a87b22ead8dc0418c2efb4582ee38edee22a4db2775",
+    "training/semantic_applications/astra/cave-mission/project.json": "e00b42f2566169ef247509409b953e137b7b832c5dfd44c3b96e1e48e46b3530"
+  },
+  "semantic_owner": "Existing one-unit scoped NL literal names local origin, identity bridge, fixed point, orientation alternatives and missing premises; parent retains and consumes those actual groups. No new forwarding function or numeric dictionary.",
+  "exact_seams": [
+    "Original IDs and quoted source membership",
+    "Union of actual cited source groups into child evidence",
+    "Retention of actual raw support closure and convention/landmark return",
+    "Single-unit progress and actual projection"
+  ],
+  "composition": {
+    "nl_files": 30,
+    "nl_total_lines": 817,
+    "nl_body_lines": 621,
+    "numbered_steps": 219,
+    "type_aliases": 60,
+    "visible_crisp_policy_lines": 0
+  },
+  "checks": {
+    "native_loader": true,
+    "typescript": true,
+    "frame_progress": {
+      "passed": true,
+      "positive": 9,
+      "negative": 24
+    },
+    "survey_item": {
+      "passed": true,
+      "positive": 13,
+      "negative": 15
+    },
+    "mission_exact": {
+      "passed": true,
+      "positive": 5,
+      "negative": 17
+    }
+  },
+  "canonical_preflight": {
+    "path": "/tmp/sol-cave-v9-source-preflight/package-report.json",
+    "source_sha256": "8c6abf02132553c8d2fad66a3a8b8cc2f8d880ccb72327f743179dbebd2cbbe7",
+    "reference_ok": true,
+    "scope": "Full typed authored source witness only, not NL execution"
+  },
+  "unchanged_private_oracle": {
+    "training/semantic_applications/astra/cave-mission/mirrored-vault/oracle.json": "652c18267e79c61c0b2b12d4626e979578a880b81f2c03c955e0248f2036c786",
+    "training/semantic_applications/astra/cave-mission/mirrored-vault/reference-report.json": "3f2efe03c7e7b14608a0fa336ec8b43a3d890ebb3796b8136afa91c450713f90",
+    "training/semantic_applications/astra/cave-mission/verify-result.mjs": "5be4d8fa2c646d9c73d96adbf8fd2c9991c7b8f40ae04a36ce4f3ed779ea9737"
+  },
+  "generation_ready": false,
+  "training_admission": false,
+  "measurement": {
+    "live_samples": 0,
+    "planned_samples": 48,
+    "semantic_entailment_review": false,
+    "actual_literal_consumption_review": false
+  }
+}
