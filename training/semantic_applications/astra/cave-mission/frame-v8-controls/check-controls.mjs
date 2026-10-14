@@ -14,22 +14,25 @@ function verify(before,after,trace=null){const issues=[];try{coerce(before,parse
  if(!unit.sourceFrame)issues.push('original frame scope required');
  if(unit.kind==='landmark'&&!eq(unit,row.unit))issues.push('original landmark unit retained');
  if(unit.kind==='frame'){
-  const groupsForUnit=['localOriginClauseIds','identityBridgeClauseIds','fixedPointClauseIds','orientationClauseIds','supportingClauseIds'];const expectedSupports=[...new Set(unit.supportingClauseIds.concat(groupsForUnit.flatMap(k=>trace?.actual_support_closure?.[k]??[])))].sort();
+  const groupsForUnit=['ownedConventionClauseIds','localOriginClauseIds','identityBridgeClauseIds','fixedPointClauseIds','orientationClauseIds','supportingClauseIds'];const expectedSupports=[...new Set(groupsForUnit.flatMap(k=>trace?.actual_support_closure?.[k]??[]))].sort();
   if(!trace||!eq({...row.unit,supportingClauseIds:[...row.unit.supportingClauseIds].sort()},{...unit,supportingClauseIds:expectedSupports})||!row.unit.supportingClauseIds.every(id=>by.has(id)))issues.push('actual frame support selection retained');
   if(!eq(row.convention,trace?.actual_child_return))issues.push('actual convention child return retained');
   if(!eq(row.supportClosure,trace?.actual_support_closure))issues.push('actual support closure retained');
   const closure=row.supportClosure;if(!closure)issues.push('actual typed frame support closure');else{
-   const groups=['localOriginClauseIds','identityBridgeClauseIds','fixedPointClauseIds','orientationClauseIds','supportingClauseIds'];
+   if(closure.ownedConventionClauseIds.some(id=>!unit.primaryClauseIds.includes(id))||[...closure.localOriginClauseIds,...closure.orientationClauseIds].some(id=>!closure.ownedConventionClauseIds.includes(id)))issues.push('selected unit owns convention evidence');
+   const groups=['ownedConventionClauseIds','localOriginClauseIds','identityBridgeClauseIds','fixedPointClauseIds','orientationClauseIds','supportingClauseIds'];
+   if(closure.frameRole==='reference-grid'&&groups.flatMap(k=>closure[k]).some(id=>!closure.ownedConventionClauseIds.includes(id)))issues.push('reference grid support belongs to selected primary scope');
    if(groups.flatMap(k=>closure[k]).some(id=>!row.unit.supportingClauseIds.includes(id)))issues.push('all actual closure groups passed downstream');
    if(groups.flatMap(k=>closure[k]).some(id=>!closure.evidence.some(e=>e.clauseId===id)))issues.push('exact evidence for every cited closure ID');
    for(const e of closure.evidence){const c=by.get(e.clauseId);if(!c||!e.exactQuote||!c.text.includes(e.exactQuote))issues.push('original support closure quotation');}
-   if(row.status==='accepted'&&(!closure.localOriginClauseIds.length||!closure.fixedPointClauseIds.length||!closure.orientationClauseIds.length||closure.unresolved.length))issues.push('complete supported origin to fixed-point closure');
+   if(row.status==='accepted'&&(closure.frameRole==='unresolved'||!closure.ownedConventionClauseIds.length||!closure.localOriginClauseIds.length||!closure.fixedPointClauseIds.length||!closure.orientationClauseIds.length||closure.unresolved.length))issues.push('complete supported origin to fixed-point closure');
   }
  }
  if(unit.kind==='landmark'&&!unit.primaryClauseIds.some(id=>token(by.get(id)?.text??'',unit.originalLocalName)))issues.push('complete case-preserved original name token');
  if(row.status==='accepted'&&unit.kind==='frame'){
   if(row.failure!==null||row.landmark!==null||!row.convention?.alternatives.length||row.landmarks.length)issues.push('accepted actual convention');
   const projected=(row.convention?.alternatives??[]).map((a,i)=>{const ws=[];for(const e of a.evidence){const c=by.get(e.clauseId);if(!c||!e.exactQuote||!c.text.includes(e.exactQuote)||![...row.unit.primaryClauseIds,...row.unit.supportingClauseIds].includes(e.clauseId))issues.push('actual frame supplied quote');else ws.push({...c.witnesses[0],quote:e.exactQuote});}if(!a.evidence.length||a.sourceFrame!==unit.sourceFrame)issues.push('frame source scope/support');return{...Object.fromEntries(['sourceFrame','origin','uVector','vVector'].map(k=>[k,a[k]])),witnesses:ws};});
+  if(row.supportClosure?.frameRole==='reference-grid'&&(projected.length!==1||!eq(projected[0]?.origin,{x:0,y:0})||!eq(projected[0]?.uVector,{x:1,y:0})||!eq(projected[0]?.vVector,{x:0,y:1})))issues.push('declared reference-grid identity map');
   if(!eq(row.alternatives.map(({alternativeId,...v})=>v),projected)||new Set(row.alternatives.map(v=>v.alternativeId)).size!==projected.length)issues.push('projection of actual returned frame alternatives');
  }else if(row.status==='accepted'){
   if(row.failure!==null||!row.landmark?.meaning||row.convention!==null)issues.push('accepted actual typed landmark return');
@@ -63,7 +66,7 @@ check('empty supporting evidence',false,(_,a)=>a.completed.at(-1).landmark.evide
 check('absent original quotation',false,(_,a)=>a.completed.at(-1).landmark.evidence[0].exactQuote='An invented source quotation');
 check('fabricated witness path',false,(_,a)=>a.completed.at(-1).landmarks[0].witnesses[0].path='input');
 check('failed item projects accepted rows',false,(_,a)=>{a.completed.at(-1).status='failed';a.completed.at(-1).failure='Actual type error';});
-function frameCheck(name,expected,mutation){const t=structuredClone(authored.frame_transition);mutation?.(t.before,t.after,t);const r=verify(t.before,t.after,t);checks.push({name,expected,actual:r.ok,passed:r.ok===expected,issues:r.issues});}
+function frameCheck(name,expected,mutation,transition=authored.frame_transition){const t=structuredClone(transition);mutation?.(t.before,t.after,t);const r=verify(t.before,t.after,t);checks.push({name,expected,actual:r.ok,passed:r.ok===expected,issues:r.issues});}
 frameCheck('actual frame support refinement and two returned alternatives',true);
 frameCheck('frame generated IDs alpha rename',true,(_,a)=>a.completed[0].alternatives.forEach((v,i)=>v.alternativeId='renamed-'+i));
 frameCheck('frame actual convention dropped',false,(_,a)=>a.completed[0].convention=null);
@@ -77,4 +80,9 @@ frameCheck('frame raw closure discarded',false,(_,a)=>a.completed[0].supportClos
 frameCheck('frame fixed-point group removed',false,(_,a)=>a.completed[0].supportClosure.fixedPointClauseIds=[]);
 frameCheck('frame closure missing quote',false,(_,a)=>a.completed[0].supportClosure.evidence[0].exactQuote='Missing original quote');
 frameCheck('frame scope missing',false,(b,a)=>{b.pendingUnits[0].sourceFrame=null;a.completed[0].unit.sourceFrame=null;});
+frameCheck('reference grid owns one actual identity convention',true,null,authored.reference_grid_transition);
+frameCheck('foreign prior context is refined by actual unit support selection',true,(b)=>b.pendingUnits[0].supportingClauseIds=['F03','F04'],authored.reference_grid_transition);
+frameCheck('reference grid receives foreign export-owned clauses',false,(_,a,t)=>{t.actual_support_closure.ownedConventionClauseIds=['F03','F04'];a.completed[0].supportClosure=structuredClone(t.actual_support_closure);},authored.reference_grid_transition);
+frameCheck('foreign orientation enters selected global unit',false,(_,a,t)=>{t.actual_support_closure.orientationClauseIds=['F03','F04'];a.completed[0].supportClosure=structuredClone(t.actual_support_closure);},authored.reference_grid_transition);
+frameCheck('local alternatives relabeled as global identity',false,(_,a,t)=>{t.actual_support_closure.supportingClauseIds.push('F03','F04','F05','L03');const by=new Map(t.before.clauses.map(c=>[c.id,c]));for(const id of ['F03','F04','F05','L03'])t.actual_support_closure.evidence.push({clauseId:id,exactQuote:by.get(id).text});a.completed[0].supportClosure=structuredClone(t.actual_support_closure);a.completed[0].unit.supportingClauseIds.push('F03','F04','F05','L03');const local=structuredClone(authored.frame_transition.actual_child_return);for(const v of local.alternatives)v.sourceFrame='Global';t.actual_child_return=local;const r=a.completed[0];r.convention=structuredClone(local);r.alternatives=local.alternatives.map((v,i)=>({...Object.fromEntries(['sourceFrame','origin','uVector','vVector'].map(k=>[k,v[k]])),alternativeId:'foreign-'+i,witnesses:v.evidence.map(q=>({...t.before.clauses.find(c=>c.id===q.clauseId).witnesses[0],quote:q.exactQuote}))}));},authored.reference_grid_transition);
 console.log(JSON.stringify({scope:authored.role,passed:checks.every(c=>c.passed),positive:checks.filter(c=>c.expected).length,negative:checks.filter(c=>!c.expected).length,checks},null,2));if(checks.some(c=>!c.passed))process.exitCode=1;

@@ -10,38 +10,35 @@ returns: FrameReadFrontier
 2. Bind original primary/supporting clauses by the unit IDs. Require exact membership and a nonempty original sourceFrame. For a landmark
    verify originalLocalName is a complete case-preserved source token in its actual primary text; for
    a frame preserve originalLocalName:null. A failed boundary records this unit, not a semantic default.
-3. For a frame directly await a scoped NL FrameSupportClosure literal on
-   {unit,primaryClauses,clauses:state.clauses}. Its numbered support policy owns these actual contributions:
-   a. Name localOriginEvidence by reading the original frame's stated origin. Retain its original clause
-      IDs in localOriginClauseIds; an explicit missing origin remains an unresolved premise.
-   b. Follow that origin's named object/mark through actual identity statements across the supplied
-      clauses. Name identityBridgeEvidence and return those original IDs in identityBridgeClauseIds.
-      A reused appearance alone does not identify the anchor; competing identities stay alternatives.
-   c. For each source-supported anchor follow the actual named global landmark to its original fixed
-      point definition. Name fixedPointEvidence and return its IDs in fixedPointClauseIds. An identity
-      bridge that only names a global landmark is not a fixed point definition. If no fixed definition
-      is supplied, retain that missing dependency as unresolved rather than supplying numeric coordinates.
-   d. Name orientationEvidence for the original axes and every permitted export alternative. Return
-      original IDs in orientationClauseIds; a missing selector preserves all source alternatives and
-      does not choose physical handedness. Separate missing evidence from exhaustive known ambiguity.
-   e. Return supportingClauseIds containing the actual cited evidence needed by these contributions,
-      plus exact clause-keyed quotations for each group. No case-specific numeric point or basis table
-      is selected here; interpretConvention consumes these originals to judge numeric conventions.
-4. Name that actual returned closure actualClosure. Require every group/support ID identifies an
+3. For a frame call discoverFrameSupport(unit,primaryClauses,state.clauses). Name its actual typed
+   result actualClosure; that child owns the selected-unit reference/local role, convention ownership,
+   origin/identity/fixed-point dependencies and exact source quotations. This caller owns no replacement
+   support judgment. For a landmark retain actualClosure:null and its original support context.
+4. In the frame branch consume actualClosure. Require every group/support ID identifies an
    original clause, each cited ID has exact evidence, and every nonempty exactQuote belongs to it.
-   Bind original source identity; cited IDs alone do not establish interpreted semantic roles. A complete closure has original origin,
-   fixed-point and orientation evidence; an unnecessary identity bridge may be empty only when the
+   Bind original source identity; cited IDs alone do not establish interpreted semantic roles. A complete local-export closure has original origin,
+   fixed-point and orientation evidence; reference-grid closure owns only its own primary declarations; an unnecessary identity bridge may be empty only when the
    original frame already directly names its fixed point. Missing support keeps actual unresolved reasons.
-   Union all actual returned group IDs and supportingClauseIds with the original unit.supportingClauseIds.
-   Bind supportedUnit by copying every other original unit field unchanged. Gather supportingClauses
+   Bind the refined support set to the union of actual returned groups and supportingClauseIds.
+   Original inventory support remains available in discovery input, but enters this set only when the
+   actual closure retains it for this selected unit. Bind supportedUnit by copying every other original unit field unchanged. Gather supportingClauses
    from this union and bind unit to supportedUnit. For a landmark retain the original unit/supports
    unchanged and actualClosure:null. Parent passes these actual originals, not a preferred numeric answer.
-5. For a frame call interpretConvention(unit,primaryClauses,supportingClauses), directly await and
+5. For a frame call interpretConvention(unit,primaryClauses,supportingClauses,actualClosure), directly await and
    retain its actual ConventionInterpretation. For a landmark call interpretLandmark with that actual
    unit and originals, directly await and retain its actual LandmarkItemMeaning. Only this selected
    child is invoked. A rejected call records status=failed and its actual error; all prior results survive.
 6. Check each complete convention's sourceFrame equals the unit's actual nonempty frame, and
-   every returned landmark frame agrees likewise. A nonnull landmark meaning.localId must equal
+   every returned landmark frame agrees likewise. Require actualClosure ownedConventionClauseIds
+   subset of original primary IDs; local-origin/orientation IDs belong to that selected owner scope.
+   A reference-grid closure cites only its own primary convention scope; foreign local export clauses
+   cannot become its supported basis. A local-export closure may cite external identity/point context,
+   keeping local origin/orientation ownership in its actual primary declarations.
+   For reference-grid role the returned transform maps that coordinate grid to itself: exactly one
+   alternative, origin (0,0), uVector (1,0), vVector (0,1). Validate this identity-map property only after
+   the NL child selected reference-grid role; do not generate a missing convention here. For local-export
+   role retain only the actual source-licensed alternatives, with owned orientation evidence.
+   A nonnull landmark meaning.localId must equal
    unit.originalLocalName. Name, frame and provenance are exact boundaries; physical counterpart,
    location description and meaning still come from the actual NL child.
 7. For every established alternative or landmark require nonempty primary/support evidence. Validate

@@ -66684,6 +66684,194 @@
       },
       "notes": "Mellum twin of the admitted 47-parent/58-decision service-result recovery source. Train only; preserve low recovery weight in the next declared broad union. Not part of the current frozen training run.",
       "required_conversion": "Include at low recovery weight in the next declared Mellum broad target union; LFM twin registered separately"
+    },
+    {
+      "id": "natlang-native-turns-clef-pools-20261014-v1-render",
+      "owner": "dgx",
+      "path": "runs/natlang-native-turns-clef-pools-20261014-v1-render",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: clef-pools-20261014-v1; three renderings (full: warm-up; program-header: after warm-up; whole-trajectory), LFM2.5 and Mellum2.1 tokenizer twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "clef-pools-20261014-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "79281eccaffa0a06711758354d8a3cbc57ff5cc50e9d0bc70e051d22b67e3e24",
+            "documents": 122,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 122,
+                "supervised_tokens": 3089,
+                "tokens": 469344,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 4219,
+            "merge_omissions": {
+              "exact_duplicate_document": 2
+            }
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "7e5141cb6d9ab91c8d5d0aa40cb6fd423a552dcd6ecee1d82af6b37861f2922c",
+            "documents": 122,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 122,
+                "supervised_tokens": 4545,
+                "tokens": 470020,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 4249,
+            "merge_omissions": {
+              "exact_duplicate_document": 2
+            }
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "00fffd9b184fe3d9c18e27ec0c23bbd2ecd6289c3c6e51dedc09c9ed4225638a",
+            "documents": 2530,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 2530,
+                "supervised_tokens": 69011,
+                "tokens": 1529327,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 1031,
+            "merge_omissions": {
+              "exact_duplicate_document": 73
+            }
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "e371ff98f86144bfeaf965cc6090e5c6ea0aa5e587e9164e32aef06f35df0ecc",
+            "documents": 2530,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 2530,
+                "supervised_tokens": 98677,
+                "tokens": 1582043,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 1071,
+            "merge_omissions": {
+              "exact_duplicate_document": 73
+            }
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "8f2f4a48b7f2bee210a5278146832dacb15d39717f685a7488152b279445c3fd",
+            "documents": 2378,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 428055,
+                "documents": 2378,
+                "opening_tokens": 321457,
+                "supervised_tokens": 106598,
+                "tokens": 1414201,
+                "tool_tokens": 330537
+              }
+            },
+            "max_document_tokens": 1016,
+            "merge_omissions": {
+              "exact_duplicate_document": 67
+            }
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "80f826e4f511479f2965f6736fae1a03cf08218af393f30f5433b4298093e56f",
+            "documents": 2378,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 526553,
+                "documents": 2378,
+                "opening_tokens": 371931,
+                "supervised_tokens": 154622,
+                "tokens": 1514670,
+                "tool_tokens": 337277
+              }
+            },
+            "max_document_tokens": 1077,
+            "merge_omissions": {
+              "exact_duplicate_document": 67
+            }
+          }
+        }
+      },
+      "selection": {
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 2898,
+        "selected:train": 2898,
+        "source_rows": 2898
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 2479,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 2479
+      },
+      "program_header_parity": {
+        "equal": 5206,
+        "retokenization_checked": 5206
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "8c7b964bc1fec0169e3a2bb80e462a8e26f15837b3de0e4ecbb4c65b62c2bc40",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/natlang-native-turns-clef-pools-20261014-v1-render/receipt.json",
+        "sources": {
+          "data/neuralese/corpora/clef-pools-20261014-v1/clef-pools-20261014.turns.jsonl": {
+            "bytes": 126892213,
+            "sha256": "24bbf29ad4547dd6a207e6e161c01d02c341a001efccfbefd273dc4e2dd32bc1"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": null,
+        "protected": null,
+        "held_text": {
+          "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+          "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+        }
+      },
+      "notes": ""
     }
   ],
   "coverage_backlog": [

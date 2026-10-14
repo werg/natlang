@@ -1,5 +1,45 @@
 # Continuation guide — updated 2026-10-14
 
+## 08:05 CEST: profiler order localized, D13 packed corpus available
+
+The Pop GPU was idle after QAD v14 stopped at its hard drift gate; no useful
+follow-up had been scheduled. That was an execution handoff miss. A pinned-image
+bisect found a single predecessor module, `test_text_warmup.py`: its requested
+CPU update profile opened Kineto without CUDA activity. A minimal same-process
+CPU-only then CUDA profile exported zero CUDA events despite CUDA operations;
+enabling CUDA activity in the first session restored kernel events in both
+later CUDA profiles. `text_warmup.py` now requests both activities whenever a
+CUDA device exists, even for a CPU update. The exact warmup/CUDA-profiler test
+pair passes 2/2. The full neuralese ordinary suite subsequently passed
+1253 tests (270 skips, 15 separately scheduled GPU-heavy tests) with the
+previously failing profiler attribution test green. The GPU-heavy suite then
+passed 14/14 (one skip). The Python-other suite had 945 passes and one stale
+`test_target_set_watcher.py` fixture: it omitted the newly required source
+review SHA in the build/receipt. The fixture is fixed and focused watcher
+tests pass 5/5; the whole Python-other rerun remains outstanding.
+The post-edit Polyphonic full TS gate was preempted once by the diagnostic,
+requeued and passed: `ts-tests` 457 seconds, conformance 22/22, exit 0.
+Its one-case v3 live diagnostic reached 34 saved turns, then was stopped by
+exact unit name to release RAM for GPU validation. No result/admission; resume
+the sealed queue once the next GPU diagnostic has admitted and headroom fits.
+
+DGX's packed D13 SWE corpus arrived at Pop as a 3,281,604,608-byte SquashFS
+with image SHA `f0c0f67ef0632c8146b466831fa7f77d516cea1176a57014fc15334e30d058f2`.
+Pop installed squashfuse in `~/.local/opt/natlang-squashfuse-0.1.103`, enabled
+`natlang-d13-swe-packed-mount.service`, and mounted the image read-only at the
+canonical registry path. The original logical manifest verified all 162 files
+locally with no errors, manifest identity
+`3989c06df7f8d741d53c667011c1bb4e9297d70087d637d1a6b7b2654939727f`.
+The image uses 3.1 GiB on `/srv/storage`; no 50.65-GiB extraction was made.
+Corpus availability does not grant new training admission.
+
+Cave v10 (`6b944d3f`, `c30bb1ff`, independent review `5e0a899c`)
+isolates selected-unit evidence discovery in a typed NL child and checks
+role/support ownership against the actual returned values. Focused controls
+pass, but v10 is source-only pending a matched live diagnostic. All three
+commits are on origin/main; the independent child-result binding plan is
+`9f5b1969`.
+
 ## 07:37 CEST: deep-source diagnostics, source-review union and GPU profiler
 
 Cave v9 live diagnostic stopped after 130 turns: the global F01/F02 unit's

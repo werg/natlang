@@ -44,7 +44,9 @@ def test_publishing_r4_does_not_delete_a_required_r2_input(monkeypatch, tmp_path
     (tmp_path / 'runs' / (module.UNION_BASE + '-r3')).mkdir()
     union = tmp_path / 'runs' / (module.UNION_BASE + '-r4')
     union.mkdir()
-    (union / 'receipt.json').write_text(json.dumps({'renderings': {'full': {
+    source_review_sha256 = 'b' * 64
+    (union / 'receipt.json').write_text(json.dumps({'source_review': {'holds_sha256': source_review_sha256},
+        'renderings': {'full': {
         'twin_identity_equal': True, 'by_tokenizer': {'lfm25': {
             'documents': 1, 'text_data_sha256': 'a' * 64,
             'by_split': {'train': {'documents': 1}}}}}}}))
@@ -53,7 +55,8 @@ def test_publishing_r4_does_not_delete_a_required_r2_input(monkeypatch, tmp_path
     monkeypatch.setattr(module, 'register', lambda *args: None)
     monkeypatch.setattr(module.subprocess, 'run', lambda args, **kwargs: subprocess.CompletedProcess(args, 0))
     state = {'revision': 3, 'union_revisions': [2, 3]}
-    build = {'rev': 4, 'members': [], 'skipped': [], 'spec': {}, 'signature': 'r4'}
+    build = {'rev': 4, 'members': [], 'skipped': [], 'spec': {}, 'signature': 'r4',
+             'source_review_sha256': source_review_sha256}
     module.finish_revision(state, build, union)
     assert parent.read_text() == 'required checkpoint input\n'
     assert state['revision'] == 4

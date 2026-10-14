@@ -149,3 +149,20 @@ retains raw supportClosure in FrameUnitResult, and consumes the actual conventio
 Exact union/projection/progress remains mechanism. No numeric fallback, hidden point dictionary,
 new alignment policy or extra forwarding callable is introduced. The full mission oracle/reference
 are unchanged; current v9 independent source and live qualification remain pending.
+
+## Selected-unit frame ownership v10
+
+The v9 diagnostic contaminated a global unit with Amber export clauses and returned Amber alternatives
+under the global label. Split substantive evidence discovery into discoverFrameSupport beneath the
+existing one-unit step. It returns typed FrameSupportClosure from unit, original primary clauses and
+all original clauses; it has no convention callable in scope. Its scoped NL policy chooses reference-grid
+versus local-export versus unresolved role from that unit's own primary declarations, then follows only
+that unit's origin/identity/fixed-point dependencies. Each returned ownedConventionClauseId belongs
+to original primary scope. Foreign clauses supply only actual anchor/context dependencies.
+
+Parent passes actual closure into interpretConvention, retaining both results. That child consumes the
+returned role and owned primary clauses: a reference grid maps to itself, while local exported frames
+have only their source-licensed alternatives. Exact checks validate owned-ID subsets and identity-map
+properties after NL selects reference-grid role; they do not choose a frame role or supply a numeric
+answer. Inventory is a typed identity/scope stage; geometry and physical identity remain later meanings.
+Canonical fixture/mission oracle unchanged; v9 partial remains assigned source-repair evidence.

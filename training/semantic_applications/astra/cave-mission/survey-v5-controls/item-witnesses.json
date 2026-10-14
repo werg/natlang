@@ -357,7 +357,7 @@
     },
     {
       "id": "frame-source-support-input",
-      "type": "{unit:SurveyReadingUnit;frameClauses:SourceClause[];supportingClauses:SourceClause[]}",
+      "type": "{ unit: SurveyReadingUnit; frameClauses: SourceClause[]; supportingClauses: SourceClause[]; closure: FrameSupportClosure }",
       "value": {
         "unit": {
           "unitId": "frame-Amber-conventions",
@@ -433,7 +433,55 @@
               }
             ]
           }
-        ]
+        ],
+        "closure": {
+          "localOriginClauseIds": [
+            "F03"
+          ],
+          "identityBridgeClauseIds": [
+            "L03"
+          ],
+          "fixedPointClauseIds": [
+            "F01"
+          ],
+          "orientationClauseIds": [
+            "F03",
+            "F04"
+          ],
+          "supportingClauseIds": [
+            "F01",
+            "L03",
+            "F05"
+          ],
+          "evidence": [
+            {
+              "clauseId": "F03",
+              "exactQuote": "[F03] Amber scanner coordinates have origin at the three-hole junction disk. Its positive v axis points global north. The export header selecting the u-axis convention is lost."
+            },
+            {
+              "clauseId": "L03",
+              "exactQuote": "[L03] Blue records one disk with exactly three holes at J. This is the same junction disk as Amber origin; no other three-hole disk exists in the surveyed area."
+            },
+            {
+              "clauseId": "F01",
+              "exactQuote": "[F01] The global grid uses x increasing east and y increasing north. Entrance E is at (0,0); junction J is at (0,1). The eastern landing EW is (1,1), and western landing WW is (-1,1)."
+            },
+            {
+              "clauseId": "F04",
+              "exactQuote": "[F04] This scanner has exactly two export conventions: direct keeps positive u toward global east; reflected keeps positive u toward global west. Reflection changes only u, preserves v, and introduces no scale change or translation beyond the stated junction origin."
+            },
+            {
+              "clauseId": "F05",
+              "exactQuote": "[F05] Neither surviving export metadata nor the other survey notes determine which convention was used for this Amber scan. Both conventions must remain possible until a listed observation distinguishes them."
+            }
+          ],
+          "unresolved": [],
+          "frameRole": "local-export",
+          "ownedConventionClauseIds": [
+            "F03",
+            "F04"
+          ]
+        }
       },
       "exact_invariants": {
         "/unit/kind": "frame",
