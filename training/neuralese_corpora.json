@@ -67233,6 +67233,183 @@
       "review_status": "source/held-group, parent exact oracle, decision-level success and materialization reviewed; composed process repair held for arbitrary 10,000-step loop",
       "required_conversion": "render approved-turns.jsonl for LFM and Mellum at low recovery mixture weight, then include in next target union",
       "notes": "Nine distinct curriculum families. Review-only source records are provenance; approved-turns.jsonl alone is the training input."
+    },
+    {
+      "id": "qad-student-root-recovery-s52052-render-20261014-v1",
+      "owner": "dgx",
+      "path": "runs/qad-student-recovery-teacher-20261014-v1/renders-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: qad-student-root-recovery-s52052-v1; variants: full/lfm25, full/mellum21, program-header/lfm25, program-header/mellum21, whole-trajectory/lfm25, whole-trajectory/mellum21; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "qad-student-root-recovery-s52052-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "5ffec9aff6f903648e484b0710f77364d4837ffa09bddd93e845fa21d6bf4d15",
+            "documents": 17,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 17,
+                "supervised_tokens": 1299,
+                "tokens": 117909,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 8251,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "29cec5d0eddbec3ac8d7bee4ecfeff40c63267fa5ab3e6d2115218811307255b",
+            "documents": 17,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 17,
+                "supervised_tokens": 1558,
+                "tokens": 118247,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 8421,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "0a558a5068ba1a8d94b5cf8f54afe87d79df18f9d44251f26e529d95873e1c5c",
+            "documents": 57,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 57,
+                "supervised_tokens": 6323,
+                "tokens": 130273,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 4206,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "d1a16448aa51f82d0d8843aa0add2c2d234f8cf79812fbdc6c4aee2f53645817",
+            "documents": 57,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 57,
+                "supervised_tokens": 7135,
+                "tokens": 133058,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 4749,
+            "merge_omissions": {}
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "fb11782631c43135e6991e6d4a9e1e4384fa2a2e002f41016c318efad2c3e30d",
+            "documents": 39,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 23830,
+                "documents": 39,
+                "opening_tokens": 17621,
+                "supervised_tokens": 6209,
+                "tokens": 82996,
+                "tool_tokens": 10224
+              }
+            },
+            "max_document_tokens": 4131,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "3f6d89845f28eb9804c6c0438b18f3b848b850a81443be6b3692389c3055ea2d",
+            "documents": 39,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 26383,
+                "documents": 39,
+                "opening_tokens": 17684,
+                "supervised_tokens": 8699,
+                "tokens": 85233,
+                "tool_tokens": 10772
+              }
+            },
+            "max_document_tokens": 4749,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 57,
+        "selected:train": 57,
+        "source_rows": 57
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 40,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 40
+      },
+      "program_header_parity": {
+        "equal_text_serving_token_boundaries": 114,
+        "retokenization_checked": 0
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "8c7b964bc1fec0169e3a2bb80e462a8e26f15837b3de0e4ecbb4c65b62c2bc40",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/qad-student-recovery-teacher-20261014-v1/renders-v1/receipt.json",
+        "sources": {
+          "runs/qad-student-recovery-teacher-20261014-v1/approved-turns.jsonl": {
+            "bytes": 4873072,
+            "sha256": "d7c2fe4a6859d15b953af2f17e194360b95b211c4c077696d66269b4eecef052"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {}
+      },
+      "notes": "Both tokenizer twins:57 program-header and39 trajectory documents;17 full warmup documents. Approved57targets only, train-only protected reservations checked, no merge omissions. Next union uses student-recovery cohort at its natural small share without oversampling; pairs and held capped-loop parent excluded."
     }
   ],
   "coverage_backlog": [
