@@ -35,6 +35,10 @@ FAMILIES = ('contract_diagnosis', 'workbench_tickets', 'logic_proof_verifier',
 START_SEED = 52007
 WORKERS = 6
 PER_FAMILY = {family: 6 for family in FAMILIES}
+# Both MuSiQue hop variants are under a source-contract family hold. Keep the
+# key for already prepared campaigns, but do not spend new teacher calls on it.
+PER_FAMILY['musique_hops'] = 0
+SOURCE_FAMILIES = tuple(family for family in FAMILIES if PER_FAMILY[family] > 0)
 # Large CoEdIT folder edits require file-by-file semantic review even when the
 # numeric return matches. The exact reference replay has a separate admitted
 # static route. CUAD folder_extract presently takes hundreds of requests per
@@ -423,7 +427,7 @@ def build_source(campaign, seed):
     source.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(['node', 'ts-host/scripts/inline-curriculum/build.mjs',
                     '--seed', str(seed), '--shapes', '8', '--split', 'train',
-                    '--families', ','.join(FAMILIES), '--allow-failures',
+                    '--families', ','.join(SOURCE_FAMILIES), '--allow-failures',
                     '--out', str(source)],
                    cwd=ROOT, check=True)
     try:
