@@ -3,23 +3,33 @@
   "author": "semantic_slate_astra",
   "application": "seed-lineage-laboratory",
   "source_commit": "30c4d001",
-  "source_fixture_changes": false,
+  "source_fixture_changes": {
+    "scope": "Format precision only after first source freeze",
+    "source_files": [
+      "applications/seed-lineage-laboratory/types.ts"
+    ],
+    "fixture_files": [
+      "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/fixture/controls/request-and-output.md"
+    ],
+    "meaning": "Q05 makes focal subject independent of oriented parents and leaves compartment descriptions free. Biological facts and predicted outcomes unchanged; coverage now42clauses."
+  },
   "private_files": {
-    "training/semantic_applications/astra/seed-lineage-laboratory/verify-result.mjs": "235a4bfbd4d7804e485ffb17ed3b2132e112b09586119cecbd2ad373d4756209",
-    "training/semantic_applications/astra/seed-lineage-laboratory/check-verifier.mjs": "d4a026684f8fb69e562c76c746b05729036062167e07585b4841977793fe60e5",
+    "training/semantic_applications/astra/seed-lineage-laboratory/verify-result.mjs": "1259c2a11aa81aacbdcd1b6b3b0f39a01ae55f1b521b7669c6f35fa70c48807f",
+    "training/semantic_applications/astra/seed-lineage-laboratory/check-verifier.mjs": "2a87b2393b143fe0ec7031a694530c828a50668fbce89096982423ebfc286069",
     "training/semantic_applications/astra/seed-lineage-laboratory/project.json": "c8ccd5113ae6c75d4dcb007bf001021aae4b214fc0c3c179e33ce3523f61f0ef",
     "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/oracle.json": "61e6626d368dcdb2e2cfb46cccb2acb4fa672bfae3da8fdd3759980deb711df0",
-    "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/reference-certificate.json": "7cba6645240b5e670926d1d2b8d47c834f47dab7c01164305e7eb788850ed1b2"
+    "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/reference-certificate.json": "e98e9480191b6edde3a1b63cf7f842abc8253f0d9c2847e8ffd7cb8bcfd04fe1",
+    "training/semantic_applications/astra/seed-lineage-laboratory/derive-reference.py": "4b50b5dd13bc7369f62d1d542ddca542c57b0a8131e7e9959aaee9bf7d440fcc"
   },
   "package": {
-    "path": "/tmp/astra-seed-lineage-source-v2",
-    "source_sha256": "8735a3e680f5f408bb9edc7ccd753bceba77adaf9a221625edb7e94340d1565d",
+    "path": "/tmp/astra-seed-lineage-source-v3",
+    "source_sha256": "7f08efaa7e55ccb828a70d3e87fc314119108183270c00e6cbcb8296deda1c62",
     "reference": {
       "path": "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/reference-certificate.json",
-      "sha256": "7cba6645240b5e670926d1d2b8d47c834f47dab7c01164305e7eb788850ed1b2",
+      "sha256": "e98e9480191b6edde3a1b63cf7f842abc8253f0d9c2847e8ffd7cb8bcfd04fe1",
       "reference_ok": true,
       "reference_problems": [],
-      "opening_sha256": "7b40ecdf5dacd53a918a53b9af5bfdb1f014dee079826120d0f28ccd78f70d60",
+      "opening_sha256": "b38ce2f49096c6de80ca0ab0fda6fbaeddb633928290e2ac40862ee4fc80139e",
       "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
     },
     "quality": {
@@ -97,16 +107,17 @@
   },
   "controls": {
     "passed": true,
-    "positive": 6,
-    "negative": 30,
-    "output_sha256": "acd3c310ce4f9f66bae890cfd41aa76352d48c1c083a40d71608897b4351cd67"
+    "positive": 7,
+    "negative": 29,
+    "output_sha256": "80be630fa834142c239438c3db1f8ad33f6f04c638696ec0d2d3991e4a9a3ea7"
   },
   "equivalences_checked": [
     "Unordered collections",
     "Consistent generated world/node alpha-renaming",
     "Unreduced rational representation",
     "Proportional internal carried masses preserving posterior",
-    "Free explanation prose"
+    "Free explanation prose",
+    "Equivalent compartment prose; exact source output convention fixes focal subject role"
   ],
   "exact_scope": [
     "Original source IDs/nonempty exact quotations and coverage",

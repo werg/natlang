@@ -34,7 +34,7 @@ check('residual genotype falsely collapsed',false,r=>r.residual.find(x=>x.theory
 check('mechanism stop requires unavailable extra genotype',false,r=>r.residual.find(x=>x.theoryIds.includes('M')).mechanismKnown=false);
 check('unperformed audit field',false,r=>r.audits=[]);
 check('observation prediction detached from likelihood',false,r=>r.posterior.assessments[0].prediction.answers[0].answer='dark');
-check('cross compartment invented',false,r=>r.predictions.partitions.find(x=>x.experiment.experimentId==='C').cross.compartment='maternal seed coat');
+check('free biological compartment wording',true,r=>r.predictions.partitions.find(x=>x.experiment.experimentId==='C').cross.compartment='adult lamp expression in the reciprocal offspring tray');
 check('carried stock clause body forged',false,r=>r.policy.closure.stockRules[0].text='All material is free.');
 check('node carried masses contradict probabilities',false,r=>r.policy.closure.nodes.find(n=>n.worlds.length>1).worlds[0].mass.numerator+=1);
 check('proportional internal mass representation',true,r=>{for(const n of r.policy.closure.nodes)for(const x of n.worlds)x.mass.numerator*=3;});
