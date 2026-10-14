@@ -65,10 +65,11 @@ export function handoffSites(row: TeacherRow): Site[] {
     if (failed && !lastFailed.get(calls[index]!)) sites.push({ index, kind: 'failed_action' });
     lastFailed.set(calls[index]!, failed);
   });
-  // The root's last turn returned the result the task did not accept.
+  // A completed root's last turn committed the result the task did not
+  // accept. It may be return_result, eval({finish:true}), or a bare done;
+  // checking only return_result silently loses wrong-result repair sites.
   const outcome = row.outcome as Dict, last = calls.lastIndexOf(0);
-  if (outcome.status === 'done' && last >= 0 &&
-      (trajectory[last]!.assistant.calls ?? []).some(call => call.tool === 'return_result'))
+  if (outcome.status === 'done' && last >= 0)
     sites.push({ index: last, kind: 'wrong_result' });
   return sites;
 }

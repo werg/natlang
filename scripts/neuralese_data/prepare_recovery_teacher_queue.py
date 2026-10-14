@@ -42,12 +42,15 @@ def prepare(source, output, *, line, workers, case_seconds):
                 not isinstance(semantics.get('root'), str) or
                 semantics['root'] not in semantics.get('files', {}) or
                 row.get('split') != 'train' or not row.get('source_groups') or
-                seeded == bool(replayed)):
-            raise ValueError('recovery source needs focused train IR v2, source groups, and exactly one seeded failure or replay-checked handoff')
+                not (seeded or replayed) or (handoff and not replayed)):
+            raise ValueError('recovery source needs focused train IR v2, source groups, and a seeded failure or replay-checked handoff')
         if row['id'] in ids:
             raise ValueError(f'duplicate recovery source id: {row["id"]}')
         ids.add(row['id'])
-        source_modes.add('seeded_failure' if seeded else 'replay_checked_handoff')
+        # A handoff from a seeded run retains the seed in its source record.
+        # The replayed prefix, rather than a second seed injection, determines
+        # where the teacher resumes.
+        source_modes.add('replay_checked_handoff' if replayed else 'seeded_failure')
     output.mkdir(parents=True)
     manifest = {'schema': 'natlang.recovery-teacher-campaign/1',
                 'line': line, 'source': str(source), 'source_sha256': sha256_file_hex(source),
