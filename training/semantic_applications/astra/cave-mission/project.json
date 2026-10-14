@@ -598,17 +598,17 @@
   "fixture_clause_count": 31,
   "composition": {
     "nl_files": 29,
-    "nl_total_lines": 728,
-    "nl_body_lines": 509,
-    "numbered_steps": 207,
+    "nl_total_lines": 745,
+    "nl_body_lines": 526,
+    "numbered_steps": 210,
     "type_aliases": 57,
     "visible_crisp_policy_lines": 0
   },
   "reference_scope": "Full typed canonical source-validity witness, separate from actual callable execution. Equivalent policies are replayed rather than compared bytewise.",
-  "model_facing_debt": "Survey-v5 instructions/types/literals:0/48 live samples; stoppedv4diagnostic remains frozen, no model-negative or admission.",
+  "model_facing_debt": "Survey-v5 diagnostic stopped on a provider output-ceiling transport bug; it supplies no semantic or training credit. Consumer-depth v6 source (including settleValue's complete outcome dependencies) remains 0/48 live samples and requires its own result and literal-consumption review.",
   "source_replay": {
-    "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/astra-cave-project-package-v1",
-    "scope": "Shared-loader full typed canonical source-validity replay only"
+    "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/cave-app-consumer-depth-v6-package-v1",
+    "scope": "Current consumer-depth v6 shared-loader full typed canonical source-validity replay only"
   },
   "independent_review": {
     "path": "training/semantic_applications/reviews/ASTRA_CAVE_REVIEW_SOL.json",
