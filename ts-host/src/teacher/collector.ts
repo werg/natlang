@@ -1341,6 +1341,8 @@ export type ExecuteOptions = { systemPrompt: string; contextTokens: number;
   runId: string; runLabel?: string;
   /** Explicitly disable or provide the call store for bounded replays; default collection still records normally. */
   calls?: import('../runtime/runtime.js').NatlangRuntimeOptions['calls'];
+  /** Scripted source/type replay only: its direct canonical return does not certify model-run child lineage. */
+  sourceReferenceOnly?: boolean;
   /** Optional Neuralese store/port for source-authentic inline soft-body collection and replay. */
   neuralese?: import('../native/neuralese.js').NeuraleseRuntimeOptions;
   /** Explicit library service for the non-learned text-provider read implementation. */
@@ -1419,7 +1421,8 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   }
   const environment = new TypeScriptEnvironment({ mode: 'fresh' });
   const effects = effectHarness(record.semantics.effects ?? {});
-  const bindingSpec = (record.curriculum as { item_result_binding?: ItemResultBindingSpec } | undefined)?.item_result_binding;
+  const bindingSpec = options.sourceReferenceOnly ? undefined :
+    (record.curriculum as { item_result_binding?: ItemResultBindingSpec } | undefined)?.item_result_binding;
   let runtime: NodeNativeRuntime | undefined;
   const agent = new NativeToolAgent(driver, { systemPrompt: options.systemPrompt, temperature: options.temperature ?? 0,
     ...(options.promptRendering ? { promptRendering: options.promptRendering } : {}),

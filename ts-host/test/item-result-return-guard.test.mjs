@@ -52,3 +52,21 @@ test('declared binding rejects a direct root answer before collection admission'
   assert.equal(run.outcome.checks.item_result_binding, false);
   assert.ok(seen.some(message => message.includes(failure.message)));
 });
+
+test('scripted source reference checks the canonical return without claiming child lineage', async () => {
+  const record = { version: 'natlang.program/2', id: 'binding-source-reference', kind: 'lambda_source',
+    semantics: { root: 'solve.nl', files: { 'solve.nl': '---\nargs: {}\nreturns: string\n---\nReturn the source reference.\n' },
+      inputs: {}, expected: 'ready' },
+    curriculum: { item_result_binding: { schema: 'semantic-actual-child-result-binding/1', sites: [{
+      owner_source_path: 'solve/child.nl', inline_child_site: { return_type: 'string' },
+      frontier_input_pointer: '/state', next_state_pointer: '', prior_result_array_pointer: '/results',
+      new_slot_pointer: '/results', prior_completed_array_pointer: '/completed', next_completed_array_pointer: '/completed',
+      pending_array_pointer: '/pending', consumed_input_selector: { kind: 'first_pending_item', pointer: '' },
+      item_identity_fields: [], semantic_fields: [], owned_pending_update: 'remove_exact_first_item', stable_state_fields: [],
+    }] } } };
+  const run = await executeProgram(record, async () => ({ calls: [['return_result', { status: 'success', value: 'ready' }]] }),
+    { rootSeed: 1, runId: 'binding-source-reference', systemPrompt: TOOLS_PROMPT,
+      contextTokens: 8192, maxTurns: 2, sourceReferenceOnly: true });
+  assert.equal(run.outcome.accepted, true);
+  assert.equal(run.outcome.checks.item_result_binding, undefined);
+});

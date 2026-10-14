@@ -526,6 +526,7 @@ The v18b live trace called the named stages but its folder-two audit selected ca
 For a record declaring this check, failed or unverified binding now sets a collector rejection and, when capture is missing, a quality-pending reason; a matching answer cannot silently bypass it. This changes collection qualification only and gives no training admission without separate semantic/trajectory review.
 
 The next opt-in return refinement checks the same durable child-input/result lineage when a declared program proposes a typed root return, including `return_result` and `eval` with `finish:true`. A missing or changed named child result gets one recovery sentence: “Complete the declared named child decisions and carry their actual typed results into the return value.” The model can repair within the existing refinement loop; post-run admission checks remain authoritative. No source-specific answer policy is added. **Measurement debt:** 0/48 live attempts on this runtime variant; the focused scripted return tests are mechanism checks, not adoption evidence. Compare live return repairs, completed named stages, semantic answer and resource cost before broad use.
+Deterministic `replayReference` and opening rendering explicitly use source-reference-only mode: a scripted canonical return checks source/type validity but cannot certify live child lineage. The live collector keeps both return and post-run binding checks.
 
 ### 2026-10-14 — Field Gloss Reed Court source world and authority handoff
 
