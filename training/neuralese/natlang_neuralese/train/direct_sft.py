@@ -1200,6 +1200,12 @@ def main(argv=None):
     a = parse(raw_argv)
     if a.plan_only:
         return plan_only(a)
+    # Flash SDPA's default BF16 backward can return different gradients for the
+    # same weights, batch, and RNG state. PyTorch's deterministic mode keeps the
+    # flash kernel on CUDA while selecting its repeatable backward path. Set the
+    # cuBLAS workspace before the first CUDA handle is created as well.
+    os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
+    torch.use_deterministic_algorithms(True)
     stop = StopSignal().install()
     from ..common.hashing import sha256_file_hex
     from ..model.neuralese_projection import TokenChoiceProjection, project_token_states
