@@ -143,6 +143,10 @@ def cmd_convert_agents(args):
         sink = Sink(args.out, f"upstream.{name}")
         try:
             for row, traj in adapter(args.limit):
+                flags = traj.lineage.get('notes', {}).get('source_quality_flags', []) if getattr(args, 'exclude_source_quality_flags', False) else []
+                if flags and traj.split == 'train':
+                    sink.reject(name, row, 'source-quality-flags: ' + ','.join(sorted(flags)))
+                    continue
                 if getattr(args, 'exclude_failed', False) and traj.outcome.get('label') == 'failed':
                     sink.reject(name, row, 'upstream-reported-failure: excluded from positive conversion')
                     continue
@@ -439,6 +443,8 @@ def main(argv=None):
     p.add_argument("--limit", type=int, default=None, help="trajectories per corpus; default all")
     p.add_argument("--windows", type=int, default=None, help="windows per trajectory; default per corpus")
     p.add_argument("--exclude-failed", action="store_true", help="record and omit upstream-reported failed trajectories")
+    p.add_argument("--exclude-source-quality-flags", action="store_true",
+                   help="omit producer-quality-flagged train sessions; retain held sessions for protection")
     p.add_argument("--out", type=Path, default=sample_root)
     p.set_defaults(func=cmd_convert_agents)
     p = sub.add_parser("convert-turns")

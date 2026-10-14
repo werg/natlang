@@ -7,6 +7,52 @@ from neuralese_data.agents import expansion_messages, expansion_trajectory
 from neuralese_data.trajectory import record
 
 
+def test_gatc_preserves_tools_and_protects_family_through_flagged_parent(tmp_path, monkeypatch):
+    import json
+    from neuralese_data import agents
+    from neuralese_data.records import group_key
+    root = tmp_path / 'D03'; root.mkdir()
+    (root / 'acquisition.json').write_text(json.dumps({'repo':'fixture/gatc','revision':'abc'}))
+    def row(tid, **extra):
+        return {'trajectory_id':tid, 'messages':[
+            {'role':'user','content':'Shared harness wrapper','is_wrapper':True},
+            {'role':'user','content':'Repair task '+tid,'is_wrapper':False},
+            {'role':'assistant','content':'Edit','tool_calls':[{'id':'c1','function':{'name':'edit','arguments':'{}'}}]},
+            {'role':'tool','content':'Observed','tool_call_id':'c1'},
+            {'role':'assistant','content':'Done'}], 'tools':json.dumps([{'type':'function','function':{'name':'edit'}}]),
+            **extra}
+    rows=[row('parent',is_eval=True),row('bridge',parent_trajectory_id='parent',ft_issues=['incomplete_tool_args']),
+          row('child',parent_trajectory_id='bridge',last_test_result='failed'),row('other')]
+    monkeypatch.setattr(agents,'EXPANSION_ROOT',tmp_path)
+    monkeypatch.setattr(agents,'_gatc_rows',lambda root:iter(enumerate(rows)))
+    values=[t for _,t in agents.gatc_sessions()]
+    assert [t.split for t in values]==['test','test','test','train']
+    assert set(values[0].split_groups)&set(values[2].split_groups)
+    assert group_key('task',agents.task_hash('Shared harness wrapper')) not in values[0].split_groups
+    assert values[2].tools[0]['function']['name']=='edit'
+    assert values[2].messages[2]['tool_calls'][0]['id']=='c1'
+    assert values[2].messages[3]['tool_call_id']=='c1'
+    assert values[2].outcome['label']=='teacher'
+    assert values[2].lineage['notes']['metadata']['last_test_result']=='failed'
+
+
+def test_source_quality_filter_keeps_held_protection_and_records_train_omission(tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+    import neuralese_port_records as cli
+    def trajectory(split, flags):
+        return SimpleNamespace(split=split,lineage={'notes':{'source_quality_flags':flags}},outcome={'label':'teacher'})
+    values=[trajectory('train',['withheld_text']),trajectory('test',['withheld_text']),trajectory('train',[])]
+    monkeypatch.setitem(cli.agents.CORPORA,'fixture',(lambda limit:iter(enumerate(values)),4))
+    seen=[]
+    monkeypatch.setattr(cli.trajectory,'records_for',lambda t,*args:seen.append(t))
+    cli.cmd_convert_agents(SimpleNamespace(corpora=['fixture'],limit=None,out=tmp_path,windows=None,
+                                          exclude_failed=False,exclude_source_quality_flags=True))
+    assert seen==values[1:]
+    omitted=json.loads((tmp_path/'upstream.fixture.rejects.jsonl').read_text())
+    assert omitted['reason']=='source-quality-flags: withheld_text'
+
+
 def test_coding_sessions_preserve_dispatch_outcome_and_shared_benchmark_group(tmp_path, monkeypatch):
     import json
     from neuralese_data import agents

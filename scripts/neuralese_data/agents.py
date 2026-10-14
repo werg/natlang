@@ -524,6 +524,7 @@ def expansion_trajectory(ref, receipt, rid, row):
     if not msgs:
         raise Reject("empty-trajectory")
     request = next((m.get("content") or "" for m in msgs if m["role"] == "user"), "")
+    task_group_text = row.get('_expansion_task_group_text', request)
     trajectory_id = metadata.get("trajectory_id") or metadata.get("source_trajectory_id") or row.get("task_id")
     source = str(metadata.get("source") or "")
     if not trajectory_id and source:
@@ -546,7 +547,7 @@ def expansion_trajectory(ref, receipt, rid, row):
                             "native_execution_verified": False}),
         license=licence(license_name, "nc" in license_name.lower(), "Pinned upstream card; owner accepts all licenses."),
         split=row.get('_expansion_split', 'train'), split_groups=[group_key(f"expansion-{ref.lower()}-task", trajectory_id),
-                                     group_key("task", task_hash(request))],
+                                     *([group_key("task", task_hash(task_group_text))] if task_group_text is not None else [])],
         outcome={"label": "teacher", "checked": None},
         tools=json.loads(row["tools"]) if isinstance(row.get("tools"), str) else row.get("tools"),
     )
@@ -742,7 +743,48 @@ def agentic_coding_sessions(limit=None):
         yield str(index), _initial_request_background(t)
 
 
-CORPORA.update({"wideseek": (wideseek, 4), "cooperator-dual-policy": (cooperator_dual_policy, 4),
+def _gatc_rows(root):
+    from natlang_neuralese.common.jsonio import open_jsonl_text
+    with open_jsonl_text(root / 'sample/messages/messages.jsonl.zst') as stream:
+        for index, line in enumerate(stream):
+            if line.strip():
+                yield index, json.loads(line)
+
+
+def gatc_sessions(limit=None):
+    """Complete pinned messages with evaluation protection resolved before quality selection."""
+    from .splits import UnionFind
+    root = EXPANSION_ROOT / 'D03'
+    receipt = json.loads((root / 'acquisition.json').read_text())
+    groups, evaluation_ids = UnionFind(), []
+    for index, row in _gatc_rows(root):
+        tid = str(row.get('trajectory_id') or index)
+        groups.find(tid)
+        if row.get('parent_trajectory_id'):
+            groups.union(tid, str(row['parent_trajectory_id']))
+        if row.get('template_group'):
+            groups.union(tid, 'template:' + str(row['template_group']))
+        if row.get('is_eval'):
+            evaluation_ids.append(tid)
+    evaluation_roots = {groups.find(tid) for tid in evaluation_ids}
+    for index, row in _limited(_gatc_rows(root), limit):
+        tid = str(row.get('trajectory_id') or index)
+        component = groups.find(tid)
+        metadata = {k: row.get(k) for k in ('trajectory_id', 'parent_trajectory_id', 'template_group',
+                    'is_eval', 'eval_kind', 'models', 'repo_id', 'actor_id', 'repo', 'prompt_language',
+                    'last_test_result', 'git_commit_made', 'ft_issues')}
+        converted = {**row, 'metadata': {**metadata, 'session_id': tid},
+                     '_expansion_task_group_text': next((m.get('content') for m in row.get('messages', [])
+                         if m.get('role') == 'user' and not m.get('is_wrapper') and m.get('content')), None),
+                     '_expansion_split': 'test' if component in evaluation_roots else 'train'}
+        t = expansion_trajectory('D03', receipt, str(index), converted)
+        t.split_groups.append(group_key('gatc-component', component))
+        t.lineage['notes']['source_quality_flags'] = [flag for flag in row.get('ft_issues') or []
+                                                     if flag in ('incomplete_tool_args', 'withheld_text')]
+        yield index, _initial_request_background(t)
+
+
+CORPORA.update({'gatc-sessions': (gatc_sessions, 4), "wideseek": (wideseek, 4), "cooperator-dual-policy": (cooperator_dual_policy, 4),
                 "searchswarm": (searchswarm, 4), "owl-sft": (owl_sft, 4), "codeagent-sft": (codeagent_sft, 1),
                 'evidence-subagent': (evidence_subagent, 4), 'openthoughts-agent': (openthoughts_agent, 4),
                 'terminaltraj': (terminaltraj, 4), 'dolci-tool-use': (dolci_tool_use, 4),
