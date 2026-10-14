@@ -1,0 +1,52 @@
+{
+  "caseId": "astra-seed-lantern-v1",
+  "documents": [
+    {
+      "id": "INHERIT",
+      "path": "conventions/inheritance.md",
+      "role": "inheritance"
+    },
+    {
+      "id": "PEDIGREE",
+      "path": "pedigree/accessions.md",
+      "role": "pedigree"
+    },
+    {
+      "id": "THEORIES",
+      "path": "hypotheses/theories.md",
+      "role": "theory"
+    },
+    {
+      "id": "PRIORS",
+      "path": "hypotheses/prior-tickets.md",
+      "role": "prior"
+    },
+    {
+      "id": "ASSAYS",
+      "path": "assays/protocols.md",
+      "role": "assay"
+    },
+    {
+      "id": "OBS",
+      "path": "observations/recorded.md",
+      "role": "observation"
+    },
+    {
+      "id": "EXPERIMENTS",
+      "path": "experiments/offered.md",
+      "role": "experiment"
+    },
+    {
+      "id": "STOCKS",
+      "path": "stocks/living-material.md",
+      "role": "stock"
+    },
+    {
+      "id": "OUTPUT",
+      "path": "controls/request-and-output.md",
+      "role": "contract"
+    }
+  ],
+  "sourceScope": "Closed fictional inheritance and assay world. Only supplied clauses determine predictions and costs.",
+  "outputContract": "Original IDs exact; generated IDs consistently renamable; fractions exact; unordered worlds/witnesses/answer siblings; source assay answer labels govern observable partitions."
+}

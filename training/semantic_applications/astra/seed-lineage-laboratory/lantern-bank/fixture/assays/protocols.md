@@ -1,0 +1,6 @@
+[A01] COOL_COLOR measures adult lamp expression in the calibrated cool regime. On a replica-complete tray its answer is the bright fraction: bright:0/1, bright:1/2 or bright:1/1 in this source world. On a single known accession its answer is bright or dark.
+[A02] COOL_UNIFORM measures adult lamp uniformity in a calibrated cool replica-complete tray. Its answer is mixed when both bright and dark classes occur with positive proportion, otherwise uniform. Uniform does not distinguish all bright from all dark.
+[A03] GENOTYPE measures the assayed original accession's nuclear genotype exactly, with answers genotype:AA, genotype:Aa or genotype:aa. It does not measure lamp expression.
+[A04] COAT_IMAGE measures the original maternal plant's newly produced seed-coat color. Its answers coat:amber and coat:clear follow I05 and do not measure an adult embryo's lamp trait.
+[A05] WARM_COLOR loses lamp sensitivity in the warm regime. A flat detector display in that regime establishes no bright fraction or dark phenotype; this protocol is explicitly unusable for deciding the expression mechanism.
+[A06] The cool calibration certificate is current for the recorded adult observation and all offered cool experiments. Every proposed nursery cross uses I04's replica-complete regime.

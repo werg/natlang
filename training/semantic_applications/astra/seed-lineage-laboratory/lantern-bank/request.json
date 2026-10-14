@@ -1,0 +1,6 @@
+{
+  "caseId": "astra-seed-lantern-v1",
+  "accessionId": "U",
+  "goal": "Identify adult lamp mechanism D, R or M while retaining any unresolved genotype alternatives.",
+  "objective": "Minimize posterior expected total cost, then worst total cost, then original experiment ID alphabetically."
+}

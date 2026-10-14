@@ -67,9 +67,9 @@ Paths below are relative to `designExperiments`; each helper is physically neste
 
 ## Structural iteration
 
-World construction consumes a finite source-derived assignment variable frontier; each step assigns one original variable. The observation reducer consumes one original observation identity, retaining all surviving or unresolved worlds.
+World construction consumes a finite source-derived assignment variable frontier; each step consumes one original joint ticket, joining all its assignments with established pedigree constraints. The observation reducer consumes one original observation identity, retaining all surviving or unresolved worlds.
 
-Planning does not recursively call a named ancestor. It first constructs a finite closure of states identified by surviving source-world content, remaining original experiment slots and exact stock. Each transition consumes one original experiment slot; every path is strictly shorter in that set. A worklist may grow, so its length is not used as a decreasing measure. The `iterateOn` finished predicate is that every reachable state in the bounded subset closure is expanded. Each successful expansion marks one previously unexpanded state permanently, and all successors belong to the finite original subset/stock universe.
+Planning does not recursively call a named ancestor. It first constructs a finite closure of states identified by surviving source-world content and conditional rational weights, remaining original experiment slots and exact stock. Each transition consumes one original experiment slot; every path is strictly shorter in that set. A worklist may grow, so its length is not used as a decreasing measure. The `iterateOn` finished predicate is that every reachable state in the bounded subset closure is expanded. Each successful expansion marks one previously unexpanded state permanently, and all successors belong to the finite original subset/stock universe.
 
 A second reducer values dependency-ready states from leaves upward. Its measure is the number of unvalued original closure-state IDs. Every step consumes one; a missing dependency or ambiguous source contract yields a typed unresolved terminal state. Candidate expected cost is exact rational arithmetic over returned branch masses and costs. NL owns feasibility, goal equivalence, answer partition and candidate comparison.
 
