@@ -1365,13 +1365,13 @@ class AuthoredRootDidNotFinishError extends Error {
  * Run a program's root invocation with a model driver in a fresh environment and check the result,
  * effects, and folder against its contract. The collector and reference replays share this path.
  */
-function itemResultInvocationLedger(runtime: NodeNativeRuntime, bindingSpec: ItemResultBindingSpec): Record<string, unknown>[] {
+function itemResultInvocationLedger(runtime: NodeNativeRuntime, bindingSpec?: ItemResultBindingSpec): Record<string, unknown>[] {
   const trace = runtime.trace.events as unknown as Record<string, unknown>[];
   const children = runtime.frame?.task.traces ?? [];
   const childById = new Map(children.map(child => [child.callId, child]));
-  const sources = new Set(bindingSpec.sites.map(site => site.owner_source_path));
-  const seedCoverage = bindingSpec.joined_seed_coverage;
-  const possibleStore = runtime.frame?.task.runtime.callStore() as Partial<CaptureSource> | undefined;
+  const sources = new Set(bindingSpec?.sites.map(site => site.owner_source_path) ?? []);
+  const seedCoverage = bindingSpec?.joined_seed_coverage;
+  const possibleStore = bindingSpec ? runtime.frame?.task.runtime.callStore() as Partial<CaptureSource> | undefined : undefined;
   const store: CaptureSource | undefined = possibleStore &&
     typeof possibleStore.call === 'function' && typeof possibleStore.value === 'function' ?
     possibleStore as CaptureSource : undefined;
@@ -1387,7 +1387,7 @@ function itemResultInvocationLedger(runtime: NodeNativeRuntime, bindingSpec: Ite
     const returns = inline && typeof inline === 'object' ?
       (inline as { returns?: { natlang?: unknown; text?: unknown } }).returns : undefined;
     const returnedType = String(returns?.natlang ?? returns?.text ?? output?.result_type ?? '');
-    const scopedChild = bindingSpec.sites.some(site => returnedType.includes(site.inline_child_site.return_type)) ||
+    const scopedChild = bindingSpec?.sites.some(site => returnedType.includes(site.inline_child_site.return_type)) ||
       !!(seedCoverage && returnedType.includes(seedCoverage.child_return_type));
     const inputNames = seedCoverage?.owner_source_path === source ? ['input'] :
       sources.has(String(source)) ? ['state'] : scopedChild ? ['input'] : [];
@@ -1549,7 +1549,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const childInvocationTraces = runtime.frame?.task.traces ?? [];
     const invocationTraces = [trace, ...childInvocationTraces.map(child => child.events)];
     const executionGraph = invocationTraces.flat().filter(event => typeof event.node === 'string' && Array.isArray(event.inputs));
-    const invocationLedger = bindingSpec ? itemResultInvocationLedger(runtime, bindingSpec) : [];
+    const invocationLedger = itemResultInvocationLedger(runtime, bindingSpec);
     const itemResultBinding = bindingSpec ? checkItemResultBinding(bindingSpec, invocationLedger) : undefined;
     const bindingAccepted = !bindingSpec || itemResultBinding?.status === 'pass';
     const outcomeChecks = bindingSpec ? { ...checks, item_result_binding: bindingAccepted } : checks;
