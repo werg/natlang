@@ -1,26 +1,31 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { checkTrustedExactVerifier } from '../dist/teacher/trusted-exact-verifier.js';
+import { fileURLToPath } from 'node:url';
+
+const repo = fileURLToPath(new URL('../../', import.meta.url));
+const repoPath = path => resolve(repo, path);
+process.env.NATLANG_REPO_ROOT ??= repo;
+const { checkTrustedExactVerifier } = await import('../dist/teacher/trusted-exact-verifier.js');
 
 async function fixtureCase(manifestPath) {
-  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const manifest = JSON.parse(await readFile(repoPath(manifestPath), 'utf8'));
   const spec = { path: manifest.external_verifier_path,
-    sha256: createHash('sha256').update(await readFile(manifest.external_verifier_path)).digest('hex'),
-    oracle: JSON.parse(await readFile(manifest.oracle_path, 'utf8')) };
+    sha256: createHash('sha256').update(await readFile(repoPath(manifest.external_verifier_path))).digest('hex'),
+    oracle: JSON.parse(await readFile(repoPath(manifest.oracle_path), 'utf8')) };
   const fixture = Object.fromEntries(await Promise.all(manifest.fixture_files.map(async path =>
-    [path, await readFile(join(manifest.fixture_root, path), 'utf8')])));
+    [path, await readFile(join(repoPath(manifest.fixture_root), path), 'utf8')])));
   const inputs = {};
   for (const [name, binding] of Object.entries(manifest.input_bindings ??
       { request: { from: 'request_path' } })) {
     const path = binding.from === 'request_path' ? manifest.request_path :
       binding.from === 'snapshot_path' ? manifest.snapshot_path : null;
     if (!path) throw Error(`unknown input binding: ${name}`);
-    inputs[name] = JSON.parse(await readFile(path, 'utf8'));
+    inputs[name] = JSON.parse(await readFile(repoPath(path), 'utf8'));
   }
-  const value = JSON.parse(await readFile(manifest.reference_path, 'utf8'));
+  const value = JSON.parse(await readFile(repoPath(manifest.reference_path), 'utf8'));
   return { spec, input: { value, oracle: spec.oracle, inputs, fixture } };
 }
 
