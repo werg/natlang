@@ -38,7 +38,6 @@ PER_FAMILY = {family: 6 for family in FAMILIES}
 # Both MuSiQue hop variants are under a source-contract family hold. Keep the
 # key for already prepared campaigns, but do not spend new teacher calls on it.
 PER_FAMILY['musique_hops'] = 0
-SOURCE_FAMILIES = tuple(family for family in FAMILIES if PER_FAMILY[family] > 0)
 # Large CoEdIT folder edits require file-by-file semantic review even when the
 # numeric return matches. The exact reference replay has a separate admitted
 # static route. CUAD folder_extract presently takes hundreds of requests per
@@ -58,6 +57,17 @@ PER_FAMILY.update(actor_greenhouse=10, dataset_workbench=10,
                   workbench_tickets=8, composed_process=8,
                   recurrence_inline_graphs=8, folder_criteria_reducer=10,
                   knowledge_research=8, relational_late_argmax=8)
+# Exact final answers are insufficient for these shapes: the backlog-v5 audit
+# found that their successful trajectories systematically bypassed the intended
+# per-item NL decision or measured iterateOn process. Fresh s52065/s52066
+# successes show the same pattern. Hold *new* teacher allocation until the
+# visible task and source oracle enforce the process, then measure the changed
+# task live. Existing campaigns still finish and remain available for review.
+PER_FAMILY.update(actor_greenhouse=0, composed_process=0,
+                  edit_stream=0, folder_criteria_reducer=0,
+                  counterexample_revision=0)
+PER_FAMILY['inline_review_each'] = 4
+SOURCE_FAMILIES = tuple(family for family in FAMILIES if PER_FAMILY[family] > 0)
 TARGET_GROUP_INDEX = BASE / 'target-r3-source-groups.jsonl'
 TARGET_GROUP_INPUT_HASHES = {
     'program-header': '0974200754e27da114f429de3142fb3be8500431bcb0837cbea35868ebf30ba9',
