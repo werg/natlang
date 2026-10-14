@@ -420,7 +420,12 @@ def _literal_list(text: str) -> list:
 
 
 def _turns(meeting: dict) -> list[str]:
-    return [f"{t.get('speaker', '').strip()}: {re.sub(r'\s+', ' ', t.get('content', '')).strip()}" for t in meeting["meeting_transcripts"]]
+    turns = []
+    for turn in meeting["meeting_transcripts"]:
+        speaker = turn.get("speaker", "").strip()
+        content = re.sub(r"\s+", " ", turn.get("content", "")).strip()
+        turns.append(f"{speaker}: {content}")
+    return turns
 
 
 def _span(spans) -> tuple[int, int] | None:

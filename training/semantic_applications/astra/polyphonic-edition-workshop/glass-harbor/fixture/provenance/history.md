@@ -1,0 +1,4 @@
+[H01] AUTO is the authenticated original score. COPY1 transcribed all AUTO notation before either signed correction was issued. COPY2 transcribed COPY1, including its inherited duration reading. These copying relations cover notation, not independent observation. The surviving copy files are excerpts; unquoted copied locations add no separate reading unit.
+[H02] DURATION_SLIP and PITCH_SLIP are separately authenticated instructions by the authorized editor. Both were issued after AUTO and neither supersedes the other. Their scopes and targets are stated only in their own texts.
+[H03] REHEARSAL is an independent observer's report made after both slips. REHEARSAL_COPY later copied that report verbatim and contributes no new observation.
+[H04] COPYIST_NOTE records a later copyist's tentative expansion of PITCH_SLIP. The editor never confirmed its target choice. PLAYER_NOTE is an unsigned player's fingering proposal, with no editorial authorization.

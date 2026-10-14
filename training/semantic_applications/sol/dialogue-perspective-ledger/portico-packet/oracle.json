@@ -1,7 +1,7 @@
 {
   "schema": "natlang.dialogue-query-invariants/1",
   "caseId": "sol-dialogue-portico-v1",
-  "scope": "Independent authored projection of source-visible query observables, not a complete typed reference trajectory.",
+  "scope": "Source-visible query invariants plus exact original identity/availability bounds; not a semantic trajectory oracle.",
   "query_observables": {
     "Q01": {
       "actorIds": [
@@ -105,5 +105,949 @@
       ],
       "retains_sincere_and_ironic_alternatives": true
     }
+  },
+  "exact_source_contract": {
+    "participantIds": [
+      "Mira",
+      "Lea",
+      "Jon",
+      "Neri",
+      "Ada"
+    ],
+    "propositionIds": [
+      "P_DUE10",
+      "P_DUE13",
+      "P_COLLECT10",
+      "P_COLLECT11",
+      "P_COLLECT12",
+      "P_ACK_B1",
+      "P_ACK_B2",
+      "P_RELEASE",
+      "P_CANCEL_INTENT",
+      "P_FLAWLESS"
+    ],
+    "turns": [
+      {
+        "turnId": "J09",
+        "clauseId": "J09",
+        "speaker": "Jon",
+        "occurredAt": {
+          "day": 9,
+          "hour": 16
+        },
+        "audienceIds": [
+          "Mira",
+          "Lea"
+        ],
+        "channelId": "P",
+        "visibility": "shared"
+      },
+      {
+        "turnId": "M10",
+        "clauseId": "M10",
+        "speaker": "Mira",
+        "occurredAt": {
+          "day": 10,
+          "hour": 9
+        },
+        "audienceIds": [
+          "Lea",
+          "Jon"
+        ],
+        "channelId": "P",
+        "visibility": "shared"
+      },
+      {
+        "turnId": "L10",
+        "clauseId": "L10",
+        "speaker": "Lea",
+        "occurredAt": {
+          "day": 10,
+          "hour": 10
+        },
+        "audienceIds": [
+          "Mira"
+        ],
+        "channelId": "P",
+        "visibility": "shared"
+      },
+      {
+        "turnId": "J11",
+        "clauseId": "J11",
+        "speaker": "Jon",
+        "occurredAt": {
+          "day": 11,
+          "hour": 10
+        },
+        "audienceIds": [
+          "Lea"
+        ],
+        "channelId": "P",
+        "visibility": "shared"
+      },
+      {
+        "turnId": "L11",
+        "clauseId": "L11",
+        "speaker": "Lea",
+        "occurredAt": {
+          "day": 11,
+          "hour": 10.5
+        },
+        "audienceIds": [],
+        "channelId": null,
+        "visibility": "private"
+      },
+      {
+        "turnId": "N11",
+        "clauseId": "N11",
+        "speaker": "Neri",
+        "occurredAt": {
+          "day": 11,
+          "hour": 11
+        },
+        "audienceIds": [],
+        "channelId": null,
+        "visibility": "private"
+      },
+      {
+        "turnId": "M12_PRIVATE",
+        "clauseId": "M12_PRIVATE",
+        "speaker": "Mira",
+        "occurredAt": {
+          "day": 12,
+          "hour": 8
+        },
+        "audienceIds": [],
+        "channelId": null,
+        "visibility": "private"
+      },
+      {
+        "turnId": "M12_REPORT",
+        "clauseId": "M12_REPORT",
+        "speaker": "Mira",
+        "occurredAt": {
+          "day": 12,
+          "hour": 11
+        },
+        "audienceIds": [
+          "Lea"
+        ],
+        "channelId": "P",
+        "visibility": "shared"
+      },
+      {
+        "turnId": "M12_ARCHIVE",
+        "clauseId": "M12_ARCHIVE",
+        "speaker": "Mira",
+        "occurredAt": {
+          "day": 12,
+          "hour": 13
+        },
+        "audienceIds": [
+          "Neri"
+        ],
+        "channelId": null,
+        "visibility": "shared"
+      },
+      {
+        "turnId": "N12",
+        "clauseId": "N12",
+        "speaker": "Neri",
+        "occurredAt": {
+          "day": 12,
+          "hour": 14
+        },
+        "audienceIds": [
+          "Ada"
+        ],
+        "channelId": "R",
+        "visibility": "shared"
+      },
+      {
+        "turnId": "A12",
+        "clauseId": "A12",
+        "speaker": "Ada",
+        "occurredAt": {
+          "day": 12,
+          "hour": 16
+        },
+        "audienceIds": [],
+        "channelId": null,
+        "visibility": "private"
+      },
+      {
+        "turnId": "L13",
+        "clauseId": "L13",
+        "speaker": "Lea",
+        "occurredAt": {
+          "day": 13,
+          "hour": 10
+        },
+        "audienceIds": [],
+        "channelId": null,
+        "visibility": "private"
+      },
+      {
+        "turnId": "N13",
+        "clauseId": "N13",
+        "speaker": "Neri",
+        "occurredAt": {
+          "day": 13,
+          "hour": 11
+        },
+        "audienceIds": [
+          "Mira"
+        ],
+        "channelId": null,
+        "visibility": "shared"
+      },
+      {
+        "turnId": "AMB13",
+        "clauseId": "AMB13",
+        "speaker": "Neri",
+        "occurredAt": {
+          "day": 13,
+          "hour": 11.5
+        },
+        "audienceIds": [
+          "Ada"
+        ],
+        "channelId": null,
+        "visibility": "shared"
+      }
+    ],
+    "physicalFacts": [
+      {
+        "factId": "F_COLLECTION",
+        "propositionId": "P_COLLECT10",
+        "value": false,
+        "occurredAt": null,
+        "completenessThrough": {
+          "day": 13,
+          "hour": 12
+        }
+      },
+      {
+        "factId": "F_COLLECTION",
+        "propositionId": "P_COLLECT11",
+        "value": false,
+        "occurredAt": null,
+        "completenessThrough": {
+          "day": 13,
+          "hour": 12
+        }
+      },
+      {
+        "factId": "F_COLLECTION",
+        "propositionId": "P_COLLECT12",
+        "value": true,
+        "occurredAt": {
+          "day": 12,
+          "hour": 9
+        },
+        "completenessThrough": {
+          "day": 13,
+          "hour": 12
+        }
+      },
+      {
+        "factId": "F_NO_RELEASE",
+        "propositionId": "P_RELEASE",
+        "value": false,
+        "occurredAt": null,
+        "completenessThrough": {
+          "day": 13,
+          "hour": 12
+        }
+      },
+      {
+        "factId": "F_ACKNOWLEDGMENT",
+        "propositionId": "P_ACK_B1",
+        "value": true,
+        "occurredAt": {
+          "day": 10,
+          "hour": 10
+        },
+        "completenessThrough": {
+          "day": 13,
+          "hour": 12
+        }
+      },
+      {
+        "factId": "F_ACKNOWLEDGMENT",
+        "propositionId": "P_ACK_B2",
+        "value": false,
+        "occurredAt": null,
+        "completenessThrough": {
+          "day": 13,
+          "hour": 12
+        }
+      }
+    ],
+    "receiptIds": [
+      "H09",
+      "H10",
+      "H11",
+      "R12_MIRA",
+      "R12_LEA",
+      "R13_LEA",
+      "H_ARCHIVE",
+      "R13_ADA",
+      "H13"
+    ],
+    "availability": [
+      {
+        "at": {
+          "day": 9,
+          "hour": 16
+        },
+        "participantId": "Jon",
+        "turnIds": [
+          "J09"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 9,
+          "hour": 16
+        },
+        "participantId": "Mira",
+        "turnIds": [
+          "J09"
+        ],
+        "receiptIds": [
+          "H09"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 9,
+          "hour": 16
+        },
+        "participantId": "Lea",
+        "turnIds": [
+          "J09"
+        ],
+        "receiptIds": [
+          "H09"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 10,
+          "hour": 9
+        },
+        "participantId": "Mira",
+        "turnIds": [
+          "M10"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 10,
+          "hour": 9
+        },
+        "participantId": "Lea",
+        "turnIds": [
+          "M10"
+        ],
+        "receiptIds": [
+          "H10"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 10,
+          "hour": 9
+        },
+        "participantId": "Jon",
+        "turnIds": [
+          "M10"
+        ],
+        "receiptIds": [
+          "H10"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 10,
+          "hour": 10
+        },
+        "participantId": "Lea",
+        "turnIds": [
+          "L10"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 10,
+          "hour": 10
+        },
+        "participantId": "Mira",
+        "turnIds": [
+          "L10"
+        ],
+        "receiptIds": [
+          "H10"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 11,
+          "hour": 10
+        },
+        "participantId": "Jon",
+        "turnIds": [
+          "J11"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 11,
+          "hour": 10
+        },
+        "participantId": "Lea",
+        "turnIds": [
+          "J11"
+        ],
+        "receiptIds": [
+          "H11"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 11,
+          "hour": 10.5
+        },
+        "participantId": "Lea",
+        "turnIds": [
+          "L11"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 11,
+          "hour": 10.75
+        },
+        "participantId": "Neri",
+        "turnIds": [
+          "J11"
+        ],
+        "receiptIds": [
+          "H11"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 11,
+          "hour": 11
+        },
+        "participantId": "Neri",
+        "turnIds": [
+          "N11"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 12,
+          "hour": 8
+        },
+        "participantId": "Mira",
+        "turnIds": [
+          "M12_PRIVATE"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 12,
+          "hour": 10
+        },
+        "participantId": "Mira",
+        "turnIds": [],
+        "receiptIds": [
+          "R12_MIRA"
+        ],
+        "verifiedFactIds": [
+          "F_COLLECTION"
+        ]
+      },
+      {
+        "at": {
+          "day": 12,
+          "hour": 11
+        },
+        "participantId": "Mira",
+        "turnIds": [
+          "M12_REPORT"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 12,
+          "hour": 13
+        },
+        "participantId": "Mira",
+        "turnIds": [
+          "M12_ARCHIVE"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 12,
+          "hour": 13
+        },
+        "participantId": "Neri",
+        "turnIds": [
+          "M12_ARCHIVE",
+          "J09"
+        ],
+        "receiptIds": [
+          "H_ARCHIVE"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 12,
+          "hour": 14
+        },
+        "participantId": "Neri",
+        "turnIds": [
+          "N12"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 12,
+          "hour": 15
+        },
+        "participantId": "Ada",
+        "turnIds": [
+          "N12",
+          "M12_ARCHIVE",
+          "J09"
+        ],
+        "receiptIds": [
+          "R13_ADA"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 12,
+          "hour": 16
+        },
+        "participantId": "Ada",
+        "turnIds": [
+          "A12"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 13,
+          "hour": 9
+        },
+        "participantId": "Lea",
+        "turnIds": [
+          "M12_REPORT"
+        ],
+        "receiptIds": [
+          "R13_LEA"
+        ],
+        "verifiedFactIds": [
+          "F_COLLECTION"
+        ]
+      },
+      {
+        "at": {
+          "day": 13,
+          "hour": 10
+        },
+        "participantId": "Lea",
+        "turnIds": [
+          "L13"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 13,
+          "hour": 11
+        },
+        "participantId": "Neri",
+        "turnIds": [
+          "N13"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 13,
+          "hour": 11
+        },
+        "participantId": "Mira",
+        "turnIds": [
+          "N13"
+        ],
+        "receiptIds": [
+          "H13"
+        ],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 13,
+          "hour": 11.5
+        },
+        "participantId": "Neri",
+        "turnIds": [
+          "AMB13"
+        ],
+        "receiptIds": [],
+        "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 13,
+          "hour": 11.5
+        },
+        "participantId": "Ada",
+        "turnIds": [
+          "AMB13"
+        ],
+        "receiptIds": [
+          "H13"
+        ],
+        "verifiedFactIds": []
+      }
+    ],
+    "receipts": [
+      {
+        "receiptId": "H09",
+        "turnIds": [
+          "J09"
+        ],
+        "recipientId": "Mira",
+        "dispatchedAt": {
+          "day": 9,
+          "hour": 16
+        },
+        "receivedAt": {
+          "day": 9,
+          "hour": 16
+        },
+        "readAt": {
+          "day": 9,
+          "hour": 16
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "H09",
+        "turnIds": [
+          "J09"
+        ],
+        "recipientId": "Lea",
+        "dispatchedAt": {
+          "day": 9,
+          "hour": 16
+        },
+        "receivedAt": {
+          "day": 9,
+          "hour": 16
+        },
+        "readAt": {
+          "day": 9,
+          "hour": 16
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "H10",
+        "turnIds": [
+          "M10"
+        ],
+        "recipientId": "Lea",
+        "dispatchedAt": {
+          "day": 10,
+          "hour": 9
+        },
+        "receivedAt": {
+          "day": 10,
+          "hour": 9
+        },
+        "readAt": {
+          "day": 10,
+          "hour": 9
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "H10",
+        "turnIds": [
+          "M10"
+        ],
+        "recipientId": "Jon",
+        "dispatchedAt": {
+          "day": 10,
+          "hour": 9
+        },
+        "receivedAt": {
+          "day": 10,
+          "hour": 9
+        },
+        "readAt": {
+          "day": 10,
+          "hour": 9
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "H10",
+        "turnIds": [
+          "L10"
+        ],
+        "recipientId": "Mira",
+        "dispatchedAt": {
+          "day": 10,
+          "hour": 10
+        },
+        "receivedAt": {
+          "day": 10,
+          "hour": 10
+        },
+        "readAt": {
+          "day": 10,
+          "hour": 10
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "H11",
+        "turnIds": [
+          "J11"
+        ],
+        "recipientId": "Lea",
+        "dispatchedAt": {
+          "day": 11,
+          "hour": 10
+        },
+        "receivedAt": {
+          "day": 11,
+          "hour": 10
+        },
+        "readAt": {
+          "day": 11,
+          "hour": 10
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "H11",
+        "turnIds": [
+          "J11"
+        ],
+        "recipientId": "Neri",
+        "dispatchedAt": {
+          "day": 11,
+          "hour": 10.75
+        },
+        "receivedAt": {
+          "day": 11,
+          "hour": 10.75
+        },
+        "readAt": {
+          "day": 11,
+          "hour": 10.75
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "R12_MIRA",
+        "turnIds": [],
+        "recipientId": "Mira",
+        "dispatchedAt": {
+          "day": 12,
+          "hour": 10
+        },
+        "receivedAt": {
+          "day": 12,
+          "hour": 10
+        },
+        "readAt": {
+          "day": 12,
+          "hour": 10
+        },
+        "verifiedEvidence": true,
+        "verifiedFactIds": [
+          "F_COLLECTION"
+        ]
+      },
+      {
+        "receiptId": "R12_LEA",
+        "turnIds": [
+          "M12_REPORT"
+        ],
+        "recipientId": "Lea",
+        "dispatchedAt": {
+          "day": 12,
+          "hour": 11
+        },
+        "receivedAt": null,
+        "readAt": null,
+        "verifiedEvidence": true,
+        "verifiedFactIds": [
+          "F_COLLECTION"
+        ]
+      },
+      {
+        "receiptId": "R13_LEA",
+        "turnIds": [
+          "M12_REPORT"
+        ],
+        "recipientId": "Lea",
+        "dispatchedAt": {
+          "day": 12,
+          "hour": 11
+        },
+        "receivedAt": {
+          "day": 13,
+          "hour": 9
+        },
+        "readAt": {
+          "day": 13,
+          "hour": 9
+        },
+        "verifiedEvidence": true,
+        "verifiedFactIds": [
+          "F_COLLECTION"
+        ]
+      },
+      {
+        "receiptId": "H_ARCHIVE",
+        "turnIds": [
+          "M12_ARCHIVE",
+          "J09"
+        ],
+        "recipientId": "Neri",
+        "dispatchedAt": {
+          "day": 12,
+          "hour": 13
+        },
+        "receivedAt": {
+          "day": 12,
+          "hour": 13
+        },
+        "readAt": {
+          "day": 12,
+          "hour": 13
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "R13_ADA",
+        "turnIds": [
+          "N12",
+          "M12_ARCHIVE",
+          "J09"
+        ],
+        "recipientId": "Ada",
+        "dispatchedAt": {
+          "day": 12,
+          "hour": 15
+        },
+        "receivedAt": {
+          "day": 12,
+          "hour": 15
+        },
+        "readAt": {
+          "day": 12,
+          "hour": 15
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "H13",
+        "turnIds": [
+          "N13"
+        ],
+        "recipientId": "Mira",
+        "dispatchedAt": {
+          "day": 13,
+          "hour": 11
+        },
+        "receivedAt": {
+          "day": 13,
+          "hour": 11
+        },
+        "readAt": {
+          "day": 13,
+          "hour": 11
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      },
+      {
+        "receiptId": "H13",
+        "turnIds": [
+          "AMB13"
+        ],
+        "recipientId": "Ada",
+        "dispatchedAt": {
+          "day": 13,
+          "hour": 11.5
+        },
+        "receivedAt": {
+          "day": 13,
+          "hour": 11.5
+        },
+        "readAt": {
+          "day": 13,
+          "hour": 11.5
+        },
+        "verifiedEvidence": false,
+        "verifiedFactIds": []
+      }
+    ]
   }
 }

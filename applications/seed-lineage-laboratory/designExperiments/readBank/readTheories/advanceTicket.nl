@@ -18,6 +18,10 @@ returns: TicketReadingFrontier
 5. Bind Witness sourceId/path from the matched original clause witnesses and retain the child's exact
    quote. Construct JointTicket by adding unit.ticketId to the actual returned theoryId, assignments
    and mass. Append one accepted TicketReadResult with that ticket and the child's retained issues.
-6. Return the frontier with exactly this first pending unit removed and exactly one actual result
-   appended. Keep context, clauses and every prior result unchanged. Semantic evidence failures remain
-   visible in their results; the finite reader still completes coverage of the other source units.
+6. Bind next:TicketReadingFrontier to the actual frontier with exactly this first pending unit removed
+   and exactly one actual result appended. Keep context, clauses and every prior result unchanged.
+   Complete this invocation in the first return action after that update:
+   eval({code:"return next;",finish:true})
+7. readTheories owns iterateOn and the next original ticket. This invocation has completed its one
+   selected unit; semantic evidence failures remain visible in that retained result. The parent receives
+   this actual next state before invoking a fresh step for the remaining original frontier.

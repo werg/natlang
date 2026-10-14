@@ -471,9 +471,9 @@
   "services": [],
   "composition": {
     "nl_files": 30,
-    "physical_lines": 662,
-    "body_lines": 438,
-    "numbered_steps": 183,
+    "physical_lines": 668,
+    "body_lines": 444,
+    "numbered_steps": 184,
     "type_aliases": 53
   },
   "comparison_spec": {
@@ -500,9 +500,9 @@
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false,
-    "source_variant_review": "Joint-ticket-frontier v4 independently source reviewed; live pending."
+    "source_variant_review": "One-ticket completion v5 independently reviewed; live pending."
   },
-  "model_facing_debt": "joint-ticket-frontier-v4:0/48 live samples; measure actual per-ticket typed contributions, source coverage, preserved partial progress and downstream consumption.",
+  "model_facing_debt": "joint-ticket-one-step-v5:0/48 live samples; require one named invocation per ticket and actual returned frontier progress.",
   "scoped_literals": [
     {
       "site": "designExperiments/readBank/readPedigree/judgeParentage.nl",
@@ -563,6 +563,12 @@
       "sha256": "2bf6a8cd7729fa4f8fa2002da67f21a3b239e423ad90cd4f74cba84a718a9c22",
       "reviewer": "pop-semantic-curriculum",
       "scope": "Independent finite ticket frontier and actual typed tuple contribution review; no live credit"
+    },
+    {
+      "path": "plans/semantic_stack/SEED_TICKET_V5_ONE_STEP_REVIEW_POP.json",
+      "sha256": "dbd48f43df50b846669e0097bb236aae82ae2877e40a105bbbb96d8995a480a7",
+      "reviewer": "pop-semantic-curriculum",
+      "scope": "Independent one-ticket completion and parent iteration ownership review; no live credit"
     }
   ],
   "readiness_scope": "Original world/oracle and current ticket-frontier source independently reviewed; source/type canonical replay is not actual reader execution or training admission.",
@@ -585,20 +591,20 @@
     }
   },
   "source_variant": {
-    "id": "joint-ticket-frontier-v4",
-    "supersedes": "source-reader-scope-v3",
+    "id": "joint-ticket-one-step-v5",
+    "supersedes": "joint-ticket-frontier-v4",
     "independent_source_review": true,
     "fixture_oracle_reference_unchanged": true,
     "status": "source_reviewed_live_pending",
     "changes": [
-      "Source theory/context and complete original ticket-unit inventory",
-      "Finite typed per-ticket reading with actual returned tuple insertion and retained partial progress"
+      "Actual next frontier returned with first-action finish:true after one ticket",
+      "Parent iterateOn exclusively owns next original ticket invocation"
     ],
     "review_receipt": {
-      "path": "plans/semantic_stack/SEED_TICKET_FRONTIER_REVIEW_POP.json",
-      "sha256": "2bf6a8cd7729fa4f8fa2002da67f21a3b239e423ad90cd4f74cba84a718a9c22",
+      "path": "plans/semantic_stack/SEED_TICKET_V5_ONE_STEP_REVIEW_POP.json",
+      "sha256": "dbd48f43df50b846669e0097bb236aae82ae2877e40a105bbbb96d8995a480a7",
       "reviewer": "pop-semantic-curriculum",
-      "scope": "Independent finite ticket frontier and actual typed tuple contribution review; no live credit"
+      "scope": "Independent one-ticket completion and parent iteration ownership review; no live credit"
     }
   }
 }

@@ -1,0 +1,1 @@
+[S02] Authenticated signed instruction: lower the written rank of the final entry in exactly one Channel part by one rank. The slip lay between the two Channel parts; its attachment does not identify Bell or Reed. The final entries are B5 and R3, and these are the two possible exclusive targets. Keep duration, accidental and all other fields unchanged.

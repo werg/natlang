@@ -159,6 +159,7 @@ def test_an_async_evaluation_is_submitted_from_a_weights_only_snapshot_and_lands
                             'async': True})
     evaluator = _light_evaluator(spec, tmp_path)
     monkeypatch.setattr(task_cadence, 'request_queue', lambda: tmp_path / 'queue')
+    monkeypatch.setenv('NATLANG_CHECKPOINT_OFFLOAD_HDD_FLOOR_GB', '0')
     slot = tmp_path / 'checkpoint.pt'
     torch.save({'schema': 'natlang.neuralese-direct/1', 'step': 40,
                 'student_parameters': {'backbone.w': torch.ones(2)},

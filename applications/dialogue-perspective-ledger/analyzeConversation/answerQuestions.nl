@@ -13,8 +13,8 @@ returns: QueryAnswers
 2. Call joinProof(focus, source, scoped, episodePlan, evolution). Name its returned actual support/defeat graph actualGraph
    and its actual returned challenge; a convenient globally true proposition cannot substitute for this proof.
 3. Derive QueryObservable from the actual focus and joined evidence: statement speaker/due from its
-   attributed act, belief from current endorsed or defeated atoms, knowledge from endorsement plus available
-   corroboration, commitment from its actual condition/status, verified truth from bounded physical facts.
+   attributed act, belief from current endorsed or defeated atoms, knowledgeValue as whether the requested knowledge assertion qualifies under endorsement plus
+   available corroboration (distinct from the underlying known proposition value), commitment from its actual condition/status, verified truth from bounded physical facts.
 4. Copy actualGraph.challenge into QueryAnswer.challenge; a missing challenge remains unresolved.
    Keep irrelevant observable fields null. Known absence of endorsement is not false endorsement;
    ambiguous referents retain their exact eligible set and unresolved illocution keeps actual alternatives.

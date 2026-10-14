@@ -1,0 +1,41 @@
+{
+  "schema": "natlang.application-independent-semantic-review/1",
+  "reviewer": "pop-semantic-curriculum",
+  "project": "astra-app-polyphonic-edition-v1",
+  "source_package_sha256": "5139465c2e9ad267831014a43c84e303e9f7886830dd21695f7c11f0f19ae726",
+  "manifest_sha256": "eecf63409d1a1bf7b70e4dfbcf4bd2cd3ea86f94ba6985b10927980935884e43",
+  "reference_sha256": "5122bd67f8ca8b1290da5de43a7b17c356a5cd0140c086d14d6dae3a62e19dfe",
+  "verifier_sha256": "7f32061e7453e3b33d73ca098471416b8f26fb1ee3b7b47cb5f1c962e086d5dd",
+  "controls_sha256": "4f4ff6c4e57ea09be35bf8fa1eade73997220e7c250c38d141c43ff773bf2109",
+  "source_oracle_status": "pass",
+  "open_source_oracle_findings": [],
+  "independent_source_derivation": {
+    "authority": "The authenticated autograph is the base. S01 uniquely changes B2 duration II to I. S02 is signed and applies to exactly one of B5 and R3; copyist expansion and unsigned player aid have no authority. COPY1/COPY2 share a notation line; REHEARSAL_COPY repeats the independent rehearsal.",
+    "dock": "Bell durations are 1+1+2=4 ticks after S01, with sounding ranks B1=5, B2=5 by carried rank-4 raise, and B3=7 after rank-7 natural. Reed R1 lasts 4 ticks and sounds rank 4. The D2 reprise repeats the chosen edition with a fresh accidental state.",
+    "channel_when_S02_targets_B5": "B5 written rank 4 sounds 4; Reed R3 remains written rank 3 and sounds 5 after its one-time +2 instrument offset. The late sonority is the unordered pair {4,5}.",
+    "channel_when_S02_targets_R3": "B5 remains written rank 5 and sounds 5; R3 becomes written rank 2 and sounds 4 after its one-time +2 offset. The late sonority is again {4,5}.",
+    "consequence": "Both target assignments satisfy independent timing and unordered sonority evidence. The source cannot choose one voice attribution. Applying S02 twice or treating a dependent copy as a separate observation would contradict the source.",
+    "rejected_extensions": "The two crossed prior/incoming S02 assignments conflict. Rejected rows now carry real prior option IDs and assignments, a real incoming option and assignment, and the reducer order needed to verify the exact prior prefix."
+  },
+  "source_flow_review": [
+    "The 27 callable NL modules own source role, notation, authority, local target, global assignment, event effect and ensemble scope judgments in numbered natural-language steps.",
+    "Six declared scoped literals return typed decisions which later named stages are instructed to consume; exact tick arithmetic and provenance membership are separate mechanisms.",
+    "The target basis distinguishes finite authorized alternatives from missing authority or evidence, and actual TargetDecision values remain attached to reading options.",
+    "The revised rejected-extension schema and checker require a real prefix and both crossed conflicts while accepting a different actual bundle traversal order.",
+    "The model-visible program file list excludes the ignored generated declaration; source and oracle/verifier roots remain separate."
+  ],
+  "reproduced_controls": {
+    "passed": true,
+    "positive": 8,
+    "negative": 33,
+    "canonical_typed_reference_replay": true,
+    "scope": "Finite source, target, performance-state, evidence and rejected-extension integrity checks; these do not execute the NL program."
+  },
+  "limitations": [
+    "The checker is a finite fixture verifier. Exact quote membership alone does not establish arbitrary semantic entailment.",
+    "No teacher trajectory has run, so actual child invocation, literal-result consumption, generated-code idiomaticity and end-to-end answer quality remain unmeasured."
+  ],
+  "actual_application_execution": false,
+  "live_samples": 0,
+  "training_admission": false
+}

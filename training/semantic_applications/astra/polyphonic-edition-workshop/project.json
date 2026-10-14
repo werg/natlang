@@ -1,0 +1,516 @@
+{
+  "schema": "natlang.semantic-application-source/1",
+  "id": "astra-app-polyphonic-edition-v1",
+  "source_root": "applications/polyphonic-edition-workshop",
+  "entry": "reconstructEdition.nl",
+  "entry_kind": "directory-reducer",
+  "request_type": "EditionRequest",
+  "result_type": "EditionCertificate",
+  "program_files": [
+    "natlang.json",
+    "reconstructEdition.nl",
+    "reconstructEdition/arbitrateReadings.nl",
+    "reconstructEdition/arbitrateReadings/advanceReading.nl",
+    "reconstructEdition/arbitrateReadings/advanceReading/compareSupport.nl",
+    "reconstructEdition/arbitrateReadings/advanceReading/resolveTargets.nl",
+    "reconstructEdition/assembleEditions.nl",
+    "reconstructEdition/assembleEditions/advanceHypothesis.nl",
+    "reconstructEdition/assembleEditions/advanceHypothesis/checkClaimConsistency.nl",
+    "reconstructEdition/auditEdition.nl",
+    "reconstructEdition/buildFamilies.nl",
+    "reconstructEdition/buildFamilies/advanceFamily.nl",
+    "reconstructEdition/checkEnsemble.nl",
+    "reconstructEdition/checkEnsemble/judgeConstraint.nl",
+    "reconstructEdition/explainAlternatives.nl",
+    "reconstructEdition/performEditions.nl",
+    "reconstructEdition/performEditions/advanceOccurrence.nl",
+    "reconstructEdition/performEditions/advanceOccurrence/advanceVoiceEvent.nl",
+    "reconstructEdition/performEditions/advanceOccurrence/advanceVoiceEvent/judgeEventEffect.nl",
+    "reconstructEdition/readArchive.nl",
+    "reconstructEdition/readArchive/classifyWitnesses.nl",
+    "reconstructEdition/readArchive/readConventions.nl",
+    "reconstructEdition/readArchive/readEditorialClaims.nl",
+    "reconstructEdition/readArchive/readEditorialClaims/judgeAuthority.nl",
+    "reconstructEdition/readArchive/readPartbooks.nl",
+    "reconstructEdition/readArchive/readPartbooks/advanceLocation.nl",
+    "reconstructEdition/readArchive/readPartbooks/advanceLocation/interpretNotation.nl",
+    "reconstructEdition/readArchive/readRehearsal.nl",
+    "tsconfig.json",
+    "types.ts"
+  ],
+  "fixture_root": "training/semantic_applications/astra/polyphonic-edition-workshop/glass-harbor/fixture",
+  "fixture_files": [
+    "controls/performance.md",
+    "conventions/editorial.md",
+    "conventions/notation.md",
+    "editorial/copyist-expansion.md",
+    "editorial/duration-slip.md",
+    "editorial/pitch-slip.md",
+    "editorial/player-aid.md",
+    "manifest.json",
+    "partbooks/autograph/score.md",
+    "partbooks/copy1/dock.md",
+    "partbooks/copy2/dock.md",
+    "provenance/history.md",
+    "rehearsal/copied.md",
+    "rehearsal/independent.md"
+  ],
+  "request_path": "training/semantic_applications/astra/polyphonic-edition-workshop/glass-harbor/request.json",
+  "oracle_path": "training/semantic_applications/astra/polyphonic-edition-workshop/glass-harbor/oracle.json",
+  "source_world_split_key": "astra-polyphonic-glass-harbor-v1",
+  "metadata_files": [
+    "DECOMPOSITION.md"
+  ],
+  "typed_call_graph": {
+    "nodes": [
+      {
+        "path": "reconstructEdition/arbitrateReadings/advanceReading/compareSupport.nl",
+        "args": {
+          "readings": "WrittenEvent[]",
+          "claims": "EditorialClaim[]",
+          "targets": "TargetDecision[]",
+          "families": "FamilyIndex",
+          "protocol": "NotationProtocol"
+        },
+        "returns": "ReadingBundle",
+        "owned_delta": "Construct supported reading options from authority, dependency and explicit ambiguity."
+      },
+      {
+        "path": "reconstructEdition/arbitrateReadings/advanceReading/resolveTargets.nl",
+        "args": {
+          "eventId": "string",
+          "readings": "WrittenEvent[]",
+          "claims": "EditorialClaim[]",
+          "protocol": "NotationProtocol"
+        },
+        "returns": "TargetDecision[]",
+        "owned_delta": "Judge source-supported attachment of editorial claims to one written location."
+      },
+      {
+        "path": "reconstructEdition/arbitrateReadings/advanceReading.nl",
+        "args": {
+          "state": "ArbitrationFrontier"
+        },
+        "returns": "ArbitrationFrontier",
+        "owned_delta": "Join one location to editorial target decisions and source-family support."
+      },
+      {
+        "path": "reconstructEdition/arbitrateReadings.nl",
+        "args": {
+          "archive": "Archive",
+          "families": "FamilyIndex"
+        },
+        "returns": "ReadingIndex",
+        "owned_delta": "Resolve source readings per written location while preserving supported alternatives."
+      },
+      {
+        "path": "reconstructEdition/assembleEditions/advanceHypothesis/checkClaimConsistency.nl",
+        "args": {
+          "hypothesis": "EditionHypothesis",
+          "option": "ReadingOption"
+        },
+        "returns": "ConsistencyDecision",
+        "owned_delta": "Judge whether one local reading agrees with the edition\u2019s existing editorial assignments."
+      },
+      {
+        "path": "reconstructEdition/assembleEditions/advanceHypothesis.nl",
+        "args": {
+          "state": "HypothesisFrontier"
+        },
+        "returns": "HypothesisFrontier",
+        "owned_delta": "Extend each actual partial edition by one location and consume compatibility judgments."
+      },
+      {
+        "path": "reconstructEdition/assembleEditions.nl",
+        "args": {
+          "readings": "ReadingIndex"
+        },
+        "returns": "EditionSet",
+        "owned_delta": "Assemble globally consistent source editions from actual location alternatives."
+      },
+      {
+        "path": "reconstructEdition/auditEdition.nl",
+        "args": {
+          "request": "EditionRequest",
+          "archive": "Archive",
+          "families": "FamilyIndex",
+          "readings": "ReadingIndex",
+          "editions": "EditionSet",
+          "checked": "CheckedEdition[]",
+          "ambiguities": "AmbiguityFinding[]"
+        },
+        "returns": "EditionCertificate",
+        "owned_delta": "Assemble the certificate from actual source, arbitration, performance and constraint contributions."
+      },
+      {
+        "path": "reconstructEdition/buildFamilies/advanceFamily.nl",
+        "args": {
+          "state": "FamilyFrontier"
+        },
+        "returns": "FamilyFrontier",
+        "owned_delta": "Incorporate one source dependency and preserve its actual documentary scope."
+      },
+      {
+        "path": "reconstructEdition/buildFamilies.nl",
+        "args": {
+          "roles": "RoleIndex"
+        },
+        "returns": "FamilyIndex",
+        "owned_delta": "Connect source copying relations without manufacturing independent support."
+      },
+      {
+        "path": "reconstructEdition/checkEnsemble/judgeConstraint.nl",
+        "args": {
+          "constraint": "TimingConstraint",
+          "events": "PerformedEvent[]"
+        },
+        "returns": "ConstraintScope",
+        "owned_delta": "Interpret the exact scope of one rehearsal relation over actual performed events."
+      },
+      {
+        "path": "reconstructEdition/checkEnsemble.nl",
+        "args": {
+          "performed": "PerformedEdition[]",
+          "rehearsal": "RehearsalIndex",
+          "protocol": "NotationProtocol"
+        },
+        "returns": "CheckedEdition[]",
+        "owned_delta": "Check actual performed editions against scoped independent ensemble constraints."
+      },
+      {
+        "path": "reconstructEdition/explainAlternatives.nl",
+        "args": {
+          "checked": "CheckedEdition[]",
+          "editorial": "EditorialIndex"
+        },
+        "returns": "AmbiguityFinding[]",
+        "owned_delta": "Explain material differences among actual admissible editions without inventing a winner."
+      },
+      {
+        "path": "reconstructEdition/performEditions/advanceOccurrence/advanceVoiceEvent/judgeEventEffect.nl",
+        "args": {
+          "option": "ReadingOption",
+          "state": "NotationState",
+          "protocol": "NotationProtocol"
+        },
+        "returns": "EventEffectDecision",
+        "owned_delta": "Judge one notation effect from the actual selected reading and carried state."
+      },
+      {
+        "path": "reconstructEdition/performEditions/advanceOccurrence/advanceVoiceEvent.nl",
+        "args": {
+          "state": "VoiceFrontier"
+        },
+        "returns": "VoiceFrontier",
+        "owned_delta": "Apply one actual NL event effect to the carried voice-local notation state."
+      },
+      {
+        "path": "reconstructEdition/performEditions/advanceOccurrence.nl",
+        "args": {
+          "state": "PerformanceFrontier"
+        },
+        "returns": "PerformanceFrontier",
+        "owned_delta": "Own one occurrence boundary and consume each voice\u2019s actual event-state reducer."
+      },
+      {
+        "path": "reconstructEdition/performEditions.nl",
+        "args": {
+          "editions": "EditionSet",
+          "protocol": "NotationProtocol"
+        },
+        "returns": "PerformedEdition[]",
+        "owned_delta": "Perform each actual edition through finite occurrences and stateful voice readings."
+      },
+      {
+        "path": "reconstructEdition/readArchive/classifyWitnesses.nl",
+        "args": {
+          "documents": "SourceDocument[]",
+          "clauses": "SourceClause[]"
+        },
+        "returns": "RoleIndex",
+        "owned_delta": "Distinguish original, derivative, editorial and observational source roles."
+      },
+      {
+        "path": "reconstructEdition/readArchive/readConventions.nl",
+        "args": {
+          "clauses": "SourceClause[]"
+        },
+        "returns": "NotationProtocol",
+        "owned_delta": "Interpret the fictional score notation and edition-admission contract."
+      },
+      {
+        "path": "reconstructEdition/readArchive/readEditorialClaims/judgeAuthority.nl",
+        "args": {
+          "claimClauses": "SourceClause[]",
+          "roles": "RoleIndex",
+          "policyClauses": "SourceClause[]"
+        },
+        "returns": "AuthorityDecision",
+        "owned_delta": "Judge authorization and scope of one original editorial act."
+      },
+      {
+        "path": "reconstructEdition/readArchive/readEditorialClaims.nl",
+        "args": {
+          "clauses": "SourceClause[]",
+          "roles": "RoleIndex"
+        },
+        "returns": "EditorialIndex",
+        "owned_delta": "Interpret actual editorial operations and uncertain target attachments."
+      },
+      {
+        "path": "reconstructEdition/readArchive/readPartbooks/advanceLocation/interpretNotation.nl",
+        "args": {
+          "unit": "NotationUnit",
+          "selectedClauses": "SourceClause[]"
+        },
+        "returns": "NotationReading",
+        "owned_delta": "Judge one diplomatic notation statement without performing the score."
+      },
+      {
+        "path": "reconstructEdition/readArchive/readPartbooks/advanceLocation.nl",
+        "args": {
+          "state": "NotationFrontier"
+        },
+        "returns": "NotationFrontier",
+        "owned_delta": "Read one original notation unit and retain its actual typed contribution."
+      },
+      {
+        "path": "reconstructEdition/readArchive/readPartbooks.nl",
+        "args": {
+          "clauses": "SourceClause[]"
+        },
+        "returns": "PartbookIndex",
+        "owned_delta": "Accumulate diplomatic notation readings from actual original source units."
+      },
+      {
+        "path": "reconstructEdition/readArchive/readRehearsal.nl",
+        "args": {
+          "clauses": "SourceClause[]",
+          "roles": "RoleIndex"
+        },
+        "returns": "RehearsalIndex",
+        "owned_delta": "Read independent rehearsal relations without assigning unobserved voice owners."
+      },
+      {
+        "path": "reconstructEdition/readArchive.nl",
+        "args": {
+          "request": "EditionRequest"
+        },
+        "returns": "Archive",
+        "owned_delta": "Read the original score archive and consume distinct source-role branches."
+      },
+      {
+        "path": "reconstructEdition.nl",
+        "args": {
+          "request": "EditionRequest"
+        },
+        "returns": "EditionCertificate",
+        "owned_delta": "Reconstruct all source-supported ensemble editions from an immutable evidence directory."
+      }
+    ],
+    "edges": [
+      {
+        "caller": "reconstructEdition/arbitrateReadings/advanceReading.nl",
+        "callee": "reconstructEdition/arbitrateReadings/advanceReading/compareSupport.nl"
+      },
+      {
+        "caller": "reconstructEdition/arbitrateReadings/advanceReading.nl",
+        "callee": "reconstructEdition/arbitrateReadings/advanceReading/resolveTargets.nl"
+      },
+      {
+        "caller": "reconstructEdition/arbitrateReadings.nl",
+        "callee": "reconstructEdition/arbitrateReadings/advanceReading.nl"
+      },
+      {
+        "caller": "reconstructEdition.nl",
+        "callee": "reconstructEdition/arbitrateReadings.nl"
+      },
+      {
+        "caller": "reconstructEdition/assembleEditions/advanceHypothesis.nl",
+        "callee": "reconstructEdition/assembleEditions/advanceHypothesis/checkClaimConsistency.nl"
+      },
+      {
+        "caller": "reconstructEdition/assembleEditions.nl",
+        "callee": "reconstructEdition/assembleEditions/advanceHypothesis.nl"
+      },
+      {
+        "caller": "reconstructEdition.nl",
+        "callee": "reconstructEdition/assembleEditions.nl"
+      },
+      {
+        "caller": "reconstructEdition.nl",
+        "callee": "reconstructEdition/auditEdition.nl"
+      },
+      {
+        "caller": "reconstructEdition/buildFamilies.nl",
+        "callee": "reconstructEdition/buildFamilies/advanceFamily.nl"
+      },
+      {
+        "caller": "reconstructEdition.nl",
+        "callee": "reconstructEdition/buildFamilies.nl"
+      },
+      {
+        "caller": "reconstructEdition/checkEnsemble.nl",
+        "callee": "reconstructEdition/checkEnsemble/judgeConstraint.nl"
+      },
+      {
+        "caller": "reconstructEdition.nl",
+        "callee": "reconstructEdition/checkEnsemble.nl"
+      },
+      {
+        "caller": "reconstructEdition.nl",
+        "callee": "reconstructEdition/explainAlternatives.nl"
+      },
+      {
+        "caller": "reconstructEdition/performEditions/advanceOccurrence/advanceVoiceEvent.nl",
+        "callee": "reconstructEdition/performEditions/advanceOccurrence/advanceVoiceEvent/judgeEventEffect.nl"
+      },
+      {
+        "caller": "reconstructEdition/performEditions/advanceOccurrence.nl",
+        "callee": "reconstructEdition/performEditions/advanceOccurrence/advanceVoiceEvent.nl"
+      },
+      {
+        "caller": "reconstructEdition/performEditions.nl",
+        "callee": "reconstructEdition/performEditions/advanceOccurrence.nl"
+      },
+      {
+        "caller": "reconstructEdition.nl",
+        "callee": "reconstructEdition/performEditions.nl"
+      },
+      {
+        "caller": "reconstructEdition/readArchive.nl",
+        "callee": "reconstructEdition/readArchive/classifyWitnesses.nl"
+      },
+      {
+        "caller": "reconstructEdition/readArchive.nl",
+        "callee": "reconstructEdition/readArchive/readConventions.nl"
+      },
+      {
+        "caller": "reconstructEdition/readArchive/readEditorialClaims.nl",
+        "callee": "reconstructEdition/readArchive/readEditorialClaims/judgeAuthority.nl"
+      },
+      {
+        "caller": "reconstructEdition/readArchive.nl",
+        "callee": "reconstructEdition/readArchive/readEditorialClaims.nl"
+      },
+      {
+        "caller": "reconstructEdition/readArchive/readPartbooks/advanceLocation.nl",
+        "callee": "reconstructEdition/readArchive/readPartbooks/advanceLocation/interpretNotation.nl"
+      },
+      {
+        "caller": "reconstructEdition/readArchive/readPartbooks.nl",
+        "callee": "reconstructEdition/readArchive/readPartbooks/advanceLocation.nl"
+      },
+      {
+        "caller": "reconstructEdition/readArchive.nl",
+        "callee": "reconstructEdition/readArchive/readPartbooks.nl"
+      },
+      {
+        "caller": "reconstructEdition/readArchive.nl",
+        "callee": "reconstructEdition/readArchive/readRehearsal.nl"
+      },
+      {
+        "caller": "reconstructEdition.nl",
+        "callee": "reconstructEdition/readArchive.nl"
+      }
+    ]
+  },
+  "services": [],
+  "composition": {
+    "nl_files": 27,
+    "physical_lines": 651,
+    "numbered_steps": 173,
+    "type_aliases": 51
+  },
+  "comparison_spec": {
+    "mode": "external finite invariant/trace checker plus independent semantic review",
+    "unordered_collections": [
+      "witnesses",
+      "families",
+      "editions",
+      "constraint findings"
+    ],
+    "ordered_collections": [
+      "voice event chronology",
+      "source occurrence order",
+      "bundleOrder actual reducer chronology"
+    ],
+    "generated_identifiers": "Family, option and hypothesis IDs may be consistently alpha-renamed. Original source/event/voice/section/claim/occurrence IDs exact.",
+    "semantic_fields": "Source role, authority, target, notation and uncertainty entailment require independent source review."
+  },
+  "readiness": {
+    "source_loader_checked": true,
+    "typed_declarations_checked": true,
+    "typed_reference_checked": true,
+    "independent_oracle_review": true,
+    "exact_result_replay": true,
+    "live_qualified": false,
+    "training_admitted": false
+  },
+  "source_variant": {
+    "id": "authority-depth-v2",
+    "status": "focused_source_review_passed_live_pending",
+    "independent_source_review": true,
+    "review_receipt": {
+      "path": "plans/semantic_stack/POLYPHONIC_AUTHORITY_DEPTH_REVIEW_ASTRA.json",
+      "sha256": "24e1c5e367da312f2d82c10d4aa7d81280b673ec76f6adf95d8ee829b7672638",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Focused parent-to-child evidence reachability and authority-branch pseudocode review; prior full source/oracle review remains POLYPHONIC_EDITION_REVIEW_POP.json; no live or training credit"
+    }
+  },
+  "model_facing_debt": "authority-depth-v2:0/48 live samples; prior full source/reference/checker review and focused authority source review passed; actual NL execution and admission pending",
+  "provenance": {
+    "author": "semantic_slate_astra",
+    "kind": "Original fictional notation archive and NL application",
+    "license": "Repository license"
+  },
+  "scoped_literals": [
+    {
+      "site": "reconstructEdition/readArchive/classifyWitnesses.nl",
+      "result_type": "WitnessRole",
+      "consumed_by": "Actual source families and authority inputs"
+    },
+    {
+      "site": "reconstructEdition/readArchive/readPartbooks/advanceLocation/interpretNotation.nl",
+      "result_type": "NotationReading",
+      "consumed_by": "Actual per-location written reading accumulator"
+    },
+    {
+      "site": "reconstructEdition/readArchive/readEditorialClaims/judgeAuthority.nl",
+      "result_type": "AuthorityDecision",
+      "consumed_by": "Actual claim authorization and scope"
+    },
+    {
+      "site": "reconstructEdition/arbitrateReadings/advanceReading/resolveTargets.nl",
+      "result_type": "TargetDecision",
+      "consumed_by": "Local correction alternatives and global exclusive assignment"
+    },
+    {
+      "site": "reconstructEdition/performEditions/advanceOccurrence/advanceVoiceEvent/judgeEventEffect.nl",
+      "result_type": "EventEffectDecision",
+      "consumed_by": "Actual duration/pitch/state delta and performed event"
+    },
+    {
+      "site": "reconstructEdition/checkEnsemble/judgeConstraint.nl",
+      "result_type": "ConstraintScope",
+      "consumed_by": "Exact scoped timing/sonority comparison"
+    }
+  ],
+  "reference_path": "training/semantic_applications/astra/polyphonic-edition-workshop/glass-harbor/reference-certificate.json",
+  "external_verifier_path": "training/semantic_applications/astra/polyphonic-edition-workshop/verify-result.mjs",
+  "external_verifier_export": "verifyCandidate",
+  "independent_reviews": [
+    {
+      "path": "plans/semantic_stack/POLYPHONIC_EDITION_REVIEW_POP.json",
+      "sha256": "55f06c3c787116336791c64d683b90373421ce8bb9e8e468ee3e5d214b6e45f3",
+      "reviewer": "pop-semantic-curriculum",
+      "scope": "Independent source reconstruction, typed flow and finite verifier controls; no live or training credit"
+    },
+    {
+      "path": "plans/semantic_stack/POLYPHONIC_AUTHORITY_DEPTH_REVIEW_ASTRA.json",
+      "sha256": "24e1c5e367da312f2d82c10d4aa7d81280b673ec76f6adf95d8ee829b7672638",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Focused source delta review of parent evidence reachability and typed authority pseudocode; no live or training credit"
+    }
+  ]
+}

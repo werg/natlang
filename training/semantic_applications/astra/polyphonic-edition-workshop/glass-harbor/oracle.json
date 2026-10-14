@@ -1,0 +1,58 @@
+{
+  "schema": "natlang.polyphonic-finite-invariants/1",
+  "caseId": "glass-harbor",
+  "world_split_key": "astra-polyphonic-glass-harbor-v1",
+  "surviving_target_assignments": [
+    {
+      "claimId": "S02",
+      "targetEventId": "B5"
+    },
+    {
+      "claimId": "S02",
+      "targetEventId": "R3"
+    }
+  ],
+  "required_events": [
+    "B1",
+    "B2",
+    "B3",
+    "R1",
+    "B4",
+    "B5",
+    "R2",
+    "R3"
+  ],
+  "occurrences": [
+    {
+      "id": "D1",
+      "section": "Dock",
+      "start": 0
+    },
+    {
+      "id": "C1",
+      "section": "Channel",
+      "start": 4
+    },
+    {
+      "id": "D2",
+      "section": "Dock",
+      "start": 8
+    }
+  ],
+  "duration_correction": {
+    "claimId": "S01",
+    "eventId": "B2",
+    "duration": 1
+  },
+  "dependent_family": [
+    "AUTO",
+    "COPY1",
+    "COPY2"
+  ],
+  "rehearsal_family": [
+    "REHEARSAL",
+    "REHEARSAL_COPY"
+  ],
+  "semantic_review_required": true,
+  "training_admitted": false
+}

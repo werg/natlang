@@ -1,0 +1,47 @@
+{
+  "schema": "natlang.semantic-source-render-review/1",
+  "reviewer": "semantic_slate_astra",
+  "variant": "ecology-role-seed-causal-v17",
+  "proposal": "plans/semantic_stack/ASTRA_ECOLOGY_ROLE_SEED_V17_PROPOSAL.json",
+  "proposal_sha256": "a4ab99c66b9a697c1fd03e9df26fb3f473fe08cfa0463e69ea013a870cab8116",
+  "render_root": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/ecology-v17-preflight-b/programs/astra/astra-ecology-01",
+  "whole_source_sha256": "43e9c8ffa92ee19ee2fc7509464ade8146e78aee0a435abf1eb4a5f5fef669dd",
+  "reviewed_files": {
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope/auditEffectGraph/advanceEffectFrontier.nl": "364937bdcf1c458f926cb842f1df8f54c0523fffe760f3a63a344e89c6ee6eaf",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope/auditEffectGraph.nl": "2a689c7607967152643a761577e2a9b72a4d5ef5b8d336cc8091bf9a450ad33b",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink/interpretObservationScope.nl": "7bececac9be146b4460f9b0c7ef2ab807f747bf001de5141bb2523a38ad25ff8",
+    "solve/readStudyPlots/buildInteractionGraph/assessCausalLink.nl": "e050430ca6ca5c2bed7a02969037742e5e0c1fbb3ea51ecf3c314135305cc579",
+    "solve/readStudyPlots/buildInteractionGraph.nl": "a242c5234616d941fdcfebca1b7ad5a8059566314f921f9d9d5d8b2d678c075f",
+    "solve/readStudyPlots.nl": "cecca746b20a2e07702fafcf830efd6a3854c07b68b28fe7d6856f00abb55ff1",
+    "solve.d.nl.ts": "9da36213e69b978542d61849aec69b0969d1a3dc65266756cf0dae0569a6b5b5",
+    "solve.nl": "f3f3fde3a02a9b27b07e6d2f93a869181e7c32615f1e43338d1ca653d65997a3",
+    "types.ts": "fe7493d34604f67bc40eb19c90c341f7931c1bfe6d4b4f08e61c2fcc0578f94c"
+  },
+  "accepted_findings": [
+    "Stage1 actual sourceRole survives exact parent binding into InteractionAssertion",
+    "Stage5 selects explicit perturbation/unknown source-role assertions for actual typed SeedDecision",
+    "Only actual kind=seed contributes source-bound signed EffectSeed; interaction consequences remain edges",
+    "CausalAssessment preserves actual CausalDecision reason/directness and original current sourceIds",
+    "Scope and graph audit read actual causal decision; root validates retained decision/owner witness domains",
+    "Named frontier still consumes actual node judgment and now finishes its next state in one explicit action"
+  ],
+  "preflight_b_delta": "Only solve.nl exact causal-decision/source-owner guard differs from reviewed preflight-a. Types/stage plans/literal idioms unchanged.",
+  "native_loader_types": {
+    "ok": true,
+    "provenance": "Curriculum independent native preflight; author read type/stage fidelity"
+  },
+  "source_reference_replay": {
+    "designs": 220,
+    "candidates": 23,
+    "passed": 23,
+    "scope": "Source/type reference replay, not NL execution"
+  },
+  "fixture_oracle_unchanged": true,
+  "live_samples": 0,
+  "required_live_samples_approx": 48,
+  "training_admitted": false,
+  "limitations": [
+    "Source role and seed causality judgments still require matched live evidence",
+    "Direct typed materialization in a named NL stage is not alone proof of crisp semantic algorithm displacement; explicit scoped-child compliance is tracked separately"
+  ]
+}

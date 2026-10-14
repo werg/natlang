@@ -1,0 +1,70 @@
+{
+  "caseId": "glass-harbor",
+  "documents": [
+    {
+      "id": "NOTATION",
+      "path": "conventions/notation.md",
+      "role": "convention"
+    },
+    {
+      "id": "POLICY",
+      "path": "conventions/editorial.md",
+      "role": "convention"
+    },
+    {
+      "id": "PERFORMANCE",
+      "path": "controls/performance.md",
+      "role": "control"
+    },
+    {
+      "id": "HISTORY",
+      "path": "provenance/history.md",
+      "role": "control"
+    },
+    {
+      "id": "AUTO",
+      "path": "partbooks/autograph/score.md",
+      "role": "autograph"
+    },
+    {
+      "id": "COPY1",
+      "path": "partbooks/copy1/dock.md",
+      "role": "copy"
+    },
+    {
+      "id": "COPY2",
+      "path": "partbooks/copy2/dock.md",
+      "role": "copy"
+    },
+    {
+      "id": "DURATION_SLIP",
+      "path": "editorial/duration-slip.md",
+      "role": "editorial"
+    },
+    {
+      "id": "PITCH_SLIP",
+      "path": "editorial/pitch-slip.md",
+      "role": "editorial"
+    },
+    {
+      "id": "COPYIST_NOTE",
+      "path": "editorial/copyist-expansion.md",
+      "role": "editorial"
+    },
+    {
+      "id": "PLAYER_NOTE",
+      "path": "editorial/player-aid.md",
+      "role": "editorial"
+    },
+    {
+      "id": "REHEARSAL",
+      "path": "rehearsal/independent.md",
+      "role": "rehearsal"
+    },
+    {
+      "id": "REHEARSAL_COPY",
+      "path": "rehearsal/copied.md",
+      "role": "copy"
+    }
+  ]
+}

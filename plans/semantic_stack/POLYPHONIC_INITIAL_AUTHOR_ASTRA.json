@@ -1,0 +1,65 @@
+{
+  "schema": "natlang.semantic-application-author-quality/1",
+  "author": "semantic_slate_astra",
+  "application": "polyphonic-edition-workshop",
+  "composition": {
+    "nl_files": 27,
+    "physical_lines": 626,
+    "numbered_steps": 172,
+    "type_aliases": 51
+  },
+  "source_policy": "Typed numbered NL stages own source interpretation, authority, target alternatives, family dependence, global claim consistency, notation state and ensemble scope. Crisp visible TS declares types only.",
+  "source_files": {
+    "applications/polyphonic-edition-workshop/reconstructEdition/arbitrateReadings/advanceReading/compareSupport.nl": "0685978bbf13e6cd37d87ad8abf19afc81224710d8b46671a3373b093fe647bc",
+    "applications/polyphonic-edition-workshop/reconstructEdition/arbitrateReadings/advanceReading/resolveTargets.nl": "766529d9bcd01fdeb2e4ac8c349ec6f19ab4658259ae0bb374ca390ede461718",
+    "applications/polyphonic-edition-workshop/reconstructEdition/arbitrateReadings/advanceReading.nl": "4c3c3aac471cfb3143cf998aaada10f64e258431d09f14862191fac218b042cc",
+    "applications/polyphonic-edition-workshop/reconstructEdition/arbitrateReadings.nl": "c3547a22fac172de6c7056bb42ddbba4fc4f9a197db889c9dd2e86d3d7b9a58e",
+    "applications/polyphonic-edition-workshop/reconstructEdition/assembleEditions/advanceHypothesis/checkClaimConsistency.nl": "20a83f94969d96d029ec4f5beafe3a9cfe16abca97ea615edae0d22a169c5574",
+    "applications/polyphonic-edition-workshop/reconstructEdition/assembleEditions/advanceHypothesis.nl": "380b7624311ee0efa8bafe02958d1364b86309a72b40fbc2d7fd27bcf7f76567",
+    "applications/polyphonic-edition-workshop/reconstructEdition/assembleEditions.nl": "f0ed403c3093bf6b45f069af530032f25754aa6ddb9962469b20bb5622ad1b4a",
+    "applications/polyphonic-edition-workshop/reconstructEdition/auditEdition.nl": "d981470a2aafd66602e99875a5c4f42dc6f5da307627dd79a6cdd71466ca58d3",
+    "applications/polyphonic-edition-workshop/reconstructEdition/buildFamilies/advanceFamily.nl": "2a7c29fc8762a5f0f21b568b1e02ce11b4b2a70756d72086c6d9217028c741c5",
+    "applications/polyphonic-edition-workshop/reconstructEdition/buildFamilies.nl": "26a680886246f011171250a5b70bbc33b80287232558433b95ec726cfd1f2390",
+    "applications/polyphonic-edition-workshop/reconstructEdition/checkEnsemble/judgeConstraint.nl": "252838cd4d68278a0d0ef64f7b68c123b64e00d600848434f4810cf435d76d01",
+    "applications/polyphonic-edition-workshop/reconstructEdition/checkEnsemble.nl": "b32bc280157afb61be80039f149490fdb791e11ac2fb77cd7d2516908b5a9a9e",
+    "applications/polyphonic-edition-workshop/reconstructEdition/explainAlternatives.nl": "15d9539d3f288dac899a6f4638f34de32a91d1ec461df75f232b138e4406b43f",
+    "applications/polyphonic-edition-workshop/reconstructEdition/performEditions/advanceOccurrence/advanceVoiceEvent/judgeEventEffect.nl": "f573b7fedcb61b2dfdb797af352684e800098d5337e5c9f08d672d42532ebe24",
+    "applications/polyphonic-edition-workshop/reconstructEdition/performEditions/advanceOccurrence/advanceVoiceEvent.nl": "1621fd5bfc36c0dd997d6762c7ea8f4950620807e332d59a7f18cebceb5c3294",
+    "applications/polyphonic-edition-workshop/reconstructEdition/performEditions/advanceOccurrence.nl": "b6909dada00cb7a4622c9fcd04080992614ac7ed1145f11cd30336ac253a8361",
+    "applications/polyphonic-edition-workshop/reconstructEdition/performEditions.nl": "7e6538a8d0c3c8f96f1609f8d927442919353753f4258a9ad2fe27b72450c4ab",
+    "applications/polyphonic-edition-workshop/reconstructEdition/readArchive/classifyWitnesses.nl": "6ddbe939acc2a3b60c2f44a564ed26676fbdae072ae1ae48837d41f9681f9a36",
+    "applications/polyphonic-edition-workshop/reconstructEdition/readArchive/readConventions.nl": "75b61e9f0d30721fcc4388c69c50f7c350e33e4445b9ff9dc86b86cc7807236c",
+    "applications/polyphonic-edition-workshop/reconstructEdition/readArchive/readEditorialClaims/judgeAuthority.nl": "4d66f14835143267b3a3902d52e31985b9607c8c7186f4da9f7e7dc178af4f37",
+    "applications/polyphonic-edition-workshop/reconstructEdition/readArchive/readEditorialClaims.nl": "65f74fc9daa68ddd11acd873b0e059065a42bd0a7d3a497bc84d4877390ea759",
+    "applications/polyphonic-edition-workshop/reconstructEdition/readArchive/readPartbooks/advanceLocation/interpretNotation.nl": "6c379235540e182b12386604244c7ca16286628fda4b19b6069a6307d40d10b2",
+    "applications/polyphonic-edition-workshop/reconstructEdition/readArchive/readPartbooks/advanceLocation.nl": "2a59407f46b9fb96b7319ae33e34063e9a4df004c50b3ce7efdbcf6428fcbc7f",
+    "applications/polyphonic-edition-workshop/reconstructEdition/readArchive/readPartbooks.nl": "8f228623f34f8f22c36f496602fbb30cdb94a198abf6af3b80b4cf5ce45681fc",
+    "applications/polyphonic-edition-workshop/reconstructEdition/readArchive/readRehearsal.nl": "a5ee9b3d80b614178164c81913ced74584e9dd5334a181ce61f4e79a82bb3666",
+    "applications/polyphonic-edition-workshop/reconstructEdition/readArchive.nl": "2c034170c1280b050140672c64fab7ecb7f4ba8831ac50269105ec222531398f",
+    "applications/polyphonic-edition-workshop/reconstructEdition.nl": "405501e9d1d7ec01d25d6e1bf7899922d7b6e6a9b0f5a3133f3af8bc2a021483",
+    "applications/polyphonic-edition-workshop/types.ts": "822048dcfd28fce0401a0b81f549dfb6f6cad9ca382146f62f43f6ec327af158"
+  },
+  "controls": {
+    "positive": 8,
+    "negative": 33,
+    "passed": true
+  },
+  "canonical_reference_sha256": "5122bd67f8ca8b1290da5de43a7b17c356a5cd0140c086d14d6dae3a62e19dfe",
+  "external_verifier_sha256": "7f32061e7453e3b33d73ca098471416b8f26fb1ee3b7b47cb5f1c962e086d5dd",
+  "reference_ok": true,
+  "native_typecheck_ok": true,
+  "independent_review_pending": false,
+  "live_samples": 0,
+  "training_admission": false,
+  "limitations": [
+    "Authored canonical witness does not execute NL.",
+    "Exact finite checks do not establish semantic entailment.",
+    "Independent review and live trajectory qualification remain separate."
+  ],
+  "independent_review": {
+    "path": "plans/semantic_stack/POLYPHONIC_EDITION_REVIEW_POP.json",
+    "sha256": "55f06c3c787116336791c64d683b90373421ce8bb9e8e468ee3e5d214b6e45f3",
+    "reviewer": "pop-semantic-curriculum",
+    "scope": "Independent source reconstruction, typed flow and finite verifier controls; no live or training credit"
+  }
+}

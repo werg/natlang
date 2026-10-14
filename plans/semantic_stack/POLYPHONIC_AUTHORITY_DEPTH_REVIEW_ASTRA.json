@@ -1,0 +1,22 @@
+{
+  "schema": "natlang.application-source-delta-review/1",
+  "reviewer": "semantic_slate_astra",
+  "project": "astra-app-polyphonic-edition-v1",
+  "variant": "authority-depth-v2",
+  "reviewed_files": {
+    "applications/polyphonic-edition-workshop/reconstructEdition/readArchive/readEditorialClaims.nl": "d1d310347120a17eba299a6d96ecd992cfce68ee1b7de7d779e2672c6b70c7f6",
+    "applications/polyphonic-edition-workshop/reconstructEdition/readArchive/readEditorialClaims/judgeAuthority.nl": "148520419c15655f7cf0187e9e1684ab3ba582fb23e714b37fbecb2c4e2305f7"
+  },
+  "findings": [
+    "The reader sees the full source-clause inventory and now explicitly passes the selected policy clauses, original act clauses and role index to the typed authority child.",
+    "The child contains a genuine numbered natural-language candidate, authentication, scope and uncertainty procedure; no case-specific crisp policy is substituted.",
+    "The child result's authority, scope and reason are consumed by the reader, with clause-keyed quotation and original witness binding.",
+    "A decisive established attribution or agreement across every still-supported attribution is required for true; a nonempty supported candidate set is required for false.",
+    "Authenticated source role or form may establish authority without an invented personally named issuer; this is necessary for the original signed instructions S01 and S02."
+  ],
+  "fixture_oracle_unchanged": true,
+  "source_delta_review_passed": true,
+  "actual_application_execution": false,
+  "live_samples": 0,
+  "training_admission": false
+}

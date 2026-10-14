@@ -15,6 +15,8 @@ returns: TheoryIndex
 4. Invoke advanceTicket.iterateOn on that state. Its measure is pending.length; each step consumes
    exactly its first original unit and appends one typed result. The original finite unit inventory is
    fixed. Completed successes remain present when another unit has missing or conflicting evidence.
+   The returned next frontier is the sole next-step input; this parent iterateOn owns every subsequent
+   ticket invocation, while each child finishes immediately after its one retained result.
 5. Require completed ticket IDs to equal the original unit IDs exactly once. Project accepted nonnull
    tickets from those actual results; retain every unresolved or failed ticket ID with its specific
    issue. A source contradiction cannot be repaired by dropping its unit from coverage.

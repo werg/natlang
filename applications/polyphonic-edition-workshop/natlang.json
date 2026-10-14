@@ -1,0 +1,1 @@
+{"schema":"natlang.package/v2","name":"@natlang/polyphonic-edition-workshop","version":"0.1.0","description":"Source-grounded ensemble editions with dependent witnesses and stateful notation.","include":["types.ts","reconstructEdition.nl","reconstructEdition","tsconfig.json"],"engines":{"natlang":">=0.1.0","node":">=22.13.0"}}

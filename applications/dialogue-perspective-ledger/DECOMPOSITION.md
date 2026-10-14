@@ -133,3 +133,19 @@ actual verifiedFactIds into participant availability. Private intention has its 
 proposition; it supplies no communicated cancellation. Adoption IDs are actual scoped act identities.
 Retraction joins real beneficiary views and issuer-owned commitments, with separate owner/adopter fields
 in the returned delta; later fact/deadline recomputation preserves terminal retraction.
+
+## Canonical certificate and exact verifier boundary
+
+One private authored certificate records14 original turns,18 scoped acts,22 episodes and16 query
+answers. Its annotations are a source witness, not an executable semantic extraction algorithm or
+an application trajectory. It is excluded from both visible fixture and application roots. The exact
+checker validates original identities/quotes, clock order, declared availability bounds, actual typed
+delta-to-history propagation, generated-reference integrity and declared query projections. It accepts
+consistent generated-ID renaming, unordered source/quote/proof collections and free explanations.
+It neither classifies utterances nor proves that a quoted source entails a returned speech meaning;
+independent semantic and full live contribution review remain required. Knowledge observables test
+whether the requested knowledge criterion qualifies, separately from the underlying proposition value.
+
+Source-established cutoff/day-end closures are typed boundary episodes, separate from physical occurrences,
+utterances and receipts. The episode NL stage derives their source role and clock from actual act conditions
+and due fields, retaining original witnesses and granting no participant access by the boundary itself.

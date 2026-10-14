@@ -421,6 +421,7 @@ def test_the_guard_preempts_for_the_queue_head_then_relaunches_when_room_returns
     monkeypatch.setattr(ledger, 'terminate', lambda unit, container: calls.append(unit))
     monkeypatch.setattr(ledger, 'launch', lambda spec: launched.append(spec['unit']) or 0)
     monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('inactive', ''))
+    monkeypatch.setattr(ledger, 'forget_failure', lambda unit: None)
     monkeypatch.setattr(ledger, 'time', type('T', (), {'time': staticmethod(lambda: now[0]), 'sleep': staticmethod(lambda s: None)}))
     now = [10000.0]
     with ledger.ledger() as state:

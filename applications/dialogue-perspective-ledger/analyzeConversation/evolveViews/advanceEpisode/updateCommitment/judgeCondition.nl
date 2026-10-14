@@ -22,7 +22,8 @@ returns: ConditionReading
 5. For role fulfillment interpret the actual promised consequent independently from activation.
    Apply its source day/hour due scope: an unspecified hour remains null, while a later-day event is late.
    Complete bounded absence can establish false timely fulfillment; incomplete absence remains null.
-6. issuerKnows needs actual issuer endorsement plus available verified support. beneficiaryBelieves
+6. issuerKnows tests knowledge of the actual predicate truth value, including knowing it is false;
+   it needs actual issuer endorsement of that value plus available corroborating verified support. beneficiaryBelieves
    examines actual beneficiary endorsement in its own supplied view. Absence of a required view stays
    null rather than borrowing another actor's belief. Multiple beneficiaries remain unresolved if they differ.
 7. Return the actual three-channel reading and source witnesses. A child false on actual fulfillment

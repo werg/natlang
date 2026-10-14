@@ -25,12 +25,20 @@ const evaluator = (driver, options = {}) => new SourceEvaluator({ entry: 'solve.
   cases, driver, new UsageGateway({ maxModelCalls: 10, maxRollouts: 5, maxProposals: 0 }), { executorId: 'delayed-test', timeoutMs: 3000, ...options });
 
 test('explicit local execution budget excludes pending model time', async () => {
-  // The local work (cold compile and run) must fit the budget on a loaded machine; the model wait alone exceeds it.
-  const report = await evaluator(delayed(3500), { excludeModelWaitFromTimeout: true }).evaluate(folder(), { split: 'train' });
+  // Calibrate the worker's cold local path on this machine. Under a loaded DGX,
+  // startup/compilation can exceed a fixed 3 s before the first model request.
+  const started = performance.now();
+  const baseline = await evaluator(delayed(0), { timeoutMs: 30000, excludeModelWaitFromTimeout: true }).evaluate(folder(), { split: 'train' });
+  assert.equal(baseline.quality, 1, JSON.stringify(baseline.outcomes));
+  assert.equal(baseline.modelCalls, 1);
+  const timeoutMs = Math.max(3000, Math.ceil(3 * (performance.now() - started) + 500));
+  const modelDelayMs = timeoutMs + 500;
+  const report = await evaluator(delayed(modelDelayMs), { timeoutMs, excludeModelWaitFromTimeout: true }).evaluate(folder(), { split: 'train' });
   assert.equal(report.quality, 1, JSON.stringify(report.outcomes));
   assert.equal(report.modelCalls, 1);
-  const old = await evaluator(delayed(3500)).evaluate(folder(), { split: 'train' });
+  const old = await evaluator(delayed(modelDelayMs), { timeoutMs }).evaluate(folder(), { split: 'train' });
   assert.equal(old.outcomes[0].failureKind, 'timeout');
+  assert.equal(old.modelCalls, 1);
   assert.equal(old.quality, 0);
 });
 
