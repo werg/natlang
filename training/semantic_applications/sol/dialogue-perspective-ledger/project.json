@@ -628,10 +628,11 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": false,
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "live_qualified": false,
-    "training_admitted": false
+    "training_admitted": false,
+    "independent_source_review": true
   },
   "reference_scope": "Full authored typed source certificate passes native declaration and package replay; no actual NL application trajectory or complete semantic entailment oracle.",
   "model_facing_debt": "Current29NL/206step source requires independent semantic/full certificate/checker review and approximately48 live samples before adoption.",
@@ -639,6 +640,19 @@
   "reference_path": "training/semantic_applications/sol/dialogue-perspective-ledger/portico-packet/reference-report.json",
   "reference_role": "One private authored full typed source certificate; not an NL execution or complete semantic oracle.",
   "external_verifier_path": "training/semantic_applications/sol/dialogue-perspective-ledger/verify-result.mjs",
-  "generation_ready": false,
-  "readiness_scope": "Source/full certificate/exact comparator awaiting independent review. No live qualification or training admission."
+  "generation_ready": true,
+  "readiness_scope": "First-world pinned diagnostic preparation; actual live and training admission false.",
+  "independent_reviews": [
+    {
+      "path": "plans/semantic_stack/DIALOGUE_FULL_REVIEW_ASTRA.json",
+      "sha256": "6178de67564585173365330bcdc4deed7917e39f015d95cc4f4d152acdba7dc1",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Full first-world29NL source,16observable oracle,fulltyped canonical and51exactcontrols. Four dangling/omitted provenance findings closed; no actual NL execution or training admission."
+    }
+  ],
+  "source_review_binding": {
+    "reviewed": true,
+    "scope": "First-world source/checker independent review b7a5a21d; diagnostic preparation only"
+  },
+  "training_admission": false
 }
