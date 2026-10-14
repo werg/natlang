@@ -4,14 +4,14 @@
   "date": "2026-10-14",
   "result": "passed_focused_numbered_policy_refinement",
   "hashes": {
-    "applications/seed-lineage-laboratory/designExperiments/predictExperiments/partitionAnswers.nl": "28cd6cfa6cece6925b1d8c351e9d137f0562a35048eb74b131805c406bd6f301",
+    "applications/seed-lineage-laboratory/designExperiments/predictExperiments/partitionAnswers.nl": "8cafeaa5394078e141b848a3e8ee15c9770c5af5f1c0e1b895da69a435743454",
     "applications/seed-lineage-laboratory/designExperiments/planPolicy/valueBeliefNode/compareCandidates.nl": "8980f58cf2c036e0a1ddabc00610017d2e22199ab1cb77aa62bb84d4223e44be",
     "applications/cave-mission/planMission/designPolicy/evaluateBranches/settleValue.nl": "8ddb52ead53c6106df4196e8a9e96470cc45ca565080e65faef141ed0ec2098f"
   },
   "source_semantics": [
     {
       "path": "applications/seed-lineage-laboratory/designExperiments/predictExperiments/partitionAnswers.nl",
-      "judgment": "Actual assay readout equivalence determines finite observation classes before exact weighting. Every posterior world has a likelihood row including zero; missing and zero differ. Positive-branch goal membership preserves within-mechanism genotype alternatives. Later conditional node reweighting is explicit."
+      "judgment": "Actual assay readout equivalence determines finite observation classes before exact weighting. Every posterior world has a likelihood row including zero; missing and zero differ. Positive-branch goal membership preserves within-mechanism genotype alternatives. Later conditional node reweighting is explicit. Established invalidity stays usable=false; unresolved meaning or missing evidence stays usable=null, preserving typed uncertainty."
     },
     {
       "path": "applications/seed-lineage-laboratory/designExperiments/planPolicy/valueBeliefNode/compareCandidates.nl",
@@ -46,5 +46,6 @@
     "Approximately48 samples before adoption"
   ],
   "live_qualified": false,
-  "training_admission": false
+  "training_admission": false,
+  "precision_followup": "Accepted final nullable usability distinction after initial d9ef61eb receipt; signatures, fixture, oracle and canonical values unchanged."
 }
