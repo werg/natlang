@@ -280,8 +280,11 @@ def container_cgroups(names):
     two names of one container count once)."""
     if not names:
         return []
-    out = subprocess.run(['docker', 'inspect', '-f', '{{.Id}} {{.State.Running}}', *names],
-                         capture_output=True, text=True).stdout.split('\n')
+    try:
+        out = subprocess.run(['docker', 'inspect', '-f', '{{.Id}} {{.State.Running}}', *names],
+                             capture_output=True, text=True).stdout.split('\n')
+    except FileNotFoundError:
+        return []
     ids = [line.split()[0] for line in out if line.strip().endswith(' true')]
     return [f'/sys/fs/cgroup/system.slice/docker-{i}.scope' for i in dict.fromkeys(ids)]
 
@@ -873,7 +876,11 @@ def unit_containers(unit, command=None, extra=(), cgroup=None):
 
 
 def container_running(name):
-    out = subprocess.run(['docker', 'inspect', '-f', '{{.State.Running}}', name], capture_output=True, text=True)
+    try:
+        out = subprocess.run(['docker', 'inspect', '-f', '{{.State.Running}}', name], capture_output=True, text=True)
+    except FileNotFoundError:
+        # The ledger also manages pure systemd jobs on machines without Docker.
+        return False
     return out.stdout.strip() == 'true'
 
 
