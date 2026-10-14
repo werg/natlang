@@ -72415,6 +72415,26 @@
         }
       },
       "notes": "Read R7 only as a filtered raw snapshot. No R6/R7 weights or optimizer continuation. Independent full twins32539documents; original external teacher correctness unknown."
+    },
+    {
+      "id": "external-expansion-evidence-terminal-handoffs-20261014-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-evidence-terminal-handoffs-20261014-v1",
+      "include": [
+        "*.port-records.jsonl",
+        "manifest.json",
+        "admission-review.json"
+      ],
+      "source_class": "external-static-typed-handoff",
+      "training_admission": true,
+      "training_admission_reason": "Owner authorizes static natlang-like external coding and Neuralese teacher data.",
+      "derived_from": [
+        "external-expansion-d10-source-20261014-v1",
+        "external-expansion-d29-source-20261014-v1",
+        "external-expansion-d33-source-20261014-v1"
+      ],
+      "license": "Pinned upstream source-card facts retained in source manifests.",
+      "notes": "Upstream teacher correctness unknown; independent task execution not claimed. Native replay/render and recipe bindings are separate steps."
     }
   ],
   "coverage_backlog": [

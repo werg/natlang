@@ -1,5 +1,50 @@
 # Continuation guide — updated 2026-10-14
 
+## 18:42 CEST: clean R8 warmup handoff and Pop monitoring
+
+R7 training is withdrawn: the R7 union lost protected MuSiQue group exclusions, so
+Pop stopped its clean-QAD attempt at update 38 and deleted that run directory and
+optimizer checkpoint. R5, R6 and R7 registry admission is false. Do not resume
+or reuse any R7 weights. DGX is building protected R8 and has registered the
+**full-stage-only** prefix `natlang-target-union-r8-full-prefix-20261014-v1` on
+main. Pop has locally verified its three manifest files (81,747,806 bytes;
+manifest object SHA `3eb4133fbaed8bc922aca5a88fb5344a004a8557ed05c72dac1e86f930fc505d`).
+The prefix proof records identical 32,539 LFM/Mellum full document identities,
+29,781 train and 2,758 held per tokenizer, no overlap with quarantined MuSiQue
+groups, no local train/held overlap, and no pending source-review train overlap.
+This admits the **full warmup only**, not the unfinished R8 program-header or
+whole-trajectory phases. DGX owns the R8 builder and final qualification.
+
+Pop prepared `training/neuralese/recipes/neuralese-direct-lfm-qad-r8-clean-warmup-20261014-v1.json`:
+fresh QAD heads, exact R8 prefix hash, current package-code and image pins,
+only `direct_warmup`. Its plan-only preflight passed inside the training image
+with the host `zstd` mount; clean training launch awaits DGX's supplemental
+global held-group check. After a qualified warmup, use the **existing**
+`neuralese_direct` full-state phase continuation for PH: `continue_from` is
+the exact warmup `checkpoint.pt`, `continue_identity` its
+`identity-check.json`, and `continue_monitor_reference` its
+`monitor-reference.pt`, plus the same pinned clean heads. See
+`neuralese-direct-mellum-v4-from-v3-warmup.json`. A proposed same-lineage
+held-stage activation was discarded before commit once DGX identified this
+existing mechanism; do not add another handoff path. Finishing the warmup
+step count alone is not qualification.
+
+Pop Luna s52059 had 82 completed results (78 accepted) at 16:26 UTC; s52060
+and s52061 are queued/starting through the replenisher timer. One of four
+s52059 exact-answer rejections is a false negative from Banking77 source
+labels: `compromised_card` text explicitly says transactions are not
+recognized, so the generated natural-language routing rule applies despite
+the label oracle. Do not use that row as a model-negative or DPO pair.
+Field Gloss v4 onecase reached 887 saved turns before its 2 GB ledger OOM;
+resumed with 3.2 GB to 907 turns, then Pop stopped the exact resumable unit
+to prioritize full checks and clean training. Its partial trace remains the
+current bug investigation; evidence snapshots are large and `/srv/storage`
+has about 3 GB free. Pop's full gate after the corpus-status fix passed general,
+Neuralese, GPU, TypeScript, and conformance checks (`b01d1876`, pushed).
+The later held-stage-activation full gate was stopped because that approach
+was discarded, with both uncommitted runtime/test edits restored. Keep
+checking `coord.py` inbox and the Luna/Gemini timers at least every 50 minutes.
+
 ## 13:10 CEST: Pop student-root diagnostic and active work
 
 Pop student-root fix `55439aae` is pushed. Full TypeScript gate v3 passed
