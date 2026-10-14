@@ -615,12 +615,12 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": false,
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "exact_checker_controls_passed": 22,
     "live_qualified": false,
     "training_admitted": false,
-    "source_variant_review": "Current v9 dependency closure source/type/progress pending independent review"
+    "source_variant_review": "Focused v9 dependency-closure source/type/progress independently reviewed; actual live pending"
   },
   "fixture_document_count": 10,
   "fixture_clause_count": 31,
@@ -650,7 +650,7 @@
     "parent_review": "c759e85e",
     "live_parent_finding": "v8 partial be16f95d, Amber support /49turn106 and convention /51turn114",
     "meaning": "Actual typed origin/identity/fixed-point/orientation groups and exact source evidence are unioned into convention input and retained in FrameUnitResult; no numerical fallback.",
-    "independent_source_review": false,
+    "independent_source_review": true,
     "author_controls": {
       "frame_progress": 33,
       "item_witness": 28,
@@ -688,6 +688,12 @@
       "sha256": "c994373a3f2d4bdc5c1bdde6752d69dc810be3588fd9b3bf2132ac0f0230c461",
       "reviewer": "semantic_stack_curriculum",
       "scope": "Independent original-name/token binding and actual one-unit frame/landmark result progress; both source alternatives,27exactcontrols and policy-location audit. No live/admission."
+    },
+    {
+      "path": "plans/semantic_stack/CAVE_SUPPORT_CLOSURE_V9_REVIEW_POP.json",
+      "sha256": "b3245b3ee59fdd8d0087d3488435c347b0ced10496429490ab570b2bae8f77de",
+      "reviewer": "semantic_stack_curriculum",
+      "scope": "Independent v9 actual dependency closure/union/raw-return source and exact33+28+22controls, native/type/canonical. No live/admission."
     }
   ],
   "current_policy_source_revision": {
@@ -706,9 +712,9 @@
       "scope": "Focused consumer-depth and actual Assay/input-scope follow-up; no live credit"
     }
   },
-  "readiness_scope": "v9 source-only until focused independent review; historical original-world review retained, no live/training admission.",
-  "generation_ready": false,
+  "readiness_scope": "Pinned one-case v9 diagnostic preparation only; actual live semantic/consumed-literal review and training admission false.",
+  "generation_ready": true,
   "training_admission": false,
-  "pending_independent_source_review": "Typed dependency groups and original quote binding/union; source selection remains numbered NL.",
+  "pending_independent_source_review": null,
   "historical_source_world_review_status": "Original mirrored-vault oracle remains independently reviewed; current v8 source handoff has not yet been independently reviewed."
 }
