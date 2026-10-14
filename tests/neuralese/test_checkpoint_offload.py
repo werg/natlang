@@ -60,6 +60,56 @@ def test_the_latest_slot_is_mirrored_but_stays_on_the_nvme(layout):
     assert not again['copied']  # the mirror is current: no second copy
 
 
+@pytest.mark.parametrize('role,name', [('latest', 'checkpoint.pt'), ('archive', 'best-checkpoint.pt')])
+def test_atomic_publication_keeps_the_opened_snapshot_but_never_replaces_its_successor(layout, monkeypatch, role, name):
+    out, mirror_dir = layout
+    slot = write(out / name, b'a' * 4096)
+    original_identity = co._identity(slot.stat())
+    successor = write(out / (name + '.pending'), b'b' * 4096)
+    monkeypatch.setattr(co, 'CHUNK', 1024)
+    monkeypatch.setattr(co, 'SYNC_EVERY', 1024)
+
+    def publish_successor(*streams):
+        if successor.exists():
+            os.replace(successor, slot)
+
+    monkeypatch.setattr(co, '_drop', publish_successor)
+    if role == 'latest':
+        event = co.offload_one(slot, role, co.OffloadSettings.from_env(), copier=co.local_copy)
+        assert event['copied']
+    else:
+        with pytest.raises(RuntimeError, match='changed before its link swap'):
+            co.offload_one(slot, role, co.OffloadSettings.from_env(), copier=co.local_copy)
+    mirror = mirror_dir / name
+    assert mirror.read_bytes() == b'a' * 4096
+    assert co.read_record(mirror)['source_identity'] == original_identity
+    assert co.mirror_current(slot, mirror) is None
+    assert not slot.is_symlink() and slot.read_bytes() == b'b' * 4096
+    assert not list(mirror_dir.glob('*.offload.part'))
+
+
+def test_in_place_source_mutation_is_rejected_even_when_the_copied_bytes_hash_matches(layout, monkeypatch):
+    out, mirror_dir = layout
+    slot = write(out / 'checkpoint.pt', b'a' * 4096)
+    monkeypatch.setattr(co, 'CHUNK', 1024)
+    monkeypatch.setattr(co, 'SYNC_EVERY', 1024)
+    changed = False
+
+    def mutate_source(*streams):
+        nonlocal changed
+        if not changed:
+            with slot.open('ab') as stream:
+                stream.write(b'b')
+            changed = True
+
+    monkeypatch.setattr(co, '_drop', mutate_source)
+    with pytest.raises(RuntimeError, match='changed during the copy'):
+        co.offload_one(slot, 'latest', co.OffloadSettings.from_env(), copier=co.local_copy)
+    assert slot.read_bytes() == b'a' * 4096 + b'b'
+    assert not (mirror_dir / slot.name).exists()
+    assert not list(mirror_dir.glob('*.offload.part'))
+
+
 def test_a_copy_that_fails_verification_leaves_the_file_and_no_partial(layout, monkeypatch):
     out, mirror_dir = layout
     best = write(out / 'best-checkpoint.pt')
