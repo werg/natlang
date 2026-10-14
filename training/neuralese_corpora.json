@@ -67212,6 +67212,27 @@
         "held_text": {}
       },
       "notes": "Mellum twin of admitted closed Luna backlog; same5 split-reservation collisions excluded,2 unresolved direct source references omitted. Wholetrajectory has1 unresolved hash-bound Neuralese message body; omission retained for source repair, no guessed source. No new examples admitted."
+    },
+    {
+      "id": "qad-student-root-recovery-s52052-v1",
+      "owner": "pop",
+      "path": "runs/qad-student-recovery-teacher-20261014-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "native-turns.review-candidates.jsonl",
+        "approved-turns.jsonl",
+        "admission-review.json",
+        "accepted-parents.review.json"
+      ],
+      "source_class": "project-generated typed natlang train-only student-handoff teacher continuations",
+      "license": "project-generated",
+      "split": "train only; source IDs and source groups disjoint from protected QAD held48 packet and prior selected train rollout",
+      "admission": "nine exact native oracle teacher continuations; 57 successful decision targets only, replayed student and failed teacher decisions excluded; one arbitrary-bound loop parent held",
+      "training_admission": true,
+      "training_admission_reason": "Review of exact train-only source binding, protected held overlap, native action status, and idiomatic iteration. See admission-review.json; pair labels separately unadmitted.",
+      "review_status": "source/held-group, parent exact oracle, decision-level success and materialization reviewed; composed process repair held for arbitrary 10,000-step loop",
+      "required_conversion": "render approved-turns.jsonl for LFM and Mellum at low recovery mixture weight, then include in next target union",
+      "notes": "Nine distinct curriculum families. Review-only source records are provenance; approved-turns.jsonl alone is the training input."
     }
   ],
   "coverage_backlog": [
