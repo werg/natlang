@@ -87,11 +87,35 @@ def score_gold(engine, row):
     nll = -log_probs.gather(1, gold[:, None]).squeeze(1)
     agree = logits[0].argmax(-1) == gold
     disagreement = (~agree).nonzero().flatten()
+    # This is diagnostic segmentation of the already-rendered target, not a
+    # second target renderer: labels do not alter the score or the loss mask.
+    suffix = ids[start:]
+    decoded = engine.tokenizer.decode(suffix, skip_special_tokens=False)
+    call_open = decoded.find('<|tool_call_start|>')
+    tool_begin = decoded.find('[', call_open) if call_open >= 0 else -1
+    argument_begin = decoded.find('(', tool_begin) if tool_begin >= 0 else -1
+    call_close = decoded.find('<|tool_call_end|>', argument_begin) if argument_begin >= 0 else -1
+    offsets = [len(engine.tokenizer.decode(suffix[:i], skip_special_tokens=False)) for i in range(len(suffix) + 1)]
+    groups = {'reasoning_or_reply': [], 'tool_name': [], 'tool_arguments': [], 'action_delimiters': []}
+    for i, position in enumerate(offsets[:-1]):
+        if tool_begin <= position < argument_begin and tool_begin >= 0:
+            groups['tool_name'].append(i)
+        elif argument_begin <= position < call_close and argument_begin >= 0:
+            groups['tool_arguments'].append(i)
+        elif call_open < 0 or position < call_open:
+            groups['reasoning_or_reply'].append(i)
+        else:
+            groups['action_delimiters'].append(i)
+    grouped = {name: {'positions': len(index),
+                      'mean_nll': float(nll[index].mean()) if index else None,
+                      'argmax_agreement': float(agree[index].float().mean()) if index else None}
+               for name, index in groups.items()}
     return {'positions': int(gold.numel()), 'mean_nll': float(nll.mean()),
             'argmax_agreement': float(agree.float().mean()),
             'first_argmax_disagreement': None if not len(disagreement) else int(disagreement[0]),
             'first_16_nll': [float(x) for x in nll[:16]],
             'last_16_nll': [float(x) for x in nll[-16:]],
+            'target_regions': grouped,
             'gold_suffix_sha256': digest(ids[start:])}
 
 

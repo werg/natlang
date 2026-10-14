@@ -85,3 +85,15 @@ substantial probability to correct actions under the actual full prompt even
 though its sampled task rollouts often choose a different action. Continue the
 bug dragnet at action choice, length/repetition, and transfer from the declared
 program-header/full mix; do not treat this narrow audit as an approach verdict.
+
+The same exact logits segmented by the already-rendered action show where this
+case's difficulty lies. In full mode, the tool names and delimiters are
+near-certain (tool-name NLL 0.01/0.03; argmax both 100%). Arguments are also
+strong under gold history (NLL 0.34/0.01; argmax 93%/100%). The earlier
+reasoning/reply spans are much less certain (NLL 2.38/2.41; argmax 45%/44%).
+This is teacher forcing: a good score on later action tokens after gold
+reasoning does not show the model reaches that action under its own reasoning.
+Inspect the transition from self-generated reasoning to action in actual
+rollouts and measure whether reasoned continuation, repeated tool use or the
+decision to stop is the first divergence. Region boundaries are diagnostic
+labels, not a modified training target or mask.
