@@ -39,6 +39,8 @@ export class PageStore {
   has(id: string): boolean { return this.pages.has(id); }
   read(id: string, page: number): string {
     const pages = this.pages.get(id);
+    if (!pages && this.pages.size === 0)
+      throw new Error('No tool output was cut off in this call; use eval to inspect the value in scope.');
     if (!pages) throw new Error(`no cut-off output is named ${JSON.stringify(id)}; use an ID from a cut-off message`);
     if (!Number.isInteger(page) || page < 1 || page > pages.length)
       throw new Error(`${id} has pages 1 to ${pages.length}`);

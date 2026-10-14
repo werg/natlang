@@ -1505,7 +1505,7 @@ test('read_page on a name in scope says to use it in eval', () => {
   const { session } = open({ type: '() => number', instructions: 'Read the facts.' }, { services: { facts } });
   const paged = session.apply('read_page', { id: 'facts', page: 1 });
   assert.equal(paged.kind, 'rejected'); assert.match(paged.text, /facts is a name in eval's scope, so use it in eval \(for example facts\.page\(1\)/);
-  assert.match(session.apply('read_page', { id: 'amber', page: 1 }).text, /no cut-off output is named "amber"/);
+  assert.match(session.apply('read_page', { id: 'amber', page: 1 }).text, /No tool output was cut off in this call; use eval to inspect the value in scope/);
 });
 
 test('code written into a reply is answered with a note that it did not run', async () => {

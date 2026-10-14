@@ -29,7 +29,9 @@ only to preserve the shared nested-family/QAT stage map; bundle and launch
 
 ## Runnable evaluation and runtime inputs
 
-Bundle the recipe's named `direct_sft` inputs and these additional files at
+Bundle the recipe's named `direct_sft` inputs, the PH corpus manifest's two
+files (including `prefix-proof.json`), the qualified
+`direct-certificate.json` at the DGX handoff path, and these additional files at
 their logical paths. They are regular files in the DGX canonical checkout:
 
 | Logical path | SHA-256 |
