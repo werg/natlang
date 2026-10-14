@@ -1,0 +1,34 @@
+{
+  "schema": "semantic-render-review/1",
+  "reviewer": "Astra independent author/render review",
+  "variant": "plans/semantic_stack/ASTRA_ECOLOGY_BATCH_DELTA_V15D_PROPOSAL.json",
+  "variant_sha256": "6d0ca5a7b4e81ce34dd0bf3206b925f0b4e899c42137f37bbfc9806c99fe8fd9",
+  "rendered_root": "/tmp/semantic-v15d-builder-preflight-b-20261014/programs/astra/astra-ecology-01",
+  "source_candidates_sha256": "218d59b2a05dc6dae3f3d383294d86f51591ca48b02dad2e3898d0468ef8d8cc",
+  "source_reference_replay": {
+    "reported_by": "semantic_stack_curriculum",
+    "designs": 220,
+    "candidates": 23,
+    "failed": 0
+  },
+  "source_review": {
+    "batch_only_handoffs": true,
+    "terminal_global_audit_only_union": true,
+    "prior_support_witnesses_allowed": true,
+    "derived_edge_projection_guard": true,
+    "terminal_effect_frontier_not_misidentified_as_batch_delta": true,
+    "types_and_named_frontier_unchanged": true
+  },
+  "closed_findings": [
+    "v15c stage1 merged completed folders into StageInput2.prior; explicit batch-only handoff now rendered.",
+    "v15c terminal generic footer contradicted numbered delta contract; all stage footers now use current-batch ownership.",
+    "preflight-a terminal inherited child-delta forwarding despite EffectFrontier child; common and forwarding instructions separated before final seal."
+  ],
+  "limitations": [
+    "Exact typed/source replay does not execute the semantic application.",
+    "Guard prose requires actual live trace to establish execution and preservation of legitimate cross-folder support.",
+    "Current-batch record ownership is distinct from supporting witness provenance; semantic entailment remains review work."
+  ],
+  "live_samples": 0,
+  "training_admitted": false
+}

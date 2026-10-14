@@ -285,3 +285,18 @@ MirrorCheckpoint follows the existing asynchronous storage policy:
    source; never replace a newly published checkpoint with an older mirror.
 The crisp helper verifies opened-file identity, bytes, hash and atomic durability.
 It changes no model-facing text or training state, and does not relax pruning.
+
+## Remeasure a completed recurrence checkpoint — 2026-10-14
+
+EvaluateCompletedRecurrence uses the existing trainer's evaluator and restore:
+1. Require an explicit full-state continuation checkpoint and a distinct output
+   checkpoint path. Preserve its model, optimizer, RNG, fixed inputs and controls.
+2. Require the declared stage end to equal the saved step. In evaluation-only
+   mode, allow only the evaluation count and held test-chain count to change;
+   reject curriculum changes and all training-control or input changes.
+3. Select additional held chains from the existing test split, never the train
+   split. Record paired readers on the same writer states and emitted histories.
+4. Run zero optimizer updates structurally. Write evidence in the separate output
+   and leave the parent checkpoint untouched.
+The CLI flag and identity/step/path checks are crisp execution verifiers. This
+does not change prompts, generation, training objectives or ordinary resumes.

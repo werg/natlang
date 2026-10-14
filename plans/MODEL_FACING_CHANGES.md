@@ -401,3 +401,9 @@ global truth. Native loader/type checks pass; the private oracle currently conta
 not a full typed canonical report. **Measurement debt:**0/48 live samples, independent source review,
 full typed canonical/checker qualification and actual contribution-consumption trace review pending.
 Source size and projected expected answers grant no application execution or training admission.
+
+Dialogue initial-source precision now has200 numbered steps and46clauses. It supplies an actual authenticated archive-summary turn for two nested quote interiors, types activation and consequent predicates separately, and consumes source-bounded fulfillment judgments. Corroborating facts must match endorsement polarity; contrary evidence does not silently revise belief. The queried-force performed field and quote collection ordering are visibly specified. Full typed canonical/checker and independent source review remain pending; initial0/48 live debt is unchanged.
+
+### 2026-10-14 — Ecology current-batch contribution ownership v15d
+
+The v15c cursor visited the next folder correctly, but Stage1 and Stage5 copied earlier-folder arrays into the current batch, contradicting the single root append. V15d makes input.prior batch-local in all five stages, keeps completed folders exclusively in context.priorCompletedState, and returns current arrays with a global effectAudit. Exact root guards validate original source ownership and decision→edge→assessment→scope projections while allowing older supporting witnesses. Parent provenance retention is exact field transfer; relation meaning and global propagation remain numbered NL stages. Final source218d59b2... replays23/23; type/frontier/fixture/oracle unchanged. **Measurement debt:**0/48 live samples. Inspect second-folder owned arrays, legitimate cross-folder joins, one root append and final global audit before adoption. Frozen v15c remains assigned source diagnosis, not a model-negative or admitted trajectory.

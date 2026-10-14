@@ -15,11 +15,14 @@ returns: SpeechActMeaning
    original has performed false while its kind may still be promise; missing force scope stays null.
    Separate actual promise from quotation of a promise. A reporting-only sentence can identify the
    original target and meaning without creating a new commitment by the reporter or intermediate archive.
-4. A conditional promise names issuer, beneficiary, consequent and each independent prerequisite.
+4. A conditional promise names issuer, beneficiary, actual consequent predicates and each independent
+   activation prerequisite. Return conditions with role activation and consequences with role fulfillment.
    Preserve strict/inclusive temporal scope, personally performed acknowledgment and exact brief version.
-5. A correction or private note may explicitly endorse a proposition and target a previous act. Read
+5. An original day-only collection promise has a source-bounded collection consequent, not merely a
+   true statement about its due date. Preserve due hour null; the explicit day rule supplies timely scope.
+6. A correction or private note may explicitly endorse a proposition and target a previous act. Read
    the stated target rather than defeating every similar belief in every participant's ledger.
-6. Signed irony framing can defeat literal-praise endorsement. Missing tone cannot certify sincerity
+7. Signed irony framing can defeat literal-praise endorsement. Missing tone cannot certify sincerity
    or irony, and unknown pronoun attribution cannot be repaired by selecting the most likely actor.
-7. Return the actual meaning with nullable polarity/issuer, condition predicates, alternatives and
+8. Return the actual meaning with nullable polarity/issuer, condition predicates, alternatives and
    nonempty exact quotes. Classification does not itself grant the recipient adoption or verified knowledge.

@@ -9,7 +9,7 @@ and what a specific perspective can support at a requested time. Return a source
 The task is dialogue interpretation, not a legal obligation engine or an action planner.
 
 The central distinctions are speaker versus reporter, quotation versus endorsement, original utterance
-time versus forwarding time, factual truth versus participant belief, delivery versus adoption, private
+time versus forwarding time, factual truth versus participant belief, activation versus timely promised-consequent fulfillment, delivery versus adoption, private
 revision versus a communicated correction, and a conditional promise versus an event that happened.
 A report must preserve unsupported or genuinely ambiguous meanings. It cannot read another person's
 private note into a recipient's state just because the application sees the complete evidence folder.
@@ -94,7 +94,7 @@ remain exact. Free explanation wording requires independent semantic review, not
 ## First connected source world
 
 Planned original `portico-packet` world: five participants, two nested forwarding layers, an original
-"tomorrow" anchored before the forward, a before-noon conditional promise, an acknowledgment tied to a
+"tomorrow" anchored before the forward, an authenticated intermediate archive quote, a before-noon conditional promise, an acknowledgment tied to a
 specific brief version, an explicitly mistaken collection claim, actual later collection, recipient doubt
 and explicit adoption, a private correction reaching one recipient late, an ironic remark with signed
 context, and an unresolvable pronoun retained as ambiguity. Every fact participates in a query or in

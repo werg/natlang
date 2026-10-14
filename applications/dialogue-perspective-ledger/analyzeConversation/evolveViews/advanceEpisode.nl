@@ -12,7 +12,7 @@ returns: PerspectiveFrontier
    exactly those actor-owned belief effects, preserving independent contradictory beliefs unless defeated.
 4. For performed promise acts at their actual original event, call updateCommitment(act, episode,
    issuerView, currentViews, source, scoped). Only the actual issuer view owns this commitment. For previously
-   established commitments whose condition facts changed, call the same stage with their original act.
+   established commitments whose condition facts changed or whose source due boundary this episode crosses, call the same stage with their original act.
    Consume actual commitment additions/replacements; report-only acts cannot invent a new issuer promise.
 5. For an actual correction or explicit adopted retraction call resolveRetraction(act, episode, view,
    actualDecision, source). Consume targeted defeat/retraction IDs; a sender's private intention does not

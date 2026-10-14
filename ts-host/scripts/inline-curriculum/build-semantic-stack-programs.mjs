@@ -449,6 +449,7 @@ function render(entry, provider) {
     renameVariantStage(variant.cross_folder_accumulation, rename) : null;
   const typedHandoff = stageSpec?.typedEvidenceHandoff;
   const rootFolder = stageSpec && variant?.program_id === id ? variant.root_folder_iteration : null;
+  const batchDelta = stageSpec && variant?.program_id === id ? variant.batch_delta_contract : null;
   if (rootFolder) {
     if (!forwarding || !crossFolder || !typedHandoff ||
         rootFolder.state_type_name !== 'FolderReductionState' ||
@@ -464,6 +465,12 @@ function render(entry, provider) {
       throw Error(`${id}: invalid typed folder-cursor contract`);
     stageSpec.types.FolderReductionState = rootFolder.state_type;
   }
+  if (batchDelta && (!rootFolder || !typedHandoff ||
+      batchDelta.schema !== 'semantic-current-batch-delta/1' ||
+      !['root_plan', 'stage_plan', 'forwarding_plan', 'terminal_plan', 'guard_plan',
+        'exact_vs_semantic', 'recovery'].every(key =>
+        typeof batchDelta[key] === 'string' && batchDelta[key].trim())))
+    throw Error(`${id}: invalid current-batch delta contract`);
   const entityIdentity = stageSpec && variant?.program_id === id ? variant.entity_identity_contract : null;
   if (entityIdentity && ['join_key', 'source_quotes', 'scope'].some(key =>
     typeof entityIdentity[key] !== 'string' || !entityIdentity[key].trim()))
@@ -524,7 +531,7 @@ function render(entry, provider) {
     identityInstruction +
     (identities ? `Source ID binding (attach id and path to every EvidenceRecord, and use these exact IDs in the result):\n${identities.map(({ id, path }) => `${id}: ${path}`).join('\n')}\n\n` : '') +
     (rootFolder ?
-      `Use the typed FolderReductionState for the folder frontier. Initialize completedState:FinalSemanticState = ${JSON.stringify(crossFolder.initial_state)}. Initial folder state: ${rootFolder.initial_state}. sortedDirs is the finite sorted list of actual source folders; bind it once. ${rootFolder.static_context} Every source ID/path comes from the visible source table, and only Stage1 reads original EvidenceRecord text. The root owns exact folder selection and coverage checks, while the named NL stages own semantic judgments. Follow this folder reduction plan:\n${rootFolder.numbered_plan.join('\n')}\nBefore the iteration: ${rootFolder.idiom_preconditions}\nUse this typed iteration form: ${rootFolder.positive_idiom}\n` :
+      `Use the typed FolderReductionState for the folder frontier. Initialize completedState:FinalSemanticState = ${JSON.stringify(crossFolder.initial_state)}. Initial folder state: ${rootFolder.initial_state}. sortedDirs is the finite sorted list of actual source folders; bind it once. ${rootFolder.static_context} Every source ID/path comes from the visible source table, and only Stage1 reads original EvidenceRecord text. The root owns exact folder selection and coverage checks, while the named NL stages own semantic judgments. Follow this folder reduction plan:\n${rootFolder.numbered_plan.join('\n')}\n${batchDelta ? `Current-batch handoff: ${batchDelta.root_plan}\nExact source/derived-field check: ${batchDelta.guard_plan}\n${batchDelta.exact_vs_semantic}\n` : ''}Before the iteration: ${rootFolder.idiom_preconditions}\nUse this typed iteration form: ${rootFolder.positive_idiom}\n` :
     crossFolder && typedHandoff ?
       `Use iterateOn over sorted source folders with a shrinking unprocessed-folder frontier. Initialize completedState:FinalSemanticState = ${JSON.stringify(crossFolder.initial_state)}. For each folder, bind every source ID and path from the visible source table, make a typed EvidenceBatch of {id,path,text} records, and call ${steps[0].name} with StageInput1 {batch,context:{objective,rule,priorCompletedState:completedState},prior:{stageAbsences:[]}}. Stage1 reads current EvidenceRecords. Stages2–5 receive BatchIdentity and typed prior decisions, edges and witness snippets. Exact root mechanism checks one assertion decision per current record and verifies every returned witness quote against its identified source record. Use the semantic returned contributions to build the result. Follow this exact typed state plan:\n${crossFolder.root_numbered_plan.join('\n')}\n` :
     crossFolder ?
@@ -582,10 +589,11 @@ function render(entry, provider) {
             identityInstruction) +
           `Transformation: ${owned.new_semantic_transformation}\n` +
           `Evidence: ${owned.source_evidence_obligation}\nInvariant: ${owned.invariant}\n` +
-          `No applicable evidence: ${owned.no_op_policy}${literalPlan}${carriedPlan}${handoffPlan}\n` +
+          `No applicable evidence: ${owned.no_op_policy}${literalPlan}${carriedPlan}${handoffPlan}${batchDelta ? `\nCurrent-batch typed handoff: ${batchDelta.stage_plan}${next ? ` ${batchDelta.forwarding_plan}` : ''}\n` : ''}\n` +
           (next && forwarding ?
-            `After binding nextStageInput with this stage's completed typed contribution, finish this call in one eval action: eval({code:"return await ${next}(nextStageInput);",finish:true}). This returns the child's complete FinalSemanticState.\n` :
-            next ? `Pass the accumulated typed contributions to child ${next} within this active call and return its complete FinalSemanticState.\n` :
+            `After binding nextStageInput with this stage's completed typed contribution, finish this call in one eval action: eval({code:"return await ${next}(nextStageInput);",finish:true}). This returns the child's ${batchDelta ? 'current-batch contribution arrays and global audit' : 'complete FinalSemanticState'}.\n` :
+            next ? `Pass the accumulated typed contributions to child ${next} within this active call and return its ${batchDelta ? 'current-batch contribution arrays and global audit' : 'complete FinalSemanticState'}.\n` :
+            batchDelta ? `${batchDelta.terminal_plan}\n` :
             `Return the complete FinalSemanticState with every earlier contribution preserved.\n`) });
       continue;
     }

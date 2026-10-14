@@ -130,3 +130,7 @@ span containment, original quotation bytes, clock arithmetic and actor-owned del
 meaning, availability/adoption and commitment scope remain NL. Invalid source spans identify their
 original turn/range for repair; recover from that exact input. Inspect live nested literals and before/after
 view deltas before qualification. A projected query oracle is not a full typed report or executor replay.
+
+Preserve Dialogue commitment activation and fulfillment arrays independently through typed stage handoffs. Do not reinterpret a performed report as a performed promise: the query force determines that observable. Validate nested quoted provenance using original bounds and parent IDs; node collection order may vary, while sibling source order and episode chronology remain meaningful.
+
+When rendering batch-delta pipelines, keep generic footers consistent with the per-stage ownership contract. Distinguish current input.prior from context.priorCompletedState, and terminal batch arrays from a global audit field. Validate source-ID coverage and actual decision→edge→assessment→scope derivation before the single root merge; permit older exact supporting witnesses. On an ownership violation, identify the stage/source and instruct it to return only the current batch contribution while retaining earlier evidence in context. Check terminal child result types before adding generic forwarding instructions.
