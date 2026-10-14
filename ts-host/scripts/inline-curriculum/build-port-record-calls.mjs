@@ -155,7 +155,7 @@ function caseFor(items, split) {
       source_binding: { path, sha256: sha(files[path]), source_record_id: referenceId(item) },
       calls: [evalCall('item.evidence'), returnCall(item.target)] };
   });
-  const bundle = sha(sourceIds.join('\n')).slice(0, 20);
+  const bundle = sha(sourceIds.join('\n') + '\n' + items.map(item => sha(canonical(item.record))).join('\n')).slice(0, 20);
   const record = curriculumCase({ family: 'port_record_calls', familyVersion: 1, shape: `${family}-${bundle}`, variant: 'iterate-records/1',
     splitGroup: sourceGroups.length === 1 ? sourceGroups[0] : `${family}:derived-batch:${bundle}`, split, slice: 'iterate', domain: family,
     mode: 'single_call', inline: 'required', iterate: 'required',
