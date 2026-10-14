@@ -219,16 +219,21 @@ def test_a_merged_conversation_trains_each_completion_as_its_own_turn_does():
     """A later turn's prompt is the earlier prompt and completion plus new context, so on a causal model each
     completion token has the same loss in the merged sequence as in its own turn."""
     from scripts.train_lora import collate_completions, batch_completion_loss
+    import importlib.util
     torch.manual_seed(5)
+    optimized_conv = importlib.util.find_spec('causal_conv1d') is not None
+    if optimized_conv and not torch.cuda.is_available():
+        pytest.skip('Installed optimized causal-conv1d requires CUDA')
+    device = 'cuda' if optimized_conv else 'cpu'
     config = Lfm2Config(vocab_size=32, hidden_size=32, intermediate_size=64, num_hidden_layers=2,
                         num_attention_heads=4, num_key_value_heads=2, full_attn_idxs=[1], use_cache=False)
-    model = Lfm2ForCausalLM(config).eval()
+    model = Lfm2ForCausalLM(config).eval().to(device)
     p1, c1, d2, c2 = [1, 2, 3], [4, 5], [6, 7, 8], [9, 10, 11]
     turns = [(p1, c1), (p1 + c1 + d2, c2)]
     merged = (p1, c1 + d2 + c2, [True] * len(c1) + [False] * len(d2) + [True] * len(c2))
-    encoded = collate_completions([merged], device="cpu")
+    encoded = collate_completions([merged], device=device)
     assert encoded["labels"][0].tolist()[1:] == c1 + [-100] * len(d2) + c2
     with torch.no_grad():
-        by_turn = sum(batch_completion_loss(model, collate_completions([t], device="cpu")) * len(t[1])
+        by_turn = sum(batch_completion_loss(model, collate_completions([t], device=device)) * len(t[1])
                       for t in turns) / (len(c1) + len(c2))
         torch.testing.assert_close(batch_completion_loss(model, encoded), by_turn, atol=1e-6, rtol=1e-5)
