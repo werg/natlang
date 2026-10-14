@@ -67,7 +67,7 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
                   'recovery_selection': None,
                   'train_min_context_tokens': 0, 'fresh_monitor_reference': False,
                   'token_choice_lr': None, 'token_choice_optimizer': 'muon', 'neuralese_projection_lr': None,
-                  'neuralese_projection_optimizer': 'muon', 'e2e_mix': None}
+                  'neuralese_projection_optimizer': 'muon', 'e2e_mix': None, 'stop_after_training_seconds': 0.0}
 # Train-window geometry (HEADER_EFFICIENCY_20261012.md): a running stage changes it only by a windowing continuation
 # (continuation_mode), which rebuilds the plan it trained on under the saved values.
 # cohort_repeats (the epoch's per-cohort repeat counts) changes which windows an epoch holds, so it moves exactly like
@@ -80,7 +80,7 @@ OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkp
                          'continue_monitor_reference', 'gradient_digest_steps', 'state_hash_steps',
                          'continued_text_data', 'plan_only', 'plan_out', 'objective_continuation',
                          # the in-run task-success evaluation (owner 2026-10-12) is a verifier, not the objective
-                         'task_eval', 'task_eval_every'})
+                         'task_eval', 'task_eval_every', 'stop_after_training_seconds'})
 # Objective components a declared objective continuation may change in an active stage (recipe.py
 # OBJECTIVE_COMPONENTS): each is a recipe component the stage receives as one JSON option.
 OBJECTIVE_KEYS = ('quantization', 'family', 'e2e_mix')
@@ -196,6 +196,9 @@ def parse(argv=None):
     p.add_argument('--stop-at', type=int, default=0,
                    help='operational: end the stage at this update (eval, gate and report as at the end) while the '
                         'schedules (QAT ramps) follow --steps: a prefix of the declared run; 0: --steps')
+    p.add_argument('--stop-after-training-seconds', type=float, default=0.0,
+                   help='diagnostic prefix: finish a whole direct/e2e group after this sum of update seconds; '
+                        'initialization, evaluation and checkpoint writes excluded; 0: disabled')
     p.add_argument('--weight-drift-base', type=Path,
                    help='report-only: a directory holding the base latents (written before the first update when '
                         'absent); at the end weight-drift.json records each latent\'s drift from it, per expert for '
@@ -301,6 +304,8 @@ def parse(argv=None):
         p.error('positive bounds required')
     if a.checkpoint_every < 0:
         p.error('invalid checkpoint cadence')
+    if not math.isfinite(a.stop_after_training_seconds) or a.stop_after_training_seconds < 0:
+        p.error('--stop-after-training-seconds must be finite and nonnegative')
     if min(a.gradient_audit_steps, a.saved_tensor_audit_steps, a.gradient_digest_steps, a.state_hash_steps) < 0:
         p.error('diagnostic audit step counts must be nonnegative')
     if a.gradient_digest_steps and a.window_execution == 'packed':
@@ -1486,6 +1491,8 @@ def main(argv=None):
                         'length-bucketed right-padded updates (text_supervision.epoch_schedule)',
               'data_continuation': continuation_summary(continuation)}
     totals = {'supervised_tokens': 0, 'target_tokens': 0, 'windows': 0}
+    training_seconds = 0.0
+    timed_prefix_step = None
     print(json.dumps({'event': 'windows', 'train': len(train_windows), 'held': len(held), 'budget': budget,
                       'held_selection': {k: held_selection.get(k) for k in ('policy', 'limit_documents')},
                       'system_prompt_context_tokens': mask_receipt.get('masked_system_tokens')}), flush=True)
@@ -2329,6 +2336,7 @@ def main(argv=None):
         log('train.jsonl', {'step': step, 'kind': 'e2e', 'e2e_cursor': cursor, 'loss': float(loss),
                             'precision': point, 'mix': mix, **info, 'grad_clip': grad_clip, 'seconds': seconds,
                             'supervised_tokens_per_second': info['supervised_tokens'] / seconds})
+        return seconds
 
     def e2e_evaluate():
         """The e2e objective's paired held readers (written V against token T) and its held crisp CE, at BF16."""
@@ -2524,9 +2532,16 @@ def main(argv=None):
             log('fp8-runtime-inventory.jsonl', {'step': step, **fp8_backend.inventory()})
         profiler.update_done(step, seconds, forward_tokens=metrics['forward_tokens'], windows=metrics['windows'],
                              checkpoint_layers=plan['checkpoint_layers'], mode=plan['mode'], precision=point)
+        training_seconds += seconds
         if e2e is not None:  # the mixed run: this direct update's share of e2e updates, at its precision point
             for cursor in e2e_cursors(step, a.e2e_mix['fraction']):
-                e2e_update(step, cursor, point, mix)
+                training_seconds += e2e_update(step, cursor, point, mix)
+        if a.stop_after_training_seconds and training_seconds >= a.stop_after_training_seconds:
+            end = step
+            timed_prefix_step = step
+            log('training-time-prefix.jsonl', {'step': step, 'limit_seconds': a.stop_after_training_seconds,
+                                             'training_seconds': training_seconds,
+                                             'overshoot_seconds': training_seconds - a.stop_after_training_seconds})
         if step % a.eval_every == 0 or step == end:
             try:
                 with profile_region('update/eval'):
@@ -2590,6 +2605,8 @@ def main(argv=None):
                 policy.save(full_state())  # it would replace the slot and break best-checkpoint.pt's hard link
             saved_step = step
         profiler.maybe_finish(step)
+        if timed_prefix_step is not None:
+            break
     profiler.close(step)
     if archive is not None:
         archive.wait()
@@ -2628,7 +2645,9 @@ def main(argv=None):
     identity_file = a.out / 'identity-check.json'
     final.update(identity_check=json.loads(identity_file.read_text()) if identity_file.is_file() else None)
     status = ('complete' if step >= a.steps else 'stopped_at') if finished else ('checkpointed_on_drift_guard' if drift_stopped else 'checkpointed_on_signal')
-    final.update(status=status, stop_signals=stop.received, completed=step >= a.steps, steps=step, stopped_at=a.stop_at or None, best=best,
+    final.update(status=status, stop_signals=stop.received, completed=step >= a.steps, steps=step,
+                 stopped_at=timed_prefix_step or a.stop_at or None, best=best,
+                 training_seconds=training_seconds, training_time_limit_seconds=a.stop_after_training_seconds,
                  behaviour_gate=gate, behaviour_gate_report_only=True, task_gate=task_gate,
                  qualification='held CE below base, no drift stop, final task successes at least the base and '
                                'not below the previous evaluation minus noise (owner/coordinator 2026-10-12)', drift_stopped=drift_stopped, qualified=qualified,

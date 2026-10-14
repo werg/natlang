@@ -93,6 +93,35 @@ def test_a_mixed_run_runs_both_kinds_and_resumes_both_cursors(loaded, tmp_path, 
     assert report['e2e']['step'] == 3 and report['steps'] == 3
 
 
+def test_training_time_prefix_finishes_the_whole_mixed_group_and_can_resume(loaded, tmp_path, monkeypatch):
+    records, pieces, _ = _direct_stand_in(loaded, tmp_path, monkeypatch)
+    direct = tmp_path / 'direct-records.jsonl'
+    direct.write_text(''.join(json.dumps({**record, 'source_groups': [f"direct-{record['split']}"],
+                                        'training_admission': {'approved': True}}) + '\n'
+                              for record in map(json.loads, records.read_text().splitlines())))
+    _mixed(tmp_path, direct, records, pieces, '--stop-after-training-seconds', '0.000001')
+    out = tmp_path / 'mixed'
+    report = json.loads((out / 'report.json').read_text())
+    updates = [json.loads(line) for line in (out / 'train.jsonl').read_text().splitlines()]
+    assert [(u['kind'], u['step']) for u in updates] == [('direct', 1), ('e2e', 1)]
+    assert report['stopped_at'] == report['steps'] == 1
+    assert report['status'] == 'stopped_at' and report['completed'] is False
+    assert report['training_seconds'] == sum(u['seconds'] for u in updates)
+    assert report['training_time_limit_seconds'] == 0.000001
+    assert report['e2e']['step'] == 1 and (out / 'checkpoint.pt').is_file()
+    _mixed(tmp_path, direct, records, pieces, '--stop-after-training-seconds', '0')
+    updates = [json.loads(line) for line in (out / 'train.jsonl').read_text().splitlines()]
+    assert [(u['kind'], u['step']) for u in updates] == [
+        ('direct', 1), ('e2e', 1), ('direct', 2), ('e2e', 2), ('direct', 3), ('e2e', 3)]
+
+
+@pytest.mark.parametrize('limit', ['-1', 'nan', 'inf'])
+def test_training_time_prefix_rejects_invalid_allowances(limit):
+    with pytest.raises(SystemExit):
+        parse(['--heads', 'h.pt', '--out', 'out', '--records', 'r.jsonl',
+               '--stop-after-training-seconds', limit])
+
+
 def test_both_lines_hand_off_into_the_same_mixed_run():
     """Lockstep: both launch recipes carry one e2e_mix and continue their running direct_sft by an objective
     continuation that adds only it; the e2e base no longer declares a readiness moment."""
