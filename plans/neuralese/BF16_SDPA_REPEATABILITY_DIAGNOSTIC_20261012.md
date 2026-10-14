@@ -51,6 +51,26 @@ recipe and receipts are under
 `/home/werg/data/bf16-deterministic-direct-20261014-v1/`, and the long
 geometry run is under `/home/werg/data/bf16-deterministic-long-20261014-v1/`.
 
+The same deterministic Flash setting was then repeated with TE FP8
+DelayedScaling, the same input subpack, and two updates per arm. All 146
+first-update gradient hashes matched. Both arms had identical parameter,
+optimizer, and RNG hashes before and after that update; their step-1 and
+step-2 scalar losses and final held CE (`4.4630497495`) matched exactly.
+All 146 final student parameter tensors matched. Their raw TE extra-state
+tensor hashes and whole-checkpoint bytes differed. This is a serialization
+difference, not a measured scale-state difference: parsing the pickle opcodes
+of all 92 TE modules found exactly 368 differing embedded storage blobs and
+four corresponding pickle frame lengths. Deserializing each embedded storage
+showed equal dtype and values across the paired runs; there were no other
+opcode or value differences. The varying bytes are generated storage IDs
+(including four IDs of different decimal lengths). The paired FP8 recipes,
+logs, first-step digests, and checkpoints are under
+`/home/werg/data/fp8-deterministic-repeat-20261014-v1/`. After the audit,
+the five completed comparison checkpoint payloads and their five hard links
+were deleted, reclaiming 5,749,497,751 physical bytes; receipts and hashes
+remain. Exact numerical repeatability of
+this short TE-enabled experiment does not certify a longer production run.
+
 Pop retained recipes, logs, reports, and first-step hashes under
 `/home/werg/data/bf16-sdpa-short-20261014-v1/` and the longer default repeats
 under `/srv/storage/natlang-artifacts/bf16-sdpa-repeat-20261014-v1/`.
