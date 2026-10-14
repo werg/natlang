@@ -1,0 +1,405 @@
+{
+  "schema": "natlang.connected-generated-closure-control/1",
+  "id": "station-handover-transitive-permission-bug",
+  "source_world_split_key": "sol-app-world:radio-club-procedure-editions-v1",
+  "provenance": {
+    "kind": "Original authored erroneous generated code; original station-handover source clauses and state",
+    "license": "Repository license"
+  },
+  "entry_path": "decision.nl",
+  "actual_files": [
+    {
+      "path": "decision.nl",
+      "kind": "module",
+      "text": "---\nargs:\n  frame: ProbeFrame\nreturns: ProbeFrame\n---\n1. Call readGate(frame) and retain its actual guardValue and atoms.\n2. Copy that actual value into this frame and return it without substituting a source-required answer.\n"
+    },
+    {
+      "path": "decision/readGate.nl",
+      "kind": "module",
+      "text": "---\nargs:\n  frame: ProbeFrame\nreturns: ProbeFrame\n---\n1. Call permit(frame) using the supplied actual frame.\n2. Return its actual permission and effects unchanged; an intended prerequisite described elsewhere is not evaluated here.\n"
+    },
+    {
+      "path": "decision/readGate/permit.nl",
+      "kind": "module",
+      "text": "---\nargs:\n  frame: ProbeFrame\nreturns: ProbeFrame\n---\n1. Read the selected clause with id V2 from frame.selectedClauses for the report's original edition citation.\n2. Set guardValue to true for this actual event, without testing the clause or acknowledgment atom. Preserve all other atoms and return this frame.\n"
+    },
+    {
+      "path": "decoys/explainIdeal.nl",
+      "kind": "module",
+      "text": "---\nargs:\n  frame: ProbeFrame\nreturns: ProbeFrame\n---\n1. This uncalled ideal explanation describes personal acknowledgment as necessary. The other file mentions permit; no instruction here invokes it.\n2. Return frame.\n"
+    },
+    {
+      "path": "types.ts",
+      "kind": "types",
+      "text": "export type StateAtom = {key:string;subject:string;value:string|number|boolean|null;known:boolean;establishedAt:number|null;witnesses:Witness[]};\nexport type Witness = {sourceId:string;path:string;quote:string};\nexport type ScenarioEvent = {id:string;time:number;actor:string;meaning:string;witnesses:Witness[]};\nexport type SourceClause = {id:string;meaning:string;witnesses:Witness[]};\nexport type ProbeFrame = {event:ScenarioEvent;atoms:StateAtom[];selectedClauses:SourceClause[];guardValue:boolean|null};\n"
+    },
+    {
+      "path": "decoys/unused-types.ts",
+      "kind": "types",
+      "text": "export type ObsoleteFrame = {unused:boolean};\n"
+    }
+  ],
+  "selected_clauses": [
+    {
+      "id": "V1",
+      "editionId": "E1",
+      "issuer": "CC",
+      "meaning": "[V1] Edition ONE permits a named operator to start a transmission when that operator owns the station token and has an accepted queue turn. ONE does not require a separate safety acknowledgment.",
+      "effectiveFrom": 0,
+      "effectiveUntil": 5,
+      "witnesses": [
+        {
+          "sourceId": "E1",
+          "path": "procedures/edition-one.md",
+          "quote": "[V1] Edition ONE permits a named operator to start a transmission when that operator owns the station token and has an accepted queue turn. ONE does not require a separate safety acknowledgment."
+        }
+      ]
+    },
+    {
+      "id": "CUSTODY",
+      "editionId": "E1",
+      "issuer": "CC",
+      "meaning": "[CUSTODY] There is one station token ST. Only its current actual holder has custody. A witnessed completed handover changes holder; a proposed transfer does not. Appearance of a similar brass token is not identity with ST.",
+      "effectiveFrom": 0,
+      "effectiveUntil": null,
+      "witnesses": [
+        {
+          "sourceId": "E1",
+          "path": "procedures/edition-one.md",
+          "quote": "[CUSTODY] There is one station token ST. Only its current actual holder has custody. A witnessed completed handover changes holder; a proposed transfer does not. Appearance of a similar brass token is not identity with ST."
+        }
+      ]
+    },
+    {
+      "id": "HAZARD",
+      "editionId": "E1",
+      "issuer": "CC",
+      "meaning": "[HAZARD] A known uncleared station hazard blocks starting a transmission under every edition. An unresolved decisive hazard finding leaves permission unresolved. Only an actual signed clearance by maintenance M establishes clearance.",
+      "effectiveFrom": 0,
+      "effectiveUntil": null,
+      "witnesses": [
+        {
+          "sourceId": "E1",
+          "path": "procedures/edition-one.md",
+          "quote": "[HAZARD] A known uncleared station hazard blocks starting a transmission under every edition. An unresolved decisive hazard finding leaves permission unresolved. Only an actual signed clearance by maintenance M establishes clearance."
+        }
+      ]
+    },
+    {
+      "id": "V2",
+      "editionId": "E2",
+      "issuer": "CC",
+      "meaning": "[V2] From day5 TWO replaces only V1 permission prerequisites. Starting requires the named operator's accepted queue turn, current custody of ST, personal acknowledgment of the actual current safety brief, and no uncleared hazard. CUSTODY and HAZARD remain unchanged.",
+      "effectiveFrom": 5,
+      "effectiveUntil": null,
+      "witnesses": [
+        {
+          "sourceId": "E2",
+          "path": "procedures/edition-two.md",
+          "quote": "[V2] From day5 TWO replaces only V1 permission prerequisites. Starting requires the named operator's accepted queue turn, current custody of ST, personal acknowledgment of the actual current safety brief, and no uncleared hazard. CUSTODY and HAZARD remain unchanged."
+        }
+      ]
+    },
+    {
+      "id": "BRIEF",
+      "editionId": "E2",
+      "issuer": "CC",
+      "meaning": "[BRIEF] Safety acknowledgment is personal to the actor and current brief edition. A token receipt proves custody only. Receiving, forwarding or overhearing a brief does not prove acknowledgment; a recorded explicit acknowledgment does.",
+      "effectiveFrom": 5,
+      "effectiveUntil": null,
+      "witnesses": [
+        {
+          "sourceId": "E2",
+          "path": "procedures/edition-two.md",
+          "quote": "[BRIEF] Safety acknowledgment is personal to the actor and current brief edition. A token receipt proves custody only. Receiving, forwarding or overhearing a brief does not prove acknowledgment; a recorded explicit acknowledgment does."
+        }
+      ]
+    },
+    {
+      "id": "HISTORY",
+      "editionId": "E2",
+      "issuer": "CC",
+      "meaning": "[HISTORY] Later acknowledgment or clearance permits later actions only. It cannot authorize an earlier attempted transmission. A later authentic report can revise knowledge about a past event without changing its actual time.",
+      "effectiveFrom": 5,
+      "effectiveUntil": null,
+      "witnesses": [
+        {
+          "sourceId": "E2",
+          "path": "procedures/edition-two.md",
+          "quote": "[HISTORY] Later acknowledgment or clearance permits later actions only. It cannot authorize an earlier attempted transmission. A later authentic report can revise knowledge about a past event without changing its actual time."
+        }
+      ]
+    },
+    {
+      "id": "WAIVER",
+      "editionId": "EM",
+      "issuer": "DC",
+      "meaning": "[WAIVER] A DC-confirmed emergency transmission need not have an accepted queue turn. This removes only the queue prerequisite, preserving ST custody, current safety acknowledgment and hazard clearance under TWO.",
+      "effectiveFrom": 5,
+      "effectiveUntil": null,
+      "witnesses": [
+        {
+          "sourceId": "EM",
+          "path": "procedures/emergency.md",
+          "quote": "[WAIVER] A DC-confirmed emergency transmission need not have an accepted queue turn. This removes only the queue prerequisite, preserving ST custody, current safety acknowledgment and hazard clearance under TWO."
+        }
+      ]
+    },
+    {
+      "id": "WAIVER_EFFECT",
+      "editionId": "EM",
+      "issuer": "DC",
+      "meaning": "[WAIVER_EFFECT] Waiving the queue condition does not mark a queue turn completed and does not supply its normal scheduling effects for later ordinary transmissions.",
+      "effectiveFrom": 5,
+      "effectiveUntil": null,
+      "witnesses": [
+        {
+          "sourceId": "EM",
+          "path": "procedures/emergency.md",
+          "quote": "[WAIVER_EFFECT] Waiving the queue condition does not mark a queue turn completed and does not supply its normal scheduling effects for later ordinary transmissions."
+        }
+      ]
+    }
+  ],
+  "event": {
+    "id": "N_BO",
+    "time": 7,
+    "actor": "Bo",
+    "meaning": "Transmission attempt after actual handover.",
+    "witnesses": [
+      {
+        "sourceId": "SN",
+        "path": "scenarios/normal.md",
+        "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+      }
+    ]
+  },
+  "actual_atoms": [
+    {
+      "key": "queueAccepted",
+      "subject": "Ada",
+      "value": true,
+      "known": true,
+      "establishedAt": null,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "briefAcknowledged",
+      "subject": "Ada",
+      "value": true,
+      "known": true,
+      "establishedAt": null,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "unclearedHazard",
+      "subject": "ST",
+      "value": false,
+      "known": true,
+      "establishedAt": null,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "queueAccepted",
+      "subject": "Bo",
+      "value": true,
+      "known": true,
+      "establishedAt": null,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "briefAcknowledged",
+      "subject": "Bo",
+      "value": false,
+      "known": true,
+      "establishedAt": null,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "permission",
+      "subject": "Ada",
+      "value": true,
+      "known": true,
+      "establishedAt": 6,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "custody",
+      "subject": "Ada",
+      "value": null,
+      "known": true,
+      "establishedAt": 7,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "custody",
+      "subject": "Bo",
+      "value": "ST",
+      "known": true,
+      "establishedAt": 7,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    }
+  ],
+  "source_atoms": [
+    {
+      "key": "queueAccepted",
+      "subject": "Ada",
+      "value": true,
+      "known": true,
+      "establishedAt": null,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "briefAcknowledged",
+      "subject": "Ada",
+      "value": true,
+      "known": true,
+      "establishedAt": null,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "unclearedHazard",
+      "subject": "ST",
+      "value": false,
+      "known": true,
+      "establishedAt": null,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "queueAccepted",
+      "subject": "Bo",
+      "value": true,
+      "known": true,
+      "establishedAt": null,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "briefAcknowledged",
+      "subject": "Bo",
+      "value": false,
+      "known": true,
+      "establishedAt": null,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "permission",
+      "subject": "Ada",
+      "value": true,
+      "known": true,
+      "establishedAt": 6,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "custody",
+      "subject": "Ada",
+      "value": null,
+      "known": true,
+      "establishedAt": 7,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    },
+    {
+      "key": "custody",
+      "subject": "Bo",
+      "value": "ST",
+      "known": true,
+      "establishedAt": 7,
+      "witnesses": [
+        {
+          "sourceId": "SN",
+          "path": "scenarios/normal.md",
+          "quote": "ID SN. Scenario NORMAL at days6..7.\n[SN1] At day6 Ada has custody ST, accepted queue, personally acknowledged current brief, and an actual signed hazard-clear record. Ada attempts transmission N_ATTEMPT at day6.\n[SN2] At day7 Ada actually hands ST to Bo in N_TRANSFER. Bo has accepted queue and signed hazard clearance but explicitly has not acknowledged the current brief. Bo attempts N_BO at day7 after transfer."
+        }
+      ]
+    }
+  ]
+}

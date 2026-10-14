@@ -68,7 +68,9 @@
     "writing.nl",
     "types.ts",
     "natlang.json",
-    "tsconfig.json"
+    "tsconfig.json",
+    "scenarios/replayStep/judgeGuard/readEmittedClosure.nl",
+    "scenarios/replayStep/judgeGuard/readEmittedClosure/followCodeReference.nl"
   ],
   "typed_call_graph": {
     "nodes": [
@@ -369,6 +371,24 @@
         "returns": "GeneratedProgram",
         "kind": "function",
         "owned_delta": "Author a typed callable NL program from the actual module plans and semantic branch ownership."
+      },
+      {
+        "path": "scenarios/replayStep/judgeGuard/readEmittedClosure.nl",
+        "args": {
+          "entry": "GeneratedModule",
+          "program": "GeneratedProgram",
+          "selectedClauses": "SourceClause[]"
+        },
+        "returns": "EmittedClosure",
+        "owned_delta": "Actual generated call/type closure and referenced runtime source data"
+      },
+      {
+        "path": "scenarios/replayStep/judgeGuard/readEmittedClosure/followCodeReference.nl",
+        "args": {
+          "state": "CodeClosureState"
+        },
+        "returns": "CodeClosureState",
+        "owned_delta": "One body dependency judgment, activated original paths and consumed source reads"
       }
     ],
     "edges": [
@@ -491,6 +511,14 @@
       {
         "caller": "audit.nl",
         "callee": "audit/checkInterfaces.nl"
+      },
+      {
+        "caller": "scenarios/replayStep/judgeGuard.nl",
+        "callee": "scenarios/replayStep/judgeGuard/readEmittedClosure.nl"
+      },
+      {
+        "caller": "scenarios/replayStep/judgeGuard/readEmittedClosure.nl",
+        "callee": "scenarios/replayStep/judgeGuard/readEmittedClosure/followCodeReference.nl"
       }
     ]
   },
@@ -514,6 +542,10 @@
     {
       "site": "scenarios/replayStep/judgeGuard.nl",
       "consumed_by": "Actual emitted value/effects updates ScenarioFrontier.atoms; independent sourceRequiredValue/effects updates sourceAtoms; matchesSource detects divergence."
+    },
+    {
+      "site": "scenarios/replayStep/judgeGuard/readEmittedClosure/followCodeReference.nl",
+      "consumed_by": "Actual visited files, callee/type edges and runtime source reads form emitted judgment context."
     }
   ],
   "iteration_reducers": [
@@ -534,6 +566,12 @@
       "state": "RevisionState",
       "measure": "remainingScenarioIds.length",
       "until": "all actual failedscenario targets settled asrepaired orunresolved"
+    },
+    {
+      "path": "scenarios/replayStep/judgeGuard/readEmittedClosure/followCodeReference.nl",
+      "state": "CodeClosureState",
+      "measure": "unvisitedPaths.length",
+      "until": "No pending original path or unresolved closure dependency"
     }
   ],
   "provenance": {
@@ -543,16 +581,16 @@
   "readiness": {
     "source_loader_checked": true,
     "typed_declarations_checked": true,
-    "full_typed_reference": "passed_authored_source_type_replay",
-    "independent_oracle_review": true,
+    "full_typed_reference": "baseline witness preserved; extension type/source replay pending",
+    "independent_oracle_review": false,
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
   },
   "generation_ready": false,
   "training_admission": false,
-  "model_facing_debt": "0live samples; source, generatedpolicy and callable interface variant need roughly48live samples after source qualification.",
-  "nl_line_count": 669,
+  "model_facing_debt": "Connected closure frontier variant:0/48 live samples; baseline diagnostic remains separately frozen.",
+  "nl_line_count": 726,
   "scenario_execution_scope": "Symbolic NL interpretation of actual generated bodies; generated callable runtime invocation remains pending.",
   "reference_path": "training/semantic_applications/sol/semantic-procedure-compiler/station-handover/reference-packet.json",
   "reference_role": "One authored full typed generated-program and symbolic scenario witness, not compiler execution or generated-callable trajectory.",
@@ -569,5 +607,6 @@
       "scope": "Source/oracle and authored canonical/checker review, no live qualification"
     }
   ],
-  "diagnostic_readiness": "Source/type/canonical/exact peer checks passed; eligible separately pinned one-case diagnostic, training admission false."
+  "diagnostic_readiness": "Baseline reviewed-v1 package remains pinned; connected closure source needs its own peer and live review.",
+  "variant": "connected-emitted-closure-v2"
 }

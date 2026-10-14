@@ -1,0 +1,132 @@
+{
+  "closure": {
+    "entryPath": "decision.nl",
+    "files": [
+      {
+        "path": "decision.nl",
+        "kind": "module",
+        "text": "---\nargs:\n  frame: ProbeFrame\nreturns: ProbeFrame\n---\n1. Call readGate(frame) and retain its actual guardValue and atoms.\n2. Copy that actual value into this frame and return it without substituting a source-required answer.\n"
+      },
+      {
+        "path": "decision/readGate.nl",
+        "kind": "module",
+        "text": "---\nargs:\n  frame: ProbeFrame\nreturns: ProbeFrame\n---\n1. Call permit(frame) using the supplied actual frame.\n2. Return its actual permission and effects unchanged; an intended prerequisite described elsewhere is not evaluated here.\n"
+      },
+      {
+        "path": "decision/readGate/permit.nl",
+        "kind": "module",
+        "text": "---\nargs:\n  frame: ProbeFrame\nreturns: ProbeFrame\n---\n1. Read the selected clause with id V2 from frame.selectedClauses for the report's original edition citation.\n2. Set guardValue to true for this actual event, without testing the clause or acknowledgment atom. Preserve all other atoms and return this frame.\n"
+      },
+      {
+        "path": "types.ts",
+        "kind": "types",
+        "text": "export type StateAtom = {key:string;subject:string;value:string|number|boolean|null;known:boolean;establishedAt:number|null;witnesses:Witness[]};\nexport type Witness = {sourceId:string;path:string;quote:string};\nexport type ScenarioEvent = {id:string;time:number;actor:string;meaning:string;witnesses:Witness[]};\nexport type SourceClause = {id:string;meaning:string;witnesses:Witness[]};\nexport type ProbeFrame = {event:ScenarioEvent;atoms:StateAtom[];selectedClauses:SourceClause[];guardValue:boolean|null};\n"
+      }
+    ],
+    "references": [
+      {
+        "callerPath": "decision.nl",
+        "targetPath": "decision/readGate.nl",
+        "kind": "call",
+        "status": "resolved",
+        "reason": "Explicit actual named child invocation.",
+        "generatedEvidence": [
+          {
+            "path": "decision.nl",
+            "quote": "Call readGate(frame)"
+          }
+        ]
+      },
+      {
+        "callerPath": "decision/readGate.nl",
+        "targetPath": "decision/readGate/permit.nl",
+        "kind": "call",
+        "status": "resolved",
+        "reason": "Explicit actual named child invocation.",
+        "generatedEvidence": [
+          {
+            "path": "decision/readGate.nl",
+            "quote": "Call permit(frame)"
+          }
+        ]
+      },
+      {
+        "callerPath": "decision.nl",
+        "targetPath": "types.ts",
+        "kind": "type",
+        "status": "resolved",
+        "reason": "ProbeFrame is actually defined in the supplied types file.",
+        "generatedEvidence": [
+          {
+            "path": "decision.nl",
+            "quote": "frame: ProbeFrame"
+          }
+        ]
+      },
+      {
+        "callerPath": "decision/readGate.nl",
+        "targetPath": "types.ts",
+        "kind": "type",
+        "status": "resolved",
+        "reason": "ProbeFrame is actually defined in the supplied types file.",
+        "generatedEvidence": [
+          {
+            "path": "decision/readGate.nl",
+            "quote": "frame: ProbeFrame"
+          }
+        ]
+      },
+      {
+        "callerPath": "decision/readGate/permit.nl",
+        "targetPath": "types.ts",
+        "kind": "type",
+        "status": "resolved",
+        "reason": "ProbeFrame is actually defined in the supplied types file.",
+        "generatedEvidence": [
+          {
+            "path": "decision/readGate/permit.nl",
+            "quote": "frame: ProbeFrame"
+          }
+        ]
+      }
+    ],
+    "runtimeReads": [
+      {
+        "callerPath": "decision/readGate/permit.nl",
+        "clauseIds": [
+          "V2"
+        ],
+        "wholeCollection": false,
+        "reason": "Actual body reads V2 for a citation; it does not evaluate its condition.",
+        "generatedEvidence": [
+          {
+            "path": "decision/readGate/permit.nl",
+            "quote": "Read the selected clause with id V2 from frame.selectedClauses"
+          }
+        ]
+      }
+    ],
+    "runtimeClauses": [
+      {
+        "id": "V2",
+        "editionId": "E2",
+        "issuer": "CC",
+        "meaning": "[V2] From day5 TWO replaces only V1 permission prerequisites. Starting requires the named operator's accepted queue turn, current custody of ST, personal acknowledgment of the actual current safety brief, and no uncleared hazard. CUSTODY and HAZARD remain unchanged.",
+        "effectiveFrom": 5,
+        "effectiveUntil": null,
+        "witnesses": [
+          {
+            "sourceId": "E2",
+            "path": "procedures/edition-two.md",
+            "quote": "[V2] From day5 TWO replaces only V1 permission prerequisites. Starting requires the named operator's accepted queue turn, current custody of ST, personal acknowledgment of the actual current safety brief, and no uncleared hazard. CUSTODY and HAZARD remain unchanged."
+          }
+        ]
+      }
+    ],
+    "unresolved": []
+  },
+  "actualEmittedPermission": true,
+  "sourceRequiredPermission": false,
+  "matchesSource": false,
+  "role": "Authored source-validity/control witness only; no NL stage execution."
+}

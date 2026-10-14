@@ -1,0 +1,56 @@
+{
+  "schema": "natlang.connected-nl-application-extension-quality/1",
+  "author": "semantic_slate_sol",
+  "date": "2026-10-14",
+  "application": "semantic-procedure-compiler",
+  "variant": "connected-emitted-closure-v2",
+  "baseline_freeze": "43adf1c6 and sol-procedure-compiler-reviewed-v1 immutable package",
+  "files": {
+    "applications/semantic-procedure-compiler/types.ts": "0c2df95bdb23f0b657566a605c7379e9da32ecbaad9b097abc122273040036ef",
+    "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard.nl": "bf5cb8e90a3661892c75de475f147e7aebbb62219e4a22d083cac4f2ff7e0630",
+    "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard/readEmittedClosure.nl": "be7362f4e66b6fc48cd8b784aed71940263f7f14ab1af1fc403720ada75a8a5c",
+    "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard/readEmittedClosure/followCodeReference.nl": "dc29b0afe85cb859b29b8cf55f7569c6cd3dc5967e6fb23bd996bc8ebd7fb089",
+    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/check-control.mjs": "5215332b630ddf463c67cc168a1465f36d8d86c58854c4a4ef193762a6048512",
+    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/transitive-permission-bug.input.json": "e8655a8dcdc323f88899a7255edbd0722d21d3ec23ec93494765474d9561e6d3",
+    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/transitive-permission-bug.oracle.json": "57f5c22662a082223ef8ab39bec87ca3e9be0dcd0c23723a951ed3f369328de9",
+    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/transitive-permission-bug.reference.json": "36311456ead0755b4209fcff839143af4b2cc85735c6130959a0b76aa4d261e0"
+  },
+  "nl_modules": 30,
+  "nl_lines": 726,
+  "numbered_steps": 208,
+  "typed_aliases": 47,
+  "graph_edges": 32,
+  "new_semantic_roles": [
+    "Actual transitive module/type call discovery and source-runtime read scope",
+    "Scoped per-file dependency judgment consumes original file and path inventories",
+    "Typed closure consumed independently from required-source judgment"
+  ],
+  "exact_seams": [
+    "Original path/quote/ID membership",
+    "Original file and source value preservation",
+    "Existing parser/type/coercion and external invariant verification"
+  ],
+  "crisp_policy_helpers": 0,
+  "source_type_replay": {
+    "source_sha256": "bcae53505240ffb9be41261114cfa999646205c13a4fc205d119e951d1bc7c0d",
+    "reference_ok": true,
+    "closure_witness_type_ok": true,
+    "scope": "Authored fullcompiler and closure witness type/source replay, not NL stage execution"
+  },
+  "connected_controls": {
+    "count": 10,
+    "passed": true,
+    "positive": 3,
+    "negative": 7,
+    "source_grounding": "Original N_BO has no personal acknowledgment underV2; actual transitive generated grandchild permission is unconditional true. Uncalled ideal decoys remain outside the actual closure.",
+    "execution": "Authored witness exact control, no NL execution credit"
+  },
+  "baseline_exact_controls": {
+    "count": 32,
+    "passed": true
+  },
+  "independent_peer_review": "pending new variant only; baseline passed separately",
+  "live_samples": 0,
+  "training_admission": false,
+  "generation_ready": false
+}

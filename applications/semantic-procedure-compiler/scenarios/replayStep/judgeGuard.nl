@@ -10,12 +10,11 @@ args:
   program: GeneratedProgram
 returns: GuardDecision
 ---
-1. Prepare emittedContext from the actual module text and generated callee/type-file closure in
-   program as exact {path,text} records, excluding ModulePlans/contribution audits. Include actual
-   atoms and original event evidence. Supply selected clause definitions only as
-   runtime data when the emitted body explicitly reads them; do not supply ideal BranchPlan guidance,
-   sourceAtoms, expected decisions or model.schema's normative invariants as interpretation rules.
-   The actual body controls which runtime data are read and which calls/effects occur.
+1. Call readEmittedClosure(module, program, model.requirements.selection.selectedClauses). Consume
+   its actual returned files, references and runtimeClauses as emittedContext, plus actual atoms and
+   original event evidence. Preserve unresolved closure dependencies as unresolved emitted behavior.
+   Exclude ModulePlans, contribution audits, ideal BranchPlan guidance, sourceAtoms, expected decisions
+   and normative schema invariants. Only the actual returned closure authorizes callee/runtime data.
 2. In eval declare StateEffect as {key:string;subject:string;value:string|number|boolean|null;
    known:boolean;establishedAt:number|null;witnesses:{sourceId:string;path:string;quote:string}[]}.
    Declare EmittedJudgment with value:boolean|null, effects:StateEffect[], reason:string,
