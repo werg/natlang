@@ -367,7 +367,7 @@
       "3. Create the direct typed ScopeDecision literal using the supplied three-step instruction and await it on this scopeInput. The child result owns usable, sign, reason and selected witness support.",
       "4. Validate the returned endpoint keys against the input relation and every nonempty returned witness against supplied relation/premise evidence. A usable result retains the supplied signedEffect. A failure identifies this original relation and leaves settled earlier decisions intact for repair.",
       "5. Bind next as a copied ScopeFrontier. Append this actual ScopeInput and actual unchanged ScopeDecision once, remove only that input from pending, and preserve all other settled items.",
-      "6. Finish immediately with the actual next frontier in one return action. interpretObservationScope.iterateOn supplies the next original relation to a fresh invocation."
+      "6. Finish immediately with the actual next frontier in one return action. The parent interpretObservationScope supplies the next original relation through its measured iteration."
     ],
     "iteration": {
       "measure": "pending.length",
@@ -379,7 +379,15 @@
       "instruction": "After the actual one-item result is validated and appended, return next with finish:true in the same completing action.",
       "positive_idiom": "eval({code:\"return next;\",finish:true})"
     },
-    "owned_delta": "One new actual returned ScopeDecision and its paired original ScopeInput; no reclassification by the reducer parent."
+    "owned_delta": "One new actual returned ScopeDecision and its paired original ScopeInput; no reclassification by the reducer parent.",
+    "parent_numbered_plan": [
+      "1. Read the current-batch causalAssessments, including each actual decision/reason and source owner IDs. Construct one ScopeInput per actual assessment from its own condition and exact relevant typed witnesses. Keep prior-folder evidence in context; preparing this input does not classify applicability.",
+      "2. Bind that fixed ScopeInput collection as pending of ScopeFrontier with empty completedInputs and decisions. Preserve its original order and multiplicity for exact coverage.",
+      "3. Call advanceScopeFrontier.iterateOn on the actual frontier with remaining pending count as its decreasing measure. The named child owns one scoped judgment per call and completes the returned state; this parent owns moving to the next input.",
+      "4. Consume the returned frontier. Check completedInputs is exactly the original input collection and each actual ScopeDecision matches its paired input endpoints. Bind each current source-owner witness through the declared exact witness union, preserving the actual decision semantic fields and returned witnesses.",
+      "5. Use those actual decisions as current-batch scopeDecisions. Earlier completed folders remain only in context.priorCompletedState.",
+      "6. Build StageInput5 from input.prior and the actual current-batch decisions, then finish the single awaited auditEffectGraph call using the existing same-action finish contract."
+    ]
   },
   "item_result_binding": {
     "schema": "semantic-actual-child-result-binding/1",

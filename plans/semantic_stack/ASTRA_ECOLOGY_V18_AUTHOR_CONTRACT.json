@@ -3,7 +3,7 @@
   "author": "semantic_slate_astra",
   "variant": "astra-ecology01-item-result-binding-v18-proposal",
   "proposal_path": "plans/semantic_stack/ASTRA_ECOLOGY_ITEM_RESULT_V18_PROPOSAL.json",
-  "proposal_sha256": "b6816a832658f2c090745218a2d18cc670bbaf392f3f55ab8899d4e213b9299f",
+  "proposal_sha256": "3b787001f36a81d14e4d31ca516537e93f2c9f55f58eba126b418f065c4b8891",
   "base_frozen_variant": "v17",
   "fixture_oracle_changes": false,
   "contract_checks": [
@@ -11,7 +11,8 @@
     "Scope semantic fields are exact; declared witness projection retains the actual child support and optionally adds only exact paired owner evidence with deterministic deduplication.",
     "Effect finding remains exact, including source witnesses; no case-specific semantic output table is introduced.",
     "Durable runtime-owned lineage and typed input/output evidence is required. Missing capture yields unverified_hold.",
-    "The binding is transported unchanged at record.curriculum.item_result_binding; source rendering, durable input capture and generic checker are owned by curriculum."
+    "The binding is transported unchanged at record.curriculum.item_result_binding; source rendering, durable input capture and generic checker are owned by curriculum.",
+    "The scope_frontier.parent_numbered_plan explicitly assigns repeated iteration to Stage4 and one-item completion to its child; it is identical to the original intended top-level numbered_plan."
   ],
   "peer_schema_review": "semantic_stack_curriculum confirmed site schema maps to the generic checker after durable inputs are captured; final witness projection added to avoid false negatives.",
   "rendered_source_review_pending": true,
