@@ -15,7 +15,7 @@
 #   python3 scripts/memory_ledger.py run --unit s1-natlang-<id> --budget-gb 16 -- scripts/neuralese_data/port_record_calls.sh IN OUT 6
 set -euo pipefail
 IN=$(realpath "$1"); OUT=$(realpath -m "$2"); WORKERS=${3:-6}; CORPUS=${4:-s1-full-final-20261003}
-REPO=/home/werg/natlang
+REPO=${NATLANG_REPO:-/home/werg/natlang}
 # systemd units see /usr/bin/node (v18, no global crypto.randomUUID); use the toolchain node the checkout is built with.
 NODE=${NODE:-/home/werg/.local/bin/node}
 TS=$REPO/ts-host/scripts/inline-curriculum
@@ -62,7 +62,7 @@ export -f build replay; export OUT IN TS RES CORPUS BUILD_ARGS NODE RUNTIME SKIP
 families=$(ls "$IN" | sed -n 's/\.port-records\.jsonl$//p')
 echo "$(date -Is) build $(echo $families | wc -w) families"
 # Builds (I/O bound on the HDD families) run beside the replays: a family's shards replay as soon as its build is done.
-printf '%s\n' $families | xargs -P 3 -I{} bash -c 'build {} || echo "build failed: {}" >&2' &
+printf '%s\n' $families | xargs -P "${BUILD_WORKERS:-3}" -I{} bash -c 'build {} || echo "build failed: {}" >&2' &
 builder=$!
 # return 0: under set -e/pipefail a last shard already done (the && chain fails) would end the whole driver.
 pending() { for b in "$OUT"/ir/*/build.json; do [ -f "$b" ] || continue; d=$(dirname "$b"); f=$(basename "$d")
