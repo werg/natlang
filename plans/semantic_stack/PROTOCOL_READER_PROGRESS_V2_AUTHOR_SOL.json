@@ -1,0 +1,69 @@
+{
+  "schema": "natlang.typed-source-progress-author-review/1",
+  "author": "semantic_slate_sol",
+  "application": "protocol-meaning-debugger",
+  "hashes": {
+    "applications/protocol-meaning-debugger/DECOMPOSITION.md": "7289a0f5b1be4d11c879c74e938ef490d60aca917f6e767c93532d8848f13cf7",
+    "applications/protocol-meaning-debugger/types.ts": "afefc80cc0086699d43c11b78f7d5aa2d3253580a7d2029956a362dfb0e65c71",
+    "applications/protocol-meaning-debugger/readEvidence.nl": "92d47271a4798e56a1c9f04ebc81394d0feaf83c9910146fa4713356ad556065",
+    "applications/protocol-meaning-debugger/readEvidence/advanceDefinitionUnit.nl": "147f558ff6a6ef0196f4646e2d6bb99e4ef3b04ac5904f1024962eccadf6b776",
+    "applications/protocol-meaning-debugger/readEvidence/advanceDefinitionUnit/interpretDefinition.nl": "f94c4e9227c1708ab483b42adcbcbaf9973499eaafb5300a910ed1f248f47fb4",
+    "applications/protocol-meaning-debugger/debug/intake/interpretQuestion.nl": "2a96e346f10c653a9e42adc2211142498c1f8ea95eb0dbaa2663dec41f93f4a4",
+    "training/semantic_applications/sol/protocol-meaning-debugger/reader-progress-controls/check-controls.mjs": "62b3cce62bc9b1ab892dd8d85f12ebb5f2cbffeb525deb3bd339a959eea9a3fe",
+    "applications/protocol-meaning-debugger/debug/intake.nl": "6a07849c30bf7069667d00b4140c7e4175ffe6ad060e09ca07b4dea76f6822d7"
+  },
+  "diagnostic": {
+    "source_sha256": "b01f3e134dac4aeccf4d0b8c42e8c0bbf661bf4d598ae89da9024142083794ee",
+    "partial": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/protocol-meaning-debugger-diagnostic-v1/worker-01/case-000/jobs/000000-abf892966d4ec50b.partial.json",
+    "locations": [
+      "turn9:22definitions",
+      "turn10:one invalid role rejected entire result",
+      "turn14:reader returned empty definitions",
+      "turn16:question child authored7381-character semantic JS table"
+    ],
+    "classification": "Source/typed progress and missing prerequisite bug; not a model-negative."
+  },
+  "transformation_ownership": [
+    "readEvidence NL inventory owns original unit coverage; no numeric conclusion.",
+    "advanceDefinitionUnit retains actual accepted results and failed/unresolved identities separately.",
+    "interpretDefinition scoped NL owns semantic owner/role/meaning; parent binds original source provenance.",
+    "interpretQuestion consumes typed source index; missing meaning stays unknown and reader owns repairs."
+  ],
+  "controls": {
+    "passed": true,
+    "positive": 5,
+    "negative": 13,
+    "scope": "Exact authored type/progress/provenance only; no actual NL execution or semantic entailment proof."
+  },
+  "type_loader": "pass",
+  "canonical_fixture_oracle_reference": "unchanged",
+  "live_qualified": false,
+  "training_admission": false,
+  "canonical_reference_replay": {
+    "reference_ok": true,
+    "source_sha256": "77da96d484e71d0bd5ac329988f7c1b43c586a2e827499a50fc36b3c8b131778",
+    "reference_sha256": "27fd0fa62dd31c58e81f5eec7568251c6d5b9c2cab485c69d88d27002ecd2eab",
+    "scope": "One unchanged full typed witness; no actual app execution."
+  },
+  "counts": {
+    "schema": "natlang.semantic-application-quality-observations/1",
+    "gating": false,
+    "nl_lines": 701,
+    "numbered_policy_steps": 202,
+    "callable_nodes": 25,
+    "call_graph_edges": 29,
+    "declared_max_call_depth": 6,
+    "graph_cycle_suspected": false,
+    "declared_scoped_literal_sites": 8,
+    "sites_with_nl_instruction": 8,
+    "declared_literal_consumers": 8,
+    "crisp_policy_displacement": "manual_review_pending",
+    "live_literal_consumption": "unmeasured",
+    "note": "These are static observations and authored claims; live semantic work and policy location require trace review. Scale and depth are mix labels, never admission limits."
+  },
+  "baseline_metric_controls": {
+    "positive": 2,
+    "negative": 8,
+    "ok": true
+  }
+}

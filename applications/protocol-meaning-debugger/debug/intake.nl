@@ -8,7 +8,8 @@ returns: Intake
 ---
 1. Confirm request.caseId and input.caseId agree. Keep a mismatch explicit rather than joining trials
    from different source-world groups merely because unit identifiers happen to match.
-2. Call readEvidence(input.documents). Consume its interpreted definition clauses and source ownership.
+2. Call readEvidence(input.documents). Name its actual returned index evidenceIndex. Preserve its
+   accepted definitions, per-unit unresolved/failed results and original source ownership.
 3. Call interpretQuestion(request, evidenceIndex). Recover target population, event anchor, window
    and outcome proposition separately; preserve hard restrictions on edits and admissible interventions.
 4. Check baseline and each probe seed declare unique unit and reading identities. A reading references

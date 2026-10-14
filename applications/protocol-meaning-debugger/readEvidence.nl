@@ -1,21 +1,37 @@
 ---
-description: Interpret nested protocol documents without merging same-named revisions.
+description: Inventory original definition units and preserve each actual interpreted contribution.
 args:
   documents: ProtocolRecord[]
 returns: EvidenceIndex
 ---
-1. Visit each finite ProtocolRecord once. Read explicit source ID, owner, revision, scope and clause IDs.
-   A nested archive path and an execution binding have different evidential roles.
-2. Extract DefinitionClauses for question, population, anchor, window, metric, alias, provenance, scope
-   and probe authorization. Keep the source's named owner and exact quotation for each interpretation.
-3. A clause describing a historical definition is evidence about that definition, not an active runtime
-   policy. Preserve its wording and ownership so lineage can bind or exclude it explicitly.
-4. Treat implementation manifests as claims about selected artifacts. Keep their referenced clause IDs
-   and revision/hash distinctions; do not infer selection from the shortest filename.
-5. Distinguish raw observation coding from displayed metric labels. The word pass in a table has its
-   stated operational meaning, while a report labeled success can still count failures underneath.
-6. Keep unsupported or conflicting owner/role readings in unresolved. A numeric literal in a note
-   does not establish a universal window or population cutoff without the clause defining its scope.
-7. Return documents, definitions and unresolved. Derive no new trial readings or repair edits here.
-8. The source records themselves remain immutable. Exact hashes check bytes; semantic clause extraction
-   requires this NL interpretation and later source-grounded review.
+1. Keep documents immutable with original id/path/text/sha256. Inventory the finite original clause
+   universe in those documents. Source IDs and bracketed clause markers are provenance, not meanings;
+   exact data JSON remains trial evidence rather than a new definition merely because it contains numbers.
+2. Declare a local ReadingInventory with units:DefinitionReadingUnit[] and unresolved:string[]. Directly
+   invoke a scoped NL ReadingInventory literal on documents. Its numbered policy identifies each
+   definition-bearing original clause, preserves its exact original clause ID and quotation, and names
+   one local focus describing the semantic distinction to interpret. Include question, inclusion,
+   anchor, interval, numerator, alias, artifact binding, edit scope and intervention-permission clauses.
+3. The inventory preserves historical/archive and implementation ownership distinctions rather than
+   deciding which instruction should win. Where one clause contains several independent definitions,
+   give each an original-span unit and distinct focus; keep common governing clause IDs as support.
+   Record nondefinition evidence and unresolved source identity in inventory.unresolved only when they
+   leave a necessary inventory role unknown. Do not invent a definition for every numeric data row.
+4. Consume the actual inventory return. Require every sourceId/clauseId/exactQuote to identify an
+   original document clause and nonempty exact substring. Require unique unitIds and exact original
+   supporting clause membership. A malformed inventory boundary remains an explicit unresolved
+   inventory finding, not a guessed semantic row. Retain all valid original units for actual interpretation.
+5. Initialize DefinitionFrontier with those units, original documents, completed:[], definitions:[] and
+   actual inventory findings. Invoke iterateOn with advanceDefinitionUnit and the structural predicate
+   pendingUnits.length===0. Every step consumes one original pending unit; completed entries are carried
+   forward. No elapsed-time or arbitrary retry count substitutes for this finite measure.
+6. Consume the actual settled frontier. An accepted unit contributes its actual reading; a semantically
+   unresolved unit contributes its reason, and a transport/type/provenance failure contributes its actual
+   failure. Never erase earlier accepted readings because a later unit failed. Do not call completed units
+   again when continuing a partially processed frontier.
+7. Return documents unchanged, actual definitions, completed as unitResults, and actual unresolved
+   obligations. This inventory derives neither trial plans nor repairs. Definition meaning belongs to
+   interpretDefinition; target meaning belongs to interpretQuestion after the index exists.
+8. An empty or incomplete accepted index is a visible prerequisite failure for later stages. Preserve
+   which original units failed so a reader repair can target those units without recreating a raw-document
+   semantic table in a downstream stage.
