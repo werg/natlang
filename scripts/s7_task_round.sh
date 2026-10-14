@@ -11,7 +11,8 @@ set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 R=$1; N=${2:-1}
 SNAP=${SNAP:-$HOME/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f}
-PY=$ROOT/.venv-neuralese/bin/python
+PY=${NEURALESE_PYTHON:-$ROOT/.venv-neuralese/bin/python}
+if [ ! -x "$PY" ]; then PY=python3; fi
 export PYTHONPATH=$ROOT/training/neuralese HF_HUB_OFFLINE=1
 if [ -n "${DIRECT:-}" ]; then  # a direct-SFT export serves with its own declared rendering unless RENDER overrides
   MODEL=(--direct-artifact "$DIRECT" --direct-base-snapshot "$SNAP" ${RENDER:+--prompt-rendering $RENDER})

@@ -99,3 +99,27 @@ endings, the first observed difficulties include unbound names, service-name
 shadowing, nonexistent fields, malformed TypeScript and an unbounded
 iteration; the remaining repetition has a terminal result rather than a
 partial. These are failure-family observations, not held training inputs.
+
+## Whole-student train rollouts
+
+The first attempted 12-family, two-seed rollout mistakenly used S7's default
+authored-root packet. Its apparent one-turn successes and failures replayed the
+reference root: `action_provenance=authored_reference_root_eval`, zero generated
+tokens and empty raw model calls. That is useful for a *child-policy* experiment
+but cannot diagnose the student's root choices. The unit was stopped and its
+131 disposable output files were listed and deleted. No score or training
+admission came from it.
+
+`task_rollouts prepare --root-mode student` now explicitly removes authored-root
+replay while preserving the train row and exact oracle, records source and packet
+hashes in `preparation.json`, and makes scoring reject any replayed authored
+root. The original `authored` mode remains explicit for child-policy S7. The
+corrected source-disjoint train packet has 12 rows, two seeds each, source SHA-256
+`63d3ce7ffdd1af6dd46ad282b40d0485111c04f715e3707bcac34f9694a8aa44`,
+packet SHA-256 `52dbe9ae7878bc53f559f8abb89e71f096395a87c0fe111568a169fc34044f9d`,
+and lives under `/home/werg/natlang-artifacts/qad-student-train-rollouts-20261014-v1/round1-student-root`.
+The first complete cases contain nonzero root model tokens and no authored-action
+provenance. They already expose wrong answers after real tool work, including
+syntax repair, wrong field recovery and a wrong schedule result; do not rank or
+train from the partial batch. Score the full packet, review first failed actions
+and produce replay-checked teacher handoffs from these train sources only.

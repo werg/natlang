@@ -5,8 +5,9 @@ The reward is the task-success eval's own outcome class (`eval.task_packet.class
 the policy. Rollouts run through the same frozen-collector path as the held-task eval (`scripts/run_bonsai_queue.py`
 against an OpenAI-compatible `natlang_neuralese.serve`), so RL trains and is judged on the same execution path.
 
-  prepare  derive an authored-root packet from train rows (refuses any non-train row) and a queue of `group`
-           sampled single-case entries per row (distinct seeds, temperature > 0).
+  prepare  derive a train-only packet and a queue of `group` sampled single-case entries per row
+           (distinct seeds, temperature > 0). The root mode is declared: authored for
+           child-policy rollouts, student for complete student-policy rollouts.
   score    read the queue journal and results, classify every rollout and report per-group rewards, advantages
            (grpo.group_advantages) and the spread curriculum: groups with mixed outcomes are GRPO-ready; groups
            with zero spread go to rejection sampling (all fail: teacher seeding; all succeed: retire).
@@ -50,6 +51,19 @@ def authored_root_row(row: dict[str, Any]) -> dict[str, Any]:
         "authored_root_sha256": hashlib.sha256(root["code"].encode()).hexdigest(),
         "min_child_invocations": 0, "min_state_edges_from_children": 0, "min_iteration_steps": 0,
     }
+    return {**row, "curriculum": curriculum}
+
+
+def student_root_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Run the student at the root as well as in children, without reference-root replay."""
+    if row.get("split") != "train":
+        raise ValueError(f"refusing non-train row for RL rollouts: {row.get('id')} (split={row.get('split')!r})")
+    curriculum = dict(row.get("curriculum") or {})
+    contract = dict(curriculum.get("trajectory_contract") or {})
+    if contract.get("authored_root_eval"):
+        contract.pop("authored_root_eval", None)
+        contract.pop("authored_root_sha256", None)
+        curriculum["trajectory_contract"] = contract
     return {**row, "curriculum": curriculum}
 
 
@@ -98,14 +112,22 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     source = read_jsonl(args.cases)
-    selected = [authored_root_row(row) for row in source[args.offset:args.offset + args.rows]]
+    root_mode = getattr(args, "root_mode", "authored")
+    transform = authored_root_row if root_mode == "authored" else student_root_row
+    selected = [transform(row) for row in source[args.offset:args.offset + args.rows]]
     packet = out / "packet.jsonl"
     packet.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in selected), encoding="utf-8")
+    (out / "preparation.json").write_text(json.dumps({"schema": "natlang.task-rollout-preparation/1",
+                                                    "root_mode": root_mode,
+                                                    "source_cases": str(args.cases.resolve()),
+                                                    "source_sha256": hashlib.sha256(args.cases.read_bytes()).hexdigest(),
+                                                    "packet_sha256": hashlib.sha256(packet.read_bytes()).hexdigest()},
+                                                   indent=2) + "\n", encoding="utf-8")
     entries = build_queue(packet, len(selected), args.group, out, temperature=args.temperature,
                           case_seconds=args.case_seconds, max_model_requests=args.max_model_requests,
                           max_turns=args.max_turns, seed_base=args.seed_base)
     (out / "queue.jsonl").write_text("".join(json.dumps(e, sort_keys=True) + "\n" for e in entries), encoding="utf-8")
-    return {"packet": str(packet), "rows": len(selected), "group": args.group, "queue_entries": len(entries),
+    return {"packet": str(packet), "root_mode": root_mode, "rows": len(selected), "group": args.group, "queue_entries": len(entries),
             "source_cases": str(args.cases), "ids": [row["id"] for row in selected]}
 
 
@@ -114,6 +136,13 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
     run_dir = run_dir.resolve()
     emitted: list[dict[str, Any]] = []
     packet = read_jsonl(run_dir / "packet.jsonl")
+    preparation_path = run_dir / "preparation.json"
+    preparation = json.loads(preparation_path.read_text()) if preparation_path.exists() else {"root_mode": "authored"}
+    root_mode = preparation["root_mode"]
+    if root_mode == "student":
+        for index, task in enumerate(packet):
+            if ((task.get("curriculum") or {}).get("trajectory_contract") or {}).get("authored_root_eval"):
+                raise ValueError(f"student-root packet row {index} still requests authored-root replay")
     entries = read_jsonl(run_dir / "queue.jsonl")
     journal_path = run_dir / "journal.jsonl"
     journal = read_jsonl(journal_path) if journal_path.exists() else []
@@ -123,6 +152,10 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
         output = Path(entry["output"])
         results = read_jsonl(output) if output.is_file() else []
         result = results[0] if results else None
+        if root_mode == "student" and result:
+            for turn in result.get("trajectory") or []:
+                if (turn.get("action_provenance") or {}).get("kind") == "authored_reference_root_eval":
+                    raise ValueError(f"student-root rollout {entry['key']} replayed an authored root")
         outcome = classify_case(result, finishes.get(entry["key"]))
         reward = reward_of(outcome, finishes.get(entry["key"]))
         task = packet[entry["index"]]
@@ -158,7 +191,8 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
     counts: dict[str, int] = {}
     for r in rollouts:
         counts[r["outcome"]] = counts.get(r["outcome"], 0) + 1
-    report = {"schema": "natlang.s7-task-rollout-score/1", "rollouts": len(rollouts), "outcome_counts": counts,
+    report = {"schema": "natlang.s7-task-rollout-score/1", "root_mode": root_mode,
+              "rollouts": len(rollouts), "outcome_counts": counts,
               "scored": sum(r["reward"] is not None for r in rollouts),
               "successes": sum(r["reward"] == 1.0 for r in rollouts),
               "groups_with_spread": sum(g["spread"] for g in groups), "groups": groups}
@@ -184,6 +218,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--max-model-requests", type=int, default=32)
     p.add_argument("--max-turns", type=int, default=20)
     p.add_argument("--seed-base", type=int, default=7000)
+    p.add_argument("--root-mode", choices=("authored", "student"), default="authored",
+                   help="authored replays the reference root and samples children; student samples root and children")
     s = sub.add_parser("score")
     s.add_argument("--run-dir", type=Path, required=True)
     s.add_argument("--emit-rollouts", type=Path, default=None, help="write natlang.rollout/1 records here")
