@@ -49,15 +49,20 @@ different mechanisms. Inspect action traces before interpreting outcome counts.
 - Source quality is independently at risk: MuSiQue answer occurrence was used
   as a proxy for relation entailment. Both hop families are held and DGX is
   rebuilding the target union without their rendered member.
-- **Open:** quantify the program-header versus full-prompt serving effect on
-  the exact checkpoint with the same 20 tasks and seeds. The first PH rollout
-  (`natlang-pop-qad-trained-program-header20-v1`) finished 2/38 scored, but
-  used the preparer's 1,000-per-row seed stride while the full/base arms used
-  3,000 per row. Only the first task's two samples had the same seed. This is
-  exploratory, not a matched ablation; its two source-held MuSiQue samples
-  remain unscored. A new preparation copies seeds by task ID and sample from
-  the clean-base reference and verifies all 40 mappings plus identical packet
-  SHA. Rerun the PH arm on those exact seeds before interpreting rendering.
+- **Measured:** the first PH rollout finished 2/38 scored but used a
+  1,000-per-row seed stride while the full/base arms used 3,000; it is only
+  exploratory. The corrected PH run copied seeds by task ID and sample from
+  the clean-base queue, verified all 40 mappings plus identical packet SHA,
+  and finished 2/38 scored. Across the 40 exact task/sample/seed slots, base
+  had 2 successes, trained full prompt 1, and trained program header 2.
+  Program header recovered one `policy_after_measure` seed and added one
+  `inline_avoid_crisp` success, but lost the other base-successful
+  `policy_after_measure` seed. It had 16 invalid actions and 9 budget
+  exhaustions versus full prompt's 17 and 6, so rendering alone did not
+  restore broad action behavior. Both PH runs had two source-held MuSiQue
+  slots with no model result, and no DPO or training admission. The corrected
+  run's journal SHA and source-hold receipt are under
+  `round2-trained-program-header20-matched-seeds/diagnostic-closeout.json`.
 - **Open:** run the current-main full gate with the pinned training-image
   interpreter; the first Pop attempt lacked a host Python 3.11+ torch stack.
   The image-backed run is queued under the ledger.
