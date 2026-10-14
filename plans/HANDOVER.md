@@ -1,5 +1,40 @@
 # Continuation guide — updated 2026-10-14
 
+## 06:16 CEST: deep-source audit and Pop check status
+
+Polyphonic Edition Workshop is a 27-callable, 651-physical-line source tree, not a
+catalog sketch. Its authority reader now selects and passes governing source
+policy plus every supported attribution to a deeper numbered NL authority
+procedure (`73e51520`). The child distinguishes authenticated role/form from an
+invented issuer, evaluates authority and permitted scope across surviving
+candidates, and returns true/false/null with exact clause evidence consumed by
+its parent. Independent focused source review and current source/type package
+replay pass; actual live consumption remains **0/48** and training admission
+false. Dialogue checker false positives were repaired in `aab8ce51` (51
+controls, nine positive/42 negative); its authored 29-NL source is still live
+pending. Keep shallow valid rows in the ordinary mix while reviewing all new
+large programs for candidate, state, branch and termination logic in `.nl`.
+
+Cave frame-support v7 live diagnostic was stopped after 80 turns/161 requests
+(`fad44b36`): an NL child produced two correct basis alternatives, but later
+invented a landmark ID, accepted a hard-coded coordinate check and rebuilt
+semantic alternatives in JS. This is assigned source/ergonomics evidence, not
+an admitted or model-negative row. The next source needs an original-name span
+binding and one-unit typed frame frontier that retains actual child results.
+Re-run and inspect downstream alignment before admission.
+
+Pop full TS check is currently running under ledger unit
+`natlang-pop-ts-budget-full-check-20261014.service`. A DGX-only test fixture
+failure with zero model calls at 3276.7 ms was traced to its fixed 3000 ms
+test-only local budget expiring during cold worker startup. A calibrated
+per-machine fixture is being checked; the production timeout implementation is
+unchanged. The pinned Pop Python image check found one grouped-FP8 gradient
+gap (relative norm 0.1186 vs 0.1) and one order-dependent profiler attribution
+failure still under investigation. Other environment failures were fixed or
+isolated. Do not call the full Python gate green yet. During the full TS check,
+low-priority Luna/Gemini workers were temporarily requeued by the memory
+ledger; verify they resume afterward.
+
 ## 05:25 CEST: recovery render synced and deep-source criterion
 
 The owner clarified again that new application-scale examples must put substantive
