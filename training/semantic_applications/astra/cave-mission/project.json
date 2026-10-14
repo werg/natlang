@@ -525,6 +525,11 @@
       "site": "planMission/survey/readEquipment/interpretSensor.nl",
       "result_type": "Per-item semantic interpretation",
       "consumed_by": "Actual inventory selects original reading units; actual child meanings supply typed survey fields and original source evidence."
+    },
+    {
+      "site": "planMission/survey/readFrames.nl",
+      "result_type": "SurveyReadingUnit",
+      "consumed_by": "Actual supported unit and original source clauses passed to interpretConvention, including global anchor/identity support."
     }
   ],
   "iteration_reducers": [
@@ -587,7 +592,7 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": true,
+    "independent_oracle_review": false,
     "exact_result_replay": true,
     "exact_checker_controls_passed": 22,
     "live_qualified": false,
@@ -617,17 +622,10 @@
     "scope": "Independent source/oracle, exact lower-bound and policy-equivalence review. No actual application execution or training admission."
   },
   "source_variant": {
-    "id": "survey-item-nl-v5",
-    "parent_source_commit": "f88070f9",
-    "changes": [
-      "Scoped NL inventory and per-unit semantic literals replace extraction tables.",
-      "Actual FrameSurvey feeds passage endpoints; local origin and global anchor stay separate.",
-      "Nullable internal passage cost preserves absent/unknown route evidence; present projection requires source-permitted known cost."
-    ],
-    "fixture_oracle_reference_changed": false,
-    "independent_source_review": true,
-    "live_qualified": false,
-    "review_receipt": "plans/semantic_stack/CAVE_SURVEY_V5_REVIEW_ASTRA.json"
+    "id": "frame-support-v7",
+    "parent_source_sha256": "f990a454e08dbbd5c574ad94c61e4f36e7f5231beec8104e371a520143c92b0d",
+    "meaning": "Source-selected named-anchor/global-point support retained in actual convention literal input and returned evidence.",
+    "independent_source_review": false
   },
   "independent_reviews": [
     {
@@ -665,5 +663,8 @@
       "scope": "Focused consumer-depth and actual Assay/input-scope follow-up; no live credit"
     }
   },
-  "readiness_scope": "Original fixture/oracle and exact reference reviewed; current consumer-depth source independently reviewed by pinned delta receipt. Actual application execution and live/training qualification remain pending."
+  "readiness_scope": "Original fixture/oracle and exact reference reviewed; current consumer-depth source independently reviewed by pinned delta receipt. Actual application execution and live/training qualification remain pending.",
+  "generation_ready": false,
+  "training_admission": false,
+  "pending_independent_source_review": "Two-file frame/support delta; prior fixture/oracle/reference remain unchanged."
 }

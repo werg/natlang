@@ -8,8 +8,10 @@ returns: ConventionInterpretation
 ---
 1. Preserve this actual unit and its sourceFrame key, actual frame clauses and supporting global origin/orientation evidence. Capture only
    those originals. In eval create a scoped NL literal returning ConventionInterpretation and directly
-   await it on {unit, frameClauses}; no preselected origin, axis vector or alternative table enters its input.
-2. The literal interprets which statements concern exported coordinates and which concern a person's
+   await it on {unit, frameClauses, supportingClauses}; no preselected origin, axis vector or alternative table enters its input.
+2. The literal joins the actual source-named origin to its supplied fixed global point definition and
+   source-established identity bridge before proposing a numeric origin. Both the local origin statement
+   and global/identity support remain exact evidence in every complete alternative. It interprets which statements concern exported coordinates and which concern a person's
    viewing direction. It locates the actual local frame origin in the fixed global coordinate system.
 3. It returns exactly the complete conventions licensed by the source. A missing selector preserves
    those alternatives; it does not permit extra rotations, reflections, scales or arbitrary translation.
