@@ -43,7 +43,7 @@ export type CompilePacket = { requestId: string; program: GeneratedProgram; mode
 
 /** Internal actual-generated-code traversal; ideal source policy stays in the separate guard channel. */
 export type ExecutionFile = { path: string; text: string; kind: 'module' | 'types' };
-export type GeneratedCodeReference = { callerPath: string; targetPath: string | null; kind: 'call' | 'type'; status: 'resolved' | 'unresolved'; reason: string; generatedEvidence: GeneratedSpan[] };
+export type GeneratedCodeReference = { callerPath: string; targetPath: string | null; kind: 'call' | 'type'; status: 'resolved' | 'unresolved'; reason: string; generatedEvidence: GeneratedSpan[]; targetEvidence: GeneratedSpan[] };
 export type RuntimeSourceRead = { callerPath: string; clauseIds: string[]; wholeCollection: boolean; reason: string; generatedEvidence: GeneratedSpan[] };
 export type CodeDependencyJudgment = { filePath: string; references: GeneratedCodeReference[]; runtimeReads: RuntimeSourceRead[]; ignoredMentions: GeneratedSpan[]; unresolved: string[] };
 export type CodeClosureState = { pendingPaths: string[]; unvisitedPaths: string[]; visitedFiles: ExecutionFile[]; availableFiles: ExecutionFile[]; selectedClauses: SourceClause[]; references: GeneratedCodeReference[]; runtimeReads: RuntimeSourceRead[]; unresolved: string[] };

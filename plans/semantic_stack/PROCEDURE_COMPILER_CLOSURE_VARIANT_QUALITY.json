@@ -6,17 +6,17 @@
   "variant": "connected-emitted-closure-v2",
   "baseline_freeze": "43adf1c6 and sol-procedure-compiler-reviewed-v1 immutable package",
   "files": {
-    "applications/semantic-procedure-compiler/types.ts": "0c2df95bdb23f0b657566a605c7379e9da32ecbaad9b097abc122273040036ef",
+    "applications/semantic-procedure-compiler/types.ts": "ebf2a907ca001f97ed428dc9ae92726509639d107858afa56449ecf60b1630ba",
     "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard.nl": "bf5cb8e90a3661892c75de475f147e7aebbb62219e4a22d083cac4f2ff7e0630",
     "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard/readEmittedClosure.nl": "be7362f4e66b6fc48cd8b784aed71940263f7f14ab1af1fc403720ada75a8a5c",
-    "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard/readEmittedClosure/followCodeReference.nl": "dc29b0afe85cb859b29b8cf55f7569c6cd3dc5967e6fb23bd996bc8ebd7fb089",
-    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/check-control.mjs": "5215332b630ddf463c67cc168a1465f36d8d86c58854c4a4ef193762a6048512",
+    "applications/semantic-procedure-compiler/scenarios/replayStep/judgeGuard/readEmittedClosure/followCodeReference.nl": "b60884b259f89c67df8af310ce7291e673e4f9b96b2c4cb33eeb64ed097f4b8c",
+    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/check-control.mjs": "71c74979e889c4a398f096e0a785491b2f5543cbeb87cc8a101796e4429aae18",
     "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/transitive-permission-bug.input.json": "e8655a8dcdc323f88899a7255edbd0722d21d3ec23ec93494765474d9561e6d3",
     "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/transitive-permission-bug.oracle.json": "57f5c22662a082223ef8ab39bec87ca3e9be0dcd0c23723a951ed3f369328de9",
-    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/transitive-permission-bug.reference.json": "36311456ead0755b4209fcff839143af4b2cc85735c6130959a0b76aa4d261e0"
+    "training/semantic_applications/sol/semantic-procedure-compiler/closure-controls/transitive-permission-bug.reference.json": "066f94d28ebe93e41e829fa7c62c24e86bad28fe00cf9125a4a871a2573d0cf1"
   },
   "nl_modules": 30,
-  "nl_lines": 726,
+  "nl_lines": 730,
   "numbered_steps": 208,
   "typed_aliases": 47,
   "graph_edges": 32,
@@ -32,16 +32,16 @@
   ],
   "crisp_policy_helpers": 0,
   "source_type_replay": {
-    "source_sha256": "bcae53505240ffb9be41261114cfa999646205c13a4fc205d119e951d1bc7c0d",
+    "source_sha256": "d38363810cfe1c19ecc51ca4a024dc9d190ec66d1b117d361819ff31b7cb004b",
     "reference_ok": true,
     "closure_witness_type_ok": true,
     "scope": "Authored fullcompiler and closure witness type/source replay, not NL stage execution"
   },
   "connected_controls": {
-    "count": 10,
+    "count": 11,
     "passed": true,
     "positive": 3,
-    "negative": 7,
+    "negative": 8,
     "source_grounding": "Original N_BO has no personal acknowledgment underV2; actual transitive generated grandchild permission is unconditional true. Uncalled ideal decoys remain outside the actual closure.",
     "execution": "Authored witness exact control, no NL execution credit"
   },
@@ -52,5 +52,8 @@
   "independent_peer_review": "pending new variant only; baseline passed separately",
   "live_samples": 0,
   "training_admission": false,
-  "generation_ready": false
+  "generation_ready": false,
+  "peer_findings_resolved": [
+    "File path inventory alone cannot identify defining type symbols; actual declaration texts and separate targetEvidence now supplied and checked."
+  ]
 }
