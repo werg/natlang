@@ -57,7 +57,7 @@ notation-state transitions, all supported editions and a compact ambiguity certi
 | `NotationProtocol` | Supplied duration lexicon, pitch operations, per-voice transposition, reset and repeat policies; convention interpreter. |
 | `WrittenEvent` | Source location/voice/section/order plus literal notation tokens and witnesses; partbook unit reader. |
 | `EditorialClaim` | Actual requested operation, authority, original target candidates and source attachment; editorial interpreter. |
-| `TargetDecision` | Exact target relation and applicability true/false/unknown with original evidence; scoped NL target child. |
+| `TargetDecision` | Actual typed basis distinguishes established/excluded targets, finite exclusive candidates, unknown authority and missing premises; scoped NL target child. |
 | `ReadingBundle` | Alternative source readings and justified corrections for one location; arbitration owns admissibility. |
 | `EditionHypothesis` | One consistent assignment of ambiguous editorial targets and source readings, not one assignment per performance occurrence. |
 | `NotationState` | Current section occurrence, voice-local accidental map, previous sounded event and elapsed ticks. |
@@ -165,3 +165,11 @@ The exact checker validates declared finite invariants and replay, not arbitrary
 Peer review reconstructs the source world independently. Native loading and typed canonical replay
 qualify the source packaging only. Model-facing debt is recorded before publication; live sampling
 and training admission remain separate gates.
+
+## Source refinement and proof boundaries
+
+The executable source expands the original skeleton into explicit family merge cases, immutable hypothesis extensions, scoped target/status returns, detailed per-event notation-state judgments and relation-specific ensemble checks. Orchestration nodes forward actual typed contributions; semantic consumers retain their inputs and owned deltas. `TargetBasis` keeps finite authorized attachment alternatives separate from missing authority/evidence, and each ReadingOption carries the actual TargetDecision to its consistency consumer. Rejected hypothesis extensions carry actual prior option IDs/assignments and the actual incoming option/assignment, so a contradiction can be independently replayed rather than asserted only in prose.
+
+The first fixture has13original source documents with37connected clauses. Its full typed reference has two supported editions with12performed events each, while the private exact checker independently replays original target consistency, duration/pitch/state arithmetic, source domains and evidence coverage. All private reference/checker files live outside the model-visible source and fixture roots. Initial source remains held pending independent full source/reference review and later live measurement.
+
+The certificate retains the actual bundleOrder separately from unordered bundle presentation. Each rejected extension names one actual option per earlier location and the incoming option; both crossed exclusive-target conflicts are retained. The checker accepts a different valid traversal and generated identifiers, while rejecting incomplete prefixes. This exact proof bookkeeping does not decide authority or editorial attachment.

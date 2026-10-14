@@ -1,0 +1,1 @@
+[S01] Authenticated signed instruction: replace the duration glyph of original Bell/Dock event B2 with I. Keep its written pitch, accidental, event kind and all other events unchanged. This slip makes no pitch correction.
