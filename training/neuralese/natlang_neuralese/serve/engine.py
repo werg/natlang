@@ -831,7 +831,10 @@ class Engine:
             self._finish(seq, "length")
             return None
         token = self._next_token(seq)
-        if token is None or token in self.stop_ids:
+        # The close control is trained as the boundary of a text/document span.
+        # A generated close outside a write cannot close a Neuralese block: the
+        # writer closes its own block in _close_block. Never expose it as text.
+        if token is None or token in self.stop_ids or token == self.backbone.controls.close_id:
             self._finish(seq, "stop")
             return None
         if token == self.backbone.controls.open_id:

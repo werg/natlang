@@ -6,24 +6,25 @@
   "source_fixture_changes": {
     "scope": "Format precision only after first source freeze",
     "source_files": [
-      "applications/seed-lineage-laboratory/types.ts"
+      "applications/seed-lineage-laboratory/types.ts",
+      "applications/seed-lineage-laboratory/designExperiments/reconstructBelief/assessObservation.nl"
     ],
     "fixture_files": [
       "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/fixture/controls/request-and-output.md"
     ],
-    "meaning": "Q05 makes focal subject independent of oriented parents and leaves compartment descriptions free. Biological facts and predicted outcomes unchanged; coverage now42clauses."
+    "meaning": "Q05 makes focal subject independent of oriented parents and leaves compartment descriptions free. Biological facts and predicted outcomes unchanged; coverage now42clauses. Peer correction applies valid non-target-compartment predictions to joint-world likelihood; neutral1 is reserved for established absence of information. Current outcomes unchanged."
   },
   "private_files": {
-    "training/semantic_applications/astra/seed-lineage-laboratory/verify-result.mjs": "1259c2a11aa81aacbdcd1b6b3b0f39a01ae55f1b521b7669c6f35fa70c48807f",
-    "training/semantic_applications/astra/seed-lineage-laboratory/check-verifier.mjs": "2a87b2393b143fe0ec7031a694530c828a50668fbce89096982423ebfc286069",
-    "training/semantic_applications/astra/seed-lineage-laboratory/project.json": "c8ccd5113ae6c75d4dcb007bf001021aae4b214fc0c3c179e33ce3523f61f0ef",
+    "training/semantic_applications/astra/seed-lineage-laboratory/verify-result.mjs": "1aa16ed5fba323a01b6e3d6733857a8654422554be2da56a07083206d7b29d2e",
+    "training/semantic_applications/astra/seed-lineage-laboratory/check-verifier.mjs": "a066d39be003bd6ed733abddc0c1ddf576ff2371a1b97a81f15934c64d4dd052",
+    "training/semantic_applications/astra/seed-lineage-laboratory/project.json": "b92e4a1c2c531c096c9e3e201f15af9cb9e25065f1589b42626a6e48a4e57ca2",
     "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/oracle.json": "61e6626d368dcdb2e2cfb46cccb2acb4fa672bfae3da8fdd3759980deb711df0",
     "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/reference-certificate.json": "e98e9480191b6edde3a1b63cf7f842abc8253f0d9c2847e8ffd7cb8bcfd04fe1",
     "training/semantic_applications/astra/seed-lineage-laboratory/derive-reference.py": "4b50b5dd13bc7369f62d1d542ddca542c57b0a8131e7e9959aaee9bf7d440fcc"
   },
   "package": {
-    "path": "/tmp/astra-seed-lineage-source-v3",
-    "source_sha256": "7f08efaa7e55ccb828a70d3e87fc314119108183270c00e6cbcb8296deda1c62",
+    "path": "/tmp/astra-seed-lineage-source-v6",
+    "source_sha256": "8575e659c488d93b903ab52bca7636d01ed70d703a16923ff29bd2e648ae1d43",
     "reference": {
       "path": "training/semantic_applications/astra/seed-lineage-laboratory/lantern-bank/reference-certificate.json",
       "sha256": "e98e9480191b6edde3a1b63cf7f842abc8253f0d9c2847e8ffd7cb8bcfd04fe1",
@@ -35,7 +36,7 @@
     "quality": {
       "schema": "natlang.semantic-application-quality-observations/1",
       "gating": false,
-      "nl_lines": 558,
+      "nl_lines": 560,
       "numbered_policy_steps": 159,
       "callable_nodes": 27,
       "call_graph_edges": 26,
@@ -107,9 +108,9 @@
   },
   "controls": {
     "passed": true,
-    "positive": 7,
-    "negative": 29,
-    "output_sha256": "80be630fa834142c239438c3db1f8ad33f6f04c638696ec0d2d3991e4a9a3ea7"
+    "positive": 8,
+    "negative": 35,
+    "output_sha256": "20b7e377263dffcb5f4e9d8214f6901f25d53bad352215081f9eac4afa3cfc96"
   },
   "equivalences_checked": [
     "Unordered collections",
@@ -136,5 +137,10 @@
   ],
   "independent_review": false,
   "live_qualified": false,
-  "training_admitted": false
+  "training_admitted": false,
+  "peer_exact_findings_closed": [
+    "Complete unique likelihood world ID domain includes zero-likelihood rows.",
+    "Tie IDs are unique source candidate IDs with the actual selected objective vector.",
+    "Solved leaf comparison has no synthetic choice."
+  ]
 }

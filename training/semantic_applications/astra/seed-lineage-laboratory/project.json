@@ -429,8 +429,8 @@
   "services": [],
   "composition": {
     "nl_files": 27,
-    "physical_lines": 531,
-    "body_lines": 328,
+    "physical_lines": 533,
+    "body_lines": 330,
     "numbered_steps": 159,
     "type_aliases": 46
   },
@@ -454,7 +454,7 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": false,
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
@@ -491,5 +491,13 @@
       "result_type": "ChallengeMeaning",
       "consumed_by": "Certificate audit findings"
     }
-  ]
+  ],
+  "independent_reviews": [
+    {
+      "path": "plans/semantic_stack/SEED_LINEAGE_APPLICATION_REVIEW_SOL.json",
+      "sha256": "bb5cf5012cef71379c1f737e8f87b38872eec896505ef9ecf8356c4045074052",
+      "reviewer": "semantic_slate_sol"
+    }
+  ],
+  "readiness_scope": "Independent source semantics, full typed canonical witness and exact verifier controls pass. Live actual NL execution, contribution consumption and training admission remain unqualified."
 }

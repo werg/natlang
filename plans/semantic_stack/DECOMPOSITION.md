@@ -150,6 +150,10 @@ The folder reducer owns the finite folder frontier and exact source ID/path bind
 
 The first live typed-handoff trace showed that Stage1's global signed-effect rule caused a clear reported reduction to be marked unresolved. Stage2 also borrowed an edge from another assertion, and Stage3's aggregate child failed to return its own assessment. The v13 task boundary narrows Stage1 to extracting reported claims and perturbations, Stage2 to deciding the primary assertion's own directed relation with its own witness, and Stage3 to one edge at a time through a scoped causal-support decision. Every missing assessment is kept as a witnessed repair obligation. This changes natural-language stage policy and call granularity; exact code still only binds IDs, checks quoted evidence and carries returned fields.
 
+### Folder cursor and cumulative graph (opt-in v15c)
+
+The v15b live trace showed a real folder-selection bug: extra arguments to `iterateOn` stayed fixed, so the first evidence folder was processed again. The root now carries `FolderReductionState {nextFolderIndex,completedState,processedSourceIds}` as its sole changing iteration state. Its numbered plan binds the sorted folder collection once, selects `sortedDirs[state.nextFolderIndex]` each step, awaits the existing named natural-language stage chain, appends that chain's actual typed contributions, and advances the index once. The finite measure is the number of folders remaining. Exact code checks unique source IDs and paths, quoted spans, and final coverage of the visible ID universe; these are mechanism checks, not ecological judgments. The five named stages and scoped literals still decide claims, edges, causal support, scope and signed paths in natural language. The v15c renderer adds only the root plan and state type, preserving the v15b helper bodies, fixture and gold. Source replay proves wiring; a fresh teacher trajectory must establish that the cursor advances and that returned semantic decisions drive the final graph before any training admission.
+
 ### Non-gating live idiomaticity signal
 
 The policy decision about whether a teacher trajectory expresses the authored

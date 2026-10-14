@@ -1,0 +1,28 @@
+{
+  "schema": "natlang.application-source-readiness/1",
+  "author": "semantic_slate_astra",
+  "application": "seed-lineage-laboratory",
+  "manifest": {
+    "path": "training/semantic_applications/astra/seed-lineage-laboratory/project.json",
+    "sha256": "62ef3c2652807e249247dcd548dbccd077053bcbcd80b24d995e57bcf5138ace"
+  },
+  "independent_receipt": {
+    "path": "plans/semantic_stack/SEED_LINEAGE_APPLICATION_REVIEW_SOL.json",
+    "sha256": "bb5cf5012cef71379c1f737e8f87b38872eec896505ef9ecf8356c4045074052",
+    "reviewer": "semantic_slate_sol",
+    "all_pinned_source_fixture_oracle_reference_verifier_hashes_checked_before_binding": true
+  },
+  "package_path": "/tmp/astra-seed-lineage-reviewed-source-v1",
+  "source_sha256": "8575e659c488d93b903ab52bca7636d01ed70d703a16923ff29bd2e648ae1d43",
+  "source_status": "candidate_source_reviewed_live_pending",
+  "canonical_reference_ok": true,
+  "exact_controls": {
+    "passed": 43,
+    "positive": 8,
+    "negative": 35,
+    "independent_negative_domain_probes": 3
+  },
+  "readiness_scope": "Source/oracle semantics, typed canonical witness and exact result seams independently reviewed. Eligible for a pinned diagnostic; not live qualification or training admission.",
+  "live_qualified": false,
+  "training_admitted": false
+}
