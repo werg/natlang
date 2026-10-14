@@ -84,3 +84,36 @@ Future divergence checks should compare exact known-good references for data
 and masks, prompt rendering, dtype/upcasts, state/cache between steps, kernels,
 optimizer/resume, gradient flow, loss weighting, and scoring. A behavioral
 regression is a bug to localize until those checks rule it out.
+
+## Protected R8 warm-up, matched train-only student roots (2026-10-14)
+
+The independently qualified clean QAD R8 warm-up is a starting point for PH
+SFT, not a claim of task competence. Pop sampled two rollouts for each of 11
+held-disjoint train families in `qad-r8-warmup-student-root-20261014-v4`, then
+ran the pinned LFM base on the exact same packet and seeds in
+`qad-r8-base-matched-student-root-20261014-v4`. Both use the full prompt and
+the same serving image. The packet SHA-256 is
+`21652ee30befca810efb1283436cd4a869faead6f13874397432c8da28c8d280`.
+
+Both arms passed **0/22**. The warm-up arm had 18 `invalid_action`, three
+`semantic_mismatch`, one `budget_exhaustion` (score SHA-256
+`0b11b288e1ac450ac0e482bfc8527340e9d06f95652287b0cadb08f7b29820b2`).
+The base had one `invalid_action`, 19 `semantic_mismatch`, one
+`budget_exhaustion`, one `model_incomplete` (score SHA-256
+`0bf1366fe534ae8f8b48cc937e1a5026878c29c4ccf72ae2bccf624ad0d03f55`).
+This batch is too hard to use as a pass-rate gate at warm-up. The different
+failure mix still warrants an action-validity dragnet after PH SFT. The
+`invalid_action` scorer reports any rejected action in the trajectory before
+the final answer; for example, one route-planning run repeatedly tried to
+return the `world` service object as a string. It does not mean all 18 runs
+ended with a syntax error.
+
+The v4 exact replay produced 43 handoff sites (25 failed actions, 18 wrong
+results), skipped four whose replay diverged, and selected 11 distinct
+train-only source groups for teacher continuation. The selected source SHA is
+`08ee65459f6a59f91413fc99607ea63c91682260af0684d73c62ea0c37c70aac`.
+The earlier v3 produced 27 exact sites and selected 11. Their Luna outputs
+remain review candidates; successful continuation, source exclusion and
+native decision quality must be checked before corpus admission. The PH
+CoreWeave continuation should be judged stage by stage against this exact
+behavior baseline, including action diagnostics and post-observation recovery.
