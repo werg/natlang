@@ -109,3 +109,5 @@ A symbolic generated-code interpreter needs the actual callee/type-file closure 
 ## Separate object existence from directed permission
 
 When a source describes a physical connection and travel restrictions, give existence an explicitly physical typed meaning. NL interpretation owns whether a connection exists, which ordered direction is allowed and which carried-state conditions apply. Attach reverse-prohibition witnesses to the present one-way connection. Compare physical identity separately from directed traversal; preserve all negative evidence while reconciling a candidate world. A failed comparison calls for a scope repair, not deletion of inconvenient claims.
+
+For event certificates, distinguish generated work-slot identifiers from the original source identity that authorized the slot. A rejected one-use trigger still reports its source-owned capacity; consumption is a separate returned field. The parent copies these identities from the selected typed rule/slot before consuming the NL applicability result.

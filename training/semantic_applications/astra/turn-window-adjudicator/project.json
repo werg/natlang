@@ -451,8 +451,8 @@
   "services": [],
   "composition": {
     "nl_files": 26,
-    "nl_total_lines": 643,
-    "nl_body_lines": 435,
+    "nl_total_lines": 646,
+    "nl_body_lines": 464,
     "numbered_steps": 162,
     "type_aliases": 43,
     "visible_crisp_policy_lines": 0
@@ -481,11 +481,14 @@
   "readiness": {
     "source_loader_checked": true,
     "typed_declarations_checked": true,
-    "typed_reference_checked": false,
+    "typed_reference_checked": true,
     "independent_oracle_review": false,
-    "exact_result_replay": false,
+    "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
   },
-  "model_facing_debt": "All source is unmeasured; full reference/verifier and independent source review precede pinned diagnostic, then approximately48 reviewed samples for an adopted presentation."
+  "model_facing_debt": "All source is unmeasured; full reference/verifier and independent source review precede pinned diagnostic, then approximately48 reviewed samples for an adopted presentation.",
+  "reference_path": "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/reference-report.json",
+  "external_verifier_path": "training/semantic_applications/astra/turn-window-adjudicator/verify-result.mjs",
+  "external_verifier_export": "verifyCandidate"
 }

@@ -1,0 +1,44 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {verifyCandidate} from './verify-result.mjs';
+const base=path.join(path.dirname(fileURLToPath(import.meta.url)),'glass-garden');
+const read=p=>JSON.parse(fs.readFileSync(path.join(base,p),'utf8'));
+const reference=read('reference-report.json'),oracle=read('oracle.json'),request=read('request.json');
+const manifest=read('fixture/manifest.json'),fixture={'manifest.json':JSON.stringify(manifest)};
+for(const d of manifest.documents)fixture[d.path]=fs.readFileSync(path.join(base,'fixture',d.path),'utf8');
+const checks=[];
+function check(name,expected,mutate){const report=structuredClone(reference);mutate?.(report);const result=verifyCandidate({value:report,oracle,inputs:{request},fixture});checks.push({name,expected,actual:result.ok,passed:result.ok===expected,issues:result.issues});}
+function walk(v,fn){if(Array.isArray(v)){for(const x of v)walk(x,fn);}else if(v&&typeof v==='object'){fn(v);for(const x of Object.values(v))walk(x,fn);}}
+function rename(r,ids){const visit=v=>Array.isArray(v)?v.map(visit):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,visit(x)])):typeof v==='string'&&ids.has(v)?'alpha:'+v:v;Object.assign(r,visit(r));}
+const fork=r=>r.windows[2];
+check('full canonical certificate',true);
+check('unordered boards witnesses and sibling parts',true,r=>{r.sourceCoverage.reverse();r.triggerDecisions.reverse();walk(r,v=>{for(const k of ['witnesses','objects','resources','tokens','clauseIds','parts','outcomes'])if(Array.isArray(v[k]))v[k].reverse();});});
+check('consistent generated trace and revision IDs',true,r=>walk(r,v=>{for(const k of ['slotId','causeSlotId','bundleId','revision','beforeRevision'])if(typeof v[k]==='string')v[k]='alpha:'+v[k];}));
+check('consistent internal rule IDs',true,r=>{const ids=new Set();walk(r,v=>{if(typeof v.ruleId==='string')ids.add(v.ruleId);});walk(r,v=>{if(typeof v.ruleId==='string')v.ruleId='alpha:'+v.ruleId;if(Array.isArray(v.appliedRuleIds))v.appliedRuleIds=v.appliedRuleIds.map(x=>'alpha:'+x);if(v.kind==='trigger')v.sourceIdentity='alpha:'+v.sourceIdentity;if(typeof v.intentId==='string'&&ids.has(v.intentId))v.intentId='alpha:'+v.intentId;});});
+check('independent reason wording',true,r=>walk(r,v=>{if(typeof v.reason==='string')v.reason='Equivalent independently expressed justification.';}));
+check('wrong case identity',false,r=>r.caseId='other');
+check('captured controller replaced by live controller',false,r=>{r.announcements[0].references.find(x=>x.partId==='PA'&&x.controllerBasis==='captured').capturedController='Rowan';});
+check('announced damage altered',false,r=>r.announcements[0].parts[0].amount=2);
+check('source window order changed',false,r=>[r.windows[0],r.windows[1]]=[r.windows[1],r.windows[0]]);
+check('source identity mislabeled',false,r=>r.windows[0].sourceIdentity='MOVE');
+check('initial controller corrupted',false,r=>r.windows[0].before.objects.find(o=>o.instanceId==='A1').controller='Rowan');
+check('common before revision corrupted',false,r=>fork(r).batch.beforeRevision='absent-revision');
+check('Cover reduction omitted on second part',false,r=>{const d=fork(r).replacements.find(d=>d.lineagePartId==='PM'&&d.afterParts[0].kind==='damage');d.afterParts[0].amount=2;});
+check('Mantle converts original rather than reduced quantity',false,r=>{const d=fork(r).replacements.find(d=>d.afterParts[0].kind==='growth');d.afterParts[0].amount=2;});
+check('wrong actual damage',false,r=>fork(r).batch.outcomes.find(x=>x.part.lineagePartId==='PA').actualDamage=3);
+check('replacement capacity omitted',false,r=>fork(r).batch.consumedTokenIds=[]);
+check('last known departing controller corrupted',false,r=>fork(r).batch.departures[0].lastKnownController='Ilex');
+check('declared object delta unapplied',false,r=>fork(r).batch.objects.find(c=>c.instanceId==='M1').after.growth=2);
+check('Scribe recipient is source controller',false,r=>{r.triggerDecisions.find(d=>d.capacityTokenIds.includes('SCRIBE')).recipient='Rowan';});
+check('Mirror falsely emits',false,r=>{r.triggerDecisions.find(d=>d.capacityTokenIds.includes('MIRROR')).eligible=true;});
+check('negative trigger loses capacity owner',false,r=>{r.triggerDecisions.find(d=>d.capacityTokenIds.includes('REPRISAL')).capacityTokenIds=[];});
+check('missing printed trigger judgment',false,r=>r.triggerDecisions.pop());
+check('returned instance reuses departed identity',false,r=>r.windows[3].batch.objects[0].after.instanceId='A1');
+check('return refreshes spent token',false,r=>r.windows[3].after.tokens.find(t=>t.id==='WARD').status='available');
+check('return inherits departed damage',false,r=>r.windows[3].after.objects.find(o=>o.instanceId==='A2').damage=2);
+check('final ink paid to wrong player',false,r=>{r.finalBoard.resources.find(x=>x.player==='Ilex').ink=0;r.finalBoard.resources.find(x=>x.player==='Rowan').ink=1;});
+check('invented source quotation',false,r=>r.windows[0].before.objects[0].witnesses[0].quote='invented evidence');
+check('missing relevant source clause',false,r=>r.sourceCoverage[0].clauseIds.pop());
+console.log(JSON.stringify({scope:'External exact certificate controls; no application or NL literal execution',passed:checks.every(x=>x.passed),checks},null,2));
+if(checks.some(x=>!x.passed))process.exitCode=1;

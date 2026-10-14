@@ -27,5 +27,7 @@ returns: TriggerDecision
    specified card/instance identities and initial fields; the semantic result must not refresh turn tokens.
 6. An ineligible judgment returns no consequence parts or consumed token IDs and states its specific
    source reason. Missing decisive evidence returns null rather than a guessed recipient or event amount.
-7. Return the checked actual TriggerDecision with source priority. The parent queues this value once;
+7. Bind capacityTokenIds from the actual owning rule.tokenIds, including ineligible decisions; these
+   identify capacity separately from tokens consumed now. Return the checked TriggerDecision with
+   source priority. The parent queues this value once;
    subsequent board changes cannot cause a second interpretation of its already captured recipient.
