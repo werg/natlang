@@ -281,3 +281,33 @@ def test_evidence_subagent_keeps_published_eval_split_and_legacy_tool_observatio
     assert rows['train.parquet:0'].split == 'train'
     observation = rows['eval.parquet:0'].messages[1]
     assert observation['role'] == 'tool' and observation['content'] == 'Exact observed result'
+
+
+def test_native_replay_disambiguates_reused_upstream_ids(tmp_path):
+    import json, subprocess, shutil
+    root = Path(__file__).resolve().parents[1]
+    node = str(Path.home() / '.local/bin/node') if (Path.home() / '.local/bin/node').exists() else shutil.which('node')
+    receipt = {'repo':'fixture/reused','revision':'abc'}
+    def make(answer):
+        t = expansion_trajectory('D40',receipt,'session',{'messages':[
+            {'role':'user','content':'Continue coding'},
+            {'role':'assistant','content':'Earlier '+answer},
+            {'role':'tool','content':'Observed '+answer},
+            {'role':'assistant','content':'Recent step'},
+            {'role':'tool','content':'Recent observation'},
+            {'role':'assistant','content':answer}]})
+        return record(t,3,5)
+    rows=[make('FIRST ANSWER'),make('SECOND ANSWER')]
+    assert rows[0]['id']==rows[1]['id']
+    source=tmp_path/'fixture.port-records.jsonl';source.write_text(''.join(json.dumps(r)+'\n' for r in rows))
+    reservations=tmp_path/'reserved.jsonl';reservations.write_text('')
+    subprocess.run([node,str(root/'ts-host/scripts/inline-curriculum/build-port-record-calls.mjs'),'--input',str(source),'--out',str(tmp_path/'built'),'--reservations',str(reservations)],check=True,capture_output=True)
+    ir=next((tmp_path/'built/fixture').glob('*.ir.jsonl'))
+    case=json.loads(ir.read_text());children=case['curriculum']['reference']['children']
+    assert len({c['match'] for c in children})==2
+    assert case['source_ids']==[r['id'] for r in rows]
+    subprocess.run([node,str(root/'ts-host/scripts/inline-curriculum/replay-port-record-calls.mjs'),str(ir),str(tmp_path/'replayed')],check=True,capture_output=True)
+    summary=json.loads((tmp_path/'replayed.summary.json').read_text())
+    assert summary['admitted']==1 and not summary['omitted']
+    row=json.loads((tmp_path/'replayed.rows.jsonl').read_text())
+    assert json.loads(row['outcome']['files']['answers.json'])=={'item-01':'FIRST ANSWER','item-02':'SECOND ANSWER'}
