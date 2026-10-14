@@ -9,12 +9,15 @@ bounded iterateOn process, despite returning the exact answer in this case.
 """
 from __future__ import annotations
 
-import hashlib
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'training/neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex  # noqa: E402
+
 SOURCE = ROOT / 'runs/qad-student-recovery-teacher-20261014-v1'
 PARENTS = SOURCE / 'accepted-parents.jsonl'
 TURNS = SOURCE / 'native-turns.review-candidates.jsonl'
@@ -22,14 +25,6 @@ HELD = Path('/srv/storage/natlang-artifacts/qad-base-vs-15000-matched48-w1-20261
 OUT = SOURCE / 'approved-turns.jsonl'
 REVIEW = SOURCE / 'admission-review.json'
 HELD_FAMILY = 'curriculum_composed_process'
-
-
-def sha(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open('rb') as stream:
-        for chunk in iter(lambda: stream.read(8 << 20), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def rows(path: Path):
@@ -77,10 +72,10 @@ def main() -> None:
     review = {
         'schema': 'natlang.qad-student-recovery-admission/1',
         'training_admission': True,
-        'source': {'parents': str(PARENTS.relative_to(ROOT)), 'sha256': sha(PARENTS)},
-        'materialized': {'turns': str(TURNS.relative_to(ROOT)), 'sha256': sha(TURNS)},
-        'held_eval': {'sha256': sha(HELD), 'source_group_overlap': 0, 'source_id_overlap': 0},
-        'approved_turns': {'path': str(OUT.relative_to(ROOT)), 'sha256': sha(OUT), 'count': len(selected)},
+        'source': {'parents': str(PARENTS.relative_to(ROOT)), 'sha256': sha256_file_hex(PARENTS)},
+        'materialized': {'turns': str(TURNS.relative_to(ROOT)), 'sha256': sha256_file_hex(TURNS)},
+        'held_eval': {'sha256': sha256_file_hex(HELD), 'source_group_overlap': 0, 'source_id_overlap': 0},
+        'approved_turns': {'path': str(OUT.relative_to(ROOT)), 'sha256': sha256_file_hex(OUT), 'count': len(selected)},
         'parents': {'exact_accepted': len(parents), 'admitted': len(admitted), 'held': 1,
                     'admitted_families': dict(sorted(family_counts.items()))},
         'decision_counts': dict(counts),
@@ -93,7 +88,7 @@ def main() -> None:
     }
     REVIEW.write_text(json.dumps(review, indent=2, ensure_ascii=False) + '\n')
     print(json.dumps({'parents': len(admitted), 'turns': len(selected), 'families': len(family_counts),
-                      'sha256': sha(OUT)}, sort_keys=True))
+                      'sha256': sha256_file_hex(OUT)}, sort_keys=True))
 
 
 if __name__ == '__main__':

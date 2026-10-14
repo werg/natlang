@@ -1,0 +1,37 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "qad-student-root-recovery-s52052-v1",
+  "owner": "pop",
+  "path": "runs/qad-student-recovery-teacher-20261014-v1",
+  "files": [
+    {
+      "path": "accepted-parents.jsonl",
+      "bytes": 5844352,
+      "sha256": "fc2ea4690689f9f3a75fa0f15237a9c6368537679830f33f68cf05da1ed83793",
+      "lines": 10
+    },
+    {
+      "path": "accepted-parents.review.json",
+      "bytes": 1280,
+      "sha256": "d844ed802defe352aa0a3a9b59abf5a430aa0046a77c6674d3440fe91c7f0ae7"
+    },
+    {
+      "path": "admission-review.json",
+      "bytes": 1933,
+      "sha256": "7e2d35bffc08f89c2ec130c70dc7d2f974002fc92f089acb32563d64cff1c87c"
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 4873072,
+      "sha256": "d7c2fe4a6859d15b953af2f17e194360b95b211c4c077696d66269b4eecef052",
+      "lines": 57
+    },
+    {
+      "path": "native-turns.review-candidates.jsonl",
+      "bytes": 8186163,
+      "sha256": "5579c865e55483a12e5022ad3be02f7e94c3ed28c1d8eec146ac0baac9f0293a",
+      "lines": 95
+    }
+  ],
+  "bytes": 18906800
+}
