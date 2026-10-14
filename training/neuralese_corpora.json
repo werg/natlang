@@ -75228,6 +75228,27 @@
         "held_text": {}
       },
       "notes": "Measured greenhouse Luna iteration decisions, 38 exact+recorded iteration parents; 168 approved native decisions; train-only render"
+    },
+    {
+      "id": "luna-held-shapes-s52067-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52067-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and process review",
+      "license": "project-generated; CC-BY-SA-4.0 (HotpotQA source)",
+      "split": "train only; source IDs/groups checked against held packet; global union held/source-quality filters still required",
+      "admission": "79 terminal teacher roots, 75 exact candidates, nine semantic holds (seven dataset-workbench label audits and two missing iterateOn); 66 admitted parents and 361 approved native decisions",
+      "training_admission": true,
+      "training_admission_reason": "Exact accepted root and verified source snapshot, explicit semantic holds, protected source-group check, native per-decision approval; only approved-turns.jsonl is a training input",
+      "review_status": "Dataset-workbench parents held pending independent semantic item adjudication; two research parents held for missing required iterateOn; other exact train parents reviewed and curated",
+      "required_conversion": "Render both tokenizer twins in full, program-header and whole-trajectory, then add to next protected union",
+      "notes": "See plans/neuralese/BACKLOG_V5_SHAPE_REVIEW_20261014.md and runs/luna-s52067-parent-review-20261015-v1/curation-review.json. Native candidate intermediate may be pruned after registration."
     }
   ],
   "coverage_backlog": [
