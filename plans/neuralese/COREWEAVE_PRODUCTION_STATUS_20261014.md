@@ -187,3 +187,22 @@ At20:42 the shared scorer reports first task400 pass16finished/5success,
 2invalid-action/4repetition/5semantic-mismatch; it still reports incomplete
 accounting. Noise repeat1 has14finished/3success,2unresolved. These are partial
 investigation results, not a final noise estimate or qualification.
+
+Corrected v2 was released20:46:38 in the same LFM sandbox: ordinary bootstrap
+PID10323 under the existing namespace-init collect hold, existing sampler7235,
+no cloud reset or duplicate allocation. Exact source63b0cc280c includes fad309e5;
+archive61,072,171bytes SHA
+`b22ac96feddec9317f172cfd34caef0432ca15febf6e8d29ba2ec543e2877df3`.
+Resolved recipe v2 SHA
+`4e467b3fd0b159d7704cf28c9b1c351e2d56313e7e73e4506960ddc8cce882a1`
+matches all194 staged Python hashes and unchanged parent/PH identities. Full
+restore and first updates remain to be observed. The heads-failure evidence
+archive is independently SHA-verified on DGX:13,564,590bytes,
+`053662d98cace73099392228cee2d0f2a759293613a0f5386d2a3efce6a14f3a`.
+
+Shared scorer accounting explicitly separates complete result export from known
+terminal outcomes. First task400 pass5/16 is accounted despite `complete:false`
+because all outcomes are known and infrastructure/unresolved counts are zero.
+This permits its noise repeat; incomplete result files alone do not invalidate
+that success count. Final noise and the matched reference comparison are still
+pending.
