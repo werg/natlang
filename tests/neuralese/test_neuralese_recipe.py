@@ -14,6 +14,18 @@ from natlang_neuralese.train.recipe import load_recipe, require_gate, stage_para
 import legacy_recipes
 
 
+def test_compressed_recipe_input_checks_decoder_before_launch(monkeypatch):
+    from natlang_neuralese.train import recipe
+
+    inputs = {'direct_warmup': {'text_data': {'path': '/data/train.jsonl.zst', 'sha256': 'a' * 64}}}
+    monkeypatch.setattr(recipe.shutil, 'which', lambda name: None)
+    with pytest.raises(RuntimeError, match='zstd CLI is required.*train.jsonl.zst'):
+        recipe.require_input_decoders(inputs)
+    recipe.require_input_decoders({'held': {}})
+    monkeypatch.setattr(recipe.shutil, 'which', lambda name: '/usr/bin/zstd')
+    recipe.require_input_decoders(inputs)
+
+
 def declared():
     return legacy_recipes.foundation()
 

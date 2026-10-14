@@ -359,6 +359,15 @@ def _staged_inputs(resolved):
                    if isinstance(value, dict) and 'path' in value and role != 'direct_artifact_manifest' else value) for role, value in resolved.items()}
 
 
+def require_input_decoders(stage_inputs):
+    """Fail plan-only before creating a lineage if a declared compressed input cannot be read."""
+    compressed = sorted({value['path'] for resolved in stage_inputs.values() for value in resolved.values()
+                         if isinstance(value, dict) and str(value.get('path', '')).endswith('.zst')})
+    if compressed and shutil.which('zstd') is None:
+        raise RuntimeError('zstd CLI is required for compressed training inputs; install or mount it before '
+                           'plan-only or launch (first input: ' + compressed[0] + ')')
+
+
 def stage_input_args(resolved, kind):
     """Serialize already-validated file roles to the shared handler CLIs."""
     args = []
@@ -1838,6 +1847,7 @@ def main(argv=None):
         # A held stage (admitted: false) never runs in this lineage; its inputs are neither resolved nor hashed.
         stage_inputs[stage['id']] = ({} if stage.get('admitted') is False else
                                      resolve_stage_inputs(recipe, stage, stage_defaults, overrides))
+    require_input_decoders(stage_inputs)
     inputs = {str(args.heads): sha(args.heads)} if args.heads is not None else {}
     for path in (args.records, args.pieces, args.text_data):
         if path is not None:
