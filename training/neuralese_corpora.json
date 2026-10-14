@@ -74397,6 +74397,28 @@
           }
         }
       }
+    },
+    {
+      "id": "folder-criteria-inline-measured-20261014-v1",
+      "owner": "pop",
+      "path": "runs/folder-criteria-inline-measured-20261014-v1",
+      "include": [
+        "selected.ir.jsonl",
+        "accepted-parents.jsonl",
+        "selection-review.json",
+        "semantic-holds.json",
+        "admission-review.json",
+        "approved-turns.jsonl"
+      ],
+      "source_class": "measured-Luna-inline-directory-reducer-teacher-decisions",
+      "license": "project-generated",
+      "split": "train only; new s52062-s52064 source groups disjoint from protected held task packet, backlog-v5 v2 witness and SST witness; global union held filter still required",
+      "admission": "48 exact parent trajectories selected from matched A/B/C plus one medium-reasoning repair; 973 approved native decisions after 178 failed/unexecuted proposals and one uninspectable Boolean child were held",
+      "training_admission": true,
+      "training_admission_reason": "Exact file and answer oracle; per-ticket NL call count in revised arms; 151 independently matched child Boolean judgments agree with expected ticket moves; protected source-group checks and immutable review hashes. Materialized rejected intermediate pruned.",
+      "review_status": "Selection and native-turn semantic review completed; later global held filtering required at union build",
+      "required_conversion": "Render LFM and Mellum full, program-header and whole-trajectory twins; include in a later protected union delta after global held/source-quality checks",
+      "notes": "Only approved-turns.jsonl is a training input. 44 C reusable-function trajectories, three B explicit-inline trajectories, one medium-reasoning C repair. Measurements and failure analysis: plans/neuralese/BACKLOG_V5_SHAPE_REVIEW_20261014.md."
     }
   ],
   "coverage_backlog": [

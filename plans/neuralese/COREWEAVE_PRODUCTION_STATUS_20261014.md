@@ -235,3 +235,48 @@ SHA-verified on DGX,37,463,184bytes,
 `53e673a25582202fbb31c561f8e11618b967a774053016c66791c63abb795873`.
 Its sibling timing, first-action and partial-exchange exports preserve exact
 final/noise controls and failure feedback for the assigned diagnosis.
+
+Both full production trainers now perform real updates. LFM completed cold
+windows and exact qualified410 weights/optimizer/RNG continuation at21:21;
+actual H100 plan uses85,019,590,656byte capacity and switches packed/sequential
+execution for current geometry. At93 it processed31,743forward tokens in0.973s,
+~31,126supervised tokens/s,34.59GiB peak allocated/70.55GiB reserved andGPU100%.
+Its step0 identity file explicitly inherits the previously qualified410 proof;
+this is not a fresh claim that trained weights equal base. Resolved LFM cadence
+is checkpoint440/eval1000, distinct from Mellum170/400. LFM521 and Mellum682
+were observed at21:26 with no runtime exception.
+
+Automatic serialized private full-state exporters now supervise both roles.
+LFM440:1,149,832,219bytes, SHA
+`0d508a1051685018f4203c03a35b581d04ce920257ea86cdeb8b2ee99e84b231`,
+PRIVATE run `werg/natlang/7x3w4dq2`, verified21:27:16; PUT9.92seconds,
+independent full SHA readback8.80seconds. Mellum510:46,821,478,103bytes, SHA
+`b04223599c3c6c3fbe98801127b8d1f258f47bba44c4e718ba60d0c3fefc58dc`,
+PRIVATE run `werg/natlang/ywcj2mvb`, verified21:25:52; PUT338.05seconds and
+independent full SHA readback134.55seconds. Exact receipt/state files live in
+external dgxops; units `cw-lfm-periodic-private-checkpoint-export` and
+`cw-mellum-periodic-private-checkpoint-export` remain active. These qualify
+actual training/continuation/export mechanism, not task/model promotion.
+
+Own obsolete zero-update directories and consumed source archives were removed
+only after live-FD and manifest checks: failed-heads-binding output,
+zero-update-rng output, code.tar.gz and code-refresh.tar.gz under
+`/work/production`,181,337,398bytes reclaimed. Active parents, protected inputs,
+current runtime, caches and model outputs remain. One DGX failure evidence
+archive remains for the unresolved original restart diagnosis. No production
+sandbox was stopped; both allocations have ongoing production consumers.
+
+Remaining lifecycle work: Mellum recipe still owns PID1 and has no verified
+collect hold. Namespace-init ignored default SIGSTOP. Periodic private exports
+protect verified snapshots; final recipe exit can remove root/API before final
+artifact export. Before stage completion, use a properly held full-state resume
+from verified durable state and preserve source-job durability; never assume
+post-exit collect works. LFM's ordinary bootstrap11935 runs under retained
+namespace-init collect hold1. No third GPU allocation or current Mellum
+interruption was made.
+
+Frozen Mellum correctly declares responseKLwarn0.5/stop1.5, but separately
+inherited agreementwarn0.97 drives report-only48-probe gates every220updates
+when response agreement drops below0.97 even belowKLwarn. This is an exact
+utilization finding for a future operational handoff, not a hot package/control
+change or explanation of the independently reproduced trained-weight failures.
