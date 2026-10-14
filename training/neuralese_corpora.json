@@ -73172,6 +73172,180 @@
         "held_text": {}
       },
       "notes": "Corrected 41-decision LFM render, excludes repeated route look. Mellum tokenizer twin to be rendered separately on DGX; final union requires global held/source proof."
+    },
+    {
+      "id": "qad-r8-student-root-recovery-v3-twins-render-20261014-v2",
+      "owner": "dgx",
+      "path": "runs/qad-r8-recovery-v3-v2-twins-20261014",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: qad-r8-student-root-recovery-v3-20261014-v2; variants: full/lfm25, full/mellum21, program-header/lfm25, program-header/mellum21, whole-trajectory/lfm25, whole-trajectory/mellum21; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "qad-r8-student-root-recovery-v3-20261014-v2"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "215ebd980319386e5f5c0ce14069a4c23e15516918e28f035242fe1d4ebe5542",
+            "documents": 3,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 3,
+                "supervised_tokens": 512,
+                "tokens": 21672,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 7567,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "3725c24cd9eb37544c50f681de3d1cbffcf137795f4dcea16adf569c8c6160c8",
+            "documents": 3,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 3,
+                "supervised_tokens": 545,
+                "tokens": 21841,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 7693,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "bc0366dfdf5729e2407295cf57cee74bfede1403c101f3bdf9725deb4e8d56dd",
+            "documents": 41,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 41,
+                "supervised_tokens": 4160,
+                "tokens": 94016,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 3229,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "d64c5a1330be8903ec4c8b3bf2e29cad6ce44c419f43f9576023cfae0b6e9df6",
+            "documents": 41,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 41,
+                "supervised_tokens": 4706,
+                "tokens": 96541,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 3536,
+            "merge_omissions": {}
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "125b6f2135e4c40e77c1e24e713c7c1a970903d3fbfeed52471ec11800903a6c",
+            "documents": 23,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 14323,
+                "documents": 23,
+                "opening_tokens": 10980,
+                "supervised_tokens": 3343,
+                "tokens": 50317,
+                "tool_tokens": 6961
+              }
+            },
+            "max_document_tokens": 3121,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "87672099ef224b595f24df34ca54312ce22b93f3fc03f82375f511109eaba262",
+            "documents": 23,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 16206,
+                "documents": 23,
+                "opening_tokens": 10878,
+                "supervised_tokens": 5328,
+                "tokens": 52003,
+                "tool_tokens": 7265
+              }
+            },
+            "max_document_tokens": 3536,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 41,
+        "selected:train": 41,
+        "source_rows": 41
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 38,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 38
+      },
+      "program_header_parity": {
+        "equal_text_serving_token_boundaries": 82,
+        "retokenization_checked": 0
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "8c7b964bc1fec0169e3a2bb80e462a8e26f15837b3de0e4ecbb4c65b62c2bc40",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/qad-r8-recovery-v3-v2-twins-20261014/receipt.json",
+        "sources": {
+          "runs/qad-r8-student-root-recovery-v3-20261014-v2/approved-turns.jsonl": {
+            "bytes": 3432933,
+            "sha256": "a9f8d662a25cfafd948fbe79f8c5f88630506ac3d35c52859e5ab776feaa2c94"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": null,
+        "protected": null,
+        "held_text": {}
+      },
+      "notes": "Corrected v2 source only; LFM rows exactly equal Pop v2 by document identity (different shard order); Mellum twins ready for later globally protected delta. Ledger parity verifier2215 passed."
     }
   ],
   "coverage_backlog": [

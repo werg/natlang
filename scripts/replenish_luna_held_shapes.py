@@ -621,9 +621,13 @@ def main():
         raise FileNotFoundError(RUNTIME)
     with (BASE / '.luna-replenisher.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        student_repair_pending = False
         for campaign in STUDENT_REPAIR_CAMPAIGNS:
             if campaign.exists() and not complete(campaign):
                 print(json.dumps({'event': 'student_repair_pending', 'campaign': str(campaign)}), flush=True)
+                student_repair_pending = True
+        if student_repair_pending:
+            return
         campaigns = sorted(BASE.glob('provider-luna-held-shapes-s*-v1'))
         pending_campaigns = []
         for campaign in campaigns:
