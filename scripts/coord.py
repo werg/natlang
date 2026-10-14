@@ -227,6 +227,18 @@ def resolutions(messages):
     return {m['reply_to'] for m in messages if m.get('reply_to') and m['kind'] in ('reply', 'close')}
 
 
+def reply_targets(store, original):
+    targets = {original['from']}
+    author_machine = store.machine_of(original['from'])
+    if original['kind'] == 'request':
+        targets.add(author_machine)
+    # An originator's follow-up must reach the people asked to act, too.
+    # Otherwise replies to our own request remain on this machine silently.
+    if author_machine == store.machine:
+        targets.update(original['to'])
+    return sorted(targets)
+
+
 def render(message, full=True):
     flags = ' [URGENT]' if message.get('urgent') else ''
     reply = f" re {message['reply_to']}" if message.get('reply_to') else ''
@@ -331,7 +343,7 @@ def main():
                 sys.exit(f"coord: verifier failed on {store.machine}; {original['id']} stays open")
             body = (f"Verified on {store.machine} by scripts/sync_training_corpora.py verify: "
                     + ', '.join(args.manifest) + '\n\n' + transcript[-2000:])
-            to = sorted({original['from'], store.machine_of(original['from'])})
+            to = reply_targets(store, original)
             message = make_message(store, me, to, 'close', 'Re: ' + (original.get('subject') or ''), body,
                                    reply_to=original['id'])
             store.write(message)
@@ -341,7 +353,7 @@ def main():
             original = find(args.id)
             kind = 'close' if args.command == 'close' else ('note' if args.keep_open else 'reply')
             body = args.message if args.command == 'close' else read_body(args)
-            to = sorted({original['from']} | ({store.machine_of(original['from'])} if original['kind'] == 'request' else set()))
+            to = reply_targets(store, original)
             message = make_message(store, me, to, kind, 'Re: ' + (original.get('subject') or ''), body,
                                    reply_to=original['id'])
             store.write(message)
