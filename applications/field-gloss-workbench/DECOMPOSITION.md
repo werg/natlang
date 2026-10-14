@@ -30,6 +30,13 @@ original ID/path membership and quote substring checks are exact plumbing; decid
 source clause defines a candidate value or a stem meaning remains in NL. Both readers retain
 unresolved original units instead of fabricating a complete candidate domain.
 
+The v3 live pilot exposed a role-reader handoff error at original clause D03: a child returned
+an incompatible shape, and the one-item reducer consumed D03 as failed. The downstream domain
+reader then lacked the original F_RA definition. The next source variant keeps the same original
+clause pending until a scoped `ClauseRoleReading` has its declared role/witness shape and exact
+identity. A genuine uncertainty about source role remains typed unresolved. This is an exact
+handoff check around an NL role judgment, with no candidate answer supplied by crisp code.
+
 Each row denotes a separate typed callable and the semantic contribution it owns. Paths are
 relative to the application. Stages are numbered NL pseudocode; crisp policy is absent.
 
@@ -37,8 +44,8 @@ relative to the application. Stages are numbered NL pseudocode; crisp policy is 
 | --- | --- |
 | analyzeCorpus | Join actual intake, analysis, translation and repair reports; retain unresolved premises. |
 | analyzeCorpus/intake | CorpusSource with original sessions, observations, note versions and visible candidate domains. |
-| intake/inventoryCorpus | Actual original per-clause role inventory with completed/failed/unresolved entries; no linguistic answers. |
-| intake/inventoryCorpus/advanceClause | One actual typed ClauseRoleReading, original quote binding and immediate shorter frontier handoff. |
+| intake/inventoryCorpus | Actual original per-clause role inventory with validated completed/unresolved entries; no linguistic answers. |
+| intake/inventoryCorpus/advanceClause | One actual typed ClauseRoleReading, original quote binding and shorter frontier handoff only after exact shape and identity checks. |
 | intake/readCandidateDomains | CandidateDomainIndex from original definition clauses, with actual per-clause returns and unresolved units. |
 | intake/readCandidateDomains/advanceDomainClause | One scoped DomainClauseReading, source-bound slot values and immediate shorter frontier handoff. |
 | intake/readStemDefinitions | StemDefinitionIndex from original stem/entity clauses, with actual per-clause returns and unresolved units. |

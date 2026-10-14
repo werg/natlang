@@ -1,0 +1,31 @@
+{
+  "canonical_reference_ok": true,
+  "changed_source_files": {
+    "applications/field-gloss-workbench/analyzeCorpus/intake/inventoryCorpus.nl": "532276e52ab5168c91679b7b19089313ebfbce9b0afb7f95f1bfa51b5120263a",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/inventoryCorpus/advanceClause.nl": "4931b97b64368369260ed1b26751b741136142aa3a5c5fe6cc11237f4656164f"
+  },
+  "diagnostic": {
+    "decisive_original_id": "D03",
+    "missing_original_definition": "F_RA",
+    "observed_domain_selected_ids": [
+      "K06",
+      "D01",
+      "D02",
+      "D04",
+      "SA6"
+    ],
+    "partial_sha256": "3c00fcdb6c93663dea7e0e26e138be7fbd87183b6f2a52062210c73a680dffb2",
+    "pilot_queue_sha256": "5faa4a787dc9b276a0345fc8fff5ce2bbe35a8dca549fe852c957ce224c2e5e6",
+    "prior_source_sha256": "ed18183033de3174db12d223b9964a5c8dcecb2a3be252ad218da706b4780f14"
+  },
+  "project_id": "sol-app-field-reed-court-v1",
+  "qualification": {
+    "independent_source_review": false,
+    "live_samples": 0,
+    "training_admission": false
+  },
+  "schema": "natlang.semantic-application-source-repair-author/1",
+  "scope": "Original-role one-item typed handoff recovery only; fixture/types/oracle/private reference/verifier unchanged. Exact shape and quote checks are plumbing; NL still judges source role.",
+  "source_package_sha256": "1c0f63c9c00456e403dcd018c928915e80bc0ec6ebcd7131e1eb0e592d14cb2d",
+  "variant": "role-return-coverage-v4"
+}
