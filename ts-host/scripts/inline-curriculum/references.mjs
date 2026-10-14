@@ -60,7 +60,14 @@ export async function referenceRow(record, index, options) {
       response.execution_plan = actionPlan(response.calls ?? []);
       response.reasoning = response.execution_plan;
     }
+    // Preserve the exact submitted arguments when the runtime ledger shortens
+    // a large value to a diagnostic preview. These are scripted actions, with
+    // synthetic reference provenance; no provider sample is claimed.
+    response.raw_calls ??= (response.calls ?? []).map(([name, args]) => ({
+      type: 'function', function: { name, arguments: JSON.stringify(args) },
+    }));
     const turn = trajectoryTurn(request, response);
+    turn.model_response.raw_call_basis = 'scripted-reference-action';
     const [tool, args] = response.calls?.[0] ?? [];
     if (tool === 'return_result' && args.status === 'success' && !shown(args.value, request.messages))
       turn.assistant.direct_answer = true;

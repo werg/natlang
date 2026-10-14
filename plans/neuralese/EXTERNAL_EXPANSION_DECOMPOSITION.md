@@ -57,6 +57,17 @@ actual shared recipe bindings and sampler exposure; consumer-to-producer gradien
 for E2E views; matched held results. Acquisition or a small pilot alone is not the
 completed expansion.
 
+## Exact scripted action capture
+
+Large typed reference returns can be shortened to diagnostic previews in the
+runtime action ledger. The static reference driver must retain the exact action
+arguments it submitted, using the collector's existing raw-call serialization,
+and explicitly label that capture as scripted reference data. This is crisp
+capture plumbing, not provider sampling or a new admission policy. Keep the
+existing exact linkage verifier and all source-quality decisions. Check a large
+typed return through real execution and materialization before replaying an
+omitted case; publish a new corpus version for repaired additions.
+
 ## Direct compressed union output
 
 The MuSiQue family hold requires a corrected broad union before the next main-line launch. Keep the existing admission, protected split, deduplication and tokenizer-twin decisions; explicitly remove the held member. Serialize selected rows directly into zstd, recording compressed identity plus independently decoded SHA-256 and byte count. Compression and durability extend the existing crisp union builder and compressed registry contract. This avoids another roughly140GB raw working copy without changing model-visible data or granting source admission.
