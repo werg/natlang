@@ -83,3 +83,34 @@ The new table is internal; external report, fixture, oracle and canonical policy
 ## Physical-existence-v4 source delta
 
 The v3 trace consumed conditional binding rows correctly, then conflated a physically present outward gate with its forbidden reverse traversal. PassageAssertion now names physicalExistence explicitly. The NL reader separately interprets connection presence, ordered permission and carried-state conditions, preserving reverse-prohibition evidence on the present one-way row. World construction creates travel edges only from present connections and keeps complete negative claims for reconciliation; the conditional comparison respects ordered endpoints. This is an internal typed semantic distinction; final report, source fixture, oracle and canonical policy remain stable. Exact mechanics only project already interpreted allowed directions and validate source membership. The stopped v3 partial remains a source diagnostic without model-negative or admission credit.
+
+## Survey-item-natural-language v5 decomposition
+
+The stopped physical-v4 diagnostic remains frozen: its extraction calls constructed case-specific
+passage, landmark and equipment tables inside eval. One equipment-wide literal still delegated to a
+whole-survey table. V5 makes extraction a connected typed NL pipeline before another live diagnostic.
+
+| Unit | Natural-language ownership | Actual returned contribution | Exact seam |
+| --- | --- | --- | --- |
+| Reader inventory literals | Identify every original reading unit, including several units in one clause; join only source-established supporting scope | SurveyReadingUnit identities, original clause IDs and focus question | Original ID membership; no assertion fields precomputed |
+| readFrames/interpretLandmark | Judge one framed landmark's position, features and identity scope | One nullable LandmarkMeaning plus clause-keyed exact quotes | Parent binds original source ID/path, validates quote bytes |
+| readFrames/interpretConvention | Judge one local frame's complete allowed origin/basis alternatives | ConventionInterpretation with actual typed alternatives and unresolved premises | Exact vector arithmetic after NL interpretation; parent quote binding |
+| readPassages/interpretPassage | Judge one physical connection separately from direction, load and existence | One nullable PassageMeaning; preserves absence, reverse prohibition and unknown | Endpoint membership in actual FrameSurvey; parent quote binding |
+| readEquipment/interpretGear | Judge one original resource condition or transition | One nullable GearMeaning; consumption, sealed carrier and irreversibility remain distinct | Parent source-domain checks |
+| readEquipment/interpretSensor | Judge one sensor's answer categories, scope, costs and state effects | One nullable SensorMeaning, not an inferred answer in a chosen world | Parent source-domain checks |
+| survey reader joins | Consume each actual child result, preserve disagreements and union original support | Existing FrameSurvey/EquipmentSurvey/passage collection | Exact concatenation and provenance, no semantic lookup tables |
+
+Frame extraction precedes passage extraction. The actual FrameSurvey supplies endpoint/frame keys;
+passage interpretation cannot re-create a second landmark table. A frame's local origin remains a
+separate mention from its named global anchor. Complete finite handedness alternatives are supported
+uncertainty, not a blocking unresolved premise. Conditional alignment still chooses no actual reflection
+and an optional false candidate rejects only that pair.
+
+Each original inventory unit is visited once. Unit focus identifies its source subject/question without
+preselecting coordinates, directions, costs, effects or sensor capability. A child scoped literal receives
+that unit and its original clauses, is directly awaited, and its actual semantic row supplies the parent's
+fields. Supporting quotes are nonempty exact substrings of supplied original clause witnesses; the
+parent owns source identity. Missing decisive evidence is explicit unresolved data. Existing policy,
+world, fixture and external canonical certificate remain unchanged. No crisp extraction classifier is
+introduced. The new source needs native type/source replay, per-item control review, independent peer
+review and roughly48 live samples; none of those preparation receipts is training admission.

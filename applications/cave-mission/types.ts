@@ -13,7 +13,7 @@ export type LandmarkMention = { localId: string; frame: string; position: Point 
 export type FrameSurvey = { alternatives: FrameAlternative[]; landmarks: LandmarkMention[]; unresolved: string[] };
 export type PassageAssertion = {
   from: string; to: string; frame: string; direction: 'one-way' | 'two-way';
-  kind: 'corridor' | 'water-gate' | 'tunnel' | 'chimney'; cost: number;
+  kind: 'corridor' | 'water-gate' | 'tunnel' | 'chimney'; cost: number | null;
   condition: string; physicalExistence: 'present' | 'absent' | 'unknown'; witnesses: Witness[];
 };
 export type GearRule = { ruleId: string; subject: string; condition: string; consequence: string; witnesses: Witness[] };
@@ -70,3 +70,18 @@ export type MissionFinding = { kind: 'defect' | 'unresolved' | 'defended'; propo
 export type WorldReplay = { worldId: string; nodeIds: string[]; actionIds: string[]; terminal: RobotState; totalEnergy: number; observations: number; success: boolean; findings: MissionFinding[] };
 export type AuditedMission = { caseId: string; worlds: WorldSet; policy: BeliefPolicy; replays: WorldReplay[]; findings: MissionFinding[]; sourceCoverage: { sourceId: string; clauseIds: string[] }[] };
 export type PlanningResult = { graph: BeliefGraph; values: StateValue[]; policy: BeliefPolicy };
+
+/** Survey v5: NL-owned reading units and meanings; original provenance is bound by the parent. */
+export type SurveyQuote = { clauseId: string; exactQuote: string };
+export type SurveyReadingUnit = { unitId: string; kind: 'frame' | 'landmark' | 'passage' | 'gear' | 'sensor'; sourceFrame: string | null; primaryClauseIds: string[]; supportingClauseIds: string[]; focus: string };
+export type SurveyUnitInventory = { units: SurveyReadingUnit[]; unresolved: string[] };
+export type LandmarkMeaning = { localId: string; frame: string; position: Point | null; description: string };
+export type LandmarkItemMeaning = { meaning: LandmarkMeaning | null; evidence: SurveyQuote[]; unresolved: string[] };
+export type ConventionMeaning = { sourceFrame: string; origin: Point; uVector: Point; vVector: Point; evidence: SurveyQuote[] };
+export type ConventionInterpretation = { alternatives: ConventionMeaning[]; unresolved: string[] };
+export type PassageMeaning = { from: string; to: string; frame: string; direction: 'one-way' | 'two-way'; kind: 'corridor' | 'water-gate' | 'tunnel' | 'chimney'; cost: number | null; condition: string; physicalExistence: 'present' | 'absent' | 'unknown' };
+export type PassageItemMeaning = { assertion: PassageMeaning | null; evidence: SurveyQuote[]; unresolved: string[] };
+export type GearMeaning = { ruleId: string; subject: string; condition: string; consequence: string };
+export type GearItemMeaning = { meaning: GearMeaning | null; evidence: SurveyQuote[]; unresolved: string[] };
+export type SensorMeaning = { sensorId: string; availableAt: string; cost: number; answerDescriptions: { answer: string; meaning: string }[]; scope: string };
+export type SensorItemMeaning = { meaning: SensorMeaning | null; evidence: SurveyQuote[]; unresolved: string[] };

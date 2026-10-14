@@ -7,7 +7,10 @@ returns: WorldFrontier
 1. If pending is empty, return state. Otherwise take its first hypothesis and remove it from a copy
    of pending. Translate each local passage endpoint through that hypothesis's bindings.
 2. Read each assertion's physicalExistence before constructing travel edges. Present connections
-   contribute allowed directions: two-way gives both, one-way gives only its declared from-to direction.
+   contribute allowed directions only when their returned cost is known and satisfies the actual source
+   action-cost contract. An unsupported cost stays unresolved and supplies no claimed executable edge;
+   retain that missing premise and leave this hypothesis unclaimed instead of appending a partial world.
+   Two-way gives both, one-way gives only its declared from-to direction.
    Retain reverse-forbidden witnesses and carried-state conditions on those actual edges. Absent physical
    connections contribute negative facts without a travel edge; unknown physical existence remains an
    explicit unresolved premise wherever it could affect this mission.

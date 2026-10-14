@@ -12,8 +12,9 @@ returns: SurveyEvidence
    verbatim Witness. Directory and role hints guide reading without overriding what a clause says.
 3. Record per-document clause IDs in coverage. If duplicate IDs disagree, retain the witnessed
    conflict in unresolved instead of overwriting an assertion. Keep negation and exception wording.
-4. Call readFrames(clauses), readPassages(clauses) and readEquipment(clauses). These children own
-   coordinate alternatives, directed passage semantics, and carried-state/sensor conditions respectively.
+4. Call readFrames(clauses) and readEquipment(clauses) and consume their actual results. Then call
+   readPassages(clauses, frames) with that returned FrameSurvey. These children own coordinate,
+   directed-passage and carried-state/sensor meanings; passage endpoints use the actual frame keys.
 5. Preserve a clause in several relevant branches when it truly couples them. For example, a chimney
    assertion can constrain both direction and rope requirements. Quote the original clause in both.
 6. Combine the returned results into SurveyEvidence. Include the unchanged source documents and

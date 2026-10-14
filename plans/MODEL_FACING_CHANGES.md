@@ -365,3 +365,7 @@ continuations reviewed; its Luna queue is pending. Review corrected service
 use, exact result, duplicates and idiomatic continuation before training
 admission. This small recovery family supplements the larger deep-NL
 application sources; it does not meet their application-scale target itself.
+
+### Cave survey per-item NL v5 (2026-10-14)
+
+Stopped physical-v4 trace has case-specific eval tables in passage/frame/equipment extraction; the equipment-wide literal still constructs a whole-survey table. Source-v5 adds NL reading-unit inventories and typed per-unit passage/landmark/gear/sensor/convention judgments, parent-bound exact original quotations, and actual FrameSurvey→passage-reader dataflow. Internal passage cost is nullable for unsupported absence/unknown; executable edge projection requires the source cost contract. Existing fixture/oracle/canonical unchanged; conditional binding and physical/directional distinction preserved. Source/type/control peer qualification is not execution. Measurement debt0/48; frozen v4 row remains diagnostic, not a model-negative or admitted trajectory. Inspect next live item calls/actual returned field consumption, source scope and provenance.
