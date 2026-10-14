@@ -1,0 +1,48 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-d34-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D34",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11653,
+      "sha256": "ff4af439d0f763f1a0662f418f1006a2533331b1415e46bdb2240f07adb78862"
+    },
+    {
+      "path": "README.md",
+      "bytes": 684,
+      "sha256": "47d16be0782d6ee697bcfcc59c20c24c94f4bc6adb351d8dd63af72950f936b8"
+    },
+    {
+      "path": "acquisition.json",
+      "bytes": 1431,
+      "sha256": "2c6951ed78f374d4bf3c4367fbfd6732fa05bbd7febde0db8670ff1aced3f824"
+    },
+    {
+      "path": "ck-pro-web.sft.jsonl",
+      "bytes": 505775600,
+      "sha256": "668bbc6155c04c37e9a6ac42336f5e43b0ce10e76576c57a78773f19a5f2535a",
+      "lines": 25589
+    },
+    {
+      "path": "docbench.sft.jsonl",
+      "bytes": 20617049,
+      "sha256": "ac6d91720592bfe4d771b7a5580f7bc0305975d25028a6e81627d6ef22cfe4e5",
+      "lines": 1566
+    },
+    {
+      "path": "tablebench.sft.jsonl",
+      "bytes": 22884215,
+      "sha256": "bbae17f215ee5446637675168df5d06303ce4d707dde68cdde48b77f183a5adc",
+      "lines": 2000
+    },
+    {
+      "path": "webwalker_subset.sft.jsonl",
+      "bytes": 325264390,
+      "sha256": "7d653ab09c3bd7a4bb92163dbe5a86bb46d1691c7224c026179eed781d3f3a01",
+      "lines": 18116
+    }
+  ],
+  "bytes": 874555022
+}

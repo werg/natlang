@@ -1,0 +1,49 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-d12-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D12",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 1832,
+      "sha256": "68b078f6a3b2e7c8314e823d9a0fb894ff031d73acc78276a056b15da59de096"
+    },
+    {
+      "path": "acquisition.json",
+      "bytes": 1687,
+      "sha256": "01b9213470bf6d72cf2fa906c71e40f1fc7f29be8c485ad1e3df903147248da5"
+    },
+    {
+      "path": "cmp-flash-msa-coopgit.tar.gz",
+      "bytes": 11565738,
+      "sha256": "65ceccd7e623c2a5fb4e4d9455964b8811740fceda652641eb94acab3a51082c"
+    },
+    {
+      "path": "cmp-flash-msa-solo.tar.gz",
+      "bytes": 7005337,
+      "sha256": "a67b991e83451e74fd44fe90227f67bc8d3140dd8dc193a86a6dcab7b6ba6efb"
+    },
+    {
+      "path": "cmp-full-coopgit.tar.gz",
+      "bytes": 30514821,
+      "sha256": "f687e96cafecddad2b5bc5eb303ea254943a37cd3d128f1998d1f1438904727a"
+    },
+    {
+      "path": "cmp-full-solo.tar.gz",
+      "bytes": 14531429,
+      "sha256": "b703e921d161aa30ead2eccaad23ffa7c45b4fe6b4f59e6a7e27ce537b331cc0"
+    },
+    {
+      "path": "cmp-full-team-noproto.tar.gz",
+      "bytes": 30695468,
+      "sha256": "8206656ef5a9989987ddfbcb9ac86e80c787382ff0b74b56004c311801ae36cd"
+    },
+    {
+      "path": "cmp-full-team.tar.gz",
+      "bytes": 30632667,
+      "sha256": "fbed57e18cf3b14f3f10e3f3abeecd15c741b949ea9bdefe2464951ee325267f"
+    }
+  ],
+  "bytes": 124948979
+}

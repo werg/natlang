@@ -1,0 +1,39 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-d08-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D08",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 5065,
+      "sha256": "a2b65b482d2c6927d17077ec5aa08fdf0c7010683ee68a5b2e4b97446a1c8cf1"
+    },
+    {
+      "path": "accepted_trajectories.json",
+      "bytes": 34885,
+      "sha256": "a58854420603dd651a7e1ce01720e5149d013a52e5c1a4ce0c804f1f73359719"
+    },
+    {
+      "path": "acquisition.json",
+      "bytes": 1818,
+      "sha256": "dc69a93d8706e1d3d1e134fe48b99dc8f8f6c4fd7d54909fa20122cd8515929d"
+    },
+    {
+      "path": "data/combined-00000-of-00001.parquet",
+      "bytes": 5335455,
+      "sha256": "ec39427c3e720d99f668f20a32a141b5677d13b0b5d2eb6c9f117439e59f96e1"
+    },
+    {
+      "path": "data/follower-00000-of-00001.parquet",
+      "bytes": 2496479,
+      "sha256": "16c8aa97cbd2e4514f6d2c50a1d8bcca86ce833a4582e5ec8f58dc46b13b103d"
+    },
+    {
+      "path": "data/leader-00000-of-00001.parquet",
+      "bytes": 2842971,
+      "sha256": "df0a85aeaf51a8dff6d80b37a85fa7a028db01c4fcf9a1f8e638fd2c6227094f"
+    }
+  ],
+  "bytes": 10716673
+}
