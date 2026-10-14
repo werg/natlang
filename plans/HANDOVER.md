@@ -1,5 +1,35 @@
 # Continuation guide — updated 2026-10-14
 
+## 05:25 CEST: recovery render synced and deep-source criterion
+
+The owner clarified again that new application-scale examples must put substantive
+semantic decisions in deep, numbered natural-language pseudocode, not in crisp
+JS. Keep valid shallow rows in the ordinary mix, but do not count a catalog
+design or a thin wrapper as a completed large application. The source authors
+and live curriculum reviewer have this instruction. Inspect live code for
+case-specific answer tables and verify typed child results actually change
+later state; repair source ergonomics before admitting such a row.
+
+The 47-parent/58-decision Luna service-result recovery source now has an LFM
+native render, `luna-service-result-recovery-s52054-lfm-render-v1`, registered
+under immutable manifest in `f74b1b36`. It selected all 58 approved decisions,
+with 58 exact program-header serving boundaries and no split/decontam omissions.
+The 2.03 MB render and receipt were synced to canonical DGX and SSH-verified
+(manifest object SHA `18ad0b56`). It is a narrow low-weight candidate for the
+next LFM training union, not part of the current QAD checkpoint. DGX has been
+briefed to render a Mellum twin if useful. A four-seed QAD self-trajectory probe
+on two of those later decisions got final return 4/4 but valid eval code 0/4;
+this diagnoses generalization and pipeline compatibility, not failure to learn
+those exact examples. See `plans/neuralese/QAD_ACTION_TARGET_DRAGNET_20261014.md`.
+
+Ecology v16 live diagnostic stopped after 81 turns with useful typed child
+consumption but three source/agent-ergonomics defects (interaction-edge scope,
+one JS semantic edge materialization, and an unfinished/repeated child).
+Curriculum is preparing v17. Seed v4 live retry is active and has passed the
+earlier monolithic TheoryIndex failure point with scoped ticket accumulation;
+Cave v7 and Protocol v2b remain queued for matched live retries. No partial
+diagnostic is an admitted training or model-negative row.
+
 ## 05:15 CEST: deep pseudocode source cohort and QAD action audit
 
 Owner clarified that the new corpus should resemble sizable natlang
