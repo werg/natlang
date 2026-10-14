@@ -1,0 +1,58 @@
+{
+  "schema": "natlang.semantic-application-independent-source-repair-review/1",
+  "reviewer": "semantic_slate_sol",
+  "application": "field-gloss-workbench",
+  "variant": "role-return-coverage-v4",
+  "reviewed_main": "1c5fd715",
+  "status": "source_delta_accepted_no_live_credit",
+  "changed_source_hashes": {
+    "applications/field-gloss-workbench/analyzeCorpus/intake/inventoryCorpus.nl": "532276e52ab5168c91679b7b19089313ebfbce9b0afb7f95f1bfa51b5120263a",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/inventoryCorpus/advanceClause.nl": "4931b97b64368369260ed1b26751b741136142aa3a5c5fe6cc11237f4656164f"
+  },
+  "author_receipt": {
+    "path": "plans/semantic_stack/FIELD_GLOSS_ROLE_COVERAGE_V4_AUTHOR_CURRICULUM.json",
+    "sha256": "2f550ef047d0885a45f8102c058e957a3fc15a01b448a29fadd30ca6822504b2"
+  },
+  "checks": [
+    "The direct awaited result uses declared ClauseRoleReading; roles are declared string labels and exact source quotations remain separate Witness records.",
+    "Original clause identity and decided-role supporting quote are checked before its pending ID is removed.",
+    "Malformed/transport return preserves earlier successful entries and the same original pending item for correction; it cannot become completed failed coverage.",
+    "A valid source-uncertain result remains an explicit unresolved original entry/reason; it does not acquire an invented semantic conclusion.",
+    "One validated actual return appends one entry, decreases pending by one and finishes immediately with the exact next state.",
+    "Parent requires exactly one valid typed role entry for each original clause and retains source-unresolved reasons.",
+    "D03 originally declares candidate slot F_RA; the diagnosed malformed-role return can no longer retire that original item before a valid child handoff."
+  ],
+  "policy_audit": {
+    "semantic_classification": "Still owned by the scoped NL role reader with numbered instructions",
+    "crisp_added_semantic_policy": false,
+    "exact_seams": "Declared type/identity/source quote validation and immediate frontier handoff"
+  },
+  "independently_reproduced": {
+    "controls": {
+      "positive": 13,
+      "negative": 77,
+      "all_passed": true
+    },
+    "canonical_source_type_replay": {
+      "path": "/tmp/sol-field-v4-peer/package-report.json",
+      "reference_ok": true,
+      "source_sha256": "1c0f63c9c00456e403dcd018c928915e80bc0ec6ebcd7131e1eb0e592d14cb2d",
+      "visible_sha256": "233c2a5c22a357254cb371f91733d3297b416f639df3bf2610884aac6acdc0d2"
+    },
+    "current_manifest": {
+      "source_status": "held_exact_verifier_bound_semantic_review_pending",
+      "reviewed": false,
+      "training_admission": false
+    }
+  },
+  "unchanged_private_verifier_sha256": "24b8c0e29605169b0b2cbcd93e6287f5ea43629a03eb6a5a7a4417a904e296af",
+  "unchanged_reference_sha256": "3c17b4cf5fb2c434b33717f2e8fd6fdb02830f8f6f6be02f07ddb2d01a66302c",
+  "unchanged_oracle_sha256": "88096a9df70f790ed1a27d68dd41ba3211b9613392440c218478001551facec9",
+  "limits": [
+    "Valid but mistaken NL source-role classification remains a semantic-review issue; exact shape checks do not classify D03 meaning.",
+    "Source uncertainty can remain unresolved and must not count as proven complete grammatical coverage.",
+    "Canonical source/type replay and existing controls do not measure recovery or actual child consumption live."
+  ],
+  "live_samples": 0,
+  "training_admission": false
+}
