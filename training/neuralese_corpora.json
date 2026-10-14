@@ -80465,6 +80465,211 @@
       "review_status": "Approved static reference SFT subject to renderer global protected/source-quality filters; zero source-mismatch labels admitted",
       "required_conversion": "Render native.held.jsonl.zst via registry-admits-reason scripted source reference requires independent semantic and training review; train-only and global protected/source reservations; render LFM/Mellum twins",
       "notes": "Authored static scaffold and scripted exact child-result reference, not provider-authored trajectory. Freeze receipt pins source/label/provenance/replay manifests for batches45-46. Sampling policy in semantic-review.json. Distinct from immutable batch1-44 snapshot."
+    },
+    {
+      "id": "gemini-clinc-static-b45-b46-reviewed-render-20261015-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261013-v1/gemini-clinc-static-v2-render-b45-b46-20261015-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: gemini-clinc-static-b45-b46-reviewed-20261015-v1; variants: full/lfm25, full/mellum21, program-header/lfm25, program-header/mellum21, whole-trajectory/lfm25, whole-trajectory/mellum21; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "gemini-clinc-static-b45-b46-reviewed-20261015-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl.zst",
+            "sha256": "678e566a0c831fc3233de61610219d2dadf97f21785ac6401604fee4ac998811",
+            "compression": "zstd",
+            "decoded_sha256": "69c61cf06910e005cb7a4fb89a23559775a574a0192c37f1572976d842c2da20",
+            "decoded_bytes": 63087117,
+            "documents": 888,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 888,
+                "supervised_tokens": 40208,
+                "tokens": 6910209,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 10509,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl.zst",
+            "sha256": "cba9f33b6d9ea08126ae7e7b41b1ae79c3f654b648b885fae795cee1fd35df67",
+            "compression": "zstd",
+            "decoded_sha256": "8f2955250fe7884a4eca1ab04b471fcb874e5f6a2827bb94bad2f552d996291f",
+            "decoded_bytes": 60080324,
+            "documents": 888,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 888,
+                "supervised_tokens": 51123,
+                "tokens": 6842751,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 10686,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl.zst",
+            "sha256": "5e26a6b2bd940bf5ffecee2c34f65f165d0995b4eb681b4b73730d5f55abc9fc",
+            "compression": "zstd",
+            "decoded_sha256": "411fcf0493b30822bfa94e085a0ed07691bc4cabe29625c0daec0acf037cb739",
+            "decoded_bytes": 20475048,
+            "documents": 888,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 888,
+                "supervised_tokens": 40208,
+                "tokens": 2339661,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 3187,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl.zst",
+            "sha256": "c4593a5349b08e33bddc86bd3efb2ecc3eef81cad9b6152d77356c1642796c75",
+            "compression": "zstd",
+            "decoded_sha256": "c48429b370baec4488b5f1870781a85b1294d2f428341d04b72f04efdd49f0e0",
+            "decoded_bytes": 19124307,
+            "documents": 888,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 888,
+                "supervised_tokens": 51123,
+                "tokens": 2292299,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 3431,
+            "merge_omissions": {}
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl.zst",
+            "sha256": "9d0e1fcd309ab786f0e66b13e0b3634f3c9529202d8c1f104065146c48c0c053",
+            "compression": "zstd",
+            "decoded_sha256": "6dca110ad15f1af175391b10c8ca3b983de02ef0006e7635537603a3256c181f",
+            "decoded_bytes": 11784416,
+            "documents": 444,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 103556,
+                "documents": 444,
+                "opening_tokens": 60134,
+                "supervised_tokens": 43422,
+                "tokens": 1329333,
+                "tool_tokens": 672607
+              }
+            },
+            "max_document_tokens": 3172,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl.zst",
+            "sha256": "c5c5c620732fb893556ee20aadb3d48811fdda48d9473f0b765bbf08b410949a",
+            "compression": "zstd",
+            "decoded_sha256": "df34b84d898c4a531a7ccb73d76b40e02167ccae67cf95ad4c3a47009723b05d",
+            "decoded_bytes": 11099089,
+            "documents": 444,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 131487,
+                "documents": 444,
+                "opening_tokens": 67508,
+                "supervised_tokens": 63979,
+                "tokens": 1315810,
+                "tool_tokens": 651915
+              }
+            },
+            "max_document_tokens": 3437,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "approved_by_registry_admission": 888,
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 888,
+        "selected:train": 888,
+        "source_rows": 888
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 0,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 0
+      },
+      "program_header_parity": {
+        "equal": 1776,
+        "retokenization_checked": 1776
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "cd22423d7181576175120a299ae1de2511cf3be9048353621840506f98da592f",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/free-provider-generation-20261013-v1/gemini-clinc-static-v2-render-b45-b46-20261015-v1/receipt.json",
+        "sources": {
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch45-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 549091,
+            "sha256": "a7231574cd61f548aaeb695963b2b9a6cb4ec05dbfcf5e0b2e386b6b2214e1cf"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch46-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 541760,
+            "sha256": "b4374cedf93584ab44ce9bb33cdd34aa825e2c6172ddabd5536a6f0102e1d6b6"
+          }
+        },
+        "exclude_programs": [
+          {
+            "path": "runs/free-provider-generation-20261013-v1/gemini-clinc-static-v2-freeze-b45-b46-20261015-v1/excluded-programs.jsonl",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        ],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {}
+      },
+      "notes": "Reviewed static CLINC batches45-46: 888 approved native turns, zero omissions; complete LFM/Mellum full, program-header and whole-trajectory twins, exact token-boundary parity; provider typed choices only, authored static scaffold"
     }
   ],
   "coverage_backlog": [
