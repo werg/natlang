@@ -116,12 +116,18 @@ let shardCases = [];
 function caseFor(items, split) {
   const family = items[0].record.family;
   const sourceIds = items.map(item => item.record.id);
+  // Upstream sessions may reuse an ID for distinct continuation targets. The
+  // reference child must identify the exact item, while provenance keeps the
+  // original source ID. Leave ordinary unique identities unchanged.
+  const identityCounts = new Map();
+  for (const id of sourceIds) identityCounts.set(id, (identityCounts.get(id) ?? 0) + 1);
+  const referenceId = item => identityCounts.get(item.record.id) > 1 ? `${item.record.id}#${item.key}` : item.record.id;
   const sourceGroups = [...new Set(items.flatMap(item => item.record.split_groups ?? []))].sort();
   const files = {
     'task.json': canonical({ instruction: 'Answer every request in items/ using only the evidence in that item. Follow each item\'s answer_format. Save the answer map to output_file and follow output_contract.',
       items: items.map(item => `items/${item.key}.json`), output_file: 'answers.json',
       output_contract: 'Write one JSON object with exactly one key per listed item filename stem and a string answer for each. Preserve all other files.' }) + '\n',
-    ...Object.fromEntries(items.map(item => [`items/${item.key}.json`, canonical({ source_record_id: item.record.id, request: item.request,
+    ...Object.fromEntries(items.map(item => [`items/${item.key}.json`, canonical({ source_record_id: referenceId(item), request: item.request,
       evidence: item.evidence, answer_format: item.answer_format }) + '\n'])),
     'answers.json': '{}\n',
   };
@@ -145,8 +151,8 @@ function caseFor(items, split) {
     `return saved;`;
   const children = items.map(item => {
     const path = `items/${item.key}.json`;
-    return { match: `source_record_id: ${JSON.stringify(item.record.id)}`,
-      source_binding: { path, sha256: sha(files[path]), source_record_id: item.record.id },
+    return { match: `source_record_id: ${JSON.stringify(referenceId(item))}`,
+      source_binding: { path, sha256: sha(files[path]), source_record_id: referenceId(item) },
       calls: [evalCall('item.evidence'), returnCall(item.target)] };
   });
   const bundle = sha(sourceIds.join('\n')).slice(0, 20);

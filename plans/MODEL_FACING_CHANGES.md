@@ -568,3 +568,7 @@ Alpaca-style CodeAgent problems and prior history become the existing typed Back
 ### 2026-10-14 — Static external tool contracts and short action sessions
 
 Dolci and Cognitive Kernel reuse the task-background instruction above for short action sessions. The native call builder now retains supplied consumer tool schemas and names/call IDs on observations, which earlier static views could omit. Existing immutable views stay unchanged; newly built views bind the corrected builder. **Measurement debt:** 0/48 live samples for tool-contract context serialization. Static expansion is owner-authorized; fidelity checks prove source retention and causality, not upstream task correctness or native behavior lift.
+
+### 2026-10-14 — Repeated external source IDs
+
+Static native item files qualify a repeated upstream source_record_id with the existing item filename stem, so scripted child answers cannot select a sibling target. Unique IDs and original source provenance stay intact. Measurement debt: 0/48 live samples for this identifier serialization; exact duplicate-ID replay checks verify mechanism only. Owner-authorized static external lowering continues under the existing expansion policy.
