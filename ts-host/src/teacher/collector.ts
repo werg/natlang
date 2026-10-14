@@ -40,6 +40,7 @@ import { registerTrace, releaseTrace } from '../native/graph.js';
 import { NATIVE_TOOL_SCHEMA } from '../native/tool-surface.js';
 import { hostCaptures, type CaptureSource } from '../exact-capture/host-capture.js';
 import { checkItemResultBinding, type ItemResultBindingSpec } from './item-result-binding.js';
+import { RefinementChecker, type RefinementFailure } from '../native/refinement.js';
 
 export const TEACHER_BATCH_VERSION = 'natlang.teacher_batch.native/1';
 export const TEACHER_TRAJECTORY_VERSION = 'natlang.teacher_trajectory.native/1';
@@ -1362,6 +1363,49 @@ class AuthoredRootDidNotFinishError extends Error {
  * Run a program's root invocation with a model driver in a fresh environment and check the result,
  * effects, and folder against its contract. The collector and reference replays share this path.
  */
+function itemResultInvocationLedger(runtime: NodeNativeRuntime, bindingSpec: ItemResultBindingSpec): Record<string, unknown>[] {
+  const trace = runtime.trace.events as unknown as Record<string, unknown>[];
+  const children = runtime.frame?.task.traces ?? [];
+  const childById = new Map(children.map(child => [child.callId, child]));
+  const sources = new Set(bindingSpec.sites.map(site => site.owner_source_path));
+  const seedCoverage = bindingSpec.joined_seed_coverage;
+  const possibleStore = runtime.frame?.task.runtime.callStore() as Partial<CaptureSource> | undefined;
+  const store: CaptureSource | undefined = possibleStore &&
+    typeof possibleStore.call === 'function' && typeof possibleStore.value === 'function' ?
+    possibleStore as CaptureSource : undefined;
+  return [trace, ...children.map(child => child.events)].flatMap(events => {
+    const manifest = events.find(event => event.kind === 'manifest');
+    if (!manifest || typeof manifest.run_id !== 'string') return [];
+    const invocation = events.find(event => event.kind === 'invocation' && event.phase === 'start');
+    const output = events.find(event => event.kind === 'host_capture' && event.capture_kind === 'invocation_output');
+    const child = childById.get(manifest.run_id);
+    const finalState = events.filter(event => event.kind === 'state' && event.phase === 'final').at(-1);
+    const source = output?.definition_source;
+    const inline = manifest.inline_instruction_site;
+    const returns = inline && typeof inline === 'object' ?
+      (inline as { returns?: { natlang?: unknown; text?: unknown } }).returns : undefined;
+    const returnedType = String(returns?.natlang ?? returns?.text ?? output?.result_type ?? '');
+    const scopedChild = bindingSpec.sites.some(site => returnedType.includes(site.inline_child_site.return_type)) ||
+      !!(seedCoverage && returnedType.includes(seedCoverage.child_return_type));
+    const inputNames = seedCoverage?.owner_source_path === source ? ['input'] :
+      sources.has(String(source)) ? ['state'] : scopedChild ? ['input'] : [];
+    let hostInputs: ReturnType<typeof hostCaptures>;
+    if (inputNames.length && store) {
+      try { hostInputs = hostCaptures(store, manifest.run_id,
+        { inputArguments: inputNames, maxBytes: 1_048_576 })?.filter(capture => capture.capture_kind === 'invocation_input'); }
+      catch { /* Missing durable capture is an unverified hold, not invented provenance. */ }
+    }
+    return [{ invocation_id: manifest.run_id, parent_invocation_id: manifest.parent_call_id ?? null,
+      ...(inline ? { inline_instruction_site: inline } : {}),
+      ...(invocation?.captures && typeof invocation.captures === 'object' ? { captures: structuredClone(invocation.captures) } : {}),
+      completion_status: finalState?.outcome ?? child?.outcome ?? null,
+      completion_source: finalState ? 'execution_graph' : child ? 'runtime_invocation_trace' : 'unavailable',
+      ...(child ? { completion_detail: child.detail } : {}),
+      ...(output ? { host_result: output } : {}),
+      ...(hostInputs ? { host_inputs: hostInputs } : {}) }];
+  });
+}
+
 export async function executeProgram(record: ProgramRecord, driver: (request: ModelTurnRequest) => Promise<ModelTurn>,
   options: ExecuteOptions): Promise<ProgramRun> {
   const root = await prepareProgramNode(record);
@@ -1375,11 +1419,23 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   }
   const environment = new TypeScriptEnvironment({ mode: 'fresh' });
   const effects = effectHarness(record.semantics.effects ?? {});
+  const bindingSpec = (record.curriculum as { item_result_binding?: ItemResultBindingSpec } | undefined)?.item_result_binding;
+  let runtime: NodeNativeRuntime | undefined;
   const agent = new NativeToolAgent(driver, { systemPrompt: options.systemPrompt, temperature: options.temperature ?? 0,
     ...(options.promptRendering ? { promptRendering: options.promptRendering } : {}),
     ...(options.fileTools ? { fileTools: options.fileTools } : {}),
     ...(options.neuralese ? { neuralese: options.neuralese } : {}),
-    contextTokens: options.contextTokens, maxTurns: options.maxTurns });
+    contextTokens: options.contextTokens, maxTurns: options.maxTurns,
+    ...(bindingSpec ? { refinement: { checker: new RefinementChecker(),
+      returnGuard: async (runId: string): Promise<RefinementFailure[]> => {
+        if (runId !== options.runId || !runtime) return [];
+        const verdict = checkItemResultBinding(bindingSpec, itemResultInvocationLedger(runtime, bindingSpec));
+        runtime.trace.emit('item_result_binding_return', { call_id: runId, status: verdict.status,
+          site_results: verdict.site_results });
+        return verdict.status === 'pass' ? [] : [{ code: 'refinement-unsatisfied', path: 'return',
+          predicate: 'declared child result lineage',
+          message: 'Complete the declared named child decisions and carry their actual typed results into the return value.' }];
+      } } } : {}) });
   // Recorded effects become host services: capability `svc.method` is method `method` of service `svc`.
   const services: Record<string, object> = {};
   for (const [name, fn] of Object.entries(effects.capabilities)) {
@@ -1406,7 +1462,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
   const serviceScopes = (record.semantics as { service_scopes?: Record<string, string[]> }).service_scopes;
   // The run is recorded in the machine's call store under its run ID, with the driver's model when it names one.
   const driverModel = (driver as { model?: unknown }).model;
-  const runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services, declarations,
+  runtime = new NodeNativeRuntime({ environment, agent: session => agent.run(session), services, declarations,
     modelId: typeof driverModel === 'string' && driverModel ? driverModel : `undeclared:${driver.name || 'teacher-driver'}`,
     ...(options.calls !== undefined ? { calls: options.calls } : {}),
     ...(serviceScopes ? { serviceScopes } : {}),
@@ -1489,49 +1545,8 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const trace = runtime.trace.events as unknown as Record<string, unknown>[];
     const childInvocationTraces = runtime.frame?.task.traces ?? [];
     const invocationTraces = [trace, ...childInvocationTraces.map(child => child.events)];
-    const childTraceByRunId = new Map(childInvocationTraces.map(child => [child.callId, child]));
     const executionGraph = invocationTraces.flat().filter(event => typeof event.node === 'string' && Array.isArray(event.inputs));
-    const bindingSpec = (record.curriculum as { item_result_binding?: ItemResultBindingSpec } | undefined)?.item_result_binding;
-    const bindingSources = new Set(bindingSpec?.sites.map(site => site.owner_source_path) ?? []);
-    const seedCoverage = bindingSpec?.joined_seed_coverage;
-    const possibleBindingStore = bindingSpec ? runtime.frame?.task.runtime.callStore() as Partial<CaptureSource> | undefined : undefined;
-    const bindingStore: CaptureSource | undefined = possibleBindingStore &&
-      typeof possibleBindingStore.call === 'function' && typeof possibleBindingStore.value === 'function' ?
-      possibleBindingStore as CaptureSource : undefined;
-    const invocationLedger = invocationTraces.flatMap(events => {
-      const manifest = events.find(event => event.kind === 'manifest');
-      if (!manifest || typeof manifest.run_id !== 'string') return [];
-      const invocation = events.find(event => event.kind === 'invocation' && event.phase === 'start');
-      const output = events.find(event => event.kind === 'host_capture' && event.capture_kind === 'invocation_output');
-      const childTrace = childTraceByRunId.get(manifest.run_id);
-      const finalState = events.filter(event => event.kind === 'state' && event.phase === 'final').at(-1);
-      const source = output?.definition_source;
-      const inline = manifest.inline_instruction_site;
-      const inlineReturns = inline && typeof inline === 'object' ?
-        (inline as { returns?: { natlang?: unknown; text?: unknown } }).returns : undefined;
-      const scopedChild = bindingSpec?.sites.some(site =>
-        String(inlineReturns?.natlang ?? inlineReturns?.text ?? output?.result_type ?? '')
-          .includes(site.inline_child_site.return_type)) ||
-        (seedCoverage && String(inlineReturns?.natlang ?? inlineReturns?.text ?? output?.result_type ?? '')
-          .includes(seedCoverage.child_return_type));
-      const inputNames = seedCoverage?.owner_source_path === source ? ['input'] :
-        bindingSources.has(String(source)) ? ['state'] :
-        scopedChild ? ['input'] : [];
-      let hostInputs: ReturnType<typeof hostCaptures>;
-      if (inputNames.length && bindingStore) {
-        try { hostInputs = hostCaptures(bindingStore, manifest.run_id,
-          { inputArguments: inputNames, maxBytes: 1_048_576 })?.filter(capture => capture.capture_kind === 'invocation_input'); }
-        catch { /* Missing durability evidence is an unverified hold, never an execution failure. */ }
-      }
-      return [{ invocation_id: manifest.run_id, parent_invocation_id: manifest.parent_call_id ?? null,
-        ...(inline ? { inline_instruction_site: inline } : {}),
-        ...(invocation?.captures && typeof invocation.captures === 'object' ? { captures: structuredClone(invocation.captures) } : {}),
-        completion_status: finalState?.outcome ?? childTrace?.outcome ?? null,
-        completion_source: finalState ? 'execution_graph' : childTrace ? 'runtime_invocation_trace' : 'unavailable',
-        ...(childTrace ? { completion_detail: childTrace.detail } : {}),
-        ...(output ? { host_result: output } : {}),
-        ...(hostInputs ? { host_inputs: hostInputs } : {}) }];
-    });
+    const invocationLedger = bindingSpec ? itemResultInvocationLedger(runtime, bindingSpec) : [];
     const itemResultBinding = bindingSpec ? checkItemResultBinding(bindingSpec, invocationLedger) : undefined;
     const bindingAccepted = !bindingSpec || itemResultBinding?.status === 'pass';
     const outcomeChecks = bindingSpec ? { ...checks, item_result_binding: bindingAccepted } : checks;

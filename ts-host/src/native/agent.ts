@@ -446,7 +446,9 @@ export class NativeToolAgent {
        * Checks `Is<T, P>` slots of the call's result before it is accepted (native/refinement.ts). A failure goes back
        * to the model as a tool error within the repair budget; past it the call fails with the refinement's code.
        */
-      refinement?: { checker: RefinementChecker; judge?: RefinementJudge; escalation?: RefinementJudge };
+      refinement?: { checker: RefinementChecker; judge?: RefinementJudge; escalation?: RefinementJudge;
+        /** Optional host-owned return obligation, checked with the same repair feedback as refined slots. */
+        returnGuard?: (runId: string) => Promise<RefinementFailure[]> };
       /** Tensor store and write port for soft values (S0 §3). */
       neuralese?: NeuraleseRuntimeOptions;
       /**
@@ -879,7 +881,7 @@ export class NativeToolAgent {
    */
   private async refinementGate(session: NativeSession, args?: Record<string, unknown>): Promise<RefinementFailure[] | undefined> {
     const options = this.options.refinement, lam = session.lam;
-    if (!options || lam.type.kind !== 'lambda' || !containsRefinement(lam.type.returns, session.env)) return;
+    if (!options || lam.type.kind !== 'lambda') return;
     let value: Value | typeof MISSING = MISSING;
     if (args && Object.hasOwn(args, 'value')) {
       // The structural check belongs to the tool; a value that does not fit is not judged here.
@@ -892,9 +894,11 @@ export class NativeToolAgent {
     } else value = lam.return;
     if (value === MISSING) return;
     const callId = session.runtime.currentCallId ?? null;
-    const failures = await options.checker.checkValue(value, lam.type.returns, session.env,
-      { phase: 'return', judge: options.judge, escalation: options.escalation, callId, signal: session.runtime.signal,
-        emit: (kind, data) => { session.runtime.trace.emit(kind, data); } });
+    const failures = containsRefinement(lam.type.returns, session.env) ?
+      await options.checker.checkValue(value, lam.type.returns, session.env,
+        { phase: 'return', judge: options.judge, escalation: options.escalation, callId, signal: session.runtime.signal,
+          emit: (kind, data) => { session.runtime.trace.emit(kind, data); } }) : [];
+    if (options.returnGuard) failures.push(...await options.returnGuard(session.runtime.options.runId));
     return failures.length ? failures : undefined;
   }
 
@@ -988,6 +992,8 @@ export class NativeToolAgent {
       const failures = await refinement.checker.checkValue(value, type, session.env,
         { phase: 'return', judge: refinement.judge, escalation: refinement.escalation, callId: session.runtime.currentCallId ?? null,
           signal: session.runtime.signal, emit: (kind, data) => { session.runtime.trace.emit(kind, data); } }, path);
+      if (path === 'return' && refinement.returnGuard)
+        failures.push(...await refinement.returnGuard(session.runtime.options.runId));
       return failures.length ? { code: failures[0]!.code, message: failures.map(failure => failure.message).join(' ') } : undefined;
     };
     const messages = openingMessages();
