@@ -58,10 +58,28 @@ def test_grouped_linear_grads_are_in_parameter_layout(monkeypatch):
             assert torch.isfinite(a).all() and float((a - b).norm() / b.norm()) < tolerance, fp8
 
 
+def _exact_quantized_projection(a, rows, weight, expert_ids):
+    """FP32 reference for the actual E4M3 operands and scales, with the production BF16 stage boundary."""
+    from natlang_neuralese.maple.fp8_experts import rowwise_quant
+
+    experts, out_width, width = weight.shape
+    aq, sa = rowwise_quant(a.contiguous())
+    wq, sw = rowwise_quant(weight.reshape(experts * out_width, width))
+    wq, sw = wq.view(experts, out_width, width), sw.view(experts, out_width)
+    result = torch.empty(expert_ids.numel(), out_width, device=a.device, dtype=torch.bfloat16)
+    for expert in range(experts):
+        selected = (expert_ids == expert).nonzero(as_tuple=True)[0]
+        if not selected.numel():
+            continue
+        source = rows[selected] if rows is not None else selected
+        product = aq[source].float() @ wq[expert].float().T
+        result[selected] = (product * sa[source, None] * sw[expert, None, :]).bfloat16()
+    return result
+
+
 @pytest.mark.parametrize('tokens', [5, 700])
-def test_grouped_fp8_experts_track_bf16(monkeypatch, tokens):
-    """maple/expert_gemm.fp8_dense_experts (DENSE_MOE["fp8"] = "grouped", the FP8 expert backend): finite, and within FP8 rounding of the BF16
-    grouped experts in output and every gradient (an idle expert included)."""
+def test_grouped_fp8_experts_track_bf16(monkeypatch, tokens, record_property):
+    """Check exact quantized projection/routing math; report the separately useful BF16 drift."""
     torch.manual_seed(tokens)
     experts, top_k, width, ff = 8, 4, 256, 128
     x = torch.randn(tokens, width, device='cuda').bfloat16()
@@ -73,9 +91,54 @@ def test_grouped_fp8_experts_track_bf16(monkeypatch, tokens):
     monkeypatch.setitem(DENSE_MOE, 'fp8', None)
     reference = _run(monkeypatch, True, x, index, logits, gate_up, down)
     monkeypatch.setitem(DENSE_MOE, 'fp8', 'grouped')
+    from natlang_neuralese.maple.moe_glue import Combine
+    captured_expert_outputs = []
+    original_combine_forward = Combine.forward
+
+    def capture_combine_input(ctx, out, slot_of, weights, hand=None):
+        captured_expert_outputs.append(out.detach())
+        return original_combine_forward(ctx, out, slot_of, weights, hand)
+
+    monkeypatch.setattr(Combine, 'forward', staticmethod(capture_combine_input))
     fp8 = _run(monkeypatch, True, x, index, logits, gate_up, down)
+    assert len(captured_expert_outputs) == 1
     for name, a, b in zip(('out', 'grad_x', 'grad_weights', 'grad_gate_up', 'grad_down'), fp8, reference):
-        assert torch.isfinite(a).all() and float((a - b).norm() / b.norm().clamp_min(1e-30)) < 0.1, name
+        assert torch.isfinite(a).all(), name
+        drift = float((a - b).norm() / b.norm().clamp_min(1e-30))
+        record_property(f'{name}_bf16_relative', drift)
+        if name != 'grad_weights':
+            assert drift < 0.1, (name, drift)
+
+    # A routing logit's derivative depends on the FP8 expert outputs. Quantization
+    # can amplify its difference from BF16 beyond a fixed 10% without a bad
+    # Combine backward. Independently reconstruct both expert projections from
+    # their E4M3 operands, then apply the softmax Jacobian to those exact values.
+    import torch.nn.functional as F
+    from natlang_neuralese.maple.expert_gemm import BlockTable, Fp8ExpertProjection
+    from natlang_neuralese.maple.moe_glue import routing_permutation
+
+    order, slot_of = routing_permutation(index)
+    flat = index.reshape(-1)
+    offsets = torch.searchsorted(flat[order], torch.arange(experts, device=flat.device), right=True).to(torch.int32)
+    source = (order // top_k).contiguous()
+    expert_ids = flat[order]
+    table = BlockTable(offsets, flat.numel())
+    hidden = _exact_quantized_projection(x, source, gate_up, expert_ids)
+    actual_hidden = Fp8ExpertProjection.apply(x.contiguous(), source, slot_of, top_k, gate_up, table, offsets, None)
+    assert float((actual_hidden.float() - hidden.float()).norm() / hidden.float().norm()) < 5e-3
+    activation = (F.silu(hidden[:, :ff]) * hidden[:, ff:]).contiguous()
+    exact_out = _exact_quantized_projection(activation, None, down, expert_ids)
+    actual_out = Fp8ExpertProjection.apply(activation, None, None, top_k, down, table, offsets, None)
+    assert float((actual_out.float() - exact_out.float()).norm() / exact_out.float().norm()) < 5e-3
+    # Use the actual fused-path output for the Jacobian. SwiGLU and BF16 stage
+    # rounding can differ slightly from this separate eager projection probe;
+    # projection arithmetic is checked independently above.
+    slot_out = captured_expert_outputs[0][slot_of.reshape(tokens, top_k).long()].float()
+    g = torch.randn(fp8[0].shape, device=x.device, generator=torch.Generator(x.device).manual_seed(1))
+    route_derivative = (slot_out * g[:, None, :]).sum(-1)
+    weights = torch.softmax(logits, -1)
+    exact_logit_grad = weights * (route_derivative - (weights * route_derivative).sum(-1, keepdim=True))
+    assert float((fp8[2] - exact_logit_grad).norm() / exact_logit_grad.norm().clamp_min(1e-30)) < 5e-3
     assert float(fp8[3][7].abs().max()) == 0.0  # the idle expert gets no gradient
 
 

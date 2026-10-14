@@ -1,5 +1,45 @@
 # Continuation guide — updated 2026-10-14
 
+## 06:51 CEST: deep pseudocode source and FP8 reference update
+
+The owner clarified that large examples should be substantive structured
+natural-language pseudocode, not many thin `.nl` wrappers around crisp
+decisions. `plans/semantic_stack/DEPTH_AUDIT.md` now states the concrete
+whole-tree criterion (`1908dae9`): trace evidence, alternatives, unknowns,
+typed child results and downstream state changes across positive, negative
+and ambiguous branches. Keep valid shallow cases in the ordinary mix; do not
+count the 220 catalog designs as 220 authored applications. Review live JS for
+case-specific semantic shortcuts before admission.
+
+Cave v8 has 30 `.nl` callables and 219 numbered steps. Its one-unit frame
+frontier keeps the actual child convention result and original source-frame
+name; exact controls now exercise both frame and landmark branches (27 checks,
+7 positive/20 negative), with independent receipt and bound source manifest.
+Commits `32040990`, `0288c3fa`, `c759e85e`, `a7f55e23` are on origin/main.
+Source replay passes; matched live teacher consumption is pending and
+training admission remains false. Ecology v17 live reached 93 turns but
+exposed two scoped NL bypasses in generated JS; diagnostic `d02d87fa` is
+published, repair pending. Polyphonic 27-NL source package is independently
+reviewed source-only and awaits live sampling.
+
+The Pop FP8 seed5 literal fixture and its two actual E4M3 projection captures
+were copied with SHA verification to DGX
+`/home/werg/data/dgxops/fp8-pop-literal-20261014/`. DGX replay matched the
+Pop BF16 reference and found both FP8 projections bitwise equal to exact
+quantized arithmetic (with BF16 stage rounding); the routing-gradient gap is
+about 0.127 there and 0.119 on Pop. The blanket 0.1 BF16 routing-gradient
+test bound is not a valid kernel correctness check. A focused Pop test now
+compares both E4M3 projection outputs against independent dequantized FP32
+matmuls, and compares routing-logit gradients against the independent softmax
+Jacobian of the actual fused-path expert outputs; BF16 drift is reported as
+pytest properties. Its pinned-image focused run passed 2/2 in ledger unit
+`natlang-pop-fp8-exact-test-20261014d.service`. DGX was briefed; the full
+Python suite still needs rerun after this test change and its unrelated
+order-dependent profiler attribution issue remains open. The full TS gate
+after Cave controls passed (2,037 tests, conformance 22/22) under
+`natlang-pop-ts-cave-full-check-20261014.service`. Its memory claim briefly
+preempted ordinary Luna/Gemini; the replenisher timers restore them.
+
 ## 06:16 CEST: deep-source audit and Pop check status
 
 Polyphonic Edition Workshop is a 27-callable, 651-physical-line source tree, not a
