@@ -1,5 +1,46 @@
 # Continuation guide — updated 2026-10-14
 
+## 10:05 CEST: Pop GPU evaluation, source handoff and storage
+
+The 09:12 section below is historical: its clean full TS gate finished green
+(builds, layering, TS tests and 22/22 conformance). The deterministic Flash
+trainer fix, FP8 audit and gate results were published to `origin/main` at
+`9b59911d`; Pop subsequently pulled the DGX mixed-corpus and ledger changes,
+then published semantic source/review commits through `cd221494`. Current Pop
+checkout has fast-forwarded to DGX `a892860a`. Ecology v18b source-only full
+replay rendered 220 cases, with 23 candidates and zero reference failures;
+its one-case Luna live diagnostic is still running and held. Field Gloss has
+independently reviewed source, but no typed certificate, checker or live
+qualification. Neither source has training admission.
+
+The Pop GPU is now running the QAD step-15000 **full-prompt, temperature-0.6,
+48-case matched evaluation** as ledger unit
+`natlang-pop-qad-matched48-w1-trained15000-20261014.service`. At 10:04 CEST,
+9/48 cases had finished: three complete trajectories all missed the exact
+answer, four repeated, and two exhausted the request budget. The GPU used
+7.6/8.2 GiB with no CUDA OOM in this single-worker arm. Earlier four- and
+two-worker trained attempts OOMed, so their partial scores must not be used;
+the two-worker clean-base arm returned 1/48 but is not yet an exact operational
+match. Run the base arm at one worker and the same per-case seeds after the
+trained arm finishes. Its script is `/tmp/natlang-pop-qad-matched48-w1-20261014.py`;
+output root is
+`/srv/storage/natlang-artifacts/qad-base-vs-15000-matched48-w1-20261014-v1`.
+Trace review so far shows heterogeneous loops: repeated `read_code(nl)`,
+attempts to add a sixth ad hoc NL layer despite the depth-five error, and
+repeated JS binding mistakes. Keep held eval cases out of training; use these
+failure families to select disjoint train tasks for teacher recovery. DGX's
+repetition request has an interim reply and remains open until the full census.
+
+Luna held-shape queues, retry and Gemini batch30 are active; their replenish
+timers are enabled. Pop listed and removed only two discarded cold FP8
+diagnostic run directories using
+`/tmp/prune_pop_discarded_fp8_20261014.py`; four unique checkpoint payloads
+accounted for about 4.4 GiB reclaimed (root free 20→24 GiB). Committed
+FP8 recipes/receipts remain. `/srv/storage` still has only 7.3 GiB free, so
+continue retention review without deleting unadmitted source data or protected
+held evaluations. DGX was briefed through coordination message
+`2026-10-14T08:04:50.847526Z-pop-c5c2`.
+
 ## 09:12 CEST: Pop GPU handoff, deterministic Flash and FP8 repeat
 
 The Pop GPU had an avoidable idle handoff after QAD v14's hard drift stop at
