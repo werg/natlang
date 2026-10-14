@@ -134,3 +134,15 @@ Application decisions and policy remain in the `.nl` call graph. A project may a
 The folder reducer owns the finite folder frontier and exact source ID/path binding. Its first natural-language stage reads each `EvidenceRecord` and invokes a scoped interpretation literal, producing a typed `InteractionAssertion` for every record, including background or unresolved records. The second stage receives only these typed assertions and exact witness snippets, invokes a scoped relation literal, and returns one `EdgeDecision` per assertion plus established edges. Later natural-language stages assess causal support, edge-specific scope and the global signed graph using the accumulated typed evidence. Only the root appends completed-folder fields and checks quote substrings against the original records. These exact checks are plumbing; relevance, referents, direction, sign, scope and uncertainty stay in natural-language calls. The emitted source variant is separate from the catalog and preserves its fixture, gold and oracle. A source/reference replay proves wiring only; live stage contribution and final semantic correctness remain unqualified.
 
 The first live typed-handoff trace showed that Stage1's global signed-effect rule caused a clear reported reduction to be marked unresolved. Stage2 also borrowed an edge from another assertion, and Stage3's aggregate child failed to return its own assessment. The v13 task boundary narrows Stage1 to extracting reported claims and perturbations, Stage2 to deciding the primary assertion's own directed relation with its own witness, and Stage3 to one edge at a time through a scoped causal-support decision. Every missing assessment is kept as a witnessed repair obligation. This changes natural-language stage policy and call granularity; exact code still only binds IDs, checks quoted evidence and carries returned fields.
+
+### Non-gating live idiomaticity signal
+
+The policy decision about whether a teacher trajectory expresses the authored
+natural-language program remains an independent semantic review. An exact trace
+scanner may count evaluation-code length, natural-language literal call sites,
+and large authored object/array tables by invocation. It reports locations for
+review and never rejects or admits a row. This crisp mechanism is justified by
+exact counting of recorded tool calls; it cannot decide whether a typed object
+literal is legitimate materialization of a natural-language judgment or a
+hard-coded replacement for that judgment. The reviewer must inspect source
+grounding and whether later natural-language stages consume the returned value.
