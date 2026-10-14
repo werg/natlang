@@ -120,6 +120,14 @@ def active_luna_workers():
     return sum(unit.startswith('natlang-pop-luna-') and '-w' in unit for unit in units)
 
 
+def luna_unit_prefix(campaign, seed, *, repair=False):
+    if repair:
+        return f'natlang-pop-luna-repair-s{seed}'
+    if campaign == BACKFILL:
+        return f'natlang-pop-luna-backfill-s{seed}'
+    return f'natlang-pop-luna-s{seed}'
+
+
 def durable_progress(journals, missing, finished):
     """Count completed jobs and the largest saved turn of an unfinished job.
 
@@ -156,7 +164,7 @@ def complete(campaign):
     for number in range(1, manifest.get('workers', WORKERS) + 1):
         worker = campaign / f'worker-{number:02d}'
         queue = rows(worker / 'queue.jsonl')
-        prefix = f'natlang-pop-luna-repair-s{manifest["seed"]}' if repair else f'natlang-pop-luna-s{manifest["seed"]}'
+        prefix = luna_unit_prefix(campaign, manifest['seed'], repair=repair)
         unit = f'{prefix}-w{number:02d}.service'
         retry_dirs = sorted(worker.glob('retry-*'))
         if active(unit) or any(active(f'{prefix}-w{number:02d}-r{path.name.removeprefix("retry-")}.service')
@@ -238,7 +246,7 @@ def launch_queue(queue_dir, unit):
 
 
 def launch_worker(campaign, seed, number, *, repair=False):
-    prefix = f'natlang-pop-luna-repair-s{seed}' if repair else f'natlang-pop-luna-s{seed}'
+    prefix = luna_unit_prefix(campaign, seed, repair=repair)
     return launch_queue(campaign / f'worker-{number:02d}', f'{prefix}-w{number:02d}')
 
 
@@ -285,7 +293,7 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs, *, 
     if own_retries and (not retry_journal.exists() or
                         not any(event.get('event') == 'finish' for event in rows(retry_journal))):
         last_retry = own_retries[-1]
-        prefix = f'natlang-pop-luna-repair-s{seed}' if repair else f'natlang-pop-luna-s{seed}'
+        prefix = luna_unit_prefix(campaign, seed, repair=repair)
         unit = f'{prefix}-w{number:02d}-r{last_retry.name.removeprefix("retry-")}'
         state_file = last_retry / 'relaunch-state.json'
         state = json.loads(state_file.read_text()) if state_file.exists() else {'failures': 0}
@@ -345,7 +353,7 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs, *, 
         'reason': 'observed_model_request_budget' if resource_budget else 'provider_transport',
         **({'resumed_partial_sha256': partial_sha256, 'seed_preserved': True} if resource_budget else {}),
         'training_admission': False}, indent=2) + '\n')
-    prefix = f'natlang-pop-luna-repair-s{seed}' if repair else f'natlang-pop-luna-s{seed}'
+    prefix = luna_unit_prefix(campaign, seed, repair=repair)
     launch_queue(retry, f'{prefix}-w{number:02d}-r{ordinal:03d}-{attempt:02d}')
     return True
 
