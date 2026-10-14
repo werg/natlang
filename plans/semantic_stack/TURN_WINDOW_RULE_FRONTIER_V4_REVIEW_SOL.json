@@ -1,0 +1,65 @@
+{
+  "schema": "natlang.application-independent-source-delta-review/1",
+  "reviewer": "semantic_slate_sol",
+  "application": "turn-window-adjudicator",
+  "reviewed_commit": "17375c02",
+  "variant": "rule-role-frontier-v4",
+  "source_hashes": {
+    "applications/turn-window-adjudicator/types.ts": "edfb45925ab13b3ee25afbacbfee450d45162580cd521807c75c62fbb93088b4",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn.nl": "3b004371ee73debbae2d67e098931472751fe889d4c79113ba60093059b7b7f3",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn/readRules.nl": "61508af28856833a6e9caeab35227dea2534f5aef63756700630f4f0e86fdf72",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn/readRules/advanceRuleUnit.nl": "c9bcd87d310fc39c702072eced6e5427094d1cb2bd175d74bdf947e7af8a1bb5",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn/readRules/advanceRuleUnit/interpretAbility.nl": "8fc485e20a7b669cc23c83f3cf5ecfd0985f7a816e07a1c7cd3efe14d1028d92",
+    "applications/turn-window-adjudicator/adjudicateTurn/readTurn/readBoard.nl": "9b2a303aee947635f7bae519eeb2116d7bfc1c09dc91fd193c8c56934bbfcad7",
+    "applications/turn-window-adjudicator/adjudicateTurn/compileWindows.nl": "0b0c238603578bf2c9ca59c977a896393033e4c35a4f87adaf99d0a0712b2aa0",
+    "applications/turn-window-adjudicator/adjudicateTurn/compileWindows/classifyTiming.nl": "704b3cffb346046a9f1be5bd062cd3e547369c4652e52ae2b174362618079808",
+    "applications/turn-window-adjudicator/adjudicateTurn/captureAnnouncements.nl": "6853c33c1bb27f58502eb8bcbb255e45d5170220736c3e7e649c487a3aa3f99e",
+    "applications/turn-window-adjudicator/adjudicateTurn/captureAnnouncements/bindReference.nl": "152ccb14cb9ae1f2df14f85af57d0b2edba0e33d5a151627e3f76d49fce28b50",
+    "applications/turn-window-adjudicator/adjudicateTurn/settleTurn.nl": "904f8da356b5c39a58d252694e3ac9e383472ab27d8e0dbf97761191bde48dac"
+  },
+  "review": {
+    "typed_semantic_inventory": "pass: scoped RuleInventory separates actual ability primary units from identity/timing/capacity/state/submission/output contexts; context meaning is retained instead of synthetic abilities.",
+    "source_coverage": "pass: exact primary/context union covers originals; failed coverage is not semantic success.",
+    "per_unit_progress": "pass: one original pending unit consumed; actual accepted/unresolved/failed results distinct; completed returns preserved and failure reason propagated.",
+    "literal_ownership": "pass: nested interpretAbility directly awaits nullable semantic RuleMeaning under actual governing contexts/unit focus; parent checks original primary/context quotes and binds provenance.",
+    "typed_context_consumers": "pass: readBoard receives RuleIndex; classifyTiming receives actual source rules; capture/bindReference receives actual contexts and uses selected returned controller basis.",
+    "semantic_policy_location": "pass: role grouping, ability interpretation, timing/controller/uncertainty decisions in numbered NL; TS only declarations. Exact original IDs/quotes/finite progress are mechanism.",
+    "unfinished_safety": "pass: failed/decisively missing rules remain unresolved and settleTurn blocks unsupported effects; explicit absent submitted choice remains an established context, with consequential choice handled in the existing later order branch."
+  },
+  "source_semantic_gate": "pass",
+  "open_findings": [],
+  "independent_checks": {
+    "native_project": "pass",
+    "typescript": "pass",
+    "exact_controls": {
+      "base": {
+        "passed": true,
+        "count": 35
+      },
+      "mirror": {
+        "passed": true,
+        "count": 24
+      }
+    },
+    "canonical_reference_replay": {
+      "base": {
+        "source_sha256": "e4b091a737c9f73dcd7b2830b369dfcba09bf21dcd9fb8ede6ed22a4ae1858e7",
+        "reference_ok": true,
+        "reference_sha256": "079db52e06611176e740eff3d6b74b65e910d143a284dbc93da20ea2f8f2337d"
+      },
+      "mirror": {
+        "source_sha256": "73470f0a278a034304e4acee84f28e22f8bf4b46a25fa809837a97cffbda0383",
+        "reference_ok": true,
+        "reference_sha256": "200cce3de94a663cf0e08840d3a6f50ae0bf84bbc4df040f6cc852fac69930b0"
+      },
+      "open": {
+        "source_sha256": "2aa0a382f61dac61b2dfaadcdf06a6f7c56e41e00dd96eb844ddad44e959d8be",
+        "reference_ok": true,
+        "reference_sha256": "e5d2b25f33111ec694438329c52a92b5327edd6e95a4126466dd8901225b5898"
+      }
+    }
+  },
+  "scope": "Focused source/type/control review of11current source paths plus3unchanged typed canonical certificates. No actual NL child, reducer or whole application execution; quote existence is not entailment. Earlier independent fixture/oracle reviews remain separate.",
+  "live_qualified": false,
+  "training_admission": false
+}
