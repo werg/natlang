@@ -127,6 +127,15 @@ def run_one(engine, item, steps: int, fresh_every: int):
         result["steps"].append(observation)
     result["forced_token_ids"] = forced
     result["forced_text"] = engine.tokenizer.decode(forced, skip_special_tokens=False)
+    first_stop = next((i for i, token in enumerate(forced) if token in engine.stop_ids), None)
+    result["first_forced_greedy_stop_index"] = first_stop
+    reachable = [result["prefill"]] + [step["cached_hf_vs_port"] for step in result["steps"][:first_stop]]
+    result["pre_greedy_stop"] = {
+        "compared_positions": len(reachable),
+        "argmax_mismatches": sum(row["hf_argmax"] != row["port_argmax"] for row in reachable),
+        "hf_control_mass_max_t06": max(row["hf_control_total_at_t06"] for row in reachable),
+        "port_control_mass_max_t06": max(row["port_control_total_at_t06"] for row in reachable),
+    }
     return result
 
 
@@ -166,6 +175,8 @@ def run_interleaved(engine, pair, steps: int, fresh_every: int):
             state["observations"].append(observation)
     return [{"label": state["label"], "forced_token_ids": state["forced"],
              "forced_text": engine.tokenizer.decode(state["forced"], skip_special_tokens=False),
+             "first_forced_greedy_stop_index": next((i for i, token in enumerate(state["forced"])
+                                                      if token in engine.stop_ids), None),
              "observations": state["observations"]} for state in states]
 
 
@@ -187,13 +198,14 @@ def main():
         (request_dir / "request.json").write_text(json.dumps({"weights": str(args.checkpoint.resolve())}))
         engine = restore_engine({"dir": str(request_dir), "heads": str(args.heads.resolve()),
                                  "device": "cuda", "prompt_rendering": "full"})
-        report = {"schema": "natlang.qad-hf-port-parity/1", "checkpoint": str(args.checkpoint.resolve()),
+        report = {"schema": "natlang.qad-hf-port-parity/2", "checkpoint": str(args.checkpoint.resolve()),
                   "checkpoint_sha256": sha256_file_hex(args.checkpoint), "heads": str(args.heads.resolve()),
                   "heads_sha256": sha256_file_hex(args.heads), "requests_sha256": sha256_file_hex(args.requests),
                   "runtime_module": str(Path(restore_engine.__code__.co_filename).resolve()),
                   "runtime_module_sha256": sha256_file_hex(Path(restore_engine.__code__.co_filename)),
                   "torch": torch.__version__, "dtype": str(engine.backbone.embedding_weight.dtype),
                   "control_token_ids": [engine.backbone.controls.open_id, engine.backbone.controls.close_id],
+                  "ordinary_stop_token_ids": sorted(engine.stop_ids),
                   "device": str(engine.backbone.embedding_weight.device), "cases": []}
         items = list(selected_requests(args.requests, engine))
         for item in items:
@@ -204,9 +216,8 @@ def main():
                               "decode_steps": len(case["steps"]),
                               "non_control_max": max(s["cached_hf_vs_port"]["non_control_max_logit_abs"]
                                                      for s in case["steps"]),
-                              "argmax_mismatches": sum(s["cached_hf_vs_port"]["hf_argmax"] !=
-                                                       s["cached_hf_vs_port"]["port_argmax"]
-                                                       for s in case["steps"])}), flush=True)
+                              "greedy_first_stop_index": case["first_forced_greedy_stop_index"],
+                              "pre_greedy_stop": case["pre_greedy_stop"]}), flush=True)
             torch.cuda.empty_cache()
         if len(items) >= 2:
             pair = (items[0], items[2] if len(items) >= 3 else items[1])

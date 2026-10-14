@@ -5,20 +5,27 @@
 The exact step-15000 QAD HF/serving-port comparison now covers four captured
 task prompts, 64 forced continuation positions each, and a two-request
 interleaved cache path. All ordinary-token logits match bit-for-bit, including
-the interleaved path. The trained control rows do change behavior: on the
-proof-full root, decoded position 28 has HF argmax token 6 but port argmax
-Neuralese close token 18; its probability at evaluator temperature 0.6 is
-0.99999368 under the port and ~1e-11 under native HF. The interleaved path
-reproduces it. The port deliberately substitutes trained control rows for the
-HF marker rows (`model/lfm2_port.py`), and the serving sampler previously
-emitted close as ordinary text outside a write. Shared `serve/engine.py` now
-treats a free close marker as a stop boundary; a writer still handles its own
-block close. This runtime change needs live ~48-case measurement before
-behavioral adoption, plus the full current-main check. The immutable diagnostic
+the interleaved path. The control rows can differ sharply: on the proof-full
+root, comparison row 28 has HF argmax token 6 but port argmax Neuralese close
+token 18; its probability at evaluator temperature 0.6 is 0.99999368 under
+the port and ~1e-11 under native HF. **This is after the first forced greedy
+EOS token 7 at index 26, so it does not establish a reachable behavior
+failure.** The interleaved path reproduces that post-EOS divergence.
+Before that first greedy stop, all four sampled prefixes have zero argmax
+mismatches; the largest port control-token mass at T=0.6 is 6.19e-11.
+This strongly narrows the specific R3 evidence, though sampled live paths
+can differ from the forced greedy path. The port
+deliberately substitutes separately initialized control rows for HF marker
+rows (`model/lfm2_port.py`); the direct SFT checkpoint student parameters
+contain no control rows, and the heads anchor is explicitly untrained. Shared
+`serve/engine.py` now treats a free close marker as a stop boundary, while a
+writer still handles its own block close. This structural guard is not an
+explanation for current task failures. It needs before-stop evidence from the
+active ~48-case sampled live evaluation, plus the full current-main check. The diagnostic
 is `/srv/storage/natlang-artifacts/qad15000-hf-serving-cache-parity/run-03/report.json`;
 `scripts/neuralese_data/qad_hf_port_parity.py` is the reproducer. The older
-four-token `run-02` missed the issue; delete redundant `run-01` after its
-evidence is superseded. DGX has the exact result through coord request
+four-token `run-02` missed the post-EOS difference; redundant `run-01` was
+deleted after `run-03` was preserved. DGX has the exact result through coord request
 `2026-10-14T01:23:37.616958Z-dgx-6e62`.
 
 Ecology v15b was stopped and excluded from admission: its root `iterateOn`
