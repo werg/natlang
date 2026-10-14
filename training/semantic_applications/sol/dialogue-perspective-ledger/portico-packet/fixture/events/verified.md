@@ -1,4 +1,4 @@
-[F01] Verified complete crate log F_COLLECTION: the first and only collection through day13 hour12 occurred day12 hour9, by Jon. No collection occurred before day11 noon.
+[F01] Verified complete crate log F_COLLECTION: the first and only collection through day13 hour12 occurred day12 hour9, by Jon. No collection occurred on day10 or before day11 noon.
 [F02] Verified complete key log F_NO_RELEASE: Mira did not release the key to Lea at any time through day13 hour12. These logs are application-visible physical evidence, not inherently shared participant knowledge.
 [F03] The collection log report includes exact verified evidence for P_COLLECT12=true and P_COLLECT11=false. The complete key log supports P_RELEASE=false through its stated completeness horizon.
-[F04] Verified complete personal acknowledgment ledger through day13 hour12: Lea acknowledged B1 through L10 and never personally acknowledged B2. There is no other acknowledgment event in this closed packet. The ledger is application-visible, not automatically participant knowledge.
+[F04] Verified complete personal acknowledgment ledger F_ACKNOWLEDGMENT through day13 hour12: Lea acknowledged B1 through L10 and never personally acknowledged B2. There is no other acknowledgment event in this closed packet. The ledger is application-visible, not automatically participant knowledge.

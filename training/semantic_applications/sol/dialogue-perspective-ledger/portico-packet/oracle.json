@@ -55,11 +55,7 @@
         "Ada"
       ]
     },
-    "Q13": {
-      "actKinds": [
-        "unresolved"
-      ]
-    },
+    "Q13": {},
     "Q14": {
       "performed": false
     },
@@ -100,5 +96,14 @@
       "/answers/*/explanation"
     ]
   },
-  "training_admission": false
+  "training_admission": false,
+  "query_constraints": {
+    "Q13": {
+      "permitted_statuses": [
+        "ambiguous",
+        "unresolved"
+      ],
+      "retains_sincere_and_ironic_alternatives": true
+    }
+  }
 }

@@ -246,7 +246,7 @@
         },
         "returns": "CommitmentDelta",
         "kind": "function",
-        "owned_delta": "Derive actual conditional commitments and independently judged activation."
+        "owned_delta": "Derive activation and timely promised-consequent fulfillment through actual typed child judgments."
       },
       {
         "path": "analyzeConversation/evolveViews/advanceEpisode.nl",
@@ -599,11 +599,11 @@
   ],
   "source_shape": {
     "documents": 11,
-    "clauses": 43,
+    "clauses": 46,
     "participants": 5,
     "queries": 16,
     "nl_functions": 29,
-    "numbered_steps": 195
+    "numbered_steps": 200
   },
   "provenance": {
     "author": "semantic_slate_sol",
@@ -620,5 +620,6 @@
     "training_admitted": false
   },
   "reference_scope": "Full typed canonical report pending. Projection oracle is not a complete result and grants no runtime replay credit.",
-  "model_facing_debt": "Initial29NL source requires independent review, full typed witness/checker and approximately48 live samples before adoption."
+  "model_facing_debt": "Initial29NL source requires independent review, full typed witness/checker and approximately48 live samples before adoption.",
+  "source_precision": "Actual two-layer quoted archive chain; activation versus consequent predicates and source-bounded fulfillment; corroboration must match endorsed value."
 }

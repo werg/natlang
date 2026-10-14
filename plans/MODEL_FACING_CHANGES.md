@@ -401,3 +401,5 @@ global truth. Native loader/type checks pass; the private oracle currently conta
 not a full typed canonical report. **Measurement debt:**0/48 live samples, independent source review,
 full typed canonical/checker qualification and actual contribution-consumption trace review pending.
 Source size and projected expected answers grant no application execution or training admission.
+
+Dialogue initial-source precision now has200 numbered steps and46clauses. It supplies an actual authenticated archive-summary turn for two nested quote interiors, types activation and consequent predicates separately, and consumes source-bounded fulfillment judgments. Corroborating facts must match endorsement polarity; contrary evidence does not silently revise belief. The queried-force performed field and quote collection ordering are visibly specified. Full typed canonical/checker and independent source review remain pending; initial0/48 live debt is unchanged.

@@ -10,7 +10,7 @@ returns: ActReading[]
 1. Select each node's own speech content after excluding child interiors. Retain immediate-child meaning
    as context for a reporting act, without assigning the child's original promise to the outer reporter.
 2. For each semantic speech unit call judgeIllocution(node, turn, references, source). Consume the actual
-   returned performed status, kind, propositions, polarity, issuer, beneficiaries, conditions and endorsement.
+   returned performed status, kind, propositions, polarity, issuer, beneficiaries, activation conditions, consequent predicates and endorsement.
 3. Bind actId as a generated identifier and spanId to this actual node. Speaker/time come from the
    node's actual attributed frame. Copy originalTurnId from the actual node; parent cannot replace a quoted Jon issuer with Neri or Mira.
 4. Validate returned proposition IDs against the visible source vocabulary and actor IDs against actual

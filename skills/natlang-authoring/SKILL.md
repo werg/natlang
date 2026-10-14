@@ -146,3 +146,5 @@ named NL step: disjoint proper interiors have smaller combined character mass. N
 remain forbidden. On an invalid span or quote, recover using the identified original turn/range and exact
 substring; on a perspective mismatch, recover from the original recipient receipt and historical view,
 not a fabricated empty bundle or global final ledger.
+
+Dialogue promise refinement: type activation predicates separately from promised-consequent predicates and consume their distinct actual NL judgments. A false antecedent need not mean a failed unconditional promise. Preserve day-only due hours as null; source rules can still distinguish a strictly later day. Verified evidence must corroborate the endorsed value before it supplies knowledge support. A contrary log may be available while the actor retains a false belief.
