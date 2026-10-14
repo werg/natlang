@@ -110,11 +110,35 @@ PY
     pids+=($!)
   done
 fi
-wait "${pids[@]}"
-cat $R/shards/journal-*.jsonl > $R/journal.jsonl
-$PY -m natlang_neuralese.rl.task_rollouts score --run-dir $R > $R/score.log 2>&1
+collector_status=0
+for pid in "${pids[@]}"; do
+  wait "$pid" || collector_status=1
+done
+if [ "$collector_status" -ne 0 ]; then
+  echo "one or more rollout collectors failed; inspect shard logs" >&2
+  stop_server
+  exit 1
+fi
+cat "$R"/shards/journal-*.jsonl > "$R/journal.jsonl" || {
+  echo "rollout journals could not be merged" >&2
+  stop_server
+  exit 1
+}
+$PY -m natlang_neuralese.rl.task_rollouts score --run-dir $R > $R/score.log 2>&1 || {
+  echo "rollout scoring failed; inspect $R/score.log" >&2
+  stop_server
+  exit 1
+}
 if [ -n "${CONTROL_DIR:-}" ]; then
-  cat $CONTROL_DIR/shards/journal-*.jsonl > $CONTROL_DIR/journal.jsonl
-  $PY -m natlang_neuralese.rl.task_rollouts score --run-dir $CONTROL_DIR > $CONTROL_DIR/score.log 2>&1
+  cat "$CONTROL_DIR"/shards/journal-*.jsonl > "$CONTROL_DIR/journal.jsonl" || {
+    echo "control rollout journals could not be merged" >&2
+    stop_server
+    exit 1
+  }
+  $PY -m natlang_neuralese.rl.task_rollouts score --run-dir $CONTROL_DIR > $CONTROL_DIR/score.log 2>&1 || {
+    echo "control rollout scoring failed; inspect $CONTROL_DIR/score.log" >&2
+    stop_server
+    exit 1
+  }
 fi
 stop_server
