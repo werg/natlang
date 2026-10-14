@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from natlang_neuralese.rl.task_rollouts import authored_root_row, build_queue, reward_of, score
+from natlang_neuralese.rl.task_rollouts import authored_root_row, build_queue, reward_of, score, student_root_row
 
 
 def _row(split="train", code="return await f(task);"):
@@ -28,6 +28,16 @@ def test_authored_root_derivation_is_train_only_and_hash_bound():
     assert contract["authored_root_sha256"] == hashlib.sha256(b"return await f(task);").hexdigest()
     with pytest.raises(ValueError, match="non-train"):
         authored_root_row(_row(split="test"))
+
+
+def test_student_root_derivation_refuses_reference_replay_and_non_train_rows():
+    authored = authored_root_row(_row())
+    student = student_root_row(authored)
+    assert student["curriculum"]["reference"] == authored["curriculum"]["reference"]
+    assert not student["curriculum"]["trajectory_contract"].get("authored_root_eval")
+    assert "authored_root_sha256" not in student["curriculum"]["trajectory_contract"]
+    with pytest.raises(ValueError, match="non-train"):
+        student_root_row(_row(split="test"))
 
 
 def test_queue_samples_distinct_seeds_and_refuses_greedy_groups(tmp_path):
@@ -56,6 +66,21 @@ def test_score_routes_groups_by_spread(tmp_path):
     routes = [g["route"] for g in report["groups"]]
     assert routes == ["grpo", "rejection-sampling"]
     assert report["successes"] == 1 and report["groups_with_spread"] == 1
+
+
+def test_student_root_score_rejects_host_authored_action(tmp_path):
+    (tmp_path / "packet.jsonl").write_text(json.dumps(student_root_row(_row())) + "\n")
+    (tmp_path / "preparation.json").write_text(json.dumps({"root_mode": "student"}))
+    entries = build_queue(tmp_path / "packet.jsonl", 1, 2, tmp_path, temperature=0.6, case_seconds=60,
+                          max_model_requests=8, max_turns=4, seed_base=0)
+    (tmp_path / "queue.jsonl").write_text("".join(json.dumps(e) + "\n" for e in entries))
+    output = tmp_path / entries[0]["output"]
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps({"outcome": {"status": "done", "accepted": True}, "trajectory": [
+        {"phase": "action", "action_provenance": {"kind": "authored_reference_root_eval"}}
+    ]}) + "\n")
+    with pytest.raises(ValueError, match="replayed an authored root"):
+        score(tmp_path)
 
 
 def test_rollout_turns_keep_policy_samples_and_skip_authored_actions():

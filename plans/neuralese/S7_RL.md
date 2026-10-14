@@ -36,6 +36,15 @@ get the held packet's derivation (`trajectory_contract.authored_root_eval` bound
 SHA-256), so the model acts inside the child calls exactly as in the eval. More families come from more natlang
 domains with exact checks (AGENTS.md: breadth from natlang domains), each added as train rows with the same contract.
 
+For diagnosis or training of the **whole student policy**, `task_rollouts prepare --root-mode student`
+keeps the train row and its exact oracle but removes authored-root replay. The default
+`--root-mode authored` retains the original child-policy S7 design. The preparer records
+the chosen mode and packet/source hashes in `preparation.json`; scoring rejects any
+authored-root action in a student-root packet. Do not interpret authored-root successes
+as evidence that the student can choose the root program. This was caught on Pop on
+2026-10-14 when a nominal student probe showed zero-token root actions and empty raw
+model calls despite valid task outcomes. That probe was stopped and discarded.
+
 ## 3. Rollouts: harness, collector, served student
 
 - **Server.** The student is served by `natlang_neuralese.serve` from the direct artifacts the direct stages export

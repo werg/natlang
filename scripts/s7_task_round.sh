@@ -1,6 +1,8 @@
 #!/bin/bash
 # usage: scripts/s7_task_round.sh RUN_DIR [SHARDS]  (env: RENDER, PORT, SNAP, DIRECT=export dir,
 #   SERVE_IMAGE + RECEIPT + CONTAINER: serve DIRECT in a container at its source-proof paths;
+#   TRAINING_CHECKPOINT + TRAINING_HEADS + pinned SHA-256 values + SERVE_IMAGE + CONTAINER:
+#     serve a direct-stage training checkpoint through the in-run evaluator's exact restore path;
 #   UPDATE_FROM=<scored run dir>: one GRPO round instead of a rollout round; RESTORE_ADAPTER=<adapter.nzb>: sample with it;
 #   CONTROL_DIR=<prepared run dir>: concurrent no-adapter arm; PROBE_ROLLOUTS=<rollouts.jsonl>: decode tok/s probe)
 # S7 smoke round (plans/neuralese/S7_RL.md §8): serve LFM2.5-350M on GPU, run the group queue through the collector in SHARDS
@@ -9,14 +11,29 @@ set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 R=$1; N=${2:-1}
 SNAP=${SNAP:-$HOME/.cache/huggingface/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f}
-PY=$ROOT/.venv-neuralese/bin/python
+PY=${NEURALESE_PYTHON:-$ROOT/.venv-neuralese/bin/python}
+if [ ! -x "$PY" ]; then PY=python3; fi
 export PYTHONPATH=$ROOT/training/neuralese HF_HUB_OFFLINE=1
 if [ -n "${DIRECT:-}" ]; then  # a direct-SFT export serves with its own declared rendering unless RENDER overrides
   MODEL=(--direct-artifact "$DIRECT" --direct-base-snapshot "$SNAP" ${RENDER:+--prompt-rendering $RENDER})
 else
   MODEL=(--base "$SNAP" --prompt-rendering "${RENDER:-full}")
 fi
-if [ -n "${SERVE_IMAGE:-}" ]; then
+if [ -n "${TRAINING_CHECKPOINT:-}" ]; then
+  : "${TRAINING_HEADS:?TRAINING_HEADS is required with TRAINING_CHECKPOINT}"
+  : "${TRAINING_CHECKPOINT_SHA256:?TRAINING_CHECKPOINT_SHA256 is required}"
+  : "${TRAINING_HEADS_SHA256:?TRAINING_HEADS_SHA256 is required}"
+  : "${SERVE_IMAGE:?SERVE_IMAGE is required with TRAINING_CHECKPOINT}"
+  : "${CONTAINER:?CONTAINER is required with TRAINING_CHECKPOINT}"
+  docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+  docker run --rm --name "$CONTAINER" --gpus all --network host --user "$(id -u):$(id -g)" \
+    -e HOME=/tmp -e PYTHONPATH=$ROOT/training/neuralese -e HF_HUB_OFFLINE=1 \
+    -v /home/werg:/home/werg:ro -v /srv/storage:/srv/storage:ro -w "$ROOT" "$SERVE_IMAGE" \
+    python scripts/neuralese_data/serve_direct_checkpoint.py \
+      --checkpoint "$TRAINING_CHECKPOINT" --checkpoint-sha256 "$TRAINING_CHECKPOINT_SHA256" \
+      --heads "$TRAINING_HEADS" --heads-sha256 "$TRAINING_HEADS_SHA256" \
+      --prompt-rendering "${RENDER:-full}" --device cuda --port "${PORT:-8097}" > "$R/server.log" 2>&1 &
+elif [ -n "${SERVE_IMAGE:-}" ]; then
   # A direct export pins its source proof to the exporting machine's paths (hf_hub_cache, launch receipt). Serve it in
   # a container that mounts the local HF cache and the exact receipt (RECEIPT, hash-checked by the loader) at those
   # paths; the container is named CONTAINER and must be declared to the ledger unit (--container).
@@ -94,11 +111,35 @@ PY
     pids+=($!)
   done
 fi
-wait "${pids[@]}"
-cat $R/shards/journal-*.jsonl > $R/journal.jsonl
-$PY -m natlang_neuralese.rl.task_rollouts score --run-dir $R > $R/score.log 2>&1
+collector_status=0
+for pid in "${pids[@]}"; do
+  wait "$pid" || collector_status=1
+done
+if [ "$collector_status" -ne 0 ]; then
+  echo "one or more rollout collectors failed; inspect shard logs" >&2
+  stop_server
+  exit 1
+fi
+cat "$R"/shards/journal-*.jsonl > "$R/journal.jsonl" || {
+  echo "rollout journals could not be merged" >&2
+  stop_server
+  exit 1
+}
+$PY -m natlang_neuralese.rl.task_rollouts score --run-dir $R > $R/score.log 2>&1 || {
+  echo "rollout scoring failed; inspect $R/score.log" >&2
+  stop_server
+  exit 1
+}
 if [ -n "${CONTROL_DIR:-}" ]; then
-  cat $CONTROL_DIR/shards/journal-*.jsonl > $CONTROL_DIR/journal.jsonl
-  $PY -m natlang_neuralese.rl.task_rollouts score --run-dir $CONTROL_DIR > $CONTROL_DIR/score.log 2>&1
+  cat "$CONTROL_DIR"/shards/journal-*.jsonl > "$CONTROL_DIR/journal.jsonl" || {
+    echo "control rollout journals could not be merged" >&2
+    stop_server
+    exit 1
+  }
+  $PY -m natlang_neuralese.rl.task_rollouts score --run-dir $CONTROL_DIR > $CONTROL_DIR/score.log 2>&1 || {
+    echo "control rollout scoring failed; inspect $CONTROL_DIR/score.log" >&2
+    stop_server
+    exit 1
+  }
 fi
 stop_server

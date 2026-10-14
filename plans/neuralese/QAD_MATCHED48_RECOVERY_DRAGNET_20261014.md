@@ -77,3 +77,49 @@ first argmax disagreement is at target token zero for each case, which is
 sensitive to free-form reasoning choice. Next inspect actual repeated held
 continuations and train-only recoveries at their first failed tool action; do
 not use held traces as training targets.
+
+Four independent temperature-0.6 samples on each of those six full-mode
+train decisions, with a 192-token action window, are recorded at
+`runs/qad-action-target-mask-audit-20261014-v1/closed-backlog-sample-report.json`
+(SHA-256 `1f4e93d112d2acd7a38ce72b5e9a38764cf12b9ca77822b686ca207ffa98b847`).
+All 24 emitted a tool call; 23 reached an ordinary stop and one hit the local
+sampling length cap. Thirteen used the gold tool name, while the rest often
+read a service first. This checks immediate action formation only; it does
+not execute actions or grade answers. Some emitted code shadows a service,
+calls `iterateOn` without a structural stopping measure, or includes stray
+reserved-token text. Inspect raw tokenization and training provenance before
+classifying the latter as a template or tokenizer bug.
+
+In one held workbench repetition, the exact prior `read_code(nl)` result is
+present in later provider requests, their message count grows from four to
+sixty, and request hashes and sampling seeds differ. The model still repeats
+the read. This rules out missing tool feedback or a cached identical request
+for that child only. Across 20 retained partial traces of the 21 repetition
+endings, the first observed difficulties include unbound names, service-name
+shadowing, nonexistent fields, malformed TypeScript and an unbounded
+iteration; the remaining repetition has a terminal result rather than a
+partial. These are failure-family observations, not held training inputs.
+
+## Whole-student train rollouts
+
+The first attempted 12-family, two-seed rollout mistakenly used S7's default
+authored-root packet. Its apparent one-turn successes and failures replayed the
+reference root: `action_provenance=authored_reference_root_eval`, zero generated
+tokens and empty raw model calls. That is useful for a *child-policy* experiment
+but cannot diagnose the student's root choices. The unit was stopped and its
+131 disposable output files were listed and deleted. No score or training
+admission came from it.
+
+`task_rollouts prepare --root-mode student` now explicitly removes authored-root
+replay while preserving the train row and exact oracle, records source and packet
+hashes in `preparation.json`, and makes scoring reject any replayed authored
+root. The original `authored` mode remains explicit for child-policy S7. The
+corrected source-disjoint train packet has 12 rows, two seeds each, source SHA-256
+`63d3ce7ffdd1af6dd46ad282b40d0485111c04f715e3707bcac34f9694a8aa44`,
+packet SHA-256 `52dbe9ae7878bc53f559f8abb89e71f096395a87c0fe111568a169fc34044f9d`,
+and lives under `/home/werg/natlang-artifacts/qad-student-train-rollouts-20261014-v1/round1-student-root`.
+The first complete cases contain nonzero root model tokens and no authored-action
+provenance. They already expose wrong answers after real tool work, including
+syntax repair, wrong field recovery and a wrong schedule result; do not rank or
+train from the partial batch. Score the full packet, review first failed actions
+and produce replay-checked teacher handoffs from these train sources only.

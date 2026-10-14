@@ -1,0 +1,38 @@
+{
+  "schema": "natlang.semantic-application-source-review/1",
+  "application": "field-gloss-workbench",
+  "variant": "named-domain-stem-readers-v3",
+  "author": "semantic_stack_curriculum",
+  "source_sha256": "ae3d0bee95e3ecf280c538b60d75e9a1056392f900522cf2a670e8d7897ce831",
+  "manifest_sha256": "831c7b2abc501b85d8d56acebf3a3afb04aebccbfe67e488d652277852aafe23",
+  "changed_source_hashes": {
+    "applications/field-gloss-workbench/analyzeCorpus/intake.nl": "b6ddb15730495057e197daf50d39170d44878ae327ce18c9172ba04b3130e69d",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readCandidateDomains.nl": "3be5bee5ea4f5297f3e34400366d10363a9f339405037d354d701ba41bd8477b",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readCandidateDomains/advanceDomainClause.nl": "1b08451ae705790ad0e7ff3e7795154ff5678990bdca8773c35a4cdb9913e77d",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readStemDefinitions.nl": "8ad39225947bd83cc115115ae23c28f7a421200ce40d69c6e66da2f553776431",
+    "applications/field-gloss-workbench/analyzeCorpus/intake/readStemDefinitions/advanceStemClause.nl": "a4f42e5cee5a76432fb75feb4662b3f40eb00c54338fd0644b2b263dcd9c7ae7",
+    "applications/field-gloss-workbench/types.ts": "a5b13378acf26b540d335501d28c957de971ee3855e94ead08e73e967ed3bbe0"
+  },
+  "unchanged_oracle_sha256": "88096a9df70f790ed1a27d68dd41ba3211b9613392440c218478001551facec9",
+  "unchanged_reference_sha256": "11680502ee3c5f79832f726240894e2a898e8c1f40a7c50129e26898dc51c1b1",
+  "canonical_reference_replay_ok": true,
+  "exact_checker_controls": {
+    "positive": 10,
+    "negative": 58,
+    "passed": true
+  },
+  "source_contract": [
+    "Original role inventory selects source units but does not decide domain or stem meanings.",
+    "Each named reader advances one original clause, directly awaits one typed NL judgment, retains actual return or unresolved/failed entry, and finishes the shorter frontier.",
+    "Intake consumes actual returned slots and stems; original ID/path/quote checks are exact plumbing."
+  ],
+  "quality_and_readiness": {
+    "source_loader_passed": true,
+    "typed_canonical_reference_passed": true,
+    "independent_delta_review": false,
+    "live_samples": 0,
+    "training_admission": false,
+    "prior_review_receipts": "historical metadata only"
+  },
+  "limits": "Canonical reference checks source/type validity only; exact controls do not prove actual NL child consumption or linguistic entailment."
+}

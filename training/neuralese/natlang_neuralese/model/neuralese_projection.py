@@ -269,9 +269,20 @@ def causal_conv_receptive_field(stack_or_projection) -> int:
 
 
 def project_token_states(hidden: torch.Tensor, projection: TokenChoiceProjection | None = None,
-                         segments: torch.Tensor | None = None) -> torch.Tensor:
+                         segments: torch.Tensor | None = None,
+                         detach_output_positions: torch.Tensor | None = None) -> torch.Tensor:
     """Apply the optional causal token-choice projection to hidden states."""
-    return hidden if projection is None else projection(hidden, segments)
+    read = hidden if projection is None else projection(hidden, segments)
+    if detach_output_positions is None or not bool(detach_output_positions.any()):
+        return read
+    if projection is None:
+        raise ValueError('detached output positions require a token-choice projection')
+    if detach_output_positions.shape != hidden.shape[:-1]:
+        raise ValueError('detached output mask must match hidden positions')
+    # Detach the entire causal history for these outputs. Detaching only their
+    # own input would leak backbone gradients through earlier convolution taps.
+    detached_read = projection(hidden.detach(), segments)
+    return torch.where(detach_output_positions[..., None], detached_read, read)
 
 
 def token_choice_logits(backbone, hidden: torch.Tensor, projection: TokenChoiceProjection | None = None,
