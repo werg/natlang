@@ -1,0 +1,41 @@
+{
+  "schema": "natlang.cave-selected-unit-independent-review/1",
+  "reviewer": "pop-semantic-curriculum",
+  "source_variant": "selected-unit-support-ownership-v10",
+  "author_commit": "c30bb1ff",
+  "author_receipt": {
+    "path": "plans/semantic_stack/CAVE_UNIT_OWNERSHIP_V10_AUTHOR_SOL.json",
+    "sha256": "db302558e42aa334fd79a970b6dfaf61a2ec63153f273107fef7e88aa7bd60c9",
+    "changed_path_hashes_matched": 10
+  },
+  "package": {
+    "report_path": "/tmp/sol-cave-v10-grounded-preflight/package-report.json",
+    "report_sha256": "9ba44a1ecba23a1a41b1ebb1dda834e07b340e37280fcb3b4bcd920aabdee2de",
+    "source_sha256": "404fc5a7d6b21833a27fa13256f9eeae2a5c97ed619a7a2bf876378d7ec095d5",
+    "canonical_typed_reference_ok": true
+  },
+  "independent_controls": {
+    "frame_progress": {"passed": true, "positive": 11, "negative": 27},
+    "survey_item": {"passed": true, "positive": 13, "negative": 15},
+    "mission_exact": {"passed": true, "positive": 5, "negative": 17}
+  },
+  "source_review": {
+    "status": "pass_source_only",
+    "findings": [
+      "New discoverFrameSupport scoped NL owns selected unit role, its primary convention clauses, and exact origin, identity, fixed-point, and orientation evidence. It does not choose numeric convention vectors.",
+      "The parent passes the actual typed closure and only its selected support to interpretConvention; reference-grid support is limited to its own primary declarations, while a local export may cite external identity and point context without taking their convention rules.",
+      "The reference-grid identity transform is an exact check after the NL role decision. No crisp coordinate fallback or case-specific source-ID table was added to the visible source.",
+      "FrameReadFrontier retains prior child returns and finishes one actual selected unit before the parent iterates again.",
+      "Final grounded-unit wording completes each validated pending unit once; excluded inventory units and their original clauses remain separate unresolved findings instead of receiving fabricated interpretations."
+    ],
+    "reproduced_v9_failure_boundary": "Global U01 previously received Amber export clauses and produced Amber alternatives under the global label; the selected-unit ownership controls reject that transfer.",
+    "limits": [
+      "Canonical replay proves source and type validity for an authored witness, not live semantic execution.",
+      "Controls test declared invariants and selected corruptions; they do not prove every teacher trajectory or source entailment.",
+      "Actual child-result consumption, final answer, and natlang idiomaticity remain unmeasured for v10."
+    ]
+  },
+  "generation_prep_ready": true,
+  "live_samples": 0,
+  "training_admission": false
+}
