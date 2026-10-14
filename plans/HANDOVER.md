@@ -46,8 +46,11 @@ not a trustworthy model/DPO failure. Stop of the exact retry unit
 `natlang-pop-luna-s52047-w05-r015-01.service` freed capacity. Registry manifest
 `source-reviews-20261014-v2` holds the source across derived variants, and
 campaign s52047 has an exact zero-result `reviewed-exclusions.json` entry so
-the replenisher does not reattempt it. The partial is assigned to this source
-diagnosis; prune redundant raw partial/evidence after durable receipt review.
+the replenisher does not reattempt it. The source diagnosis and exact exclusion
+receipt remain; after verifying the unit was inactive, seven redundant raw
+partial/evidence files from the original and resumed attempt were removed,
+reclaiming 180,785,438 bytes. The campaign journal, error, empty result and
+review records remain for accounting.
 
 ## 06:51 CEST: deep pseudocode source and FP8 reference update
 
