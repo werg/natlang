@@ -24,8 +24,8 @@ makes these source-meaning tasks named, typed readers. `readCandidateDomains` se
 definitions using the actual inventory and original clauses, advances one definition at a time,
 and retains the returned candidate-slot meanings. `readStemDefinitions` does the same for
 original stem/entity definitions. Each reader has one named one-item reducer whose scoped NL
-judgment owns meaning, uncertainty and exact source witnesses. `intake` consumes the actual
-returned arrays before session and correction interpretation. Finite pending-ID removal,
+judgment owns meaning, uncertainty and exact source witnesses. `intake` retains both typed
+indices and consumes their accepted slot/stem projections before session and correction interpretation. Finite pending-ID removal,
 original ID/path membership and quote substring checks are exact plumbing; deciding that a
 source clause defines a candidate value or a stem meaning remains in NL. Both readers retain
 unresolved original units instead of fabricating a complete candidate domain.
