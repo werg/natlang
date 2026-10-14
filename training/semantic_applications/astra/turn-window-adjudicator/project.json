@@ -482,7 +482,7 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": false,
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
@@ -490,5 +490,11 @@
   "model_facing_debt": "All source is unmeasured; full reference/verifier and independent source review precede pinned diagnostic, then approximately48 reviewed samples for an adopted presentation.",
   "reference_path": "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/reference-report.json",
   "external_verifier_path": "training/semantic_applications/astra/turn-window-adjudicator/verify-result.mjs",
-  "external_verifier_export": "verifyCandidate"
+  "external_verifier_export": "verifyCandidate",
+  "independent_review": {
+    "path": "plans/semantic_stack/TURN_WINDOW_APPLICATION_REVIEW_SOL.json",
+    "sha256": "e28d38071d223475e5ab08be158026c1add052a36a7eed52c192f494f917cce1",
+    "reviewer": "semantic_slate_sol",
+    "scope": "Source/oracle and exact certificate controls; no live execution or training admission."
+  }
 }
