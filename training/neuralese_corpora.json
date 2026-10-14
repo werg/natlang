@@ -72435,6 +72435,23 @@
       ],
       "license": "Pinned upstream source-card facts retained in source manifests.",
       "notes": "Upstream teacher correctness unknown; independent task execution not claimed. Native replay/render and recipe bindings are separate steps."
+    },
+    {
+      "id": "external-expansion-codeagent-linkage-repair-20261014-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-codeagent-linkage-repair-20261014-v1",
+      "include": [
+        "*.turns.jsonl.zst",
+        "repair-proof.json"
+      ],
+      "source_class": "statically-lowered-external-native-teacher-turns",
+      "training_admission": true,
+      "training_admission_reason": "Owner-authorized static external coding conversion; exact linkage repaired and ten decisions independently replayed.",
+      "derived_from": [
+        "external-expansion-codeagent-handoffs-20261014-v1"
+      ],
+      "license": "Pinned CodeAgent source card facts retained in source corpus.",
+      "notes": "Only the previously omitted parent; existing native corpus unchanged. Upstream teacher correctness unknown; scripted plumbing is verified."
     }
   ],
   "coverage_backlog": [
