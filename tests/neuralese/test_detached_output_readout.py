@@ -2,21 +2,25 @@
 import copy
 
 import torch
+import pytest
 
 from natlang_neuralese.model.neuralese_projection import TokenChoiceProjection, project_token_states
 from natlang_neuralese.train.direct_sft import detached_target_mask
 
 
-def test_detached_output_preserves_readout_and_tcp_gradient_without_backbone_history_gradient():
+@pytest.mark.parametrize('device', ['cpu', 'cuda'])
+def test_detached_output_preserves_readout_and_tcp_gradient_without_backbone_history_gradient(device):
+    if device == 'cuda' and not torch.cuda.is_available():
+        pytest.skip('CUDA unavailable')
     torch.manual_seed(42)
-    projection = TokenChoiceProjection(4, blocks=2, hidden=7, kernel=3)
+    projection = TokenChoiceProjection(4, blocks=2, hidden=7, kernel=3).to(device)
     with torch.no_grad():
         for parameter in projection.parameters():
             parameter.uniform_(-0.3, 0.3)
     reference = copy.deepcopy(projection)
-    hidden = torch.randn(1, 6, 4, requires_grad=True)
-    segments = torch.tensor([[0, 0, 0, 0, 1, 1]])
-    mask = torch.tensor([[False, False, False, True, False, False]])
+    hidden = torch.randn(1, 6, 4, requires_grad=True, device=device)
+    segments = torch.tensor([[0, 0, 0, 0, 1, 1]], device=device)
+    mask = torch.tensor([[False, False, False, True, False, False]], device=device)
     read = project_token_states(hidden, projection, segments, mask)
     expected = reference(hidden.detach(), segments)
     assert torch.equal(read, expected)
