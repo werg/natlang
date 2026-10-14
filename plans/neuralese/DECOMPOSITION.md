@@ -207,3 +207,33 @@ The caller supplies the unit to cancel; this adds no scheduling decision.
 The memory ledger performs these exact systemd and durability operations. Stopping
 only the queue entry allows its still-running client to put it back and prevents
 an immediate relaunch with a corrected reservation.
+
+## Continue Mellum on the shared R5 corpus — 2026-10-14
+
+ContinueMixedTraining uses the existing mixed objective and data continuation:
+1. At the measured handoff, retain the active Mellum weights, optimizer state,
+   update counter, RNG and completed-stage history.
+2. Bind the admitted R5 Mellum tokenizer twins for the current program-header
+   stage and the unstarted whole-trajectory stage. Name the current R3
+   program-header data as continued_text_data so seen-document accounting survives.
+3. Keep the inherited mixed objective, exact parent projection qualification and
+   measured fraction selection. The inherited 0.25 is a preparation placeholder;
+   it grants no launch or adoption before the equal-wall comparison.
+4. Validate the concrete handoff against the active recipe-plan and checkpoint
+   before replacing the frozen runtime.
+The recipe is a declarative natural-language training plan. Existing crisp
+recipe, input-hash and optimizer restoration verifiers enforce it; no new trainer.
+
+## Preserve JSONL record framing — 2026-10-14
+
+ReadTrajectoryRecords separates records only at the JSONL byte newline (LF),
+retaining Unicode line/paragraph separators inside JSON strings. Reuse the
+shared jsonl-stream reader for both converter passes, exposing raw lines so
+invalid JSON still receives the existing unreadable accounting. The framing
+and UTF-8 decoding are exact crisp mechanisms, with no policy or model change.
+Node 24 readline treats U+2028/U+2029 as line endings; those are valid JSON
+string contents and must not fragment a trajectory row.
+
+The same exact LF reader serves native SFT export and the trajectory rewrite
+stage. Both retain their current malformed-JSON behavior and rendering/rewrite
+policy; this only prevents valid Unicode-bearing records from being fragmented.

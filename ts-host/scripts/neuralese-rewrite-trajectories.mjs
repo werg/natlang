@@ -9,8 +9,8 @@
  * out and counted. Records keep their ID, lineage, licence and split group, and gain `data_rewrite` provenance (the
  * migration and compiler revision). Replaying the recorded execution is a separate step.
  */
-import { createReadStream, createWriteStream, readFileSync } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { createWriteStream, readFileSync } from 'node:fs';
+import { jsonlLines } from './jsonl-stream.mjs';
 import { parseArgs } from 'node:util';
 import { DATA_REWRITE_MIGRATION, DATA_REWRITE_VERSION, rewriteTrajectory } from '../dist/compiler/data-rewrites.js';
 
@@ -26,7 +26,7 @@ const scope = values.scope ? JSON.parse(readFileSync(values.scope, 'utf8')) : un
 const out = createWriteStream(values.out);
 const totals = { records: 0, rewritten: 0, evals: 0, annotated: 0, sites: 0, skipped: {}, failed: 0, unreadable: 0 };
 for (const input of positionals) {
-  for await (const line of createInterface({ input: createReadStream(input), crlfDelay: Infinity })) {
+  for await (const line of jsonlLines(input)) {
     if (!line.trim()) continue;
     totals.records++;
     let row;
