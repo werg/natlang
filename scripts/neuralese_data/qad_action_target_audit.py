@@ -16,6 +16,7 @@ from natlang_neuralese.train.direct_sft import context_only_mask, text_engine
 from natlang_neuralese.train.recipe import resolve_recipe_data
 from natlang_neuralese.train.text_supervision import ROLE_CODES, balanced_position_weights
 from natlang_neuralese.train.text_warmup import prepare_text_windows
+from qad_hf_port_parity import port_forward
 
 
 def digest(value):
@@ -139,6 +140,39 @@ def serving_boundary(engine, native, row):
             'train_near_difference': engine.tokenizer.decode(train[max(0, first-12):first+12], skip_special_tokens=False)}
 
 
+@torch.inference_mode()
+def sample_live_action(engine, native, *, seed, temperature=.6, max_tokens=192):
+    engine.prompt_rendering = 'full'
+    plan = engine._prompt_plan(native['messages'], native['tools'])
+    if any(kind != 'tokens' for kind, _ in plan):
+        raise ValueError('sampled case unexpectedly contains a Neuralese block')
+    prompt = [token for _, part in plan for token in part]
+    device = engine.backbone.embedding_weight.device
+    logits, cache = port_forward(engine, torch.tensor([prompt], device=device))
+    generator = torch.Generator(device='cpu').manual_seed(seed)
+    generated = []
+    boundary = 'length'
+    for _ in range(max_tokens):
+        probabilities = torch.softmax(logits[0].float() / temperature, -1).cpu()
+        token = int(torch.multinomial(probabilities, 1, generator=generator))
+        if token in engine.stop_ids:
+            boundary = 'ordinary_stop'
+            break
+        if token in (engine.backbone.controls.open_id, engine.backbone.controls.close_id):
+            boundary = 'neuralese_control'
+            break
+        generated.append(token)
+        logits, cache = port_forward(engine, torch.tensor([[token]], device=device), cache)
+    text = engine.tokenizer.decode(generated, skip_special_tokens=False)
+    expected = [call.get('function', {}).get('name') for call in native.get('target', {}).get('tool_calls', ())]
+    return {'seed': seed, 'temperature': temperature, 'max_tokens': max_tokens,
+            'generated_tokens': len(generated), 'boundary': boundary,
+            'generated_token_ids_sha256': digest(generated),
+            'generated_text': text,
+            'contains_tool_call': '<|tool_call_start|>' in text,
+            'contains_expected_tool_name': any(f'[{name}(' in text for name in expected if name)}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--selection', type=Path, required=True)
@@ -148,6 +182,7 @@ def main():
     parser.add_argument('--heads', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--gpu', action='store_true')
+    parser.add_argument('--sample-seeds', type=int, default=0)
     args = parser.parse_args()
     selection = json.loads(args.selection.read_text())
     native_path = Path(selection['source'])
@@ -195,6 +230,9 @@ def run(args, selection, natives, params, engine, gpu):
             if gpu:
                 case['serving_boundary'] = serving_boundary(engine, native, row)
                 case['gold_scoring'] = score_gold(engine, row)
+                if mode == 'full' and args.sample_seeds:
+                    case['sampled_live_actions'] = [sample_live_action(engine, native, seed=820100 + i)
+                                                    for i in range(args.sample_seeds)]
             report['cases'].append(case)
     return report
 

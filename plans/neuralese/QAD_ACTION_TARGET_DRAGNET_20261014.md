@@ -97,3 +97,19 @@ Inspect the transition from self-generated reasoning to action in actual
 rollouts and measure whether reasoned continuation, repeated tool use or the
 decision to stop is the first divergence. Region boundaries are diagnostic
 labels, not a modified training target or mask.
+
+An eight-continuation read-only probe on these two train-only cases used the
+live full prompt, exact step-15000 weights, temperature 0.6 and seeds
+820100–820103 (`runs/qad-action-target-mask-audit-20261014-v1/sampled-report.json`).
+All eight reached an ordinary stop with a tool call; this is neither runtime
+execution nor a task-success evaluation. On decision 0002, all four emitted
+the correct `return_result(status='success', value={status:'pending',
+inspector:'zal'})`. On decision 0001, one called `eval` with `return permits;`
+instead of reading the specific site; three wrote
+`const permits = permits.current({"site":"skait quay"}); return permits;`.
+The latter shadows the service binding in JavaScript and refers to it before
+local initialization. Thus finding the right tool name is insufficient here:
+code-argument composition and recovery from a binding error are concrete
+targets. Verify the exact runtime error/recovery feedback before changing any
+model-facing error text or admitting a repaired preference pair. Four samples
+per decision do not establish prevalence across task families.
