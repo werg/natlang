@@ -55,6 +55,8 @@ step() {
   results+=("$(printf '%-22s %-12s %4ss' "$name" "$status" $((SECONDS - start)))")
 }
 
+step source-review-manifest python3 scripts/source_review.py verify
+
 python_setup_error() { printf '%s\n' "$1" >&2; return 2; }
 
 # The Python suite has integration tests that invoke ts-host/dist/teacher/collector.js.

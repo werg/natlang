@@ -147,13 +147,32 @@ def write_manifest(manifest: dict[str, Any], manifests: Path = MANIFESTS) -> Pat
     return path
 
 
+def latest_manifest_path(manifests: Path = MANIFESTS) -> Path | None:
+    candidates = []
+    for path in manifests.glob("source-reviews-*-v*.json"):
+        match = re.fullmatch(r"source-reviews-(\d{8})-v(\d+)\.json", path.name)
+        if match:
+            candidates.append((match.group(1), int(match.group(2)), path))
+    return max(candidates, default=None, key=lambda item: (item[0], item[1]))[2] if candidates else None
+
+
+def verify_current_manifest(registry: Path = REGISTRY, manifests: Path = MANIFESTS) -> Path:
+    path = latest_manifest_path(manifests)
+    if path is None:
+        raise ReviewError("source-review registry has no immutable manifest")
+    current = json.loads(path.read_text(encoding="utf-8"))
+    if current != build_manifest(current["id"], registry, current["previous"]):
+        raise ReviewError(f"{path} does not describe the current source-review registry; publish a new immutable manifest")
+    return path
+
+
 def next_manifest_id(day: str, manifests: Path = MANIFESTS) -> tuple[str, str | None]:
     """The next free `source-reviews-<day>-v<n>` id and the id of the newest manifest before it."""
     existing = sorted(int(m.group(1)) for p in manifests.glob(f"source-reviews-{day}-v*.json")
                       if (m := re.fullmatch(rf"source-reviews-{day}-v(\d+)\.json", p.name)))
     number = (existing[-1] + 1) if existing else 1
-    older = sorted(p.stem for p in manifests.glob("source-reviews-*-v*.json"))
-    return f"source-reviews-{day}-v{number}", (older[-1] if older else None)
+    latest = latest_manifest_path(manifests)
+    return f"source-reviews-{day}-v{number}", (latest.stem if latest else None)
 
 
 # ------------------------------------------------------------------------------------------------------------ receipts
@@ -421,6 +440,7 @@ def main(argv: list[str] | None = None) -> int:
     manifest = sub.add_parser("manifest")
     manifest.add_argument("--id", required=True)
     manifest.add_argument("--previous", default=None)
+    sub.add_parser("verify", help="check that the latest immutable manifest matches the live registry")
     show = sub.add_parser("show")
     show.add_argument("receipt_id")
     args = parser.parse_args(argv)
@@ -442,6 +462,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "manifest":
             path = write_manifest(build_manifest(args.id, args.registry, args.previous), args.manifests)
             print(json.dumps({"manifest": str(path), "sha256": sha256_hex(path.read_bytes())}))
+        elif args.command == "verify":
+            path = verify_current_manifest(args.registry, args.manifests)
+            print(json.dumps({"manifest": str(path), "sha256": sha256_hex(path.read_bytes()), "current": True}))
         else:
             print(json.dumps(load_receipt(args.receipt_id, receipts), ensure_ascii=False, indent=2))
     except ReviewError as error:
