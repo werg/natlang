@@ -539,14 +539,14 @@
   "readiness": {
     "source_loader_checked": true,
     "typed_declarations_checked": true,
-    "independent_oracle_review": false,
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false,
     "metric_transformation_revision": "Independent current-source metric handoff review passes; actual runtime/live consumption remains pending.",
     "typed_reference_checked": true
   },
-  "generation_ready": false,
+  "generation_ready": true,
   "training_admission": false,
   "model_facing_debt": "Reader-progress v2:0/48 live samples; require actual per-unit progress, probe-role literal classification and consumed typed question prerequisites. Frozen v1 failure is source diagnosis/no model-negative.",
   "nl_line_count": 675,
@@ -563,9 +563,15 @@
       "sha256": "c83fe7c25b2ee6b946142a99891894b469cce0a933d4ae1cc12864b893aa5409",
       "reviewer": "semantic_slate_astra",
       "scope": "Current typed symbolic metric/operational outcome handoff, raw reference recalculation and current verifier/reference hashes."
+    },
+    {
+      "path": "plans/semantic_stack/PROTOCOL_READER_PROGRESS_V2_REVIEW_ASTRA.json",
+      "sha256": "d9e1f45a9d63c7c2a41a8df6941e0a74f9e209e891ae1c1c5a5e78fa75eddfab",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Reader-progress v2 original unit/literal ownership, prior progress and exact parent-index binding;18controls/native independently reproduced. Source-only/no live."
     }
   ],
-  "readiness_scope": "Reader-progress variant held for independent source and actual live handoff review; historical oracle/reference reviews remain valid for unchanged numeric fixture. No training admission.",
+  "readiness_scope": "Pinned one-case v2 diagnostic preparation only; new reader source peer accepted, original oracle/current metric full reference unchanged. Live-qualified and training-admitted false.",
   "current_reference_preflight": {
     "source_sha256": "b01f3e134dac4aeccf4d0b8c42e8c0bbf661bf4d598ae89da9024142083794ee",
     "reference_ok": true,
@@ -575,7 +581,7 @@
   "source_variant": {
     "id": "typed-reader-progress-v2",
     "parent_source_sha256": "b01f3e134dac4aeccf4d0b8c42e8c0bbf661bf4d598ae89da9024142083794ee",
-    "independent_source_review": false,
+    "independent_source_review": true,
     "fixture_oracle_reference_unchanged": true
   }
 }
