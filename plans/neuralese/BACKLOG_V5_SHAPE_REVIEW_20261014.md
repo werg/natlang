@@ -82,3 +82,26 @@ reference now expresses the same NL judgment flow rather than hardcoded
 filename moves. All generated results still need exact oracle and action-shape
 review before training admission. A separate medium-reasoning Luna repair
 targets the one case both B and C missed.
+
+## Greenhouse process trial
+
+The completed 48-case Luna greenhouse trial compared the original source with
+two visible instruction variants on the same cases. V1 explicitly asked for
+`iterateOn`; 37/48 outcomes were exact, but only **22/48** exact trajectories
+actually called `iterateOn` in executed `eval` code. V2 also explained how to
+stop a greenhouse with ineffective controls as `blocked`; 42/48 outcomes were
+exact, including 7/12 broken-heater cases, but only **18/48** exact trajectories
+actually called `iterateOn`. All seven accepted broken-heater V2 trajectories
+used another control form. The earlier counts derived by searching complete
+trajectory JSON were invalid because they matched the task's instruction text.
+This review counts only `assistant.calls[].arguments.code` in action turns.
+
+The two arms together provide 30 distinct exact cases with an actual
+`iterateOn` call. Six source groups from seed 52041 overlap an existing accepted
+parent corpus, so global source-group filtering is still required. V2 improves
+honest stopping but does not improve process compliance; neither variant is
+adopted as the generator source yet. The replenisher keeps `actor_greenhouse`
+at zero while a third, more structured instruction is measured on fresh
+training seeds. `curriculum.iterate: required` currently produces only an
+`iterate_missing` note in admission, so exact outcomes alone cannot be counted
+as iteration examples.
