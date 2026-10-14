@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts' / 'neuralese_data'))
 
 from build_native_turn_union import plan_member_rows, _row_identity  # noqa: E402
+from source_review import pending_unpinned_source_groups  # noqa: E402
 import target_set_manifest  # noqa: E402
 
 
@@ -24,9 +25,32 @@ def member(name, rows_by_tokenizer):
     return {name: {tok: dict(rows) for tok, rows in rows_by_tokenizer.items()}}
 
 
-def decide(order, members, *, supersedes=None, held_groups=None, held_texts=None, duplicates=None):
+def decide(order, members, *, supersedes=None, held_groups=None, held_texts=None, duplicates=None,
+           source_review_groups=None):
     return plan_member_rows(order, members, supersedes or {}, TOKENS,
-                            held_groups or set(), held_texts or set(), member_duplicates=duplicates)
+                            held_groups or set(), held_texts or set(), member_duplicates=duplicates,
+                            source_review_groups=source_review_groups)
+
+
+def test_pending_unpinned_source_reviews_drop_train_twins_before_dedup(tmp_path):
+    registry = tmp_path / 'source-reviews'
+    registry.mkdir()
+    (registry / 'holds.jsonl').write_text(
+        '{"dataset":"musique","id":"bad","status":"pending"}\n'
+        '{"dataset":"musique","id":"pinned","status":"pending","sourceSnapshotSha256":"abc"}\n'
+        '{"dataset":"musique","id":"clear","status":"resolved"}\n')
+    held = pending_unpinned_source_groups(registry)
+    assert held == {'musique:bad'}
+    reviewed = member('reviewed', {tok: {'doc': identity('same', groups=('musique:bad',))} for tok in TOKENS})
+    eligible = member('eligible', {tok: {'doc': identity('new', groups=('musique:other',))} for tok in TOKENS})
+    selected, omissions = decide(['reviewed', 'eligible'], reviewed | eligible, source_review_groups=held)
+    assert selected == {('eligible', 'doc')}
+    assert omissions[('reviewed', 'doc')]['reason'] == 'source_review_pending'
+    assert omissions[('reviewed', 'doc')]['source_groups'] == ['musique:bad']
+    pinned = member('pinned', {tok: {'p': identity('pinned', groups=('musique:pinned',))} for tok in TOKENS})
+    selected, omissions = decide(['pinned'], pinned, source_review_groups=held)
+    assert selected == {('pinned', 'p')}
+    assert not omissions
 
 
 def test_incomplete_twin_cannot_claim_same_document_id_or_text():
@@ -206,3 +230,8 @@ def test_target_set_signature_pins_member_cohorts():
     plain = tsm.signature([member])
     assert tsm.signature([{**member, 'cohort': None}]) == plain
     assert tsm.signature([{**member, 'cohort': 'agentic-tool-loop'}]) != plain
+
+
+def test_target_set_signature_changes_when_source_review_holds_change():
+    member = {'id': 'render', 'supersedes': [], 'files': {'program-header': {'lfm25': 'a', 'mellum21': 'b'}}}
+    assert target_set_manifest.signature([member], 'old-holds') != target_set_manifest.signature([member], 'new-holds')

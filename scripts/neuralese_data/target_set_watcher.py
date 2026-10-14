@@ -34,6 +34,8 @@ sys.path.insert(0, str(ROOT / 'scripts' / 'neuralese_data'))
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 from natlang_neuralese.common.paths import root, resolve  # noqa: E402
 import target_set_manifest as tsm  # noqa: E402
+sys.path.insert(0, str(ROOT / 'scripts'))
+from source_review import registry_sha256  # noqa: E402
 from register_corpora import register, registered_ids  # noqa: E402
 import register_native_turn_render as rntr  # noqa: E402
 
@@ -153,6 +155,8 @@ def registry_sources(members: list[dict]) -> list[str]:
 def finish_revision(state: dict, build: dict, union: Path) -> None:
     rev, members, skipped, spec, sig = build['rev'], build['members'], build['skipped'], build['spec'], build['signature']
     union_receipt = json.loads((union / 'receipt.json').read_text())
+    if union_receipt.get('source_review', {}).get('holds_sha256') != build.get('source_review_sha256'):
+        raise ValueError(f'{union}: source-review registry changed during build; do not register this union')
     renderings = union_receipt.get('renderings') or {}
     if not renderings or any(not data.get('by_tokenizer') or not data.get('twin_identity_equal')
                             or any(stats.get('documents', 0) <= 0
@@ -164,6 +168,7 @@ def finish_revision(state: dict, build: dict, union: Path) -> None:
               for r, v in union_receipt['renderings'].items()}
     set_id, union_id = f'{tsm.BASE_ID}-r{rev}', f'{UNION_BASE}-r{rev}'
     snapshot = {'id': set_id, 'revision': rev, 'signature': sig, 'union': union_id,
+                'source_review_sha256': build['source_review_sha256'],
                 'members': members, 'skipped': skipped, 'pending': spec.get('pending', []),
                 'exclude': spec.get('exclude', []), 'totals_after_union': totals}
     save(SET_DIR / f'r{rev}.json', snapshot)
@@ -222,16 +227,27 @@ def one_pass(min_gap: float, force: bool) -> None:
             build['launches'] = build.get('launches', 0) + 1
             save(STATE, state)
         elif union is not None:
+            if build.get('source_review_sha256') != registry_sha256():
+                # This build has not been registered. A changed hold registry makes
+                # its omission set stale, so discard it and let the next pass build
+                # against the current source-review snapshot.
+                shutil.rmtree(union)
+                state.pop('building', None)
+                save(STATE, state)
+                log(stale_union_discarded=str(union), reason='source_review_changed')
+                return
             finish_revision(state, build, union)
         return
     members, skipped = tsm.resolve(tsm.origin_registry(), spec)
-    sig = tsm.signature(members)
+    source_review_sha256 = registry_sha256()
+    sig = tsm.signature(members, source_review_sha256)
     if sig == state.get('signature'):
         return
     if not force and time.time() - state.get('last_build', 0) < min_gap:
         log(waiting_for_gap=True, members=len(members))
         return
-    state['building'] = {'rev': state.get('revision', 1) + 1, 'signature': sig, 'members': members,
+    state['building'] = {'rev': state.get('revision', 1) + 1, 'signature': sig,
+                         'source_review_sha256': source_review_sha256, 'members': members,
                          'skipped': skipped, 'spec': spec}
     state['last_build'] = time.time()
     if build_union(members, state['building']['rev']) == 'launched':
