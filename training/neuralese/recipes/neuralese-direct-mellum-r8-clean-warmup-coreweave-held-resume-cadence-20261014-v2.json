@@ -1,0 +1,15 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "neuralese-direct-mellum-r8-clean-warmup-coreweave-held-resume-cadence-20261014-v2",
+  "extends": "neuralese-direct-mellum-r8-clean-warmup-coreweave-held-resume-20261014-v1",
+  "description": "Explicit next safe handoff: task evaluation every1200updates, CE/drift evaluation every400unchanged. Same16tasks/one per shape,160per-case turn limit, exact scoring/reference/noise/temperature and final task evaluation. No active process hot mutation or promotion claim.",
+  "overrides": {
+    "stages": {
+      "direct_warmup": {
+        "parameters": {
+          "task_eval_every": 1200
+        }
+      }
+    }
+  }
+}

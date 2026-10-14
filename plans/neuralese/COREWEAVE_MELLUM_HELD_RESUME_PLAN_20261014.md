@@ -192,3 +192,34 @@ Checkpoint exporter capability files now use object-SHA-specific names, and raw
 receipts use separate explicit paths, preventing overlap with periodic model
 exports. Latest checkpoint selection remains separate and must be refreshed
 before any stop. Both existing trainers continue; no replacement allocation.
+
+## Operational task cadence at the next safe handoff
+
+The supervisor proposes LFM task evaluation every4000updates with CE/drift
+cadence1000 unchanged, and Mellum task evaluation every1200updates with CE/drift
+cadence400 unchanged. This policy reduces synchronous evaluation overhead;
+existing recipe operational handoff and trainer cadence implement it. Preserve
+16actual tasks, one per shape;160 is the per-case turn limit. Scoring, reference,
+noise, sampling and final task evaluation remain unchanged. Keep48drift-warn/end
+probes and response-KL stop1.5. Do not mutate active processes or interrupt any
+current evaluation. Prepare derived recipes and verify the exact resolved diff
+before the supervisor adopts either variant at a durable handoff.
+
+Cadence candidates passed ledgered resolved-plan validation. LFM
+`neuralese-direct-lfm-qad-r8-ph-coreweave-cadence-20261014-v4.json` changes only
+`direct_sft.parameters.task_eval_every` to4000 and updates the complete194-file
+package pin for e8864dff's compressed writer addition in common/jsonio.py
+(7c77db8f toceea5918). Its reader path and all immutable controls are unchanged.
+Mellum `neuralese-direct-mellum-r8-clean-warmup-coreweave-held-resume-cadence-20261014-v2.json`
+changes only `direct_warmup.parameters.task_eval_every` to1200 from the already
+admitted code-only held-resume recipe. Both pins match current complete source.
+The operational handoff verifier passes for both, with exact one-parameter
+diffs after excluding the single declared LFM code-file update. Detailed receipt
+is `/home/werg/data/dgxops/coreweave-task-cadence-recipes-verifier-20261014.json`.
+
+The supervisor approved these candidates after publication/verification: LFM
+may advance on its existing held allocation after a current evaluation finishes
+and exact rolling optimizer/RNG state is saved; report its exact parent and
+resolved diff before relaunch. Mellum uses its variant at the planned safe
+replacement only after raw-survival and newest-parent availability review.
+R9 data continuation remains separately admitted; these variants add no data.
