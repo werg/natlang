@@ -27,9 +27,11 @@ trap 'rm -f "$ERRLOG"' EXIT
 # The image has no Node; candidate-selection admission runs scripts/verify_candidate_selection_packet.mjs (needs a
 # built ts-host/dist), so the host's Node binary is mounted in.
 NODE_BIN=$(readlink -f "$(command -v node || echo /home/werg/.local/bin/node)")
+ZSTD_BIN=$(command -v zstd)
 [ $stopped = 1 ] && exit 0  # stopped before the container started: do not start it
 docker run --rm --name "$NAME" --network none --user "$(id -u):$(id -g)" --memory "${MEM:-24g}" --cpus "${CPUS:-16}" \
   -v "$NODE_BIN:/usr/local/bin/node:ro" \
+  -v "$ZSTD_BIN:/usr/local/bin/zstd:ro" \
   -e HF_HUB_OFFLINE=1 -e TRANSFORMERS_OFFLINE=1 -e CUDA_VISIBLE_DEVICES= -e TOKENIZERS_PARALLELISM=false -e HOME=/tmp \
   -e PYTHONDONTWRITEBYTECODE=1 \
   -v "$REPO:$REPO:ro" -v /mnt/external:/mnt/external:ro -v /home/werg/data:/home/werg/data:ro -v "$OUT:$OUT" \

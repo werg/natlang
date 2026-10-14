@@ -50,3 +50,16 @@ def test_validation_rows_become_test_with_source_split(tmp_path):
     # An unknown split is not mapped; it reaches the renderer, which records it as an omission with its reason.
     assert by_id['d']['split'] == 'weird'
     assert not omissions
+
+
+def test_compressed_native_sources_preserve_selection_ids_and_source_bytes(tmp_path):
+    from natlang_neuralese.common.jsonio import write_jsonl_text,open_jsonl_text
+    render=load_renderer();source=tmp_path/'turns.jsonl.zst'
+    original=row('source','train','group');original['messages']=[{'role':'user','content':'你好\u2028héllo'}]
+    encoded=json.dumps(original,ensure_ascii=False)+'\n'
+    with write_jsonl_text(source) as stream:stream.write(encoded)
+    args=Args(source=[source],exclude_programs=[],pieces=[],protected=None,reserved=None,shards=1,limit=None,full_sample=1.0)
+    shards=tmp_path/'selected';shards.mkdir()
+    result=render.select(args,shards)
+    assert result[1]['selected']==1
+    assert next(shards.glob('*.jsonl')).read_bytes()==encoded.encode('utf-8')

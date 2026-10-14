@@ -68,7 +68,7 @@ from natlang_neuralese.common.jsonio import canonical_json_str as canonical, ope
 
 def jsonl_lines(path: Path):
     """Read LF-delimited records; Unicode U+2028 inside JSON strings is data."""
-    with path.open(encoding='utf-8') as stream:
+    with open_jsonl_text(path) as stream:
         yield from stream
 
 
@@ -535,8 +535,9 @@ def select(args, shard_dir: Path):
     test_groups = set()
     n = 0
     for source in args.source:
-        with open(source, 'rb') as f:
-            for line in f:
+        with open_jsonl_text(source) as f:
+            for text_line in f:
+                line = text_line.encode('utf-8')
                 if not line.strip():
                     continue
                 if args.limit and n >= args.limit:
