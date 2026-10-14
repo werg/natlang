@@ -1,5 +1,36 @@
 # Continuation guide — updated 2026-10-14
 
+## 10:28 CEST: Pop active work after replenisher repair
+
+The Luna replenisher fix is committed and pushed as `9658fc88`; focused tests
+2/2 and the quick gate passed, with the full main gate still due in a host
+memory window. Its previously blocked s52046 worker-04 case016 resumed under a
+2.0-GiB claim and produced an exact accepted result after 272 saved turns.
+The timer subsequently started s52049 worker-05's large partial retry and
+s52050's next source campaign. At 10:27 CEST the ledger counted three active
+Luna workers plus Gemini batch30. The s52049 retry had 400 durable saved
+turns and was receiving provider output. The ecology v18b one-case resume is
+queued at 2.0 GiB behind those collectors and the GPU evaluation; its
+source-only status is unchanged. DGX was briefed of the shared fix via coord
+message `2026-10-14T08:27:24.442763Z-pop-a2ae`.
+
+The QAD step-15000 one-worker held48 evaluation remained on GPU at 10:27
+CEST: 28 cases finished (nine complete trajectories, all nine exact-answer
+rejections; twelve repetition exits; seven request-budget incomplete), and
+case28 was active. Its completed rejections span ticket classification,
+document editing, proof checking, relational aggregation and dynamic roster
+tasks. Do not attribute the gap to one cause or train on these held packets.
+When this arm finishes, run the clean-base arm using the same pinned image,
+script, one worker and per-case seeds before drawing a trained-versus-base
+conclusion. The GPU arm used 7.6/8.2 GiB at its peak without a one-worker
+CUDA OOM. The DGX E2E handoff and repetition requests remain open pending
+this matched evaluation and further diagnosis.
+
+Root has about 43 GiB free after the superseded v11 and discarded FP8
+cleanup; `/srv/storage` has about 7.1 GiB free. Preserve current v13 corpus,
+held evaluation packets and active checkpoint lineage. Three untracked Luna
+manifest files are owned by another process and must not be staged casually.
+
 ## 10:05 CEST: Pop GPU evaluation, source handoff and storage
 
 The 09:12 section below is historical: its clean full TS gate finished green
