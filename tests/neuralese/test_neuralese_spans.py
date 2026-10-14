@@ -255,3 +255,13 @@ def test_compact_history_note_uses_declared_tool_and_argument_path():
         assert missing == 0 and len(spans) == 1
         begin, end = spans[0][:2]
         assert target[begin:end].startswith('Customer') and target[begin:end].endswith('question.')
+
+
+def test_native_tool_envelope_ignores_apostrophes_in_assistant_prose():
+    target = "The customer's review is positive.\n<|tool_call_start|>[return_result(value='Positive')]<|tool_call_end|>"
+    spans, missing = spans_module.spans_for_row(row('', target), [('answer', 'Positive', True)], CharTokenizer())
+    begin = target.index('Positive')
+    assert missing == 0 and spans == [[begin, begin + 8, 'answer', True]]
+    # A different tool's quoted value cannot serve as the declared write.
+    wrong = target.replace('return_result', 'other_tool')
+    assert spans_module.spans_for_row(row('', wrong), [('answer', 'Positive', True)], CharTokenizer()) == ([], 1)
