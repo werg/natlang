@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { once } from 'node:events';
-import { createInterface } from 'node:readline';
+import { jsonlLines } from './jsonl-stream.mjs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -112,7 +112,7 @@ async function main() {
     const row = await inFlight.shift();
     if (row) { rows++; await write(JSON.stringify(row) + '\n'); }
   };
-  for await (const line of createInterface({ input: createReadStream(input), crlfDelay: Infinity })) {
+  for await (const line of jsonlLines(input)) {
     if (!line) continue;
     const turn = JSON.parse(line);
     turns++;

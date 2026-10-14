@@ -33,3 +33,18 @@ test('trajectory converter keeps complete Unicode-containing rows in both passes
   assert.equal(result.id,row.id);assert.equal(result.target.content,row.target.content);
  }finally{rmSync(dir,{recursive:true,force:true})}
 });
+
+// The rewriting stage shares this framing contract and preserves target bytes.
+test('trajectory rewrite preserves Unicode-bearing native rows',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'natlang-rewrite-unicode-'));
+ try{
+  const row={id:'unicode:decision:0000',messages:[{role:'user',content:'A\u2028B\u2029C'}],target:{role:'assistant',content:'A\u2028B\u2029C'}};
+  const input=join(dir,'input.jsonl'),output=join(dir,'output.jsonl'),summary=join(dir,'summary.json');
+  writeFileSync(input,JSON.stringify(row)+'\n');
+  execFileSync(process.execPath,[resolve(import.meta.dirname,'../scripts/neuralese-rewrite-trajectories.mjs'),'--out',output,'--summary',summary,input],{stdio:'pipe'});
+  const stats=JSON.parse(readFileSync(summary,'utf8'));
+  assert.equal(stats.records,1);assert.equal(stats.unreadable,0);
+  const result=JSON.parse(readFileSync(output,'utf8'));
+  assert.deepEqual(result.messages,row.messages);assert.deepEqual(result.target,row.target);
+ }finally{rmSync(dir,{recursive:true,force:true})}
+});
