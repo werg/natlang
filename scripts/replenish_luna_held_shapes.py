@@ -597,6 +597,10 @@ def prepare_backfill():
 
 
 def main():
+    # This script is intentionally optionless; still parse the CLI so --help
+    # remains read-only instead of unexpectedly starting a generation cycle.
+    import argparse
+    argparse.ArgumentParser(description='Replenish the reviewed Luna held-shapes generation campaigns.').parse_args()
     BASE.mkdir(parents=True, exist_ok=True)
     if not RUNTIME.exists():
         raise FileNotFoundError(RUNTIME)
