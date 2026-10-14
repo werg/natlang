@@ -184,6 +184,17 @@ samples before adoption. Do not infer from these three positions that the
 training approach is intrinsically unsound; the on-policy recovery campaign
 is running in parallel.
 
+Precision and rendering controls narrowed the cause. Restoring the same
+checkpoint in FP32 gave bad-token masses 0.263862/0.044576/0.007791, very
+close to BF16 0.264770/0.050242/0.008190, so BF16 serving conversion is not
+the large drift. Rendering the same messages in short program-header mode
+gave trained masses 0.207423/0.000271/0.000131; full rendering amplifies two
+sites, but one short child prompt still has 20.7% bad-token probability.
+The base remains effectively zero in either rendering. The two supplementary
+probe reports are `/tmp/natlang-pop-qad-special-mass-v3.json` and
+`/tmp/natlang-pop-qad-special-mass-header-v1.json` on Pop. These are
+diagnostics, not training data or a blanket verdict on the objective.
+
 Separate Luna generation triage: `s52048/worker-06/case-009` is an eight-message
 dataset workbench program. Its first run exhausted the model-request budget;
 the retry reached 824 model replies, about 95,000 completion tokens and 433
