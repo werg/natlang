@@ -16,7 +16,7 @@ It must preserve genuine alternative analyses and distinguish unattested from co
 No answer gloss table enters an executing callable. The first world will use explicitly closed
 candidate inventories so finite coverage is verifiable; those are candidate spaces, not gold labels.
 
-## Connected call graph: 32 planned NL functions
+## Connected call graph: 34 authored NL functions
 
 Each row denotes a separate typed callable and the semantic contribution it owns. Paths are
 relative to the application. Stages are numbered NL pseudocode; crisp policy is absent.
@@ -25,6 +25,8 @@ relative to the application. Stages are numbered NL pseudocode; crisp policy is 
 | --- | --- |
 | analyzeCorpus | Join actual intake, analysis, translation and repair reports; retain unresolved premises. |
 | analyzeCorpus/intake | CorpusSource with original sessions, observations, note versions and visible candidate domains. |
+| intake/inventoryCorpus | Actual original per-clause role inventory with completed/failed/unresolved entries; no linguistic answers. |
+| intake/inventoryCorpus/advanceClause | One actual typed ClauseRoleReading, original quote binding and immediate shorter frontier handoff. |
 | intake/readSessions | SessionIndex: consultant, time, elicitation frame and actual access/context. |
 | intake/readSessions/readSituation | SituationReading: depicted roles, named entities and known contrast; no gloss inference. |
 | intake/readUtterances | UtteranceIndex: exact surface units and original utterance/record identity. |
@@ -103,6 +105,12 @@ are false. File count is an architecture description, not a quality gate or a re
 
 ## Initial authored source scope
 
-The32callables now contain substantive numbered NL procedures, not executable grammar classifiers. Shared segmentation/role interpretation lives directly in the root callable folder and is explicitly used by both candidate attempts and held-out phrase interpretation; their boundary/discourse children remain owned nested callables. This lexical placement permits real cross-branch reuse under the existing loader, without ancestor reloading or duplicate implementations. Grammar and translation frontiers each consume one original item and finish actual returned next state. Actual evidence graph travels into both branches, so held-out interpretation retains original correction/reuse context rather than constructing an empty source substitute.
+The34callables now contain substantive numbered NL procedures, not executable grammar classifiers. Shared segmentation/role interpretation lives directly in the root callable folder and is explicitly used by both candidate attempts and held-out phrase interpretation; their boundary/discourse children remain owned nested callables. This lexical placement permits real cross-branch reuse under the existing loader, without ancestor reloading or duplicate implementations. Grammar and translation frontiers each consume one original item and finish actual returned next state. Actual evidence graph travels into both branches, so held-out interpretation retains original correction/reuse context rather than constructing an empty source substitute.
 
 The initial tree is author-only: visible corpus world, full typed witness, exact checker, independent source review and live execution remain pending. No source eligibility or training admission follows from file count.
+
+## Source-scope and licensing refinement
+
+Original clause-role discovery now has its own typed one-item frontier: the actual `ClauseRoleReading` is retained in `ClauseInventoryEntry` and the actual `CorpusInventory` is retained by `CorpusSource`. Role discovery exposes original evidence scope only; candidate/stem meanings are separately returned by typed NL judgments over actual definitions. This prevents a broad inventory operation from standing in for later segmentation, role or translation policy.
+
+`DiscourseRoleJudgment` now retains actual `RoleContribution` rows and a nullable `licensed` verdict. An established conflicting two-agent assignment is false licensing, while missing role evidence is unknown. The actual role child owns that distinction under the supplied candidate/source rules, and compatibility consumes it without repairing the prediction. No crisp role classifier or fixed fixture table was added.
