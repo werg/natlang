@@ -531,7 +531,7 @@ def expansion_trajectory(ref, receipt, rid, row):
                             "observed_graph_snapshot": str(EXPANSION_ROOT / ref),
                             "native_execution_verified": False}),
         license=licence(license_name, "nc" in license_name.lower(), "Pinned upstream card; owner accepts all licenses."),
-        split="train", split_groups=[group_key(f"expansion-{ref}-task", trajectory_id),
+        split="train", split_groups=[group_key(f"expansion-{ref.lower()}-task", trajectory_id),
                                      group_key("task", task_hash(request))],
         outcome={"label": "teacher", "checked": None},
         tools=json.loads(row["tools"]) if isinstance(row.get("tools"), str) else row.get("tools"),

@@ -31,6 +31,8 @@ def test_sibling_sessions_share_task_group_and_no_future_enters_inputs():
     first, second = trajectory('planner'), trajectory('worker')
     assert first.id != second.id and first.split_groups == second.split_groups
     row = record(first, 3, 5)
+    from neuralese_data.records import validate
+    assert validate(row) == []
     import json
     assert 'FUTURE SECRET' not in json.dumps(row)
     assert row['writer']['result_type'] == 'Neuralese<SessionHistory>'
@@ -39,6 +41,7 @@ def test_sibling_sessions_share_task_group_and_no_future_enters_inputs():
 def test_native_builder_preserves_structured_target_and_source_calls(tmp_path):
     import json
     import subprocess
+    import shutil
     receipt = {'repo': 'test/source', 'revision': 'abc'}
     call = {'type': 'function', 'function': {'name': 'search', 'arguments': '{"query":"KEEP QUERY"}'}}
     messages = [{'role': 'user', 'content': 'Find the answer'},
@@ -54,7 +57,9 @@ def test_native_builder_preserves_structured_target_and_source_calls(tmp_path):
     reserved = tmp_path / 'reservations.jsonl'
     reserved.write_text('')
     root = Path(__file__).resolve().parents[1]
-    subprocess.run(['/home/werg/.local/bin/node', str(root / 'ts-host/scripts/inline-curriculum/build-port-record-calls.mjs'),
+    toolchain_node = Path.home() / '.local/bin/node'
+    node = str(toolchain_node) if toolchain_node.exists() else shutil.which('node')
+    subprocess.run([node, str(root / 'ts-host/scripts/inline-curriculum/build-port-record-calls.mjs'),
                     '--input', str(source), '--out', str(tmp_path / 'built'), '--reservations', str(reserved)],
                    check=True, capture_output=True)
     built = tmp_path / 'built/fixture'
