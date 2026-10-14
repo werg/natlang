@@ -114,3 +114,23 @@ as family version 3, and the replenisher restores its quota of ten. Teacher
 admission still requires both the exact oracle and recorded iteration steps.
 Broken-heater failures are rejected; a later stopping-focused repair may
 improve that slice.
+
+## 2026-10-14 22:11 UTC replay correction and continuation
+
+Changing the folder reference to use an inline `nl.with<boolean>` judge exposed
+a replay matcher bug. The child receives ticket text as a scoped argument; the
+opening contains JSON-escaped newlines, while the reference match fragment has
+literal newlines. `referenceDriver` used plain `includes`, so all 64 folder
+cases in seed 52068 failed source replay despite a valid answer. Commit
+`dd3515c9` uses the existing raw-or-escaped `shows` matcher. Rebuilding the
+source then verified **764/764** cases across 17 families with zero failures;
+five fresh Luna workers started and the sixth waits for the previous seed's
+remaining worker. The same bug caused the sole TypeScript test failure in DGX's
+full check of `730dcc52`; DGX has been asked to rerun at the fix commit.
+
+The source-disjoint greenhouse V3 trial has now yielded 38 exact parents with
+recorded iteration steps. Curation selected 168 approved native decisions from
+189 candidate decisions, excluding 21 failed or unexecuted decisions. Its
+train-only source and Mellum/LFM render corpora are registered, immutable and
+verified on DGX (render manifest `6ab323404181e982b424219c9ad9cd5132a7b503c3bb1fedba13e72127960af1`).
+DGX has been asked to include them in the next protected train union.
