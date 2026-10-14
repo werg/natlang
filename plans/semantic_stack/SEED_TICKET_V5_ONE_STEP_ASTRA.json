@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.semantic-source-author-review/1",
+  "variant": "joint-ticket-one-step-v5",
+  "author": "semantic_slate_astra",
+  "source_sha256": {
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readTheories.nl": "a43fdd0301c13555b4be6baca9795a2b18e22699774a5f563eac6ad4701a1aa4",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readTheories/advanceTicket.nl": "b0145f511dbef03c50b12e283a0bf042540a195845c7d4021d93614cdf194b8a"
+  },
+  "independent_review": "plans/semantic_stack/SEED_TICKET_V5_ONE_STEP_REVIEW_POP.json",
+  "native_loader_types": true,
+  "canonical_reference": {
+    "package": "/tmp/astra-seed-ticket-v5-sealed",
+    "source_sha256": "c92d7da223679fb6eb6d8661d1f6f2c0f41505bab372276e0c44aaf5bb23c837",
+    "reference_ok": true
+  },
+  "external_controls": {
+    "passed": 43,
+    "scope": "Original invariant verifier; not new reader execution"
+  },
+  "quick_gate": true,
+  "fixture_oracle_reference_unchanged": true,
+  "live_samples": 0,
+  "training_admitted": false
+}
