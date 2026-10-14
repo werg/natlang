@@ -790,16 +790,16 @@
   "readiness": {
     "source_loader_checked": true,
     "typed_declarations_checked": true,
-    "typed_reference_checked": true,
+    "typed_reference_checked": false,
     "independent_source_review": false,
     "independent_oracle_review": false,
-    "exact_result_replay": true,
+    "exact_result_replay": false,
     "live_qualified": false,
     "training_admitted": false
   },
   "source_review_binding": {
     "reviewed": false,
-    "scope": "Current named domain/stem reader source awaits independent delta review; prior source and oracle receipts remain historical",
+    "scope": "Current named domain/stem reader source and expanded CorpusSource indices await independent delta review and refreshed private typed certificate; prior receipts remain historical",
     "source_commit": null
   },
   "independent_reviews": [],
@@ -832,7 +832,7 @@
   "source_variant": "named-domain-stem-readers-v3",
   "generation_ready": false,
   "training_admission": false,
-  "model_facing_debt": "0/48 named-domain-stem-reader live samples; actual per-clause scoped returns, finished frontiers, intake consumption and whole-task correctness unmeasured",
+  "model_facing_debt": "0/48 named-domain-stem-reader live samples; actual per-clause scoped returns, retained typed indices, finished frontiers, intake consumption and whole-task correctness unmeasured",
   "reference_scope": "One full typed privately authored source-validity witness plus qualified declared exact comparator; not execution of the NL application, a complete linguistic classifier or a teaching trajectory",
   "reference_path": "training/semantic_applications/sol/field-gloss-workbench/reed-court/reference-report.json",
   "external_verifier_path": "training/semantic_applications/sol/field-gloss-workbench/verify-result.mjs",

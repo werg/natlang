@@ -1,5 +1,52 @@
 # Continuation guide — updated 2026-10-14
 
+## 13:10 CEST: Pop student-root diagnostic and active work
+
+Pop student-root fix `55439aae` is pushed. Full TypeScript gate v3 passed
+builds/types/layering, tests in 447 seconds and conformance 22/22. The full
+Python gate is queued under `natlang-pop-python-after-student-root-v1` for the
+next GPU window; focused `task_rollouts` tests are 7/7 and quick gate green,
+but do not claim a full post-change gate yet.
+
+The S7 preparer default deliberately replays an authored reference root. Pop
+caught this in the first nominal QAD student run: zero generated root tokens,
+empty raw model calls, authored-action provenance. That invalid diagnostic was
+stopped; its 131 files were listed and deleted. Commit `55439aae` adds explicit
+`--root-mode student`, preserves source/oracle, records source/packet hashes,
+and makes student-mode scoring reject authored root replay. The corrected
+source-disjoint train run, `natlang-pop-qad-student-root-rollouts-v2`, is
+active on the Pop GPU at
+`/home/werg/natlang-artifacts/qad-student-train-rollouts-20261014-v1/round1-student-root`:
+12 families × two seeds, full prompt, temperature 0.6, exact step-15000 QAD
+checkpoint and clean heads. All 24 have terminal journals: two successes,
+ten semantic mismatches, nine invalid actions and three budget exhaustions;
+two groups have success/failure spread. Two no-result attempts exhausted the
+declared model-request budget. The wrapper treated them as a fatal shard and
+skipped scoring; Pop scored the complete journals and fixed the wrapper to
+accept only exact, declared budget exits. Review first failed actions and use
+`build-handoffs.mjs` on the **train-only** failures for replay-checked teacher
+recovery. Held48 remains evaluation only (clean base1/48, trained1/48, trained
+21 repetition exits). The supporting evidence is in
+`plans/neuralese/QAD_MATCHED48_RECOVERY_DRAGNET_20261014.md`.
+
+The Python gate `natlang-pop-python-after-student-root-v1` is now active on
+the Pop GPU following the QAD rollout. It includes the DGX detached token
+readout and native returned-value span-matching commits; inspect its three
+logs and summary before claiming a full gate. Field Gloss v3 source fixes
+`e69f393f` are pushed; its independent reference/certificate update is in
+progress, so live 48 sampling remains held.
+
+Luna/Gemini replenishers remain active around ledger headroom. The s52048
+worker-06 eight-message workbench attempt expanded to 824 replies/433
+invocations and about 95,000 completion tokens without an exact result; it is
+held and not automatically retried. Its 539 MB of failed partial/evidence
+files were listed and pruned after diagnosis, leaving review/queue status.
+Storage `/srv/storage` has about 4.1 GB free. Field Gloss named typed reader
+source `decf3256` is pushed and held for independent review and live sampling;
+the semantic agent owns that work. DGX owns its R6 compression/Mellum twin and
+broad union. Pop only manages Pop jobs. Check `coord.py` inbox at least every
+50 minutes and keep status current.
+
 ## 11:30 CEST: matched QAD result, Luna backlog admission and Pop gate
 
 The exact matched full-prompt, temperature-0.6, one-worker held48 packet

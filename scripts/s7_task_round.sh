@@ -58,7 +58,16 @@ SP=$!
 for i in $(seq 1 150); do curl -sf http://127.0.0.1:${PORT:-8097}/v1/models >/dev/null && break; sleep 2; done
 curl -sf http://127.0.0.1:${PORT:-8097}/v1/models >/dev/null || { echo "server did not come up; see $R/server.log" >&2; kill $SP; exit 1; }
 URL=http://127.0.0.1:${PORT:-8097}
-stop_server() { kill $SP 2>/dev/null; wait $SP 2>/dev/null; [ -n "${SERVE_IMAGE:-}" ] && docker stop "$CONTAINER" >/dev/null 2>&1; true; }
+stop_server() {
+  if [ -n "${SERVE_IMAGE:-}" ]; then
+    # The docker CLI is the background process here. SIGTERM followed by wait
+    # can hang while the container is still serving, retaining its GPU claim.
+    docker stop --timeout 2 "$CONTAINER" >/dev/null 2>&1 || true
+  else
+    kill "$SP" 2>/dev/null || true
+  fi
+  wait "$SP" 2>/dev/null || true
+}
 if [ -n "${UPDATE_FROM:-}" ]; then
   # One GRPO round on a scored run (S7 §5): zero adapter (policy == reference), the run's rollouts as behaviour samples,
   # natlang.rollout/1 records from the collector trajectories, adapter saved to $R/policy-r1/adapter.nzb.
@@ -116,9 +125,37 @@ for pid in "${pids[@]}"; do
   wait "$pid" || collector_status=1
 done
 if [ "$collector_status" -ne 0 ]; then
-  echo "one or more rollout collectors failed; inspect shard logs" >&2
-  stop_server
-  exit 1
+  # A case that exhausts its declared model-request budget still has an exact
+  # terminal journal record and is a scored rollout. Preserve it; fail closed
+  # for missing terminal records, transport errors and accounting failures.
+  python3 - "$R" <<'PY' || {
+import json, sys
+from pathlib import Path
+r = Path(sys.argv[1])
+entries = [json.loads(line) for line in (r / "queue.jsonl").read_text().splitlines() if line.strip()]
+finishes = {}
+for path in sorted((r / "shards").glob("journal-*.jsonl")):
+    for line in path.read_text().splitlines():
+        row = json.loads(line)
+        if row.get("event") == "finish":
+            if row["key"] in finishes:
+                raise SystemExit(f"duplicate rollout finish: {row['key']}")
+            finishes[row["key"]] = row
+keys = {entry["key"] for entry in entries}
+if set(finishes) != keys:
+    raise SystemExit(f"rollout finish coverage mismatch: missing={sorted(keys-set(finishes))}, extra={sorted(set(finishes)-keys)}")
+for key, row in finishes.items():
+    if row.get("status") in {"complete", "complete_with_skips"}:
+        continue
+    if row.get("status") == "incomplete" and row.get("resource_limit_reason") == "model_request_budget":
+        continue
+    raise SystemExit(f"rollout collector failed: {key}: {row.get('status')}: {row.get('resource_limit_reason')}")
+print("all rollout collectors terminated with exact results or declared model-request budgets")
+PY
+    echo "one or more rollout collectors failed; inspect shard logs" >&2
+    stop_server
+    exit 1
+  }
 fi
 cat "$R"/shards/journal-*.jsonl > "$R/journal.jsonl" || {
   echo "rollout journals could not be merged" >&2
