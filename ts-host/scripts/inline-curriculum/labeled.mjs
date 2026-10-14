@@ -42,6 +42,12 @@ export const DATASETS = {
 };
 
 const loaded = new Map();
+// Sentence-level sources can assign opposite labels to the same visible text
+// (SST-2 contains both positive and negative annotations for the same film
+// phrase, differing only in punctuation). Such a row has no defensible exact
+// answer to the instruction the model sees. Filter every conflicting copy
+// before assigning a train/test split, including cross-split duplicates.
+const visibleLabelKey = text => text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 export function rowsOf(name, split = 'train') {
   if (!loaded.has(name)) {
     const source = SOURCES[name], [file] = source.files, spec = DATASETS[name];
@@ -51,7 +57,14 @@ export function rowsOf(name, split = 'train') {
     const rows = text.split('\n').filter(Boolean).map(line => JSON.parse(line))
       .map(row => ({ text: normalizeSourceText(row[spec.text]), label: String(row[spec.label]) }))
       .filter(row => row.text.length >= (spec.minLength ?? 15) && row.text.length <= 320 && !(spec.exclude ?? []).includes(row.label));
-    loaded.set(name, rows);
+    const labels = new Map();
+    for (const row of rows) {
+      const key = visibleLabelKey(row.text);
+      const existing = labels.get(key);
+      if (existing === undefined) labels.set(key, row.label);
+      else if (existing !== row.label) labels.set(key, null);
+    }
+    loaded.set(name, rows.filter(row => labels.get(visibleLabelKey(row.text)) !== null));
   }
   return loaded.get(name).filter(row => sourceRecordSplit(sourceRecordId(name, row.text, '')) === split);
 }
