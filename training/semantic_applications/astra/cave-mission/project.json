@@ -631,12 +631,12 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": false,
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "exact_checker_controls_passed": 22,
     "live_qualified": false,
     "training_admitted": false,
-    "source_variant_review": "Current v10 selected-unit scope and evidence-only discovery pending independent review"
+    "source_variant_review": "Focused v10 selected-unit ownership/source/type/controls independently reviewed; actual live pending"
   },
   "fixture_document_count": 10,
   "fixture_clause_count": 31,
@@ -665,7 +665,7 @@
     "parent_review": "1a1524a4",
     "live_parent_partial_sha256": "85259f220bf73ecc99ab19ec29af1d9283ae43116fdb9cad3c8818a5b0508797",
     "meaning": "Isolated typed NL evidence-discovery callable owns per-unit reference/local role and primary convention scope; parent consumes actual support and convention with exact structural/math guards.",
-    "independent_source_review": false,
+    "independent_source_review": true,
     "author_controls": {
       "frame_progress": 38,
       "item_witness": 28,
@@ -709,6 +709,12 @@
       "sha256": "b3245b3ee59fdd8d0087d3488435c347b0ced10496429490ab570b2bae8f77de",
       "reviewer": "semantic_stack_curriculum",
       "scope": "Independent v9 actual dependency closure/union/raw-return source and exact33+28+22controls, native/type/canonical. No live/admission."
+    },
+    {
+      "path": "plans/semantic_stack/CAVE_UNIT_OWNERSHIP_V10_REVIEW_POP.json",
+      "sha256": "4b2a1a1caaa7c0bb3c255a98942e7d55f44d98e9b214854efbe16ab02f5d8e89",
+      "reviewer": "semantic_stack_curriculum",
+      "scope": "Independent v10 selected-unit evidence ownership, role/actual consumer, grounded inventory coverage;38+28+22 controls and canonical native replay. No live/admission."
     }
   ],
   "current_policy_source_revision": {
@@ -727,9 +733,9 @@
       "scope": "Focused consumer-depth and actual Assay/input-scope follow-up; no live credit"
     }
   },
-  "readiness_scope": "v10 source-only until focused peer; preserved v9 diagnostic has no admission.",
-  "generation_ready": false,
+  "readiness_scope": "Pinned one-case v10 diagnostic preparation only; actual semantic/literal-consumption review and training admission false.",
+  "generation_ready": true,
   "training_admission": false,
-  "pending_independent_source_review": "Selected-unit owned convention scope, typed evidence-only helper and actual role/closure/convention consumer",
+  "pending_independent_source_review": null,
   "historical_source_world_review_status": "Original mirrored-vault oracle remains independently reviewed; current v8 source handoff has not yet been independently reviewed."
 }
