@@ -5,7 +5,7 @@
  "description": "Controlled120-second training-time prefix, common original u10006 weights/fresh optimizer, admittedR3/v4 data, complete output masks. Operational calibration only, not QAD fresh start or fraction adoption. Setup/evaluation excluded from clock. All arms share runtime/data/hardware and differ only in e2e update fraction.",
  "overrides": {
   "runtime": {
-   "repo_commit": "7ac8f2e17696dccc43023a25d257c77c69fd6be0",
+   "repo_commit": "3e88642ca84ef53d3fca15455a51dc0895617eb6",
    "package_code": {
     "__init__.py": "81a7625700b5fa5ef986b14e801c7ffed45bfa1a762fc121b11c6b6121e8e6b0",
     "artifacts.py": "93fe52d40906981bbcf71da52e782bbcb36651a03e7fd195cae432ccebe00c95",
@@ -149,7 +149,7 @@
     "train/delta_e2e.py": "3a5676e1ceb92b5d5ae9ff126be3a13ed2519ad21ffecdadcc116f29792942b5",
     "train/delta_projection.py": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91",
     "train/direct_export.py": "5ad70b7792ec2ef7d544159bed84de19bd407ec79ec89cdd1e65acb94171d370",
-    "train/direct_sft.py": "324e8dd8c6b0adaafb1477ae01ac55b967739494a362cf3d7e27d64c9e5e9149",
+    "train/direct_sft.py": "e5d02b4f9099351116052136bcecd4d7e4809dadefbe4ebbc58214694fcbfffe",
     "train/drift_monitor.py": "f7e1ab47a8c110a1aecc5d8b6f2152c9e1b4332e5b1df6d067be738f4d91b2e3",
     "train/e2e_acceptance.py": "583b731c47602883588fc437eab4d982be654cc7c35e111324b50f27a4d880f0",
     "train/e2e_records.py": "c0b22034181a7c985919d0718978ef1125ced8b347ca68c1321bb680766aeb3d",
@@ -206,8 +206,8 @@
   "e2e_mix": {
    "fraction": 0.25,
    "neuralese_spans": {
-    "path": "runs/neuralese-spans-r3-v4-20261014/lfm25-v7.jsonl",
-    "sha256": "e30ed7f17767926beb26ca7a8460a8aea2cc420a869ef0fedcffb8de9979a9a5"
+    "path": "runs/neuralese-spans-r3-v4-20261014/lfm25-v8.jsonl",
+    "sha256": "f1318b44f84c545fb7981e9175ee9d0237d2cab5aef993d70ab4f1149e4bcacd"
    }
   },
   "stages": {
