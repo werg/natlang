@@ -540,7 +540,11 @@ function render(entry, provider) {
       const plan = owned.numbered_plan.join('\n');
       const literalPlan = owned.scoped_literal_required ?
         `\nFormulate and invoke a scoped typed natural-language literal; use its actual returned decision in this stage's typed contribution.\n${paragraphs(owned.scoped_literal_plan).join('\n')}` : '';
+      const isGraphAudit = variant?.program_id === id && variant.graph_audit_frontier &&
+        name === variant.graph_audit_frontier.owner_stage;
       const carriedPlan = crossFolder ?
+        isGraphAudit ?
+          '\nCross-folder state: Read typed context.priorCompletedState and input.prior. Initialize EffectFrontier from their supported graph and source-backed perturbation seeds; call the named advanceEffectFrontier child with that frontier state through iterateOn, then consume its returned paths and node findings. Return current-batch contributions and the recomputed global audit; root merges current-batch arrays once.\n' :
         typedHandoff ?
           '\nCross-folder state: Read typed context.priorCompletedState and add only this batch’s owned contribution; pass the current typed prior to the child. Root merges returned batch fields once.\n' :
           `\nCross-folder state: ${crossFolder.stage_ownership_plan.join(' ')}\n` : '';
@@ -582,6 +586,38 @@ function render(entry, provider) {
     files[`${stageFolder}.nl`] = nlFile({ args: runtimeStageArgs(step, entry, grouped),
       returns: entry.typed_inputs ? 'StageState' : grouped ? 'EvidenceBatchFinding' : 'EvidenceFinding',
       description: `${title}: ${step.name}`, instructions: instructionBody });
+  }
+  const graphFrontier = stageSpec && variant?.program_id === id ? variant.graph_audit_frontier : null;
+  if (graphFrontier) {
+    const child = graphFrontier.step_name;
+    const expectedPath = `${graphFrontier.owner_stage}/${child}.nl`;
+    if (graphFrontier.schema !== 'semantic-named-graph-frontier/1' ||
+        graphFrontier.owner_stage !== steps.at(-1)?.name ||
+        !/^[A-Za-z_][A-Za-z0-9_]*$/.test(child) ||
+        graphFrontier.relative_child_path !== expectedPath ||
+        graphFrontier.input_type !== 'EffectFrontier' ||
+        graphFrontier.output_type !== 'EffectFrontier' ||
+        graphFrontier.args?.state !== 'EffectFrontier' ||
+        !['EffectFrontier', 'EffectSeed', 'EffectNodeFinding',
+          'SignedEffectPath', 'SupportedEffectEdge'].every(name =>
+          typeof stageSpec.types?.[name] === 'string') ||
+        !Array.isArray(graphFrontier.numbered_plan) ||
+        graphFrontier.numbered_plan.length < 5 ||
+        graphFrontier.iteration?.measure !== 'remainingEntityKeys.length' ||
+        graphFrontier.iteration?.finished_predicate !== 'state.finished' ||
+        !Array.isArray(crossFolder?.stage5_numbered_plan) ||
+        !crossFolder.stage5_numbered_plan.some(step => step.includes(`${child}.iterateOn`)))
+      throw Error(`${id}: invalid named graph frontier contract`);
+    const path = `${stageFolder}/${child}.nl`;
+    if (Object.hasOwn(files, path)) throw Error(`${id}: duplicate named graph frontier path`);
+    files[path] = nlFile({ args: graphFrontier.args,
+      returns: graphFrontier.output_type, description: graphFrontier.description,
+      instructions: graphFrontier.numbered_plan.join('\n') + '\n' +
+        `This callable performs one frontier step and returns EffectFrontier. ` +
+        `${graphFrontier.owner_stage} owns iterateOn with measure ` +
+        `${graphFrontier.iteration.measure} and finished predicate ` +
+        `${graphFrontier.iteration.finished_predicate}. ` +
+        `Preserve earlier paths, findings and witnesses in the returned state.` });
   }
   const filePaths = fixture ? Object.keys(fixture) : [];
   const hasScopedCollection = filePaths.length >= 3 &&
