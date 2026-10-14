@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "mellum-train-only-recovery-proxy-20261014-v1",
+  "owner": "pop",
+  "path": "runs/mellum-train-only-recovery-proxy-20261014-v1",
+  "files": [
+    {
+      "path": "accepted-parents.jsonl",
+      "bytes": 36747342,
+      "sha256": "e52df9be85883c2bd654dd482b5c275cf4dfa0d4a28e0a5ef6f91c526570713f",
+      "lines": 142
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 37615178,
+      "sha256": "cac013b77fdf34861a1163ef82dd789bb216c4688f2f055335f9ff1f42a818e8",
+      "lines": 495
+    },
+    {
+      "path": "selected.ir.jsonl",
+      "bytes": 676736,
+      "sha256": "9f4fb9721d95a80f61288b79c3a0af6f00f34bd8f8bcbad14a315618c51e4e5b",
+      "lines": 142
+    },
+    {
+      "path": "selection-review.json",
+      "bytes": 44995,
+      "sha256": "1490d02812c3612a18528d233f10d7e83ef120974ccc0b928a254a3c229ecc7c"
+    }
+  ],
+  "bytes": 75084251
+}
