@@ -25,7 +25,11 @@ from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # n
 
 
 OUTPUT_ACCOUNTING_VERSION = 'natlang.supervisor_output_accounting/2'
-OBSERVATION_POLICY_VERSION = 'natlang.collection_observations/1'
+OBSERVATION_POLICY_VERSION = 'natlang.collection_observations/2'
+
+
+class ProviderStreamOverflow(RuntimeError):
+    """A tool-call stream outgrew the action's output ceiling without a reply."""
 
 
 def jsonl_lines(path):
@@ -47,6 +51,7 @@ class ProviderObservations:
         self.counts = {}
         self.requests = {}
         self.latest_delta_at = None
+        self.max_toolcall_delta_bytes = 0
         self.invalid_events = 0
 
     def poll(self):
@@ -111,8 +116,10 @@ class ProviderObservations:
                         self.requests.pop(key, None)
                     continue
                 events, size = event.get('deltaEvents'), event.get('deltaBytes')
+                toolcall_bytes = event.get('toolCallDeltaBytes', 0)
                 if (event.get('status') not in {'progress', 'completed', 'failed'}
-                        or type(events) is not int or type(size) is not int or events < 0 or size < 0):
+                        or type(events) is not int or type(size) is not int or events < 0 or size < 0
+                        or type(toolcall_bytes) is not int or not 0 <= toolcall_bytes <= size):
                     raise ValueError('invalid delta counters')
                 started = event.get('startedAt')
                 observed = datetime.fromisoformat(event['observedAt'].replace('Z', '+00:00'))
@@ -127,6 +134,7 @@ class ProviderObservations:
                 if len(self.counts) >= 4096 and key not in self.counts:
                     raise ValueError('too many observed requests')
                 self.counts[key] = (events, size)
+                self.max_toolcall_delta_bytes = max(self.max_toolcall_delta_bytes, toolcall_bytes)
                 if events > previous_events and size > previous_size:
                     self.latest_delta_at = max(self.latest_delta_at or 0, observed.timestamp())
                     delta = True
@@ -134,6 +142,7 @@ class ProviderObservations:
                 self.invalid_events += 1
         return delta, {'pending_requests': list(self.requests.values()),
                        'latest_delta_at': self.latest_delta_at,
+                       'max_toolcall_delta_bytes': self.max_toolcall_delta_bytes,
                        'invalid_events': self.invalid_events}
 
 
@@ -671,6 +680,17 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                         decoding = decode is not None and previous_decode is not None and decode > previous_decode
                         previous_decode = decode
                         stream_delta, observation = observer.poll() if observer else (False, {'pending_requests': []})
+                        # The provider's token ceiling should bound an action's streamed
+                        # arguments. A growing tool-call stream far beyond that ceiling,
+                        # without any completed turn, is a measured collection failure.
+                        # Ordinary long reasoning and silent rate-limit waits do not trip it.
+                        action_tokens = int(entry.get('action_max_tokens') or 4096)
+                        toolcall_stream_limit = max(131_072, 32 * action_tokens)
+                        if observation.get('max_toolcall_delta_bytes', 0) > toolcall_stream_limit:
+                            limit_reason = 'provider_tool_call_stream_overflow'
+                            raise ProviderStreamOverflow(
+                                f'tool-call stream exceeded {toolcall_stream_limit} bytes '
+                                f'for {action_tokens} requested output tokens')
                         waiting = bool(remote and retry_waiting(entry))
                         now = time.monotonic()
                         observations = []
@@ -707,8 +727,9 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                     limit_reason = 'case_wall_budget'
                     raise subprocess.TimeoutExpired(command, case_seconds)
                 status = 'complete' if code == 0 else 'incomplete'
-            except (subprocess.TimeoutExpired, TimeoutError, IdenticalTurnLimit) as error:
+            except (subprocess.TimeoutExpired, TimeoutError, IdenticalTurnLimit, ProviderStreamOverflow) as error:
                 status, code = ('repetition' if isinstance(error, IdenticalTurnLimit) else
+                                'provider_stream_overflow' if isinstance(error, ProviderStreamOverflow) else
                                 'no_observation_limit' if isinstance(error, TimeoutError) else 'timeout'), None
                 child.terminate()
                 try:
