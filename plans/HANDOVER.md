@@ -25,6 +25,20 @@ separate ability units from typed identity/timing context and preserve
 completed child results in a finite iteration. No teacher row is admitted or
 model-negative label assigned. The bounded Codex output transport worked.
 
+Seed Lineage v2 also completed a diagnostic only. `judgeObservationScope`
+eventually returned a typed decision, and `readAssays` returned a typed index;
+`readBank` then incorrectly demanded Q01–Q05 posterior/policy/cost results
+that belong to downstream belief, experiment and policy stages. An undeclared
+local `ScopeMeaning` name caused earlier child retries. Exact trace and source
+pins are in `LIVE_DIAGNOSTICS.md` (`519eceef`). Its source is being repaired,
+with no admitted row or model-negative verdict. Cave current source v6 was
+sealed and run for its own bounded live diagnostic. It stopped at 38 turns:
+`interpretConvention` lacked global F01's numeric anchor in its arguments,
+could not settle Amber's origin, and its parent then discarded both still-valid
+frame alternatives. This is a source dataflow and alternative-preservation
+bug, not a model-negative example. Exact trace and hashes are in
+`LIVE_DIAGNOSTICS.md` (`2a23e556`); Astra is repairing the child handoff.
+
 The v15d ecology diagnostic stopped after Stage 5 made case-specific graph
 status decisions in generated JS; v16 must move each node finding into a
 scoped typed NL decision while exact graph traversal remains mechanical.
