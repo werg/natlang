@@ -56,3 +56,7 @@ communication edges with their provenance; protected splits; both tokenizer view
 actual shared recipe bindings and sampler exposure; consumer-to-producer gradients
 for E2E views; matched held results. Acquisition or a small pilot alone is not the
 completed expansion.
+
+## Direct compressed union output
+
+The MuSiQue family hold requires a corrected broad union before the next main-line launch. Keep the existing admission, protected split, deduplication and tokenizer-twin decisions; explicitly remove the held member. Serialize selected rows directly into zstd, recording compressed identity plus independently decoded SHA-256 and byte count. Compression and durability extend the existing crisp union builder and compressed registry contract. This avoids another roughly140GB raw working copy without changing model-visible data or granting source admission.

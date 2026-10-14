@@ -31,6 +31,9 @@ import hashlib
 import json
 import sys
 import time
+import os
+import subprocess
+from contextlib import contextmanager
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -43,6 +46,49 @@ from text_tokenizer_twin import document_identity, IDENTITY_FIELDS, PROVENANCE_F
 from source_review import pending_unpinned_source_groups, registry_sha256  # noqa: E402
 
 SCHEMA = 'natlang.native-text-union/2'
+
+
+@contextmanager
+def union_text_writer(path, compressed=False):
+    """Exact UTF-8 output, optionally streamed through zstd without a raw working copy."""
+    digest = hashlib.sha256()
+    class Writer:
+        decoded_bytes = 0
+        def write(self, text):
+            data = text.encode('utf-8')
+            stream.write(data)
+            digest.update(data)
+            self.decoded_bytes += len(data)
+    writer = Writer()
+    with open(path, 'wb') as raw:
+        proc = subprocess.Popen(['zstd', '-q', '-3', '--long=27', '-T2', '-c'],
+                                stdin=subprocess.PIPE, stdout=raw) if compressed else None
+        stream = proc.stdin if proc else raw
+        try:
+            yield writer
+        except BaseException:
+            if proc is not None:
+                proc.terminate()
+            raise
+        finally:
+            if proc is not None:
+                stream.close()
+                result = proc.wait()
+        if proc is not None and result:
+            raise RuntimeError(f'union zstd encoder failed: {result}')
+        raw.flush()
+        os.fsync(raw.fileno())
+    writer.decoded_sha256 = digest.hexdigest()
+    if compressed:
+        from natlang_neuralese.common.jsonio import open_jsonl_text
+        actual, size = hashlib.sha256(), 0
+        with open_jsonl_text(path) as decoded:
+            for line in decoded:
+                data = line.encode('utf-8')
+                actual.update(data)
+                size += len(data)
+        if (actual.hexdigest(), size) != (writer.decoded_sha256, writer.decoded_bytes):
+            raise ValueError('compressed union decoded identity mismatch')
 
 
 def rows(path: Path):
@@ -257,6 +303,7 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--out-dir', type=Path, required=True)
+    p.add_argument('--compress-text', action='store_true', help='write verified zstd text directly, without raw intermediates')
     p.add_argument('--tokenizer', action='append', required=True, help='NAME=DIR')
     p.add_argument('--member', action='append', required=True, help='NAME:RENDERING:TOKENIZER=PATH')
     p.add_argument('--supersedes', action='append', default=[],
@@ -371,11 +418,11 @@ def main(argv=None):
                 detail['reason'] == 'conflicting_split_duplicate_id'
                 for detail in o.get('additional_reasons', []))]
         for tok in tokenizer_dirs:
-            target = out / tok / 'text-data.jsonl'
+            target = out / tok / ('text-data.jsonl.zst' if a.compress_text else 'text-data.jsonl')
             target.parent.mkdir(parents=True, exist_ok=True)
             stats = {'documents': 0, 'by_member': {}, 'by_split': {}}
             order_check = []
-            with open(target, 'w') as dst:
+            with union_text_writer(target, a.compress_text) as dst:
                 for name in order[rendering]:
                     m = stats['by_member'].setdefault(name, {'documents': 0, 'tokens': 0, 'supervised_tokens': 0,
                                                              'train_documents': 0, 'test_documents': 0})
@@ -410,6 +457,9 @@ def main(argv=None):
                         order_check.append((row['id'], row['split'], tuple(row['source_groups'])))
                         dst.write(line if line.endswith('\n') else line + '\n')
             stats['text_data_sha256'] = file_sha(target)
+            if a.compress_text:
+                stats.update(text_data_file=target.name, decoded_text_data_sha256=dst.decoded_sha256,
+                             decoded_text_data_bytes=dst.decoded_bytes)
             stats['identity_sha256'] = sha(canonical(order_check).encode())
             rendering_receipt['by_tokenizer'][tok] = stats
             print(json.dumps({rendering: tok, 'documents': stats['documents'], 'by_split': stats['by_split'],
