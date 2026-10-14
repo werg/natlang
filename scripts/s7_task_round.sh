@@ -1,6 +1,8 @@
 #!/bin/bash
 # usage: scripts/s7_task_round.sh RUN_DIR [SHARDS]  (env: RENDER, PORT, SNAP, DIRECT=export dir,
 #   SERVE_IMAGE + RECEIPT + CONTAINER: serve DIRECT in a container at its source-proof paths;
+#   TRAINING_CHECKPOINT + TRAINING_HEADS + pinned SHA-256 values + SERVE_IMAGE + CONTAINER:
+#     serve a direct-stage training checkpoint through the in-run evaluator's exact restore path;
 #   UPDATE_FROM=<scored run dir>: one GRPO round instead of a rollout round; RESTORE_ADAPTER=<adapter.nzb>: sample with it;
 #   CONTROL_DIR=<prepared run dir>: concurrent no-adapter arm; PROBE_ROLLOUTS=<rollouts.jsonl>: decode tok/s probe)
 # S7 smoke round (plans/neuralese/S7_RL.md §8): serve LFM2.5-350M on GPU, run the group queue through the collector in SHARDS
@@ -16,7 +18,21 @@ if [ -n "${DIRECT:-}" ]; then  # a direct-SFT export serves with its own declare
 else
   MODEL=(--base "$SNAP" --prompt-rendering "${RENDER:-full}")
 fi
-if [ -n "${SERVE_IMAGE:-}" ]; then
+if [ -n "${TRAINING_CHECKPOINT:-}" ]; then
+  : "${TRAINING_HEADS:?TRAINING_HEADS is required with TRAINING_CHECKPOINT}"
+  : "${TRAINING_CHECKPOINT_SHA256:?TRAINING_CHECKPOINT_SHA256 is required}"
+  : "${TRAINING_HEADS_SHA256:?TRAINING_HEADS_SHA256 is required}"
+  : "${SERVE_IMAGE:?SERVE_IMAGE is required with TRAINING_CHECKPOINT}"
+  : "${CONTAINER:?CONTAINER is required with TRAINING_CHECKPOINT}"
+  docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+  docker run --rm --name "$CONTAINER" --gpus all --network host --user "$(id -u):$(id -g)" \
+    -e HOME=/tmp -e PYTHONPATH=$ROOT/training/neuralese -e HF_HUB_OFFLINE=1 \
+    -v /home/werg:/home/werg:ro -v /srv/storage:/srv/storage:ro -w "$ROOT" "$SERVE_IMAGE" \
+    python scripts/neuralese_data/serve_direct_checkpoint.py \
+      --checkpoint "$TRAINING_CHECKPOINT" --checkpoint-sha256 "$TRAINING_CHECKPOINT_SHA256" \
+      --heads "$TRAINING_HEADS" --heads-sha256 "$TRAINING_HEADS_SHA256" \
+      --prompt-rendering "${RENDER:-full}" --device cuda --port "${PORT:-8097}" > "$R/server.log" 2>&1 &
+elif [ -n "${SERVE_IMAGE:-}" ]; then
   # A direct export pins its source proof to the exporting machine's paths (hf_hub_cache, launch receipt). Serve it in
   # a container that mounts the local HF cache and the exact receipt (RECEIPT, hash-checked by the loader) at those
   # paths; the container is named CONTAINER and must be declared to the ledger unit (--container).

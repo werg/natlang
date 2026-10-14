@@ -77,3 +77,25 @@ first argmax disagreement is at target token zero for each case, which is
 sensitive to free-form reasoning choice. Next inspect actual repeated held
 continuations and train-only recoveries at their first failed tool action; do
 not use held traces as training targets.
+
+Four independent temperature-0.6 samples on each of those six full-mode
+train decisions, with a 192-token action window, are recorded at
+`runs/qad-action-target-mask-audit-20261014-v1/closed-backlog-sample-report.json`
+(SHA-256 `1f4e93d112d2acd7a38ce72b5e9a38764cf12b9ca77822b686ca207ffa98b847`).
+All 24 emitted a tool call; 23 reached an ordinary stop and one hit the local
+sampling length cap. Thirteen used the gold tool name, while the rest often
+read a service first. This checks immediate action formation only; it does
+not execute actions or grade answers. Some emitted code shadows a service,
+calls `iterateOn` without a structural stopping measure, or includes stray
+reserved-token text. Inspect raw tokenization and training provenance before
+classifying the latter as a template or tokenizer bug.
+
+In one held workbench repetition, the exact prior `read_code(nl)` result is
+present in later provider requests, their message count grows from four to
+sixty, and request hashes and sampling seeds differ. The model still repeats
+the read. This rules out missing tool feedback or a cached identical request
+for that child only. Across 20 retained partial traces of the 21 repetition
+endings, the first observed difficulties include unbound names, service-name
+shadowing, nonexistent fields, malformed TypeScript and an unbounded
+iteration; the remaining repetition has a terminal result rather than a
+partial. These are failure-family observations, not held training inputs.
