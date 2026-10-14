@@ -18,9 +18,9 @@ returns: QueryAnswers
 4. Copy actualGraph.challenge into QueryAnswer.challenge; a missing challenge remains unresolved.
    Keep irrelevant observable fields null. Known absence of endorsement is not false endorsement;
    ambiguous referents retain their exact eligible set and unresolved illocution keeps actual alternatives.
-5. A query that asks whether a reporter created a promise must inspect the reporter's own act scope,
-   not merely find any embedded original promise. Its performed observable tests that queried promise
-   force, rather than whether the reporter performed some other reporting act. Explain absence with report-only source evidence.
+5. A query that asks whether a reporter performed a specified speech force must inspect the reporter's own act scope,
+   not merely find an embedded original act. Its performed observable tests the query's actual requested
+   force (including promise or withdrawal), separately from the performed reporting act. Explain absence with report-only source evidence.
 6. Set supported/refuted/ambiguous/unresolved status from actual proof and challenge. A failed challenge
    leaves unresolved and does not silently replace the answer with an independently reconstructed preferred one.
 7. Return actual QueryAnswers in original query order, with generated proof identity consistently joined

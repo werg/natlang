@@ -40,7 +40,7 @@ byturn={t['turnId']:t for t in turns}
 props={'P_COLLECT18':'Noor collected on day18','P_COLLECT20':'Noor collected before day20 noon','P_ACK_B2':'Sada personally acknowledged B2','P_ACK_B3':'Sada personally acknowledged B3','P_KEY19':'Oren released key to Sada on day19','P_KEY20':'Oren released key to Sada on day20','P_CODE20':'Oren supplied code to Tavi on day20','P_ALL_ADOPT':'Both named original beneficiaries adopted W18','P_WITHDRAW_RECEIVED_TAVI':'Tavi received W18'}
 physical_annotations=[('F_COLLECTION','P_COLLECT18',False,None,'F01'),('F_COLLECTION','P_COLLECT20',True,moment(19,10),'F01'),('F_KEY','P_KEY19',True,moment(19,11),'F02'),('F_KEY','P_KEY20',False,None,'F02'),('F_CODE','P_CODE20',False,None,'F03'),('F_BRIEF','P_ACK_B2',True,moment(18,6),'F04'),('F_BRIEF','P_ACK_B3',True,moment(19,9),'F04'),('F_ADOPTIONS','P_ALL_ADOPT',True,moment(18,4),'F05')]
 physical=[{'factId':i,'propositionId':p,'value':v,'occurredAt':at,'completenessThrough':moment(21,12),'witnesses':witnesses(c)} for i,p,v,at,c in physical_annotations]
-receipt_annotations=[('HP17',['P17'],'Sada',moment(17,10),moment(17,10),False,[]),('HP17',['P17'],'Tavi',moment(17,10),moment(17,10),False,[]),('HW18_S',['W18'],'Sada',moment(18,0),moment(18,1),False,[]),('RW18_T',['W18'],'Tavi',moment(18,0),moment(18,3),False,[]),('HN18',['N18'],'Sada',moment(18,5),moment(18,5),False,[]),('HB19',['B18'],'Oren',moment(18,6),moment(18,6),False,[]),('HB19',['B19'],'Oren',moment(19,9),moment(19,9),False,[]),('HC18',['C18'],'Sada',moment(18,8),moment(18,8),False,[]),('RC19_S',['C19'],'Sada',moment(19,10.5),moment(20,1),True,['F_COLLECTION']),('RADOPT_O',['S18','T18_ADOPT'],'Oren',moment(19,12),moment(19,12),True,['F_ADOPTIONS']),('HREM19',['REM19','W18'],'Tavi',moment(19,13),moment(19,13),False,[])]
+receipt_annotations=[('HP17',['P17'],'Sada',moment(17,10),moment(17,10),False,[]),('HP17',['P17'],'Tavi',moment(17,10),moment(17,10),False,[]),('HW18_S',['W18'],'Sada',moment(18,0),moment(18,1),False,[]),('RW18_T',['W18'],'Tavi',moment(18,0),moment(18,3),False,[]),('HN18',['N18'],'Sada',moment(18,5),moment(18,5),False,[]),('HB19',['B18'],'Oren',moment(18,6),moment(18,6),False,[]),('HB19',['B19'],'Oren',moment(19,9),moment(19,9),False,[]),('HC18',['C18'],'Sada',moment(18,8),moment(18,8),False,[]),('RC19_S',['C19'],'Sada',moment(19,10.5),moment(20,1),True,['F_COLLECTION']),('RADOPT_O',['S18','T18_ADOPT'],'Oren',moment(19,12),moment(19,12),True,['F_ADOPTIONS']),('RC19_N',[],'Noor',None,moment(19,10.25),True,['F_COLLECTION']),('HREM19',['REM19','W18'],'Tavi',moment(19,13),moment(19,13),False,[])]
 receipts=[{'receiptId':i,'turnIds':ids,'recipientId':who,'dispatchedAt':sent,'receivedAt':arrived,'readAt':arrived,'verifiedEvidence':verified,'verifiedFactIds':facts,'witnesses':witnesses(i)} for i,ids,who,sent,arrived,verified,facts in receipt_annotations]
 actors=['Oren','Sada','Tavi','Noor','Remy']
 source={'caseId':snapshot['caseId'],'clauses':list(clauses.values()),'rules':[c for k,c in clauses.items() if re.fullmatch(r'R\d+',k)],'turns':turns,'propositions':[{'propositionId':k,'meaning':v,'witnesses':witnesses('P01')} for k,v in props.items()],'physicalFacts':physical,'temporal':{'entries':[{'turnId':t['turnId'],'originalTime':t['occurredAt'],'reportingTime':t['occurredAt'] if t['turnId'] in ['O19_REPORT','REM19'] else None,'reason':'Authenticated original turn; embedded W18 remains day18 hour0.','witnesses':t['witnesses']} for t in turns],'unresolved':[]},'participants':{'participantIds':actors,'memberships':[{'participantId':p,'channelId':'P','from':moment(17,0),'through':moment(21,24),'witnesses':witnesses('C02')} for p in ['Oren','Sada','Tavi']],'unresolved':[]},'receipts':{'receipts':receipts,'unresolved':[]},'unresolved':[]}
@@ -142,7 +142,7 @@ for ep in episodes:
    cm={'commitmentId':'K_'+tid,'issuerId':'Oren','beneficiaryIds':a['meaning']['beneficiaryIds'],'sourceActId':a['actId'],'propositionIds':[p['propositionId'] for p in a['meaning']['consequences']],'due':a['meaning']['due'],'conditions':[],'fulfillment':[],'status':'conditional','establishedAt':ep['at'],'witnesses':a['witnesses']};v['commitments'].append(cm);ed['commitments'].append({'participantId':'Oren','add':[clone(cm)],'replace':[],'unresolved':[]})
   # Explicit source-authored revision conclusions; this is not a semantic revision selector.
   if tid in ['W18','S18','T18_ADOPT','C19']:
-   full=tid=='T18_ADOPT';rd={'revisionId':'REV_'+tid if full or tid=='C19' else None,'participantId':who,'commitmentOwnerId':'Oren' if full else None,'adoptingParticipantIds':['Sada','Tavi'] if full else ([] if tid=='W18' else [who]),'supersededActIds':[primary['C18']['actId']] if tid=='C19' else [primary['P17']['actId']],'defeatBeliefIds':bd['defeatBeliefIds'],'retractCommitmentIds':['K_P17'] if full else [],'reason':'Last actual beneficiary adoption retracts only issuer-owned P17; collection correction defeats only Noor original C18 endorsement; partial audience adoption applies no global retraction.','witnesses':witnesses(tid,'R06','R07'),'unresolved':[]};ed['revisions'].append(rd)
+   full=tid=='T18_ADOPT';rd={'selection':{'revisionActId':primary['C19' if tid=='C19' else 'W18']['actId'],'targetActIds':[primary['C18' if tid=='C19' else 'P17']['actId']],'targetPropositionIds':['P_COLLECT18','P_COLLECT20'] if tid=='C19' else [],'kind':'belief-correction' if tid=='C19' else 'commitment-retraction','communicated':True,'reason':'The actual performed/adopted original revision targets its exact source lineage; belief correction and promise withdrawal remain distinct scopes.','witnesses':witnesses(tid,'C19' if tid=='C19' else 'W18','R06'),'unresolved':[]},'revisionId':'REV_'+tid if full or tid=='C19' else None,'participantId':who,'commitmentOwnerId':'Oren' if full else None,'adoptingParticipantIds':['Sada','Tavi'] if full else ([] if tid=='W18' else [who]),'supersededActIds':[primary['C18']['actId']] if tid=='C19' else [primary['P17']['actId']],'defeatBeliefIds':bd['defeatBeliefIds'],'retractCommitmentIds':['K_P17'] if full else [],'reason':'Last actual beneficiary adoption retracts only issuer-owned P17; collection correction defeats only Noor original C18 endorsement; partial audience adoption applies no global retraction.','witnesses':witnesses(tid,'R06','R07'),'unresolved':[]};ed['revisions'].append(rd)
    if rd['revisionId']:v['revisionIds'].append(rd['revisionId'])
  for cm in view_by_id['Oren']['commitments']:
   original=byact[cm['sourceActId']]['turnId'];a=primary[original];cm['conditions']=[condition_reading(p,ep,cm['beneficiaryIds']) for p in a['meaning']['conditions']];cm['fulfillment']=[condition_reading(p,ep,cm['beneficiaryIds']) for p in a['meaning']['consequences']];cm['status']='conditional' if original=='P17' and ep['at']==moment(18,4) else last_annotation(status_journal[original],ep['at'])
@@ -171,7 +171,10 @@ answer_support={
 'Q15':['O19_ADOPT','RADOPT_O','F05','R05'],
 'Q16':['REM19','W18','HREM19','R03'],
 'Q17':['B19','F04','R08'],
-'Q18':['P17','F03','R09']}
+'Q18':['P17','F03','R09'],
+'Q19':['RC19_N','C18','R04','R05'],
+'Q20':['RC19_N','C19','F01','R05'],
+'Q21':['S19_EARLY','RC19_S','F01','R04','R05']}
 answer_explanations={
 'Q01':'Only Sada has explicitly adopted W18; all original beneficiaries must adopt before P17 retracts.',
 'Q02':'Tavi actual arrival supplies access without adoption; the earlier explicit doubt does not adopt W18.',
@@ -190,7 +193,10 @@ answer_explanations={
 'Q15':'Oren later explicit endorsement combines with available verified F_ADOPTIONS and qualifies knowledge.',
 'Q16':'Remy performs a report of Oren original W18; the embedded withdrawal is depicted rather than newly performed.',
 'Q17':'The actual personal B3 acknowledgment is a different version-specific event from B18 acknowledgment of B2.',
-'Q18':'The complete day20 code log establishes no promised delivery to Tavi, without altering terminal retraction.'}
+'Q18':'The complete day20 code log establishes no promised delivery to Tavi, without altering terminal retraction.',
+'Q19':'Noor has read the verified past record, but the old day18 claim remains endorsed until his actual correction; its value lacks corroboration.',
+'Q20':'Noor now endorses false for the day18 proposition with actual available verified record; the knowledge criterion qualifies although the proposition is false.',
+'Q21':'Sada before-noon value was already endorsed and remains so; actual later matching verified evidence now qualifies that proposition under the declared model, without revising her separate day18 belief.'}
 # Separately authored query projections, checked against the independent draft table rather than read as answers.
 answer_projection_annotations={
 'Q01':{'commitmentStatus':'conditional'},'Q02':{'commitmentStatus':'conditional'},
@@ -199,7 +205,7 @@ answer_projection_annotations={
 'Q07':{'commitmentStatus':'active','actorIds':['Oren']},'Q08':{'commitmentStatus':'fulfilled'},
 'Q09':{'commitmentStatus':'retracted'},'Q10':{'truthValue':False},'Q11':{'beliefValue':True},
 'Q12':{'knowledgeValue':False},'Q13':{'beliefValue':True},'Q14':{'knowledgeValue':False},
-'Q15':{'knowledgeValue':True},'Q16':{'performed':False},'Q17':{'truthValue':True},'Q18':{'truthValue':False}}
+'Q15':{'knowledgeValue':True},'Q16':{'performed':False},'Q17':{'truthValue':True},'Q18':{'truthValue':False},'Q19':{'knowledgeValue':False},'Q20':{'knowledgeValue':True},'Q21':{'knowledgeValue':True}}
 assert answer_projection_annotations==json.loads((ROOT/'oracle.json').read_text())['query_observables']
 answers=[]
 for query in request['queries']:

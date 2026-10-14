@@ -11,7 +11,7 @@ returns: EndorsementDecision
 1. Capture the actual act meaning, original speech substring, participant's actual access, episode clock
    and source endorsement rule and actual scoped act inventory. Exclude final expected belief answers and application-global truth repair.
 2. Construct and directly invoke a scoped NL EndorsementDecision literal for this participant/act pair.
-   First determine whether the actor authored this act or only encountered its content at this episode.
+   First determine whether this actor authors a new original act at this episode or only encounters earlier content now. Match the actual episode moment and original turn identity for authorship; original act.speaker attribution alone does not make a delayed receipt a fresh speaker action. Preserve access without fresh endorsement when no current adoption/assertion is source-established.
 3. Return basisActIds for the actual accessible assertion/utterance this actor endorses, alongside
    its own current act. A private note adopting an earlier claim retains that earlier actual scoped act
    identity, rather than losing the claim-source link when the note becomes a belief atom.
@@ -20,7 +20,7 @@ returns: EndorsementDecision
    quoting or forwarding preserves access without endorsing the original assertion.
 4. Doubt returns posture doubt and the actual questioned proposition, not belief in its negation.
    Irony alone does not certify a literal proposition; unsupported attribution stays unresolved.
-5. A correction adopted by this actor can identify superseded actual act IDs. Join original turn
+5. A correction or withdrawal adopted by this actor can identify superseded actual act IDs. Join original turn
    references to the actual scoped inventory and return adoptsActIds for the exact revision being adopted. Sender endorsement is
    not recipient adoption; an arriving correction leaves an earlier endorsement active until actual revision.
 6. A conjunction can affirm one proposition and deny another. Copy each actual supported claim/value

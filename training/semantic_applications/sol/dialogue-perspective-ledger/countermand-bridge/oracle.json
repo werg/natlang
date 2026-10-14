@@ -59,6 +59,15 @@
     },
     "Q18": {
       "truthValue": false
+    },
+    "Q19": {
+      "knowledgeValue": false
+    },
+    "Q20": {
+      "knowledgeValue": true
+    },
+    "Q21": {
+      "knowledgeValue": true
     }
   },
   "source_world_split_key": "sol-app-world:countermand-bridge-v1",
@@ -379,6 +388,7 @@
       "HC18",
       "RC19_S",
       "RADOPT_O",
+      "RC19_N",
       "HREM19"
     ],
     "receipts": [
@@ -595,6 +605,24 @@
         "verifiedEvidence": true,
         "verifiedFactIds": [
           "F_ADOPTIONS"
+        ]
+      },
+      {
+        "receiptId": "RC19_N",
+        "turnIds": [],
+        "recipientId": "Noor",
+        "dispatchedAt": null,
+        "receivedAt": {
+          "day": 19,
+          "hour": 10.25
+        },
+        "readAt": {
+          "day": 19,
+          "hour": 10.25
+        },
+        "verifiedEvidence": true,
+        "verifiedFactIds": [
+          "F_COLLECTION"
         ]
       },
       {
@@ -852,6 +880,20 @@
           "HB19"
         ],
         "verifiedFactIds": []
+      },
+      {
+        "at": {
+          "day": 19,
+          "hour": 10.25
+        },
+        "participantId": "Noor",
+        "turnIds": [],
+        "receiptIds": [
+          "RC19_N"
+        ],
+        "verifiedFactIds": [
+          "F_COLLECTION"
+        ]
       },
       {
         "at": {

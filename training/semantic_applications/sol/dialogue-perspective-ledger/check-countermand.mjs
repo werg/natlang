@@ -1,0 +1,38 @@
+/** Exact private source certificate controls. No NL extraction or semantic entailment is executed. */
+import fs from'node:fs';import{createRequire}from'node:module';import{TypeEnv,parseType}from'../../../../ts-host/dist/native/types.js';import{coerce}from'../../../../ts-host/dist/native/values.js';import{verifyCandidate}from'./verify-result.mjs';
+const ts=createRequire(new URL('../../../../ts-host/package.json',import.meta.url))('typescript'),text=fs.readFileSync(new URL('../../../../applications/dialogue-perspective-ledger/types.ts',import.meta.url),'utf8'),ast=ts.createSourceFile('types.ts',text,ts.ScriptTarget.Latest,true),defs={};for(const n of ast.statements)if(ts.isTypeAliasDeclaration(n))defs[n.name.text]=parseType(n.type.getText(ast));const env=new TypeEnv(defs);
+const root=new URL('./countermand-bridge/',import.meta.url),read=n=>JSON.parse(fs.readFileSync(new URL(n,root),'utf8')),reference=read('reference-report.json'),oracle=read('oracle.json'),request=read('request.json'),snapshot=read('snapshot.json');
+const checks=[];function check(name,expected,mutation){const value=structuredClone(reference);mutation?.(value);if(expected)coerce(value,parseType('PerspectiveReport'),env);const result=verifyCandidate({value,oracle,inputs:{request,snapshot},fixture:{}});checks.push({name,expected,actual:result.ok,passed:result.ok===expected,issues:result.issues});}
+const answer=(v,id)=>v.answers.find(a=>a.queryId===id),retraction=v=>v.evolution.deltas.flatMap(d=>d.revisions).find(r=>r.retractCommitmentIds.length),correction=v=>v.evolution.deltas.flatMap(d=>d.revisions).find(r=>r.selection.kind==='belief-correction');
+check('full typed second-world certificate',true);
+check('unordered original/source/actor collections',true,v=>{v.source.clauses.reverse();v.source.turns.reverse();v.source.physicalFacts.reverse();for(const h of v.evolution.history)h.views.reverse();v.evolution.views.reverse();});
+check('free selected-target explanation and exact source quote subset',true,v=>{const r=retraction(v);r.selection.reason='The two actual beneficiaries adopt the same original withdrawal, independently of Oren knowledge.';r.selection.witnesses[0].quote='I have read W18 and adopt Oren\'s withdrawal of P17.';});
+check('equivalent supported false observable status',true,v=>answer(v,'Q18').status='supported');
+check('generated IDs alpha rename including selected revision',true,v=>{const ids=new Set();function find(x){if(!x||typeof x!=='object')return;for(const[k,a]of Object.entries(x)){if(['actId','episodeId','beliefId','commitmentId','proofId','spanId','revisionId'].includes(k)&&typeof a==='string')ids.add(a);if(Array.isArray(a))a.forEach(find);else if(a&&typeof a==='object')find(a);}}find(v);const names=new Map([...ids].map((id,i)=>[id,'RENAMED_'+i]));function replace(x){if(typeof x==='string')return names.get(x)??x;if(Array.isArray(x))return x.map(replace);if(x&&typeof x==='object')return Object.fromEntries(Object.entries(x).map(([k,a])=>[k,replace(a)]));return x;}const changed=replace(v);for(const k of Object.keys(v))v[k]=changed[k];});
+check('unrelated supported proof node',true,v=>answer(v,'Q03').proof.nodes.push({...structuredClone(answer(v,'Q03').proof.nodes[0]),proofId:'BENIGN_UNUSED_SOURCE'}));
+check('audience adoption sets may reorder',true,v=>{retraction(v).adoptingParticipantIds.reverse();for(const a of v.scoped.acts)a.meaning.beneficiaryIds.reverse();for(const d of v.evolution.deltas)for(const c of d.commitments)for(const m of [...c.add,...c.replace])m.beneficiaryIds.reverse();for(const h of v.evolution.history)for(const p of h.views)for(const c of p.commitments)c.beneficiaryIds.reverse();for(const p of v.evolution.views)for(const c of p.commitments)c.beneficiaryIds.reverse();});
+check('retraction bypassed through direct commitment replacement',false,v=>{const d=v.evolution.deltas.find(d=>d.revisions.some(r=>r.retractCommitmentIds.length));for(const r of d.revisions)r.retractCommitmentIds=[];for(const c of d.commitments)for(const m of c.replace)if(m.commitmentId==='K_P17')m.status='retracted';});
+check('one audience adopter treated as global withdrawal',false,v=>answer(v,'Q01').observable.commitmentStatus='retracted');
+check('arrival treated as audience adoption',false,v=>answer(v,'Q02').observable.commitmentStatus='retracted');
+check('later collection revives terminal original',false,v=>answer(v,'Q05').observable.commitmentStatus='active');
+check('fresh promise fulfillment borrowed by original',false,v=>answer(v,'Q09').observable.commitmentStatus='fulfilled');
+check('day19 delivery becomes day20 event',false,v=>answer(v,'Q10').observable.truthValue=true);
+check('receipt defeats belief without endorsement',false,v=>answer(v,'Q13').observable.beliefValue=false);
+check('receipt alone qualifies Noors old false claim',false,v=>answer(v,'Q19').observable.knowledgeValue=true);
+check('known false value treated as failed knowledge criterion',false,v=>answer(v,'Q20').observable.knowledgeValue=false);
+check('later matching evidence restricted to acquisition-time basis',false,v=>answer(v,'Q21').observable.knowledgeValue=false);
+check('issuer receipt becomes endorsed knowledge',false,v=>answer(v,'Q14').observable.knowledgeValue=true);
+check('reporter performs quoted withdrawal',false,v=>answer(v,'Q16').observable.performed=true);
+check('selected original revision erased',false,v=>delete retraction(v).selection);
+check('selected original revision has foreign ID',false,v=>retraction(v).selection.revisionActId='NO_REVISION');
+check('selected target is separate fresh promise',false,v=>retraction(v).selection.targetActIds=['A_N18_0']);
+check('declared retraction changed to belief correction',false,v=>retraction(v).selection.kind='belief-correction');
+check('private target communication permits global withdrawal',false,v=>retraction(v).selection.communicated=false);
+check('source correction loses affected proposition scope',false,v=>correction(v).selection.targetPropositionIds=[]);
+check('selected source quote fabricated',false,v=>retraction(v).selection.witnesses[0].quote='No original source contains this sentence');
+check('actual common adopter omitted',false,v=>retraction(v).adoptingParticipantIds=['Sada']);
+check('recipient loses actual revision availability',false,v=>{for(const h of v.evolution.history)h.views.find(p=>p.participantId==='Tavi').availableActIds=[];});
+check('actual adoption delta removed',false,v=>{const d=v.evolution.deltas.find(d=>d.endorsements.some(e=>e.actId==='A_T18_ADOPT_0'));d.endorsements.find(e=>e.actId==='A_T18_ADOPT_0').adoptsActIds=[];});
+check('new promise due copied from original',false,v=>{const c=v.evolution.deltas.flatMap(d=>d.commitments.flatMap(c=>c.add)).find(c=>c.sourceActId==='A_N18_0');c.due={day:20,hour:null};});
+check('new promise audience copied from original',false,v=>{const c=v.evolution.deltas.flatMap(d=>d.commitments.flatMap(c=>c.add)).find(c=>c.sourceActId==='A_N18_0');c.beneficiaryIds=['Sada','Tavi'];});
+console.log(JSON.stringify({scope:'Exact authored source/type/provenance and state controls; independent entailment and actual NL execution remain separate.',passed:checks.every(c=>c.passed),positive:checks.filter(c=>c.expected).length,negative:checks.filter(c=>!c.expected).length,checks},null,2));if(checks.some(c=>!c.passed))process.exitCode=1;

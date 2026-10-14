@@ -149,3 +149,25 @@ whether the requested knowledge criterion qualifies, separately from the underly
 Source-established cutoff/day-end closures are typed boundary episodes, separate from physical occurrences,
 utterances and receipts. The episode NL stage derives their source role and clock from actual act conditions
 and due fields, retaining original witnesses and granting no participant access by the boundary itself.
+
+## Connected revision target variant
+
+Countermand Bridge exercises a different audience/causal structure: one actual adopter does not
+withdraw a two-beneficiary promise; a later original adoption completes the issuer-owned normative
+revision while issuer knowledge remains absent. A fresh promise later fulfills without reviving the
+terminal original, and actual receipt of a factual correction leaves belief unchanged without adoption.
+
+Add one substantive NL child beneath resolveRetraction: selectRevisionTarget consumes actual act,
+returned endorsement/adoption IDs, episode and original scoped/source objects. Its numbered policy
+joins adopting act→original revision→original target, preserves target exclusions, and distinguishes
+belief-correction, commitment-retraction, none and unresolved meaning. It returns RevisionSelection,
+retained verbatim in RevisionDelta.selection. Parent uses those actual target/communication fields
+before joining issuer-owned commitments and every beneficiary's actual access/adoption. No target
+lookup service, hidden expected answer or crisp semantic classifier is added.
+
+The episode reducer keeps actual child state deltas and finishes one updated typed frontier; parent
+iterateOn owns the next source episode with explicit decreasing-count and empty predicates. Query
+performed force is the requested force, including withdrawal, rather than any performed report.
+The exact checker validates selected-ID ownership and new retraction provenance; it does not choose
+semantic targets. First-world source bytes/certificate are retained in the frozen reviewed baseline;
+current richer variant and second-world certificate await independent review/live qualification.

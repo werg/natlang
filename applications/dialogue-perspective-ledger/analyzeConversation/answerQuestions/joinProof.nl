@@ -15,7 +15,10 @@ returns: ProofGraph
    revisions. Edges name supports/defeats/available-to/anchored-at/conditions/quotes with real endpoint IDs.
 3. For belief preserve any current active false endorsement and its support. For knowledge additionally
    join actual available corroborating verified evidence; a global fact without an actor receipt has no
-   admissible available-to edge. Keep defeating corrections that were adopted after their actual receipt.
+   admissible available-to edge. Join current available verified IDs at focus.asOf to the actual
+   endorsed value; matching evidence may arrive after acquisition while the endorsement remains
+   unchanged. BeliefAtom corroboration records its acquisition basis, not a cutoff on later knowledge.
+   Keep defeating corrections that were adopted after their actual receipt.
 4. For promise conditions show independent strict-time and version/actor predicates. A false actual
    predicate and a true listener belief are different source paths, not contradictory proof-node corruption.
 5. Keep enough exact original witnesses to establish the requested observable; omit unrelated diaries

@@ -25,6 +25,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
+sys.path.insert(0, str(ROOT / 'scripts'))
+from source_review import pending_unpinned_source_groups, registry_sha256  # noqa: E402
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 
@@ -47,6 +49,17 @@ def read_lines(path):
     with open(path, encoding='utf-8') as f:
         yield from f
         os.posix_fadvise(f.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+
+
+def reviewed_trajectories(records, review_groups):
+    """Whole train trajectories rejected by exact shared source-review groups."""
+    blocked = collections.defaultdict(set)
+    for record in records:
+        if record.get('split') == 'train':
+            matched = set(record.get('source_groups') or []) & review_groups
+            if matched:
+                blocked[trajectory_of(record)].update(matched)
+    return blocked
 
 
 def trajectory_of(row):
@@ -303,6 +316,8 @@ def content_key(row):
 
 
 def cmd_assemble(a):
+    review_groups = pending_unpinned_source_groups()
+    review_sha = registry_sha256()
     work = Path(a.work)
     out = Path(a.out_dir) / a.id if a.out_dir else Path(resolve_str('data_nvme', 'natlang-corpora', a.id))
     staged = out.with_name(out.name + '.building'); staged.mkdir(parents=True, exist_ok=True)
@@ -341,8 +356,11 @@ def cmd_assemble(a):
         for line in read_lines(f'{stem}.records.jsonl'):
             r = json.loads(line); records[r['id']] = r
         edges = [json.loads(l) for l in read_lines(f'{stem}.edges.jsonl')]
+        reviewed = reviewed_trajectories(records.values(), review_groups)
         keep_ids, drop = set(), {}
         for rid, r in records.items():
+            if trajectory_of(r) in reviewed:
+                drop[rid] = 'source_review_pending_chain'; continue
             if rid in seen_ids:
                 drop[rid] = 'duplicate_id_of_' + seen_ids[rid]; continue
             c = content_key(r)
@@ -365,7 +383,8 @@ def cmd_assemble(a):
         chains = collections.defaultdict(list)
         for e in kept_edges: chains[e['trajectory']].append(e)
         for rid, why in drop.items():
-            omissions.write(json.dumps({'id': rid, 'source': source, 'stage': 'assemble', 'reason': why}) + '\n')
+            detail = {'source_groups': sorted(reviewed[trajectory_of(records[rid])])} if why == 'source_review_pending_chain' else {}
+            omissions.write(json.dumps({'id': rid, 'source': source, 'stage': 'assemble', 'reason': why, **detail}) + '\n')
             totals['omitted_assemble_' + why.split('_of_')[0]] += 1
         for traj, ces in chains.items():
             ids = [rid for rid, r in records.items() if rid in keep_ids and trajectory_of(r) == traj]
@@ -396,6 +415,7 @@ def cmd_assemble(a):
         'selection': 'every gradient_edge reference of authenticated_recurrence_context_view over every converted native-turn source (conversion /15 with --admit-host-results: host-computed child returns are producers, kind result/host_result marked in conversion receipts); records = whole trajectories of chains',
         'exclusions': 'cross-split edges; train edges sharing a source group with a held document of the held union; duplicate ids (first source wins), exact duplicate content, piece version conflicts, conversion/authentication failures, all registered in omissions.jsonl',
         'held_union': a.held_union, 'held_groups': len(held_groups), 'piece_conflicts': sorted(piece_conflicts),
+        'source_review_registry_sha256': review_sha,
         'totals': totals, 'by_source': by_source,
         'by_family': {f: {**fam[f], 'edge_kinds': fam_kinds[f], 'supervised_tokens_lfm25_shard_kept': tokens[f]} for f in sorted(fam)},
         'sources': {d.name: {**json.load(open(d / 'sharded.json')), 'shards_done': len(glob.glob(str(d / 'shard-*.stats.json')))}
@@ -408,6 +428,91 @@ def cmd_assemble(a):
         raise SystemExit(f'{out} exists; corpora are immutable')
     staged.rename(out)
     print(json.dumps({k: receipt[k] for k in ('id', 'totals')}, indent=1, default=dict))
+
+
+def cmd_review_filter(a):
+    """A new immutable cohort; preserve complete good chains and held bytes."""
+    import shutil
+    src, out = Path(a.source), Path(a.out)
+    if out.exists():
+        raise SystemExit(f'{out} exists; corpora are immutable')
+    staged = out.with_name(out.name + '.building')
+    staged.mkdir(parents=True, exist_ok=True)
+    chains = [json.loads(line) for line in read_lines(src / 'chains.jsonl')]
+    membership = {}
+    chain_index = {}
+    for i, chain in enumerate(chains):
+        key = (chain['source'], chain['trajectory'])
+        if key in chain_index:
+            raise ValueError(f'duplicate chain identity {key}')
+        chain_index[key] = i
+        for rid in chain['records']:
+            if rid in membership:
+                raise ValueError(f'duplicate chain membership {rid}')
+            membership[rid] = i
+    review_sha = registry_sha256()
+    groups = pending_unpinned_source_groups()
+    if registry_sha256() != review_sha:
+        raise ValueError('source-review registry changed during snapshot')
+    blocked, held_flags, seen = collections.defaultdict(set), [], set()
+    for line in read_lines(src / 'records.jsonl'):
+        row = json.loads(line); rid = row['id']
+        if rid not in membership or rid in seen:
+            raise ValueError(f'unknown or duplicate record {rid}')
+        seen.add(rid); i = membership[rid]
+        if row.get('split') != chains[i]['split']:
+            raise ValueError(f'record/chain split mismatch {rid}')
+        matched = set(row.get('source_groups') or []) & groups
+        if matched:
+            if row['split'] == 'train':
+                blocked[i].update(matched)
+            else:
+                held_flags.append({'id': rid, 'source_groups': sorted(matched)})
+    if seen != set(membership):
+        raise ValueError('chain records missing from source cohort')
+    kept_ids = {rid for rid, i in membership.items() if i not in blocked}
+    with open(src / 'records.jsonl', 'rb') as source, open(staged / 'records.jsonl', 'wb') as target:
+        for line in source:
+            if json.loads(line)['id'] in kept_ids:
+                target.write(line)
+    edge_counts = collections.Counter()
+    with open(src / 'edges.jsonl', 'rb') as source, open(staged / 'edges.jsonl', 'wb') as target:
+        for line in source:
+            edge = json.loads(line); i = chain_index[(edge['source'], edge['trajectory'])]
+            w, r = edge['writer_record_id'], edge['reader_record_id']
+            if membership.get(w) != i or membership.get(r) != i or edge['split'] != chains[i]['split'] or edge['writer_split'] != edge['split']:
+                raise ValueError(f'edge is not closed within its split/chain: {w} -> {r}')
+            edge_counts[i] += 1
+            if i not in blocked:
+                target.write(line)
+    if any(edge_counts[i] != chain['edges'] for i, chain in enumerate(chains)):
+        raise ValueError('source edge count differs from chain certificate')
+    with open(staged / 'chains.jsonl', 'w') as stream:
+        for i, chain in enumerate(chains):
+            if i not in blocked:
+                stream.write(json.dumps(chain) + '\n')
+    with open(staged / 'omissions.jsonl', 'w') as stream:
+        for i, matched in sorted(blocked.items()):
+            for rid in chains[i]['records']:
+                stream.write(json.dumps({'id': rid, 'trajectory': chains[i]['trajectory'], 'source': chains[i]['source'],
+                    'stage': 'source_review', 'reason': 'source_review_pending_chain', 'source_groups': sorted(matched)}) + '\n')
+    shutil.copyfile(src / 'pieces.jsonl', staged / 'pieces.jsonl')
+    kept = [chain for i, chain in enumerate(chains) if i not in blocked]
+    receipt = {'schema': 'natlang.neuralese-e2e-cohort/2', 'id': a.id,
+        'selection': 'Existing admitted cohort, whole train chains removed by exact pending unpinned source-review groups; held chains unchanged',
+        'source_review_registry_sha256': review_sha,
+        'source': {'path': str(src), 'receipt_sha256': sha256_file_hex(src / 'receipt.json')},
+        'totals': {'chains': len(kept), 'records': len(kept_ids), 'edges': sum(c['edges'] for c in kept),
+                   'omitted_chains': len(blocked), 'omitted_records': len(membership) - len(kept_ids)},
+        'by_split': {split: {'chains': sum(c['split'] == split for c in kept),
+                    'records': sum(len(c['records']) for c in kept if c['split'] == split),
+                    'edges': sum(c['edges'] for c in kept if c['split'] == split)} for split in ('train', 'test')},
+        'held_source_review_flags': held_flags,
+        'files': {name: {'sha256': sha256_file_hex(staged / name), 'bytes': (staged / name).stat().st_size}
+                  for name in ('records.jsonl', 'edges.jsonl', 'chains.jsonl', 'pieces.jsonl', 'omissions.jsonl')}}
+    (staged / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    staged.rename(out)
+    print(json.dumps({'id': a.id, 'totals': receipt['totals']}), flush=True)
 
 
 def cmd_slice(a):
@@ -575,6 +680,8 @@ def main():
     sl = sub.add_parser('slice'); sl.add_argument('--source', required=True, help='corpus id under data_nvme natlang-corpora, or a path'); sl.add_argument('--id', required=True)
     sl.add_argument('--train-records', type=int, default=12000); sl.add_argument('--test-records', type=int, default=1500)
     sl.add_argument('--seed', type=int, default=20261012)
+    review = sub.add_parser('review-filter'); review.add_argument('--source', required=True)
+    review.add_argument('--out', required=True); review.add_argument('--id', required=True)
     pa = sub.add_parser('partition'); pa.add_argument('--source', required=True); pa.add_argument('--id', required=True)
     pa.add_argument('--records', type=int, default=8000); pa.add_argument('--out-dir')
     r = sub.add_parser('redo-failed'); r.add_argument('name'); r.add_argument('--work', required=True)
@@ -582,7 +689,7 @@ def main():
     m.add_argument('--out-dir', help='parent directory of the corpus (default: data_nvme natlang-corpora); bulk corpora go to the HDD')
     m.add_argument('--held-union', default=resolve_str('repo', 'runs/natlang-target-union-20261011-r3'))
     a = ap.parse_args()
-    {'shard': cmd_shard, 'convert': cmd_convert, 'assemble': cmd_assemble, 'redo-failed': cmd_redo_failed, 'slice': cmd_slice, 'partition': cmd_partition}[a.cmd](a)
+    {'shard': cmd_shard, 'convert': cmd_convert, 'assemble': cmd_assemble, 'redo-failed': cmd_redo_failed, 'slice': cmd_slice, 'partition': cmd_partition, 'review-filter': cmd_review_filter}[a.cmd](a)
 
 
 if __name__ == '__main__':

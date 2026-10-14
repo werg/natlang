@@ -4,12 +4,12 @@ args:
   frontier: PerspectiveFrontier
 returns: PerspectiveFrontier
 ---
-1. Bind source to frontier.source and scoped to frontier.scoped, preserving those actual original
+1. If frontier.pendingEpisodes is empty, return frontier. Otherwise bind source to frontier.source and scoped to frontier.scoped, preserving those actual original
    objects. Remove the next original episode as episode and copy current participant views as currentViews. Apply its actual availability
    rows first, adding only returned turn/act/verified-fact IDs to the named participant's access sets.
-2. For each actual episode act and relevant named participant call judgeEndorsement(act, episode,
+2. Build this episode's posture work items from its actual new act IDs and the actual newly available act IDs in returned access rows. Resolve those IDs against scoped.acts, deduplicate each participant/act pair, and retain whether it is new authorship or encountered original content. For each item and relevant named participant call judgeEndorsement(act, episode,
    that view, source, scoped). Name the actual returned decision actualDecision, and preserve this
-   accessed actor view as beforeBeliefView before belief changes. Relevant means actual speaker or an access-bearing participant, not everybody.
+   accessed actor view as beforeBeliefView before belief changes. At an original utterance/private-note episode, relevant actors are its actual author and source-established present audience. At a later receipt episode, relevant actors are only the participants receiving that original content now. Use episode kind/time and original turn identity to distinguish these cases; the attributed original speaker does not act again at a later receipt. A quoted historical speaker is not the author of the forwarding utterance.
 3. From actualDecision.adoptsActIds retain only actual correction/retraction acts from scoped, then add
    those exact IDs to that actor's adoptedRevisionActIds after checking source
    access and actual scoped ID membership. Call updateBelief(actualDecision, act, episode, beforeBeliefView, source). Consume its add/defeat arrays. Apply
@@ -31,5 +31,7 @@ returns: PerspectiveFrontier
    only typed effects to that participant; copy source witness identity exactly without semantic re-judgment.
 8. Record EpisodeDelta containing the actual endorsement/belief/commitment/revision results and access.
    Append an immutable ViewSnapshot after all this episode's independent effects have been applied.
-9. Return frontier with remaining original episodes, updated views/history/deltas and unresolved child
-   reasons. Exact copy/set application is mechanism; the named child decisions own semantic changes.
+9. Bind next to the shorter typed frontier with remaining original episodes, actual updated views,
+   history/deltas and unresolved child reasons. Finish this invocation immediately with
+   eval({code:"return next;",finish:true}); the parent iterator owns the next episode. Exact copy/set
+   application is mechanism; the named child decisions own semantic changes.

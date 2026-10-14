@@ -6,6 +6,48 @@ from pathlib import Path
 import pytest
 
 
+def test_review_filter_preserves_good_and_held_graphs_and_omits_dependent_train_context(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    spec = importlib.util.spec_from_file_location('e2e_review_filter', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    monkeypatch.setattr(module, 'pending_unpinned_source_groups', lambda: {'musique:bad'})
+    monkeypatch.setattr(module, 'registry_sha256', lambda: 'a' * 64)
+    source, out = tmp_path / 'source', tmp_path / 'filtered'; source.mkdir()
+    chains, edges, raw = [], [], []
+    for name, split in [('bad', 'train'), ('good', 'train'), ('held', 'test')]:
+        ids = [f'{name}:{i}' for i in range(2)]
+        chains.append({'source': 'fixture', 'trajectory': name, 'family': 'f', 'split': split, 'records': ids, 'edges': 1})
+        edges.append({'source': 'fixture', 'trajectory': name, 'split': split, 'writer_split': split,
+                      'writer_record_id': ids[0], 'reader_record_id': ids[1]})
+        for i, rid in enumerate(ids):
+            row = {'id': rid, 'split': split, 'source_ref': {'trajectory_id': name},
+                   'source_groups': ['musique:bad'] if name != 'good' and i == 0 else ['musique:seed:shared'],
+                   'target': {'role': 'assistant', 'content': 'keep\u2028literal'}}
+            raw.append(json.dumps(row, ensure_ascii=False).encode() + b'\r\n')
+    (source / 'records.jsonl').write_bytes(b''.join(raw))
+    for name, rows in [('chains', chains), ('edges', edges)]:
+        (source / f'{name}.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    (source / 'pieces.jsonl').write_text('{"name":"p","text":"shared"}\n')
+    (source / 'receipt.json').write_text('{"id":"source"}\n')
+    module.cmd_review_filter(SimpleNamespace(source=str(source), out=str(out), id='filtered'))
+    assert (out / 'records.jsonl').read_bytes() == b''.join(raw[2:])
+    assert [json.loads(line)['trajectory'] for line in (out / 'edges.jsonl').open()] == ['good', 'held']
+    assert {json.loads(line)['id'] for line in (out / 'omissions.jsonl').open()} == {'bad:0', 'bad:1'}
+    receipt = json.loads((out / 'receipt.json').read_text())
+    assert receipt['totals']['records'] == 4 and receipt['by_split']['test']['records'] == 2
+    assert receipt['held_source_review_flags'] == [{'id': 'held:0', 'source_groups': ['musique:bad']}]
+    assert (out / 'pieces.jsonl').read_bytes() == (source / 'pieces.jsonl').read_bytes()
+    with pytest.raises(SystemExit, match='immutable'):
+        module.cmd_review_filter(SimpleNamespace(source=str(source), out=str(out), id='filtered'))
+    # A retained edge pointing outside its chain must never become a corpus.
+    edges[1]['reader_record_id'] = 'not-in-the-chain'
+    (source / 'edges.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in edges))
+    rejected = tmp_path / 'broken-filter'
+    with pytest.raises(ValueError, match='not closed'):
+        module.cmd_review_filter(SimpleNamespace(source=str(source), out=str(rejected), id='broken'))
+    assert not rejected.exists()
+
+
 @pytest.mark.parametrize('prior_failure', [False, True])
 def test_zero_edge_trajectory_has_row_level_omissions(tmp_path, prior_failure):
     path = Path(__file__).resolve().parents[1] / 'scripts/neuralese_data/e2e_mine.py'

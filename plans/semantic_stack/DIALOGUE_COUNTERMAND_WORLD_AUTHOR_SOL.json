@@ -1,31 +1,31 @@
 {
   "schema": "natlang.dialogue-connected-world-draft/1",
   "world_key": "sol-app-world:countermand-bridge-v1",
-  "status": "full_authored_canonical_type_pass_source_extension_and_comparator_pending",
+  "status": "full_authored_reference_controls_pass_current_variant_independent_review_pending",
   "documents": 11,
-  "clauses": 44,
-  "queries": 18,
+  "clauses": 45,
+  "queries": 21,
   "snapshot_exact_fixture_match": true,
   "source_files": {
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/DECOMPOSITION.md": "d9ffea71de5263b5162a870ebd5821d0cbd6edaec3b307f47f95d2d3d4c34732",
-    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/author-reference.py": "c4994b99d61cfb3f01b439ce1d98a3252836657c20a38fb8e899d1d7fd5144c6",
-    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/controls/format.md": "caa68513c9858104388c2d2ca79367494e1d6f0fc27e61d13037b300833af216",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/author-reference.py": "a6909a98f935bd4e71cede936b0a27a830090e3bbe578182aac5784f88e6289c",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/controls/format.md": "b6658e36ef1bb17e58e5bc5410a93752872459c0144640b5236e6260b5a8c050",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/controls/model.md": "c106bb55cc76ca99716bca211246983358b5cee15fb1a93867e56502b0b287f0",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/acknowledgments/versions.md": "2ee8be902f14d67808fb6562fac2447a0ff97213efbbd68c5109ba143b912a2e",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/promises/fresh.md": "29895e8ecc778962d28617f7b2d01ddd07460c792e400144684428aee3d8632a",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/promises/original.md": "e03fc39cfdd07e7193dbaee73712b471730fbca1f413ef413af399911feb779d",
-    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/reports/collection.md": "44adf9539aa0c57a142c87c0f3a96eae7c10c5ea8ef292a5abc2e5544bece56a",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/reports/collection.md": "92be861a7f0c91514124ded84025c2b87a7285bc28861b52a1c871bcc740bb72",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/reports/issuer-and-forward.md": "8a6329b4e7f2ef0489666273634ca9425d4f460fea7c91310a7e6778e87b1a56",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/revisions/adoptions.md": "8512f61eb14b9418341a4788636e6b08459045c531c36ba5839486a95c18d002",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/revisions/withdrawal.md": "3d14b3982af90112f35d4d56e430a7ea1aa89b4b088bd85bc3d6c0561ce95338",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/events/complete-log.md": "c9505d872ef4b516ede46a9a9dcca0f726cea0999be1428371fb8d5d81c6a81d",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/manifest.json": "f8631e8a533b18da2ebf0070e8db63daeb6c03b24f9ac9865e717a1c0a0b48e4",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/participants/channels.md": "35cdb959f7e569028817fe58da7396010c5e1da99662ce8d97776904777acd8d",
-    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/oracle.json": "067bf3c08c1c1ad7efd65493d9581b5ce62c389bb4ad756b51c4892411c9bd0c",
-    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/project.json": "f6b1e376e37d5459bae61404e15ed52bc6fbb1c22ef198e4095cfcb31a6a70db",
-    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/reference-report.json": "9ac25eb6c35571d1a6291cce38f4ecc46383d2ce303e79599c16298ae7f16b20",
-    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/request.json": "b7a8e1ce25ec18dd964314746b32c14d3bdfc1f5a14dbce2af4933052d55c9af",
-    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/snapshot.json": "eb76809b847ee386a5202d88c090b7c26c5d559899ffecab09342f01421699b5"
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/oracle.json": "5ad414b279fcd76b21d83696db326bbb97940ae07cbf079a357ab43c38b96314",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/project.json": "874ad1a2b07ac40e8ec6cabca573b9161caacee3e027b408598f4fe5aa25b5f7",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/reference-report.json": "444e4085d6404ee7e003ea521480629c91750d635c6b926e9133f2cf5a5e9efd",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/request.json": "2d1fa1e4bced00d436508d406583fcb496f7dd5614a1483da92a49fc7bb6a16d",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/snapshot.json": "754749a64261fd1894047e6e394df21541d7b5fbe8e01b94048fa43739ad6f32"
   },
   "semantic_joins": [
     "Performed withdrawal\u2192original promise lineage",
@@ -49,20 +49,17 @@
   },
   "canonical_type_replay": true,
   "canonical_preflight": {
-    "path": "/tmp/sol-countermand-canonical-draft-preflight-v2/package-report.json",
+    "path": "/tmp/sol-countermand-target-variant-v1/package-report.json",
+    "source_sha256": "e6f9a6c76a211a773972d8b9e9d00a11b767f2ec4840cdfa73650ca7b93be5f5",
     "reference_ok": true,
-    "scope": "Typed returned source witness only; not actual callable execution",
-    "source_sha256": "a46401ba50f61b7b5df1750d79a89cc0407c0c1808c4e19469d657bcde1322d5"
+    "scope": "Private full typed source witness only; not actual callable execution"
   },
   "certificate_composition": {
     "original_turns": 14,
     "scoped_acts": 15,
-    "episodes": 22,
-    "query_answers": 18
+    "episodes": 23,
+    "query_answers": 21
   },
-  "open_exact_findings": [
-    "First-world Q13 checker branch must be conditional on declared per-query constraints",
-    "Newly retracted commitment status must come from actual RevisionDelta; a replacement can currently bypass that stage"
-  ],
-  "ready_scope": "Held; no actual NL application execution, independent source review or comparator qualification"
+  "open_exact_findings": [],
+  "ready_scope": "Held current variant; authored source/type controls only, no actual NL execution or independent review"
 }

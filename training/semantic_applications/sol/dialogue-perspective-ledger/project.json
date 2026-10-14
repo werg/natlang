@@ -68,7 +68,8 @@
     "analyzeConversation.nl",
     "types.ts",
     "natlang.json",
-    "tsconfig.json"
+    "tsconfig.json",
+    "analyzeConversation/evolveViews/advanceEpisode/resolveRetraction/selectRevisionTarget.nl"
   ],
   "typed_call_graph": {
     "nodes": [
@@ -410,6 +411,18 @@
         "returns": "PerspectiveReport",
         "kind": "directory-reducer",
         "owned_delta": "Derive time-scoped beliefs and commitments without leaking global truth into private views."
+      },
+      {
+        "path": "analyzeConversation/evolveViews/advanceEpisode/resolveRetraction/selectRevisionTarget.nl",
+        "args": {
+          "act": "ActReading",
+          "decision": "EndorsementDecision",
+          "episode": "Episode",
+          "source": "DialogueSource",
+          "scoped": "ScopedConversation"
+        },
+        "returns": "RevisionSelection",
+        "owned_delta": "Actual adopting/performed revision\u2192original target selection with communication scope; consumed by issuer/audience effects and retained verbatim."
       }
     ],
     "edges": [
@@ -552,6 +565,10 @@
         "caller": "analyzeConversation.nl",
         "callee": "analyzeConversation/scopeTurns.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
+      },
+      {
+        "caller": "analyzeConversation/evolveViews/advanceEpisode/resolveRetraction.nl",
+        "callee": "analyzeConversation/evolveViews/advanceEpisode/resolveRetraction/selectRevisionTarget.nl"
       }
     ]
   },
@@ -595,6 +612,11 @@
       "site": "analyzeConversation/scopeTurns.nl",
       "result_type": "LedgerFinding",
       "consumed_by": "ScopedConversation.scopeFindings and final report findings distinguish valid perspective differences from inconsistent joins."
+    },
+    {
+      "site": "analyzeConversation/evolveViews/advanceEpisode/resolveRetraction/selectRevisionTarget.nl",
+      "result_type": "RevisionSelection",
+      "consumed_by": "Actual targetActIds/targetPropositionIds/communication govern original owner/adoption joins; raw selection retained in RevisionDelta.selection."
     }
   ],
   "iteration_frontiers": [
@@ -616,8 +638,8 @@
     "clauses": 46,
     "participants": 5,
     "queries": 16,
-    "nl_functions": 29,
-    "numbered_steps": 207
+    "nl_functions": 30,
+    "numbered_steps": 215
   },
   "provenance": {
     "author": "semantic_slate_sol",
@@ -628,20 +650,20 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": true,
+    "independent_oracle_review": false,
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false,
-    "independent_source_review": true
+    "independent_source_review": false
   },
-  "reference_scope": "Full authored typed source certificate passes native declaration and package replay; no actual NL application trajectory or complete semantic entailment oracle.",
-  "model_facing_debt": "Current29NL/206step source requires independent semantic/full certificate/checker review and approximately48 live samples before adoption.",
+  "reference_scope": "One full authored typed witness passes source/reference replay and exact controls; independent current-variant source/checker review pending; no NL execution credit.",
+  "model_facing_debt": "0/48 current variant; actual selected child identity, original owner/adopter joins, one-episode progress and whole-task outcome remain unmeasured.",
   "source_precision": "Actual per-proposition claims and focused speech units; attachment fact-ID preservation; private intention distinct from retraction; audience adoption/issuer effect ownership; terminal retraction preserved.",
   "reference_path": "training/semantic_applications/sol/dialogue-perspective-ledger/portico-packet/reference-report.json",
   "reference_role": "One private authored full typed source certificate; not an NL execution or complete semantic oracle.",
   "external_verifier_path": "training/semantic_applications/sol/dialogue-perspective-ledger/verify-result.mjs",
-  "generation_ready": true,
-  "readiness_scope": "First-world pinned diagnostic preparation; actual live and training admission false.",
+  "generation_ready": false,
+  "readiness_scope": "Current30NL source variant held for independent source/checker review; historical first-world527daf5a package remains pinned separately. No live qualification or training admission.",
   "independent_reviews": [
     {
       "path": "plans/semantic_stack/DIALOGUE_FULL_REVIEW_ASTRA.json",
@@ -651,8 +673,28 @@
     }
   ],
   "source_review_binding": {
-    "reviewed": true,
-    "scope": "First-world source/checker independent review b7a5a21d; diagnostic preparation only"
+    "reviewed": false,
+    "scope": "Current30NL variant pending independent source/checker review; first-world29NL baseline reviewed separately."
   },
-  "training_admission": false
+  "training_admission": false,
+  "composition": {
+    "nl_files": 30,
+    "nl_total_lines": 802,
+    "numbered_steps": 215,
+    "type_aliases": 60,
+    "visible_crisp_policy_lines": 0
+  },
+  "source_variant": {
+    "id": "countermand-target-lineage-v2",
+    "meaning": "Actual typed revision target selection and cross-view owner/adopter effect; one-episode finished state; first-world query meanings unchanged.",
+    "status": "author_source_checker_checked_independent_review_pending"
+  },
+  "fixture_document_count": 11,
+  "fixture_clause_count": 46,
+  "canonical_preflight": {
+    "path": "/tmp/sol-dialogue-target-variant-v1/package-report.json",
+    "source_sha256": "338eb9da4085ebd4c53618aba76fee1f4368eeca501da70407855e845a2a2810",
+    "reference_ok": true,
+    "scope": "Private full typed source witness only; not actual callable execution"
+  }
 }

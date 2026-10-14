@@ -22,6 +22,6 @@ returns: EpisodePlan
 6. Keep unorderable source units unresolved with their original IDs. Do not silently date an unknown
    quote at the forward event or manufacture a receipt based on filename or ID spelling.
 7. Require every actual scoped act to join its original event or attributed original quotation context.
-   A quoted historical act is not replayed as a new promise at every forwarding episode.
+   Episode.turnIds identify actual new utterance/private-note events at that moment. Later received content retains its original act identity in actual availability rows, without a new authored turn or replayed original speaker. A quoted historical act is not replayed as a new promise at every forwarding episode.
 8. Return the actual finite EpisodePlan. It preserves original utterances and delayed receipts as
    independently witnessed units, ready for state reduction without new dynamically invented events.
