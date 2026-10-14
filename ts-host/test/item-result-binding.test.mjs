@@ -71,3 +71,32 @@ test('effect finding must be the actual child value for the newly completed enti
     status: 'increase' };
   assert.equal(checkItemResultBinding(effectSpec, bypass).status, 'fail');
 });
+
+test('joined seed coverage requires actual judgments for prior and current candidates', () => {
+  const seedSpec = { schema: spec.schema, sites: [], joined_seed_coverage: {
+    schema: 'semantic-joined-seed-coverage/1', owner_source_path: 'solve/auditEffectGraph.nl',
+    candidate_array_pointers: ['/context/priorCompletedState/interactionAssertions', '/prior/interactionAssertions'],
+    candidate_roles: ['perturbation', 'unresolved'], child_return_type: 'SeedDecision',
+    candidate_source_id_pointer: '/sourceId', candidate_role_pointer: '/sourceRole',
+    child_input_source_id_pointer: '/assertion/sourceId', child_result_source_id_pointer: '/sourceId',
+  } };
+  const joinedInput = { context: { priorCompletedState: { interactionAssertions: [
+    { sourceId: 'r01', sourceRole: 'perturbation' },
+  ] } }, prior: { interactionAssertions: [
+    { sourceId: 'r07', sourceRole: 'interaction' }, { sourceId: 'r08', sourceRole: 'unresolved' },
+  ] } };
+  const seedChild = (sourceId, callId) => ({ invocation_id: callId, parent_invocation_id: 'audit',
+    completion_status: 'done', inline_instruction_site: { returns: { natlang: 'SeedDecision' } },
+    host_inputs: [inputCapture('input', { assertion: { sourceId } })],
+    host_result: outputCapture({ sourceId, kind: 'interaction' }, 'eval', 'SeedDecision') });
+  const rows = [{ invocation_id: 'audit', completion_status: 'done',
+    host_inputs: [inputCapture('input', joinedInput, seedSpec.joined_seed_coverage.owner_source_path)],
+    host_result: outputCapture({}, seedSpec.joined_seed_coverage.owner_source_path, 'FinalSemanticState') },
+  seedChild('r01', 'seed-prior'), seedChild('r08', 'seed-current')];
+  assert.equal(checkItemResultBinding(seedSpec, rows).status, 'pass');
+  assert.equal(checkItemResultBinding(seedSpec, [rows[0], rows[2]]).status, 'fail');
+  assert.equal(checkItemResultBinding(seedSpec, [rows[0], rows[1], seedChild('r07', 'wrong-role')]).status, 'fail');
+  const incomplete = structuredClone(rows);
+  incomplete[1].host_inputs[0].complete = false;
+  assert.equal(checkItemResultBinding(seedSpec, incomplete).status, 'unverified_hold');
+});

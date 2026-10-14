@@ -16,7 +16,12 @@ type BindingSite = { owner_source_path: string; inline_child_site: { return_type
   witness_projection?: { schema: 'semantic-source-owner-witness-projection/1'; result_pointer: string;
     child_result_pointer: string; owner_witnesses_from: { document: 'scoped_child_input'; pointer: string };
     identity_fields: string[]; allowed_modes: string[] } | null };
-export type ItemResultBindingSpec = { schema: 'semantic-actual-child-result-binding/1'; sites: BindingSite[] };
+type JoinedSeedCoverage = { schema: 'semantic-joined-seed-coverage/1'; owner_source_path: string;
+  candidate_array_pointers: string[]; candidate_roles: string[]; child_return_type: string;
+  candidate_source_id_pointer: string; candidate_role_pointer: string;
+  child_input_source_id_pointer: string; child_result_source_id_pointer: string };
+export type ItemResultBindingSpec = { schema: 'semantic-actual-child-result-binding/1'; sites: BindingSite[];
+  joined_seed_coverage?: JoinedSeedCoverage };
 export type ItemResultBindingVerdict = { status: 'pass' | 'fail' | 'unverified_hold';
   site_results: { source: string; checked_steps: number; status: 'pass' | 'fail' | 'unverified_hold'; issues: string[] }[];
   training_admission: false };
@@ -155,6 +160,60 @@ export function checkItemResultBinding(spec: ItemResultBindingSpec, ledger: read
     const status: ItemResultBindingVerdict['status'] = issues.length ? 'fail' : missing || !checked_steps ? 'unverified_hold' : 'pass';
     return { source: site.owner_source_path, checked_steps, status, issues };
   });
+  if (spec.joined_seed_coverage) {
+    const seed = spec.joined_seed_coverage;
+    const issues: string[] = [];
+    let checked_steps = 0;
+    let missing = false;
+    for (const parent of ledger.filter(row => sourceOf(row) === seed.owner_source_path)) {
+      const id = parent.invocation_id;
+      if (typeof id !== 'string' || parent.completion_status !== 'done') { missing = true; continue; }
+      const input = captured(parent, 'input');
+      if (input.status !== 'ok') { missing = true; continue; }
+      const candidates: string[] = [];
+      let validArrays = true;
+      for (const pointer of seed.candidate_array_pointers) {
+        const array = at(input.value, pointer);
+        if (!array.found || !Array.isArray(array.value)) { validArrays = false; break; }
+        for (const assertion of array.value) {
+          const role = at(assertion, seed.candidate_role_pointer);
+          if (!role.found || typeof role.value !== 'string') { validArrays = false; break; }
+          if (!seed.candidate_roles.includes(role.value)) continue;
+          const sourceId = at(assertion, seed.candidate_source_id_pointer);
+          if (!sourceId.found || typeof sourceId.value !== 'string' || !sourceId.value) { validArrays = false; break; }
+          candidates.push(sourceId.value);
+        }
+      }
+      if (!validArrays) { issues.push(`${id}: joined typed assertions missing or malformed`); continue; }
+      if (new Set(candidates).size !== candidates.length) {
+        issues.push(`${id}: joined seed candidates repeat a source ID`); continue;
+      }
+      const children = ledger.filter(row => row.parent_invocation_id === id &&
+        returnTypeOf(row).includes(seed.child_return_type));
+      const judged: string[] = [];
+      let parentMissing = false;
+      for (const child of children) {
+        if (child.completion_status !== 'done') { parentMissing = true; continue; }
+        const childInput = captured(child, 'input');
+        const childResult = result(child);
+        if (childInput.status !== 'ok' || childResult.status !== 'ok') { parentMissing = true; continue; }
+        const inputId = at(childInput.value, seed.child_input_source_id_pointer);
+        const outputId = at(childResult.value, seed.child_result_source_id_pointer);
+        if (!inputId.found || !outputId.found || typeof inputId.value !== 'string' ||
+            inputId.value !== outputId.value) issues.push(`${id}: SeedDecision changed original source ID`);
+        else judged.push(inputId.value);
+      }
+      if (!parentMissing && (judged.length !== candidates.length ||
+          judged.some(sourceId => !candidates.includes(sourceId)) ||
+          new Set(judged).size !== judged.length))
+        issues.push(`${id}: SeedDecision coverage differs from joined prior/current candidates`);
+      if (parentMissing) missing = true;
+      checked_steps++;
+    }
+    const status: ItemResultBindingVerdict['status'] = issues.length ? 'fail' :
+      missing || !checked_steps ? 'unverified_hold' : 'pass';
+    site_results.push({ source: seed.owner_source_path, checked_steps, status, issues });
+  }
   const status = site_results.some(item => item.status === 'fail') ? 'fail' :
     site_results.some(item => item.status === 'unverified_hold') ? 'unverified_hold' : 'pass';
   return { status, site_results, training_admission: false };

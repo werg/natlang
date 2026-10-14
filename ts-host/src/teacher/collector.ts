@@ -1493,6 +1493,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const executionGraph = invocationTraces.flat().filter(event => typeof event.node === 'string' && Array.isArray(event.inputs));
     const bindingSpec = (record.curriculum as { item_result_binding?: ItemResultBindingSpec } | undefined)?.item_result_binding;
     const bindingSources = new Set(bindingSpec?.sites.map(site => site.owner_source_path) ?? []);
+    const seedCoverage = bindingSpec?.joined_seed_coverage;
     const possibleBindingStore = bindingSpec ? runtime.frame?.task.runtime.callStore() as Partial<CaptureSource> | undefined : undefined;
     const bindingStore: CaptureSource | undefined = possibleBindingStore &&
       typeof possibleBindingStore.call === 'function' && typeof possibleBindingStore.value === 'function' ?
@@ -1510,8 +1511,11 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
         (inline as { returns?: { natlang?: unknown; text?: unknown } }).returns : undefined;
       const scopedChild = bindingSpec?.sites.some(site =>
         String(inlineReturns?.natlang ?? inlineReturns?.text ?? output?.result_type ?? '')
-          .includes(site.inline_child_site.return_type));
-      const inputNames = bindingSources.has(String(source)) ? ['state'] :
+          .includes(site.inline_child_site.return_type)) ||
+        (seedCoverage && String(inlineReturns?.natlang ?? inlineReturns?.text ?? output?.result_type ?? '')
+          .includes(seedCoverage.child_return_type));
+      const inputNames = seedCoverage?.owner_source_path === source ? ['input'] :
+        bindingSources.has(String(source)) ? ['state'] :
         scopedChild ? ['input'] : [];
       let hostInputs: ReturnType<typeof hostCaptures>;
       if (inputNames.length && bindingStore) {

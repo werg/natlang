@@ -777,6 +777,13 @@ function render(entry, provider) {
           variant.item_result_binding.sites.length !== 2 ||
           variant.item_result_binding.sites.some(site => !Object.hasOwn(files, site.owner_source_path)))
         throw Error(`${id}: item-result binding site is not an emitted named callable`);
+      const seedCoverage = variant.item_result_binding.joined_seed_coverage;
+      if (seedCoverage && (seedCoverage.schema !== 'semantic-joined-seed-coverage/1' ||
+          !Object.hasOwn(files, seedCoverage.owner_source_path) ||
+          !Array.isArray(seedCoverage.candidate_array_pointers) ||
+          seedCoverage.candidate_array_pointers.length !== 2 ||
+          seedCoverage.child_return_type !== 'SeedDecision'))
+        throw Error(`${id}: joined-seed coverage does not name the emitted audit callable and typed input`);
       caseRow.curriculum.item_result_binding = variant.item_result_binding;
     }
     caseRow.semantics.oracle = { level: 'normalized', normalization: 'semantic-structured',
