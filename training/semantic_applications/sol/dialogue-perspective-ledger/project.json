@@ -414,143 +414,143 @@
     ],
     "edges": [
       {
-        "from": "analyzeConversation/answerQuestions/joinProof.nl",
-        "to": "analyzeConversation/answerQuestions/joinProof/challengePerspective.nl",
+        "caller": "analyzeConversation/answerQuestions/joinProof.nl",
+        "callee": "analyzeConversation/answerQuestions/joinProof/challengePerspective.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/answerQuestions.nl",
-        "to": "analyzeConversation/answerQuestions/joinProof.nl",
+        "caller": "analyzeConversation/answerQuestions.nl",
+        "callee": "analyzeConversation/answerQuestions/joinProof.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/answerQuestions.nl",
-        "to": "analyzeConversation/answerQuestions/resolveQueryFocus.nl",
+        "caller": "analyzeConversation/answerQuestions.nl",
+        "callee": "analyzeConversation/answerQuestions/resolveQueryFocus.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation.nl",
-        "to": "analyzeConversation/answerQuestions.nl",
+        "caller": "analyzeConversation.nl",
+        "callee": "analyzeConversation/answerQuestions.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/assembleEpisodes.nl",
-        "to": "analyzeConversation/assembleEpisodes/joinAvailability.nl",
+        "caller": "analyzeConversation/assembleEpisodes.nl",
+        "callee": "analyzeConversation/assembleEpisodes/joinAvailability.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation.nl",
-        "to": "analyzeConversation/assembleEpisodes.nl",
+        "caller": "analyzeConversation.nl",
+        "callee": "analyzeConversation/assembleEpisodes.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/auditReport.nl",
-        "to": "analyzeConversation/auditReport/checkNoKnowledgeLeak.nl",
+        "caller": "analyzeConversation/auditReport.nl",
+        "callee": "analyzeConversation/auditReport/checkNoKnowledgeLeak.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/auditReport.nl",
-        "to": "analyzeConversation/auditReport/replayAnswer.nl",
+        "caller": "analyzeConversation/auditReport.nl",
+        "callee": "analyzeConversation/auditReport/replayAnswer.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation.nl",
-        "to": "analyzeConversation/auditReport.nl",
+        "caller": "analyzeConversation.nl",
+        "callee": "analyzeConversation/auditReport.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/evolveViews/advanceEpisode.nl",
-        "to": "analyzeConversation/evolveViews/advanceEpisode/judgeEndorsement.nl",
+        "caller": "analyzeConversation/evolveViews/advanceEpisode.nl",
+        "callee": "analyzeConversation/evolveViews/advanceEpisode/judgeEndorsement.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/evolveViews/advanceEpisode.nl",
-        "to": "analyzeConversation/evolveViews/advanceEpisode/resolveRetraction.nl",
+        "caller": "analyzeConversation/evolveViews/advanceEpisode.nl",
+        "callee": "analyzeConversation/evolveViews/advanceEpisode/resolveRetraction.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/evolveViews/advanceEpisode.nl",
-        "to": "analyzeConversation/evolveViews/advanceEpisode/updateBelief.nl",
+        "caller": "analyzeConversation/evolveViews/advanceEpisode.nl",
+        "callee": "analyzeConversation/evolveViews/advanceEpisode/updateBelief.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/evolveViews/advanceEpisode/updateCommitment.nl",
-        "to": "analyzeConversation/evolveViews/advanceEpisode/updateCommitment/judgeCondition.nl",
+        "caller": "analyzeConversation/evolveViews/advanceEpisode/updateCommitment.nl",
+        "callee": "analyzeConversation/evolveViews/advanceEpisode/updateCommitment/judgeCondition.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/evolveViews/advanceEpisode.nl",
-        "to": "analyzeConversation/evolveViews/advanceEpisode/updateCommitment.nl",
+        "caller": "analyzeConversation/evolveViews/advanceEpisode.nl",
+        "callee": "analyzeConversation/evolveViews/advanceEpisode/updateCommitment.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/evolveViews.nl",
-        "to": "analyzeConversation/evolveViews/advanceEpisode.nl",
+        "caller": "analyzeConversation/evolveViews.nl",
+        "callee": "analyzeConversation/evolveViews/advanceEpisode.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation.nl",
-        "to": "analyzeConversation/evolveViews.nl",
+        "caller": "analyzeConversation.nl",
+        "callee": "analyzeConversation/evolveViews.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/intake.nl",
-        "to": "analyzeConversation/intake/readChronology.nl",
+        "caller": "analyzeConversation/intake.nl",
+        "callee": "analyzeConversation/intake/readChronology.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/intake.nl",
-        "to": "analyzeConversation/intake/readParticipation.nl",
+        "caller": "analyzeConversation/intake.nl",
+        "callee": "analyzeConversation/intake/readParticipation.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/intake.nl",
-        "to": "analyzeConversation/intake/readReceipts.nl",
+        "caller": "analyzeConversation/intake.nl",
+        "callee": "analyzeConversation/intake/readReceipts.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation.nl",
-        "to": "analyzeConversation/intake.nl",
+        "caller": "analyzeConversation.nl",
+        "callee": "analyzeConversation/intake.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/scopeTurns/classifySpeechActs.nl",
-        "to": "analyzeConversation/scopeTurns/classifySpeechActs/judgeIllocution.nl",
+        "caller": "analyzeConversation/scopeTurns/classifySpeechActs.nl",
+        "callee": "analyzeConversation/scopeTurns/classifySpeechActs/judgeIllocution.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/scopeTurns.nl",
-        "to": "analyzeConversation/scopeTurns/classifySpeechActs.nl",
+        "caller": "analyzeConversation/scopeTurns.nl",
+        "callee": "analyzeConversation/scopeTurns/classifySpeechActs.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan.nl",
-        "to": "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan/judgeQuotationFrame.nl",
+        "caller": "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan.nl",
+        "callee": "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan/judgeQuotationFrame.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/scopeTurns/partitionQuotation.nl",
-        "to": "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan.nl",
+        "caller": "analyzeConversation/scopeTurns/partitionQuotation.nl",
+        "callee": "analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/scopeTurns.nl",
-        "to": "analyzeConversation/scopeTurns/partitionQuotation.nl",
+        "caller": "analyzeConversation/scopeTurns.nl",
+        "callee": "analyzeConversation/scopeTurns/partitionQuotation.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/scopeTurns/resolveReferences.nl",
-        "to": "analyzeConversation/scopeTurns/resolveReferences/judgeDeixis.nl",
+        "caller": "analyzeConversation/scopeTurns/resolveReferences.nl",
+        "callee": "analyzeConversation/scopeTurns/resolveReferences/judgeDeixis.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation/scopeTurns.nl",
-        "to": "analyzeConversation/scopeTurns/resolveReferences.nl",
+        "caller": "analyzeConversation/scopeTurns.nl",
+        "callee": "analyzeConversation/scopeTurns/resolveReferences.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       },
       {
-        "from": "analyzeConversation.nl",
-        "to": "analyzeConversation/scopeTurns.nl",
+        "caller": "analyzeConversation.nl",
+        "callee": "analyzeConversation/scopeTurns.nl",
         "reason": "Declared callable folder ownership; actual typed contribution is described in source."
       }
     ]
@@ -617,7 +617,7 @@
     "participants": 5,
     "queries": 16,
     "nl_functions": 29,
-    "numbered_steps": 206
+    "numbered_steps": 207
   },
   "provenance": {
     "author": "semantic_slate_sol",
@@ -627,13 +627,18 @@
   "readiness": {
     "source_loader_checked": true,
     "typed_declarations_checked": true,
-    "typed_reference_checked": false,
+    "typed_reference_checked": true,
     "independent_oracle_review": false,
-    "exact_result_replay": false,
+    "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
   },
-  "reference_scope": "Full typed canonical report pending. Projection oracle is not a complete result and grants no runtime replay credit.",
-  "model_facing_debt": "Initial29NL source requires independent review, full typed witness/checker and approximately48 live samples before adoption.",
-  "source_precision": "Actual per-proposition claims and focused speech units; attachment fact-ID preservation; private intention distinct from retraction; audience adoption/issuer effect ownership; terminal retraction preserved."
+  "reference_scope": "Full authored typed source certificate passes native declaration and package replay; no actual NL application trajectory or complete semantic entailment oracle.",
+  "model_facing_debt": "Current29NL/206step source requires independent semantic/full certificate/checker review and approximately48 live samples before adoption.",
+  "source_precision": "Actual per-proposition claims and focused speech units; attachment fact-ID preservation; private intention distinct from retraction; audience adoption/issuer effect ownership; terminal retraction preserved.",
+  "reference_path": "training/semantic_applications/sol/dialogue-perspective-ledger/portico-packet/reference-report.json",
+  "reference_role": "One private authored full typed source certificate; not an NL execution or complete semantic oracle.",
+  "external_verifier_path": "training/semantic_applications/sol/dialogue-perspective-ledger/verify-result.mjs",
+  "generation_ready": false,
+  "readiness_scope": "Source/full certificate/exact comparator awaiting independent review. No live qualification or training admission."
 }
