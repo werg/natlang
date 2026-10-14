@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-held-shapes-closed-backlog-v5-native-turns-20261014-v1",
+  "owner": "pop",
+  "path": "runs/luna-held-shapes-closed-backlog-v5-native-turns-20261014-v1",
+  "files": [
+    {
+      "path": "accepted-parents.native.jsonl",
+      "bytes": 1766740817,
+      "sha256": "27c3e1b66b6b3d61e981ea8cd1a32b6d439371db17abb08cb23bcd7d2a9e9192",
+      "lines": 3029
+    },
+    {
+      "path": "admission-review.json",
+      "bytes": 8442,
+      "sha256": "743805b02f4b19650c0ef95d700f47e89eb68762511b15518eb74390f58404a2"
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 1894508227,
+      "sha256": "6ab5c37b559aa00c461ba253d2c241810950fa1e93dfb4fd0db27aaa94fa3cd2",
+      "lines": 23651
+    },
+    {
+      "path": "parent-selection-review.json",
+      "bytes": 62875,
+      "sha256": "4f2309e69ac7bf1f15cd9716334f9ef956744cde9b77a75850da234384021929"
+    }
+  ],
+  "bytes": 3661320361
+}
