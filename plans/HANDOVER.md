@@ -1,5 +1,34 @@
 # Continuation guide — updated 2026-10-14
 
+## 19:24 CEST: protected Pop QAD warmup qualified
+
+The clean Pop QAD run `natlang-pop-qad-r8-clean-warmup-v1.service` completed
+410 updates on the R8 full prefix and exited successfully. Its stage report
+and `direct-certificate.json` under
+`/home/werg/natlang-artifacts/neuralese-direct-lfm-qad-r8-clean-warmup-20261014-v1/`
+say `qualified: true`: step-zero identity passed, held CE fell from 5.17465
+to 3.36524, the response-KL guard warned but did not stop, and the final
+behaviour gate scored 0.667 above its declared floor. Preserve the 1.15 GB
+`direct_warmup/checkpoint.pt` with its optimizer, `identity-check.json`,
+`monitor-reference.pt`, and pinned clean heads. The best checkpoint is an
+inode-linked duplicate of the same exact state. Next direct phase uses the
+existing `continue_from` / `continue_identity` /
+`continue_monitor_reference` inputs after DGX publishes and qualifies R8
+program-header and whole-trajectory artifacts. DGX's old R2/R3 audit also
+found current protected-held overlaps; those old parents are held.
+
+Luna s52059 closed 118/118, 107 accepted, 11 rejected; later s52060–s52062
+continue through low-priority workers and the replenish timer. Pop found and
+removed an admission override that accepted unreviewed span answers on token
+F1 overlap alone; the code/test and detailed rejection review in
+`plans/DATA_QUALITY_REVIEW_20261014.md` passed the Pop full gate under
+`natlang-pop-full-main-span-admission-v1.service` (exit 0) and are ready for
+commit. New `dataset_workbench` rejections expose source-label/semantic-question
+disagreements; treat them as review cases, not DPO negatives. Pop removed
+three explicitly discarded temporary runs (~640 MB) and hash-deduplicated
+2,503 byte-identical result copies from closed provider campaigns, preserving
+both paths and reclaiming 5.78 GB; `/srv/storage` then had 8.5 GB free.
+
 ## 18:42 CEST: clean R8 warmup handoff and Pop monitoring
 
 R7 training is withdrawn: the R7 union lost protected MuSiQue group exclusions, so
