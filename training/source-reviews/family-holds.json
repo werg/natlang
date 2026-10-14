@@ -18,6 +18,18 @@
       "family": "cross_source_folders",
       "primarySourceId": null,
       "reason": "This family's broad \"unexpected extra charges\" predicate includes fee complaints that its banking category whitelist marks negative. Preserve original gold and hold the entire contract until a reviewed replacement establishes agreement between visible instructions and source labels."
+    },
+    {
+      "dataset": "musique",
+      "family": "musique_hops",
+      "primarySourceId": null,
+      "reason": "The hop adapter selects a support sentence because it mentions the hop answer, without checking that the sentence establishes the requested subject and relation. A random fresh eight-case review found wrong film-versus-song, location, continent and residence links. Hold generated cases and rendered training members until per-hop semantic review or a reviewed replacement; preserve source gold and do not make preference negatives."
+    },
+    {
+      "dataset": "musique",
+      "family": "musique_answer_hops",
+      "primarySourceId": null,
+      "reason": "The answer-phrase variant shares musique_hops' relation-unverified source decomposition. Hold generated cases and rendered training members until per-hop semantic review or a reviewed replacement; do not make preference negatives."
     }
   ]
 }
