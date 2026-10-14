@@ -83,6 +83,26 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def pending_unpinned_source_groups(registry: Path = REGISTRY) -> set[str]:
+    """Dataset:item identities whose pending review applies across source revisions.
+
+    Rendered training rows retain these original identities in ``source_groups``.
+    A SHA/revision-pinned review needs exact source provenance and must not be
+    broadened to every revision of the same item by this group-only matcher.
+    """
+    groups = set()
+    for number, review in enumerate(read_jsonl(registry / "holds.jsonl"), 1):
+        if review.get("status") not in ("pending", "resolved"):
+            raise ReviewError(f"holds.jsonl:{number}: invalid status")
+        if review["status"] != "pending" or review.get("sourceRevision") or review.get("sourceSnapshotSha256"):
+            continue
+        dataset, item = review.get("dataset"), review.get("id")
+        if not isinstance(dataset, str) or not dataset or not isinstance(item, str) or not item:
+            raise ReviewError(f"holds.jsonl:{number}: missing dataset or id")
+        groups.add(f"{dataset}:{item}")
+    return groups
+
+
 # ---------------------------------------------------------------------------------------------------------- manifests
 
 def registry_sha256(registry: Path = REGISTRY) -> str:

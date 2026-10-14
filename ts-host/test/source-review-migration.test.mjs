@@ -9,9 +9,10 @@ import { LEGACY_RECORDS, legacyAnliReviewText, legacyPendingSourceReview, legacy
 const sha = text => createHash('sha256').update(text).digest('hex');
 const KEYS = ['dataset', 'id', 'aliases', 'text', 'annotatedLabel', 'status', 'reason', 'sourceRevision', 'sourceSnapshotSha256', 'sourcePrompt'];
 const canonical = review => Object.fromEntries(KEYS.filter(key => review[key] !== undefined).map(key => [key, review[key]]));
+const legacyPrefix = () => SOURCE_REVIEWS.slice(0, LEGACY_RECORDS.length);
 
 test('the registry has the fingerprints of the pre-migration literals', () => {
-  const records = SOURCE_REVIEWS.map(canonical);
+  const records = legacyPrefix().map(canonical);
   assert.equal(records.length, 184);
   assert.equal(sha(JSON.stringify(records)), '006941286fc79f951bfde45d87edcbd490b88549bd77215172fca9b31743f4e2');
   const identities = records.map(review => [review.dataset, review.id, ...review.aliases].join('\0'));
@@ -21,8 +22,8 @@ test('the registry has the fingerprints of the pre-migration literals', () => {
 });
 
 test('the registry equals the frozen export of the old module, in order and byte for byte', () => {
-  assert.deepEqual(SOURCE_REVIEWS.map(canonical), LEGACY_RECORDS);
-  SOURCE_REVIEWS.forEach((review, index) => {
+  assert.deepEqual(legacyPrefix().map(canonical), LEGACY_RECORDS);
+  legacyPrefix().forEach((review, index) => {
     const old = LEGACY_RECORDS[index];
     for (const identity of [[review.id, old.id], ...review.aliases.map((alias, at) => [alias, old.aliases[at]])])
       assert.ok(Buffer.from(identity[0], 'utf8').equals(Buffer.from(identity[1], 'utf8')), `identity bytes of entry ${index}`);
@@ -31,6 +32,15 @@ test('the registry equals the frozen export of the old module, in order and byte
   assert.deepEqual(SOURCE_CONTRACT_REVIEWS.map(({ dataset, family, primarySourceId }) => ({ dataset, family, primarySourceId })), [
     { dataset: 'hotpotqa', family: 'knowledge_evidence', primarySourceId: '9e84e5af371d9280c1b4935d10dc8e02c230618c2d168ee445999dc499f597b4' },
     { dataset: 'hotpotqa', family: 'knowledge_evidence', primarySourceId: 'c5b955678123f51525b7e3c83d317961b1c2093262aa317b9ceb60a3a26ccc42' }]);
+});
+
+test('post-migration holds remain active without changing the frozen legacy comparison', () => {
+  assert.ok(SOURCE_REVIEWS.length >= LEGACY_RECORDS.length);
+  for (const review of SOURCE_REVIEWS.slice(LEGACY_RECORDS.length)) {
+    assert.equal(pendingSourceReview(review.dataset, review.id)?.id, review.id);
+    assert.ok(shapes(review, review.id).some(record => sourceReviewReason(record) === 'source_review_pending'),
+      `${review.dataset}:${review.id} has no matching current record shape`);
+  }
 });
 
 /** The record shapes of source-review.test.mjs and folder-families.test.mjs, for one identity of one review. */
@@ -82,7 +92,7 @@ function shapes(review, id) {
 
 test('differential: the data-driven functions equal the frozen old functions on every identity and record shape', () => {
   let compared = 0;
-  for (const review of SOURCE_REVIEWS) for (const id of [review.id, ...review.aliases, `${review.id}-unknown`]) {
+  for (const review of legacyPrefix()) for (const id of [review.id, ...review.aliases, `${review.id}-unknown`]) {
     assert.equal(pendingSourceReview(review.dataset, id)?.id, legacyPendingSourceReview(review.dataset, id)?.id);
     assert.equal(pendingSourceReview('sms_spam', id)?.id, legacyPendingSourceReview('sms_spam', id)?.id);
     for (const record of shapes(review, id)) {

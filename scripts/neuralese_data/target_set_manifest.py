@@ -106,18 +106,23 @@ def resolve(registry: dict, spec: dict) -> tuple[list[dict], list[dict]]:
     return members, skipped
 
 
-def signature(members: list[dict]) -> str:
+def signature(members: list[dict], source_review_sha256: str | None = None) -> str:
     import hashlib
     key = [(m['id'], sorted(m.get('supersedes') or []),
             sorted((r, t, p) for r, toks in m['files'].items() for t, p in toks.items()))
            + ((m['cohort'],) if m.get('cohort') else ()) for m in members]
-    return hashlib.sha256(json.dumps(sorted(key)).encode()).hexdigest()
+    return hashlib.sha256(json.dumps({'members': sorted(key),
+                                     'source_review_sha256': source_review_sha256}).encode()).hexdigest()
 
 
 def main():
+    import sys
+    sys.path.insert(0, str(ROOT / 'scripts'))
+    from source_review import registry_sha256
     spec = json.loads(SPEC.read_text())
     members, skipped = resolve(origin_registry(), spec)
-    print(json.dumps({'members': [m['id'] for m in members], 'skipped': skipped, 'signature': signature(members)},
+    print(json.dumps({'members': [m['id'] for m in members], 'skipped': skipped,
+                      'signature': signature(members, registry_sha256())},
                      indent=1))
 
 

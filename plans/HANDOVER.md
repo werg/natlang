@@ -1,5 +1,35 @@
 # Continuation guide — updated 2026-10-14
 
+## 07:37 CEST: deep-source diagnostics, source-review union and GPU profiler
+
+Cave v9 live diagnostic stopped after 130 turns: the global F01/F02 unit's
+scoped support child pulled in Amber F03/F04/F05/L03 and the convention child
+produced Amber alternatives mislabeled `global`. Parent quote/source-frame
+checks did not catch cross-unit semantic contamination. No final row or
+admission; trace/review in `plans/semantic_stack/LIVE_DIAGNOSTICS.md`
+(`c42fe47a`). The next revision separates typed support discovery from
+interpretation, narrows each unit's evidence scope and checks semantic
+ownership, while preserving the actual returned child values. Polyphonic's
+one-case live trace reached a typed per-notation child but stalled after
+computing a shorter frontier without `finish:true`; exact unit stopped and
+one-step completion source fix is in progress. Neither is a model negative.
+
+Both newly held MuSiQue originals occur in already rendered DGX training
+packets: eight program-header and six whole-trajectory rows per tokenizer,
+28 physical rows total. Shared union commit `9bd12367` excludes train tokenizer
+twins carrying any pending unpinned original `dataset:id` source group, records
+`source_review_pending` omissions and the registry SHA, and triggers a new
+target-set revision when the hold registry changes. Pinned source-review items
+still need exact provenance matching, so the group-only rule does not broaden
+them. DGX owns verifying all 28 omissions in its next union. Focused union
+tests 18/18 and quick check passed; full checks remain pending.
+
+Pop GPU had been idle. Ledgered pinned-image neuralese suite
+`natlang-pop-profiler-order-20261014.service` is now running on GPU to
+reproduce the long-process CUDA profiler attribution failure and localize its
+test-order cause. It temporarily preempted the low-priority full TS gate,
+which is queued to resume. Ordinary Luna replenishment and Gemini continue.
+
 ## 07:20 CEST: quantified source depth, Cave v9 and full Python gate
 
 The 100 Sol catalog designs each have exactly four named functions. After

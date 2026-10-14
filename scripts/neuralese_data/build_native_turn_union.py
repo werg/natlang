@@ -40,6 +40,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'scripts' / 'neuralese_data'))
 from render_native_turn_corpus import canonical, file_sha, role_counter, sha, whole_trajectory_target_tokens  # noqa: E402
 from text_tokenizer_twin import document_identity, IDENTITY_FIELDS, PROVENANCE_FIELDS  # noqa: E402
+from source_review import pending_unpinned_source_groups, registry_sha256  # noqa: E402
 
 SCHEMA = 'natlang.native-text-union/2'
 
@@ -98,7 +99,8 @@ def _drop(drop: dict, key: tuple[str, str], reason: str, **details) -> None:
 def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
                      tokenizer_names: list[str], held_groups: set, held_texts: set,
                      member_duplicates: dict | None = None,
-                     member_duplicate_observations: dict | None = None) -> tuple[set, dict]:
+                     member_duplicate_observations: dict | None = None,
+                     source_review_groups: set[str] | None = None) -> tuple[set, dict]:
     """Return (selected (member,id) pairs, omissions) after twin and source-safety checks.
 
     ``member_rows`` holds only row identities, not rendered text/token payloads. A candidate becomes eligible only
@@ -110,6 +112,7 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
     observed_by_id = defaultdict(list)
     member_duplicates = member_duplicates or {}
     member_duplicate_observations = member_duplicate_observations or {}
+    source_review_groups = source_review_groups or set()
     member_rank = {name: index for index, name in enumerate(order)}
     for name in order:
         per_tok = member_rows[name]
@@ -139,6 +142,11 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
                 continue
             identity = {**signatures[0], 'twin_text_sha256': tuple(
                 (tok, per_tok[tok][rid]['text_sha256']) for tok in tokenizer_names)}
+            pending_source_groups = sorted(set(identity['source_groups']) & source_review_groups)
+            if identity['split'] == 'train' and pending_source_groups:
+                _drop(drop, key, 'source_review_pending', source_groups=pending_source_groups,
+                      text_sha256=identity['text_sha256'])
+                continue
             if identity['split'] == 'train' and set(identity['source_groups']) & held_groups:
                 _drop(drop, key, 'train_document_shares_held_source_group',
                       text_sha256=identity['text_sha256'])
@@ -275,6 +283,8 @@ def main(argv=None):
             p.error(f'invalid --cohort {item!r}; expected MEMBER=COHORT')
         cohorts[member] = cohort
     t0 = time.time()
+    source_review_groups = pending_unpinned_source_groups()
+    source_review_sha256 = registry_sha256()
     tokenizer_dirs = dict(item.split('=', 1) for item in a.tokenizer)
     members = defaultdict(dict)  # rendering -> [(name, {tok: path})] in order
     order = defaultdict(list)
@@ -321,6 +331,9 @@ def main(argv=None):
                                 for name, paths in by_name.items()}
                     for rendering, by_name in members.items()}
     receipt = {'schema': SCHEMA, 'renderings': {}, 'held_groups': len(held_groups), 'held_texts': len(held_texts),
+               'source_review': {'holds_sha256': source_review_sha256,
+                                 'pending_unpinned_source_groups': len(source_review_groups),
+                                 'match': 'exact original dataset:id source_group; train rows only'},
                'member_files': member_files,
                'member_cohorts': dict(sorted(cohorts.items())),
                'tokenizer_twin_identity': {'fields': list(IDENTITY_FIELDS + PROVENANCE_FIELDS),
@@ -331,7 +344,8 @@ def main(argv=None):
                'tokenizers': {tok: str(Path(d).resolve()) for tok, d in tokenizer_dirs.items()},
                'code': {str(f.relative_to(ROOT)): file_sha(f) for f in (
                    Path(__file__).resolve(), ROOT / 'scripts/neuralese_data/render_native_turn_corpus.py',
-                   ROOT / 'scripts/neuralese_data/text_tokenizer_twin.py')}}
+                   ROOT / 'scripts/neuralese_data/text_tokenizer_twin.py',
+                   ROOT / 'scripts/source_review.py')}}
     for rendering in members:
         # Pass 2: index compact row identities in both tokenizer files before resolving any duplicate. This prevents
         # an incomplete or held copy from claiming an ID/text hash before a later complete eligible twin is seen.
@@ -353,7 +367,8 @@ def main(argv=None):
         selected, drop = plan_member_rows(order[rendering], member_rows, supersedes,
                                           list(tokenizer_dirs), held_groups, held_texts,
                                           member_duplicates=member_duplicates,
-                                          member_duplicate_observations=member_duplicate_observations)
+                                          member_duplicate_observations=member_duplicate_observations,
+                                          source_review_groups=source_review_groups)
         if not selected:
             raise ValueError(f'{rendering}: no eligible tokenizer twins; cannot publish an empty training union')
         out = a.out_dir / rendering
