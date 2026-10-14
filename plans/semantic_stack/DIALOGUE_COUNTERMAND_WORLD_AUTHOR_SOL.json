@@ -22,7 +22,7 @@
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/manifest.json": "f8631e8a533b18da2ebf0070e8db63daeb6c03b24f9ac9865e717a1c0a0b48e4",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/participants/channels.md": "35cdb959f7e569028817fe58da7396010c5e1da99662ce8d97776904777acd8d",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/oracle.json": "5ad414b279fcd76b21d83696db326bbb97940ae07cbf079a357ab43c38b96314",
-    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/project.json": "874ad1a2b07ac40e8ec6cabca573b9161caacee3e027b408598f4fe5aa25b5f7",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/project.json": "47775f5cc9c306b0ad87ca22eeb049940a8af2fb8d1a29db79b267392ad1a059",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/reference-report.json": "444e4085d6404ee7e003ea521480629c91750d635c6b926e9133f2cf5a5e9efd",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/request.json": "2d1fa1e4bced00d436508d406583fcb496f7dd5614a1483da92a49fc7bb6a16d",
     "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/snapshot.json": "754749a64261fd1894047e6e394df21541d7b5fbe8e01b94048fa43739ad6f32"
@@ -49,8 +49,8 @@
   },
   "canonical_type_replay": true,
   "canonical_preflight": {
-    "path": "/tmp/sol-countermand-target-variant-v1/package-report.json",
-    "source_sha256": "e6f9a6c76a211a773972d8b9e9d00a11b767f2ec4840cdfa73650ca7b93be5f5",
+    "path": "/tmp/sol-countermand-target-variant-v2/package-report.json",
+    "source_sha256": "1d4790e8d82f932009842a06e89a951a15ae19d318ad939c4a1eaa62b7d52ee7",
     "reference_ok": true,
     "scope": "Private full typed source witness only; not actual callable execution"
   },

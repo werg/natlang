@@ -25,6 +25,8 @@ check('issuer receipt becomes endorsed knowledge',false,v=>answer(v,'Q14').obser
 check('reporter performs quoted withdrawal',false,v=>answer(v,'Q16').observable.performed=true);
 check('selected original revision erased',false,v=>delete retraction(v).selection);
 check('selected original revision has foreign ID',false,v=>retraction(v).selection.revisionActId='NO_REVISION');
+check('belief correction borrows unrelated original withdrawal',false,v=>correction(v).selection.revisionActId='A_W18_0');
+check('withdrawal borrows unrelated original correction',false,v=>retraction(v).selection.revisionActId='A_C19_0');
 check('selected target is separate fresh promise',false,v=>retraction(v).selection.targetActIds=['A_N18_0']);
 check('declared retraction changed to belief correction',false,v=>retraction(v).selection.kind='belief-correction');
 check('private target communication permits global withdrawal',false,v=>retraction(v).selection.communicated=false);

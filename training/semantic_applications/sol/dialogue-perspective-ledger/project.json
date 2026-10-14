@@ -692,8 +692,8 @@
   "fixture_document_count": 11,
   "fixture_clause_count": 46,
   "canonical_preflight": {
-    "path": "/tmp/sol-dialogue-target-variant-v1/package-report.json",
-    "source_sha256": "338eb9da4085ebd4c53618aba76fee1f4368eeca501da70407855e845a2a2810",
+    "path": "/tmp/sol-dialogue-target-variant-v2/package-report.json",
+    "source_sha256": "e83831224b4684c2781b7dc20bacbb600ac27562ba7f42496824f72209b72bc4",
     "reference_ok": true,
     "scope": "Private full typed source witness only; not actual callable execution"
   }
