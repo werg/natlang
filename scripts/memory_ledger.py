@@ -759,6 +759,19 @@ def adopt(args):
                                  'admitted': previous.get('admitted', time.time()), 'command': command, 'host_max': None,
                                  **{key: previous[key] for key in ('peak', 'peak_since') if key in previous},
                                  **({'hold_budget': True} if args.hold_budget else {})}
+        # Re-registering a managed job must keep its restart and container ownership.
+        current = state['claims'][unit]
+        for key in ('resumable', 'spec', 'cuda_budget', 'stop_seconds', 'stop_seconds_explicit', 'host_max'):
+            if key in previous:
+                current[key] = previous[key]
+        if args.priority is None and 'priority' in previous:
+            current['priority'] = previous['priority']
+        if previous.get('hold_budget'):
+            current['hold_budget'] = True
+        if current.get('spec'):
+            current['spec'] = {**current['spec'], 'budget': current['budget'], 'cls': args.cls,
+                               'priority': PRIORITY_NAMES[priority_of(current)],
+                               'hold_budget': current.get('hold_budget', False)}
         state['events'].append({'time': time.time(), 'event': 'adopted', 'unit': unit,
                                 **({'hold_budget': True} if args.hold_budget else {})})
 

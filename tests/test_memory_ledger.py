@@ -214,6 +214,34 @@ def test_re_adoption_keeps_the_admission_time_and_peak_and_can_hold_the_budget(m
         (123.0, 42 * GIB, 38 * GIB, 200.0, True, ['docker', 'start', '-a', 'w'])
 
 
+def test_re_adoption_preserves_the_exact_managed_restart_and_requeues_with_new_claim(monkeypatch, tmp_path):
+    monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
+    procs = tmp_path / 'cg'
+    procs.mkdir()
+    (procs / 'cgroup.procs').write_text('')
+    monkeypatch.setattr(ledger, 'unit_state', lambda unit: ('active', '/../../..' + str(procs)))
+    spec = {'unit': 'render.service', 'budget': 16 * GIB, 'cls': 'experiment', 'priority': 'low',
+            'command': ['docker', 'start', '-a', 'render'], 'resumable': True,
+            'workdir': '/exact/checkout', 'env': ['PIN=exact'], 'containers': ['render'],
+            'cuda_budget': 2 * GIB, 'host_max_gb': 16, 'stop_seconds': 90,
+            'reserve': 4 * GIB, 'reserve_explicit': True}
+    with ledger.ledger() as state:
+        state['claims']['render.service'] = ledger.claim_for(spec, now=123.0)
+    args = type('Args', (), {'unit': 'render', 'budget_gb': 24, 'cls': 'experiment',
+                            'hold_budget': False, 'priority': None})()
+    ledger.adopt(args)
+    with ledger.ledger() as state:
+        held = state['claims']['render.service']
+        assert ledger.resumable(held)
+        assert held['cuda_budget'] == 2 * GIB and held['stop_seconds'] == 90
+        assert held['host_max'] == 16 and held['priority'] == 'low'
+        assert ledger.requeue_spec(state, 'render.service', now=200)
+        queued = state['waiting']['render.service']
+        assert queued['budget'] == 24 * GIB
+        assert queued['spec'] == {**spec, 'budget': 24 * GIB, 'hold_budget': False}
+        assert spec['budget'] == 16 * GIB
+
+
 def test_container_names_come_from_attached_and_named_runs():
     assert ledger.container_name(['docker', 'start', '-a', 'natlang-x']) == 'natlang-x'
     assert ledger.container_name('/usr/bin/docker run --rm --name pi-executor --gpus all img') == 'pi-executor'
