@@ -19,7 +19,7 @@ import re
 from pathlib import Path
 
 from .common import Reject
-from .records import group_key, strip_markup
+from .records import group_key, strip_markup, source
 from .trajectory import Trajectory, licence, message, split_think, task_hash, tool_call
 
 TRAJ_EXT = Path("/mnt/external/bgkit-data/trajectories_ext")
@@ -585,5 +585,29 @@ def owl_sft(limit=None):
     yield from _expansion("D21", limit)
 
 
+def codeagent_sft(limit=None):
+    """Alpaca coding responses as derived typed task handoffs; upstream outcomes remain unknown."""
+    root = EXPANSION_ROOT / 'D05'
+    receipt = json.loads((root / 'acquisition.json').read_text())
+    rows = json.loads((root / 'CodeAgentSFTDataset.json').read_text())
+    for index, row in _limited(enumerate(rows), limit):
+        task = str(row.get('instruction') or '') + '\n' + str(row.get('input') or '')
+        history = row.get('history') or []
+        if history:
+            task = json.dumps({'previous_history': history}, ensure_ascii=False) + '\n' + task
+        target = row.get('output')
+        if not isinstance(target, str) or not target.strip():
+            raise Reject('empty-codeagent-target')
+        converted = {'metadata': {'trajectory_id': task_hash(task), 'session_id': str(index),
+                                  'relationship': 'derived-task-background'},
+                     'messages': [{'role': 'user', 'content': 'Complete the coding task supplied in the background, following its requested format.'},
+                                  {'role': 'assistant', 'content': target}]}
+        trajectory = expansion_trajectory('D05', receipt, str(index), converted)
+        trajectory.background = [source('document', text=strip_markup(task))]
+        trajectory.split_groups = [group_key('expansion-d05-task', task_hash(task)),
+                                   group_key('task', task_hash(task))]
+        yield index, trajectory
+
+
 CORPORA.update({"wideseek": (wideseek, 4), "cooperator-dual-policy": (cooperator_dual_policy, 4),
-                "searchswarm": (searchswarm, 4), "owl-sft": (owl_sft, 4)})
+                "searchswarm": (searchswarm, 4), "owl-sft": (owl_sft, 4), "codeagent-sft": (codeagent_sft, 1)})

@@ -73,3 +73,24 @@ def test_native_builder_preserves_structured_target_and_source_calls(tmp_path):
     values = list(strings(json.loads(next(built.glob('*.ir.jsonl')).read_text())))
     assert json.dumps(row['target']['value'], separators=(',', ':'), ensure_ascii=False) in values
     assert any('KEEP QUERY' in value and 'evidence' in value for value in values)
+
+
+def test_codeagent_task_handoff_keeps_problem_and_prior_history_out_of_consumer(tmp_path, monkeypatch):
+    import json
+    from neuralese_data import agents
+    from neuralese_data.records import validate
+    data = tmp_path / 'D05'
+    data.mkdir()
+    (data / 'acquisition.json').write_text(json.dumps({'repo': 'test/codeagent', 'revision': 'pinned'}))
+    (data / 'CodeAgentSFTDataset.json').write_text(json.dumps([{'instruction': 'Write a sum function.',
+        'input': 'Use integers.', 'history': [['Previous question', 'Previous answer']],
+        'output': 'def sum_two(a, b): return a + b'}]))
+    monkeypatch.setattr(agents, 'EXPANSION_ROOT', tmp_path)
+    _, trajectory = next(agents.codeagent_sft())
+    row = record(trajectory, trajectory.head, trajectory.head)
+    assert validate(row) == []
+    assert 'Write a sum function.' in row['sources'][0]['text']
+    assert 'Previous answer' in row['sources'][0]['text']
+    assert 'Write a sum function.' not in json.dumps(row['consumer'])
+    assert row['target']['value']['content'] == 'def sum_two(a, b): return a + b'
+    assert row['writer']['result_type'] == 'Neuralese<Background>'
