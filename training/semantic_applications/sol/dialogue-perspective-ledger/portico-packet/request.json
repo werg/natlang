@@ -1,0 +1,181 @@
+{
+  "caseId": "sol-dialogue-portico-v1",
+  "queries": [
+    {
+      "queryId": "Q01",
+      "perspective": null,
+      "asOf": {
+        "day": 12,
+        "hour": 16
+      },
+      "targetId": "J09",
+      "dimension": "statement",
+      "question": "Whose original collection promise is forwarded in N12 and which day anchors tomorrow?"
+    },
+    {
+      "queryId": "Q02",
+      "perspective": "Ada",
+      "asOf": {
+        "day": 12,
+        "hour": 17
+      },
+      "targetId": "P_DUE13",
+      "dimension": "belief",
+      "question": "Which due-day belief does Ada actually endorse, even if mistaken?"
+    },
+    {
+      "queryId": "Q03",
+      "perspective": "Lea",
+      "asOf": {
+        "day": 12,
+        "hour": 12
+      },
+      "targetId": "P_COLLECT11",
+      "dimension": "belief",
+      "question": "Does Lea still endorse collection before day11 noon at day12 noon?"
+    },
+    {
+      "queryId": "Q04",
+      "perspective": "Lea",
+      "asOf": {
+        "day": 12,
+        "hour": 12
+      },
+      "targetId": "P_COLLECT11",
+      "dimension": "knowledge",
+      "question": "Does Lea have corroborated knowledge of her endorsed collection claim?"
+    },
+    {
+      "queryId": "Q05",
+      "perspective": "Lea",
+      "asOf": {
+        "day": 13,
+        "hour": 9.5
+      },
+      "targetId": "P_COLLECT11",
+      "dimension": "belief",
+      "question": "Has receipt alone defeated Lea old endorsement before her day13 hour10 note?"
+    },
+    {
+      "queryId": "Q06",
+      "perspective": "Lea",
+      "asOf": {
+        "day": 13,
+        "hour": 11
+      },
+      "targetId": "P_COLLECT11",
+      "dimension": "belief",
+      "question": "What is Lea collection-before-noon belief after adopting the correction?"
+    },
+    {
+      "queryId": "Q07",
+      "perspective": "Lea",
+      "asOf": {
+        "day": 13,
+        "hour": 11
+      },
+      "targetId": "P_COLLECT12",
+      "dimension": "knowledge",
+      "question": "Does Lea now have endorsed verified knowledge of day12 collection?"
+    },
+    {
+      "queryId": "Q08",
+      "perspective": null,
+      "asOf": {
+        "day": 13,
+        "hour": 12
+      },
+      "targetId": "M10",
+      "dimension": "commitment",
+      "question": "Has Mira conditional key promise activated or been communicated as retracted?"
+    },
+    {
+      "queryId": "Q09",
+      "perspective": null,
+      "asOf": {
+        "day": 13,
+        "hour": 12
+      },
+      "targetId": "P_RELEASE",
+      "dimension": "verified",
+      "question": "Was the key released within the complete physical log horizon?"
+    },
+    {
+      "queryId": "Q10",
+      "perspective": "Neri",
+      "asOf": {
+        "day": 12,
+        "hour": 12
+      },
+      "targetId": "P_COLLECT11",
+      "dimension": "belief",
+      "question": "Did Neri receipt plus explicit doubt amount to endorsement?"
+    },
+    {
+      "queryId": "Q11",
+      "perspective": null,
+      "asOf": {
+        "day": 13,
+        "hour": 12
+      },
+      "targetId": "N13",
+      "dimension": "act",
+      "question": "Is Neri signed Great remark ironic complaint or literal praise?"
+    },
+    {
+      "queryId": "Q12",
+      "perspective": null,
+      "asOf": {
+        "day": 13,
+        "hour": 12
+      },
+      "targetId": "AMB13",
+      "dimension": "referent",
+      "question": "Who may she refer to when no intention disambiguates?"
+    },
+    {
+      "queryId": "Q13",
+      "perspective": null,
+      "asOf": {
+        "day": 13,
+        "hour": 12
+      },
+      "targetId": "AMB13",
+      "dimension": "act",
+      "question": "Can Excellent be uniquely classified without a tone frame?"
+    },
+    {
+      "queryId": "Q14",
+      "perspective": null,
+      "asOf": {
+        "day": 13,
+        "hour": 12
+      },
+      "targetId": "N12",
+      "dimension": "statement",
+      "question": "Did Neri or Mira create a new collection promise by reporting J09?"
+    },
+    {
+      "queryId": "Q15",
+      "perspective": "Mira",
+      "asOf": {
+        "day": 12,
+        "hour": 10.5
+      },
+      "targetId": "P_COLLECT11",
+      "dimension": "knowledge",
+      "question": "Has receiving verified evidence established endorsement before M12_REPORT?"
+    },
+    {
+      "queryId": "Q16",
+      "perspective": null,
+      "asOf": {
+        "day": 13,
+        "hour": 12
+      },
+      "targetId": "P_ACK_B2",
+      "dimension": "verified",
+      "question": "Does the only source acknowledgment L10 satisfy personal B2 acknowledgment?"
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "schema": "natlang.dialogue-query-invariants/1",
+  "caseId": "sol-dialogue-portico-v1",
+  "scope": "Independent authored projection of source-visible query observables, not a complete typed reference trajectory.",
+  "query_observables": {
+    "Q01": {
+      "actorIds": [
+        "Jon"
+      ],
+      "due": {
+        "day": 10,
+        "hour": null
+      },
+      "performed": true
+    },
+    "Q02": {
+      "beliefValue": true
+    },
+    "Q03": {
+      "beliefValue": true
+    },
+    "Q04": {
+      "knowledgeValue": false
+    },
+    "Q05": {
+      "beliefValue": true
+    },
+    "Q06": {
+      "beliefValue": false
+    },
+    "Q07": {
+      "knowledgeValue": true
+    },
+    "Q08": {
+      "actorIds": [
+        "Mira"
+      ],
+      "commitmentStatus": "conditional"
+    },
+    "Q09": {
+      "truthValue": false
+    },
+    "Q10": {
+      "beliefValue": null
+    },
+    "Q11": {
+      "actKinds": [
+        "irony"
+      ],
+      "performed": true
+    },
+    "Q12": {
+      "referentIds": [
+        "Mira",
+        "Ada"
+      ]
+    },
+    "Q13": {
+      "actKinds": [
+        "unresolved"
+      ]
+    },
+    "Q14": {
+      "performed": false
+    },
+    "Q15": {
+      "knowledgeValue": false
+    },
+    "Q16": {
+      "truthValue": false
+    }
+  },
+  "semantic_review_required": [
+    "Speech-act and proposition entailment",
+    "Actual participant availability/adoption lineage",
+    "Quoted original versus newly performed force",
+    "Support/defeat proof sufficiency and privacy",
+    "Actual live NL child/literal result consumption"
+  ],
+  "comparison_spec": {
+    "unordered_paths": [
+      "/answers/*/observable/actorIds",
+      "/answers/*/observable/referentIds",
+      "/answers/*/observable/actKinds"
+    ],
+    "exact_paths": [
+      "/answers/*/observable/truthValue",
+      "/answers/*/observable/beliefValue",
+      "/answers/*/observable/knowledgeValue",
+      "/answers/*/observable/performed",
+      "/answers/*/observable/due",
+      "/answers/*/observable/commitmentStatus"
+    ],
+    "ordered_paths": [
+      "/answers",
+      "/evolution/history",
+      "/evolution/deltas"
+    ],
+    "prose_paths": [
+      "/answers/*/explanation"
+    ]
+  },
+  "training_admission": false
+}

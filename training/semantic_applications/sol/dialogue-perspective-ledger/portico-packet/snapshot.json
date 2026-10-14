@@ -1,0 +1,60 @@
+{
+  "caseId": "sol-dialogue-portico-v1",
+  "documents": [
+    {
+      "sourceId": "RULES",
+      "path": "controls/speech-model.md",
+      "text": "[R01] This is a closed fictional dialogue model. Only the five named participants Mira, Lea, Jon, Neri and Ada exist in this packet. Day/hour pairs use one common clock; before is strict and at-or-before is inclusive.\n[R02] An authenticated utterance gives its speaker access to its own content at utterance time. Named addressees gain access only at source-established direct hearing, receipt or reading; dispatch alone is insufficient.\n[R03] Quotation and forwarding preserve the original speaker and original temporal anchor. Reporters do not endorse quoted content without explicit adoption. Original tomorrow means the next day after that original utterance, regardless of forwarding date.\n[R04] For this task a belief is an explicit endorsement, including a private signed note. Receipt, silence, reporting, doubt and irony alone do not establish belief. An actor can retain a false endorsed belief.\n[R05] Knowledge in this packet requires endorsement and corroborating verified evidence actually available to that participant. Application-visible physical truth does not by itself enter any participant view.\n[R06] A correction defeats only the superseded claim for the participant who explicitly adopts it. Mere arrival makes it available; another actor's private revision does not retract a communicated promise.\n[R07] A promise remains a conditional commitment even when its antecedent later proves false. Its activation uses actual source-established event conditions, with issuer knowledge and beneficiary belief reported separately. Fulfillment requires an actual promised consequent event.\n[R08] Acknowledgment of a brief is version-specific and personal. Acknowledgment of B1 does not acknowledge B2. A before-day11-noon collection predicate is about actual collection, rather than an assertion of collection.\n[R09] Use authenticated explicit tone/framing notes to distinguish irony. With no decisive frame retain alternatives. For an unresolvable pronoun return all source-eligible referents and mark ambiguous; never choose by convenience.\n[R10] Queries inspect only events at or before their asOf moment. A later source fact can settle verified history but must not retroactively add earlier participant availability or adoption. Ordered episode traces follow clock order and source-established ties; unordered proof siblings may permute.\n"
+    },
+    {
+      "sourceId": "FORMAT",
+      "path": "controls/propositions-and-format.md",
+      "text": "[P01] Exact proposition IDs: P_DUE10 = Jon original collection promise due day10; P_DUE13 = collection promise due day13; P_COLLECT11 = Jon collected before day11 noon; P_COLLECT12 = actual collection day12 hour9; P_ACK_B1 = Lea personally acknowledged B1; P_ACK_B2 = Lea personally acknowledged B2; P_RELEASE = Mira released key to Lea.\n[P02] Original turn IDs are J09, M10, L10, J11, L11, N11, M12_PRIVATE, M12_REPORT, N12, A12, L13, N13 and AMB13. Receipt IDs are H09,H10,H11,R12_MIRA,R12_LEA,R13_LEA,R13_ADA. Physical IDs are F_COLLECTION,F_NO_RELEASE. These identities are visible output vocabulary, not a truth assignment.\n[P03] Output query observables use named nullable fields: performed (actual original act versus depicted report), truthValue, beliefValue, knowledgeValue, due:{day,hour}, actorIds, actKinds, commitmentStatus and referentIds. Null means unresolved or inapplicable, never false by absence. A known lack of endorsement is beliefValue=null with a supported absence explanation. Act kinds use assertion/report/promise/acknowledgment/correction/doubt/irony/request/unresolved.\n[P04] Original IDs and exact quotations must remain source-visible. Generated act/episode/belief/commitment/proof/span IDs may consistently alpha-rename. Source clause coverage and unordered actor/referent/proof sets are order-insensitive; actual episode chronology and ordered nested quote spans are not.\n[P05] A conditional commitment whose actual antecedent is false remains status conditional; an explicit retraction requires communicating and adopting that revision in the relevant audience. Speaker attribution to an authenticated quoted original is supported even if the outer reporter is different.\n"
+    },
+    {
+      "sourceId": "PEOPLE",
+      "path": "participants/channels.md",
+      "text": "[C01] Mira coordinates keys; Lea receives a key; Jon collects a crate; Neri relays transcripts; Ada keeps a private diary. These roles do not imply truthfulness or privileged knowledge.\n[C02] Direct conversation channel P includes Mira, Lea and Jon on days9 through13. Channel R is Neri to Ada forwarding only. Private diaries are available only to their named author until an explicit sharing event; none is shared here.\n[C03] All H receipts below are authenticated direct hearing of exactly their named turns. Forwarded packets can carry nested quotations of earlier turns without making their reporter the earlier speaker.\n"
+    },
+    {
+      "sourceId": "D09",
+      "path": "conversation/original/day09.md",
+      "text": "[J09] Authenticated turn J09: Jon, day9 hour16, to Mira and Lea on P: \"I will collect the crate tomorrow.\" This is an actual promise; no hour was specified, so its due day is10 with hour unresolved.\n[H09] Hearing H09: Mira and Lea directly heard J09 at day9 hour16.\n"
+    },
+    {
+      "sourceId": "D10",
+      "path": "conversation/original/day10.md",
+      "text": "[M10] Authenticated turn M10: Mira, day10 hour9, to Lea and Jon on P: \"If Jon collects the crate before day11 noon, I promise to release the key to Lea after Lea personally acknowledges shipping brief B2.\" Both predicates condition activation; no release deadline is specified.\n[L10] Authenticated turn L10: Lea, day10 hour10, to Mira: \"I personally acknowledge shipping brief B1, not B2.\"\n[H10] Hearing H10: Lea and Jon heard M10 at day10 hour9; Mira heard L10 at day10 hour10. Lea knows her own acknowledged version through her utterance.\n"
+    },
+    {
+      "sourceId": "D11",
+      "path": "conversation/original/day11.md",
+      "text": "[J11] Authenticated turn J11: Jon, day11 hour10, to Lea: \"I picked the crate up at10 today.\" This is his mistaken assertion of P_COLLECT11, not a verified physical report.\n[L11] Authenticated turn L11: Lea, day11 hour10.5, private signed note: \"I believe Jon's claim that he collected before noon today. I have only his assertion, not verified collection evidence.\"\n[N11] Authenticated turn N11: Neri, day11 hour11, private signed note after reading J11 transcript: \"I doubt Jon picked it up. I do not adopt his collection claim.\"\n[H11] Hearing H11: Lea directly heard J11 at day11 hour10. Neri received an authenticated J11 transcript at day11 hour10.75, which supplies access but no adoption.\n"
+    },
+    {
+      "sourceId": "EVENTS",
+      "path": "events/verified.md",
+      "text": "[F01] Verified complete crate log F_COLLECTION: the first and only collection through day13 hour12 occurred day12 hour9, by Jon. No collection occurred before day11 noon.\n[F02] Verified complete key log F_NO_RELEASE: Mira did not release the key to Lea at any time through day13 hour12. These logs are application-visible physical evidence, not inherently shared participant knowledge.\n[F03] The collection log report includes exact verified evidence for P_COLLECT12=true and P_COLLECT11=false. The complete key log supports P_RELEASE=false through its stated completeness horizon.\n[F04] Verified complete personal acknowledgment ledger through day13 hour12: Lea acknowledged B1 through L10 and never personally acknowledged B2. There is no other acknowledgment event in this closed packet. The ledger is application-visible, not automatically participant knowledge.\n"
+    },
+    {
+      "sourceId": "MPRIVATE",
+      "path": "conversation/private/mira.md",
+      "text": "[M12_PRIVATE] Authenticated turn M12_PRIVATE: Mira, day12 hour8, private signed note: \"Privately I want to cancel my conditional key promise. I have sent nobody a retraction.\" This changes her intention only; it does not communicate a cancellation.\n"
+    },
+    {
+      "sourceId": "CORRECTION",
+      "path": "conversation/reports/correction.md",
+      "text": "[M12_REPORT] Authenticated turn M12_REPORT: Mira, day12 hour11, to Lea: \"The verified collection log says Jon collected day12 hour9, not before day11 noon. Correct J11 on that point.\" She explicitly endorses both verified log propositions.\n[R12_MIRA] Receipt R12_MIRA: Mira received and read the verified F_COLLECTION log day12 hour10. The log is actual corroborating evidence available to her from that moment.\n[R12_LEA] Dispatch R12_LEA: M12_REPORT and its verified F_COLLECTION attachment were sent to Lea day12 hour11. Transport did not deliver them on day12; there is no earlier access.\n[R13_LEA] Receipt R13_LEA: Lea received and read M12_REPORT plus its verified attachment day13 hour9. Receipt makes both available, with no endorsement yet.\n[L13] Authenticated turn L13: Lea, day13 hour10, private signed note: \"I adopt Mira's correction and verified log. I retract my endorsement of J11: Jon did not collect before day11 noon; he collected day12 hour9.\"\n"
+    },
+    {
+      "sourceId": "FORWARD",
+      "path": "conversation/forwards/packet.md",
+      "text": "[N12] Authenticated turn N12: Neri, day12 hour14, to Ada on R: \"Mira's authenticated archive summary quotes Jon's original J09 from day9 hour16: 'I will collect the crate tomorrow.' I am forwarding the quotation, not promising collection myself.\" The archive-summary layer reports Jon; it is not a new Mira promise.\n[R13_ADA] Receipt R13_ADA: Ada received and read N12 at day12 hour15, despite its receipt ID. This ID is opaque; its timestamp is day12. No verified collection log was attached.\n[A12] Authenticated turn A12: Ada, day12 hour16, private signed note: \"I believe Jon's collection promise is due day13 because I used Neri's forwarding day for tomorrow.\" The packet explicitly labels this temporal interpretation mistaken. Retain Ada's actual endorsed belief P_DUE13; do not silently correct it to P_DUE10.\n"
+    },
+    {
+      "sourceId": "REMARKS",
+      "path": "conversation/framing/remarks.md",
+      "text": "[N13] Authenticated turn N13: Neri, day13 hour11, to Mira: \"Great, another flawless handover.\" Signed tone note: this is ironic complaint about the failed handover, not literal praise and not endorsement that the handover was flawless.\n[AMB13] Authenticated turn AMB13: Neri, day13 hour11.5, to Ada: \"She said 'Excellent.'\" Source-eligible she referents are Mira and Ada; no disambiguating intention is recorded. No tone or endorsement frame determines whether Excellent was sincere or ironic. Both referent and act ambiguity must remain.\n[H13] Mira directly heard N13 day13 hour11. Ada directly heard AMB13 day13 hour11.5. Neither private diary is thereby exposed.\n"
+    }
+  ]
+}

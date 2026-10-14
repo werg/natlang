@@ -133,3 +133,16 @@ When an experiment separates the focal subject from its physical participants, d
 A valid observation of another compartment can still update a joint hypothesis through shared latent variables. Apply its actual source-predicted likelihood before marginalizing to the requested goal. Use neutral likelihood only for established information absence or unusable measurement; unresolved scope/referents retain unknown likelihood and require their missing evidence.
 
 In a folder reducer, carry the current folder cursor and accumulated semantic result in the iteration state. The step selects the current original folder from that cursor, consumes the actual child return, and advances once. Stable context and extra iterateOn arguments remain unchanged across steps; they do not themselves select a later collection item. A repeated-source-ID error identifies the processed record: recover from the carried cursor and preserve completed semantic state before the next call. Use remaining original folders as the decreasing measure and verify complete unique source coverage at the end.
+
+### Perspective-scoped dialogue state and nonrecursive quotation frontiers
+
+For conversation applications, separate original speaker/time, outer reporter, performed versus depicted
+speech force, recipient availability, explicit endorsement and verified corroboration in named typed
+fields. A quoted promise does not create a reporter promise, and a globally false proposition can remain
+a participant's actual endorsed belief. Apply corrections only to the actor who actually adopts them.
+Pass real historical views into condition/query children; preserve actual/issuer-knowledge/beneficiary-
+belief channels without replacing unknowns by false. Use a typed original quote-span frontier with a
+named NL step: disjoint proper interiors have smaller combined character mass. NL self/ancestor calls
+remain forbidden. On an invalid span or quote, recover using the identified original turn/range and exact
+substring; on a perspective mismatch, recover from the original recipient receipt and historical view,
+not a fabricated empty bundle or global final ledger.
