@@ -79725,6 +79725,380 @@
         "static-curriculum-s7k-b00-source-20261015-v1"
       ],
       "license": "Per-source facts retained in original case IR, all licenses accepted."
+    },
+    {
+      "id": "gemini-clinc-static-reviewed-render-20261015-v1",
+      "owner": "pop",
+      "path": "runs/free-provider-generation-20261013-v1/gemini-clinc-static-v2-render-20261015-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: gemini-clinc-static-reviewed-20261015-v1; variants: full/lfm25, full/mellum21, program-header/lfm25, program-header/mellum21, whole-trajectory/lfm25, whole-trajectory/mellum21; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "gemini-clinc-static-reviewed-20261015-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl.zst",
+            "sha256": "b2d9207919dbbaf2acc3af3c480296bd547668364fab27238caebfcc32dca078",
+            "compression": "zstd",
+            "decoded_sha256": "3129aafab38101333c02bd9dd0a217fb87994a37d88ab743c40254cdc5cb36e9",
+            "decoded_bytes": 72299016,
+            "documents": 1018,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1018,
+                "supervised_tokens": 45889,
+                "tokens": 7919889,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 10532,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl.zst",
+            "sha256": "e61f08b7a3c862f069df01f018f602514c1e7d01b38744f4882ddc9d7fb073bb",
+            "compression": "zstd",
+            "decoded_sha256": "e288e99aeeba2f60d7e42eb0f9e607a1960e1f77b86294c2d8eff098878b5772",
+            "decoded_bytes": 68853950,
+            "documents": 1018,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 1018,
+                "supervised_tokens": 58516,
+                "tokens": 7843693,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 10680,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl.zst",
+            "sha256": "077f464022932ebebb312f4032cf10ad98733893fd3de0c1ebb3e989a776f50a",
+            "compression": "zstd",
+            "decoded_sha256": "6a7caa956ca6f5200611e0b9f6faa4e09fb85809f5ffc2b562d3993a5dbcb77c",
+            "decoded_bytes": 463333621,
+            "documents": 20104,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 20104,
+                "supervised_tokens": 909392,
+                "tokens": 52960684,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 3212,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl.zst",
+            "sha256": "e7034f2871ca45d91572a90012ebeff765e77537c32e9c24baaf74bee3010f69",
+            "compression": "zstd",
+            "decoded_sha256": "10b73b77fc92172e5137c38c9035ca06eef3793dd766ebbdef5981b57d2a6ed3",
+            "decoded_bytes": 432777089,
+            "documents": 20104,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 20104,
+                "supervised_tokens": 1158220,
+                "tokens": 51901069,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 3463,
+            "merge_omissions": {}
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl.zst",
+            "sha256": "cd310ea57d3fa7119df0acabc41246584089f02302d7bd6ef68a6f2677c75cb2",
+            "compression": "zstd",
+            "decoded_sha256": "775796ae84521982c79a08c87bf6b47d209d2123203f24488a7cd27b68aa4a68",
+            "decoded_bytes": 266665382,
+            "documents": 10052,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 2344926,
+                "documents": 10052,
+                "opening_tokens": 1362737,
+                "supervised_tokens": 982189,
+                "tokens": 30088367,
+                "tool_tokens": 15219446
+              }
+            },
+            "max_document_tokens": 3197,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl.zst",
+            "sha256": "a7aa286c9dadc0a9705780908d36369899b24c61e78d351fb61b0963ee3ee5d9",
+            "compression": "zstd",
+            "decoded_sha256": "8056641256fb05958e261ce2b5bb4ac32dbe6d2bca9e05354c9248f40f3831ee",
+            "decoded_bytes": 251169392,
+            "documents": 10052,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 2978972,
+                "documents": 10052,
+                "opening_tokens": 1529564,
+                "supervised_tokens": 1449408,
+                "tokens": 29792248,
+                "tool_tokens": 14759292
+              }
+            },
+            "max_document_tokens": 3469,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "approved_by_registry_admission": 20140,
+        "omitted:semantic_label_ambiguity_in_reviewed_item": 36,
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 20104,
+        "selected:train": 20104,
+        "source_rows": 20140
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 19086,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 19086
+      },
+      "program_header_parity": {
+        "equal": 40208,
+        "retokenization_checked": 40208
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "cd22423d7181576175120a299ae1de2511cf3be9048353621840506f98da592f",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/free-provider-generation-20261013-v1/gemini-clinc-static-v2-render-20261015-v1/receipt.json",
+        "sources": {
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch01-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 602951,
+            "sha256": "46e2959f116a3e88be9bfcadce3bd9e7c777029e9142a583e5e2abd7a81c4644"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch02-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 590666,
+            "sha256": "909ddb13fbf0670ed36deda06ade21234aeea15e2dfe1b4af4178d0154152057"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch03-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 598009,
+            "sha256": "f01db11812346485cda2f3429dc08613cd95fa672c8ae8695d8a4d63a82fb7f5"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch04-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 592285,
+            "sha256": "da6bf8287042009b1e9d21d7d939181bccebc446c16d13fbd71cf98675d98cd2"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch05-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 563077,
+            "sha256": "58a695edaa776b6b1846a2b5ebb1a2e3e6064b34b185b36e37bb1857b73b0611"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch06-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 529028,
+            "sha256": "9ffc5dba8cd1bcfca862214eeb709531de2caa85f48d832bee12778eff52903a"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch07-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 513847,
+            "sha256": "d23553b3a189f7a9a0a5f0016e87061c3e39d59a5fc2e55e4bd2af81e1204f31"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch08-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 526305,
+            "sha256": "ea319aac02ae599d6cf61bdd44e0ed71e4e95cb77dba1c73e9d80ea55ea55c91"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch09-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 511822,
+            "sha256": "a1ee2c2f062d38cd2d44e01adcd7d5a08b6cf7b9901b9d1a28dc8f4908feac96"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch10-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 537517,
+            "sha256": "4f4c263f74aac35fcbdebaa9e22018a85c86a66de72c12096e56ad0a2b0d149f"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch11-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 533158,
+            "sha256": "7f26bbb9e085d743a89117e3bce572b85c4a8b0ebbfbf99315f06c1578f05048"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch12-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 510588,
+            "sha256": "06d53e08e4b18145ba202dde8b98e86be082b92f5bf2df0d947d498bbb4e4f44"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch13-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 567466,
+            "sha256": "08e21a294772a37afd1745c2bc1cf81e5d14ec8d9b7f0d5eae712908d46dc8fd"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch14-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 552894,
+            "sha256": "947215f68cc1a767944604e2b11b3c284a03ee4df206c703dcb1c41b7f84c40e"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch15-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 539356,
+            "sha256": "66556216794e0bfde47fb66ade26f5ed15deefbb83fef32c404c730a501b97f4"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch16-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 512500,
+            "sha256": "1c8f09c539a6642591612cd0eb809180f19a54337e37a420c95e2b5bb7d6c263"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch17-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 541264,
+            "sha256": "4cecd9d36f1f417482bed86830fadcc4c8e4a1c84cae8101d68d731d451c6119"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch18-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 609168,
+            "sha256": "fce173503edbe63beb62441c4372e1db37b78d8310f2bcd53d3c2535de71a28b"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch19-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 585507,
+            "sha256": "0939fd426223f64a0363400a84ccdc937d29935632fcb08f625096b8a4a5f9a0"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch20-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 587008,
+            "sha256": "1e2de19bea3e9d3446201952940422e5ff9100dcebd990338b208dffb430a818"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch21-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 611312,
+            "sha256": "ff3f8506299376d8f5d53d54c762708789818aba28dd190537b706c49e2f04f6"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch22-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 547214,
+            "sha256": "d6da88c73f0eb997df8e2f4ce405ed3014ea9294a1362a29680d5f8911f7c551"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch23-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 565802,
+            "sha256": "6e8cb2683105db19a06a2a8e401d6983f7679e6a5df884bac924aa83e5d1e587"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch24-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 559671,
+            "sha256": "481b19e9548fb3e061f85add4f9dc2769f0404f4a19f35b00f158e1056d3bf42"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch25-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 551761,
+            "sha256": "deb4d0f1b1799018ce3b7b2c651c71a963ef30dff27b6233115ffb16ea22177e"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch26-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 537348,
+            "sha256": "46047a0454fe5b2ccddae17e36c6590afc0f0bb0d505d83a8675fd4d437ce6cf"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch27-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 559080,
+            "sha256": "dfb8ce19998321df933d6dc371a04ebdaad39f2150355ec78f8a30eff9872c70"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch28-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 518253,
+            "sha256": "6695096eddc846801c729021afb6c28b24b631a3c814384e7ea22275c934c9ff"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch29-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 536598,
+            "sha256": "eed38c147fba8cfe4da3d4e9ddda9b46727a446ba39e2b1af18550eec15a1b19"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch30-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 506309,
+            "sha256": "fc6354f7d4d147aef9955877bde323ddb9d374b2d6c2f8c5bead535302329d41"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch31-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 551082,
+            "sha256": "6ca023637da9595c19217a023e35aea870a544916c138c857e354841ca8bbbfb"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch32-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 563693,
+            "sha256": "76fa862fa2db86063f0fa16a4d9f922653720570addc3e1eb521a7208ec8048f"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch33-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 580958,
+            "sha256": "37a7ac358d6dff9a150443ce953c63cf96b7bcc5e36678c39641293347f7c7c8"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch34-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 543034,
+            "sha256": "e5b3d26388b44356419c5c69a5662ec2aa4bbf2de1166dc88caf3a8f4e321f7d"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch35-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 587145,
+            "sha256": "f2c8949e487ad07c318e96c973b2bbacde244e33f7c5029955db996ed86bb256"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch36-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 569909,
+            "sha256": "2a3b7ecdde0eb760a602184df1453200485bd839fb0f6fae8a1f82b83d9077ac"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch37-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 539135,
+            "sha256": "c1c6304f2fced3ce16904c626960ed5dcd3ab1973cf7aff16074a0a98d8cb436"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch38-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 543310,
+            "sha256": "d8e871bdef6be96b3f95e78300e9e614a0a5b435086539d82c5fa26bf3397e53"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch39-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 567417,
+            "sha256": "a434858dcc0407656e655a5bb0fa5a6396bb121d1bbc3a2b47aed229ba4a69da"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch40-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 581526,
+            "sha256": "117dd18039a7c916ff9da4db9370af03419a8b1e8de5152471aa2d54a837ed71"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch41-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 583050,
+            "sha256": "cf44bd5eef662d3c6473bb25e8e912f1649ffea3c20eb2fbf333a6c73bc74d2a"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch42-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 529555,
+            "sha256": "d96b2ae90566acc828ac9792cd06eed67fbb5f997a2f12b0e8447c13d83ece6b"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch43-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 523060,
+            "sha256": "8d388c037dc22b4b39b7b27212745630b5105a5b4770b5e4e778bbee89833adc"
+          },
+          "runs/free-provider-generation-20261013-v1/gemini-clinc-batch44-static-adapter-v2-full-replay/native.held.jsonl.zst": {
+            "bytes": 571168,
+            "sha256": "722afb0693125b16034a7a7350fbfb970af4a42547517ba18df9f3b0a0c3542a"
+          }
+        },
+        "exclude_programs": [
+          {
+            "path": "runs/free-provider-generation-20261013-v1/gemini-clinc-static-v2-freeze-20261015-v1/excluded-programs.jsonl",
+            "sha256": "d6584e0d2f36768d0b0c91d0e0a74fb247a7d120462909e02487bf9872a69c5a"
+          }
+        ],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {}
+      },
+      "notes": "Reviewed static CLINC source labels: 20,104 approved turns, 36 ambiguity-held turns; complete program-header and whole-trajectory twins, one full warmup sample per program; static source scaffold, no provider reasoning trace"
     }
   ],
   "coverage_backlog": [
