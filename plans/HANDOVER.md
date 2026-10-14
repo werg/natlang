@@ -1,5 +1,57 @@
 # Continuation guide — updated 2026-10-14
 
+## 07:20 CEST: quantified source depth, Cave v9 and full Python gate
+
+The 100 Sol catalog designs each have exactly four named functions. After
+substituting the entry-specific `semantic_rule`, every instruction after each
+stage's first step is identical across all 100. The Astra catalog has fuller
+`stage_specs` on 13/120 designs. These are useful ordinary cases, not a claim
+of 220 deep programs; see `plans/semantic_stack/DEPTH_AUDIT.md` (`065a8ddb`).
+The application cohort must put branch/state/evidence decisions in deep
+numbered `.nl` pseudocode. Valid shallow examples stay in the mix.
+
+Cave v8's live diagnostic stopped at 119 turns when its scoped support child
+omitted F01, the fixed global point needed after the local-origin and identity
+bridge. No final row or admission. Cave v9 (`4c6023f9`, independent review
+`1a1524a4`) gives the scoped NL closure explicit origin, identity, fixed-point,
+orientation and unresolved groups, then binds the actual cited originals into
+the convention child and preserves both returned values. Focused controls
+33 frame-progress, 28 item and 22 mission plus type/canonical checks pass;
+matched live v9 is next. Polyphonic's separately reviewed one-case live trace
+is running; early typed source-role children are useful, while a generated
+H01–H04 history-clause shortcut is under source-ergonomics review.
+
+The full Pop Python gate at `065a8ddb` passed GPU-heavy 14/14, including the
+exact FP8 check. Its ordinary suite had 939 passes and two source-review
+bookkeeping failures caused by the new MuSiQue hold. The manifest and a
+fixed-count test were corrected in `e6c5657d`; focused 18/18 and quick 22/22
+pass. The neuralese suite had 1252 passes and one long-process CUDA profiler
+attribution failure: exported trace contains 9,967 events but zero CUDA
+runtime/kernel events, versus a passing focused trace with 16,562 events and
+1,594 kernels. Both report/trace pairs are retained on Pop at
+`/srv/storage/natlang-artifacts/profiler-pop-order-20261014/` and SHA-verified
+on DGX at `/home/werg/data/dgxops/profiler-pop-order-20261014/`. This is an
+unresolved Kineto/CUPTI lifecycle or test-order bug, not a green full gate;
+locate the prior test or profiler state that drops CUDA activities before
+changing assertions. Pop's `source-reviews-20261014-v1` now pins all 185 hold
+records. Existing frozen training rows still require source-review exclusion
+at the next union; a hold registry update alone does not rewrite them.
+
+A later ordinary Luna case, MuSiQue `2hop__146823_377891`, exhausted 384
+requests and began a 768-request resumed retry. Its source asks for the city
+where Ibn Zaydún died, but the visible Ibn Zaydún paragraph says only that he
+was a poet of Cordoba and Seville; the authored first-hop reference returns
+that whole paragraph, not a city. This is another unsupported source join,
+not a trustworthy model/DPO failure. Stop of the exact retry unit
+`natlang-pop-luna-s52047-w05-r015-01.service` freed capacity. Registry manifest
+`source-reviews-20261014-v2` holds the source across derived variants, and
+campaign s52047 has an exact zero-result `reviewed-exclusions.json` entry so
+the replenisher does not reattempt it. The source diagnosis and exact exclusion
+receipt remain; after verifying the unit was inactive, seven redundant raw
+partial/evidence files from the original and resumed attempt were removed,
+reclaiming 180,785,438 bytes. The campaign journal, error, empty result and
+review records remain for accounting.
+
 ## 06:51 CEST: deep pseudocode source and FP8 reference update
 
 The owner clarified that large examples should be substantive structured

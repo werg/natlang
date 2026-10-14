@@ -543,8 +543,8 @@
     },
     {
       "site": "planMission/survey/readFrames/advanceFrameUnit.nl",
-      "result_type": "SurveyReadingUnit",
-      "consumed_by": "Actual supportedUnit and original supporting clauses enter the one selected convention child; raw returned meaning enters completed FrameUnitResult."
+      "result_type": "FrameSupportClosure",
+      "consumed_by": "All actual origin/identity/fixed-point/orientation group IDs unioned into supportedUnit and child supportingClauses; raw closure retained in completed FrameUnitResult."
     }
   ],
   "iteration_reducers": [
@@ -620,20 +620,20 @@
     "exact_checker_controls_passed": 22,
     "live_qualified": false,
     "training_admitted": false,
-    "source_variant_review": "Focused v8 independent source/type/progress and crisp-policy audit passed; actual live pending"
+    "source_variant_review": "Focused v9 dependency-closure source/type/progress independently reviewed; actual live pending"
   },
   "fixture_document_count": 10,
   "fixture_clause_count": 31,
   "composition": {
     "nl_files": 30,
-    "nl_total_lines": 798,
-    "nl_body_lines": 602,
+    "nl_total_lines": 817,
+    "nl_body_lines": 621,
     "numbered_steps": 219,
-    "type_aliases": 59,
+    "type_aliases": 60,
     "visible_crisp_policy_lines": 0
   },
   "reference_scope": "Full typed canonical source-validity witness, separate from actual callable execution. Equivalent policies are replayed rather than compared bytewise.",
-  "model_facing_debt": "Cave v7 stopped at80 turns with invented localId and re-solved frame values (fad44b36). v8 correction remains 0/48 measured live samples; source/check controls grant no live/training credit.",
+  "model_facing_debt": "v8 live omitted fixed point and correctly returned unknown conventions; v9 remains0/48 live, source-only.",
   "source_replay": {
     "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/cave-app-consumer-depth-v6-package-v1",
     "scope": "Current consumer-depth v6 shared-loader full typed canonical source-validity replay only"
@@ -645,15 +645,17 @@
     "scope": "Independent source/oracle, exact lower-bound and policy-equivalence review. No actual application execution or training admission."
   },
   "source_variant": {
-    "id": "frame-original-name-frontier-v8",
-    "parent_review": "fad44b36",
-    "meaning": "Complete original source-local token names and one-unit actual child-result frontier replace replayed frame extraction; physical alignment/direction policy unchanged.",
+    "id": "fixed-point-support-closure-v9",
+    "parent_source_sha256": "5feb77fce81170aa08a9970d847aa6de5c690ff8479c5deecffd5f24d4c6c620",
+    "parent_review": "c759e85e",
+    "live_parent_finding": "v8 partial be16f95d, Amber support /49turn106 and convention /51turn114",
+    "meaning": "Actual typed origin/identity/fixed-point/orientation groups and exact source evidence are unioned into convention input and retained in FrameUnitResult; no numerical fallback.",
     "independent_source_review": true,
     "author_controls": {
-      "frame_progress": 27,
+      "frame_progress": 33,
       "item_witness": 28,
       "mission_mechanism": 22,
-      "scope": "Exact authored controls only; no NL execution"
+      "scope": "Authored exact controls, not NL execution or entailment"
     }
   },
   "independent_reviews": [
@@ -686,6 +688,12 @@
       "sha256": "c994373a3f2d4bdc5c1bdde6752d69dc810be3588fd9b3bf2132ac0f0230c461",
       "reviewer": "semantic_stack_curriculum",
       "scope": "Independent original-name/token binding and actual one-unit frame/landmark result progress; both source alternatives,27exactcontrols and policy-location audit. No live/admission."
+    },
+    {
+      "path": "plans/semantic_stack/CAVE_SUPPORT_CLOSURE_V9_REVIEW_POP.json",
+      "sha256": "b3245b3ee59fdd8d0087d3488435c347b0ced10496429490ab570b2bae8f77de",
+      "reviewer": "semantic_stack_curriculum",
+      "scope": "Independent v9 actual dependency closure/union/raw-return source and exact33+28+22controls, native/type/canonical. No live/admission."
     }
   ],
   "current_policy_source_revision": {
@@ -704,7 +712,7 @@
       "scope": "Focused consumer-depth and actual Assay/input-scope follow-up; no live credit"
     }
   },
-  "readiness_scope": "Pinned one-case v8 diagnostic preparation only; actual live semantic/literal-consumption review and training admission remain false.",
+  "readiness_scope": "Pinned one-case v9 diagnostic preparation only; actual live semantic/consumed-literal review and training admission false.",
   "generation_ready": true,
   "training_admission": false,
   "pending_independent_source_review": null,

@@ -14,8 +14,17 @@ function verify(before,after,trace=null){const issues=[];try{coerce(before,parse
  if(!unit.sourceFrame)issues.push('original frame scope required');
  if(unit.kind==='landmark'&&!eq(unit,row.unit))issues.push('original landmark unit retained');
  if(unit.kind==='frame'){
-  if(!trace||!eq(row.unit,trace.actual_support_selection)||!eq({...row.unit,supportingClauseIds:unit.supportingClauseIds},unit)||!unit.supportingClauseIds.every(id=>row.unit.supportingClauseIds.includes(id))||!row.unit.supportingClauseIds.every(id=>by.has(id)))issues.push('actual frame support selection retained');
+  const groupsForUnit=['localOriginClauseIds','identityBridgeClauseIds','fixedPointClauseIds','orientationClauseIds','supportingClauseIds'];const expectedSupports=[...new Set(unit.supportingClauseIds.concat(groupsForUnit.flatMap(k=>trace?.actual_support_closure?.[k]??[])))].sort();
+  if(!trace||!eq({...row.unit,supportingClauseIds:[...row.unit.supportingClauseIds].sort()},{...unit,supportingClauseIds:expectedSupports})||!row.unit.supportingClauseIds.every(id=>by.has(id)))issues.push('actual frame support selection retained');
   if(!eq(row.convention,trace?.actual_child_return))issues.push('actual convention child return retained');
+  if(!eq(row.supportClosure,trace?.actual_support_closure))issues.push('actual support closure retained');
+  const closure=row.supportClosure;if(!closure)issues.push('actual typed frame support closure');else{
+   const groups=['localOriginClauseIds','identityBridgeClauseIds','fixedPointClauseIds','orientationClauseIds','supportingClauseIds'];
+   if(groups.flatMap(k=>closure[k]).some(id=>!row.unit.supportingClauseIds.includes(id)))issues.push('all actual closure groups passed downstream');
+   if(groups.flatMap(k=>closure[k]).some(id=>!closure.evidence.some(e=>e.clauseId===id)))issues.push('exact evidence for every cited closure ID');
+   for(const e of closure.evidence){const c=by.get(e.clauseId);if(!c||!e.exactQuote||!c.text.includes(e.exactQuote))issues.push('original support closure quotation');}
+   if(row.status==='accepted'&&(!closure.localOriginClauseIds.length||!closure.fixedPointClauseIds.length||!closure.orientationClauseIds.length||closure.unresolved.length))issues.push('complete supported origin to fixed-point closure');
+  }
  }
  if(unit.kind==='landmark'&&!unit.primaryClauseIds.some(id=>token(by.get(id)?.text??'',unit.originalLocalName)))issues.push('complete case-preserved original name token');
  if(row.status==='accepted'&&unit.kind==='frame'){
@@ -54,12 +63,18 @@ check('empty supporting evidence',false,(_,a)=>a.completed.at(-1).landmark.evide
 check('absent original quotation',false,(_,a)=>a.completed.at(-1).landmark.evidence[0].exactQuote='An invented source quotation');
 check('fabricated witness path',false,(_,a)=>a.completed.at(-1).landmarks[0].witnesses[0].path='input');
 check('failed item projects accepted rows',false,(_,a)=>{a.completed.at(-1).status='failed';a.completed.at(-1).failure='Actual type error';});
-function frameCheck(name,expected,mutation){const t=structuredClone(authored.frame_transition);mutation?.(t.before,t.after);const r=verify(t.before,t.after,t);checks.push({name,expected,actual:r.ok,passed:r.ok===expected,issues:r.issues});}
+function frameCheck(name,expected,mutation){const t=structuredClone(authored.frame_transition);mutation?.(t.before,t.after,t);const r=verify(t.before,t.after,t);checks.push({name,expected,actual:r.ok,passed:r.ok===expected,issues:r.issues});}
 frameCheck('actual frame support refinement and two returned alternatives',true);
 frameCheck('frame generated IDs alpha rename',true,(_,a)=>a.completed[0].alternatives.forEach((v,i)=>v.alternativeId='renamed-'+i));
 frameCheck('frame actual convention dropped',false,(_,a)=>a.completed[0].convention=null);
 frameCheck('frame actual convention altered',false,(_,a)=>a.completed[0].convention.alternatives[0].origin.y=0);
 frameCheck('frame supporting anchor lost',false,(_,a)=>a.completed[0].unit.supportingClauseIds=a.completed[0].unit.supportingClauseIds.filter(id=>id!=='F01'));
 frameCheck('frame projection re-solved',false,(_,a)=>a.completed[0].alternatives[0].uVector.x=-1);
+frameCheck('actual support groups may arrive in another order',true,(_,a,t)=>{for(const k of ['localOriginClauseIds','identityBridgeClauseIds','fixedPointClauseIds','orientationClauseIds','supportingClauseIds','evidence'])t.actual_support_closure[k].reverse();a.completed[0].supportClosure=structuredClone(t.actual_support_closure);});
+frameCheck('actual missing fixed point remains unresolved without numeric fallback',true,(_,a,t)=>{const c=t.actual_support_closure;c.fixedPointClauseIds=[];c.supportingClauseIds=c.supportingClauseIds.filter(id=>id!=='F01');c.evidence=c.evidence.filter(q=>q.clauseId!=='F01');c.unresolved=['Actual support selection did not supply a fixed global point'];t.actual_child_return={alternatives:[],unresolved:['Supplied origin identity lacks its explicit fixed point']};const r=a.completed[0];r.supportClosure=structuredClone(c);r.unit.supportingClauseIds=r.unit.supportingClauseIds.filter(id=>id!=='F01');r.convention=structuredClone(t.actual_child_return);r.alternatives=[];r.status='unresolved';r.unresolved=[...c.unresolved,...r.convention.unresolved];});
+frameCheck('cited fixed point loses its exact support quote',false,(_,a,t)=>{t.actual_support_closure.evidence=t.actual_support_closure.evidence.filter(q=>q.clauseId!=='F01');a.completed[0].supportClosure=structuredClone(t.actual_support_closure);});
+frameCheck('frame raw closure discarded',false,(_,a)=>a.completed[0].supportClosure=null);
+frameCheck('frame fixed-point group removed',false,(_,a)=>a.completed[0].supportClosure.fixedPointClauseIds=[]);
+frameCheck('frame closure missing quote',false,(_,a)=>a.completed[0].supportClosure.evidence[0].exactQuote='Missing original quote');
 frameCheck('frame scope missing',false,(b,a)=>{b.pendingUnits[0].sourceFrame=null;a.completed[0].unit.sourceFrame=null;});
 console.log(JSON.stringify({scope:authored.role,passed:checks.every(c=>c.passed),positive:checks.filter(c=>c.expected).length,negative:checks.filter(c=>!c.expected).length,checks},null,2));if(checks.some(c=>!c.passed))process.exitCode=1;
