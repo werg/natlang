@@ -15,10 +15,7 @@ from pathlib import Path
 import torch
 
 from natlang_neuralese.eval.task_cadence import restore_engine
-
-
-def sha(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+from natlang_neuralese.common.hashing import sha256_file_hex as sha
 
 
 def compare(reference: torch.Tensor, candidate: torch.Tensor, *, excluded_ids=()) -> dict:
