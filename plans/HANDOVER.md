@@ -23,17 +23,21 @@ an admitted or model-negative row. The next source needs an original-name span
 binding and one-unit typed frame frontier that retains actual child results.
 Re-run and inspect downstream alignment before admission.
 
-Pop full TS check is currently running under ledger unit
-`natlang-pop-ts-budget-full-check-20261014.service`. A DGX-only test fixture
+Pop full TS check completed green under ledger unit
+`natlang-pop-ts-budget-full-check-20261014.service`: 318 files/2037 tests,
+22/22 conformance, with builds/browser types/layering green. A DGX-only test fixture
 failure with zero model calls at 3276.7 ms was traced to its fixed 3000 ms
 test-only local budget expiring during cold worker startup. A calibrated
-per-machine fixture is being checked; the production timeout implementation is
-unchanged. The pinned Pop Python image check found one grouped-FP8 gradient
+per-machine fixture passed in Pop's full gate (`d93bf8fd`); DGX loaded-run
+confirmation is pending. The production timeout implementation is unchanged.
+The pinned Pop Python image check found one grouped-FP8 gradient
 gap (relative norm 0.1186 vs 0.1) and one order-dependent profiler attribution
-failure still under investigation. Other environment failures were fixed or
-isolated. Do not call the full Python gate green yet. During the full TS check,
-low-priority Luna/Gemini workers were temporarily requeued by the memory
-ledger; verify they resume afterward.
+failure still under investigation. The same FP8 gap persists with both fused
+SwiGLU and fused gradient quantization disabled, so those paths are ruled out;
+DGX owns the exact-reference dragnet. Other environment failures were fixed or
+isolated. Do not call the full Python gate green yet. The ledger resumed Luna
+and Gemini after the check. Ecology v17 has a frozen one-case diagnostic queue;
+its live outputs remain quality-pending.
 
 ## 05:25 CEST: recovery render synced and deep-source criterion
 
