@@ -18,6 +18,19 @@ def declared():
     return legacy_recipes.foundation()
 
 
+def test_direct_training_clock_is_declarable_in_shared_recipes(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    recipe = load_recipe(root / 'training/neuralese/recipes/diag-mixed-lfm-u10006-p25.json')
+    next(s for s in recipe['stages'] if s['id'] == 'direct_sft')['parameters']['stop_after_training_seconds'] = 120.0
+    path = tmp_path / 'clock.json'
+    path.write_text(json.dumps(recipe))
+    loaded = load_recipe(path)
+    parameters = next(s for s in loaded['stages'] if s['id'] == 'direct_sft')['parameters']
+    argv = stage_parameter_args(parameters)
+    index = argv.index('--stop-after-training-seconds')
+    assert argv[index + 1] == '120.0'
+
+
 def legacy_raw_recurrence(tmp_path):
     """The inline legacy raw-recurrence lineage, loaded through a file (load_recipe reads paths)."""
     path = tmp_path / 'legacy-raw-recurrence.json'
