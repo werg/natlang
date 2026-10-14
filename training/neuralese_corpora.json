@@ -66551,6 +66551,139 @@
         }
       },
       "notes": "Program-header decisions of harness-bench-swe-rebench-openhands-pi-records-bulk-20261011-v1, using the source pi harness's own system prompt and tool schemas. Suffix targets and balanced context supervision use the shared renderer; whole-trajectory twins separately cover complete clean assistant chains. Repository/source splits are inherited, not resampled."
+    },
+    {
+      "id": "luna-service-result-recovery-s52054-mellum-render-v1",
+      "owner": "dgx",
+      "path": "runs/luna-service-result-recovery-s52054-v1/mellum21-render-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "train only; inherited accepted source decision groups; protected and held groups excluded by the shared renderer",
+      "admission": "Mellum2.1 three-rendering twin of admitted luna-service-result-recovery-s52054-v1; no independent source credit",
+      "training_admission": true,
+      "training_admission_reason": "58/58 admitted decisions rendered with exact program-header serving token boundaries, zero decontamination omissions, 47 whole-trajectory parents; inherited source admission, not admission based on transfer or schema",
+      "derived_from": [
+        "luna-service-result-recovery-s52054-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "a40fda7a78e4a6e7da2976779c30c524db18b496193093889300a581cf0c441f",
+            "documents": 3,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 3,
+                "supervised_tokens": 360,
+                "tokens": 18238,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 6100,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "2ea2e1eb0c1cba51dce6d210e79f35e468ce7547ced68481e8d87aefa87030a8",
+            "documents": 58,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 58,
+                "supervised_tokens": 6645,
+                "tokens": 105095,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 2023,
+            "merge_omissions": {}
+          }
+        },
+        "whole-trajectory": {
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "478b534a7667a77bbd788da013a43079060422d78666bf042a47bb81ca82c541",
+            "documents": 47,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 22420,
+                "documents": 47,
+                "opening_tokens": 13630,
+                "supervised_tokens": 8790,
+                "tokens": 85729,
+                "tool_tokens": 7100
+              }
+            },
+            "max_document_tokens": 2023,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 58,
+        "selected:train": 58,
+        "source_rows": 58
+      },
+      "render_omissions": {
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 55
+      },
+      "program_header_parity": {
+        "equal_text_serving_token_boundaries": 58,
+        "retokenization_checked": 0
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "8c7b964bc1fec0169e3a2bb80e462a8e26f15837b3de0e4ecbb4c65b62c2bc40",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/luna-service-result-recovery-s52054-v1/mellum21-render-v1/receipt.json",
+        "sources": {
+          "runs/luna-service-result-recovery-s52054-v1/approved-turns.jsonl": {
+            "bytes": 3960804,
+            "sha256": "ad606a8b67317a8f758d7486295d156859aa774ec215fc373588e5d6eb802d9c"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": {
+          "path": "data/neuralese/corpora/protected-bgkit-20261003/bgkit-benchmarks.protected.json",
+          "programs_checked": 47,
+          "programs_hit": 0,
+          "sha256": "585b21e7091adfbc4f851ef35b0b3c6da00f032fffe69a8b98816a567abad7bf"
+        },
+        "held_text": {
+          "data/neuralese/corpora/harness-bench-swe-rebench-openhands-pi-text-lfm25-350m-20261010-v2/text.jsonl": "6cd682efbc43f7ef76ecf373c0a98271c567bd2c4c1085e2cc78e1a2a609aea9",
+          "runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl": "30ef44f4670d47a065ff8ba96aff3e46650526b07236c03e6a9d8429480c8576"
+        }
+      },
+      "notes": "Mellum twin of the admitted 47-parent/58-decision service-result recovery source. Train only; preserve low recovery weight in the next declared broad union. Not part of the current frozen training run.",
+      "required_conversion": "Include at low recovery weight in the next declared Mellum broad target union; LFM twin registered separately"
     }
   ],
   "coverage_backlog": [
