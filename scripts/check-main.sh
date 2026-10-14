@@ -81,13 +81,18 @@ if [ $python = 1 ]; then
       /usr/bin/python3; do
       # A stale general-purpose venv may exist without the neuralese test
       # dependencies. Select an interpreter that can actually run this suite.
-      if [ -x "$candidate" ] && "$candidate" -c 'import pytest, torch' >/dev/null 2>&1; then
+      if [ "$quick" = 1 ]; then
+        interpreter_probe='import pytest, torch'
+      else
+        interpreter_probe='import sys; assert sys.version_info >= (3, 11); import pytest, torch, transformers; from transformers import Lfm2Config; from transformers.modeling_rope_utils import dynamic_rope_update'
+      fi
+      if [ -x "$candidate" ] && "$candidate" -c "$interpreter_probe" >/dev/null 2>&1; then
         PY=$candidate
         break
       fi
     done
     if [ -z "$PY" ]; then
-      python_error="Python checks requested, but no interpreter with pytest and torch was found. Set NATLANG_PYTHON or install them in .venv-neuralese."
+      python_error="Python checks requested, but no compatible Python >=3.11 with pytest, torch and the required Transformers API was found. Set NATLANG_PYTHON or install them in .venv-neuralese."
     fi
   fi
   if [ -n "$python_error" ]; then
