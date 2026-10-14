@@ -84,3 +84,32 @@ observations do not grant training admission or count as model-negative rows.
   a typed forwarded result in its first eval action. Model-facing wording must
   be measured live before adoption.
 
+## Ecology, direct forwarding v15b (2026-10-14)
+
+- Frozen source SHA-256: `fc3c6f4f5bbf3ca5a282fbf0a2039d0ea7f072f41bfd002ac8339119538e352e`.
+  The selected one-case queue SHA-256 is
+  `25ca9a04758b7d62bf26a7b6b36a17e6fb30df198220d4389913c1068096f035`;
+  runtime manifest SHA-256 is
+  `56a3c44516c7599167bb8106ca13c1c54e188c331cf31083626e8a1b6df0cbf1`.
+- The named Stage 1, 2, 3 and 4 callers used `return await child(nextStageInput)`
+  with `finish:true` in their first forwarding evals (turns 22, 25, 36, 47).
+  Stage 4's narrow scoped children directly returned typed `ScopeDecision`
+  values, avoiding v15's captured task-string call. Stage 5's named frontier
+  returned supported signed paths and an unresolved grass target at turn 71;
+  its typed result was used to build the first folder's audit at turn 72. These
+  are positive live observations for the source presentation, not admission.
+- The root then processed evidence-1 again. At turn 9 it had defined
+  `stepFolder(state, f)` and called
+  `iterateOn(stepFolder, emptyState, ...sortedDirs)`. `iterateOn` passes its
+  extra arguments unchanged at every step; it does not advance through the
+  spread folder arguments. Turn 74 starts a second `readStudyPlots` call with
+  evidence-1 and source IDs r1–r6. Its `until` checked only that 24 assertions
+  existed, so four copies of those six records could falsely satisfy it.
+- The exact unit `natlang-pop-semstack-v15b-ecology.service` was stopped at
+  roughly 79 turns. No result or training row was admitted; this is a root
+  iteration/source-presentation defect, not a model-negative example.
+  The next root contract will carry an explicit folder index and completed
+  typed state, select the current folder from that index, check unique source
+  ID/path coverage, advance the index exactly once and finish on the exhausted
+  folder frontier. The source's semantic graph decisions remain NL-owned.
+
