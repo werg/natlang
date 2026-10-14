@@ -3,6 +3,7 @@ description: Form observational equivalence branches from actual world predictio
 args:
   experiment: ExperimentPlan
   cross: CrossReading
+  assay: Assay
   predictions: WorldPrediction[]
   posterior: Posterior
 returns: ExperimentPartition
@@ -14,8 +15,8 @@ returns: ExperimentPartition
    an interpretable, usable answer distribution, preserve that blocker. Set usable=false for established
    invalidity and usable=null for unresolved meaning or missing evidence.
    Keep its actual prediction for audit rather than inventing an observable category for the failure.
-3. Interpret answer identity at this assay's supplied readout resolution and visible serialization
-   grammar. Identify which differences the instrument actually reports. A uniformity answer can merge
+3. Interpret answer identity from the actual assay.readout and assay.answerGrammar supplied here.
+   Use its compartment, stage and regime to preserve the observation scope. Identify which differences the instrument actually reports. A uniformity answer can merge
    different colors, and equal observed colors can merge different genotypes or mechanisms when the
    source readout says so. A distinction unavailable to the assay cannot become an observation branch.
 4. Visit the actual predictions, then their actual AnswerMass entries. Build the finite collection of

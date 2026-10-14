@@ -23,7 +23,7 @@ returns: ValueFrontier
    the maximum child energy. Compute remaining observations independently as the maximum child count
    plus one precisely when this action observes. These maxima can be attained by different branches;
    both summarize the actual complete policy under the source's two worst-case objectives.
-7. Compare the complete winning action values under request.objective. For the supplied energy-first,
+7. Compare the complete winning action values under state.request.objective. For the supplied energy-first,
    observations-second objective, retain minimum worst energy, then minimum worst observation count.
    Interpret a changed source objective explicitly before comparing; unknown priority is a source
    contract defect requiring repair, not permission to reuse a fixture-specific ordering.

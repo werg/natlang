@@ -12,8 +12,8 @@ returns: CandidateComparison
    ambiguity in reason and return null selection; iteration order is not an objective.
 2. Inventory the actual CandidateValue experiment IDs and their answer branches. Distinguish a
    complete policy from a cheap partial policy: every positive-probability answer must have a retained
-   child continuation. Interpret complete using the upstream goal, which may resolve a mechanism
-   while leaving within-mechanism genotype uncertainty. Preserve that distinction in the comparison.
+   child continuation. Consume the actual upstream complete verdict and branch reasons; the closure
+   and valuation stages own goal-class satisfaction. This comparison preserves that typed verdict.
 3. Separate candidates explicitly marked incomplete. Keep their experiment IDs and concrete missing
    branch reasons in the explanation. Numeric placeholder fields on incomplete candidates do not
    enter the ordering. If no complete candidate remains, return null with that obstruction.

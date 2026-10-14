@@ -592,7 +592,7 @@
     "exact_checker_controls_passed": 22,
     "live_qualified": false,
     "training_admitted": false,
-    "source_variant_review": "Focused semantic-consumer-depth-v2 peer source review passes; fixture/type/oracle/reference unchanged; live pending."
+    "source_variant_review": "Consumer-depth and actual typed input-scope follow-up independently reviewed; live pending."
   },
   "fixture_document_count": 10,
   "fixture_clause_count": 31,
@@ -644,9 +644,9 @@
     },
     {
       "path": "plans/semantic_stack/SEED_CAVE_NL_DEPTH_REVIEW_SOL.json",
-      "sha256": "aff571bb803ccd98969f560d3609dbc3ee9b86b31c61634714e820664e633baf",
+      "sha256": "bf30e58a4130db9420c42afb89e6c9add4be5e146076c366b9c553cb30578e46",
       "reviewer": "semantic_slate_sol",
-      "scope": "Focused source consumer-depth delta and existing exact controls; no live credit"
+      "scope": "Focused consumer-depth and actual Assay/input-scope follow-up; no live credit"
     }
   ],
   "current_policy_source_revision": {
@@ -660,9 +660,9 @@
     "training_admitted": false,
     "review_receipt": {
       "path": "plans/semantic_stack/SEED_CAVE_NL_DEPTH_REVIEW_SOL.json",
-      "sha256": "aff571bb803ccd98969f560d3609dbc3ee9b86b31c61634714e820664e633baf",
+      "sha256": "bf30e58a4130db9420c42afb89e6c9add4be5e146076c366b9c553cb30578e46",
       "reviewer": "semantic_slate_sol",
-      "scope": "Focused source consumer-depth delta and existing exact controls; no live credit"
+      "scope": "Focused consumer-depth and actual Assay/input-scope follow-up; no live credit"
     }
   },
   "readiness_scope": "Original fixture/oracle and exact reference reviewed; current consumer-depth source independently reviewed by pinned delta receipt. Actual application execution and live/training qualification remain pending."

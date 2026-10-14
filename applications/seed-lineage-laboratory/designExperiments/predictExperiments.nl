@@ -13,7 +13,7 @@ returns: PredictionIndex
    Then call readOffspring(world, experiment, assay, cross, offspring, actualTheory).
 4. Keep each actual WorldPrediction with its original world/experiment IDs and witnesses. A failure
    or missing semantic contribution remains unresolved; it cannot become an empty valid partition.
-5. Call partitionAnswers(experiment, cross, predictions, posterior). Consume its observable branches,
+5. Call partitionAnswers(experiment, cross, assay, predictions, posterior). Consume its observable branches,
    goal-class memberships, usable status and reason into the returned PredictionIndex.
 6. Preserve all unresolved predictions. Planning receives typed predictions and partitions, rather
    than raw bank documents or a case-specific answer table.
