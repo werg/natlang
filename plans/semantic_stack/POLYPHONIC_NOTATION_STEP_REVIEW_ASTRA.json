@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.application-source-delta-review/1",
+  "reviewer": "semantic_slate_astra",
+  "project": "astra-app-polyphonic-edition-v1",
+  "variant": "notation-one-step-v3",
+  "source_commit": "61e2ea8a",
+  "source_package_sha256": "17542a5fa6bdc0ed86495a7c3b75eace72a56ffa3603154371935c56ad96174e",
+  "reviewed_files": {
+    "applications/polyphonic-edition-workshop/reconstructEdition/readArchive/readPartbooks/advanceLocation.nl": "60d87841176d9e90ea699f64df9a7e9b6eca4943ba1d09cac0d921b5f463d434"
+  },
+  "findings": [
+    "The actual interpretNotation return is retained through source-keyed witness binding and original event/source identity projection.",
+    "Step5 consumes exactly one original unit, retains earlier completed readings and unresolved units, and binds the resulting actual NotationFrontier as next.",
+    "Step6 completes that existing next value with finish:true in the same action; readPartbooks.iterateOn owns selecting the next original unit.",
+    "No semantic policy or notation interpretation moved into crisp code; the added eval return is completion plumbing.",
+    "Fixture, oracle, reference and external checker are unchanged; no source contradiction found."
+  ],
+  "source_delta_review_passed": true,
+  "reproduced_checks": {
+    "native_typecheck": true,
+    "exact_controls": {
+      "positive": 8,
+      "negative": 33,
+      "passed": true
+    }
+  },
+  "canonical_replay": {
+    "reported_by": "pop-semantic-curriculum",
+    "reference_ok": true,
+    "source_sha256": "17542a5fa6bdc0ed86495a7c3b75eace72a56ffa3603154371935c56ad96174e"
+  },
+  "actual_application_execution": false,
+  "live_samples": 0,
+  "training_admission": false
+}

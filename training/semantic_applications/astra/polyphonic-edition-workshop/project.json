@@ -448,17 +448,20 @@
     "training_admitted": false
   },
   "source_variant": {
-    "id": "authority-depth-v2",
+    "id": "notation-one-step-v3",
+    "supersedes": "authority-depth-v2",
     "status": "focused_source_review_passed_live_pending",
     "independent_source_review": true,
     "review_receipt": {
-      "path": "plans/semantic_stack/POLYPHONIC_AUTHORITY_DEPTH_REVIEW_ASTRA.json",
-      "sha256": "24e1c5e367da312f2d82c10d4aa7d81280b673ec76f6adf95d8ee829b7672638",
+      "path": "plans/semantic_stack/POLYPHONIC_NOTATION_STEP_REVIEW_ASTRA.json",
+      "sha256": "49f53648c6d0b56b14f18a20b0af29fc8b1a12b84b390d68391b612392c5048b",
       "reviewer": "semantic_slate_astra",
-      "scope": "Focused parent-to-child evidence reachability and authority-branch pseudocode review; prior full source/oracle review remains POLYPHONIC_EDITION_REVIEW_POP.json; no live or training credit"
-    }
+      "scope": "Focused actual one-unit frontier/result completion review; no live or training credit"
+    },
+    "source_package_sha256": "17542a5fa6bdc0ed86495a7c3b75eace72a56ffa3603154371935c56ad96174e",
+    "source_commit": "61e2ea8a"
   },
-  "model_facing_debt": "authority-depth-v2:0/48 live samples; prior full source/reference/checker review and focused authority source review passed; actual NL execution and admission pending",
+  "model_facing_debt": "notation-one-step-v3:0/48 live samples; prior full source/oracle and focused authority reviews retained, actual one-unit frontier completion independently reviewed; live execution and admission pending",
   "provenance": {
     "author": "semantic_slate_astra",
     "kind": "Original fictional notation archive and NL application",
@@ -511,6 +514,12 @@
       "sha256": "24e1c5e367da312f2d82c10d4aa7d81280b673ec76f6adf95d8ee829b7672638",
       "reviewer": "semantic_slate_astra",
       "scope": "Focused source delta review of parent evidence reachability and typed authority pseudocode; no live or training credit"
+    },
+    {
+      "path": "plans/semantic_stack/POLYPHONIC_NOTATION_STEP_REVIEW_ASTRA.json",
+      "sha256": "49f53648c6d0b56b14f18a20b0af29fc8b1a12b84b390d68391b612392c5048b",
+      "reviewer": "semantic_slate_astra",
+      "scope": "Focused actual one-unit frontier/result completion review; no live or training credit"
     }
   ]
 }
