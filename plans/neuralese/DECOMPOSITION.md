@@ -244,3 +244,14 @@ flatten the whole growing record on every input chunk. This preserves exact
 JSONL bytes after UTF-8 decoding and CRLF normalization while making framing
 work proportional to source length. Verify against the captured 9.5 MB source
 row's hash and the existing Unicode/chunk-boundary regressions.
+
+## Preserve Unicode-bearing Python probe and rollout rows — 2026-10-14
+
+ReadJsonlObjects uses the existing protected-task JSONL object reader for
+monitor probes, precision probes, paired behavior evaluation and RL rollouts.
+Move that exact reader to common/jsonio and re-export it from task_packet so
+there is one implementation. Iterate physical LF-framed file lines rather
+than str.splitlines, which also splits valid Unicode separators within JSON
+strings. Keep object validation and physical-line error locations. These are
+exact input verifiers; task scoring, drift policy, rendering and prompts do
+not change. Leave actual source-code/text line splitting alone.

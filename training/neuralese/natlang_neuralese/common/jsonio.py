@@ -10,6 +10,7 @@ import json
 import os
 from datetime import datetime, timezone
 from typing import Any
+from pathlib import Path
 
 
 def canonical_json_str(value: Any) -> str:
@@ -45,3 +46,17 @@ def write_json_durable(path, value) -> None:
         stream.flush()
         os.fsync(stream.fileno())
     pending.replace(path)
+
+
+def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
+    rows = []
+    with Path(path).open(encoding="utf-8", newline="\n") as stream:
+        for number, line in enumerate(stream, 1):
+            if not line.strip():
+                continue
+            value = json.loads(line)
+            if not isinstance(value, dict):
+                raise ValueError(f"expected an object at {path}:{number}")
+            rows.append(value)
+    return rows
+

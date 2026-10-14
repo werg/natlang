@@ -13,6 +13,8 @@ model's own answers and top-k on the monitor prompts, captured before any update
 """
 from __future__ import annotations
 
+from ..common.jsonio import read_jsonl
+
 import argparse
 import contextlib
 import json
@@ -69,7 +71,7 @@ def monitor_reference(monitor, out: Path, hf, tokenizer, render, *, root):
     data = data if data.is_absolute() else Path(root) / data
     if sha256_file_hex(data) != monitor['data']['sha256']:
         raise ValueError('monitor prompts changed since the recipe pinned them: ' + str(data))
-    prompts = [json.loads(line) for line in data.read_text().splitlines() if line.strip()]
+    prompts = read_jsonl(data)
     eos = tokenizer.convert_tokens_to_ids('<|im_end|>')
     held = capture_reference(hf, tokenizer, prompts, render, eos)
     torch.save(held, reference_path)
