@@ -1,0 +1,203 @@
+{
+  "caseId": "sol-dialogue-countermand-v1",
+  "queries": [
+    {
+      "queryId": "Q01",
+      "perspective": null,
+      "asOf": {
+        "day": 18,
+        "hour": 2.25
+      },
+      "targetId": "P17",
+      "dimension": "commitment",
+      "question": "Has one adopter globally withdrawn the two-beneficiary promise?"
+    },
+    {
+      "queryId": "Q02",
+      "perspective": null,
+      "asOf": {
+        "day": 18,
+        "hour": 3.25
+      },
+      "targetId": "P17",
+      "dimension": "commitment",
+      "question": "Does Tavi arrival alone finish joint withdrawal?"
+    },
+    {
+      "queryId": "Q03",
+      "perspective": null,
+      "asOf": {
+        "day": 18,
+        "hour": 4.25
+      },
+      "targetId": "P17",
+      "dimension": "commitment",
+      "question": "What is the original promise after Tavi explicit adoption joins Sada?"
+    },
+    {
+      "queryId": "Q04",
+      "perspective": "Oren",
+      "asOf": {
+        "day": 18,
+        "hour": 4.25
+      },
+      "targetId": "P_ALL_ADOPT",
+      "dimension": "knowledge",
+      "question": "Does Oren already have endorsed corroborated knowledge of joint adoption?"
+    },
+    {
+      "queryId": "Q05",
+      "perspective": null,
+      "asOf": {
+        "day": 19,
+        "hour": 10.25
+      },
+      "targetId": "P17",
+      "dimension": "commitment",
+      "question": "Does actual collection reactivate the old withdrawn promise?"
+    },
+    {
+      "queryId": "Q06",
+      "perspective": null,
+      "asOf": {
+        "day": 19,
+        "hour": 8.25
+      },
+      "targetId": "N18",
+      "dimension": "commitment",
+      "question": "Is the fresh promise activated by Sada early belief and the B2 acknowledgment?"
+    },
+    {
+      "queryId": "Q07",
+      "perspective": null,
+      "asOf": {
+        "day": 19,
+        "hour": 10.25
+      },
+      "targetId": "N18",
+      "dimension": "commitment",
+      "question": "Does the fresh lineage activate after B3 plus actual collection?"
+    },
+    {
+      "queryId": "Q08",
+      "perspective": null,
+      "asOf": {
+        "day": 19,
+        "hour": 11.25
+      },
+      "targetId": "N18",
+      "dimension": "commitment",
+      "question": "What is the fresh promise after the actual on-day19 key release?"
+    },
+    {
+      "queryId": "Q09",
+      "perspective": null,
+      "asOf": {
+        "day": 21,
+        "hour": 12
+      },
+      "targetId": "P17",
+      "dimension": "commitment",
+      "question": "Do later delivery and closed due scope revive or fulfill the old retracted lineage?"
+    },
+    {
+      "queryId": "Q10",
+      "perspective": null,
+      "asOf": {
+        "day": 21,
+        "hour": 12
+      },
+      "targetId": "P_KEY20",
+      "dimension": "verified",
+      "question": "Did the day19 key event occur on the old promised day20?"
+    },
+    {
+      "queryId": "Q11",
+      "perspective": "Sada",
+      "asOf": {
+        "day": 19,
+        "hour": 8.25
+      },
+      "targetId": "P_COLLECT18",
+      "dimension": "belief",
+      "question": "What false earlier-day collection belief does Sada actually endorse?"
+    },
+    {
+      "queryId": "Q12",
+      "perspective": "Sada",
+      "asOf": {
+        "day": 19,
+        "hour": 8.25
+      },
+      "targetId": "P_COLLECT20",
+      "dimension": "knowledge",
+      "question": "Does endorsement alone establish corroborated before-cutoff knowledge at this time?"
+    },
+    {
+      "queryId": "Q13",
+      "perspective": "Sada",
+      "asOf": {
+        "day": 20,
+        "hour": 1.25
+      },
+      "targetId": "P_COLLECT18",
+      "dimension": "belief",
+      "question": "Has arrival without adoption defeated her endorsed day18 belief?"
+    },
+    {
+      "queryId": "Q14",
+      "perspective": "Oren",
+      "asOf": {
+        "day": 19,
+        "hour": 12.25
+      },
+      "targetId": "P_ALL_ADOPT",
+      "dimension": "knowledge",
+      "question": "Has receipt alone established endorsed corroborated joint-adoption knowledge?"
+    },
+    {
+      "queryId": "Q15",
+      "perspective": "Oren",
+      "asOf": {
+        "day": 19,
+        "hour": 12.75
+      },
+      "targetId": "P_ALL_ADOPT",
+      "dimension": "knowledge",
+      "question": "Does explicit endorsement after actual verified receipt qualify?"
+    },
+    {
+      "queryId": "Q16",
+      "perspective": null,
+      "asOf": {
+        "day": 19,
+        "hour": 14
+      },
+      "targetId": "REM19",
+      "dimension": "statement",
+      "question": "Did Remy perform Oren quoted withdrawal as a new revision?"
+    },
+    {
+      "queryId": "Q17",
+      "perspective": null,
+      "asOf": {
+        "day": 21,
+        "hour": 12
+      },
+      "targetId": "P_ACK_B3",
+      "dimension": "verified",
+      "question": "Was the correct personal version acknowledgment actually performed?"
+    },
+    {
+      "queryId": "Q18",
+      "perspective": null,
+      "asOf": {
+        "day": 21,
+        "hour": 12
+      },
+      "targetId": "P_CODE20",
+      "dimension": "verified",
+      "question": "Was the old second beneficiary consequent actually delivered?"
+    }
+  ]
+}

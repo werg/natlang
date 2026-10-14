@@ -1,0 +1,3 @@
+[S18] Signed private note S18: Sada, day18 hour2: "I adopt Oren's communicated withdrawal W18 of P17." It adopts that exact revision. It is not a new withdrawal issued by Sada and is not sent to Oren at this time.
+[T18_DOUBT] Signed private note T18_DOUBT: Tavi, day18 hour2.5: "I do not yet have W18. I doubt that the original promise has been jointly withdrawn; I adopt no withdrawal." This is explicit nonadoption before arrival.
+[T18_ADOPT] Signed private note T18_ADOPT: Tavi, day18 hour4: "I have read W18 and adopt Oren's withdrawal of P17." This exact adoption joins Sada's earlier adoption. No other adoption exists before it; it is not yet shared with Oren.

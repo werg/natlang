@@ -1,0 +1,2 @@
+[C01] Oren issues both promises; Sada and Tavi are beneficiaries of P17; only Sada is beneficiary of N18. Noor collects the crate. Remy only forwards a revision. No role transfers between these named actors.
+[C02] Direct promise channel P includes Oren,Sada,Tavi on days17 through21. Revision W18 is separately delivered to Sada and Tavi as recorded; channel membership alone establishes no receipt. Private notes are visible only to their author until an explicit sharing event.

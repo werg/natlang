@@ -1,0 +1,60 @@
+{
+  "caseId": "sol-dialogue-countermand-v1",
+  "documents": [
+    {
+      "sourceId": "CB01",
+      "path": "controls/model.md",
+      "text": "[R01] This is a closed fictional dialogue model with Oren, Sada, Tavi, Noor and Remy. Day/hour pairs use one common clock. Before is strict; at-or-before is inclusive.\n[R02] An original speaker accesses their own turn at its authenticated time. Other actors access content only at source-established hearing or actual receipt/read time; dispatch alone is insufficient. Private signed notes remain private.\n[R03] Reporting and quotation preserve original speaker, time and target identity. A reporter does not perform the quoted promise or withdrawal and does not endorse it without explicit adoption.\n[R04] Belief requires explicit endorsement, including a signed private note. Receipt, silence, doubt and reporting alone do not establish belief. A false claim can remain endorsed until this actor adopts a defeating correction.\n[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically.\n[R06] Withdrawing a promise requires the issuer's communicated retraction of its exact original promise plus explicit adoption by every named beneficiary. Partial adoption preserves the actual adopter set without globally retracting. Final adoption changes the issuer-owned normative commitment, even if the issuer has not learned that adoption occurred. Belief/knowledge of adoption is separately tracked.\n[R07] An adopted withdrawal is terminal for that original promise. Later true conditions, deliveries or due boundaries cannot reactivate it. A fresh performed promise has its own lineage and audience. Actual activation, actual fulfillment and actor belief/knowledge are separate readings.\n[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3.\n[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes.\n[R10] All original records below are authentic and complete within their stated horizon. Missing actor endorsement is a known absence when no other private/shared note exists. Forwarded text supplies availability rather than endorsement; no outside act or physical occurrence may be invented.\n"
+    },
+    {
+      "sourceId": "CB02",
+      "path": "controls/format.md",
+      "text": "[P01] Exact propositions: P_COLLECT18 = Noor collected on day18; P_COLLECT20 = Noor collected before day20 noon; P_ACK_B2 = Sada personally acknowledged B2; P_ACK_B3 = Sada personally acknowledged B3; P_KEY19 = Oren released key to Sada on day19; P_KEY20 = Oren released key to Sada on day20; P_CODE20 = Oren supplied code to Tavi on day20; P_ALL_ADOPT = both named beneficiaries actually adopted withdrawal W18; P_WITHDRAW_RECEIVED_TAVI = Tavi has received W18.\n[P02] Original turn IDs: P17,W18,S18,T18_DOUBT,T18_ADOPT,N18,B18,B19,C18,S19_EARLY,C19,O19_REPORT,REM19,O19_ADOPT. Receipt IDs: HP17,HW18_S,RW18_T,HN18,HB19,HC18,RC19_S,RADOPT_O,HREM19. Physical IDs: F_COLLECTION,F_KEY,F_CODE,F_BRIEF,F_ADOPTIONS.\n[P03] Query fields are named nullable performed/truthValue/beliefValue/knowledgeValue/due/actorIds/actKinds/commitmentStatus/referentIds. KnowledgeValue tests whether the knowledge criterion qualifies, not the underlying proposition value. Commitment status is the actual normative lineage state, not an actor belief. For a query asking whether a reporter performed a quoted promise or withdrawal, performed tests that requested force, not the fact that a report happened.\n[P04] Original IDs and exact quotations remain source-visible. Generated act/span/episode/belief/commitment/proof IDs may consistently alpha-rename. Source and actor/proof sets are unordered; actual episode chronology and parent child-span source order are ordered. Source-derived cutoff/day-end closure is a boundary, not a physical event or recipient arrival.\n"
+    },
+    {
+      "sourceId": "CB03",
+      "path": "participants/channels.md",
+      "text": "[C01] Oren issues both promises; Sada and Tavi are beneficiaries of P17; only Sada is beneficiary of N18. Noor collects the crate. Remy only forwards a revision. No role transfers between these named actors.\n[C02] Direct promise channel P includes Oren,Sada,Tavi on days17 through21. Revision W18 is separately delivered to Sada and Tavi as recorded; channel membership alone establishes no receipt. Private notes are visible only to their author until an explicit sharing event.\n"
+    },
+    {
+      "sourceId": "CB04",
+      "path": "conversation/promises/original.md",
+      "text": "[P17] Authenticated original turn P17: Oren, day17 hour10, to Sada and Tavi: \"If Noor collects the crate before day20 noon, I promise to release the key to Sada and provide the access code to Tavi on day20.\" Both beneficiaries and both promised consequent events belong to this one original promise.\n[HP17] Sada and Tavi directly hear P17 at day17 hour10. They do not thereby endorse that collection already occurred.\n"
+    },
+    {
+      "sourceId": "CB05",
+      "path": "conversation/revisions/withdrawal.md",
+      "text": "[W18] Authenticated original turn W18: Oren, day18 hour0, addressed to Sada and Tavi: \"I withdraw my original promise P17. This withdrawal names P17 only; no later new promise is withdrawn.\" It is dispatched separately to both named beneficiaries at that time.\n[HW18_S] Sada receives and reads W18 at day18 hour1. Oren directly knows only Sada's arrival at this point; no evidence of Tavi arrival or adoption has reached Oren.\n[RW18_T] W18 is dispatched to Tavi at day18 hour0 but arrives and is read by Tavi only at day18 hour3. Its opaque receipt identifier is not a date or a statement of adoption.\n"
+    },
+    {
+      "sourceId": "CB06",
+      "path": "conversation/revisions/adoptions.md",
+      "text": "[S18] Signed private note S18: Sada, day18 hour2: \"I adopt Oren's communicated withdrawal W18 of P17.\" It adopts that exact revision. It is not a new withdrawal issued by Sada and is not sent to Oren at this time.\n[T18_DOUBT] Signed private note T18_DOUBT: Tavi, day18 hour2.5: \"I do not yet have W18. I doubt that the original promise has been jointly withdrawn; I adopt no withdrawal.\" This is explicit nonadoption before arrival.\n[T18_ADOPT] Signed private note T18_ADOPT: Tavi, day18 hour4: \"I have read W18 and adopt Oren's withdrawal of P17.\" This exact adoption joins Sada's earlier adoption. No other adoption exists before it; it is not yet shared with Oren.\n"
+    },
+    {
+      "sourceId": "CB07",
+      "path": "conversation/promises/fresh.md",
+      "text": "[N18] Authenticated original turn N18: Oren, day18 hour5, to Sada only: \"If Noor collects before day20 noon and Sada personally acknowledges shipping brief B3, I make a new promise to release the key to Sada on day19.\" This is a fresh performed promise, not a quotation, revival or amendment of P17. Tavi has no beneficiary role in N18.\n[HN18] Sada directly hears N18 at day18 hour5. Neither the fresh promise nor hearing it asserts collection or B3 acknowledgment has already happened.\n"
+    },
+    {
+      "sourceId": "CB08",
+      "path": "conversation/acknowledgments/versions.md",
+      "text": "[B18] Authenticated turn B18: Sada, day18 hour6, to Oren: \"I personally acknowledge shipping brief B2, not B3.\"\n[B19] Authenticated turn B19: Sada, day19 hour9, to Oren: \"I now personally acknowledge shipping brief B3.\"\n[HB19] Oren directly hears B18 at day18 hour6 and B19 at day19 hour9. These are different version-specific acknowledgment events.\n"
+    },
+    {
+      "sourceId": "CB09",
+      "path": "conversation/reports/collection.md",
+      "text": "[C18] Authenticated turn C18: Noor, day18 hour8, to Sada: \"I collected the crate today.\" This is Noor's asserted claim; the complete physical log supplies actual timing separately.\n[HC18] Sada directly hears C18 at day18 hour8. No verified log accompanies this assertion.\n[S19_EARLY] Signed private note S19_EARLY: Sada, day19 hour8: \"I believe Noor's C18 claim that the crate was collected on day18; therefore I also believe it was collected before day20 noon.\" This endorses both named propositions but has no verified corroboration yet.\n[C19] Authenticated correction C19: Noor, day19 hour10.5, to Sada: \"Correct C18: I first collected at day19 hour10, not on day18.\" A verified collection log is attached. This is a correction of the collection claim, not a withdrawal of either Oren promise.\n[RC19_S] C19 with verified F_COLLECTION is dispatched at day19 hour10.5 and received/read by Sada only at day20 hour1. Receipt makes evidence available but supplies no adoption; no signed Sada correction-adoption note exists in this packet.\n"
+    },
+    {
+      "sourceId": "CB10",
+      "path": "conversation/reports/issuer-and-forward.md",
+      "text": "[O19_REPORT] Authenticated turn O19_REPORT: Oren, day19 hour12, to Remy: \"I report only the text of received signed records S18 and T18_ADOPT. I have not yet endorsed their joint-adoption conclusion.\"\n[RADOPT_O] The signed S18/T18_ADOPT records and verified F_ADOPTIONS summary reach Oren at day19 hour12, not earlier. Their authentic content includes both actual adoption times, but arrival alone is not an Oren endorsement.\n[O19_ADOPT] Signed private note O19_ADOPT: Oren, day19 hour12.5: \"I endorse that both original beneficiaries adopted W18 and that P17 is withdrawn. This does not withdraw my separate fresh promise N18.\"\n[REM19] Authenticated report REM19: Remy, day19 hour13, to Tavi: \"Oren said at day18 hour0: 'I withdraw my original promise P17.'\" Remy is quoting Oren's original revision, not issuing a new withdrawal or a new promise.\n[HREM19] Tavi directly hears REM19 at day19 hour13. Hearing this report does not add another adoption or supersede the earlier T18_ADOPT act.\n"
+    },
+    {
+      "sourceId": "CB11",
+      "path": "events/complete-log.md",
+      "text": "[F01] Complete crate log through day21 hour12: Noor's first and only collection is day19 hour10. There is no collection on day18. Physical ID F_COLLECTION supports the corresponding collection propositions; before-day20-noon becomes actually true only when the day19 event occurs.\n[F02] Complete key log through day21 hour12: Oren's only release of the key to Sada is day19 hour11. There is no key-release event on day20. Physical ID F_KEY distinguishes day19 and day20 propositions; one event cannot change its actual date to satisfy the older promise.\n[F03] Complete access-code log through day21 hour12: Oren never supplies Tavi the promised code on day20. Physical ID F_CODE bounds the negative code proposition. No version of this packet contains another code event.\n[F04] Complete acknowledgment log through day21 hour12: Sada personally acknowledges B2 at day18 hour6 and B3 at day19 hour9. Physical ID F_BRIEF preserves both distinct versioned events; no acknowledgment is transferable between beneficiaries.\n[F05] Authentic signed adoption ledger: S18 at day18 hour2 and T18_ADOPT at day18 hour4 are the only adoptions of W18; both have actual access to W18 when adopting. Physical ID F_ADOPTIONS records the joint-adoption fact at day18 hour4. This application-visible ledger enters Oren's evidence only through RADOPT_O at day19 hour12.\n"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+[N18] Authenticated original turn N18: Oren, day18 hour5, to Sada only: "If Noor collects before day20 noon and Sada personally acknowledges shipping brief B3, I make a new promise to release the key to Sada on day19." This is a fresh performed promise, not a quotation, revival or amendment of P17. Tavi has no beneficiary role in N18.
+[HN18] Sada directly hears N18 at day18 hour5. Neither the fresh promise nor hearing it asserts collection or B3 acknowledgment has already happened.

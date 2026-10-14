@@ -1,0 +1,47 @@
+{
+  "schema": "natlang.dialogue-connected-world-draft/1",
+  "world_key": "sol-app-world:countermand-bridge-v1",
+  "status": "source_projection_draft_full_witness_and_source_extension_pending",
+  "documents": 11,
+  "clauses": 44,
+  "queries": 18,
+  "snapshot_exact_fixture_match": true,
+  "source_files": {
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/DECOMPOSITION.md": "d9ffea71de5263b5162a870ebd5821d0cbd6edaec3b307f47f95d2d3d4c34732",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/oracle.json": "91771817ac4c4dbe74f71910dfbab74cc5f95d46e86074072bbbfdbdf10cd7e8",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/request.json": "b7a8e1ce25ec18dd964314746b32c14d3bdfc1f5a14dbce2af4933052d55c9af",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/snapshot.json": "eb76809b847ee386a5202d88c090b7c26c5d559899ffecab09342f01421699b5",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/manifest.json": "f8631e8a533b18da2ebf0070e8db63daeb6c03b24f9ac9865e717a1c0a0b48e4",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/controls/format.md": "caa68513c9858104388c2d2ca79367494e1d6f0fc27e61d13037b300833af216",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/controls/model.md": "c106bb55cc76ca99716bca211246983358b5cee15fb1a93867e56502b0b287f0",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/participants/channels.md": "35cdb959f7e569028817fe58da7396010c5e1da99662ce8d97776904777acd8d",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/events/complete-log.md": "c9505d872ef4b516ede46a9a9dcca0f726cea0999be1428371fb8d5d81c6a81d",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/reports/collection.md": "44adf9539aa0c57a142c87c0f3a96eae7c10c5ea8ef292a5abc2e5544bece56a",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/reports/issuer-and-forward.md": "8a6329b4e7f2ef0489666273634ca9425d4f460fea7c91310a7e6778e87b1a56",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/promises/original.md": "e03fc39cfdd07e7193dbaee73712b471730fbca1f413ef413af399911feb779d",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/promises/fresh.md": "29895e8ecc778962d28617f7b2d01ddd07460c792e400144684428aee3d8632a",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/acknowledgments/versions.md": "2ee8be902f14d67808fb6562fac2447a0ff97213efbbd68c5109ba143b912a2e",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/revisions/withdrawal.md": "3d14b3982af90112f35d4d56e430a7ea1aa89b4b088bd85bc3d6c0561ce95338",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/revisions/adoptions.md": "8512f61eb14b9418341a4788636e6b08459045c531c36ba5839486a95c18d002"
+  },
+  "semantic_joins": [
+    "Performed withdrawal\u2192original promise lineage",
+    "Separate actual receipt\u2192explicit adoption per beneficiary",
+    "Last adoption\u2192issuer-owned normative status without issuer knowledge",
+    "Terminal withdrawal\u2192later true conditions without revival",
+    "Fresh promise\u2192different audience/version/due event",
+    "Delayed verified correction\u2192evidence availability without endorsed belief defeat",
+    "Forwarded withdrawal\u2192original force without new reporter revision"
+  ],
+  "typed_certificate": false,
+  "exact_app_reference_replay": false,
+  "independent_semantic_review": false,
+  "live_qualified": false,
+  "generation_ready": false,
+  "training_admission": false,
+  "provenance": {
+    "author": "semantic_slate_sol",
+    "license": "Repository license",
+    "kind": "Original fictional source, no external material"
+  }
+}

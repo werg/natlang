@@ -1,0 +1,2 @@
+[P17] Authenticated original turn P17: Oren, day17 hour10, to Sada and Tavi: "If Noor collects the crate before day20 noon, I promise to release the key to Sada and provide the access code to Tavi on day20." Both beneficiaries and both promised consequent events belong to this one original promise.
+[HP17] Sada and Tavi directly hear P17 at day17 hour10. They do not thereby endorse that collection already occurred.
