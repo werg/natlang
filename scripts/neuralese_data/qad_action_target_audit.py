@@ -97,13 +97,17 @@ def score_gold(engine, row):
 
 def serving_boundary(engine, native, row):
     engine.prompt_rendering = row['prompt_rendering']
-    plan = engine._prompt_plan(native['messages'], native['tools'])
+    # The natlang runtime omits its own generic tool schemas in program-header
+    # mode. Serving preserves only tools supplied by an outside client.
+    runtime_tools = native['tools'] if row['prompt_rendering'] == 'full' else None
+    plan = engine._prompt_plan(native['messages'], runtime_tools)
     if any(kind != 'tokens' for kind, _ in plan):
         return {'status': 'neuralese-blocks-in-live-prompt'}
     live = [token for _, segment in plan for token in segment]
     train = row['token_ids'][:row['supervised_suffix_start']]
     first = next((i for i, (a, b) in enumerate(zip(live, train)) if a != b), min(len(live), len(train)))
     return {'status': 'exact' if live == train else 'different',
+            'runtime_tool_schemas': len(runtime_tools or ()),
             'live_tokens': len(live), 'train_prefix_tokens': len(train),
             'first_difference': None if live == train else first,
             'live_token_ids_sha256': digest(live), 'train_prefix_token_ids_sha256': digest(train),

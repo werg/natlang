@@ -54,7 +54,7 @@ train-only `service_result_recovery` decisions from parent
 `runs/qad-action-target-mask-audit-20261014-v1/selection.json`, the shared
 renderer outputs, the resolved direct-SFT stage parameters, step-15000 weights
 and the clean QAD heads. Raw machine-readable receipts are
-`runs/qad-action-target-mask-audit-20261014-v1/{cpu,gpu}-report.json` (local
+`runs/qad-action-target-mask-audit-20261014-v1/report.json` (local
 diagnostic artifacts, not corpus entries).
 
 The correctly typed `eval` action has 100 gold suffix tokens, zero masked;
@@ -66,15 +66,16 @@ accidentally excluded by the failed-action mask. The two rendered full-mode
 prefixes exactly equal live executor `_prompt_plan` token IDs at the assistant
 boundary (5935 and 6180 tokens).
 
-The program-header train prefixes have 1644 and 1889 tokens; setting the same
-executor to program-header mode produces 2697 and 2942 live prompt tokens.
-Their first difference is token 1079, where the live prompt continues with a
-tool-list description while the training system message ends and the user turn
-starts. This is an exact template difference, not whitespace-only. Determine
-whether the data curriculum intentionally uses a shorter program header while
-task evaluation uses full mode; if so, quantify the transfer cost before any
-recipe change. The full-mode match means the executor path itself is not
-universally mismatched.
+The program-header train prefixes have 1644 and 1889 tokens. They exactly
+match the live executor when the natlang runtime omits its own generic tool
+schemas in that mode, as `apply_prompt_rendering` and the runtime contract
+require. The first diagnostic mistakenly passed the native generic tools as
+if they were supplied by an outside client; the executor correctly preserved
+those supplied schemas, creating an artificial 1053-token difference. That
+diagnostic artifact was discarded and the source-level tool argument fixed.
+Both supported rendering modes now show exact token-boundary parity on these
+two rows. The shorter program header is a declared curriculum choice, while
+the current task evaluation uses full rendering.
 
 Teacher-forcing the exact suffix under the step-15000 student gives mean NLL
 1.646 / 1.336 and argmax agreement 62.0% / 69.2% in full mode; the shorter
@@ -82,5 +83,5 @@ program-header view gives 1.614 / 1.297 and 61.0% / 69.2%. These two actions
 alone do not estimate task success. They show the trained model can assign
 substantial probability to correct actions under the actual full prompt even
 though its sampled task rollouts often choose a different action. Continue the
-bug dragnet at action choice, length/repetition, and the declaration of the
+bug dragnet at action choice, length/repetition, and transfer from the declared
 program-header/full mix; do not treat this narrow audit as an approach verdict.
