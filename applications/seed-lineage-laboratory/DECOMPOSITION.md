@@ -101,3 +101,9 @@ actual inventory feeds reconstructBelief, predictExperiments and planPolicy, whi
 posterior and adaptive-cost conclusions. This changes neither biological source facts nor report types;
 unknown scope, invalid protocol and failed execution remain different. New source is held for peer/live
 qualification. The stopped v2 diagnostic grants neither successful execution nor training admission.
+
+## Joint-ticket frontier v4
+
+The reader owns a source inventory. `readTheoryContext` interprets expression hypotheses and joint-prior conventions, then lists every original ticket unit with source support. `readTheories` owns a finite `TicketReadingFrontier`; `advanceTicket` consumes one original unit and preserves each prior typed result. Its nested `interpretTicket` directly invokes a scoped NL judgment for the complete tuple. The parent binds original witness identities and appends the actual returned fields. Null semantic readings and invocation/type failures remain separate retained results. The final index projects accepted tickets and reports every unresolved original ID.
+
+All tuple association, fixed-assignment joins and correlated-prior interpretation remain numbered NL. Crisp operations only validate identity/quote/integer domains, move one frontier unit and project actual typed fields. Posterior filtering and normalization remain in reconstructBelief. This source revision responds to a live monolithic-return failure and has no live qualification yet.

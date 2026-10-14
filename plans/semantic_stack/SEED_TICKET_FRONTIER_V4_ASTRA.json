@@ -1,0 +1,54 @@
+{
+  "schema": "natlang.semantic-application-source-review/1",
+  "author": "semantic_slate_astra",
+  "variant": "joint-ticket-frontier-v4",
+  "prior_live_finding": "readStocks completed its typed inventory; readTheories attempted an incomplete monolithic TheoryIndex and blocked after exact type rejection. No actual type-schema deficiency was found.",
+  "files": {
+    "applications/seed-lineage-laboratory/types.ts": "8a143ea3566a18886ca9d53192a6b1c467e958872f3f9f92e475dea0d06bdefb",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readTheories.nl": "fd31ad87058a46e3b8bacb9d257ee456b167589be82eba5b54f59ae5d2ac9628",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readTheories/readTheoryContext.nl": "fa118062e03480c69bb20c1f76d66642f6e62e9bef09c66a73864740b4fe23fa",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readTheories/advanceTicket.nl": "3f4eb02066db667551b504576c7c2e9a41fd5aee3aa6b9c473671f39babeac1b",
+    "applications/seed-lineage-laboratory/designExperiments/readBank/readTheories/advanceTicket/interpretTicket.nl": "c1a6108c2c0b168fc5f2964dd4140e6ff47a4041a2983ca95a557eb87ab150f5"
+  },
+  "source_composition": {
+    "nl_files": 30,
+    "physical_lines": 662,
+    "numbered_steps": 183
+  },
+  "owned_deltas": [
+    "Source theory/convention interpretation and original ticket-unit inventory",
+    "One complete joint tuple from actual per-unit scoped NL return",
+    "Typed accepted/unresolved/failed result retained once per original unit",
+    "Final TheoryIndex projects actual accepted tuples and carries every unresolved source ID"
+  ],
+  "exact_mechanism": [
+    "Original ID/quote membership",
+    "Positive integer mass and unique assignment identity checks",
+    "One-unit frontier advancement and actual returned-field projection"
+  ],
+  "fixture_oracle_reference_unchanged": true,
+  "native_loader_types": {
+    "ok": true
+  },
+  "canonical_reference_replay": {
+    "reference_ok": true,
+    "package": "/tmp/astra-seed-ticket-v4-sealed",
+    "source_sha256": "c3389957e1df91ea3a0c9e9b05487adbf7119c1e2aad3ae5acf859c187639aca"
+  },
+  "existing_external_controls": {
+    "total": 43,
+    "positive": 8,
+    "negative": 35,
+    "passed": true,
+    "scope": "Original result verifier controls; not execution of the new reader"
+  },
+  "independent_source_review": {
+    "path": "plans/semantic_stack/SEED_TICKET_FRONTIER_REVIEW_POP.json",
+    "sha256": "2bf6a8cd7729fa4f8fa2002da67f21a3b239e423ad90cd4f74cba84a718a9c22",
+    "reviewer": "pop-semantic-curriculum",
+    "scope": "Independent finite ticket frontier and actual typed tuple contribution review; no live credit"
+  },
+  "live_samples": 0,
+  "required_live_samples_approx": 48,
+  "training_admitted": false
+}

@@ -30,6 +30,9 @@
     "designExperiments/readBank/readPedigree/judgeParentage.nl",
     "designExperiments/readBank/readStocks.nl",
     "designExperiments/readBank/readTheories.nl",
+    "designExperiments/readBank/readTheories/advanceTicket.nl",
+    "designExperiments/readBank/readTheories/advanceTicket/interpretTicket.nl",
+    "designExperiments/readBank/readTheories/readTheoryContext.nl",
     "designExperiments/reconstructBelief.nl",
     "designExperiments/reconstructBelief/assessObservation.nl",
     "designExperiments/reconstructBelief/assessObservation/predictObservedTrait.nl",
@@ -318,6 +321,32 @@
         },
         "returns": "LaboratoryCertificate",
         "owned_delta": "Reconstruct joint inheritance beliefs and design a stock-feasible adaptive experiment policy."
+      },
+      {
+        "path": "designExperiments/readBank/readTheories/readTheoryContext.nl",
+        "args": {
+          "clauses": "SourceClause[]"
+        },
+        "returns": "TheoryContext",
+        "owned_delta": "Separate expression hypotheses, joint-prior conventions and finite original ticket units."
+      },
+      {
+        "path": "designExperiments/readBank/readTheories/advanceTicket.nl",
+        "args": {
+          "state": "TicketReadingFrontier"
+        },
+        "returns": "TicketReadingFrontier",
+        "owned_delta": "Interpret and retain one original joint-ticket result while preserving prior progress."
+      },
+      {
+        "path": "designExperiments/readBank/readTheories/advanceTicket/interpretTicket.nl",
+        "args": {
+          "unit": "TicketReadingUnit",
+          "selectedClauses": "SourceClause[]",
+          "context": "TheoryContext"
+        },
+        "returns": "TicketInterpretation",
+        "owned_delta": "Judge one complete joint prior tuple from its original declaration and fixed source context."
       }
     ],
     "edges": [
@@ -424,16 +453,28 @@
       {
         "caller": "designExperiments.nl",
         "callee": "designExperiments/reconstructBelief.nl"
+      },
+      {
+        "caller": "designExperiments/readBank/readTheories.nl",
+        "callee": "designExperiments/readBank/readTheories/readTheoryContext.nl"
+      },
+      {
+        "caller": "designExperiments/readBank/readTheories.nl",
+        "callee": "designExperiments/readBank/readTheories/advanceTicket.nl"
+      },
+      {
+        "caller": "designExperiments/readBank/readTheories/advanceTicket.nl",
+        "callee": "designExperiments/readBank/readTheories/advanceTicket/interpretTicket.nl"
       }
     ]
   },
   "services": [],
   "composition": {
-    "nl_files": 27,
-    "physical_lines": 533,
-    "body_lines": 330,
-    "numbered_steps": 159,
-    "type_aliases": 46
+    "nl_files": 30,
+    "physical_lines": 662,
+    "body_lines": 438,
+    "numbered_steps": 183,
+    "type_aliases": 53
   },
   "comparison_spec": {
     "mode": "exact-source-world-and-adaptive-policy-replay",
@@ -459,9 +500,9 @@
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false,
-    "source_variant_review": "Consumer-depth and actual typed input-scope follow-up independently reviewed; live pending."
+    "source_variant_review": "Joint-ticket-frontier v4 independently source reviewed; live pending."
   },
-  "model_facing_debt": "source-reader-scope-v3:0/48 live samples; require actual scope literal result and source inventory handoff into later posterior/policy stages.",
+  "model_facing_debt": "joint-ticket-frontier-v4:0/48 live samples; measure actual per-ticket typed contributions, source coverage, preserved partial progress and downstream consumption.",
   "scoped_literals": [
     {
       "site": "designExperiments/readBank/readPedigree/judgeParentage.nl",
@@ -492,6 +533,11 @@
       "site": "designExperiments/auditCertificate/challengeCompartment.nl",
       "result_type": "ChallengeMeaning",
       "consumed_by": "Certificate audit findings"
+    },
+    {
+      "site": "designExperiments/readBank/readTheories/advanceTicket/interpretTicket.nl",
+      "result_type": "TicketInterpretation",
+      "consumed_by": "Actual JointTicket appended to finite reading frontier, then source TheoryIndex and posterior reconstruction"
     }
   ],
   "independent_reviews": [
@@ -511,9 +557,15 @@
       "sha256": "3e468400bc67a9ed9f2ae51bce303a80d8eb0511d135dca9174937799f614b97",
       "reviewer": "pop-semantic-curriculum",
       "scope": "Independent reader-stage scope/type handoff review; no live credit"
+    },
+    {
+      "path": "plans/semantic_stack/SEED_TICKET_FRONTIER_REVIEW_POP.json",
+      "sha256": "2bf6a8cd7729fa4f8fa2002da67f21a3b239e423ad90cd4f74cba84a718a9c22",
+      "reviewer": "pop-semantic-curriculum",
+      "scope": "Independent finite ticket frontier and actual typed tuple contribution review; no live credit"
     }
   ],
-  "readiness_scope": "Original source-world/oracle, consumer-depth and new reader-stage handoffs have pinned independent source reviews; native/source reference replay remains a witness, no live/admission.",
+  "readiness_scope": "Original world/oracle and current ticket-frontier source independently reviewed; source/type canonical replay is not actual reader execution or training admission.",
   "current_policy_source_revision": {
     "id": "semantic-consumer-depth-v2",
     "source_files": [
@@ -533,20 +585,20 @@
     }
   },
   "source_variant": {
-    "id": "source-reader-scope-v3",
-    "supersedes": "semantic-consumer-depth-v2",
+    "id": "joint-ticket-frontier-v4",
+    "supersedes": "source-reader-scope-v3",
     "independent_source_review": true,
     "fixture_oracle_reference_unchanged": true,
     "status": "source_reviewed_live_pending",
     "changes": [
-      "Declared ScopeMeaning plus local typed direct-await idiom",
-      "Source inventory stage responsibilities separated from downstream certificate conclusions"
+      "Source theory/context and complete original ticket-unit inventory",
+      "Finite typed per-ticket reading with actual returned tuple insertion and retained partial progress"
     ],
     "review_receipt": {
-      "path": "plans/semantic_stack/SEED_READER_STAGE_REVIEW_POP.json",
-      "sha256": "3e468400bc67a9ed9f2ae51bce303a80d8eb0511d135dca9174937799f614b97",
+      "path": "plans/semantic_stack/SEED_TICKET_FRONTIER_REVIEW_POP.json",
+      "sha256": "2bf6a8cd7729fa4f8fa2002da67f21a3b239e423ad90cd4f74cba84a718a9c22",
       "reviewer": "pop-semantic-curriculum",
-      "scope": "Independent reader-stage scope/type handoff review; no live credit"
+      "scope": "Independent finite ticket frontier and actual typed tuple contribution review; no live credit"
     }
   }
 }

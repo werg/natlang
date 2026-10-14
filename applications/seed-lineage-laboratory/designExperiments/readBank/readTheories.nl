@@ -1,19 +1,24 @@
 ---
-description: Interpret competing expression mechanisms and correlated prior tickets.
+description: Accumulate complete source joint tickets through finite typed reading steps.
 args:
   clauses: SourceClause[]
 returns: TheoryIndex
 ---
-1. Identify the source's competing theory declarations. For each, retain theoryId, expressed quantity,
-   biological compartment, developmental stage and its complete conditional rule with exact witnesses.
-2. Separate those hypotheses from established transmission conventions. The source can fix how an
-   allele is inherited while leaving how it becomes an observed trait uncertain.
-3. Read each source joint ticket into a complete theory/assignment tuple with its positive integer
-   mass. Add fixed accession assignments explicitly included by the prior convention. Bind original
-   ticketId/accession IDs; an assignment neither listed nor fixed by that convention remains unresolved.
-4. Interpret the prior convention. When tickets are joint possibilities, their listed masses belong
-   to entire tuples; shared genotype or mechanism labels do not make those masses independent factors.
-5. Preserve all tickets before evidence. A theory's apparent agreement with an observed trait does
-   not authorize this reader to remove a ticket or renormalize its mass.
-6. Return the actual theories, tickets, prior convention and supporting witnesses. Record duplicate
-   incompatible ticket declarations explicitly instead of merging their masses silently.
+1. Call readTheoryContext(clauses). Preserve the actual competing theories, joint prior convention,
+   original ticket units and supporting witnesses. This reader owns the source prior inventory;
+   reconstructBelief later applies evidence and normalizes the returned joint possibilities.
+2. Check each unit has its original nonempty ticketId, nonempty primary clause IDs and only existing
+   source clause IDs. Require unique ticket IDs in the finite frontier. Conflicting declarations for
+   one original ID belong to one unit with all their source clauses and an explicit unresolved issue.
+3. Initialize TicketReadingFrontier with pending equal to the actual returned ticketUnits, completed
+   empty, context equal to the actual TheoryContext and clauses equal to these original clauses.
+4. Invoke advanceTicket.iterateOn on that state. Its measure is pending.length; each step consumes
+   exactly its first original unit and appends one typed result. The original finite unit inventory is
+   fixed. Completed successes remain present when another unit has missing or conflicting evidence.
+5. Require completed ticket IDs to equal the original unit IDs exactly once. Project accepted nonnull
+   tickets from those actual results; retain every unresolved or failed ticket ID with its specific
+   issue. A source contradiction cannot be repaired by dropping its unit from coverage.
+6. Return TheoryIndex with actual context theories/priorConvention, the accumulated complete tickets,
+   their exact witnesses together with context witnesses, and all context/result issues. Every returned
+   ticket retains its original positive joint mass. The reader neither filters by observations nor
+   substitutes independent marginal priors for the source tuples.
