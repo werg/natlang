@@ -191,6 +191,24 @@ if (manifest.external_verifier_path) {
   row.semantics.trusted_exact_verifier = { path: manifest.external_verifier_path,
     sha256: exactVerifierHash, oracle };
 }
+const reviewBindings = [];
+if (manifest.independent_reviews !== undefined) {
+  if (!Array.isArray(manifest.independent_reviews) ||
+      new Set(manifest.independent_reviews.map(review => review?.path)).size !== manifest.independent_reviews.length)
+    throw Error('independent_reviews must list distinct receipt paths');
+  for (const review of manifest.independent_reviews) {
+    if (typeof review?.path !== 'string' || !review.path.startsWith('plans/') ||
+        typeof review?.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(review.sha256) ||
+        typeof review?.reviewer !== 'string' || !review.reviewer.trim())
+      throw Error('invalid independent review binding');
+    const path = await sourcePath(review.path, 'independent review receipt');
+    const actual = sha(await readFile(path));
+    if (actual !== review.sha256) throw Error(`independent review receipt changed: ${review.path}`);
+    reviewBindings.push({ path: review.path, sha256: actual, reviewer: review.reviewer });
+  }
+}
+if (manifest.readiness?.independent_oracle_review === true && reviewBindings.length === 0)
+  throw Error('independent oracle review needs a pinned review receipt');
 row.generation.collection = 'teacher';
 row.generation.source_quality = 'Exact authored natlang project snapshot; external verifier and independent semantic review required.';
 row.collection_guidance = { training_admission: false, review_scope: 'full-project-trajectory-and-external-oracle' };
@@ -222,10 +240,16 @@ if (manifest.reference_path) {
     scope: 'source/type replay of one canonical witness, not complete semantic grading or teacher admission' };
   await writeFile(join(output, 'reference-replay-only.ir.jsonl'), JSON.stringify(replayOnly) + '\n');
 }
+const sourceReviewed = Boolean(exactVerifierHash && canonicalReferenceReplay?.reference_ok &&
+  reviewBindings.length && ['source_loader_checked', 'typed_declarations_checked',
+    'typed_reference_checked', 'independent_oracle_review', 'exact_result_replay']
+    .every(field => manifest.readiness?.[field] === true));
 const report = { schema: 'natlang.semantic-application-package/1', id: manifest.id,
-  source_status: hasFullGold ? 'candidate_pending_reference_and_semantic_review' :
+  source_status: sourceReviewed ? 'candidate_source_reviewed_live_pending' :
+    hasFullGold ? 'candidate_pending_reference_and_semantic_review' :
     exactVerifierHash ? 'held_exact_verifier_bound_semantic_review_pending' :
       'held_invariant_oracle_requires_external_verifier',
+  source_review_binding: { reviewed: sourceReviewed, receipts: reviewBindings },
   training_admission: false, program_file_count: Object.keys(files).length,
   nl_file_count: Object.keys(files).filter(path => path.endsWith('.nl')).length,
   fixture_file_count: Object.keys(fixture).length, graph_edge_count: graph?.edges?.length ?? null,
