@@ -595,3 +595,23 @@ def test_fused_bf16_readout_normalizes_before_rounding_for_accumulation():
         assert torch.equal(loss, expected_loss)
         assert torch.equal(actual_grad, expected_grad)
 
+
+def test_mixed_span_bindings_distinguish_rendered_variants_of_one_record(tmp_path, monkeypatch):
+    import hashlib
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.train import direct_sft as direct
+    rows = [{'id': 'same-record', 'text': text, 'token_ids': list(range(length))}
+            for text, length in [('short variant', 10), ('long variant', 30)]]
+    path = tmp_path / 'spans.jsonl'
+    path.write_text(''.join(json.dumps({'id': row['id'],
+        'document_sha256': hashlib.sha256(row['text'].encode()).hexdigest(),
+        'token_count': len(row['token_ids']), 'spans': [[begin, begin + 2, 'value', True]]}) + '\n'
+        for row, begin in zip(rows, [7, 25])))
+    mix = {'neuralese_spans': {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}}
+    monkeypatch.setattr(direct, 'stream_text_rows', lambda *_: iter(rows))
+    args = SimpleNamespace(e2e_mix=mix, recovery_selection=None, merge_prefix_rows=False)
+    rendered = list(direct.stage_rows(args, 'unused', None))
+    assert direct.context_only_spans(rendered[0]) == [(7, 9)]
+    assert direct.context_only_spans(rendered[1]) == [(25, 27)]
+
