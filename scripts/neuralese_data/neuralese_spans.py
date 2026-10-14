@@ -61,7 +61,7 @@ def token_offsets(token_ids, text, tokenizer):
     return offsets, ''.join(pieces)
 
 
-def return_value_literals(text, start, value_path=('value',)):
+def return_value_literals(text, start, value_path=('value',), tool='return_result'):
     """Literal value arguments in the native call rendering; None for another dialect."""
     # Mellum renders real tool calls as JSON objects inside explicit tool tags.
     # Read member boundaries with the decoder, never substring-search status/code.
@@ -105,7 +105,7 @@ def return_value_literals(text, start, value_path=('value',)):
         for match in re.finditer(re.escape('<tool_call>'), text[start:]):
             try:
                 call = members(start + match.end())
-                if call.get('name', (None, None, None))[2] != 'return_result':
+                if call.get('name', (None, None, None))[2] != tool:
                     continue
                 recognized = True
                 arguments = call.get('arguments')
@@ -136,7 +136,7 @@ def return_value_literals(text, start, value_path=('value',)):
             except (ValueError, IndexError):
                 continue
         return values if recognized else None
-    candidates = {start + match.start(): match for match in re.finditer(r'\breturn_result\s*\(', text[start:])}
+    candidates = {start + match.start(): match for match in re.finditer(r'\b' + re.escape(tool) + r'\s*\(', text[start:])}
     calls, quote, escaped = [], None, False
     for index in range(start, len(text)):
         char = text[index]
@@ -210,6 +210,42 @@ def return_value_literals(text, start, value_path=('value',)):
     return values
 
 
+def quoted_content_offsets(rendered, literal):
+    """Raw source bounds of each decoded character in a JSON/Python quoted literal."""
+    if len(rendered) < 2 or rendered[0] not in ('"', "'") or rendered[-1] != rendered[0]:
+        return None
+    try:
+        json_mode = json.loads(rendered) == literal
+    except (ValueError, TypeError):
+        json_mode = False
+    decoder = json.loads if json_mode else ast.literal_eval
+    offsets, decoded, at = [], '', 1
+    while at < len(rendered) - 1:
+        begin = at
+        if rendered[at] != '\\':
+            piece = rendered[at]
+            at += 1
+        else:
+            match = re.match(r'''\\(?:["'\\/abfnrtv]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8})''', rendered[at:])
+            if match is None:
+                return None
+            at += len(match.group())
+            fragment = rendered[begin:at]
+            # JSON combines a high/low surrogate pair into one Unicode scalar.
+            if json_mode and fragment.startswith('\\u') and 0xD800 <= int(fragment[2:], 16) <= 0xDBFF:
+                following = re.match(r'\\u[dD][c-fC-F][0-9a-fA-F]{2}', rendered[at:])
+                if following is not None:
+                    at += len(following.group())
+                    fragment = rendered[begin:at]
+            try:
+                piece = decoder(rendered[0] + fragment + rendered[0])
+            except (ValueError, SyntaxError):
+                return None
+        decoded += piece
+        offsets.extend([(begin, at)] * len(piece))
+    return offsets if decoded == literal else None
+
+
 def spans_for_row(row: dict, writes: list[tuple[str, str, bool]], tokenizer) -> tuple[list, int]:
     """(spans, writes not found) of one direct row. ``writes``: (write name, value text, has edge) of the row's source
     records. A value is searched in the row's supervised part only (it also appears in later prompts as an input)."""
@@ -232,6 +268,28 @@ def spans_for_row(row: dict, writes: list[tuple[str, str, bool]], tokenizer) -> 
     for write in writes:
         name, value, has_edge = write[:3]
         site = write[3] if len(write) > 3 else {}
+        if site.get('source_kind') == 'inline-code-sidecar' and site.get('source_span') is not None:
+            path, tool = tuple(site['value_path']), site['tool']
+            key = (tool, path)
+            if key not in literal_cache:
+                literal_cache[key] = return_value_literals(text, supervised_from, path, tool)
+            found = None
+            for begin, end, code in literal_cache[key] or ():
+                if not isinstance(code, str) or code != site.get('code'):
+                    continue
+                left, right = site['source_span']
+                if not 0 <= left < right <= len(code):
+                    continue
+                bounds = quoted_content_offsets(text[begin:end], code)
+                if bounds is not None:
+                    found = (begin + bounds[left][0], begin + bounds[right - 1][1])
+                    break
+            covered = [] if found is None else [i for i, (b, e) in enumerate(offsets) if b < found[1] and e > found[0]]
+            if covered:
+                spans.append([covered[0], covered[-1] + 1, name, bool(has_edge)])
+            else:
+                missing += 1
+            continue
         path = tuple(site.get('value_path', ('value',))) if site.get('tool', 'return_result') == 'return_result' else ('value',)
         if path not in literal_cache:
             literal_cache[path] = return_value_literals(text, supervised_from, path)
@@ -308,6 +366,8 @@ def cohort_writes(cohort: Path) -> dict[str, list[tuple[str, str, bool]]]:
                     site = sites[n]
                     value += ({'tool': site.tool, 'value_path': list(site.value_path),
                                'source_kind': site.source_kind},)
+                    if site.source_kind == 'inline-code-sidecar':
+                        value[-1].update(source_span=list(site.source_span), code=site.arguments['code'])
                 writers[record['id']].append(value)
     row_index.save(cache, {'writers': writers})
     return writers
