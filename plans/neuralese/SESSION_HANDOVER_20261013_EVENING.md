@@ -1,3 +1,13 @@
+> Historical handover. At each session start, use `python3 scripts/coord.py
+> --as dgx-supervisor inbox --ack` and `coord.py status` for current execution
+> state before acting on the job names below. As of 2026-10-14, Mellum's actual
+> task cadence is 1600 (next evaluation 4800); C6 finished and the other sweep
+> arms are paused. R5 is registered and fully verified on both machines. The
+> independent FP32 full/no-marker LFM8000 arm is terminal with 0/16 scored
+> successes; program-header and marker comparisons are separate pending arms.
+> The Unicode JSONL framing repair is published; oversized source recovery is
+> active. These observations do not certify either model or a prompt decision.
+
 # DGX coordinator handover, 2026-10-13 ~17:40 UTC
 
 For any agent (any provider) taking over DGX coordination. Read `AGENTS.md` first. It holds the standing owner rules
