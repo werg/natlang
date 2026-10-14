@@ -39,6 +39,8 @@ Component (JSON, validated by ``validate_spec``)::
 """
 from __future__ import annotations
 
+from ..common.jsonio import read_jsonl
+
 import json
 import math
 import random
@@ -468,7 +470,7 @@ class Behaviour:
             path = Path(root) / path
         if sha256_file_hex(path) != config['probes']['sha256']:
             raise ValueError('gate probes changed since the recipe pinned them: ' + str(path))
-        self.probes = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        self.probes = read_jsonl(path)
         if 'output_convention' in config:
             # The backbone's chat/tool-call convention (line parity: one probe set, each line its own parser).
             self.probes = [{**probe, 'output_convention': config['output_convention']} for probe in self.probes]

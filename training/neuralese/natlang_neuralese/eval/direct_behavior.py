@@ -6,6 +6,8 @@ it does not qualify a runtime or change training/data admission.
 """
 from __future__ import annotations
 
+from ..common.jsonio import read_jsonl
+
 import argparse
 import json
 import os
@@ -22,7 +24,7 @@ def evaluate(args):
         raise FileNotFoundError("an explicit local immutable HF base snapshot is required")
     if sha256_file_hex(args.probes) != args.probes_sha256:
         raise ValueError("probe file changed from its declared SHA-256")
-    probes = [json.loads(line) for line in args.probes.read_text().splitlines() if line.strip()]
+    probes = read_jsonl(args.probes)
     if len(probes) != 48 or len({row.get("id") for row in probes}) != 48:
         raise ValueError("paired direct behavior evaluation requires the pinned 48-row probe set")
     signals = {row.get("signal") for row in probes}

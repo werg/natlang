@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 from ..common.hashing import sha256_file_hex
+from ..common.jsonio import read_jsonl
 
 TASK_OUTCOMES = (
     "task_success",
@@ -22,19 +23,6 @@ TASK_OUTCOMES = (
     "semantic_mismatch",
     "unresolved",
 )
-
-
-def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
-    rows = []
-    with Path(path).open(encoding="utf-8") as stream:
-        for number, line in enumerate(stream, 1):
-            if not line.strip():
-                continue
-            value = json.loads(line)
-            if not isinstance(value, dict):
-                raise ValueError(f"expected an object at {path}:{number}")
-            rows.append(value)
-    return rows
 
 
 def _text(value: Any) -> str:
