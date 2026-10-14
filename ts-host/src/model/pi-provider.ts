@@ -307,11 +307,16 @@ export function createPiModelBackend(provider: string, modelId: string, environm
         samplingParams: { ...record(requestOverride.samplingParams, 'piOptions.samplingParams'),
           ...(request.seed === null ? {} : { seed: request.seed }) },
         headers: { ...record(requestOverride.headers, 'piOptions.headers'), ...headers },
-        ...(Object.keys(payloadOverride).length ? { onPayload: async (payload: unknown, model: unknown) => {
-          const hook = requestOverride.onPayload;
-          const transformed = typeof hook === 'function' ? await hook(payload, model) : undefined;
-          return { ...record(transformed ?? payload, 'provider request payload'), ...payloadOverride };
-        } } : {}),
+        ...((Object.keys(payloadOverride).length || (model.api === 'openai-codex-responses' && maxTokens !== undefined)) ?
+          { onPayload: async (payload: unknown, providerModel: unknown) => {
+            const hook = requestOverride.onPayload;
+            const transformed = typeof hook === 'function' ? await hook(payload, providerModel) : undefined;
+            return { ...record(transformed ?? payload, 'provider request payload'), ...payloadOverride,
+              // Pi's Codex Responses adapter currently omits maxTokens from its request body.
+              // The collector's action ceiling must reach the provider for long tool calls.
+              ...(model.api === 'openai-codex-responses' && maxTokens !== undefined ?
+                { max_output_tokens: Math.max(maxTokens, 16) } : {}) };
+          } } : {}),
         ...(required ? { toolChoice: required } : {}),
         ...(apiKeyEnv && environment[apiKeyEnv] ? { apiKey: environment[apiKeyEnv] } : {})
       } as ModelsApiStreamOptions<Api>;

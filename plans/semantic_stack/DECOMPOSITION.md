@@ -158,6 +158,14 @@ The v15c trace confirmed the cursor advanced, then exposed an inconsistent retur
 
 ### Non-gating live idiomaticity signal
 
+The Codex Responses output budget is exact transport plumbing, not a natlang
+decision. The existing collector selects the action ceiling; `pi-provider`
+must put that number in the provider request body because the installed Pi
+Codex adapter currently ignores its `maxTokens` option. The model still owns
+each semantic decision and natural-language stage. A local intercepted-payload
+probe and one short authenticated turn verify the wire setting; long Cave v5
+request 70 remains a transport diagnostic rather than a semantic failure.
+
 The policy decision about whether a teacher trajectory expresses the authored
 natural-language program remains an independent semantic review. An exact trace
 scanner may count evaluation-code length, natural-language literal call sites,
