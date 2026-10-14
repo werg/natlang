@@ -318,7 +318,12 @@ def catalog(repo, config=None):
     overview += [f'| {status} | {count} |' for status, count in sorted(report['by_status'].items())]
     overview += ['', '## Registered neuralese snapshots', '']
     for corpus in registered_corpora:
-        overview.append(f"- `{corpus['id']}`: {corpus['availability']}; {corpus['admission']}; manifest `{corpus['manifest']}`.")
+        admission = corpus.get('admission')
+        if admission is None:
+            admission = corpus.get('training_admission_reason')
+        if admission is None:
+            admission = f"training_admission={corpus.get('training_admission', 'undeclared')}"
+        overview.append(f"- `{corpus['id']}`: {corpus['availability']}; {admission}; manifest `{corpus['manifest']}`.")
     overview += ['', '## Generated teacher snapshot', '']
     for snapshot in snapshots:
         s = snapshot['summary']

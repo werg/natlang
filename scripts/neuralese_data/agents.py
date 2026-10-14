@@ -480,7 +480,18 @@ def expansion_messages(raw):
     for original in raw:
         item = dict(original)
         if item.get('role') == 'function':
-            item['role'] = 'tool'
+            # Evidence-subagent Qwen transcripts use this role for dispatches,
+            # while legacy OpenAI transcripts use it for observations.
+            reasoning, body = split_think(item.get('content'))
+            try:
+                call = json.loads(body) if isinstance(body, str) else None
+            except ValueError:
+                call = None
+            if isinstance(call, dict) and isinstance(call.get('name'), str) and 'arguments' in call:
+                item.update(role='assistant', content=None, reasoning_content=reasoning,
+                            tool_calls=[tool_call(call['name'], call['arguments'], call.get('id'))])
+            else:
+                item['role'] = 'tool'
         content = item.get("content")
         if isinstance(content, list):
             # Keep non-text blocks too: silently dropping them destroys observations.

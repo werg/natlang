@@ -294,6 +294,9 @@ def test_the_guard_signals_one_victim_then_watches_it_without_stopping_another(m
     monkeypatch.setattr(ledger, 'STATE', str(path))
     calls = []
     monkeypatch.setattr(ledger, 'checkpoint_writes', lambda path=None, limit=2000: [])
+    # Docker subprocess timeout polling also calls time.sleep; keep this test's
+    # simulated guard iterations independent of host containers and subprocesses.
+    monkeypatch.setattr(ledger, 'unit_containers', lambda *args, **kwargs: ())
     monkeypatch.setattr(ledger, 'terminate', lambda unit, container: calls.append(('term', unit)))
     monkeypatch.setattr(ledger, 'kill', lambda unit, container: calls.append(('kill', unit)))
     monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})

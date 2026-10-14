@@ -35,6 +35,10 @@ FAMILIES = ('contract_diagnosis', 'workbench_tickets', 'logic_proof_verifier',
 START_SEED = 52007
 WORKERS = 6
 PER_FAMILY = {family: 6 for family in FAMILIES}
+# Both MuSiQue hop variants are under a source-contract family hold. Keep the
+# key for already prepared campaigns, but do not spend new teacher calls on it.
+PER_FAMILY['musique_hops'] = 0
+SOURCE_FAMILIES = tuple(family for family in FAMILIES if PER_FAMILY[family] > 0)
 # Large CoEdIT folder edits require file-by-file semantic review even when the
 # numeric return matches. The exact reference replay has a separate admitted
 # static route. CUAD folder_extract presently takes hundreds of requests per
@@ -47,6 +51,13 @@ PER_FAMILY['folder_criteria_reducer'] = 8
 # inline_review_each also emits its paired no-crisp family. Preserve both
 # behaviours without letting this one builder take two full family slots.
 PER_FAMILY.update(inline_review_each=3, inline_avoid_crisp=3)
+# Source-disjoint candidates remain plentiful in these deeper semantic and
+# reducer families after the MuSiQue hold. Use them rather than requiring an
+# arbitrary total that the old six-per-family caps cannot reach.
+PER_FAMILY.update(actor_greenhouse=10, dataset_workbench=10,
+                  workbench_tickets=8, composed_process=8,
+                  recurrence_inline_graphs=8, folder_criteria_reducer=10,
+                  knowledge_research=8, relational_late_argmax=8)
 TARGET_GROUP_INDEX = BASE / 'target-r3-source-groups.jsonl'
 TARGET_GROUP_INPUT_HASHES = {
     'program-header': '0974200754e27da114f429de3142fb3be8500431bcb0837cbea35868ebf30ba9',
@@ -423,7 +434,7 @@ def build_source(campaign, seed):
     source.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(['node', 'ts-host/scripts/inline-curriculum/build.mjs',
                     '--seed', str(seed), '--shapes', '8', '--split', 'train',
-                    '--families', ','.join(FAMILIES), '--allow-failures',
+                    '--families', ','.join(SOURCE_FAMILIES), '--allow-failures',
                     '--out', str(source)],
                    cwd=ROOT, check=True)
     try:
@@ -540,11 +551,12 @@ def prepare(campaign, seed, source, excluded, excluded_groups):
             seen.add(row['id'])
             used_groups.update(row['source_groups'])
             counts[family] += 1
-    if len(selected) < 100:
-        raise ValueError(f'Too few decontaminated source cases: {len(selected)}')
+    if len(selected) < WORKERS:
+        raise ValueError(f'Fewer decontaminated source cases than workers: {len(selected)} < {WORKERS}')
     manifest = dict(schema='natlang.generation-campaign/1', seed=seed,
                     source_path=str(source), source_sha256=sha256_file_hex(source),
                     source_verified_cases=len(source_rows), selected_count=len(selected),
+                    selection_target=100, selection_shortfall=max(0, 100 - len(selected)),
                     selected_by_family=dict(counts), selected_ids=[row['id'] for row in selected],
                     held_path=str(HELD), held_sha256=sha256_file_hex(HELD),
                     target_group_index=str(TARGET_GROUP_INDEX),

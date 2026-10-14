@@ -117,15 +117,32 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
     selected = [transform(row) for row in source[args.offset:args.offset + args.rows]]
     packet = out / "packet.jsonl"
     packet.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in selected), encoding="utf-8")
-    (out / "preparation.json").write_text(json.dumps({"schema": "natlang.task-rollout-preparation/1",
-                                                    "root_mode": root_mode,
-                                                    "source_cases": str(args.cases.resolve()),
-                                                    "source_sha256": hashlib.sha256(args.cases.read_bytes()).hexdigest(),
-                                                    "packet_sha256": hashlib.sha256(packet.read_bytes()).hexdigest()},
-                                                   indent=2) + "\n", encoding="utf-8")
     entries = build_queue(packet, len(selected), args.group, out, temperature=args.temperature,
                           case_seconds=args.case_seconds, max_model_requests=args.max_model_requests,
                           max_turns=args.max_turns, seed_base=args.seed_base)
+    preparation = {"schema": "natlang.task-rollout-preparation/1", "root_mode": root_mode,
+                   "source_cases": str(args.cases.resolve()),
+                   "source_sha256": hashlib.sha256(args.cases.read_bytes()).hexdigest(),
+                   "packet_sha256": hashlib.sha256(packet.read_bytes()).hexdigest()}
+    seed_reference = getattr(args, "match_seeds_from", None)
+    if seed_reference is not None:
+        reference = seed_reference.resolve()
+        reference_packet = read_jsonl(reference / "packet.jsonl")
+        reference_queue = read_jsonl(reference / "queue.jsonl")
+        by_task_sample = {}
+        for entry in reference_queue:
+            key = (reference_packet[int(entry["index"])]["id"], int(entry["sample"]))
+            if key in by_task_sample:
+                raise ValueError(f"reference seed is ambiguous for {key}")
+            by_task_sample[key] = int(entry["seed"])
+        for entry in entries:
+            key = (selected[int(entry["index"])]["id"], int(entry["sample"]))
+            if key not in by_task_sample:
+                raise ValueError(f"reference has no matching task and sample: {key}")
+            entry["seed"] = by_task_sample[key]
+        preparation["matched_seed_queue"] = str(reference / "queue.jsonl")
+        preparation["matched_seed_queue_sha256"] = hashlib.sha256((reference / "queue.jsonl").read_bytes()).hexdigest()
+    (out / "preparation.json").write_text(json.dumps(preparation, indent=2) + "\n", encoding="utf-8")
     (out / "queue.jsonl").write_text("".join(json.dumps(e, sort_keys=True) + "\n" for e in entries), encoding="utf-8")
     return {"packet": str(packet), "root_mode": root_mode, "rows": len(selected), "group": args.group, "queue_entries": len(entries),
             "source_cases": str(args.cases), "ids": [row["id"] for row in selected]}
@@ -218,6 +235,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--max-model-requests", type=int, default=32)
     p.add_argument("--max-turns", type=int, default=20)
     p.add_argument("--seed-base", type=int, default=7000)
+    p.add_argument("--match-seeds-from", type=Path,
+                   help="copy seeds by task ID and sample from an existing prepared run; fail on missing or ambiguous matches")
     p.add_argument("--root-mode", choices=("authored", "student"), default="authored",
                    help="authored replays the reference root and samples children; student samples root and children")
     s = sub.add_parser("score")

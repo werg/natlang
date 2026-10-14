@@ -14,4 +14,10 @@ args=(--rm --name "$NATLANG_PYTHON_CONTAINER" --pull never --gpus all
   -v /srv/storage:/srv/storage:ro -v /usr/bin/node:/usr/bin/node:ro
   -w "$ROOT")
 if [ -d /mnt/external ]; then args+=(-v /mnt/external:/mnt/external:ro); fi
+# The installed training image has libzstd but no CLI; corpus verification
+# invokes zstd as a subprocess. Reuse the host's pinned Homebrew CLI and libs.
+if [ -x /home/linuxbrew/.linuxbrew/bin/zstd ]; then
+  args+=(-v /home/linuxbrew/.linuxbrew:/home/linuxbrew/.linuxbrew:ro
+    -e PATH=/home/linuxbrew/.linuxbrew/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin)
+fi
 exec docker run "${args[@]}" "$NATLANG_PYTHON_IMAGE" python "$@"
