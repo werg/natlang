@@ -19,7 +19,6 @@ from pathlib import Path
 
 
 NL_CALL = re.compile(r'\bnl\s*(?:<|\.|`|\()')
-LITERAL_TICKET = re.compile(r"['\"](?:tickets/)?[A-Za-z][A-Za-z0-9_-]*\.md['\"]")
 
 
 def digest(path: Path) -> str:
@@ -69,8 +68,12 @@ def hold_reason(family: str, code: str) -> str | None:
         return 'required_iterateOn_missing'
     if family == 'curriculum_edit_stream' and (not has_iterate or not has_nl):
         return 'required_stepwise_nl_iterateOn_missing'
-    if family == 'curriculum_folder_criteria_reducer' and not has_nl and LITERAL_TICKET.search(code):
-        return 'literal_ticket_selection_without_nl'
+    if family == 'curriculum_actor_greenhouse' and not has_iterate:
+        return 'required_greenhouse_iterateOn_missing'
+    if family == 'curriculum_iterate_schedule_repair' and not has_iterate:
+        return 'required_schedule_iterateOn_missing'
+    if family == 'curriculum_folder_criteria_reducer' and not has_nl:
+        return 'required_folder_nl_criterion_missing'
     if family == 'curriculum_workbench_tickets' and not has_nl:
         return 'required_inline_nl_missing'
     return None

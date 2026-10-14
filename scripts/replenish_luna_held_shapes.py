@@ -60,13 +60,15 @@ PER_FAMILY.update(actor_greenhouse=10, dataset_workbench=10,
 # Exact final answers are insufficient for these shapes: the backlog-v5 audit
 # found that their successful trajectories systematically bypassed the intended
 # per-item NL decision or measured iterateOn process. Fresh s52065/s52066
-# successes show the same pattern. Hold *new* teacher allocation until the
+# successes show the same pattern. The wider scan also found greenhouse and
+# schedule repair almost never used iterateOn. Hold *new* teacher allocation until the
 # visible task and source oracle enforce the process, then measure the changed
 # task live. Existing campaigns still finish and remain available for review.
 PER_FAMILY.update(actor_greenhouse=0, composed_process=0,
                   edit_stream=0, folder_criteria_reducer=0,
-                  counterexample_revision=0)
+                  counterexample_revision=0, iterate_schedule_repair=0)
 PER_FAMILY['inline_review_each'] = 4
+PER_FAMILY.update(recurrence_inline_graphs=12, knowledge_research=10)
 SOURCE_FAMILIES = tuple(family for family in FAMILIES if PER_FAMILY[family] > 0)
 TARGET_GROUP_INDEX = BASE / 'target-r3-source-groups.jsonl'
 TARGET_GROUP_INPUT_HASHES = {
