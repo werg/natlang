@@ -68,6 +68,22 @@ existing exact linkage verifier and all source-quality decisions. Check a large
 typed return through real execution and materialization before replaying an
 omitted case; publish a new corpus version for repaired additions.
 
+## Short action and tool sessions
+
+Dolci function dispatches and Cognitive Kernel action snippets are typed task
+handoffs. Move the original initial request to the existing background source
+and let the Neuralese writer carry it to the consumer, using the already declared
+static task-background consumer instruction. Preserve system contracts, schemas,
+observations, later turns and teacher outputs. Parse literal Python call syntax
+with the AST as crisp serialization only; never execute source calls. Preserve
+unsupported dispatch syntax verbatim as an assistant target and record its
+unparsed form. Dataset source IDs and request hashes close related splits;
+benchmark-derived Cognitive Kernel provenance remains explicit. These are static
+external teacher targets with unknown correctness, not observed natlang executions.
+The existing native builder must carry supplied tool schemas and observation
+names/call IDs into the consumer request and evidence transcript. This is exact
+source serialization; earlier immutable views are not rewritten in place.
+
 ## Direct compressed union output
 
 The MuSiQue family hold requires a corrected broad union before the next main-line launch. Keep the existing admission, protected split, deduplication and tokenizer-twin decisions; explicitly remove the held member. Serialize selected rows directly into zstd, recording compressed identity plus independently decoded SHA-256 and byte count. Compression and durability extend the existing crisp union builder and compressed registry contract. This avoids another roughly140GB raw working copy without changing model-visible data or granting source admission.

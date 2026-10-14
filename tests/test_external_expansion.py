@@ -7,6 +7,66 @@ from neuralese_data.agents import expansion_messages, expansion_trajectory
 from neuralese_data.trajectory import record
 
 
+def test_literal_function_dispatch_never_executes_nonliteral_arguments():
+    from neuralese_data.agents import _literal_function_calls
+    import json
+    calls = _literal_function_calls('weather.forecast(city="Berlin", days=2)\nmath.pairs(nums=[2, 5], target=7)')
+    assert [c['function']['name'] for c in calls] == ['weather.forecast', 'math.pairs']
+    assert json.loads(calls[1]['function']['arguments']) == {'nums': [2, 5], 'target': 7}
+    assert _literal_function_calls('tool.run(value=__import__("os").getcwd())') is None
+    assert _literal_function_calls('tool.run(**options)') is None
+
+
+def test_dolci_keeps_first_dispatch_schemas_and_observations(tmp_path, monkeypatch):
+    import json
+    from neuralese_data import agents
+    from neuralese_data.trajectory import windows
+    data = tmp_path / 'D30'
+    data.mkdir()
+    (data / 'acquisition.json').write_text(json.dumps({'repo':'fixture/dolci', 'revision':'abc'}))
+    (data / 'train.parquet').touch()
+    schema = {'type':'function','function':{'name':'math.pairs','parameters':{'type':'object'}}}
+    row = {'id':'session-1','dataset_source':'fixture/mix','messages':[
+        {'role':'system','content':'Call the provided functions.', 'functions':json.dumps([schema])},
+        {'role':'user','content':'Find pairs from [2, 5] summing to 7.'},
+        {'role':'assistant','function_calls':'math.pairs(nums=[2, 5], target=7)'},
+        {'role':'environment','content':'OBSERVATION'},
+        {'role':'assistant','content':'Final response'}]}
+    monkeypatch.setattr(agents, 'EXPANSION_ROOT', tmp_path)
+    monkeypatch.setattr(agents, '_parquet_groups', lambda path: iter([(0,row)]))
+    _, trajectory = next(agents.dolci_tool_use())
+    assert trajectory.tools == [schema]
+    assert trajectory.messages[3]['role'] == 'tool'
+    assert trajectory.messages[3]['content'] == 'OBSERVATION'
+    first = record(trajectory, trajectory.head, 2)
+    assert 'Find pairs' in json.dumps(first['sources'])
+    assert 'Find pairs' not in json.dumps(first['consumer'])
+    assert 'OBSERVATION' not in json.dumps(first)
+    assert first['target']['value']['tool_calls'][0]['function']['name'] == 'math.pairs'
+    assert (trajectory.head, 2) in windows(trajectory, 4, seed=1)
+
+
+def test_cognitive_single_action_gets_a_causal_task_background(tmp_path, monkeypatch):
+    import json
+    from neuralese_data import agents
+    from neuralese_data.trajectory import windows
+    data = tmp_path / 'D34'
+    data.mkdir()
+    (data / 'acquisition.json').write_text(json.dumps({'repo':'fixture/kernel', 'revision':'abc'}))
+    (data / 'docbench.sft.jsonl').write_text(json.dumps({'messages':[
+        {'role':'system','content':'Produce the next Python action.'},
+        {'role':'user','content':'TASK EVIDENCE: inspect report.pdf and extract its total.'},
+        {'role':'assistant','content':'print(read_document("report.pdf"))'}]})+'\n')
+    monkeypatch.setattr(agents, 'EXPANSION_ROOT', tmp_path)
+    _, trajectory = next(agents.cognitive_kernel())
+    assert windows(trajectory, 4, seed=1) == [(2, 2)]
+    row = record(trajectory, 2, 2)
+    assert 'TASK EVIDENCE' in json.dumps(row['sources'])
+    assert 'TASK EVIDENCE' not in json.dumps(row['consumer'])
+    assert row['target']['value']['content'] == 'print(read_document("report.pdf"))'
+    assert trajectory.lineage['notes']['benchmark_source_file'] == 'docbench.sft.jsonl'
+
+
 def test_tagged_dispatch_keeps_arguments_and_reasoning():
     raw = [{'role': 'assistant', 'content': '<think>Choose workers.</think>\n<tool_call>\n'
             '{"name":"create_sub_agents","arguments":{"sub_agents":[{"prompt":"Find X"}]}}'
@@ -58,11 +118,13 @@ def test_native_builder_preserves_structured_target_and_source_calls(tmp_path):
     call = {'type': 'function', 'function': {'name': 'search', 'arguments': '{"query":"KEEP QUERY"}'}}
     messages = [{'role': 'user', 'content': 'Find the answer'},
                 {'role': 'assistant', 'content': None, 'tool_calls': [call]},
-                {'role': 'tool', 'content': 'Observed answer'},
+                {'role': 'tool', 'content': 'Observed answer', 'name':'search', 'tool_call_id':'source-call-42'},
                 {'role': 'assistant', 'content': 'Recent step'},
                 {'role': 'tool', 'content': 'Recent observation'},
                 {'role': 'assistant', 'content': None, 'tool_calls': [call]}]
     trajectory = expansion_trajectory('D01', receipt, 'sample', {'messages': messages})
+    trajectory.tools = [{'type':'function','function':{'name':'search','description':'SCHEMA CONTRACT',
+                         'parameters':{'type':'object','properties':{'query':{'type':'string'}}}}}]
     row = record(trajectory, 3, 5)
     source = tmp_path / 'fixture.port-records.jsonl'
     source.write_text(json.dumps(row) + '\n')
@@ -85,6 +147,8 @@ def test_native_builder_preserves_structured_target_and_source_calls(tmp_path):
     values = list(strings(json.loads(next(built.glob('*.ir.jsonl')).read_text())))
     assert json.dumps(row['target']['value'], separators=(',', ':'), ensure_ascii=False) in values
     assert any('KEEP QUERY' in value and 'evidence' in value for value in values)
+    assert any('SCHEMA CONTRACT' in value for value in values)
+    assert any('source-call-42' in value for value in values)
 
 
 def test_codeagent_task_handoff_keeps_problem_and_prior_history_out_of_consumer(tmp_path, monkeypatch):

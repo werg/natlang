@@ -636,7 +636,83 @@ def codeagent_sft(limit=None):
         yield index, trajectory
 
 
+def _literal_function_calls(text):
+    """Serialize literal upstream dispatches without evaluating source code."""
+    try:
+        body = ast.parse(text).body
+        calls = []
+        for statement in body:
+            if not isinstance(statement, ast.Expr) or not isinstance(statement.value, ast.Call):
+                return None
+            call = statement.value
+            parts, node = [], call.func
+            while isinstance(node, ast.Attribute):
+                parts.append(node.attr)
+                node = node.value
+            if not isinstance(node, ast.Name) or call.args or any(k.arg is None for k in call.keywords):
+                return None
+            parts.append(node.id)
+            arguments = {k.arg: ast.literal_eval(k.value) for k in call.keywords}
+            calls.append(tool_call('.'.join(reversed(parts)), arguments))
+        return calls or None
+    except (SyntaxError, ValueError, TypeError):
+        return None
+
+
+def _initial_request_background(trajectory):
+    """Use the existing typed background handoff for an otherwise history-free task."""
+    for msg in trajectory.messages[:trajectory.head]:
+        if msg['role'] == 'user' and msg.get('content'):
+            trajectory.background.append(source('document', text=msg['content']))
+            msg['content'] = 'Complete the coding task supplied in the background, following its requested format.'
+            trajectory.lineage['notes']['relationship'] = 'derived-task-background'
+            break
+    return trajectory
+
+
+def dolci_tool_use(limit=None):
+    root = EXPANSION_ROOT / 'D30'
+    receipt = json.loads((root / 'acquisition.json').read_text())
+    def rows():
+        for path in sorted(root.rglob('*.parquet')):
+            for index, row in _parquet_groups(path):
+                yield f'{path.relative_to(root)}:{index}', row
+    for rid, row in _limited(rows(), limit):
+        messages, tools, unparsed = [], [], []
+        for original in row.get('messages') or []:
+            msg = dict(original)
+            schemas = msg.get('functions')
+            if schemas:
+                for schema in json.loads(schemas) if isinstance(schemas, str) else schemas:
+                    if schema not in tools:
+                        tools.append(schema)
+            if msg.get('role') == 'environment':
+                msg['role'] = 'tool'
+            dispatch = msg.get('function_calls')
+            if dispatch:
+                calls = _literal_function_calls(dispatch)
+                if calls:
+                    msg['tool_calls'] = calls
+                else:
+                    msg['content'] = '\n'.join(filter(None, [msg.get('content'), dispatch]))
+                    unparsed.append(dispatch)
+            messages.append(msg)
+        normalized = {**row, 'messages':messages, 'tools':tools,
+                      'metadata':{'source':row.get('dataset_source'), 'session_id':row.get('id') or rid,
+                                  'trajectory_id':row.get('id') or rid}}
+        trajectory = expansion_trajectory('D30', receipt, rid, normalized)
+        trajectory.lineage['notes']['unparsed_function_calls'] = unparsed
+        yield rid, _initial_request_background(trajectory)
+
+
+def cognitive_kernel(limit=None):
+    for rid, trajectory in _expansion('D34', limit):
+        trajectory.lineage['notes']['benchmark_source_file'] = rid.split(':', 1)[0]
+        yield rid, _initial_request_background(trajectory)
+
+
 CORPORA.update({"wideseek": (wideseek, 4), "cooperator-dual-policy": (cooperator_dual_policy, 4),
                 "searchswarm": (searchswarm, 4), "owl-sft": (owl_sft, 4), "codeagent-sft": (codeagent_sft, 1),
                 'evidence-subagent': (evidence_subagent, 4), 'openthoughts-agent': (openthoughts_agent, 4),
-                'terminaltraj': (terminaltraj, 4)})
+                'terminaltraj': (terminaltraj, 4), 'dolci-tool-use': (dolci_tool_use, 4),
+                'cognitive-kernel': (cognitive_kernel, 4)})
