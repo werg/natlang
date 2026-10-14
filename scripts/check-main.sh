@@ -14,6 +14,10 @@
 #     sh -c 'NATLANG_NEURALESE_DEVICE=cuda scripts/check-main.sh > /tmp/check-main.log 2>&1; echo exit=$? >> /tmp/check-main.log'
 # Environment: NATLANG_PYTHON overrides discovery; otherwise prefer .venv-neuralese, then .venv
 # in this checkout or its main worktree. CHECK_MAIN_TS_CONCURRENCY defaults to 2.
+# On Pop, the pinned training image supplies Python 3.12/PyTorch/Transformers:
+#   run this under memory_ledger.py --container <name>, setting
+#   NATLANG_PYTHON=$PWD/scripts/python_training_image.sh,
+#   NATLANG_PYTHON_CONTAINER=<name>, NATLANG_PYTHON_IMAGE=<installed image>.
 # Node packages come from `npm install` at the workspace root (never `npm ci` while other sessions run).
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
