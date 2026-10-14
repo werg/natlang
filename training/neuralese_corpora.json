@@ -70248,6 +70248,63 @@
       "review_status": "All seven first actions read criterion and ticket contents; moves and returns match exact file/answer oracle. One enumerated five names from the visible folder listing rather than using a glob, still a valid snapshot solution.",
       "required_conversion": "render LFM and Mellum twins; include additively in next broad train union without duplicate targets",
       "notes": "Only approved-turns.jsonl is a training input. semantic-holds.json excludes 81 already admitted parents and two genuine loop-cap holds from the shared 90-parent candidate; original parent/native evidence resides in luna-held-shapes-s52052-curated-native-turns-20261014-v1. This shallow slice is not credited to lambda-depth curriculum."
+    },
+    {
+      "id": "external-expansion-initial-handoffs-20261014-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-initial-handoffs-20261014-v1",
+      "include": [
+        "*.port-records.jsonl",
+        "manifest.json",
+        "admission-review.json"
+      ],
+      "source_class": "external-static-typed-handoff",
+      "training_admission": true,
+      "training_admission_reason": "Owner2026-10-14 explicitly admits static natlang-like transformation and general coding/Neuralese teacher data.",
+      "derived_from": [
+        "external-expansion-d01-source-20261014-v1",
+        "external-expansion-d08-source-20261014-v1"
+      ],
+      "license": "pinned source card facts in source manifests and record lineage",
+      "notes": "External teacher correctness unknown; exact static source/target separation and protected closure, not live native task certification."
+    },
+    {
+      "id": "external-expansion-codeagent-handoffs-20261014-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-codeagent-handoffs-20261014-v1",
+      "include": [
+        "*.port-records.jsonl",
+        "manifest.json",
+        "admission-review.json"
+      ],
+      "source_class": "external-static-typed-handoff",
+      "training_admission": true,
+      "training_admission_reason": "Owner2026-10-14 explicitly admits static natlang-like transformation and general coding/Neuralese teacher data.",
+      "derived_from": [
+        "external-expansion-d05-source-20261014-v1"
+      ],
+      "license": "pinned source card facts in source manifests and record lineage",
+      "notes": "External teacher correctness unknown; exact static source/target separation and protected closure, not live native task certification."
+    },
+    {
+      "id": "external-expansion-first-wave-20261014-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-first-wave-20261014-v1",
+      "include": [
+        "turns/**/*.turns.jsonl.zst",
+        "turns/**/*.summary.json",
+        "ir/**/build.json",
+        "runtime-page.json",
+        "admission-review.json"
+      ],
+      "source_class": "statically-lowered-external-native-teacher-turns",
+      "training_admission": true,
+      "training_admission_reason": "Owner2026-10-14 static natlang-like conversion and broad coding/Neuralese teacher training",
+      "derived_from": [
+        "external-expansion-initial-handoffs-20261014-v1"
+      ],
+      "license": "external source facts retained in pinned snapshots/port records",
+      "notes": "Exact reference verifies static native program plumbing using upstream recorded teacher targets; does not independently execute or verify external research/code targets."
     }
   ],
   "coverage_backlog": [
