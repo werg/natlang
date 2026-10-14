@@ -12,6 +12,7 @@ export type ExpressionTheory = { theoryId: string; compartment: string; stage: s
 export type JointTicket = { ticketId: string; theoryId: string; assignments: { accessionId: string; genotype: string; cytoplasm: string }[]; mass: number; witnesses: Witness[] };
 export type TheoryIndex = { theories: ExpressionTheory[]; tickets: JointTicket[]; priorConvention: string; witnesses: Witness[]; unresolved: string[] };
 export type ScopeDecision = { measuresClaim: boolean | null; quantity: string; compartment: string; stage: string; regime: string; reason: string; witnesses: Witness[] };
+export type ScopeMeaning = { measuresClaim: boolean | null; quantity: string; compartment: string; stage: string; regime: string; reason: string; evidence: { clauseId: string; exactQuote: string }[] };
 export type Observation = { observationId: string; accessionId: string; reportedAnswer: string; scope: ScopeDecision; witnesses: Witness[] };
 export type Assay = { assayId: string; readout: string; compartment: string; stage: string; regime: string; usable: boolean | null; answerGrammar: string; witnesses: Witness[] };
 export type AssayIndex = { assays: Assay[]; observations: Observation[]; unresolved: string[] };

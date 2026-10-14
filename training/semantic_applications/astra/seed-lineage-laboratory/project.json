@@ -461,7 +461,7 @@
     "training_admitted": false,
     "source_variant_review": "Consumer-depth and actual typed input-scope follow-up independently reviewed; live pending."
   },
-  "model_facing_debt": "Initial27NL source unmeasured. Fullsource/control review and approximately48 live samples required before adoption; no training admission.",
+  "model_facing_debt": "source-reader-scope-v3:0/48 live samples; require actual scope literal result and source inventory handoff into later posterior/policy stages.",
   "scoped_literals": [
     {
       "site": "designExperiments/readBank/readPedigree/judgeParentage.nl",
@@ -505,9 +505,15 @@
       "sha256": "bf30e58a4130db9420c42afb89e6c9add4be5e146076c366b9c553cb30578e46",
       "reviewer": "semantic_slate_sol",
       "scope": "Focused consumer-depth and actual Assay/input-scope follow-up; no live credit"
+    },
+    {
+      "path": "plans/semantic_stack/SEED_READER_STAGE_REVIEW_POP.json",
+      "sha256": "3e468400bc67a9ed9f2ae51bce303a80d8eb0511d135dca9174937799f614b97",
+      "reviewer": "pop-semantic-curriculum",
+      "scope": "Independent reader-stage scope/type handoff review; no live credit"
     }
   ],
-  "readiness_scope": "Original fixture/oracle and exact reference reviewed; current consumer-depth source independently reviewed by pinned delta receipt. Actual application execution and live/training qualification remain pending.",
+  "readiness_scope": "Original source-world/oracle, consumer-depth and new reader-stage handoffs have pinned independent source reviews; native/source reference replay remains a witness, no live/admission.",
   "current_policy_source_revision": {
     "id": "semantic-consumer-depth-v2",
     "source_files": [
@@ -524,6 +530,23 @@
       "sha256": "bf30e58a4130db9420c42afb89e6c9add4be5e146076c366b9c553cb30578e46",
       "reviewer": "semantic_slate_sol",
       "scope": "Focused consumer-depth and actual Assay/input-scope follow-up; no live credit"
+    }
+  },
+  "source_variant": {
+    "id": "source-reader-scope-v3",
+    "supersedes": "semantic-consumer-depth-v2",
+    "independent_source_review": true,
+    "fixture_oracle_reference_unchanged": true,
+    "status": "source_reviewed_live_pending",
+    "changes": [
+      "Declared ScopeMeaning plus local typed direct-await idiom",
+      "Source inventory stage responsibilities separated from downstream certificate conclusions"
+    ],
+    "review_receipt": {
+      "path": "plans/semantic_stack/SEED_READER_STAGE_REVIEW_POP.json",
+      "sha256": "3e468400bc67a9ed9f2ae51bce303a80d8eb0511d135dca9174937799f614b97",
+      "reviewer": "pop-semantic-curriculum",
+      "scope": "Independent reader-stage scope/type handoff review; no live credit"
     }
   }
 }

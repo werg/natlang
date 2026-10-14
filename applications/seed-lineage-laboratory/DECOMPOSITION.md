@@ -90,3 +90,14 @@ Author source and connected fixture first, then a full typed canonical certifica
 The source audit found declaration-only visible TypeScript and no crisp biological/planning engine. It found two compressed NL consumers. partitionAnswers expands six steps to nine: original-world completeness, unusable versus missing likelihood, assay-resolution equivalence, complete world-by-answer rows, goal-class preservation and local reweighting. compareCandidates expands five steps to eight: source priority interpretation, complete versus partial continuation, successive contender reduction, independent expected/worst objectives, explicit numerical ties and source-supported tie resolution. These stages consume existing actual typed predictions and candidate values; no new forwarding modules, fixture tables or semantic services are added. Exact arithmetic/provenance remains mechanical. Current Lantern evidence, types, reference and oracle stay byte-stable; the new source needs focused peer review and live measurement.
 
 Consumer input audit: partitionAnswers now receives the actual Assay from predictExperiments, so its readout-resolution/grammar judgment has the declared input it needs. Candidate comparison consumes upstream completeness instead of referring to an unavailable goal argument. These are typed source handoffs; no new policy helper or fixture outcome is added.
+
+## Source-reader scope v3
+
+The v2 live diagnostic exposed a missing concrete ScopeMeaning alias and source readers treating the
+whole requested certificate as their local return responsibility. The scope child now has a declared
+semantic alias plus a positive local typed direct-await idiom; parent code binds original quote identity.
+readBank explicitly owns BankSource inventory, while readStocks owns offered StockIndex inputs. The
+actual inventory feeds reconstructBelief, predictExperiments and planPolicy, which own the requested
+posterior and adaptive-cost conclusions. This changes neither biological source facts nor report types;
+unknown scope, invalid protocol and failed execution remain different. New source is held for peer/live
+qualification. The stopped v2 diagnostic grants neither successful execution nor training admission.
