@@ -1,0 +1,62 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-r8-teacher-additions-delta-20261014-v1",
+  "owner": "pop",
+  "path": "runs/natlang-r8-teacher-additions-delta-20261014-v1",
+  "files": [
+    {
+      "path": "full/lfm25/text-data.jsonl.zst",
+      "bytes": 618200,
+      "sha256": "8e4e2f73cfcd8b018d6a155d3da952b7d3287d52e6129b634ce39669a8564688"
+    },
+    {
+      "path": "full/mellum21/text-data.jsonl.zst",
+      "bytes": 598416,
+      "sha256": "5be1eaacc97ee1a75d7b1c32281498e81ed709284b2fef9991fba76690bb6232"
+    },
+    {
+      "path": "full/omissions.jsonl",
+      "bytes": 77988,
+      "sha256": "34c7152912996a2c7ea167dee7b4f070ae8ad309c5ad88d867d19c1141e43315",
+      "lines": 245
+    },
+    {
+      "path": "program-header/lfm25/text-data.jsonl.zst",
+      "bytes": 7781674,
+      "sha256": "baeb39ee65235ab79c640a2f73efe68a0e8f73d4bf8caf7ee1244fb4e5a4d9d9"
+    },
+    {
+      "path": "program-header/mellum21/text-data.jsonl.zst",
+      "bytes": 7685024,
+      "sha256": "a3a51e258745b47305d51c5f8c9532d97ed58ce867d098fcf2cc9bffa45c413e"
+    },
+    {
+      "path": "program-header/omissions.jsonl",
+      "bytes": 1905486,
+      "sha256": "c4b7034c55e6e2f351fa2adce0a83b1ba29cc9e4745623b7163a475e85b99266",
+      "lines": 6002
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 24879,
+      "sha256": "778a2169812c272a33e1368d98b615dbef8f74df2a0b5d688976182da7fcc76b"
+    },
+    {
+      "path": "whole-trajectory/lfm25/text-data.jsonl.zst",
+      "bytes": 6591395,
+      "sha256": "75535b239b447232ff72f894babdce2b0616101ef9d2ad024054c5fc8b5591de"
+    },
+    {
+      "path": "whole-trajectory/mellum21/text-data.jsonl.zst",
+      "bytes": 7846322,
+      "sha256": "2e32e0d3b7f52bfeb6696f03b7d0d0192c42a309137ec80da4bdadd7a09c3593"
+    },
+    {
+      "path": "whole-trajectory/omissions.jsonl",
+      "bytes": 670964,
+      "sha256": "316f659f7b8f61fc549e062631822aea78ba5f23657c20b580a47a7e519e8258",
+      "lines": 2018
+    }
+  ],
+  "bytes": 33800348
+}

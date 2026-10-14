@@ -71,7 +71,7 @@ Use the shared `scripts/neuralese_data/build_native_turn_union.py` once with:
   `runs/natlang-native-turns-e2e-musique-hops-render-20261013-v1/RENDERING/TOKENIZER/text-data.jsonl`
   files as R8, plus the SST and backlog-v5 structural witnesses above.
 
-Run the builder through the DGX memory ledger at low priority. Verify the
+Run the builder through the executing machine's memory ledger at low priority. Verify the
 receipt's source hashes, source-review version, protected held groups/texts,
 zero train/held source-group overlap, and equal document identities in LFM and
 Mellum for each rendering. Inspect `source_quality_quarantine` omissions for
@@ -81,3 +81,27 @@ new immutable corpus manifests, sync them to Pop, and add them through an
 explicit data continuation after the active PH snapshot. Do not treat the
 current registry's `training_admission: true` on the old backlog render as
 sufficient to skip this global quality pass.
+
+## Completed protected build (Pop, 2026-10-14)
+
+Pop built `natlang-r8-teacher-additions-delta-20261014-v1` under its memory
+ledger after DGX completed and registered all six R8 views. Receipt runtime:
+1,195 seconds. The immutable manifest covers ten files and 33,800,348 bytes.
+Both tokenizer views have the same document identities in each rendering:
+1,072 full, 20,237 program-header and 13,176 whole-trajectory documents,
+all train split. The receipt binds six R8 held references and eight quarantine
+references, including the backlog-v5 v2 witness SHA
+`29470612eecd21953f11282aa4e23dc0e9677df81123dde77807722f03bd0d68`.
+It records 12,155 held groups, 182,986 held text hashes and 64,766
+quarantined source groups. The only member omissions are backlog-v5 source
+quality holds: 245 full, 6,002 program-header and 2,018 whole-trajectory.
+No tokenizer-twin or duplicate-ID conflict was admitted.
+
+The first build exposed an order-only twin check bug: LFM and Mellum contained
+the same 1,072 unique full document identities but listed them in different
+source order. Commit `075cd442` compares the sorted identity tuples with
+multiplicity preserved; the successful rerun verified the existing full files
+byte for byte before building the other views. The receipt binds the corrected
+builder hash. The next step is manifest verification on DGX and an explicit
+recipe continuation; registry admission by itself does not alter a running
+training snapshot.
