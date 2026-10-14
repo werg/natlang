@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-d29-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D29",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 6891,
+      "sha256": "2c3f180361751c47f7fd46100c7d6587e531f4507629acf83138f086f0711b58"
+    },
+    {
+      "path": "acquisition.json",
+      "bytes": 1308,
+      "sha256": "f2ee835b02029c2eef67b40a0f255493fd56a260f8eb7f54b576ef495fde72cf"
+    },
+    {
+      "path": "data/train-00000-of-00001.parquet",
+      "bytes": 109673127,
+      "sha256": "ea8ac5c7c7e80192119861f196f90d14e94d0a1c2b77ae986ea0544759eb9547"
+    },
+    {
+      "path": "ota-logo.png",
+      "bytes": 692314,
+      "sha256": "609f53f08843672e712a531c6dc30096eb6d96dbeffaa2a82c38ffc69d9189df"
+    }
+  ],
+  "bytes": 110373640
+}

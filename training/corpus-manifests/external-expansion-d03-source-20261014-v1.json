@@ -1,0 +1,64 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-d03-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D03",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "bytes": 9040,
+      "sha256": "df439b3ffca90287229626006fa57a0906233c088343007c182ef7e82a3f5bc8"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "README.md",
+      "bytes": 46076,
+      "sha256": "9d842b2459a04511858a4c30d1e694a68fe8c95acb8a47bdae1cb39292c0789c"
+    },
+    {
+      "path": "acquisition.json",
+      "bytes": 13017,
+      "sha256": "3d2305e887d7ad6f8f1e2c97e4194fba3bd6a85626ae1e833c0ff84714abc17e"
+    },
+    {
+      "path": "sample/CHECKSUMS.json",
+      "bytes": 615,
+      "sha256": "55bf361c61354bed1db82215fccffb58b88e58ddbc31abe908cf2b2627af4d1d"
+    },
+    {
+      "path": "sample/labels/labels.jsonl.zst",
+      "bytes": 101247,
+      "sha256": "72c48e79eec912ef09071123efab047247037061cd6dcf8664ad3405b070809e"
+    },
+    {
+      "path": "sample/messages/messages.jsonl.zst",
+      "bytes": 25153654,
+      "sha256": "e30880a6836cb4ddfa126ec4789c7ca1e39474be9170b928e323a12777f305ea"
+    },
+    {
+      "path": "sample/trajectories/trajectories.jsonl.zst",
+      "bytes": 25734720,
+      "sha256": "03f643618b35c870ac7667a6212c116de69fc717b1a77ac7774f7751b5321eb9"
+    },
+    {
+      "path": "sample/views/error_recovery.jsonl.zst",
+      "bytes": 618876,
+      "sha256": "549db6ab13eafd3c8e0b68d41df19f2152b56b2bf33a666309a788eec2000fa4"
+    },
+    {
+      "path": "sample/views/sft_steps.jsonl.zst",
+      "bytes": 15277312,
+      "sha256": "1b50e5a304243e238bb8112a6bcb35c013356f5bf8ffdaea4a9418c1a5af1bb7"
+    },
+    {
+      "path": "sample/views/tool_grammar.jsonl.zst",
+      "bytes": 354,
+      "sha256": "64b5b03bc2b65e3c8fd3c23f1c7c981ed53a5c92820ea28924a6ca43ee40d925"
+    }
+  ],
+  "bytes": 66966269
+}
