@@ -72895,11 +72895,12 @@
       "license": "source-row licenses; mixed project-generated and AG News academic-use",
       "split": "train only; exact accepted source program, source group and source ID disjoint from protected held48",
       "admission": "8 of 11 exact accepted parents, 42 native successful teacher decisions; three semantic quality holds and 15 non-target native decisions",
-      "training_admission": true,
-      "training_admission_reason": "Explicit parent-level semantic holds, exact source/outcome checks, successful native teacher decision selection, protected held48 separation; admission-review.json binds immutable source/output hashes. No DPO pairs admitted.",
+      "training_admission": false,
+      "training_admission_reason": "Superseded: initial review admitted one exact repeated world.look() target after identical observation; use corrected v2 source/render only.",
       "review_status": "Parent and tool-action semantic review, source-group protection and native decision checks completed",
       "required_conversion": "render LFM and Mellum twins; include in a later protected target-union delta after global held/source-quality checks",
-      "notes": "Only approved-turns.jsonl is a training input. Three exact-success parents held for process/iteration/ID-specific quality; student prefix and rejected proposals are context only. Pop-owned raw campaign remains on Pop."
+      "notes": "Only approved-turns.jsonl is a training input. Three exact-success parents held for process/iteration/ID-specific quality; student prefix and rejected proposals are context only. Pop-owned raw campaign remains on Pop.",
+      "superseded_by": "qad-r8-student-root-recovery-v3-20261014-v2"
     },
     {
       "id": "qad-r8-student-root-recovery-v3-lfm-render-20261014-v1",
@@ -72918,8 +72919,8 @@
       "source_class": "rendered-natlang-native-teacher-turn-text",
       "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
       "admission": "renders of admitted source corpora: qad-r8-student-root-recovery-v3-20261014-v1; variants: full/lfm25, program-header/lfm25, whole-trajectory/lfm25; no new example admission",
-      "training_admission": true,
-      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "training_admission": false,
+      "training_admission_reason": "Superseded: initial review admitted one exact repeated world.look() target after identical observation; use corrected v2 source/render only.",
       "derived_from": [
         "qad-r8-student-root-recovery-v3-20261014-v1"
       ],
@@ -73021,7 +73022,8 @@
         "protected": null,
         "held_text": {}
       },
-      "notes": "LFM-only source render: 42 program-header, 23 whole-trajectory, three sampled full train documents. Mellum tokenizer twin to be rendered separately on DGX; final union still requires global held/source proof."
+      "notes": "LFM-only source render: 42 program-header, 23 whole-trajectory, three sampled full train documents. Mellum tokenizer twin to be rendered separately on DGX; final union still requires global held/source proof.",
+      "superseded_by": "qad-r8-student-root-recovery-v3-lfm-render-20261014-v2"
     },
     {
       "id": "qad-r8-student-root-recovery-v3-20261014-v2",
