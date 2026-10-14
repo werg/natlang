@@ -300,6 +300,8 @@ EvaluateCompletedRecurrence uses the existing trainer's evaluator and restore:
    and leave the parent checkpoint untouched.
 The CLI flag and identity/step/path checks are crisp execution verifiers. This
 does not change prompts, generation, training objectives or ordinary resumes.
+Configuration inspection applies the same direct-writer normalization before
+reporting settings, and exits before CUDA queries, input reads or model loading.
 
 ## Report the exact failed test and its first diagnostic — 2026-10-14
 
