@@ -16,11 +16,11 @@
   "changed_paths": {
     "applications/cave-mission/DECOMPOSITION.md": "b3f37b0d2fc05f6928f2c7123374721a5f2f549644b1db402acec6010c068d85",
     "applications/cave-mission/types.ts": "ad2c7ac4dbe8398d5aada1ad77e4221efc3f976ad582f40363a16055673b324c",
-    "applications/cave-mission/planMission/survey/readFrames.nl": "92bb6de3221e7641f2d825f4937029450352d09efc9a70a85412fa24fd79e9f6",
+    "applications/cave-mission/planMission/survey/readFrames.nl": "f3d780798a5f8cb6f420868ae43186d80f8fa3f3fb4d19b88dac4e1b98caa346",
     "applications/cave-mission/planMission/survey/readFrames/advanceFrameUnit.nl": "97b819a32abb5e3ba0d7d0b2b62e283c78d385897e5b430503c5d2a15ba4b672",
     "applications/cave-mission/planMission/survey/readFrames/advanceFrameUnit/discoverFrameSupport.nl": "ff71a67b57fd109e63be57e221d5911cb9df681c84099c9b54957090284c8cde",
     "applications/cave-mission/planMission/survey/readFrames/interpretConvention.nl": "5f0e0c2f631b74b7305ee6a43afaf33b382551f07ba666a16bef4c0c082c27fc",
-    "training/semantic_applications/astra/cave-mission/project.json": "a29bafaead9c5d337b14ec342fdc1c49a768edc28f1043ced0207ccb8c38591d",
+    "training/semantic_applications/astra/cave-mission/project.json": "d2a3906c0f01f8263c9dedf2eaccc7bc0309c293065d4b94fbab4e5570030cdd",
     "training/semantic_applications/astra/cave-mission/frame-v8-controls/check-controls.mjs": "b793db8cf546e40b5a076f1ad354a27a6923e11ad843bf302c3f95af55b47ccd",
     "training/semantic_applications/astra/cave-mission/frame-v8-controls/progress-witness.json": "8def6abc4a2dff4a22e98dc0609d5975b6fca086a203f00a55bb1678dc45f22f",
     "training/semantic_applications/astra/cave-mission/survey-v5-controls/item-witnesses.json": "638a03b69f633d11da4346e66cb8dad6da59ae52601c1d8811390641fe03839d"
@@ -40,8 +40,8 @@
   },
   "composition": {
     "nl_files": 31,
-    "nl_total_lines": 873,
-    "nl_body_lines": 669,
+    "nl_total_lines": 877,
+    "nl_body_lines": 673,
     "numbered_steps": 229,
     "type_aliases": 60,
     "visible_crisp_policy_lines": 0
@@ -67,8 +67,8 @@
     "native_loader": true,
     "typescript": true,
     "quick": true,
-    "package_path": "/tmp/sol-cave-v10-source-preflight/package-report.json",
-    "source_sha256": "003d288005c9a1580e5233650999965be7275613d1fcb1f4c6ff7ef8c0cbeb62",
+    "package_path": "/tmp/sol-cave-v10-grounded-preflight/package-report.json",
+    "source_sha256": "404fc5a7d6b21833a27fa13256f9eeae2a5c97ed619a7a2bf876378d7ec095d5",
     "canonical_reference_ok": true,
     "scope": "Authored typed source witness only, not callable execution"
   },
@@ -84,5 +84,6 @@
     "planned_samples": 48,
     "semantic_entailment_review": false,
     "actual_literal_consumption_review": false
-  }
+  },
+  "peer_response": "Completion coverage applies to validated grounded pending units; excluded inventory IDs/clauses/premises remain separate source findings."
 }

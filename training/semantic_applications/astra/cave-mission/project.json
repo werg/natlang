@@ -642,8 +642,8 @@
   "fixture_clause_count": 31,
   "composition": {
     "nl_files": 31,
-    "nl_total_lines": 873,
-    "nl_body_lines": 669,
+    "nl_total_lines": 877,
+    "nl_body_lines": 673,
     "numbered_steps": 229,
     "type_aliases": 60,
     "visible_crisp_policy_lines": 0
