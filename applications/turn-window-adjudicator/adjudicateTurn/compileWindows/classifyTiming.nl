@@ -7,7 +7,8 @@ args:
 returns: TimingBinding
 ---
 1. Read this rule's actual returned kind, condition, consequence and timing together with its source
-   timing clauses. A damage noun alone does not decide whether the condition observes proposed,
+   timing/identity/capacity contexts from rules.contexts. Select relevant context by its returned role
+   and actual source links, retaining its meaning and witnesses. A damage noun alone does not decide whether the condition observes proposed,
    replaced or resolved damage; use the complete source relation.
 2. Identify the phase in which this rule can act. An input announcement captures state; a submitted
    response changes the resumed board; a replacement rewrites a pending part; an after-resolution

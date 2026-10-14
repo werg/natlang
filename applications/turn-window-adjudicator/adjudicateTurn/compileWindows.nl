@@ -4,7 +4,9 @@ args:
   source: TurnSource
 returns: WindowProtocol
 ---
-1. Inventory actual RuleReadings and their cited timing/identity clauses. Keep replacement applicability
+1. Inventory actual RuleReadings and source.rules.contexts with timing, identity or capacity roles.
+   Consume those actual context meanings/witnesses as governing constraints, retaining their uncertainty.
+   A context row contributes protocol meaning without an executable rule identity. Keep replacement applicability
    separate from triggered consequence eligibility: they observe different versions of the same event.
 2. For each reading call classifyTiming(rule, source.rules, source.clauses). Consume its actual phase,
    snapshot basis, before/after references, printed priority and unresolved conditions.

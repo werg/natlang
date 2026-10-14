@@ -24,7 +24,8 @@
     "adjudicateTurn/readTurn/readBoard.nl",
     "adjudicateTurn/readTurn/readIntents.nl",
     "adjudicateTurn/readTurn/readRules.nl",
-    "adjudicateTurn/readTurn/readRules/interpretAbility.nl",
+    "adjudicateTurn/readTurn/readRules/advanceRuleUnit.nl",
+    "adjudicateTurn/readTurn/readRules/advanceRuleUnit/interpretAbility.nl",
     "adjudicateTurn/settleTurn.nl",
     "adjudicateTurn/settleTurn/advanceWindow.nl",
     "adjudicateTurn/settleTurn/advanceWindow/collectTriggers.nl",
@@ -41,9 +42,9 @@
     "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl",
     "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl",
     "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl",
-    "types.ts",
     "natlang.json",
-    "tsconfig.json"
+    "tsconfig.json",
+    "types.ts"
   ],
   "fixture_files": [
     "abilities/other.md",
@@ -102,7 +103,7 @@
           "part": "IntentPart",
           "consumerRule": "RuleReading",
           "initialBoard": "BoardSnapshot",
-          "clauses": "SourceClause[]"
+          "contexts": "RuleContext[]"
         },
         "returns": "ReferenceBinding",
         "owned_delta": "Interpret one consumer's captured, live or last-known reference to an announced target."
@@ -164,13 +165,22 @@
         "owned_delta": "Separate submitted intent structure from rule examples and future triggered consequences."
       },
       {
-        "path": "adjudicateTurn/readTurn/readRules/interpretAbility.nl",
+        "path": "adjudicateTurn/readTurn/readRules/advanceRuleUnit/interpretAbility.nl",
         "args": {
+          "unit": "AbilityUnit",
           "unitClauses": "SourceClause[]",
-          "governingClauses": "SourceClause[]"
+          "governingContexts": "RuleContext[]"
         },
-        "returns": "RuleMeaning",
-        "owned_delta": "Interpret a source ability's timing, effect and reference semantics in one scoped NL judgment."
+        "returns": "AbilityInterpretation",
+        "owned_delta": "Interpret one actual ability unit using already classified governing contexts."
+      },
+      {
+        "path": "adjudicateTurn/readTurn/readRules/advanceRuleUnit.nl",
+        "args": {
+          "state": "RuleReadingFrontier"
+        },
+        "returns": "RuleReadingFrontier",
+        "owned_delta": "Consume one source ability unit and preserve every completed typed reading."
       },
       {
         "path": "adjudicateTurn/readTurn/readRules.nl",
@@ -275,6 +285,51 @@
         "owned_delta": "Judge and consume one replacement application against current parts and the fixed before-batch board."
       },
       {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/bindSubmittedChoice.nl",
+        "args": {
+          "plan": "OrderPlan",
+          "previews": "OrderPreview[]",
+          "differences": "OrderDifference[]",
+          "source": "TurnSource"
+        },
+        "returns": "OrderChoiceBinding",
+        "owned_delta": "Bind an actually submitted legal relative-order choice to a completed preview."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl",
+        "args": {
+          "first": "OrderPreview",
+          "second": "OrderPreview",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource"
+        },
+        "returns": "OrderDifference",
+        "owned_delta": "Judge whether source-defined downstream consumers distinguish two actual rewrite histories."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
+        "args": {
+          "plan": "OrderPlan",
+          "previews": "OrderPreview[]",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource"
+        },
+        "returns": "OrderResolution",
+        "owned_delta": "Compare actual isolated replacement previews and consume a source-governed selection."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl",
+        "args": {
+          "applications": "ReplacementApplication[]",
+          "bundle": "EventBundle",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource",
+          "protocol": "WindowProtocol"
+        },
+        "returns": "OrderPlan",
+        "owned_delta": "Interpret ordering obligations and enumerate finite source-legal replacement orders."
+      },
+      {
         "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl",
         "args": {
           "bundle": "EventBundle",
@@ -321,51 +376,6 @@
         },
         "returns": "TurnCertificate",
         "owned_delta": "Adjudicate the supplied closed turn through captured references, rewritten bundles and witnessed windows."
-      },
-      {
-        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl",
-        "args": {
-          "applications": "ReplacementApplication[]",
-          "bundle": "EventBundle",
-          "beforeBoard": "BoardSnapshot",
-          "source": "TurnSource",
-          "protocol": "WindowProtocol"
-        },
-        "returns": "OrderPlan",
-        "owned_delta": "Interpret actual ordering obligations and enumerate source-legal finite alternatives."
-      },
-      {
-        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
-        "args": {
-          "plan": "OrderPlan",
-          "previews": "OrderPreview[]",
-          "beforeBoard": "BoardSnapshot",
-          "source": "TurnSource"
-        },
-        "returns": "OrderResolution",
-        "owned_delta": "Consume actual preview comparisons and source-backed candidate selection."
-      },
-      {
-        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl",
-        "args": {
-          "first": "OrderPreview",
-          "second": "OrderPreview",
-          "beforeBoard": "BoardSnapshot",
-          "source": "TurnSource"
-        },
-        "returns": "OrderDifference",
-        "owned_delta": "Judge downstream semantic distinguishability from actual typed rewrite previews."
-      },
-      {
-        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/bindSubmittedChoice.nl",
-        "args": {
-          "plan": "OrderPlan",
-          "previews": "OrderPreview[]",
-          "differences": "OrderDifference[]",
-          "source": "TurnSource"
-        },
-        "returns": "OrderChoiceBinding",
-        "owned_delta": "Join actual submitted order scope and chooser authority to candidate identities."
       }
     ],
     "edges": [
@@ -410,8 +420,12 @@
         "callee": "adjudicateTurn/readTurn/readIntents.nl"
       },
       {
+        "caller": "adjudicateTurn/readTurn/readRules/advanceRuleUnit.nl",
+        "callee": "adjudicateTurn/readTurn/readRules/advanceRuleUnit/interpretAbility.nl"
+      },
+      {
         "caller": "adjudicateTurn/readTurn/readRules.nl",
-        "callee": "adjudicateTurn/readTurn/readRules/interpretAbility.nl"
+        "callee": "adjudicateTurn/readTurn/readRules/advanceRuleUnit.nl"
       },
       {
         "caller": "adjudicateTurn/readTurn.nl",
@@ -454,6 +468,22 @@
         "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/applyReplacement.nl"
       },
       {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/bindSubmittedChoice.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl"
+      },
+      {
         "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl",
         "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl"
       },
@@ -468,30 +498,14 @@
       {
         "caller": "adjudicateTurn.nl",
         "callee": "adjudicateTurn/settleTurn.nl"
-      },
-      {
-        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl",
-        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl"
-      },
-      {
-        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl",
-        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl"
-      },
-      {
-        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
-        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl"
-      },
-      {
-        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
-        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/bindSubmittedChoice.nl"
       }
     ]
   },
   "scoped_literals": [
     {
-      "site": "adjudicateTurn/readTurn/readRules/interpretAbility.nl",
-      "result_type": "RuleMeaning",
-      "consumed_by": "RuleReading kind, timing, controller basis and capacity"
+      "site": "adjudicateTurn/readTurn/readRules/advanceRuleUnit/interpretAbility.nl",
+      "result_type": "AbilityInterpretation",
+      "consumed_by": "Actual accepted/unresolved RuleUnitResult, then RuleReading roles"
     },
     {
       "site": "adjudicateTurn/captureAnnouncements/bindReference.nl",
@@ -522,6 +536,11 @@
       "site": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl",
       "result_type": "ConsequenceComparison",
       "consumed_by": "Typed difference constraining source-choice selection"
+    },
+    {
+      "site": "adjudicateTurn/readTurn/readRules.nl",
+      "result_type": "RuleInventory",
+      "consumed_by": "Actual ability frontier and typed identity/timing/capacity contexts"
     }
   ],
   "services": [],
@@ -558,16 +577,27 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": true,
+    "independent_oracle_review": false,
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
   },
-  "model_facing_debt": "All source is unmeasured; full reference/verifier and independent source review precede pinned diagnostic, then approximately48 reviewed samples for an adopted presentation.",
+  "model_facing_debt": "Rule-role-frontier-v4:0/48 live samples; verify actual inventory roles, per-unit returns, preserved completed results and downstream typed context consumption.",
   "reference_path": "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/reference-report.json",
   "external_verifier_path": "training/semantic_applications/astra/turn-window-adjudicator/verify-result.mjs",
   "external_verifier_export": "verifyCandidate",
-  "source_variant": "ordering-preview-v2-mirror-garden",
+  "source_variant": {
+    "id": "rule-role-frontier-v4",
+    "supersedes": "mirror-ordering-v3",
+    "status": "source_peer_review_pending",
+    "fixture_oracle_reference_unchanged": true,
+    "changes": [
+      "Ability-only scoped interpretation with nullable typed unresolved result",
+      "Typed context roles consumed by board/reference/timing stages",
+      "Finite sequential RuleReadingFrontier retains accepted/unresolved/failed unit attempts separately"
+    ],
+    "independent_source_review": false
+  },
   "prior_frozen_source": {
     "commit": "c3fd2000",
     "source_sha256": "d7b79ccfd35a32deae7edead61602fe97b2fb74204cc4d808b808669a0ee76f0",
@@ -592,5 +622,5 @@
       "reviewer": "semantic_slate_sol"
     }
   ],
-  "readiness_scope": "Source semantics, typed canonical witness and exact certificate controls are reviewed. Actual application/literal execution and training admission remain unqualified."
+  "readiness_scope": "Original fixture/oracle and external controls unchanged and previously reviewed. Current v4 source/type and canonical replay pass; independent source delta review pending, so combined source/oracle readiness held. No live/admission."
 }

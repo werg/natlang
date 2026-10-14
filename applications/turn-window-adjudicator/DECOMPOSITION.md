@@ -109,3 +109,29 @@ resolveOrdering calls enumerateLegalOrders. That child consumes actual scoped Pa
 compareOrderPreviews calls compareConsequenceProjection for each actual pair and bindSubmittedChoice for an actual selection. The returned OrderDifference and OrderChoiceBinding change the selected bundle and capacities. An unresolved consequential order preserves typed OrderResolution and finishes before a batch commit. OrderResolution records survive through WindowState and TurnCertificate, including uncommitted disputes. The exact verifier checks preview identity, constraint permutations, input revision and selected-history/token consumption; source entailment remains semantic review.
 
 Glass Garden's checked final outcomes remain unchanged. The added Mirror Garden source will make Mantle/Cover ordering consequential and supply a specific legal choice; its missing-choice partner must remain unresolved. These new cases and their independent review remain pending. No live execution or training admission is claimed.
+
+## Rule-role frontier v4
+
+The stopped Mirror diagnostic attempted to interpret identity-only and timing-only units as abilities.
+Those units lack the ability fields required by RuleMeaning, so one quiescing child invalidated a batch
+of successful sibling calls. The repair changes the typed source decomposition before another live run.
+
+- readRules owns a scoped NL source inventory: AbilityUnit primary clauses and governing-context links
+  are separate from RuleContextMeaning roles, source-grounded meaning and uncertainty.
+- Actual identity/timing/capacity/state/submission/result context is parent-bound to original witnesses.
+  Its source IDs join ability primary IDs to cover the original clause universe exactly.
+- advanceRuleUnit owns one original pending ability per decreasing frontier step. Its nested
+  interpretAbility returns nullable AbilityInterpretation, which becomes one actual RuleUnitResult.
+  Completed results survive subsequent semantic uncertainty; a transport failure identifies only the
+  active unit for repair. No domain classifier or fallback result table is implemented in crisp code.
+- compileWindows/classifyTiming consume actual timing/identity/capacity contexts. readBoard consumes
+  initial-state/identity/capacity context. bindReference receives actual RuleContext[] and the actual
+  RuleReading; its scoped judgment uses both source meanings and exact witness support.
+- Exact code may check source IDs, quotes, coverage, result multiplicity and the shrinking pending-unit
+  collection. Grouping, role classification, ability meaning and context applicability remain numbered NL.
+
+The extra callable owns durable typed progress over original units; it is not a forwarding wrapper.
+Final TurnCertificate, three source worlds/variants, fixtures and external gold remain unchanged.
+The new internal RuleIndex and callable graph require native parser/type replay, focused peer review and
+separate live measurement. Prior stopped diagnostic is source ergonomics evidence, not a model-negative
+or a successful application execution.
