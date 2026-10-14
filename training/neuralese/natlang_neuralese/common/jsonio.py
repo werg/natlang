@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import json
 import os
+import io
+import subprocess
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 from pathlib import Path
@@ -48,9 +51,38 @@ def write_json_durable(path, value) -> None:
     pending.replace(path)
 
 
+@contextmanager
+def open_jsonl_text(path: str | Path):
+    """Exact UTF-8/LF text, plain or zstd; complete reads verify decompressor success."""
+    path = Path(path)
+    if path.suffix != '.zst':
+        with path.open(encoding='utf-8', newline='\n') as stream:
+            yield stream
+        return
+    import tempfile
+    with tempfile.TemporaryFile() as errors:
+        proc = subprocess.Popen(['zstd', '-dcq', '--long=27', '--', str(path)],
+                                stdout=subprocess.PIPE, stderr=errors)
+        complete = False
+        try:
+            with io.TextIOWrapper(proc.stdout, encoding='utf-8', newline='\n') as stream:
+                yield stream
+                complete = stream.read(1) == ''
+        finally:
+            if proc.stdout is not None:
+                proc.stdout.close()
+            if not complete and proc.poll() is None:
+                proc.terminate()
+            result = proc.wait()
+        if complete and result:
+            errors.seek(0)
+            detail = errors.read(4096).decode('utf-8', errors='replace')
+            raise RuntimeError(f'zstd failed on {path} (exit {result}): {detail}')
+
+
 def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
     rows = []
-    with Path(path).open(encoding="utf-8", newline="\n") as stream:
+    with open_jsonl_text(path) as stream:
         for number, line in enumerate(stream, 1):
             if not line.strip():
                 continue

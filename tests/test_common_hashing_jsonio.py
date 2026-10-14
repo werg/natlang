@@ -1,6 +1,9 @@
 """Golden digests pinning the shared hashing/JSON helpers behind corpus manifests."""
 import re
 import sys
+import json
+import subprocess
+import pytest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "training/neuralese"))
@@ -66,3 +69,42 @@ def test_write_json_durable_replaces_whole_file(tmp_path):
     write_json_durable(path, {"b": 1, "a": [2]})
     assert path.read_text() == '{\n  "a": [\n    2\n  ],\n  "b": 1\n}'
     assert sorted(p.name for p in tmp_path.iterdir()) == ["state.json"]
+
+
+def test_zstd_jsonl_preserves_exact_lines_and_all_frames(tmp_path):
+    from natlang_neuralese.common.jsonio import open_jsonl_text, read_jsonl
+    values = [{'text': 'one\u2028two\u2029three'}, {'text': 'x' * 200000}]
+    lines = [(json.dumps(v, ensure_ascii=False) + '\r\n').encode() for v in values]
+    plain = tmp_path / 'rows.jsonl'
+    compressed = tmp_path / 'rows.jsonl.zst'
+    plain.write_bytes(b''.join(lines))
+    compressed.write_bytes(b''.join(subprocess.run(['zstd', '-q', '-c'], input=line,
+                               capture_output=True, check=True).stdout for line in lines))
+    for path in (plain, compressed):
+        with open_jsonl_text(path) as stream:
+            assert [s.encode() for s in stream] == lines
+        assert read_jsonl(path) == values
+
+
+def test_zstd_complete_read_rejects_truncation_after_a_valid_row(tmp_path):
+    from natlang_neuralese.common.jsonio import open_jsonl_text
+    data = subprocess.run(['zstd', '-q', '-c', '--check'], input=b'{"a":1}\n',
+                          capture_output=True, check=True).stdout
+    path = tmp_path / 'truncated.jsonl.zst'
+    path.write_bytes(data[:-2])
+    with pytest.raises(RuntimeError, match='zstd failed'):
+        with open_jsonl_text(path) as stream:
+            stream.read()
+
+
+def test_zstd_partial_reader_closes_without_masking_consumer_errors(tmp_path):
+    from natlang_neuralese.common.jsonio import open_jsonl_text
+    path = tmp_path / 'large.jsonl.zst'
+    path.write_bytes(subprocess.run(['zstd', '-q', '-c'], input=b'{"a":1}\n' * 100000,
+                                   capture_output=True, check=True).stdout)
+    with open_jsonl_text(path) as stream:
+        assert stream.readline() == '{"a":1}\n'
+    with pytest.raises(LookupError, match='consumer'):
+        with open_jsonl_text(path) as stream:
+            stream.readline()
+            raise LookupError('consumer')

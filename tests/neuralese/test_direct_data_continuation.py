@@ -296,6 +296,27 @@ def test_a_second_pass_over_the_same_text_file_skips_what_the_first_decided(tmp_
     assert len(list(trainer.stream_text_rows(data, tokenizer))) == len(cold) + 1  # another file hash: no stale entry
 
 
+def test_compressed_text_matches_plain_eager_and_cached_streams(tmp_path, monkeypatch):
+    import subprocess
+    from natlang_neuralese.train.text_warmup import load_text_rows
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
+    rows = [{'id': f'd{i}', 'text': f'words {i}\u2028tail\u2029end',
+             'split': 'test' if i == 0 else 'train', 'source_groups': [f'g{i}']}
+            for i in range(5)]
+    rows += [dict(rows[2]), {**rows[0], 'split': 'train', 'source_groups': ['held-copy']}]
+    raw = ''.join(json.dumps(r, ensure_ascii=False) + '\r\n' for r in rows).encode()
+    plain, packed = tmp_path / 'text.jsonl', tmp_path / 'text.jsonl.zst'
+    plain.write_bytes(raw)
+    packed.write_bytes(subprocess.run(['zstd', '-q', '-c'], input=raw,
+                                     capture_output=True, check=True).stdout)
+    tokenizer = _FingerprintTokenizer()
+    expected = list(trainer.stream_text_rows(plain, tokenizer))
+    assert len(expected) == 5
+    assert list(trainer.stream_text_rows(packed, tokenizer)) == expected
+    assert list(trainer.stream_text_rows(packed, tokenizer)) == expected
+    assert load_text_rows(None, text_data=plain) == load_text_rows(None, text_data=packed)
+
+
 def test_the_prefix_merge_decisions_are_cached_under_their_key(tmp_path, monkeypatch):
     from natlang_neuralese.train.text_warmup import stream_merge_prefix_rows
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
