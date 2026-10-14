@@ -192,16 +192,20 @@ def file_sha256(path, *, drop_cache=True) -> str:
 
 
 def verified_copy(path, dest, *, partial_suffix=PART_SUFFIX) -> dict:
-    """Copy ``path`` to ``dest`` through ``dest + partial_suffix`` (mtime kept): fsync, check the source did not
-    change, re-read the copy and compare size and SHA-256, then rename into place and fsync the directory. Raises,
-    leaving nothing at ``dest``'s partial name, on any doubt."""
+    """Durably copy the exact opened source, checking its identity, size and SHA-256.
+
+    Atomic pathname replacement by training does not invalidate that intact
+    snapshot. Its receipt retains the opened file's identity; mirror_current
+    and the archive link swap still refuse to treat it as a newer checkpoint.
+    An in-place source change fails and removes the partial copy.
+    """
     path, dest = Path(path), Path(dest)
-    before = path.lstat()
     dest.parent.mkdir(parents=True, exist_ok=True)
     partial = dest.with_name(dest.name + partial_suffix)
     source_hash = hashlib.sha256()
     try:
         with open(path, 'rb') as src, open(partial, 'wb') as out:
+            before = os.fstat(src.fileno())
             copied = 0
             while block := src.read(CHUNK):
                 source_hash.update(block)
@@ -214,10 +218,9 @@ def verified_copy(path, dest, *, partial_suffix=PART_SUFFIX) -> dict:
             out.flush()
             os.fsync(out.fileno())
             _drop(src, out)
+            if _identity(os.fstat(src.fileno())) != _identity(before):
+                raise RuntimeError(f'{path} changed during the copy')
         os.utime(partial, ns=(before.st_atime_ns, before.st_mtime_ns))
-        after = path.lstat()
-        if _identity(after) != _identity(before):
-            raise RuntimeError(f'{path} changed during the copy')
         digest = source_hash.hexdigest()
         if partial.stat().st_size != before.st_size or file_sha256(partial) != digest:
             raise RuntimeError(f'verification failed for {path}')

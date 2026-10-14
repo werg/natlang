@@ -96,9 +96,12 @@ the rolling `checkpoint.pt` (with its optimizer) plus the trainer's `.checkpoint
   `<out>/checkpoint-offload.jsonl`), never a training failure; the file is retried at the next write.
 - **Mirror**: `<data_hdd>/natlang-active-lineage/<path relative to ~/natlang/runs>` (`repo/…`, `home/…` for other
   trees), only when that root is on a mounted filesystem other than the source's (a container without the
-  `/mnt/external` mount gets no mirror). Copy to `<mirror>.offload.part`, fsync, check the source did not change,
+  `/mnt/external` mount gets no mirror). Copy to `<mirror>.offload.part`, fsync, check the opened source did not change,
   re-read and compare size and SHA-256, rename, fsync the directory, then `<mirror>.offload.json` (source identity,
-  bytes, SHA-256).
+  bytes, SHA-256). Atomic publication of a successor at the source pathname does
+  not invalidate a byte-for-byte copy of the intact opened file. Its receipt
+  names that older file identity; current-mirror checks and archive link swaps
+  still require the identity of the local pathname to match.
 - **Roles**: `checkpoint.pt` (latest) is mirrored byte for byte as a disaster copy and stays on the NVMe. `best-*.pt`,
   `final-*.pt`, `checkpoint-*.pt`, `step-*.pt` (archive) move to the mirror and the NVMe file is atomically replaced
   by a symlink to it (link written beside it, `os.replace`), so every consumer path keeps working. Files listed in a

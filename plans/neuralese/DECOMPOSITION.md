@@ -271,3 +271,17 @@ CompareTaskSuccess keeps the declared same-packet V/T and parent comparisons:
 Move the existing accounted verifier into task_packet and reuse it, rather than
 introduce a second accounting policy. The acceptance code remains an exact
 verifier of this natural-language qualification rule. No prompt or model change.
+
+## Mirror an intact checkpoint while training publishes its successor — 2026-10-14
+
+MirrorCheckpoint follows the existing asynchronous storage policy:
+1. Open the source checkpoint and identify that exact file, not an earlier
+   observation of its pathname.
+2. Copy and hash its bytes. Reject an in-place change to the opened file.
+3. Verify and durably publish the copy even if training atomically published a
+   successor under the source pathname. Keep the opened file's identity in the
+   receipt, so the older mirror is never certified as the successor.
+4. Preserve the existing identity check before an archive link replaces a local
+   source; never replace a newly published checkpoint with an older mirror.
+The crisp helper verifies opened-file identity, bytes, hash and atomic durability.
+It changes no model-facing text or training state, and does not relax pruning.
