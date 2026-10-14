@@ -615,12 +615,12 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": false,
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "exact_checker_controls_passed": 22,
     "live_qualified": false,
     "training_admitted": false,
-    "source_variant_review": "Held for focused v8 independent typed input/progress/source review"
+    "source_variant_review": "Focused v8 independent source/type/progress and crisp-policy audit passed; actual live pending"
   },
   "fixture_document_count": 10,
   "fixture_clause_count": 31,
@@ -648,7 +648,7 @@
     "id": "frame-original-name-frontier-v8",
     "parent_review": "fad44b36",
     "meaning": "Complete original source-local token names and one-unit actual child-result frontier replace replayed frame extraction; physical alignment/direction policy unchanged.",
-    "independent_source_review": false,
+    "independent_source_review": true,
     "author_controls": {
       "frame_progress": 27,
       "item_witness": 28,
@@ -680,6 +680,12 @@
       "sha256": "c2e153b486c217a6505ae61fcd3d460182b13485921523f28671dd8fa11d3f93",
       "reviewer": "semantic_slate_astra",
       "scope": "Focused frame-support v7: original global-point/anchor join and actual support input/parent binding;28 controls and native/types. No live/admission."
+    },
+    {
+      "path": "plans/semantic_stack/CAVE_FRAME_FRONTIER_V8_REVIEW_POP.json",
+      "sha256": "c994373a3f2d4bdc5c1bdde6752d69dc810be3588fd9b3bf2132ac0f0230c461",
+      "reviewer": "semantic_stack_curriculum",
+      "scope": "Independent original-name/token binding and actual one-unit frame/landmark result progress; both source alternatives,27exactcontrols and policy-location audit. No live/admission."
     }
   ],
   "current_policy_source_revision": {
@@ -698,9 +704,9 @@
       "scope": "Focused consumer-depth and actual Assay/input-scope follow-up; no live credit"
     }
   },
-  "readiness_scope": "v8 source-only; prior fixture/oracle/reference review remains valid, current reader variant awaits independent peer/package and live review.",
-  "generation_ready": false,
+  "readiness_scope": "Pinned one-case v8 diagnostic preparation only; actual live semantic/literal-consumption review and training admission remain false.",
+  "generation_ready": true,
   "training_admission": false,
-  "pending_independent_source_review": "Current original-name/token boundary and one-item actual FrameReadFrontier consumer delta; prior fixture/oracle/reference unchanged.",
+  "pending_independent_source_review": null,
   "historical_source_world_review_status": "Original mirrored-vault oracle remains independently reviewed; current v8 source handoff has not yet been independently reviewed."
 }
