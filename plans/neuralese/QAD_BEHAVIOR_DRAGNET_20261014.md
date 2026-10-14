@@ -131,10 +131,16 @@ One further target repeated `world.look()` after an identical observation;
 it was excluded while later route recovery actions remain. Unapproved
 student-prefix and failed decisions are not training targets. The initially
 published v1 source and LFM render were held in the registry once this repeat
-was found. The corrected v2 source manifest was verified after sync to DGX;
-its LFM render is queued on Pop. The Mellum tokenizer twin and global
-held/source-quality proof remain before a later protected data continuation;
-the active PH snapshot is unchanged.
+was found. The corrected v2 source and LFM render manifests were verified
+after sync to DGX. The corrected render contains 41 program-header, 23
+whole-trajectory and three sampled full train documents, with zero local
+decontamination omissions and 41 equal text/serving token boundaries. The
+Mellum tokenizer twin and global held/source-quality proof remain before a
+later protected data continuation; the active PH snapshot is unchanged.
+The shared curator's exact-source-bound parent and individual-decision hold
+path independently selected the same 41 decision IDs from all 57 materialized
+turns; its same-invocation duplicate-action check now requires an explicit
+review for later campaigns (`dc120214`).
 
 The v4 campaign has 11 distinct replay-checked train-only handoffs. Two Luna
 correction workers started on Pop; the replenisher now grants them first claim
