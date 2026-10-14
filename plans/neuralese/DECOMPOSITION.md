@@ -237,3 +237,10 @@ string contents and must not fragment a trajectory row.
 The same exact LF reader serves native SFT export and the trajectory rewrite
 stage. Both retain their current malformed-JSON behavior and rendering/rewrite
 policy; this only prevents valid Unicode-bearing records from being fragmented.
+
+For large rows, decode each source chunk once, scan that new chunk for LF,
+accumulate fragments until a complete record, then join once. Do not rescan or
+flatten the whole growing record on every input chunk. This preserves exact
+JSONL bytes after UTF-8 decoding and CRLF normalization while making framing
+work proportional to source length. Verify against the captured 9.5 MB source
+row's hash and the existing Unicode/chunk-boundary regressions.

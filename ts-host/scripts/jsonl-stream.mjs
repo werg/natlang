@@ -13,20 +13,25 @@ export async function* jsonlLines(path) {
     source.pipe(input);
   }
   const decoder = new StringDecoder('utf8');
-  let pending = '';
+  let fragments = [];
   try {
     for await (const chunk of input) {
-      pending += decoder.write(chunk);
-      let at;
-      while ((at = pending.indexOf('\n')) >= 0) {
-        const line = pending.slice(0, at);
-        pending = pending.slice(at + 1);
+      const decoded = decoder.write(chunk);
+      let start = 0, at;
+      while ((at = decoded.indexOf('\n', start)) >= 0) {
+        fragments.push(decoded.slice(start, at));
+        const line = fragments.join('');
+        fragments = [];
         yield line.endsWith('\r') ? line.slice(0, -1) : line;
+        start = at + 1;
       }
+      if (start < decoded.length) fragments.push(decoded.slice(start));
     }
-    pending += decoder.end();
-    if (pending.length) {
-      yield pending.endsWith('\r') ? pending.slice(0, -1) : pending;
+    const final = decoder.end();
+    if (final) fragments.push(final);
+    if (fragments.length) {
+      const line = fragments.join('');
+      yield line.endsWith('\r') ? line.slice(0, -1) : line;
     }
   } finally {
     if (compressed) source.off('error', forwardSourceError);
