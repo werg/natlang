@@ -280,6 +280,29 @@ def test_policy_bests_are_weights_only_while_the_slot_keeps_its_optimizer(layout
     assert 'optimizer' in torch.load(mirror_dir / 'checkpoint.pt')
 
 
+def test_superseded_pruned_best_does_not_rebind_successor_receipts(layout):
+    out, mirror_dir = layout
+    best = out / 'best-checkpoint.pt'
+    torch.save(full_state(7), best)
+    receipt = out / 'best-checkpoint.json'
+    successor_receipt = None
+
+    def publish_after_copy(path, mirror, prune):
+        nonlocal successor_receipt
+        record = co.local_copy(path, mirror, prune)
+        successor = out / 'successor.pt'
+        torch.save(full_state(8), successor)
+        os.replace(successor, best)
+        successor_receipt = {'step': 8, 'files': {'best-checkpoint.pt': {'sha256': sha(best), 'bytes': best.stat().st_size}}}
+        receipt.write_text(json.dumps(successor_receipt))
+        return record
+
+    with pytest.raises(RuntimeError, match='changed before'):
+        co.offload_one(best, 'archive', co.OffloadSettings.from_env(), copier=publish_after_copy, prune=True)
+    assert json.loads(receipt.read_text()) == successor_receipt
+    assert not best.is_symlink() and cp.CheckpointPolicy.load(best)['step'] == 8
+
+
 def test_receipts_that_pin_a_pruned_best_are_rebound_to_the_weights_only_file(layout):
     out, mirror_dir = layout
     best = out / 'best-checkpoint.pt'
