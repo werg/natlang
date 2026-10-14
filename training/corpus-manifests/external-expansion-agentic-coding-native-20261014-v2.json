@@ -1,0 +1,250 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-agentic-coding-native-20261014-v2",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-agentic-coding-native-20261014-v2",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 626,
+      "sha256": "b1acd33227a4e92980e800de30ab5d5335df2a17eecfd0e1f99b461513ee39c0"
+    },
+    {
+      "path": "identity-repair/repair-preparation.json",
+      "bytes": 5074,
+      "sha256": "7ebc05e4302bdef7517d1d42ddd3bd3aad9e3bf2652a270e749862c54f003e95"
+    },
+    {
+      "path": "identity-repair/turns/trajectory_continuation_coding/00000.summary.json",
+      "bytes": 120,
+      "sha256": "a69a253726ba7e561406bed190c0ae29b145c4bc9d294c8767ebeb694134823c"
+    },
+    {
+      "path": "identity-repair/turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+      "bytes": 4684761,
+      "sha256": "0203b55497ca45f1904dbae72a996e8d139313b784b30dbd6599b098de76a141"
+    },
+    {
+      "path": "runtime-page.json",
+      "bytes": 113,
+      "sha256": "814dad314ede1e73b05f8b3a34a0e1f206c242bfccfa0177193fb2f6404e6300"
+    },
+    {
+      "path": "source-build/trajectory_continuation_coding/build.json",
+      "bytes": 819,
+      "sha256": "421938c7b68dac5b897a3ebd368a82a3c5d32a66413d6de0b8cf52f954db9cd5"
+    },
+    {
+      "path": "source-build/trajectory_continuation_coding/omissions.jsonl",
+      "bytes": 1402515,
+      "sha256": "defc84d67499652284adf17027e87c375c8d031a384789627ca3b771669ed5c0",
+      "lines": 7664
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+      "bytes": 1848775,
+      "sha256": "2b81d478e46c88dd358b1a851d09a46b8478daf5e5499caa15dfa93f4004d619"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00001.turns.jsonl.zst",
+      "bytes": 2240540,
+      "sha256": "a0df95e0dab19bcaf3a54ffb00d0f2ec03b77f0b7350e649003c9e9e8e25a305"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00002.turns.jsonl.zst",
+      "bytes": 2434648,
+      "sha256": "a85dbef46f21467a034551eff09d80d45f814949d19ee56e5dca621622a344c8"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00003.turns.jsonl.zst",
+      "bytes": 2679790,
+      "sha256": "885600710c14dfa4c817e26388c29c13726ee36433e49214a24dae5de32d4527"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00004.turns.jsonl.zst",
+      "bytes": 2817832,
+      "sha256": "553c94d0474712fb59e18bbf83bf8eece69511f5b6502d19b2e24a69d8ae5510"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00005.turns.jsonl.zst",
+      "bytes": 3015417,
+      "sha256": "827a110f302a55b3d1b1b58260be9c80f2e1248d6684949c7335100cd927807d"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00006.turns.jsonl.zst",
+      "bytes": 3150215,
+      "sha256": "a49c0209cfe42786d73cebc60a7c9b96a148a362f85b8b14feab68773db16d00"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00007.turns.jsonl.zst",
+      "bytes": 3236593,
+      "sha256": "8ee5a27c8879b202a0efce11c60fd28b59a0ef462a54d93b789f5a1a4b225cc5"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00008.turns.jsonl.zst",
+      "bytes": 3329898,
+      "sha256": "ef580802179782484f34ccd4b1cd8beff839b8d871bb2267a110cd6f70664d78"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00009.turns.jsonl.zst",
+      "bytes": 3449597,
+      "sha256": "7c336dacc82b6ea463d4082e46167b10894588a0cae9492f67e6096e7c6ff12f"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00010.turns.jsonl.zst",
+      "bytes": 3749978,
+      "sha256": "dc886c32c281ccd1bb4c0fe4247647d97f52ad572fc6d50786efcaab95653a0d"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00011.turns.jsonl.zst",
+      "bytes": 3703245,
+      "sha256": "2f48c0567998a7b0eb01f78a4820c1dfcfbe8fa917793f25abc368694862599a"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00012.turns.jsonl.zst",
+      "bytes": 3797506,
+      "sha256": "bb4e6bd99c610bf513a430c6b1fec50fd711104858ed2f2f71fde5b3cce13fec"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00013.turns.jsonl.zst",
+      "bytes": 3977122,
+      "sha256": "32ae1d452cd2c1818eef321011d6b020e02439c16f803bf2276869550394fb7a"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00014.turns.jsonl.zst",
+      "bytes": 4038276,
+      "sha256": "be5f8021dafefd4274a8d6b915d99bc896ac0df76ddcae8faf270ce34229f6a4"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00015.turns.jsonl.zst",
+      "bytes": 4126673,
+      "sha256": "95d4769bcc58c6969bed35ec0942fd5873320a6e7da974c46ca73631717c4fa5"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00016.turns.jsonl.zst",
+      "bytes": 4342559,
+      "sha256": "6ad6b0ad76be5b651c99123e113c14b7cc4d8abc2c45e824f46512d0adc2c688"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00017.turns.jsonl.zst",
+      "bytes": 4500849,
+      "sha256": "55e049643f2bcb95e38b05524b74a79020df5354cc8b9e99919df965ac2c6807"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00018.turns.jsonl.zst",
+      "bytes": 4515771,
+      "sha256": "1e1ef1d3fd737984da37bf30fd9533ac929e0ecd74e3788da0248cef89b3fa43"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00019.turns.jsonl.zst",
+      "bytes": 4597922,
+      "sha256": "f9aeeadc85500298560f1cee2748a08e53bf8498a6f396fe6df26b5e1a6aa112"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00020.turns.jsonl.zst",
+      "bytes": 4975246,
+      "sha256": "eaac5af4fad7171bd055bc192018c0a622721b85f15ba597a22feeb5fa3e69b9"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00021.turns.jsonl.zst",
+      "bytes": 5178270,
+      "sha256": "e4828f1ed07935dd328096b193899aabe7bc856951b5193c413fb9211453f76f"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00022.turns.jsonl.zst",
+      "bytes": 5209190,
+      "sha256": "d93adde8bb2ef1426748a291fd71dc33ac866f7e38955c42cd46686c9f20d985"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00023.turns.jsonl.zst",
+      "bytes": 5513517,
+      "sha256": "868184d8c62a4f932d18e8e4af874eb1415d18eb51eae66ed32afb4144707930"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00024.turns.jsonl.zst",
+      "bytes": 5770458,
+      "sha256": "15e2b78f589da08e1b09d2ba402259d1862c22330a372aa72b7dfdcd8aadd09f"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00025.turns.jsonl.zst",
+      "bytes": 6093066,
+      "sha256": "d4369b5ac0a6953f95bcfea1b09d56f8342d6803dd719c0b20d668d324a175a1"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00026.turns.jsonl.zst",
+      "bytes": 6482773,
+      "sha256": "c470e59bf4697eb99161909e038dee0907fb8ac93f655ac938474026277d1333"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00027.turns.jsonl.zst",
+      "bytes": 6856606,
+      "sha256": "07a02002e03897e1ab0bc7e9237a5e2d2cc2cbcdb51829587da8b303265666d5"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00028.turns.jsonl.zst",
+      "bytes": 7291735,
+      "sha256": "c77d46b39a547afea4c5882e2934314ffe950e12aacb7a1ea79ab8490af5ed02"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00029.turns.jsonl.zst",
+      "bytes": 7532085,
+      "sha256": "f59a47918d76d5e13778321a715f364c7503a8f6143b3c1642069dd9bf6eeef1"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00030.turns.jsonl.zst",
+      "bytes": 7882659,
+      "sha256": "bfe7a3b4bccccefccdabc8ba8fb7f7c7f550ddfb2e8d55cb32ffcf9089823ce0"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00031.turns.jsonl.zst",
+      "bytes": 8295551,
+      "sha256": "6d752ebdc3684df88f49f336f9fca143f182f35fb8a98c28055111d7ee2c990a"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00032.turns.jsonl.zst",
+      "bytes": 8389279,
+      "sha256": "c82b0aef59ed6e2ff5334f3d9f44616485792df66908484f452a75ba4e70b925"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00033.turns.jsonl.zst",
+      "bytes": 8822688,
+      "sha256": "416091cb15f0989cb7f881b3701cf202c2352e1e1b1dd3cacda0d4935ab043f7"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00034.turns.jsonl.zst",
+      "bytes": 9016567,
+      "sha256": "6665dfe11c272aaa57c5916b2405453271d31fe64763abb69bb0f568a24c03d1"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00035.turns.jsonl.zst",
+      "bytes": 9179380,
+      "sha256": "f6e5686ea424ef6679fc274e7cea9dc74cf4f3160884d9a62a0df0f7693d71ba"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00036.turns.jsonl.zst",
+      "bytes": 9904039,
+      "sha256": "d5e86e7644d9c75f7e4884c97af3fceb96c3aec3206f72593b4afec2bb2a37ea"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00037.turns.jsonl.zst",
+      "bytes": 9957722,
+      "sha256": "9a1a1368f07421b4584a7d91fb2015b801caee13ff6211247e652520f24a2328"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00038.turns.jsonl.zst",
+      "bytes": 10390681,
+      "sha256": "281ccde6370c665c37b9b0ac0fde6f474b08df9b7eaf340eb98612bbee003fa2"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00039.turns.jsonl.zst",
+      "bytes": 11013212,
+      "sha256": "f1ff6864421bad5c1d595ca792cda095509cb568e96ca2e1dcd4dcfa0758c825"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00040.turns.jsonl.zst",
+      "bytes": 10235821,
+      "sha256": "92b0e8b3e12fcc396c5e88c5ff9c43c673c03422d27c5c242bd439a0b28f8764"
+    }
+  ],
+  "bytes": 239637779
+}

@@ -73883,8 +73883,8 @@
         "admission-review.json"
       ],
       "source_class": "statically-lowered-external-native-teacher-turns",
-      "training_admission": true,
-      "training_admission_reason": "Owner2026-10-14 static natlang-like conversion and general coding/Neuralese training",
+      "training_admission": false,
+      "training_admission_reason": "Superseded by exact content-identity repaired v2; reused upstream IDs caused42 parent collisions in downstream selection.",
       "admission": "External teacher targets unknown; static native plumbing exact. One wrong-return omission assigned repair.",
       "derived_from": [
         "external-expansion-agentic-coding-handoffs-20261014-v1"
@@ -74419,6 +74419,222 @@
       "review_status": "Selection and native-turn semantic review completed; later global held filtering required at union build",
       "required_conversion": "Render LFM and Mellum full, program-header and whole-trajectory twins; include in a later protected union delta after global held/source-quality checks",
       "notes": "Only approved-turns.jsonl is a training input. 44 C reusable-function trajectories, three B explicit-inline trajectories, one medium-reasoning C repair. Measurements and failure analysis: plans/neuralese/BACKLOG_V5_SHAPE_REVIEW_20261014.md."
+    },
+    {
+      "id": "folder-criteria-inline-measured-render-20261014-v1",
+      "owner": "pop",
+      "path": "runs/folder-criteria-inline-measured-20261014-v1/render-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: folder-criteria-inline-measured-20261014-v1; variants: full/lfm25, full/mellum21, program-header/lfm25, program-header/mellum21, whole-trajectory/lfm25, whole-trajectory/mellum21; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "folder-criteria-inline-measured-20261014-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl.zst",
+            "sha256": "cad770335fe3757d27f81a5cfd097728d676dcf52e89101ecceb4a7abae7ced6",
+            "compression": "zstd",
+            "decoded_sha256": "1a9b6553054103587292ea3cf17536c06fe4f73f85cd01544ab6f1a37a372393",
+            "decoded_bytes": 59074764,
+            "documents": 973,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 973,
+                "supervised_tokens": 111932,
+                "tokens": 6140942,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 11020,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl.zst",
+            "sha256": "415860b94d1fc3a78c5c40e7165f5e52301ee0c67b8cfbaca07393d07a0b5853",
+            "compression": "zstd",
+            "decoded_sha256": "e2576dd558216f8888485dea2872c732da0e123c5f4d21242f5de36747695b53",
+            "decoded_bytes": 57441474,
+            "documents": 973,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 973,
+                "supervised_tokens": 123467,
+                "tokens": 6165209,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 11290,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl.zst",
+            "sha256": "30d7345f1b3027a79ae05f46b8f4c43d184f1e6d74021984f14f5ed23fd8986b",
+            "compression": "zstd",
+            "decoded_sha256": "39ce612a9605a98c29944cbf74dd53830e51929fd95d7b0fa746e96950a86bf7",
+            "decoded_bytes": 17819218,
+            "documents": 973,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 973,
+                "supervised_tokens": 111932,
+                "tokens": 1814703,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 4321,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl.zst",
+            "sha256": "02183cc477a6917bc1a848abda4e654aa120b1445a6c76afb9b5c630dd25ce44",
+            "compression": "zstd",
+            "decoded_sha256": "8eb92af17c26b3482b9f73a1048508663e3041805985760ab6e8dc04cd0bc88b",
+            "decoded_bytes": 17423622,
+            "documents": 973,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 973,
+                "supervised_tokens": 123467,
+                "tokens": 1810145,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 4606,
+            "merge_omissions": {}
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl.zst",
+            "sha256": "53200921b3556d8a910d5ee1ae9f113fe8f52bad2d31786f68729ddc3f1de0e1",
+            "compression": "zstd",
+            "decoded_sha256": "362e90d3faf6c2fe498637f843e4e63fd03c16b5654db38718824a751c62b748",
+            "decoded_bytes": 15331637,
+            "documents": 869,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 389661,
+                "documents": 869,
+                "opening_tokens": 270275,
+                "supervised_tokens": 119386,
+                "tokens": 1548348,
+                "tool_tokens": 105877
+              }
+            },
+            "max_document_tokens": 4254,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl.zst",
+            "sha256": "cf0cd635129c2b1278cb8fb925225933163e0d08014baaa39e87f2b838ea8455",
+            "compression": "zstd",
+            "decoded_sha256": "4098108af706d381da40706db5ad2e6f696d043720ed7a5bd98df03224b103b0",
+            "decoded_bytes": 15179279,
+            "documents": 869,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 423412,
+                "documents": 869,
+                "opening_tokens": 274226,
+                "supervised_tokens": 149186,
+                "tokens": 1562273,
+                "tool_tokens": 106655
+              }
+            },
+            "max_document_tokens": 4606,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 973,
+        "selected:train": 973,
+        "source_rows": 973
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 0,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 0
+      },
+      "program_header_parity": {
+        "equal_text_serving_token_boundaries": 1946,
+        "retokenization_checked": 0
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "cd22423d7181576175120a299ae1de2511cf3be9048353621840506f98da592f",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/folder-criteria-inline-measured-20261014-v1/render-v1/receipt.json",
+        "sources": {
+          "runs/folder-criteria-inline-measured-20261014-v1/approved-turns.jsonl": {
+            "bytes": 72644503,
+            "sha256": "a63dd8b6bec73026e837cfacdeb55df6c8e79919a38e22edb85449abc88c51e6"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {}
+      },
+      "notes": "48 measured exact folder reducer trajectories with runtime chosen per-ticket inline Boolean judges; 973 approved turns; both tokenizer twins; train only, final union holds still applied."
+    },
+    {
+      "id": "external-expansion-agentic-coding-native-20261014-v2",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-agentic-coding-native-20261014-v2",
+      "include": [
+        "turns/**/*.turns.jsonl.zst",
+        "identity-repair/turns/**/*.turns.jsonl.zst",
+        "identity-repair/turns/**/*.summary.json",
+        "identity-repair/repair-preparation.json",
+        "runtime-page.json",
+        "admission-review.json",
+        "source-build/**/*"
+      ],
+      "source_class": "statically-lowered-external-native-teacher-turns",
+      "training_admission": true,
+      "training_admission_reason": "Owner-authorized static natlang-like general coding and Neuralese expansion. Exact content identity repair, no source/target edits.",
+      "derived_from": [
+        "external-expansion-agentic-coding-handoffs-20261014-v1"
+      ],
+      "license": "Pinned original D40 source card facts and per-row provenance retained."
     }
   ],
   "coverage_backlog": [
