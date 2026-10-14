@@ -417,17 +417,21 @@ def neuralese_spans(mix, repo, *, include_uncovered=False):
         from ..common.hashing import sha256_file_hex
         if sha256_file_hex(path) != binding.get('sha256'):
             raise ValueError('mixed Neuralese span hash mismatch: ' + str(path))
-    edges, plain = {}, {}
+    edges, plain, seen = {}, {}, set()
     with open_jsonl_text(path) as stream:
         for line in stream:
             if not line.strip():
                 continue
             row = json.loads(line)
+            key = (row['id'], row['document_sha256']) if 'document_sha256' in row else row['id']
+            if key in seen:
+                raise ValueError('duplicate mixed Neuralese span binding; regenerate with exact document identities: ' + str(key))
+            seen.add(key)
             for begin, end, _, has_edge in row['spans']:
                 if has_edge:
-                    edges.setdefault(row['id'], []).append([begin, end])
+                    edges.setdefault(key, []).append([begin, end])
                 else:
-                    plain.setdefault(row['id'], []).append([begin, end])
+                    plain.setdefault(key, []).append([begin, end])
     return edges, plain if include_uncovered else sum(map(len, plain.values()))
 
 
@@ -956,12 +960,15 @@ def stage_rows(a, text_data, tokenizer):
     def source():
         for row in stream_text_rows(text_data, tokenizer):
             row = mark_row(row, selected)
-            if spans is not None and row.get('id') in spans[0]:
+            exact_key = (row.get('id'), hashlib.sha256(row['text'].encode()).hexdigest())
+            edge_key = exact_key if spans is not None and exact_key in spans[0] else row.get('id')
+            plain_key = exact_key if spans is not None and exact_key in spans[1] else row.get('id')
+            if spans is not None and edge_key in spans[0]:
                 row = {**row, 'context_only_spans': merged_context_only_spans(row.get('context_only_spans'),
-                                                                          spans[0][row['id']])}
-            if spans is not None and row.get('id') in spans[1]:
+                                                                          spans[0][edge_key])}
+            if spans is not None and plain_key in spans[1]:
                 row = {**row, 'token_choice_detached_spans': merged_context_only_spans(
-                    row.get('token_choice_detached_spans'), spans[1][row['id']])}
+                    row.get('token_choice_detached_spans'), spans[1][plain_key])}
             yield row
     if not getattr(a, 'merge_prefix_rows', False):
         return source()

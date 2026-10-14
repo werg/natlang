@@ -418,7 +418,9 @@ def main(argv=None):
             stats['span_tokens'] += sum(e - b for b, e, _, _ in spans)
             stats['span_tokens_with_edge'] += sum(e - b for b, e, _, edge in spans if edge)
             if spans:
-                out.write(json.dumps({'id': row['id'], 'spans': spans}) + '\n')
+                out.write(json.dumps({'id': row['id'],
+                                      'document_sha256': hashlib.sha256(row['text'].encode()).hexdigest(),
+                                      'token_count': len(row['token_ids']), 'spans': spans}) + '\n')
     partial.replace(a.out)
     receipt = {'schema': 'natlang.neuralese-output-spans/1', 'rows': str(a.rows), 'cohorts': [str(c) for c in a.cohort],
                'tokenizer': a.tokenizer, 'out': str(a.out),
