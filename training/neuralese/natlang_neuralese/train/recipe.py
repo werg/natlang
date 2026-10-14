@@ -36,7 +36,7 @@ HANDLERS = {
                            'projection_hidden','projection_kernel','token_choice_projection','moe_kernel','checkpoint_layers','drift_rows','drift_every','drift_gate_every','drift_gate_rise','drift_ce_windows','gate_response_kl',
                            'drift_warn','drift_stop','drift_agreement_warn','drift_agreement_stop','drift_gate','gate_held_rows','monitor',
                            'seed','window_execution','latent_skip_idle','latent_cautious','latent_beta2_half_life_tokens',
-                           'latent_ns','latent_weight_decay','grad_spike_clip','stop_at','weight_drift_base','save_state',
+                           'latent_ns','latent_weight_decay','grad_spike_clip','stop_at','stop_after_training_seconds','weight_drift_base','save_state',
                            'fp8_training','fp8_recipe','fp8_amax_history_len',
                            'gradient_audit_steps','saved_tensor_audit_steps','gradient_digest_steps',
                            'state_hash_steps','sdpa_backend','task_eval','task_eval_every'},'result':'report.json'},
