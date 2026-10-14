@@ -10,24 +10,30 @@ args:
   scoped: ScopedConversation
 returns: RevisionDelta
 ---
-1. Select the actual correction/retraction content and its named superseded original turn/claim. Retain
-   a private intention as intention without promoting it to a communicated audience revision.
-2. Join decision to this actor and episode. A sender may endorse their correction at sending,
-   while a recipient who only receives it has no adoption-based defeat yet under the visible rule.
-3. Interpret the stated scope: correcting collection time need not retract the original collection
-   promise, versioned acknowledgment or every proposition in the old utterance. Record the exact target.
-4. Require actual access and explicit adoption before defeating this actor's endorsed belief. Select
-   only their belief IDs supported by the actual superseded act/proposition lineage.
-5. For a commitment retraction join the actual revision act to its named original promise using scoped.
-   Locate that promise in its issuer's actual view, separately from the adopting participant's own view.
-   Inspect each relevant beneficiary's adoptedRevisionActIds and its actual access to this same revision.
-   Current decision.adoptsActIds supplies only this actor's adoption; it cannot invent another adopter.
-6. Under this source model, all named promise beneficiaries must explicitly adopt the communicated
-   retraction before the issuer-owned commitment changes status. Missing audience state remains
-   unresolved; partial adoption records its actual adopter IDs without globally retracting the promise.
-   A diary that says nobody was told supplies no communicated revision or audience adoption.
-7. Return a generated revisionId only for an actual applied revision; otherwise null with a witnessed
-   reason. Keep unchanged/doubted/unknown scope explicit and never invent global cross-actor defeats.
-8. Return the actual RevisionDelta including actual adoptingParticipantIds and a commitmentOwnerId only for licensed issuer effects,
-   plus original witnesses and unresolved missing premises. Parent
-   applies belief IDs to this participant and commitment IDs only to the returned actual issuer owner and records the result in history, preserving before/after lineage.
+1. Call selectRevisionTarget(act, decision, episode, source, scoped). Name its actual returned
+   RevisionSelection actualSelection. This child owns whether the current act performs a revision,
+   adopts an earlier communicated one, depicts one, or supplies unresolved/nonrevision meaning.
+2. Join actualSelection to the actual participant decision and episode. Resolve its revisionActId in
+   scoped; an adopting acknowledgment's actor remains distinct from the original revision's issuer.
+   A sender may endorse their own correction while a receiver with access alone has no adoption effect.
+3. For belief-correction consume actual targetActIds and targetPropositionIds. Require this actor's
+   actual access and explicit adoption or its own performed correction before selecting owned beliefs
+   from those returned original target lineages. A collection-time correction cannot cancel a promise.
+4. For commitment-retraction locate actual returned original promise targets in their issuer-owned
+   views, separately from the adopter's own view. A fresh performed promise with another sourceActId
+   is not a replacement target even if its consequent uses the same physical object or proposition.
+5. For each returned promise target inspect every actual named beneficiary view. Join that actor's
+   adoptedRevisionActIds and availableActIds to the same actual original revision. Current decision
+   contributes only this actor's adoption; source-visible global knowledge cannot invent another adopter.
+6. Interpret the source's governing withdrawal rule on those actual joins. If all required beneficiaries
+   explicitly adopted the communicated revision, return only that issuer's exact commitment IDs.
+   Partial adoption preserves its actual adopter set without changing global status. Missing audience
+   or unresolved communication remains a missing premise, distinct from known nonadoption.
+7. For none/unresolved selection retain actualSelection's negative or missing basis and no unsupported
+   target effect. Existing retracted commitments remain terminal; a later true antecedent, delivery or
+   forwarded report cannot reactivate or repeat a withdrawal as a newly performed promise.
+8. Retain actualSelection unchanged as RevisionDelta.selection. Return a generated revisionId only
+   when an actual revision effect is applied. Keep nullable owner,
+   actual adoptingParticipantIds, original supersededActIds, targeted own-belief/issuer-commitment IDs,
+   actual source witnesses and unresolved premises. Parent applies belief effects only to this participant
+   and commitment effects only to the actual returned issuer owner, preserving before/after lineage.

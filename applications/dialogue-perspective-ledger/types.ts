@@ -42,7 +42,7 @@ export type ParticipantView = { participantId: string; availableTurnIds: string[
 export type EndorsementDecision = { participantId: string; actId: string; claims: PropositionClaim[]; posture: 'endorse' | 'doubt' | 'report-only' | 'none' | 'unresolved'; basisActIds: string[]; defeatsActIds: string[]; adoptsActIds: string[]; reason: string; quotes: string[] };
 export type BeliefDelta = { participantId: string; add: BeliefAtom[]; defeatBeliefIds: string[]; unresolved: string[] };
 export type CommitmentDelta = { participantId: string; add: Commitment[]; replace: Commitment[]; unresolved: string[] };
-export type RevisionDelta = { revisionId: string | null; participantId: string; commitmentOwnerId: string | null; adoptingParticipantIds: string[]; supersededActIds: string[]; defeatBeliefIds: string[]; retractCommitmentIds: string[]; reason: string; witnesses: Witness[]; unresolved: string[] };
+export type RevisionDelta = { selection: RevisionSelection; revisionId: string | null; participantId: string; commitmentOwnerId: string | null; adoptingParticipantIds: string[]; supersededActIds: string[]; defeatBeliefIds: string[]; retractCommitmentIds: string[]; reason: string; witnesses: Witness[]; unresolved: string[] };
 export type EpisodeDelta = { episodeId: string; endorsements: EndorsementDecision[]; beliefs: BeliefDelta[]; commitments: CommitmentDelta[]; revisions: RevisionDelta[]; availability: AvailabilityReading[] };
 export type ViewSnapshot = { episodeId: string; at: Moment; views: ParticipantView[] };
 export type PerspectiveFrontier = { source: DialogueSource; scoped: ScopedConversation; pendingEpisodes: Episode[]; views: ParticipantView[]; history: ViewSnapshot[]; deltas: EpisodeDelta[]; unresolved: string[] };
@@ -58,3 +58,5 @@ export type QueryAnswers = { answers: QueryAnswer[]; unresolved: string[] };
 export type LedgerFinding = { findingId: string; kind: string; passed: boolean | null; originalIds: string[]; reason: string; witnesses: Witness[] };
 export type AnswerAudit = { queryId: string; passed: boolean | null; checkedProofIds: string[]; reason: string; witnesses: Witness[] };
 export type PerspectiveReport = { caseId: string; source: DialogueSource; scoped: ScopedConversation; episodePlan: EpisodePlan; evolution: PerspectiveEvolution; answers: QueryAnswer[]; findings: LedgerFinding[]; answerAudits: AnswerAudit[]; unresolved: string[] };
+
+export type RevisionSelection = { revisionActId: string | null; targetActIds: string[]; targetPropositionIds: string[]; kind: 'belief-correction' | 'commitment-retraction' | 'none' | 'unresolved'; communicated: boolean | null; reason: string; witnesses: Witness[]; unresolved: string[] };

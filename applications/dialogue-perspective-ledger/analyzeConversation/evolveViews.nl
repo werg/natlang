@@ -10,8 +10,10 @@ returns: PerspectiveEvolution
    fact knowledge. Copy the finite ordered episode array into pendingEpisodes of PerspectiveFrontier.
 2. Pass original source/scoped objects through the frontier unchanged. Initialize empty history/deltas
    and copy source plan uncertainty; those are provenance and state, not a preferred final answer.
-3. Call advanceEpisode.iterateOn(initialFrontier, finished). Finished means no original episodes remain;
-   each step consumes exactly one pending episode, so pending original count strictly decreases.
+3. Directly await advanceEpisode.iterateOn(initialFrontier)
+   .withMeasure(next => next.pendingEpisodes.length).until(next => next.pendingEpisodes.length === 0).
+   Each named invocation consumes one original episode and finishes its actual typed next state;
+   this parent owns the subsequent original episode. The remaining count decreases structurally.
 4. Consume the actual resulting views, history and deltas. Verify each original episode was applied once
    in established chronology. History snapshots are immutable copies, not aliases of mutable final views.
 5. A participant's current false belief remains endorsed until their own later source-backed revision
