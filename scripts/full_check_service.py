@@ -106,6 +106,8 @@ def failures(text: str) -> dict:
     tests = sorted(set(re.findall(r'FAILED (tests/\S+?)(?:::| )', text)))           # pytest
     tests += sorted(set(re.findall(r'^\s*(?:✖|not ok \d+ -) .*?(test/[\w./-]+\.test\.mjs)', text, re.M)))  # node --test
     tests += sorted(set(re.findall(r'^FAIL (test/[\w./-]+\.mjs)', text, re.M)))     # test-files.mjs
+    tests += sorted(set(re.findall(
+        r'^(?:failed|timeout|killed \(out of memory\?\)|signal \S+)\s+(test/[\w./-]+\.mjs)', text, re.M)))
     exit_code = re.findall(r'^exit=(\d+)', text, re.M)
     return {'summary': summary.strip(), 'failed_steps': steps, 'failed_tests': sorted(set(tests)),
             'exit': int(exit_code[-1]) if exit_code else None}

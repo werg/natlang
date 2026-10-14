@@ -300,3 +300,13 @@ EvaluateCompletedRecurrence uses the existing trainer's evaluator and restore:
    and leave the parent checkpoint untouched.
 The CLI flag and identity/step/path checks are crisp execution verifiers. This
 does not change prompts, generation, training objectives or ordinary resumes.
+
+## Report the exact failed test and its first diagnostic — 2026-10-14
+
+DescribeFailedCheck reports the failed stage, test file and observed error.
+Preserve the first failed TAP case's diagnostic even when its name is already
+known; retain the existing end-of-output fallback for a killed or timed-out file.
+Route the file named by the isolated runner's terminal status, including its
+lowercase `failed` and `timeout` forms. Crisp parsing extracts this evidence;
+it does not infer model failure from a server startup failure or certify a retry
+as an explanation of the original failure. Model-facing text does not change.

@@ -74,3 +74,13 @@ def test_completed_failure_is_a_real_verdict(monkeypatch, tmp_path):
     assert state['last_sha'] == 'a' * 40
     assert not state['history'][-1].get('incomplete')
     assert state['history'][-1]['exit'] == 1
+
+
+@pytest.mark.parametrize('status', ['failed', 'timeout', 'killed (out of memory?)', 'signal SIGTERM'])
+def test_isolated_test_runner_terminal_file_is_routed(monkeypatch, tmp_path, status):
+    module = service(monkeypatch, tmp_path)
+    text = (f'{status}   test/neuralese-learning.test.mjs (14 failed, 5s)\n'
+            '=== summary\nts-tests FAILED (1) 580s\nexit=1\n')
+    result = module.failures(text)
+    assert result['failed_tests'] == ['test/neuralese-learning.test.mjs']
+    assert result['failed_steps'] == ['ts-tests'] and result['exit'] == 1
