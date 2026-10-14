@@ -41,6 +41,16 @@ continue retention review without deleting unadmitted source data or protected
 held evaluations. DGX was briefed through coordination message
 `2026-10-14T08:04:50.847526Z-pop-c5c2`.
 
+The later v11 source dependency audit is complete: all six major v11 data
+outputs were rehashed against the
+identical SHA-256 inputs recorded by the completed v13 recipe from v12; no
+active registry, symlink or process pointed to v11. The exact 52-file deletion
+list and hash checks are in `/tmp/prune_pop_data_lineage_v11_20261014.py` and
+its `.list`/`.applied` receipts. The superseded `run-v11` directory was
+deleted, reclaiming 20,771,869,649 logical bytes (root free 24→43 GiB).
+The current v13 prepared corpus and its `native-sft-v13-r2` symlink remain
+present and readable. This supersedes the older v11 warning below.
+
 ## 09:12 CEST: Pop GPU handoff, deterministic Flash and FP8 repeat
 
 The Pop GPU had an avoidable idle handoff after QAD v14's hard drift stop at
@@ -433,9 +443,9 @@ snapshot is about 50.65 GiB and remains explicitly `missing` on Pop while the
 main disk has about 24 GiB free; it is registered and retained by owner DGX.
 Do not delete the historical `run-v13-group-resplit-r2/prepared` directory
 while cleaning storage: `data/neuralese/corpora/native-sft-v13-r2` is a symlink
-to it, and its 8.45 GB `teacher.jsonl` is current corpus input. Older run-v11
-looks superseded but still needs a source/provenance dependency audit before
-deletion; a failed old recipe alone does not prove its rows are disposable.
+to it, and its 8.45 GB `teacher.jsonl` is current corpus input. The separate
+v11 intermediate was subsequently audited and deleted; see the current note
+at the top of this handover.
 
 Pop's sampled QAD step15000 held48 run completed with four task successes.
 The original scorer marked the run ineligible because an explicit
