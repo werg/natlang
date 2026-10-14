@@ -1,5 +1,59 @@
 # Continuation guide — updated 2026-10-14
 
+## 03:23 CEST: deep NL sources, service recovery admitted, QAD cache parity
+
+The owner's current source target is *application-scale connected programs with
+deep numbered natural-language pseudocode*. The earlier 220 simpler valid
+sources remain eligible; they are not a substitute for the richer application
+cohort. Cave survey v5 (`2ff05cba`, controls `cea25cde`, peer `f65589de`,
+binding `46d3814b`) replaces fixture-specific JS assertion tables with typed,
+per-record NL judgments: 29 `.nl` functions, 207 numbered steps, and 20 new
+item controls plus 22 unchanged baseline controls. Ecology v15b (`64385937`,
+`665d5c74`) makes stage children forward their typed result in a first
+`eval({finish:true})`; the live diagnostic under
+`natlang-pop-semstack-v15b-ecology.service` has already used that pattern in
+Stages 1–3 without the v15 duplicate replay. It has no final result or
+training admission yet. Seed Lineage Laboratory (`30c4d001`, `f1e48189`,
+`4133236a`) has 27 NL functions, 159 numbered steps, typed reference and 36
+controls; independent review remains pending. Dialogue Perspective Ledger is
+being built after its decomposition (`7f8a7aab`). Keep source review, live
+execution, and training admission distinct.
+
+Train-only `service_result_recovery` source has 48 replay-verified compiler
+failures; Luna produced 45 exact accepted continuations and 3 wrong output
+shapes. `ade3f016` fixes wrong-result handoff discovery for completed
+`eval({finish:true})`, and allows replay-checked handoffs that retain their
+original seed. Of three wrong-result repairs, two are now exact accepted and
+one still returns an extra field. Native materialization of the 47 accepted
+parents yields 58 approved teacher decisions; all 45 planted bad actions and
+both replayed student-prefix actions were denied positive training admission.
+Registered `luna-service-result-recovery-s52054-v1` in `68048a8f`, synchronized
+and verified all five manifest files on DGX. Its approved native turns need
+model-template rendering and low recovery mixture weight in the next target
+union; the one remaining bad case stays assigned to repair or pruning. Avoid
+teaching the deliberately wrong seeded action as a positive target.
+
+The ledgered Pop full TS check for the handoff/runtime changes passed on
+`f1e48189`: build, browser/app/type/layering, all TS tests (836 s), and 22/22
+conformance cases. Log: `/tmp/natlang-pop-full-ts-handoff-20261014.log`.
+DGX explicitly ruled out the untracked old `qual-u10006` Pop launch leaf as
+stale, so it was not run. In its place, Pop compared the exact QAD step15000
+checkpoint (SHA `d7bf8cc72f24b581434ba4fedb56c6b55b9131b975eb533f5498229b6313876a`)
+and clean heads (SHA `19bfa7a304d511fe4813e2625fb2855095bd1a104af4b7d6b2ed77368226483c`)
+using four actual captured full proof/program-header workbench requests, at
+662–5488 tokens, with the frozen eval runtime. Report:
+`/srv/storage/natlang-artifacts/qad15000-hf-serving-cache-parity/run-02/report.json`.
+Native HF versus serving port ordinary-token logits were bitwise identical
+(max difference and normalized KL zero) for all four prefills and 16 forced
+decode positions; interleaving two request caches stayed exact for eight more
+positions. Raw logit differences came only from intentional Neuralese marker
+output rows (IDs 17/18). Both paths show the same small BF16 cached-versus-fresh
+rounding (max 0.125–0.406; no argmax change). This sample finds no ordinary
+token backend divergence, but does not certify every task path. Script:
+`scripts/neuralese_data/qad_hf_port_parity.py`; DGX request
+`2026-10-14T01:00:50.614480Z-dgx-fbed` has the exact evidence. After the short
+diagnostic, the Pop Luna replenisher timer and workers were restored.
+
 ## 02:46 CEST: deep pseudocode priority, base task result, and train-only recovery
 
 Owner again clarified that new connected application examples should put the
