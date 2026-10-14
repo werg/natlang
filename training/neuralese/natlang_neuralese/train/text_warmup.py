@@ -3250,7 +3250,10 @@ def main(argv=None):
                 profile_start=time.perf_counter()
             elif profiling:
                 from torch.profiler import ProfilerActivity, profile
-                profiler=profile(activities=[ProfilerActivity.CPU]+([ProfilerActivity.CUDA] if a.device.startswith('cuda') else []))
+                # Kineto's first CPU-only session can leave later CUDA sessions
+                # without kernel events in this process. Initialize its CUDA
+                # activity whenever CUDA is available, even for a CPU update.
+                profiler=profile(activities=[ProfilerActivity.CPU]+([ProfilerActivity.CUDA] if torch.cuda.is_available() else []))
                 profiler.__enter__();profile_start=time.perf_counter()
             try:
                 prepared=perform_update(batch,passes,bootstrap,controls,
