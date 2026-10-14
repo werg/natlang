@@ -29,5 +29,18 @@ after their decoded hashes are pinned, recovering about 4 GiB on Pop. The
 native rows keep `trace_admission=false`; the corpus registry admits only
 authored static SFT. The renderer must use the recorded pending-review reason
 override, exclude the two held programs, and apply the global protected,
-held-source and quality filters. This new tranche does not include batch45 or
-later, which continue generating independently.
+held-source and quality filters.
+
+The source corpus `gemini-clinc-static-reviewed-20261015-v1` and render
+`gemini-clinc-static-reviewed-render-20261015-v1` are registered on main and
+manifest-verified on DGX (`57e0104a`, `03c9b90b`). The render selected 20,104
+native turns after the 36 turns from two ambiguous programs were held. Both
+tokenizers have all 20,104 program-header documents and 10,052
+whole-trajectory documents; the full view samples one per authored program
+(1,018 documents). Its only
+omissions are this declared full-view sampling. The next protected union must
+still apply the global held-source and quality filters.
+
+This tranche does not include batch45 or later. Batch46 closed with 195
+source-matching labels and 25/25 exact scripted reference replays; it remains
+held for a later semantic review tranche.
