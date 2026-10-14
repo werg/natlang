@@ -1,0 +1,459 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-d06-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D06",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 6179,
+      "sha256": "98d18ffaf3d6c6ed9824e0544e8bf8f97ec4c5a12043a5aa896d781eefc42378"
+    },
+    {
+      "path": "acquisition.json",
+      "bytes": 16966,
+      "sha256": "d3b5d93a18012bbcd05a4debf9703e1af249fe704a9678d3f50cb86e8afa7913"
+    },
+    {
+      "path": "assets/score_cost.png",
+      "bytes": 379287,
+      "sha256": "22290db0644fbff8a3c7d82c8d0a4de761f727f9a9af72373c47e78c4085e1e2"
+    },
+    {
+      "path": "results/config_cost_summary.csv",
+      "bytes": 13645,
+      "sha256": "5c47fd12770175a6cd35db1e6530ec93629108933b4ee0ae59a37762cebfe74f"
+    },
+    {
+      "path": "results/task_level.parquet",
+      "bytes": 215908,
+      "sha256": "27294b8055dc4d475c117975ae0465ab204d60ea3dfff71acbe0433cb3e3f278"
+    },
+    {
+      "path": "results/task_level.tsv",
+      "bytes": 806684,
+      "sha256": "83e9ad5c50cd71cd517bfe975ef8030babee49bfdadeba48eeee0952d1ca0b0d"
+    },
+    {
+      "path": "trajectories/ale-cli/claude-code/claude-opus-5.jsonl.gz",
+      "bytes": 4762303,
+      "sha256": "b009558669849160fc59c80361aea9f5b2f42f67803ccf8cda4fb78ae9c98d9a"
+    },
+    {
+      "path": "trajectories/ale-cli/codex/gpt-6-astra.jsonl.gz",
+      "bytes": 4049695,
+      "sha256": "073dab27b41677a457dc30c78504a05c25d72f2aa7cf457f57fe2ab84db427c1"
+    },
+    {
+      "path": "trajectories/ale-cli/deepseek-harness/claude-opus-5.jsonl.gz",
+      "bytes": 4251900,
+      "sha256": "2a1e546eb4d5f5a3a12e0862bef24ab83dd7b70de8db7fb2cd1d2b645afd9ceb"
+    },
+    {
+      "path": "trajectories/ale-cli/deepseek-harness/deepseek-v4-pro.jsonl.gz",
+      "bytes": 8424144,
+      "sha256": "c48245ec5be647098813a831c57be98cc835f34cc22a1312c8c6e4e41a953a9e"
+    },
+    {
+      "path": "trajectories/ale-cli/deepseek-harness/glm-5.3.jsonl.gz",
+      "bytes": 7628362,
+      "sha256": "83e8e810916520d7d8acc2dbec07079aff01f089080930c15db6afb788a6a695"
+    },
+    {
+      "path": "trajectories/ale-cli/deepseek-harness/gpt-6-astra.jsonl.gz",
+      "bytes": 7499725,
+      "sha256": "9dfb3eeec94c7dc3e380c2412080c89858f2cbdfae1cf871c69334eb1380cfc5"
+    },
+    {
+      "path": "trajectories/ale-cli/deepseek-harness/kimi-k3.jsonl.gz",
+      "bytes": 3683299,
+      "sha256": "0cf9e385a576f305e3ee31dd14531117378b0dbb9459e5b1a37d8898fccb4357"
+    },
+    {
+      "path": "trajectories/ale-cli/openhands/claude-opus-5.jsonl.gz",
+      "bytes": 4954601,
+      "sha256": "d66a6c3c68459571260ba66b912d458aa413d0d717ce5389e460dba3196cb12c"
+    },
+    {
+      "path": "trajectories/ale-cli/openhands/deepseek-v4-pro.jsonl.gz",
+      "bytes": 10882443,
+      "sha256": "162e5fa9a4fdea65155bc6648cc81237f3f0386e2ee877d90507c6ec994ef86d"
+    },
+    {
+      "path": "trajectories/ale-cli/openhands/glm-5.3.jsonl.gz",
+      "bytes": 8543854,
+      "sha256": "92930eb03a87108e8b3e1884494fb5b56c3c5f73c8750cabf14c654273e2d1b6"
+    },
+    {
+      "path": "trajectories/ale-cli/openhands/gpt-6-astra.jsonl.gz",
+      "bytes": 3553733,
+      "sha256": "338cd0fad2e247111bc17474bf6c004cfedf94a70eb322362b433c94eb3777ed"
+    },
+    {
+      "path": "trajectories/ale-cli/openhands/kimi-k3.jsonl.gz",
+      "bytes": 5315429,
+      "sha256": "4094a05231179555f968d66fc1237e1b776ee027433b4672f0c123ccdd5743ec"
+    },
+    {
+      "path": "trajectories/ale-cli/openjiuwen/claude-opus-5.jsonl.gz",
+      "bytes": 5457505,
+      "sha256": "ba3827332993dc767e133c7b66fd0d46511b28f62631ba54ae53f4bb20cc4802"
+    },
+    {
+      "path": "trajectories/ale-cli/openjiuwen/deepseek-v4-pro.jsonl.gz",
+      "bytes": 10715830,
+      "sha256": "3f073c2c4d2e08bc28dea1cd37c7f5d7677cfa170831862cc9829f0deb826693"
+    },
+    {
+      "path": "trajectories/ale-cli/openjiuwen/glm-5.3.jsonl.gz",
+      "bytes": 8774713,
+      "sha256": "138f6cb25007843dfc04136ab19a618bb59b9cfec168ac50a1ebc6b5b80c4639"
+    },
+    {
+      "path": "trajectories/ale-cli/openjiuwen/gpt-6-astra.jsonl.gz",
+      "bytes": 5463800,
+      "sha256": "00c86d6b702d24b5c09727aab82a5a5c92277c7b3b47180885669b104ab62dc3"
+    },
+    {
+      "path": "trajectories/ale-cli/openjiuwen/kimi-k3.jsonl.gz",
+      "bytes": 6333243,
+      "sha256": "59dc58c1883de84a85eee079c022fa28422259f2a4f978e41b02fb5a3d42dd16"
+    },
+    {
+      "path": "trajectories/ale-cli/pi/claude-opus-5.jsonl.gz",
+      "bytes": 4706386,
+      "sha256": "fb5af4be87f0c839ef862bddc5b776321a70b05dd6fa7cfb2d90b73aabe6bd89"
+    },
+    {
+      "path": "trajectories/ale-cli/pi/deepseek-v4-pro.jsonl.gz",
+      "bytes": 7961862,
+      "sha256": "e0ee8457cdaf77c631d32cf629ec670ba4fe5278936510aa7ae80c5f2700e350"
+    },
+    {
+      "path": "trajectories/ale-cli/pi/glm-5.3.jsonl.gz",
+      "bytes": 7425186,
+      "sha256": "d40453981428f2b3056635359d12710522fc06ea2387304c8867d4f0dddb7b07"
+    },
+    {
+      "path": "trajectories/ale-cli/pi/gpt-6-astra.jsonl.gz",
+      "bytes": 3128668,
+      "sha256": "4563ed6b4fe6998e98963088c8af68aa4afb25d59039a6ddcb1b89bc0a721bf2"
+    },
+    {
+      "path": "trajectories/ale-cli/pi/kimi-k3.jsonl.gz",
+      "bytes": 4538376,
+      "sha256": "860438dee4f542420039d24037a621c5ff15574d39710dea2603b553dc3edf89"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/claude-code/claude-opus-5.jsonl.gz",
+      "bytes": 5935674,
+      "sha256": "0b8093e76aaf2e496ee4303d6a269719903e0a5ca8871060a4df54a22f0c3158"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/codex/gpt-6-astra.jsonl.gz",
+      "bytes": 3253997,
+      "sha256": "377d4cdbcaa7e47ffaf9c90f96cd71a0c48dbce4957b0364e3b40550878c83d4"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/deepseek-harness/claude-opus-5.jsonl.gz",
+      "bytes": 9051354,
+      "sha256": "84ec1e07070badfecd3267377b6d5015298c7a684985d1fb0545352ac02fa791"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/deepseek-harness/deepseek-v4-pro.jsonl.gz",
+      "bytes": 18030287,
+      "sha256": "f9c035c2b36c14d176deff72d519ced89d090d570835a297b97a9befff27fdc8"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/deepseek-harness/glm-5.3.jsonl.gz",
+      "bytes": 11818606,
+      "sha256": "a6858b0c73c8aed8704302956370c669d4f6e4c3b2ae09943f8e74a75f6bbc3c"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/deepseek-harness/gpt-6-astra.jsonl.gz",
+      "bytes": 11496066,
+      "sha256": "d2aad83eff0bd631ef869132b69dd9a15e126588d0ccbe69bb6d799b5089b5d3"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/deepseek-harness/kimi-k3.jsonl.gz",
+      "bytes": 8642332,
+      "sha256": "761274ebff410bd0fcea25da5923c31e821ca80b0fe5872d384d157ab1d0a996"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/openhands/claude-opus-5.jsonl.gz",
+      "bytes": 5444911,
+      "sha256": "07f9a010a07e0d10a01dd1c28b6596ee7fcfcd08f94919512719d3119fb406b7"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/openhands/deepseek-v4-pro.jsonl.gz",
+      "bytes": 11520430,
+      "sha256": "46214c40b788cf23c5c1e3b6bc4a71833e6ab373d02e13d82508c72a7bc601ef"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/openhands/glm-5.3.jsonl.gz",
+      "bytes": 12313022,
+      "sha256": "870cc456b854952b0dab79ae1fca7bae69707629a10de968921a57e9cfe981e8"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/openhands/gpt-6-astra.jsonl.gz",
+      "bytes": 3160646,
+      "sha256": "7f18a8d3a4c12ad7f198020c8b69d0b2535602ca6c270586dde35f5d66eae53b"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/openhands/kimi-k3.jsonl.gz",
+      "bytes": 8670871,
+      "sha256": "8552fec3cef72979e3cb0137c950a305b7e898ff8d975295d6e475a03d2d6f25"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/openjiuwen/claude-opus-5.jsonl.gz",
+      "bytes": 7817798,
+      "sha256": "2e0d5a18fdb3662947a330ed9582bf6e8a6d04094fb7c1ee046760d9286af040"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/openjiuwen/deepseek-v4-pro.jsonl.gz",
+      "bytes": 14326745,
+      "sha256": "ff60dc42632407bbeefcc76dc6684ad073282af11974f1446c6c99012a8a6563"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/openjiuwen/glm-5.3.jsonl.gz",
+      "bytes": 13884561,
+      "sha256": "67a10bdbd8c89e4f5f3b34afbe105caa9e5102cb7f94abb6815df82c7445aec8"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/openjiuwen/gpt-6-astra.jsonl.gz",
+      "bytes": 4799149,
+      "sha256": "95e97a55cd793c7abca334215100b3c128639c896269c9180dec7ae836b6218a"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/openjiuwen/kimi-k3.jsonl.gz",
+      "bytes": 11966210,
+      "sha256": "09d79d0062b5588a7d4702ace016e3107883cec8f7710e73b0fbbf4d687eb33a"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/pi/claude-opus-5.jsonl.gz",
+      "bytes": 10587102,
+      "sha256": "1762d4292d82193c087f609fe7e69c1612f060599e006a7072d90d029cb92a40"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/pi/deepseek-v4-pro.jsonl.gz",
+      "bytes": 11400367,
+      "sha256": "0fa074b14d37a0365c1e74bf7e3ee7bd5604a01f232d68fa45b98762fc885212"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/pi/glm-5.3.jsonl.gz",
+      "bytes": 10964279,
+      "sha256": "0ad07a2e4d37754071ba16177c5ca2458d6f8afdb6f33da95511e4fdf58d0f69"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/pi/gpt-6-astra.jsonl.gz",
+      "bytes": 2612495,
+      "sha256": "1a69ad08fcecc7553663d85b8d02af24d0794cd1d47a898b44a6eda4011acce5"
+    },
+    {
+      "path": "trajectories/terminal-bench-4/pi/kimi-k3.jsonl.gz",
+      "bytes": 6326776,
+      "sha256": "2b38ba5860a671ab7d9e6d943fa40bd82f2db13c750eb2482241dbcac815b606"
+    },
+    {
+      "path": "trajectories/tua-bench/claude-code/claude-opus-5.jsonl.gz",
+      "bytes": 1610166,
+      "sha256": "be61ec6fe9e4d97bfd2d519f33feb9516e0d96dbb8852ec3b4e7293f9110f788"
+    },
+    {
+      "path": "trajectories/tua-bench/codex/gpt-6-astra.jsonl.gz",
+      "bytes": 2917154,
+      "sha256": "3bc1c8df8e6c1571b6d9a0bb24659949b851e9f2cc319d8a6a03c9e59d97e73c"
+    },
+    {
+      "path": "trajectories/tua-bench/deepseek-harness/claude-opus-5.jsonl.gz",
+      "bytes": 1707095,
+      "sha256": "4cdbc6b0733c2af2e8f4e2f6a44242276767eb154c35033d4e3052c76dccaf6a"
+    },
+    {
+      "path": "trajectories/tua-bench/deepseek-harness/deepseek-v4-pro.jsonl.gz",
+      "bytes": 5118633,
+      "sha256": "94294b12cdc7f87a9549af2ea4209facdaa5dc52e78e71aa95fbbd4aca877fd2"
+    },
+    {
+      "path": "trajectories/tua-bench/deepseek-harness/glm-5.3.jsonl.gz",
+      "bytes": 4788618,
+      "sha256": "f54c9913458d6fa610b0530e7901a8addf9d1419c21c59753dc573cb65054704"
+    },
+    {
+      "path": "trajectories/tua-bench/deepseek-harness/gpt-6-astra.jsonl.gz",
+      "bytes": 2390700,
+      "sha256": "d4e8cc1aab5e3ca97c8b7185818f38eb164ac6abb635dc052711b34b558b8894"
+    },
+    {
+      "path": "trajectories/tua-bench/deepseek-harness/kimi-k3.jsonl.gz",
+      "bytes": 1604051,
+      "sha256": "92867914e6820e9ff9bec70d1e73b7ab10b00a40a8a4d921761144eaf0719c81"
+    },
+    {
+      "path": "trajectories/tua-bench/openhands/claude-opus-5.jsonl.gz",
+      "bytes": 1939117,
+      "sha256": "2e477ee562f5a169188ce6adb2d9269655fc1070daf17ff7ae15cedb48426154"
+    },
+    {
+      "path": "trajectories/tua-bench/openhands/deepseek-v4-pro.jsonl.gz",
+      "bytes": 5811427,
+      "sha256": "25ad85d40fce228b70bbc1ba2185b10824a5cff94f9b455ff59ed585798210f8"
+    },
+    {
+      "path": "trajectories/tua-bench/openhands/glm-5.3.jsonl.gz",
+      "bytes": 3940182,
+      "sha256": "87a47ca5eb4d1b2836ef0e5679f766bc407cf5bf20c4d766656c8496b24d1678"
+    },
+    {
+      "path": "trajectories/tua-bench/openhands/gpt-6-astra.jsonl.gz",
+      "bytes": 1645831,
+      "sha256": "4d9e1e9f1a457e28bfd8599bfe2278e2a0403cc9168ac64a9d301060841a385f"
+    },
+    {
+      "path": "trajectories/tua-bench/openhands/kimi-k3.jsonl.gz",
+      "bytes": 2306218,
+      "sha256": "dcc30fd089a6445518a3daa4db7d6c78725ecbd074df738f6d4282aa94de07a0"
+    },
+    {
+      "path": "trajectories/tua-bench/openjiuwen/claude-opus-5.jsonl.gz",
+      "bytes": 2786215,
+      "sha256": "1b33c3a67040e4547ecf45bd2e41be204b505f42f6b6f55263720f3586c7a9c3"
+    },
+    {
+      "path": "trajectories/tua-bench/openjiuwen/deepseek-v4-pro.jsonl.gz",
+      "bytes": 6785786,
+      "sha256": "48af98fabdd888b7e10fbe29db677c62c85aa4e068e7b281ab4a39037d09ed85"
+    },
+    {
+      "path": "trajectories/tua-bench/openjiuwen/glm-5.3.jsonl.gz",
+      "bytes": 3875340,
+      "sha256": "49023c1e4b12f8335d24171b43f4cc388ca4ec25b99aef4c69d59ae826b40b5d"
+    },
+    {
+      "path": "trajectories/tua-bench/openjiuwen/gpt-6-astra.jsonl.gz",
+      "bytes": 2449647,
+      "sha256": "21b1acc13a1054e18878ecc214a26bbdb5350d89ccde435175dd612ec618a21c"
+    },
+    {
+      "path": "trajectories/tua-bench/openjiuwen/kimi-k3.jsonl.gz",
+      "bytes": 2664575,
+      "sha256": "c9d2b89d8d3fee89da95787d84b117983fdc291c4b146064b2fbac01a5d99b32"
+    },
+    {
+      "path": "trajectories/tua-bench/pi/claude-opus-5.jsonl.gz",
+      "bytes": 1267110,
+      "sha256": "f81ff5e1b77d19cf14877ecc154924be34d2cad69f213b00191e40344f9090ae"
+    },
+    {
+      "path": "trajectories/tua-bench/pi/deepseek-v4-pro.jsonl.gz",
+      "bytes": 4163234,
+      "sha256": "9c58edd6f60b8affa1d4e34aebdded08d69118fa50ef35e6616a48ca560b261d"
+    },
+    {
+      "path": "trajectories/tua-bench/pi/glm-5.3.jsonl.gz",
+      "bytes": 2821573,
+      "sha256": "fec97716d871bf939b630a4f61a66bc3dc09ee3cfab4215dc15aab9aa611ebac"
+    },
+    {
+      "path": "trajectories/tua-bench/pi/gpt-6-astra.jsonl.gz",
+      "bytes": 1221676,
+      "sha256": "cd7e3217fecdaa156698643185cd601cb2d3b916abe086cc3f6d89a99059f90d"
+    },
+    {
+      "path": "trajectories/tua-bench/pi/kimi-k3.jsonl.gz",
+      "bytes": 1326254,
+      "sha256": "048e287a0814422b2eafd66c9a9b9cff69bd1189d0112fae6429440495118a5d"
+    },
+    {
+      "path": "viewer/claude-code/ale-cli.parquet",
+      "bytes": 5058506,
+      "sha256": "6a201e0f4d33a61064b3beb894114047f358b9834a075836517fab54eeda23fc"
+    },
+    {
+      "path": "viewer/claude-code/terminal-bench-4.parquet",
+      "bytes": 5973763,
+      "sha256": "f2a7bd34b2eb3114c676260aa858c7bbae91c7e8c74718991e4fc00bf1a23978"
+    },
+    {
+      "path": "viewer/claude-code/tua-bench.parquet",
+      "bytes": 1435157,
+      "sha256": "c81c1d20587ee198201133ecc32412d08eaba30313bba716959b13afdaffe801"
+    },
+    {
+      "path": "viewer/codex/ale-cli.parquet",
+      "bytes": 3517397,
+      "sha256": "f000fee95b30714d35ab9a6aed19116365b91742c45754b59a52275c51780fff"
+    },
+    {
+      "path": "viewer/codex/terminal-bench-4.parquet",
+      "bytes": 2944261,
+      "sha256": "e85de44041d83eb81d45934421313f9c13454596c163940cae0eeeddac129931"
+    },
+    {
+      "path": "viewer/codex/tua-bench.parquet",
+      "bytes": 1562812,
+      "sha256": "d13bdf9c38ee81410eadafb849bd77831180f1b34691613bc9cd17e3a72eb6fa"
+    },
+    {
+      "path": "viewer/deepseek-harness/ale-cli.parquet",
+      "bytes": 32883548,
+      "sha256": "831c2d12972265293e0005a75c3a8d613c14909d95c37ebc5a1cb2139e703f24"
+    },
+    {
+      "path": "viewer/deepseek-harness/terminal-bench-4.parquet",
+      "bytes": 60729920,
+      "sha256": "aa78ec4b7ddab63441afd959b3381363de34779050ccbd9b6d36e2f06a45f114"
+    },
+    {
+      "path": "viewer/deepseek-harness/tua-bench.parquet",
+      "bytes": 15730796,
+      "sha256": "72a7104a0f8630ae52b88f7661a5675424342be82f337a79f46801dbd32cf2a0"
+    },
+    {
+      "path": "viewer/openhands/ale-cli.parquet",
+      "bytes": 33599207,
+      "sha256": "104aaf86ab72b06f2ddaad1664a29d209e1b7bf636376c47daf763be14b00ac3"
+    },
+    {
+      "path": "viewer/openhands/terminal-bench-4.parquet",
+      "bytes": 42915396,
+      "sha256": "a4bc0c0ce0532663bdb2db4d90ee746b2a205722f79835fcdfc90f2f8b04f63d"
+    },
+    {
+      "path": "viewer/openhands/tua-bench.parquet",
+      "bytes": 13891029,
+      "sha256": "1715dffe52309e06cae7cb3140dda22df3ab3f024a01d8e4e61854f2d50e7860"
+    },
+    {
+      "path": "viewer/openjiuwen/ale-cli.parquet",
+      "bytes": 39355835,
+      "sha256": "c9937059c0765d729f45d6e3045ecb7b85caf677d3c914fc06b013130414515d"
+    },
+    {
+      "path": "viewer/openjiuwen/terminal-bench-4.parquet",
+      "bytes": 56375321,
+      "sha256": "b08baf6440692027a4ffa54c66a883d762dd723f7ba92d71ef7d52596c55bbfc"
+    },
+    {
+      "path": "viewer/openjiuwen/tua-bench.parquet",
+      "bytes": 20046891,
+      "sha256": "eddb983d6eaa220456da92ea4722c267ccfdec04d13cc784aa62bbe4854d1c50"
+    },
+    {
+      "path": "viewer/pi/ale-cli.parquet",
+      "bytes": 30019777,
+      "sha256": "7d25c11a9ac4d3ff01c903f7c3c7e167fd63d79f77c881c64ab576de15e353e7"
+    },
+    {
+      "path": "viewer/pi/terminal-bench-4.parquet",
+      "bytes": 44291835,
+      "sha256": "3016cd490340a7b98e3434efd028654d695d0462488b245f2a57d8e68899d9b4"
+    },
+    {
+      "path": "viewer/pi/tua-bench.parquet",
+      "bytes": 11332020,
+      "sha256": "99a62e1106cc4d21c2903b74df55240b8929d6af1cd33ae0f5a45f492cc16db2"
+    }
+  ],
+  "bytes": 830321477
+}

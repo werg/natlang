@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-d11-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D11",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 997,
+      "sha256": "a1142c7e4873185ad9cbee86575b32c75bdcb07095931e58770a751e3db11f17"
+    },
+    {
+      "path": "acquisition.json",
+      "bytes": 1178,
+      "sha256": "29544300a8fa703ddd0466d087c756d0b08d5f22099e6c160d9667bca0852b4e"
+    },
+    {
+      "path": "sharegpt.json",
+      "bytes": 1724198,
+      "sha256": "a87629bca82cfa83fa6635bacbde6ea6f84b894f2bf27181cd59efb16c714eeb"
+    },
+    {
+      "path": "train.jsonl",
+      "bytes": 2195044,
+      "sha256": "efbd1c3ffc3d05772faf661511b5b256eb1c95f37e8bf8a276a6719bfa66c807",
+      "lines": 318
+    }
+  ],
+  "bytes": 3921417
+}
