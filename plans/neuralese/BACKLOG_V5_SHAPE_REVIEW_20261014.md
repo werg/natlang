@@ -99,9 +99,18 @@ This review counts only `assistant.calls[].arguments.code` in action turns.
 The two arms together provide 30 distinct exact cases with an actual
 `iterateOn` call. Six source groups from seed 52041 overlap an existing accepted
 parent corpus, so global source-group filtering is still required. V2 improves
-honest stopping but does not improve process compliance; neither variant is
-adopted as the generator source yet. The replenisher keeps `actor_greenhouse`
-at zero while a third, more structured instruction is measured on fresh
-training seeds. `curriculum.iterate: required` currently produces only an
+honest stopping but does not improve process compliance; neither variant was
+adopted as the generator source. `curriculum.iterate: required` currently produces only an
 `iterate_missing` note in admission, so exact outcomes alone cannot be counted
 as iteration examples.
+
+The V3 instruction makes the state, control step and awaited
+`iterateOn(...).until(...)` shape explicit. On 48 new, source-disjoint training
+cases from seeds 52086 and 52087, it returned 38 exact outcomes and **all 38**
+have recorded `iteration_step` events. The normal, sun and long variants were
+36/36 exact; the broken-heater variant was 2/12 exact/blocked, with ten
+failures to end as blocked. V3 is adopted for new greenhouse source generation
+as family version 3, and the replenisher restores its quota of ten. Teacher
+admission still requires both the exact oracle and recorded iteration steps.
+Broken-heater failures are rejected; a later stopping-focused repair may
+improve that slice.
