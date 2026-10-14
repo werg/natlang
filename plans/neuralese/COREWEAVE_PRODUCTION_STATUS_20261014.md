@@ -22,7 +22,9 @@ its optimizer/RNG, certificate/identity/monitor reference and clean raw heads.
 All five handoff artifacts were SHA-verified in the sandbox. Protected PH prefix
 SHA `60c69c269ac7cfc6ee26cbc5d5c78c2d72e98d14ed8370027fe9e800b5c3edf8`
 was privately transferred and independently SHA-verified. Its full data scan
-reached 90.15% at 19:03 UTC. First update/restore qualification remains pending.
+reached 90.15% at 19:03 UTC. First update/restore qualification remains pending. At19:25 the final merged-row
+window scan was62.79% complete; startup is three streamed passes (validation,
+dedup plus merge metadata, merged windows), not GPU work.
 
 Mellum uses separately declared FRESH recipe
 `neuralese-direct-mellum-r8-clean-warmup-coreweave-fresh-20261014-v1.json`
@@ -71,3 +73,30 @@ Signed capabilities and W&B runtime logs remain outside the checkout, mode600
 or private directories; never commit them. D40 CPU conversion shares LFM root
 disk in a frozen runtime and is parent-owned. Both production allocations remain
 running; all earlier seven sandbox diagnostics were independently verified stopped.
+
+## Reader cardinality proof, 19:24 UTC
+
+Raw656263 rows become656262 reader rows through one existing exact-key duplicate,
+not missing data or a held collision. Cache skip set is exactly{250111}
+(zero-based). Earliest matching row46536 is retained. Both are train,
+agentic-tool-loop, source groups
+`swe-rebench-instance:Clinical-Genomics__patientMatcher-75` and
+`swe-rebench-repo:Clinical-Genomics/patientMatcher`.
+Kept ID `harness:openhands-v0.54:chatcmpl-87de9c62149901120aee88c6287d0bba:turn:0005`;
+duplicate `harness:openhands-v0.54:chatcmpl-ea839420aa7d4dbdfb1c2a5dcb079e23:turn:0005`.
+Full duplicate key: split=train,
+text SHA `a59f7e173070e6ebe6195b5382fdb56a735dcf49cac69a08bf8e0af8188a40b0`,
+token IDs SHA `9dcaa0cb390bb2fabaa45e0ecc88e6f5a65ea1d88447f2e629f20d7d6960a561`,
+supervised suffix1658, sampling_group=null. Entire corpus scan found exactly
+these two key matches and zero held same-text lines. Diagnostic terminal0;
+receipt `/home/werg/data/dgxops/coreweave-production-lfm-reader-dedup-proof-20261014.json`.
+No admission/training change required.
+
+Mellum first atomic full state at170 committed19:13:25,
+46,821,474,583bytes. Immutable export copy completed138seconds later;
+SHA `93737f4e87454a3f07c642bec2fe36e5d9fcb8fa0b8e8027d4999c363f442381`.
+Actual private upload endpoint is `storage.googleapis.com`; GCS supports5TiB
+objects across uploadmethods ([official quotas](https://docs.cloud.google.com/storage/quotas?hl=en)).
+At19:25 scoped PUT process had read~22GB/46.8GB in370seconds (~59MB/s),
+with24MB RSS, while actual trainer continued326updates/GPU100%.
+HTTP completion and independent remote SHA verification remain pending.
