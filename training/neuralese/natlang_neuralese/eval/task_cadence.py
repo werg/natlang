@@ -234,9 +234,12 @@ class TaskEval:
             queues = self._queues(run, repeat)
             for queue, journal, _ in queues:
                 log = (queue.parent / 'supervisor.log').open('w')
+                # The collector's default model ID is the local Bonsai teacher. This endpoint serves the
+                # student engine; bind its identity in requests and trajectory provenance instead.
                 children.append((subprocess.Popen(
                     [sys.executable, str(self.repo / 'scripts' / 'run_bonsai_queue.py'), str(queue), str(journal),
                      '--runtime', str(self.spec.get('runtime') or self.repo / 'ts-host'), '--server', url,
+                     '--model-id', engine.model_name,
                      '--chat-completions-url', url + '/v1/chat/completions', '--model-concurrency', '2',
                      '--identical-turn-limit', str(self.spec['identical_turn_limit'])],
                     cwd=self.repo, env=env, stdout=log, stderr=subprocess.STDOUT), log))
