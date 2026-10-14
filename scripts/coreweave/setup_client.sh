@@ -7,5 +7,5 @@ set -euo pipefail
 VENV=${NATLANG_CW_VENV:-$HOME/.local/share/natlang/cw-venv}
 command -v uv >/dev/null || { echo "uv not found (https://docs.astral.sh/uv/)" >&2; exit 1; }
 [ -x "$VENV/bin/python" ] || uv venv -q -p 3.12 "$VENV"
-uv pip install -q -p "$VENV" --upgrade 'cwsandbox[cli]>=1.14.2' 'boto3>=1.42.5'
+uv pip install -q -p "$VENV" --upgrade 'cwsandbox[cli,wandb]>=1.14.2' 'boto3>=1.42.5'
 "$VENV/bin/python" -c "import cwsandbox, boto3; print({'venv': '$VENV', 'cwsandbox': cwsandbox.__version__, 'boto3': boto3.__version__})"

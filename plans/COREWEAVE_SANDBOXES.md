@@ -387,6 +387,12 @@ The owner authorized the W&B key for sandboxes. It lives in `~/.config/natlang/c
 `CWSANDBOX_AUTH` (or a leading `--auth wandb|coreweave_api_key`). It never prints the key or forwards it into a
 sandbox.
 
+Pop has the same private env file and client setup as DGX (2026-10-14). Run
+`scripts/coreweave/setup_client.sh` on either machine; it installs the W&B auth
+extra needed by `cwctl.py ls/get/logs`. The machine that launches a sandbox
+still owns its lifecycle and launch record; the other machine can inspect it
+without altering the job.
+
 What W&B auth does not give us:
 - **Runner discovery.** `list_runners` answers "W&B auth is not allowed for this sandbox operation".
 - **The object-storage identity.** `object_storage_access` needs a WIF configuration registered by a CoreWeave
