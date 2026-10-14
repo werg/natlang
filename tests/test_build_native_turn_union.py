@@ -13,6 +13,24 @@ import target_set_manifest  # noqa: E402
 TOKENS = ['lfm', 'mellum']
 
 
+def test_union_compression_preserves_exact_utf8_and_decoded_receipt(tmp_path):
+    from build_native_turn_union import union_text_writer
+    from natlang_neuralese.common.jsonio import open_jsonl_text
+    text = '{"text":"café 😀"}\r\n{"text":"next"}\n'
+    plain = tmp_path / 'text-data.jsonl'
+    packed = tmp_path / 'text-data.jsonl.zst'
+    with union_text_writer(plain) as ordinary:
+        ordinary.write(text)
+    with union_text_writer(packed, True) as compressed:
+        compressed.write(text[:12])
+        compressed.write(text[12:])
+    with open_jsonl_text(packed) as stream:
+        restored = stream.read().encode('utf-8')
+    assert restored == plain.read_bytes() == text.encode('utf-8')
+    assert compressed.decoded_sha256 == hashlib.sha256(restored).hexdigest()
+    assert compressed.decoded_bytes == len(restored)
+
+
 def identity(text, split='train', groups=('g1',)):
     return {
         'split': split,
