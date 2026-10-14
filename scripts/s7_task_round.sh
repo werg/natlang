@@ -136,8 +136,10 @@ for pid in "${pids[@]}"; do
 done
 if [ "$collector_status" -ne 0 ]; then
   # A case that exhausts its declared model-request budget still has an exact
-  # terminal journal record and is a scored rollout. Preserve it; fail closed
-  # for missing terminal records, transport errors and accounting failures.
+  # terminal journal record and is a scored rollout. A host wall-clock limit
+  # also has an exact terminal record, but reward_of leaves it unscored because
+  # the limit depends on serving load. Preserve both; fail closed for missing
+  # terminal records, transport errors and accounting failures.
   python3 - "$R" <<'PY' || {
 import json, sys
 from pathlib import Path
@@ -159,8 +161,11 @@ for key, row in finishes.items():
         continue
     if row.get("status") == "incomplete" and row.get("resource_limit_reason") == "model_request_budget":
         continue
+    if (row.get("status") == "timeout" and row.get("resource_limit_reason") == "case_wall_budget" and
+            row.get("output_accounting", {}).get("exact_result_rows") == 0):
+        continue
     raise SystemExit(f"rollout collector failed: {key}: {row.get('status')}: {row.get('resource_limit_reason')}")
-print("all rollout collectors terminated with exact results or declared model-request budgets")
+print("all rollout collectors terminated with exact results or declared resource limits")
 PY
     echo "one or more rollout collectors failed; inspect shard logs" >&2
     stop_server
