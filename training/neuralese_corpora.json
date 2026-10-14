@@ -66872,6 +66872,29 @@
         }
       },
       "notes": ""
+    },
+    {
+      "id": "neuralese-e2e-cohort-20261014-v4",
+      "owner": "dgx",
+      "path": "runs/neuralese-e2e-cohort-20261014-v4",
+      "include": [
+        "records.jsonl",
+        "pieces.jsonl",
+        "edges.jsonl",
+        "chains.jsonl",
+        "omissions.jsonl",
+        "receipt.json"
+      ],
+      "source_class": "source-reviewed derived tokenizer-agnostic neuralese e2e whole trajectories",
+      "license": "inherited source licenses from neuralese-e2e-cohort-20261013-v3; no new source credit",
+      "split": "train/test inherited; held chains unchanged; entire pending-review train trajectories explicitly omitted",
+      "admission": "Existing admitted v3 cohort filtered with shared exact pending unpinned source groups; graph membership, splits, endpoint closure and edge counts verified",
+      "training_admission": true,
+      "training_admission_reason": "207671 retained records/106368 closed edges;3 review-held train chains/27 dependent records omitted; no held quality flags. Source-review registry SHA pinned in receipt.",
+      "derived_from": "neuralese-e2e-cohort-20261013-v3",
+      "review_status": "exact source provenance and graph closure verified; pinned-review ID scan found no candidates in source v3",
+      "required_conversion": "Bind records/pieces hashes in the next shared mixed recipe; existing frozen consumers unchanged",
+      "notes": "Kept record bytes and piece table unchanged. Rejected source trajectories are not model/DPO negatives. No novel examples admitted."
     }
   ],
   "coverage_backlog": [

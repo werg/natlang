@@ -109,7 +109,7 @@ def test_both_lines_hand_off_into_the_same_mixed_run():
     base = resolve_recipe_data(recipes / 'neuralese-e2e-v1.json')
     assert 'parent_readiness' not in base
     manifest = json.loads((recipes.parents[1] / 'corpus-manifests' /
-                           'neuralese-e2e-cohort-20261013-v3.json').read_text())
+                           'neuralese-e2e-cohort-20261014-v4.json').read_text())
     files = {item['path']: item['sha256'] for item in manifest['files']}
     for role in ('records', 'pieces'):
         assert mixed['lfm']['e2e_mix'][role] == {
