@@ -13,6 +13,10 @@ import pytest  # noqa: E402
 @pytest.fixture(autouse=True)
 def no_real_machine_effects(monkeypatch):
     """Tests never touch real memory state: the balloon and systemd/docker calls fail loudly unless a test stubs them."""
+    from types import SimpleNamespace
+    # Mocking ledger.time.sleep/time must not change the process-wide time
+    # module used by unrelated test threads and subprocess timeout polling.
+    monkeypatch.setattr(ledger, 'time', SimpleNamespace(**vars(ledger.time)))
     def refuse(*_args, **_kwargs):
         raise AssertionError('a ledger test reached the real machine (balloon_reclaim)')
     monkeypatch.setattr(ledger, 'balloon_reclaim', refuse)
