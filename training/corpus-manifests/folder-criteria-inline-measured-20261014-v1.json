@@ -1,0 +1,42 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "folder-criteria-inline-measured-20261014-v1",
+  "owner": "pop",
+  "path": "runs/folder-criteria-inline-measured-20261014-v1",
+  "files": [
+    {
+      "path": "accepted-parents.jsonl",
+      "bytes": 74130116,
+      "sha256": "7992f6931ef06a52f9e5c20385626c06598adc66271bf6715ce765ba13d04b95",
+      "lines": 48
+    },
+    {
+      "path": "admission-review.json",
+      "bytes": 1672,
+      "sha256": "4f6417465d723684374e53fe82552258e057bd3274de7b8439a14406839bddb5"
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 72644503,
+      "sha256": "a63dd8b6bec73026e837cfacdeb55df6c8e79919a38e22edb85449abc88c51e6",
+      "lines": 973
+    },
+    {
+      "path": "selected.ir.jsonl",
+      "bytes": 215597,
+      "sha256": "2a5506fbaaad4888bf8ca3aa36221901201d995d449d366ae60f2b96bf7b3504",
+      "lines": 48
+    },
+    {
+      "path": "selection-review.json",
+      "bytes": 28432,
+      "sha256": "610c166c5eca59a2208889514262c15699125bc9b9aa9c66c8fa9e4db6473bdb"
+    },
+    {
+      "path": "semantic-holds.json",
+      "bytes": 182,
+      "sha256": "0bbc73eabaaae26df9215581dce4a5e400ab44cf692e591a6d310afe52a2207a"
+    }
+  ],
+  "bytes": 147020502
+}
