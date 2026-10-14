@@ -41,13 +41,13 @@
     "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/abilities/return.md": "fd31c768e864beb8baef34db300c5255bf2a5b5200e5201dcee62cb3fcef3149",
     "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/abilities/other.md": "39330c23512037029f5b64a430adbc5dc2a0a3ee13fa38784dbd6eba6a74e77b",
     "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/contracts/result.md": "33438606b10ffc33245591ae66f514c3f954a5db7677304d88f7cce0dece51b8",
-    "training/semantic_applications/astra/turn-window-adjudicator/verify-result.mjs": "e41e9caf3e2f952400a9fae66e9a22cdce3eae5ce14a1403244028ff9bb63882",
-    "training/semantic_applications/astra/turn-window-adjudicator/check-ordering-cases.mjs": "f65aadc935f8a3df61909a3e0297a7d41d2e5d03e7fea9719462a65cd7d9f761"
+    "training/semantic_applications/astra/turn-window-adjudicator/verify-result.mjs": "d17fb21492285f774de68c2e8ab8b3a4cb394737f067c09a23c99ebb2b28ca76",
+    "training/semantic_applications/astra/turn-window-adjudicator/check-ordering-cases.mjs": "ba981ad7e436b32dfa8873c8e471cfc26b67884603232b5c50e67e1dc5ca39ec"
   },
   "typed_replays": [
     {
       "case": "mirror-garden",
-      "source_sha256": "1aee56897ec9296f1f667067f58428727169d9792246f1cac2a9dc9eaa6188c7",
+      "source_sha256": "ed69e0b8479d6f6113cdd44c9abc487bec99def388d5682b991b1fa986216ee0",
       "canonical_replay": {
         "path": "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/reference-report.json",
         "sha256": "200cce3de94a663cf0e08840d3a6f50ae0bf84bbc4df040f6cc852fac69930b0",
@@ -59,7 +59,7 @@
     },
     {
       "case": "mirror-garden-unsubmitted",
-      "source_sha256": "480a83e32ad314a885494ea4dfb7e6fd9aa191fc6f740bd992676c7cec533f3a",
+      "source_sha256": "b89706e0ac3e5e215651795875389bc2be9487166465b446d31a11790500740b",
       "canonical_replay": {
         "path": "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/reference-report.json",
         "sha256": "e5d2b25f33111ec694438329c52a92b5327edd6e95a4126466dd8901225b5898",
@@ -432,6 +432,14 @@
         "issues": []
       },
       {
+        "caseName": "mirror-garden-unsubmitted",
+        "name": "negative submission witness without actual choice ID",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
         "caseName": "mirror-garden",
         "name": "candidate and preview set permutations",
         "expected": true,
@@ -467,6 +475,16 @@
         "issues": [
           "consequential order source choice",
           "authored consequential order choice"
+        ]
+      },
+      {
+        "caseName": "mirror-garden",
+        "name": "empty actual choice witness",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "nonempty submitted choice support"
         ]
       },
       {
@@ -586,7 +604,43 @@
         "passed": true,
         "issues": [
           "two actual uncommitted previews",
+          "uncommitted candidate identity universe",
           "retained consequential alternatives"
+        ]
+      },
+      {
+        "caseName": "mirror-garden-unsubmitted",
+        "name": "application universe omitted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "complete uncommitted application universe",
+          "uncommitted candidate application permutation",
+          "uncommitted candidate application permutation"
+        ]
+      },
+      {
+        "caseName": "mirror-garden-unsubmitted",
+        "name": "comparison cites absent previews",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "uncommitted comparison candidate domain"
+        ]
+      },
+      {
+        "caseName": "mirror-garden-unsubmitted",
+        "name": "candidate violates supplied precedence",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "uncommitted source order constraint",
+          "uncommitted source order constraint",
+          "uncommitted source order constraint",
+          "uncommitted preview application identity"
         ]
       },
       {
@@ -615,5 +669,11 @@
   "source_reconstruction": "Sol independently reconstructed both source outcomes; full new reference/checker review requested and pending.",
   "exact_scope": "Original source identities/quotes, actual branch-local rewrite arithmetic and histories, selected preview consumption, unchanged live state for unresolved choice, token and ink invariants. Semantic rule entailment remains independent review.",
   "live_qualified": false,
-  "training_admitted": false
+  "training_admitted": false,
+  "peer_findings_closed": [
+    "Reject absent comparison candidate IDs in uncommitted branch.",
+    "Require complete original application universe and candidate permutations/constraints before accepting uncommitted previews.",
+    "Require nonempty exact actual submitted-choice support.",
+    "Accept no actual choice ID when an exact negative submission witness establishes absence."
+  ]
 }
