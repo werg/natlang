@@ -1,0 +1,37 @@
+{
+  "schema": "natlang.application-exact-integrity-delta/1",
+  "author": "semantic_slate_sol",
+  "application": "dialogue-perspective-ledger",
+  "parent_commit": "f66b0d32",
+  "hashes": {
+    "training/semantic_applications/sol/dialogue-perspective-ledger/verify-result.mjs": "6a9ff37c49850ada9a55cd1e4e1467ebf36aaea96127de51e5fd7ae5084a4142",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/check-verifier.mjs": "3171081a5448208dca9cc2b4b54e6f5f7d2807bc05a7be9dc5ff8a9518ad0c7a"
+  },
+  "closed_findings": [
+    "Omitted original quote-tree coverage.",
+    "Dangling act/span binding.",
+    "Dangling reference/span binding.",
+    "Foreign physical event ID.",
+    "Revision effects lacked owned target validation/application."
+  ],
+  "checks": [
+    "Complete unique per-turn quote trees and references.",
+    "Actual per-turn act/reference span joins; one original source root.",
+    "Both directions of parent-child edges and exact nonempty support.",
+    "Original physical event domains and coverage.",
+    "Exact returned belief/issuer retraction effects and common actual adoption links."
+  ],
+  "controls": {
+    "passed": true,
+    "positive": 9,
+    "negative": 42,
+    "scope": "Exact authored certificate equivalence/corruption controls; semantic entailment and actual NL execution remain separate."
+  },
+  "nl_fixture_oracle_reference": "unchanged",
+  "holds": [
+    "Speech/proposition entailment and semantic proof sufficiency remain independent.",
+    "No actual NL stage/literal/whole application execution from these controls."
+  ],
+  "live_qualified": false,
+  "training_admission": false
+}

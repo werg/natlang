@@ -42,6 +42,17 @@ check('original quoted speaker becomes reporter',false,v=>v.scoped.quoteTrees.fi
 check('unconditional timely failure rewritten globally',false,v=>v.evolution.views.find(x=>x.participantId==='Jon').commitments[0].status='fulfilled');
 check('fabricated actual act quotation',false,v=>v.scoped.acts[0].meaning.quotes=['Not in the actual turn']);
 check('fabricated endorsement quotation',false,v=>v.evolution.deltas[0].endorsements[0].quotes=['Not in the actual turn']);
+check('quote trees omitted',false,v=>v.scoped.quoteTrees=[]);
+check('one original quote tree omitted',false,v=>v.scoped.quoteTrees.pop());
+check('dangling act span',false,v=>v.scoped.acts[0].spanId='NO_SPAN');
+check('dangling reference span',false,v=>v.scoped.references.find(r=>r.bindings.length).bindings[0].spanId='NO_SPAN');
+check('nonroot missing from parent children',false,v=>v.scoped.quoteTrees.find(t=>t.turnId==='N12').nodes[0].childSpanIds=[]);
+check('empty decided quote support',false,v=>v.scoped.quoteTrees[0].nodes[0].witnesses=[]);
+check('foreign physical event ID',false,v=>v.episodePlan.episodes.find(e=>e.factIds.length).factIds=['NO_FACT']);
+check('physical event identity coverage omitted',false,v=>{for(const e of v.episodePlan.episodes)e.factIds=[];});
+check('unknown issuer revision target',false,v=>{const r=v.evolution.deltas.find(d=>d.revisions.length).revisions[0];r.commitmentOwnerId='NO_ACTOR';r.retractCommitmentIds=['NO_COMMITMENT'];});
+check('foreign revision belief target',false,v=>v.evolution.deltas.find(d=>d.revisions.length).revisions[0].defeatBeliefIds=['NO_BELIEF']);
+check('correction falsely targets issuer promise',false,v=>{const r=v.evolution.deltas.find(d=>d.revisions.length).revisions[0];r.commitmentOwnerId='Jon';r.retractCommitmentIds=[v.evolution.views.find(p=>p.participantId==='Jon').commitments[0].commitmentId];});
 check('query order changed',false,v=>v.answers.reverse());
 check('source physical truth changed',false,v=>v.source.physicalFacts.find(f=>f.propositionId==='P_RELEASE').value=true);
 console.log(JSON.stringify({scope:'Exact authored certificate equivalence/corruption controls; semantic entailment and actual NL execution remain separate.',passed:checks.every(x=>x.passed),positive:checks.filter(x=>x.expected).length,negative:checks.filter(x=>!x.expected).length,checks},null,2));if(checks.some(x=>!x.passed))process.exitCode=1;
