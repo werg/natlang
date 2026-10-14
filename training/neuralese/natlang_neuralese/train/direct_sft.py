@@ -1876,6 +1876,7 @@ def main(argv=None):
         memory_estimator = restored_memory_estimator(state)
         if spike is not None:
             spike.load_state_dict(state.get('grad_spike_clip'))
+        restore_training_rng_state(state['rng'], a.device)
         print(json.dumps({'event': 'continued', 'from': str(a.continue_from), 'predecessor_step': state['step']}),
               flush=True)
         # The checks above bound views of the mmap'd state in main()'s scope (saved_optimizer is the whole optimizer
