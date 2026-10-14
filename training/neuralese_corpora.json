@@ -75444,6 +75444,27 @@
         "held_text": {}
       },
       "notes": "Seed52067 exact/process curated subset: 66 parents, 361 native approved decisions; seven label-audit and two missing-iteration parents held; train-only twin render"
+    },
+    {
+      "id": "luna-held-shapes-s52068-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52068-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and required-process review",
+      "license": "project-generated; CC-BY-SA-4.0 (HotpotQA source)",
+      "split": "train only; source IDs/groups checked against held packet and preceding seed52067; global union held/source-quality filters still required",
+      "admission": "99 selected generation jobs, 91 exact accepted roots, 7 wrong-answer rejections and one reviewed zero-result provider stream; eight semantic holds (seven dataset-workbench, one missing iterateOn); 83 admitted parents and 600 approved native decisions",
+      "training_admission": true,
+      "training_admission_reason": "Exact accepted roots and verified pinned source, explicit semantic/process holds, protected source-group check, native per-decision approval; only approved-turns.jsonl is a training input",
+      "review_status": "Dataset-workbench label audits remain held; one exact research answer omitted required iteration; other exact train parents reviewed and curated",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory, then add to a protected union",
+      "notes": "Seed52068 case012 policy_after_measure had a reviewed zero-result runaway provider tool-call stream, not a negative training example. See plans/neuralese/LUNA_TOOL_STREAM_GUARD_20261015.md. Selection and curation reviews bind exact files."
     }
   ],
   "coverage_backlog": [
