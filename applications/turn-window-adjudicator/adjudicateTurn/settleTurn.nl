@@ -8,7 +8,7 @@ returns: WindowState
 ---
 1. Build WindowState from the actual CapturedTurn: copy the immutable initial board into current board,
    retain all original announcements/reference bindings, and copy its work slots and remaining IDs.
-   Keep source and request unchanged. Initialize queuedTriggers and windows empty.
+   Keep source and request unchanged. Initialize queuedTriggers, windows and orderResolutions empty.
 2. Combine unresolved source, timing and capture findings. A missing decisive timing or identity premise
    makes the state finished with that unresolved reason before any unsupported effect is committed.
 3. Invoke advanceWindow.iterateOn with this state and measure remainingWorkSlotIds.length. Its finished

@@ -7,20 +7,29 @@ args:
   protocol: WindowProtocol
 returns: RewrittenBundle
 ---
-1. Inventory standing and replacement rules relevant to these actual effect kinds and original part
-   lineages. Include potentially inapplicable rules so their negative judgments can explain the result;
-   context definitions and after-resolution triggers belong to separate semantic responsibilities.
-2. Call resolveOrdering(bundle, beforeBoard, source, protocol) to obtain source-governed applications.
-   Each application pairs one rule with one original lineage and has one finite work identity. A
-   source-defined once-per-lineage rule cannot acquire another use merely by rewriting that lineage.
-3. If ordering is decisively unresolved, return the original bundle with that finding and no committed
-   token consumption. Otherwise initialize ReplacementState with the actual ordered applications,
-   beforeBoard, empty decisions/reservations and this bundle, retaining source and protocol.
-4. Invoke applyReplacement.iterateOn with measure remainingApplications.length until the list is empty
-   or unresolved prevents a supported rewrite. Each step consumes one application and returns the
-   actual updated bundle plus its semantic decision. Shared token reservations carry between steps.
-5. Consume the completed bundle, ordered decisions and reserved token IDs. Validate that each output
-   part preserves its declared original lineage and that every quantity is a source-supported nonnegative
-   integer. These are output integrity checks after semantic interpretation, not replacement selection.
-6. Return RewrittenBundle. Every before/after decision records the current rewritten input, so later
-   trigger interpretation can distinguish announced damage, post-prevention damage and converted growth.
+1. Call resolveOrdering(bundle, beforeBoard, source, protocol). Consume the actual finite OrderPlan,
+   source constraints, legal candidates and original choice clauses. Keep a pristine copy of the
+   supplied bundle/beforeBoard for all previews; ordering does not change the live turn.
+2. If legality is unresolved, return the original bundle with no decisions or consumed tokens and an
+   OrderResolution containing the plan, no fabricated previews and a null unresolved choice. Preserve
+   the specific missing source premise before any replacement or batch is committed.
+3. For each legal candidate create a separate ReplacementState with that candidate's application list,
+   the original bundle/beforeBoard, empty decisions/reservations and the same source/protocol. No state
+   object or mutable reservation collection is shared between candidates.
+4. Invoke the existing applyReplacement.iterateOn on this candidate state, measured by
+   remainingApplications.length. Consume each actual result until its list is empty or unresolved
+   stops that branch. This is the same semantic replacement child used by ordinary resolution.
+5. Store OrderPreview with candidateId parent-bound from this candidate, original beforeRevision,
+   actual returned bundle, decisions, reservedTokenIds and unresolved. Exact checks require unchanged
+   beforeBoard and original source token statuses. Preview reservations do not spend live tokens.
+6. After all finite candidates have been processed, call compareOrderPreviews(plan, previews,
+   beforeBoard, source). Consume the actual OrderResolution and its selected candidate identity.
+   Do not replace a failed preview with a predicted final part or favor the first completed branch.
+7. If comparison or source choice is unresolved, return the original bundle, empty committed decisions
+   and consumed tokens, plus the actual OrderResolution. The parent records this uncommitted dispute
+   and finishes without resolving a batch or activating a consequence from any preview.
+8. Otherwise locate the actual selected preview. Check lineage preservation, nonnegative integral
+   quantities and capacity IDs. Return its exact bundle, decisions and reserved tokens as the selected
+   RewrittenBundle, with OrderResolution retained. No second semantic replay can change the choice.
+9. The caller applies these chosen deltas only after simultaneous outcomes succeed. Hypothetical
+   histories remain distinguishable from the selected actual history in the certificate.

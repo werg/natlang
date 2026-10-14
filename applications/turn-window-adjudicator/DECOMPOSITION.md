@@ -99,3 +99,13 @@ Full source tree now authored:26 NL functions /643 total lines /435 body lines /
 ## Implementation composition audit
 
 All effect selection and interpretation remain numbered NL pseudocode. The replacement reducer uses an actual scoped ReplacementDecision, preserving beforeParts/afterParts and source-defined consumed tokens. Simultaneous reconciliation joins typed proposals from one immutable before-board and derives departures after accumulation. Trigger interpretation consumes those departures and actual rewrite quantities, selecting captured/current/last-known recipients into typed consequence parts. Independent identity/timing audits inspect the actual returned trace. The only crisp operations requested in bodies are source reads, quote/domain checks, arithmetic, finite frontier bookkeeping and application of already selected deltas. No executable TS policy or semantic regular-expression parser is present.
+
+## Connected ordering dispute extension
+
+The source now has30 NL functions/761 total lines/192 numbered steps/49 declaration aliases. The baseline package at c3fd2000 remains pinned and independently reviewed; this new ordering-preview-v2 presentation is unmeasured. Its decomposition was written first in plans/semantic_stack/TURN_WINDOW_ORDERING_EXTENSION.md.
+
+resolveOrdering calls enumerateLegalOrders. That child consumes actual scoped PairOrder judgments into source precedence and independence constraints, then enumerates a finite application-identity closure. rewriteBundle initializes a separate typed ReplacementState for each candidate and calls its existing applyReplacement.iterateOn child. No semantic simulator or replacement rule was duplicated in crisp code.
+
+compareOrderPreviews calls compareConsequenceProjection for each actual pair and bindSubmittedChoice for an actual selection. The returned OrderDifference and OrderChoiceBinding change the selected bundle and capacities. An unresolved consequential order preserves typed OrderResolution and finishes before a batch commit. OrderResolution records survive through WindowState and TurnCertificate, including uncommitted disputes. The exact verifier checks preview identity, constraint permutations, input revision and selected-history/token consumption; source entailment remains semantic review.
+
+Glass Garden's checked final outcomes remain unchanged. The added Mirror Garden source will make Mantle/Cover ordering consequential and supply a specific legal choice; its missing-choice partner must remain unresolved. These new cases and their independent review remain pending. No live execution or training admission is claimed.

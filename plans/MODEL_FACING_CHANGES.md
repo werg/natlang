@@ -336,3 +336,11 @@ V3 live confirmed the repaired conditional binding table, then a passage compari
 ### Procedure Compiler code-closure generated-span attribution (2026-10-14)
 
 `judgeGuard` now returns and validates exact `{path,quote}` spans from the actual supplied generated closure, including called child files. Goal output responsibilities are passed into schema inference so visible O06 state conventions reach their owner. Actual emitted-code interpretation remains separate from source-required judgment. Authored source/type/reference and exact controls are checked; live samples: 0/48, diagnostic only until reviewed. No generated-callable execution or training admission credit.
+
+### Procedure Compiler connected closure frontier v2 (2026-10-14)
+
+`judgeGuard` consumes `readEmittedClosure` and `followCodeReference.iterateOn` actual typed closure results. A scoped dependency judgment activates original callees/type files and explicit runtime clause reads, with exact original path/span checks. The connected control includes a transitive unconditional-permission defect and uncalled ideal decoys; actual and source-required channels remain independent. Baseline reviewed-v1 diagnostic is frozen. Debt:0/48 live samples for this variant; source/type/control peer review is not execution or admission.
+
+### 2026-10-14 — Turn Window isolated ordering previews v2
+
+Four additional NL functions interpret pairwise source ordering, enumerate finite candidate orders, compare actual downstream projections and bind a submitted choice. The parent invokes the same actual replacement child on isolated state for each candidate, consumes the selected returned preview, and retains all OrderResolutions in the typed certificate. Original Glass Garden outcomes are unchanged; its baseline source remains pinned separately. **Measurement debt:** zero v2 live samples. Native source/type and canonical checks plus35 external exact controls cover mechanism only; independent branch review and consequential Mirror Garden fixtures precede a pinned diagnostic, then approximately48 reviewed samples for adoption. No crisp rule simulator or arbitrary candidate limit was introduced.

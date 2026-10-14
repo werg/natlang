@@ -11,32 +11,36 @@
   "oracle_path": "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/oracle.json",
   "source_world_split_key": "astra-turn-window-glass-garden-v1",
   "program_files": [
+    "adjudicateTurn.nl",
+    "adjudicateTurn/auditTurn.nl",
     "adjudicateTurn/auditTurn/challengeTiming.nl",
     "adjudicateTurn/auditTurn/replayIdentity.nl",
-    "adjudicateTurn/auditTurn.nl",
-    "adjudicateTurn/captureAnnouncements/bindReference.nl",
     "adjudicateTurn/captureAnnouncements.nl",
+    "adjudicateTurn/captureAnnouncements/bindReference.nl",
+    "adjudicateTurn/compileWindows.nl",
     "adjudicateTurn/compileWindows/checkWindowDependencies.nl",
     "adjudicateTurn/compileWindows/classifyTiming.nl",
-    "adjudicateTurn/compileWindows.nl",
+    "adjudicateTurn/readTurn.nl",
     "adjudicateTurn/readTurn/readBoard.nl",
     "adjudicateTurn/readTurn/readIntents.nl",
-    "adjudicateTurn/readTurn/readRules/interpretAbility.nl",
     "adjudicateTurn/readTurn/readRules.nl",
-    "adjudicateTurn/readTurn.nl",
-    "adjudicateTurn/settleTurn/advanceWindow/collectTriggers/interpretTrigger.nl",
+    "adjudicateTurn/readTurn/readRules/interpretAbility.nl",
+    "adjudicateTurn/settleTurn.nl",
+    "adjudicateTurn/settleTurn/advanceWindow.nl",
     "adjudicateTurn/settleTurn/advanceWindow/collectTriggers.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/collectTriggers/interpretTrigger.nl",
     "adjudicateTurn/settleTurn/advanceWindow/prepareBundle.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/resolveBatch.nl",
     "adjudicateTurn/settleTurn/advanceWindow/resolveBatch/judgeOutcome.nl",
     "adjudicateTurn/settleTurn/advanceWindow/resolveBatch/reconcileDeltas.nl",
-    "adjudicateTurn/settleTurn/advanceWindow/resolveBatch.nl",
     "adjudicateTurn/settleTurn/advanceWindow/resolveInterrupts.nl",
-    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/applyReplacement.nl",
-    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl",
     "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl",
-    "adjudicateTurn/settleTurn/advanceWindow.nl",
-    "adjudicateTurn/settleTurn.nl",
-    "adjudicateTurn.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/applyReplacement.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/bindSubmittedChoice.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl",
+    "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl",
     "types.ts",
     "natlang.json",
     "tsconfig.json"
@@ -277,7 +281,7 @@
           "source": "TurnSource",
           "protocol": "WindowProtocol"
         },
-        "returns": "ReplacementOrder",
+        "returns": "OrderPlan",
         "owned_delta": "Resolve replacement precedence and shared capacity without treating simultaneous outcomes as sequential."
       },
       {
@@ -316,6 +320,51 @@
         },
         "returns": "TurnCertificate",
         "owned_delta": "Adjudicate the supplied closed turn through captured references, rewritten bundles and witnessed windows."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl",
+        "args": {
+          "applications": "ReplacementApplication[]",
+          "bundle": "EventBundle",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource",
+          "protocol": "WindowProtocol"
+        },
+        "returns": "OrderPlan",
+        "owned_delta": "Interpret actual ordering obligations and enumerate source-legal finite alternatives."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
+        "args": {
+          "plan": "OrderPlan",
+          "previews": "OrderPreview[]",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource"
+        },
+        "returns": "OrderResolution",
+        "owned_delta": "Consume actual preview comparisons and source-backed candidate selection."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl",
+        "args": {
+          "first": "OrderPreview",
+          "second": "OrderPreview",
+          "beforeBoard": "BoardSnapshot",
+          "source": "TurnSource"
+        },
+        "returns": "OrderDifference",
+        "owned_delta": "Judge downstream semantic distinguishability from actual typed rewrite previews."
+      },
+      {
+        "path": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/bindSubmittedChoice.nl",
+        "args": {
+          "plan": "OrderPlan",
+          "previews": "OrderPreview[]",
+          "differences": "OrderDifference[]",
+          "source": "TurnSource"
+        },
+        "returns": "OrderChoiceBinding",
+        "owned_delta": "Join actual submitted order scope and chooser authority to candidate identities."
       }
     ],
     "edges": [
@@ -418,6 +467,22 @@
       {
         "caller": "adjudicateTurn.nl",
         "callee": "adjudicateTurn/settleTurn.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl"
+      },
+      {
+        "caller": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews.nl",
+        "callee": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/bindSubmittedChoice.nl"
       }
     ]
   },
@@ -446,15 +511,25 @@
       "site": "adjudicateTurn/auditTurn/challengeTiming.nl",
       "result_type": "TimingJudgment",
       "consumed_by": "Defended/defect/unresolved certificate findings"
+    },
+    {
+      "site": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/resolveOrdering/enumerateLegalOrders.nl",
+      "result_type": "PairOrder",
+      "consumed_by": "Actual source precedence and independence constraints for finite candidate enumeration"
+    },
+    {
+      "site": "adjudicateTurn/settleTurn/advanceWindow/rewriteBundle/compareOrderPreviews/compareConsequenceProjection.nl",
+      "result_type": "ConsequenceComparison",
+      "consumed_by": "Typed difference constraining source-choice selection"
     }
   ],
   "services": [],
   "composition": {
-    "nl_files": 26,
-    "nl_total_lines": 646,
-    "nl_body_lines": 464,
-    "numbered_steps": 162,
-    "type_aliases": 43,
+    "nl_files": 30,
+    "nl_total_lines": 761,
+    "nl_body_lines": 546,
+    "numbered_steps": 192,
+    "type_aliases": 49,
     "visible_crisp_policy_lines": 0
   },
   "comparison_spec": {
@@ -482,7 +557,7 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": true,
+    "independent_oracle_review": false,
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
@@ -491,10 +566,11 @@
   "reference_path": "training/semantic_applications/astra/turn-window-adjudicator/glass-garden/reference-report.json",
   "external_verifier_path": "training/semantic_applications/astra/turn-window-adjudicator/verify-result.mjs",
   "external_verifier_export": "verifyCandidate",
-  "independent_review": {
-    "path": "plans/semantic_stack/TURN_WINDOW_APPLICATION_REVIEW_SOL.json",
-    "sha256": "e28d38071d223475e5ab08be158026c1add052a36a7eed52c192f494f917cce1",
-    "reviewer": "semantic_slate_sol",
-    "scope": "Source/oracle and exact certificate controls; no live execution or training admission."
+  "source_variant": "ordering-preview-v2",
+  "prior_frozen_source": {
+    "commit": "c3fd2000",
+    "source_sha256": "d7b79ccfd35a32deae7edead61602fe97b2fb74204cc4d808b808669a0ee76f0",
+    "review_receipt": "plans/semantic_stack/TURN_WINDOW_APPLICATION_REVIEW_SOL.json",
+    "status": "Independent source/exact review applies to this prior source only."
   }
 }

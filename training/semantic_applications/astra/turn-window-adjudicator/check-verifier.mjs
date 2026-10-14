@@ -17,6 +17,13 @@ check('unordered boards witnesses and sibling parts',true,r=>{r.sourceCoverage.r
 check('consistent generated trace and revision IDs',true,r=>walk(r,v=>{for(const k of ['slotId','causeSlotId','bundleId','revision','beforeRevision'])if(typeof v[k]==='string')v[k]='alpha:'+v[k];}));
 check('consistent internal rule IDs',true,r=>{const ids=new Set();walk(r,v=>{if(typeof v.ruleId==='string')ids.add(v.ruleId);});walk(r,v=>{if(typeof v.ruleId==='string')v.ruleId='alpha:'+v.ruleId;if(Array.isArray(v.appliedRuleIds))v.appliedRuleIds=v.appliedRuleIds.map(x=>'alpha:'+x);if(v.kind==='trigger')v.sourceIdentity='alpha:'+v.sourceIdentity;if(typeof v.intentId==='string'&&ids.has(v.intentId))v.intentId='alpha:'+v.intentId;});});
 check('independent reason wording',true,r=>walk(r,v=>{if(typeof v.reason==='string')v.reason='Equivalent independently expressed justification.';}));
+check('consistent generated candidate IDs',true,r=>walk(r,v=>{for(const k of ['candidateId','selectedCandidateId','firstCandidateId','secondCandidateId'])if(typeof v[k]==='string')v[k]='alpha:'+v[k];}));
+check('selected candidate absent',false,r=>r.orderResolutions[0].choice.selectedCandidateId='missing');
+check('preview input revision detached',false,r=>r.orderResolutions[0].previews[0].beforeRevision='different');
+check('preview order not actually consumed',false,r=>r.orderResolutions[0].previews[0].decisions.reverse());
+check('preview reservation leaks unselected capacity',false,r=>r.orderResolutions[0].previews[0].reservedTokenIds.push('MIRROR'));
+check('choice claimed without source submission',false,r=>r.orderResolutions[0].choice.basis='submitted-choice');
+check('candidate precedence violated',false,r=>r.orderResolutions[0].plan.candidates[0].applications.reverse());
 check('wrong case identity',false,r=>r.caseId='other');
 check('captured controller replaced by live controller',false,r=>{r.announcements[0].references.find(x=>x.partId==='PA'&&x.controllerBasis==='captured').capturedController='Rowan';});
 check('announced damage altered',false,r=>r.announcements[0].parts[0].amount=2);

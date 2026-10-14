@@ -7,6 +7,7 @@ const objectFacts=o=>core(o);
 const boardFacts=b=>({objects:bag(b.objects.map(objectFacts)),resources:bag(b.resources.map(core)),tokens:bag(b.tokens.map(t=>({id:t.id,holderCardId:t.holderCardId,status:t.status}))),unresolved:b.unresolved});
 const partFacts=p=>({...core(p),objectValue:p.objectValue?objectFacts(p.objectValue):null});
 const triggerFacts=d=>({...core(d),capacityTokenIds:[...d.capacityTokenIds].sort(),tokenIds:[...d.tokenIds].sort(),qualifyingPartIds:[...d.qualifyingPartIds].sort(),consequenceParts:bag(d.consequenceParts.map(partFacts))});
+const decisionFacts=d=>({...core(d),beforeParts:bag(d.beforeParts.map(partFacts)),afterParts:bag(d.afterParts.map(partFacts)),consumedTokenIds:[...d.consumedTokenIds].sort()});
 export function verifyCandidate({value:r,oracle:o,inputs,fixture}){
  const issues=[];const require=(condition,message)=>{if(!condition)issues.push(message);};
  try{
@@ -29,6 +30,27 @@ export function verifyCandidate({value:r,oracle:o,inputs,fixture}){
   require(ret?.controllerBasis==='last-known'&&ret?.recipient==='Rowan'&&ret?.priority===10,'return binding');require(scribe?.controllerBasis==='captured'&&scribe?.recipient==='Ilex'&&scribe?.priority===20,'scribe binding');
   require(eq(ret?.qualifyingPartIds,['PA'])&&eq(scribe?.qualifyingPartIds,['PA']),'qualifying resolved part');
   const roles=r.windows.map(w=>w.kind==='trigger'?[...byCapacity].find(([,d])=>d.ruleId===w.sourceIdentity)?.[0]:w.sourceIdentity);
+  require(r.orderResolutions.length===r.windows.filter(w=>w.bundle).length,'one ordering resolution per committed batch');
+  const resolvedSlots=new Set();for(const resolution of r.orderResolutions){
+   const plan=resolution.plan,ids=plan.applications.map(a=>a.applicationId),candidates=new Map(plan.candidates.map(c=>[c.candidateId,c]));
+   require(new Set(ids).size===ids.length&&candidates.size===plan.candidates.length,'unique order identities');
+   require(resolution.unresolved.length===0&&plan.unresolved.length===0&&resolution.choice.unresolved.length===0,'resolved source ordering');
+   require(resolution.previews.length===candidates.size&&new Set(resolution.previews.map(p=>p.candidateId)).size===candidates.size,'complete distinct previews');
+   for(const candidate of candidates.values()){const order=candidate.applications.map(a=>a.applicationId);require(bag(order)===bag(ids),'candidate application permutation');for(const edge of plan.constraints)require(order.includes(edge.beforeApplicationId)&&order.includes(edge.afterApplicationId)&&order.indexOf(edge.beforeApplicationId)<order.indexOf(edge.afterApplicationId),'source order constraint');}
+   for(const preview of resolution.previews){const candidate=candidates.get(preview.candidateId);require(candidate&&eq(preview.decisions.map(d=>d.applicationId),candidate.applications.map(a=>a.applicationId)),'actual preview application order');require(preview.unresolved.length===0&&preview.beforeRevision===preview.bundle.beforeRevision,'preview common input revision');require(new Set(preview.reservedTokenIds).size===preview.reservedTokenIds.length,'preview token uniqueness');}
+   const selected=resolution.previews.find(p=>p.candidateId===resolution.choice.selectedCandidateId),window=selected&&r.windows.find(w=>w.slotId===selected.bundle.causeSlotId);
+   require(window&&window.bundle&&!resolvedSlots.has(window.slotId),'selected preview window identity');if(!window)continue;resolvedSlots.add(window.slotId);
+   require(selected.beforeRevision===window.before.revision&&selected.bundle.bundleId===window.bundle.bundleId,'selected preview immutable input');
+   require(bag(selected.bundle.parts.map(partFacts))===bag(window.bundle.parts.map(partFacts))&&eq(selected.decisions.map(decisionFacts),window.replacements.map(decisionFacts)),'actual selected preview consumed');
+   require(bag(selected.reservedTokenIds)===bag(window.batch.consumedTokenIds),'only selected reservations committed');
+   for(const preview of resolution.previews)for(const token of preview.reservedTokenIds)require(window.before.tokens.find(t=>t.id===token)?.status==='available','each preview starts with source token availability');
+   const pairs=new Set();for(const difference of resolution.differences){require(candidates.has(difference.firstCandidateId)&&candidates.has(difference.secondCandidateId)&&difference.firstCandidateId!==difference.secondCandidateId,'preview comparison identity');pairs.add([difference.firstCandidateId,difference.secondCandidateId].sort().join('\u0000'));}
+   require(pairs.size===candidates.size*(candidates.size-1)/2&&pairs.size===resolution.differences.length,'complete pairwise preview comparisons');
+   if(resolution.choice.basis==='sole-legal-order')require(candidates.size===1,'sole legal order cardinality');
+   else if(resolution.choice.basis==='equivalent-orders')require(resolution.differences.every(d=>d.equivalent===true),'equivalent order evidence');
+   else require(resolution.choice.basis==='submitted-choice'&&resolution.choice.sourceChoiceClauseIds.length>0,'consequential order source choice');
+   require(resolution.choice.sourceChoiceClauseIds.every(id=>plan.choiceClauses.some(c=>c.id===id)&&clauses.has(id)),'submitted choice source domain');
+  }
   require(eq(roles,o.windowOrder),'source-governed window chronology');require(new Set(r.windows.map(w=>w.slotId)).size===r.windows.length,'window slot uniqueness');
   const initial=r.windows[0]?.before;require(initial&&eq(boardFacts(initial),boardFacts(o.initialBoardFacts)),'initial source board');
   let previous=initial;const obj=(b,id)=>b.objects.find(x=>x.instanceId===id);const spend=(b,ids)=>{for(const id of ids){const t=b.tokens.find(x=>x.id===id);require(t&&t.status==='available','one-use token '+id);if(t)t.status='spent';}};

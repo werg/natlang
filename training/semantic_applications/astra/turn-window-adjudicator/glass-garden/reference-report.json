@@ -4507,5 +4507,891 @@
         "C04"
       ]
     }
+  ],
+  "orderResolutions": [
+    {
+      "plan": {
+        "applications": [
+          {
+            "applicationId": "cover-pa",
+            "ruleId": "REP01",
+            "lineagePartId": "PA"
+          },
+          {
+            "applicationId": "mantle-pa",
+            "ruleId": "REP02",
+            "lineagePartId": "PA"
+          },
+          {
+            "applicationId": "cover-pm",
+            "ruleId": "REP01",
+            "lineagePartId": "PM"
+          },
+          {
+            "applicationId": "mantle-pm",
+            "ruleId": "REP02",
+            "lineagePartId": "PM"
+          }
+        ],
+        "constraints": [
+          {
+            "beforeApplicationId": "cover-pa",
+            "afterApplicationId": "mantle-pa",
+            "basis": "source-precedence",
+            "witnesses": [
+              {
+                "sourceId": "WINDOWS",
+                "path": "rules/windows.md",
+                "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+              }
+            ]
+          },
+          {
+            "beforeApplicationId": "cover-pm",
+            "afterApplicationId": "mantle-pm",
+            "basis": "source-precedence",
+            "witnesses": [
+              {
+                "sourceId": "WINDOWS",
+                "path": "rules/windows.md",
+                "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+              }
+            ]
+          }
+        ],
+        "candidates": [
+          {
+            "candidateId": "order:FORK",
+            "applications": [
+              {
+                "applicationId": "cover-pa",
+                "ruleId": "REP01",
+                "lineagePartId": "PA"
+              },
+              {
+                "applicationId": "mantle-pa",
+                "ruleId": "REP02",
+                "lineagePartId": "PA"
+              },
+              {
+                "applicationId": "cover-pm",
+                "ruleId": "REP01",
+                "lineagePartId": "PM"
+              },
+              {
+                "applicationId": "mantle-pm",
+                "ruleId": "REP02",
+                "lineagePartId": "PM"
+              }
+            ],
+            "witnesses": [
+              {
+                "sourceId": "WINDOWS",
+                "path": "rules/windows.md",
+                "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+              }
+            ]
+          }
+        ],
+        "choiceClauses": [],
+        "unresolved": [],
+        "witnesses": [
+          {
+            "sourceId": "WINDOWS",
+            "path": "rules/windows.md",
+            "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+          }
+        ]
+      },
+      "previews": [
+        {
+          "candidateId": "order:FORK",
+          "beforeRevision": "after-MOVE",
+          "bundle": {
+            "bundleId": "batch-fork",
+            "causeSlotId": "FORK",
+            "intentId": "FORK",
+            "beforeRevision": "after-MOVE",
+            "parts": [
+              {
+                "partId": "PA",
+                "lineagePartId": "PA",
+                "printedOrder": 1,
+                "kind": "damage",
+                "targetInstanceId": "A1",
+                "amount": 2,
+                "recipient": null,
+                "objectValue": null,
+                "attachmentTarget": null,
+                "appliedRuleIds": [
+                  "REP01"
+                ],
+                "witnesses": [
+                  {
+                    "sourceId": "FORK",
+                    "path": "announcements/fork.md",
+                    "quote": "[F01] Ilex announces Fork as intent FORK. First printed part PA targets A1 and proposes3 damage. Second printed part PM targets M1 and proposes2 damage. Both damage parts share the same Fork batch."
+                  },
+                  {
+                    "sourceId": "REPLACEMENTS",
+                    "path": "rules/replacements.md",
+                    "quote": "[REP01] Cover is a standing rule: if a damage part's target has another garden creature controlled by that target's current controller in the batch's before-state, reduce that part's damage by1, to a minimum0. Cover applies at most once to each original part lineage."
+                  },
+                  {
+                    "sourceId": "WINDOWS",
+                    "path": "rules/windows.md",
+                    "quote": "[WIN02] Prepare both Fork parts as one batch. All replacement conditions and all creature-state conditions for that batch read one immutable board snapshot taken after both responses. Resolve the final parts simultaneously; do not let one part's destruction change the other part's replacement eligibility."
+                  }
+                ]
+              },
+              {
+                "partId": "PM",
+                "lineagePartId": "PM",
+                "printedOrder": 2,
+                "kind": "growth",
+                "targetInstanceId": "M1",
+                "amount": 1,
+                "recipient": null,
+                "objectValue": null,
+                "attachmentTarget": null,
+                "appliedRuleIds": [
+                  "REP01",
+                  "REP02"
+                ],
+                "witnesses": [
+                  {
+                    "sourceId": "REPLACEMENTS",
+                    "path": "rules/replacements.md",
+                    "quote": "[REP01] Cover is a standing rule: if a damage part's target has another garden creature controlled by that target's current controller in the batch's before-state, reduce that part's damage by1, to a minimum0. Cover applies at most once to each original part lineage."
+                  },
+                  {
+                    "sourceId": "REPLACEMENTS",
+                    "path": "rules/replacements.md",
+                    "quote": "[REP02] Mantle's WARD replacement applies to a damage part targeting W1's attached creature when WARD is available. Replace that part's current damage quantity with the same quantity of growth added to that target, and spend WARD. A growth part cannot receive this damage replacement again."
+                  },
+                  {
+                    "sourceId": "WINDOWS",
+                    "path": "rules/windows.md",
+                    "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+                  }
+                ]
+              }
+            ],
+            "references": [
+              {
+                "consumerRuleId": "SCR01",
+                "partId": "PA",
+                "trackedInstanceId": "A1",
+                "controllerBasis": "captured",
+                "capturedController": "Ilex",
+                "reason": "Source fixes which temporal controller reference this consumer reads.",
+                "witnesses": [
+                  {
+                    "sourceId": "WINDOWS",
+                    "path": "rules/windows.md",
+                    "quote": "[WIN01] Capture Fork's target identities, their controllers and the printed part order when Fork is announced. The submitted responses resolve in listed response order before any Fork damage part is prepared. Original target identities continue to refer to the same instances."
+                  },
+                  {
+                    "sourceId": "SCRIBE",
+                    "path": "abilities/scribe.md",
+                    "quote": "[SCR02] The consequence gives1 ink to the controller captured for that chosen part's target at Fork announcement. It does not give ink to S1's controller or to the target's current or last-known controller merely because they differ."
+                  }
+                ]
+              },
+              {
+                "consumerRuleId": "REP01",
+                "partId": "PA",
+                "trackedInstanceId": "A1",
+                "controllerBasis": "current",
+                "capturedController": null,
+                "reason": "Source fixes which temporal controller reference this consumer reads.",
+                "witnesses": [
+                  {
+                    "sourceId": "REPLACEMENTS",
+                    "path": "rules/replacements.md",
+                    "quote": "[REP01] Cover is a standing rule: if a damage part's target has another garden creature controlled by that target's current controller in the batch's before-state, reduce that part's damage by1, to a minimum0. Cover applies at most once to each original part lineage."
+                  },
+                  {
+                    "sourceId": "WINDOWS",
+                    "path": "rules/windows.md",
+                    "quote": "[WIN02] Prepare both Fork parts as one batch. All replacement conditions and all creature-state conditions for that batch read one immutable board snapshot taken after both responses. Resolve the final parts simultaneously; do not let one part's destruction change the other part's replacement eligibility."
+                  }
+                ]
+              },
+              {
+                "consumerRuleId": "SCR01",
+                "partId": "PM",
+                "trackedInstanceId": "M1",
+                "controllerBasis": "captured",
+                "capturedController": "Rowan",
+                "reason": "Source fixes which temporal controller reference this consumer reads.",
+                "witnesses": [
+                  {
+                    "sourceId": "WINDOWS",
+                    "path": "rules/windows.md",
+                    "quote": "[WIN01] Capture Fork's target identities, their controllers and the printed part order when Fork is announced. The submitted responses resolve in listed response order before any Fork damage part is prepared. Original target identities continue to refer to the same instances."
+                  },
+                  {
+                    "sourceId": "SCRIBE",
+                    "path": "abilities/scribe.md",
+                    "quote": "[SCR02] The consequence gives1 ink to the controller captured for that chosen part's target at Fork announcement. It does not give ink to S1's controller or to the target's current or last-known controller merely because they differ."
+                  }
+                ]
+              },
+              {
+                "consumerRuleId": "REP01",
+                "partId": "PM",
+                "trackedInstanceId": "M1",
+                "controllerBasis": "current",
+                "capturedController": null,
+                "reason": "Source fixes which temporal controller reference this consumer reads.",
+                "witnesses": [
+                  {
+                    "sourceId": "REPLACEMENTS",
+                    "path": "rules/replacements.md",
+                    "quote": "[REP01] Cover is a standing rule: if a damage part's target has another garden creature controlled by that target's current controller in the batch's before-state, reduce that part's damage by1, to a minimum0. Cover applies at most once to each original part lineage."
+                  },
+                  {
+                    "sourceId": "WINDOWS",
+                    "path": "rules/windows.md",
+                    "quote": "[WIN02] Prepare both Fork parts as one batch. All replacement conditions and all creature-state conditions for that batch read one immutable board snapshot taken after both responses. Resolve the final parts simultaneously; do not let one part's destruction change the other part's replacement eligibility."
+                  }
+                ]
+              },
+              {
+                "consumerRuleId": "RET01",
+                "partId": "PA",
+                "trackedInstanceId": "A1",
+                "controllerBasis": "last-known",
+                "capturedController": null,
+                "reason": "Return reads the actual departing instance controller.",
+                "witnesses": [
+                  {
+                    "sourceId": "RETURN",
+                    "path": "abilities/return.md",
+                    "quote": "[RET01] Aster's Return ability has one available token RETURN for card CA across this whole turn. If an instance of CA is discarded by Fork's resolved batch, Return is eligible, consumes RETURN when queued, and remembers that departing instance's last-known controller."
+                  },
+                  {
+                    "sourceId": "RETURN",
+                    "path": "abilities/return.md",
+                    "quote": "[RET03] Return does not choose the card's controller at Fork announcement, the owner of Mantle, or Fork's caster. Its controller basis is exactly the departing instance's last-known controller."
+                  }
+                ]
+              }
+            ],
+            "witnesses": [
+              {
+                "sourceId": "FORK",
+                "path": "announcements/fork.md",
+                "quote": "[F01] Ilex announces Fork as intent FORK. First printed part PA targets A1 and proposes3 damage. Second printed part PM targets M1 and proposes2 damage. Both damage parts share the same Fork batch."
+              },
+              {
+                "sourceId": "WINDOWS",
+                "path": "rules/windows.md",
+                "quote": "[WIN02] Prepare both Fork parts as one batch. All replacement conditions and all creature-state conditions for that batch read one immutable board snapshot taken after both responses. Resolve the final parts simultaneously; do not let one part's destruction change the other part's replacement eligibility."
+              },
+              {
+                "sourceId": "WINDOWS",
+                "path": "rules/windows.md",
+                "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+              }
+            ]
+          },
+          "decisions": [
+            {
+              "applicationId": "cover-pa",
+              "ruleId": "REP01",
+              "lineagePartId": "PA",
+              "applicable": true,
+              "beforeParts": [
+                {
+                  "partId": "PA",
+                  "lineagePartId": "PA",
+                  "printedOrder": 1,
+                  "kind": "damage",
+                  "targetInstanceId": "A1",
+                  "amount": 3,
+                  "recipient": null,
+                  "objectValue": null,
+                  "attachmentTarget": null,
+                  "appliedRuleIds": [],
+                  "witnesses": [
+                    {
+                      "sourceId": "FORK",
+                      "path": "announcements/fork.md",
+                      "quote": "[F01] Ilex announces Fork as intent FORK. First printed part PA targets A1 and proposes3 damage. Second printed part PM targets M1 and proposes2 damage. Both damage parts share the same Fork batch."
+                    }
+                  ]
+                }
+              ],
+              "afterParts": [
+                {
+                  "partId": "PA",
+                  "lineagePartId": "PA",
+                  "printedOrder": 1,
+                  "kind": "damage",
+                  "targetInstanceId": "A1",
+                  "amount": 2,
+                  "recipient": null,
+                  "objectValue": null,
+                  "attachmentTarget": null,
+                  "appliedRuleIds": [
+                    "REP01"
+                  ],
+                  "witnesses": [
+                    {
+                      "sourceId": "FORK",
+                      "path": "announcements/fork.md",
+                      "quote": "[F01] Ilex announces Fork as intent FORK. First printed part PA targets A1 and proposes3 damage. Second printed part PM targets M1 and proposes2 damage. Both damage parts share the same Fork batch."
+                    },
+                    {
+                      "sourceId": "REPLACEMENTS",
+                      "path": "rules/replacements.md",
+                      "quote": "[REP01] Cover is a standing rule: if a damage part's target has another garden creature controlled by that target's current controller in the batch's before-state, reduce that part's damage by1, to a minimum0. Cover applies at most once to each original part lineage."
+                    },
+                    {
+                      "sourceId": "WINDOWS",
+                      "path": "rules/windows.md",
+                      "quote": "[WIN02] Prepare both Fork parts as one batch. All replacement conditions and all creature-state conditions for that batch read one immutable board snapshot taken after both responses. Resolve the final parts simultaneously; do not let one part's destruction change the other part's replacement eligibility."
+                    }
+                  ]
+                }
+              ],
+              "consumedTokenIds": [],
+              "reason": "A1 has another Rowan-controlled creature M1 in the common resumed before-state.",
+              "witnesses": [
+                {
+                  "sourceId": "REPLACEMENTS",
+                  "path": "rules/replacements.md",
+                  "quote": "[REP01] Cover is a standing rule: if a damage part's target has another garden creature controlled by that target's current controller in the batch's before-state, reduce that part's damage by1, to a minimum0. Cover applies at most once to each original part lineage."
+                },
+                {
+                  "sourceId": "RESPONSES",
+                  "path": "responses/submitted.md",
+                  "quote": "[R01] Response order1 is intent TAKE: Rowan gains control of the same garden instance A1. It changes no integrity, damage, growth, card identity or attachment. TAKE is legal and has already paid its cost."
+                },
+                {
+                  "sourceId": "BOARD",
+                  "path": "board/before.md",
+                  "quote": "[B02] Mosaic card CM has garden instance M1, controller Rowan, integrity2, damage0 and growth0. Mosaic has no printed trigger."
+                },
+                {
+                  "sourceId": "WINDOWS",
+                  "path": "rules/windows.md",
+                  "quote": "[WIN02] Prepare both Fork parts as one batch. All replacement conditions and all creature-state conditions for that batch read one immutable board snapshot taken after both responses. Resolve the final parts simultaneously; do not let one part's destruction change the other part's replacement eligibility."
+                }
+              ]
+            },
+            {
+              "applicationId": "mantle-pa",
+              "ruleId": "REP02",
+              "lineagePartId": "PA",
+              "applicable": false,
+              "beforeParts": [
+                {
+                  "partId": "PA",
+                  "lineagePartId": "PA",
+                  "printedOrder": 1,
+                  "kind": "damage",
+                  "targetInstanceId": "A1",
+                  "amount": 2,
+                  "recipient": null,
+                  "objectValue": null,
+                  "attachmentTarget": null,
+                  "appliedRuleIds": [
+                    "REP01"
+                  ],
+                  "witnesses": [
+                    {
+                      "sourceId": "FORK",
+                      "path": "announcements/fork.md",
+                      "quote": "[F01] Ilex announces Fork as intent FORK. First printed part PA targets A1 and proposes3 damage. Second printed part PM targets M1 and proposes2 damage. Both damage parts share the same Fork batch."
+                    },
+                    {
+                      "sourceId": "REPLACEMENTS",
+                      "path": "rules/replacements.md",
+                      "quote": "[REP01] Cover is a standing rule: if a damage part's target has another garden creature controlled by that target's current controller in the batch's before-state, reduce that part's damage by1, to a minimum0. Cover applies at most once to each original part lineage."
+                    },
+                    {
+                      "sourceId": "WINDOWS",
+                      "path": "rules/windows.md",
+                      "quote": "[WIN02] Prepare both Fork parts as one batch. All replacement conditions and all creature-state conditions for that batch read one immutable board snapshot taken after both responses. Resolve the final parts simultaneously; do not let one part's destruction change the other part's replacement eligibility."
+                    }
+                  ]
+                }
+              ],
+              "afterParts": [
+                {
+                  "partId": "PA",
+                  "lineagePartId": "PA",
+                  "printedOrder": 1,
+                  "kind": "damage",
+                  "targetInstanceId": "A1",
+                  "amount": 2,
+                  "recipient": null,
+                  "objectValue": null,
+                  "attachmentTarget": null,
+                  "appliedRuleIds": [
+                    "REP01"
+                  ],
+                  "witnesses": [
+                    {
+                      "sourceId": "FORK",
+                      "path": "announcements/fork.md",
+                      "quote": "[F01] Ilex announces Fork as intent FORK. First printed part PA targets A1 and proposes3 damage. Second printed part PM targets M1 and proposes2 damage. Both damage parts share the same Fork batch."
+                    },
+                    {
+                      "sourceId": "REPLACEMENTS",
+                      "path": "rules/replacements.md",
+                      "quote": "[REP01] Cover is a standing rule: if a damage part's target has another garden creature controlled by that target's current controller in the batch's before-state, reduce that part's damage by1, to a minimum0. Cover applies at most once to each original part lineage."
+                    },
+                    {
+                      "sourceId": "WINDOWS",
+                      "path": "rules/windows.md",
+                      "quote": "[WIN02] Prepare both Fork parts as one batch. All replacement conditions and all creature-state conditions for that batch read one immutable board snapshot taken after both responses. Resolve the final parts simultaneously; do not let one part's destruction change the other part's replacement eligibility."
+                    }
+                  ]
+                }
+              ],
+              "consumedTokenIds": [],
+              "reason": "W1 is attached to M1, so this A1 part is outside Mantle target scope.",
+              "witnesses": [
+                {
+                  "sourceId": "REPLACEMENTS",
+                  "path": "rules/replacements.md",
+                  "quote": "[REP02] Mantle's WARD replacement applies to a damage part targeting W1's attached creature when WARD is available. Replace that part's current damage quantity with the same quantity of growth added to that target, and spend WARD. A growth part cannot receive this damage replacement again."
+                },
+                {
+                  "sourceId": "RESPONSES",
+                  "path": "responses/submitted.md",
+                  "quote": "[R02] Response order2 is intent MOVE: Ilex moves W1 from A1 to M1. This attachment move is legal, consumes no WARD use, and changes neither W1's controller nor either creature's controller. MOVE has already paid its cost."
+                }
+              ]
+            },
+            {
+              "applicationId": "cover-pm",
+              "ruleId": "REP01",
+              "lineagePartId": "PM",
+              "applicable": true,
+              "beforeParts": [
+                {
+                  "partId": "PM",
+                  "lineagePartId": "PM",
+                  "printedOrder": 2,
+                  "kind": "damage",
+                  "targetInstanceId": "M1",
+                  "amount": 2,
+                  "recipient": null,
+                  "objectValue": null,
+                  "attachmentTarget": null,
+                  "appliedRuleIds": [],
+                  "witnesses": [
+                    {
+                      "sourceId": "FORK",
+                      "path": "announcements/fork.md",
+                      "quote": "[F01] Ilex announces Fork as intent FORK. First printed part PA targets A1 and proposes3 damage. Second printed part PM targets M1 and proposes2 damage. Both damage parts share the same Fork batch."
+                    }
+                  ]
+                }
+              ],
+              "afterParts": [
+                {
+                  "partId": "PM",
+                  "lineagePartId": "PM",
+                  "printedOrder": 2,
+                  "kind": "damage",
+                  "targetInstanceId": "M1",
+                  "amount": 1,
+                  "recipient": null,
+                  "objectValue": null,
+                  "attachmentTarget": null,
+                  "appliedRuleIds": [
+                    "REP01"
+                  ],
+                  "witnesses": [
+                    {
+                      "sourceId": "FORK",
+                      "path": "announcements/fork.md",
+                      "quote": "[F01] Ilex announces Fork as intent FORK. First printed part PA targets A1 and proposes3 damage. Second printed part PM targets M1 and proposes2 damage. Both damage parts share the same Fork batch."
+                    },
+                    {
+                      "sourceId": "REPLACEMENTS",
+                      "path": "rules/replacements.md",
+                      "quote": "[REP01] Cover is a standing rule: if a damage part's target has another garden creature controlled by that target's current controller in the batch's before-state, reduce that part's damage by1, to a minimum0. Cover applies at most once to each original part lineage."
+                    },
+                    {
+                      "sourceId": "WINDOWS",
+                      "path": "rules/windows.md",
+                      "quote": "[WIN02] Prepare both Fork parts as one batch. All replacement conditions and all creature-state conditions for that batch read one immutable board snapshot taken after both responses. Resolve the final parts simultaneously; do not let one part's destruction change the other part's replacement eligibility."
+                    }
+                  ]
+                }
+              ],
+              "consumedTokenIds": [],
+              "reason": "M1 has another Rowan-controlled creature A1 in the same before-state.",
+              "witnesses": [
+                {
+                  "sourceId": "REPLACEMENTS",
+                  "path": "rules/replacements.md",
+                  "quote": "[REP01] Cover is a standing rule: if a damage part's target has another garden creature controlled by that target's current controller in the batch's before-state, reduce that part's damage by1, to a minimum0. Cover applies at most once to each original part lineage."
+                },
+                {
+                  "sourceId": "RESPONSES",
+                  "path": "responses/submitted.md",
+                  "quote": "[R01] Response order1 is intent TAKE: Rowan gains control of the same garden instance A1. It changes no integrity, damage, growth, card identity or attachment. TAKE is legal and has already paid its cost."
+                },
+                {
+                  "sourceId": "WINDOWS",
+                  "path": "rules/windows.md",
+                  "quote": "[WIN02] Prepare both Fork parts as one batch. All replacement conditions and all creature-state conditions for that batch read one immutable board snapshot taken after both responses. Resolve the final parts simultaneously; do not let one part's destruction change the other part's replacement eligibility."
+                }
+              ]
+            },
+            {
+              "applicationId": "mantle-pm",
+              "ruleId": "REP02",
+              "lineagePartId": "PM",
+              "applicable": true,
+              "beforeParts": [
+                {
+                  "partId": "PM",
+                  "lineagePartId": "PM",
+                  "printedOrder": 2,
+                  "kind": "damage",
+                  "targetInstanceId": "M1",
+                  "amount": 1,
+                  "recipient": null,
+                  "objectValue": null,
+                  "attachmentTarget": null,
+                  "appliedRuleIds": [
+                    "REP01"
+                  ],
+                  "witnesses": [
+                    {
+                      "sourceId": "FORK",
+                      "path": "announcements/fork.md",
+                      "quote": "[F01] Ilex announces Fork as intent FORK. First printed part PA targets A1 and proposes3 damage. Second printed part PM targets M1 and proposes2 damage. Both damage parts share the same Fork batch."
+                    },
+                    {
+                      "sourceId": "REPLACEMENTS",
+                      "path": "rules/replacements.md",
+                      "quote": "[REP01] Cover is a standing rule: if a damage part's target has another garden creature controlled by that target's current controller in the batch's before-state, reduce that part's damage by1, to a minimum0. Cover applies at most once to each original part lineage."
+                    },
+                    {
+                      "sourceId": "WINDOWS",
+                      "path": "rules/windows.md",
+                      "quote": "[WIN02] Prepare both Fork parts as one batch. All replacement conditions and all creature-state conditions for that batch read one immutable board snapshot taken after both responses. Resolve the final parts simultaneously; do not let one part's destruction change the other part's replacement eligibility."
+                    }
+                  ]
+                }
+              ],
+              "afterParts": [
+                {
+                  "partId": "PM",
+                  "lineagePartId": "PM",
+                  "printedOrder": 2,
+                  "kind": "growth",
+                  "targetInstanceId": "M1",
+                  "amount": 1,
+                  "recipient": null,
+                  "objectValue": null,
+                  "attachmentTarget": null,
+                  "appliedRuleIds": [
+                    "REP01",
+                    "REP02"
+                  ],
+                  "witnesses": [
+                    {
+                      "sourceId": "REPLACEMENTS",
+                      "path": "rules/replacements.md",
+                      "quote": "[REP01] Cover is a standing rule: if a damage part's target has another garden creature controlled by that target's current controller in the batch's before-state, reduce that part's damage by1, to a minimum0. Cover applies at most once to each original part lineage."
+                    },
+                    {
+                      "sourceId": "REPLACEMENTS",
+                      "path": "rules/replacements.md",
+                      "quote": "[REP02] Mantle's WARD replacement applies to a damage part targeting W1's attached creature when WARD is available. Replace that part's current damage quantity with the same quantity of growth added to that target, and spend WARD. A growth part cannot receive this damage replacement again."
+                    },
+                    {
+                      "sourceId": "WINDOWS",
+                      "path": "rules/windows.md",
+                      "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+                    }
+                  ]
+                }
+              ],
+              "consumedTokenIds": [
+                "WARD"
+              ],
+              "reason": "Mantle converts the current post-Cover quantity1 into growth.",
+              "witnesses": [
+                {
+                  "sourceId": "REPLACEMENTS",
+                  "path": "rules/replacements.md",
+                  "quote": "[REP02] Mantle's WARD replacement applies to a damage part targeting W1's attached creature when WARD is available. Replace that part's current damage quantity with the same quantity of growth added to that target, and spend WARD. A growth part cannot receive this damage replacement again."
+                },
+                {
+                  "sourceId": "REPLACEMENTS",
+                  "path": "rules/replacements.md",
+                  "quote": "[REP04] Prevention or conversion is judged from the actual rewritten part. An announced quantity that was reduced or converted does not count as damage dealt or as the converted amount."
+                },
+                {
+                  "sourceId": "WINDOWS",
+                  "path": "rules/windows.md",
+                  "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+                },
+                {
+                  "sourceId": "RESPONSES",
+                  "path": "responses/submitted.md",
+                  "quote": "[R02] Response order2 is intent MOVE: Ilex moves W1 from A1 to M1. This attachment move is legal, consumes no WARD use, and changes neither W1's controller nor either creature's controller. MOVE has already paid its cost."
+                }
+              ]
+            }
+          ],
+          "reservedTokenIds": [
+            "WARD"
+          ],
+          "unresolved": []
+        }
+      ],
+      "differences": [],
+      "choice": {
+        "selectedCandidateId": "order:FORK",
+        "basis": "sole-legal-order",
+        "sourceChoiceClauseIds": [],
+        "reason": "The source-governed per-lineage precedence and independent display order yield this representative sequence.",
+        "witnesses": [
+          {
+            "sourceId": "WINDOWS",
+            "path": "rules/windows.md",
+            "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+          }
+        ],
+        "unresolved": []
+      },
+      "unresolved": []
+    },
+    {
+      "plan": {
+        "applications": [],
+        "constraints": [],
+        "candidates": [
+          {
+            "candidateId": "order:RETURN",
+            "applications": [],
+            "witnesses": [
+              {
+                "sourceId": "WINDOWS",
+                "path": "rules/windows.md",
+                "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+              }
+            ]
+          }
+        ],
+        "choiceClauses": [],
+        "unresolved": [],
+        "witnesses": [
+          {
+            "sourceId": "WINDOWS",
+            "path": "rules/windows.md",
+            "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+          }
+        ]
+      },
+      "previews": [
+        {
+          "candidateId": "order:RETURN",
+          "beforeRevision": "after-FORK",
+          "bundle": {
+            "bundleId": "batch-return",
+            "causeSlotId": "RETURN",
+            "intentId": "RET01",
+            "beforeRevision": "after-FORK",
+            "parts": [
+              {
+                "partId": "return-part",
+                "lineagePartId": "return-part",
+                "printedOrder": 1,
+                "kind": "return",
+                "targetInstanceId": "A1",
+                "amount": null,
+                "recipient": "Rowan",
+                "objectValue": {
+                  "instanceId": "A2",
+                  "cardId": "CA",
+                  "kind": "creature",
+                  "zone": "garden",
+                  "controller": "Rowan",
+                  "integrity": 2,
+                  "damage": 0,
+                  "growth": 0,
+                  "attachedTo": null,
+                  "witnesses": [
+                    {
+                      "sourceId": "RETURN",
+                      "path": "abilities/return.md",
+                      "quote": "[RET02] Resolving Return creates garden instance A2 of card CA under the remembered last-known controller, integrity2, damage0 and growth0, with no attachment. A1 remains the discarded old instance in the history; A2 does not refresh RETURN or any other turn-use token."
+                    }
+                  ]
+                },
+                "attachmentTarget": null,
+                "appliedRuleIds": [],
+                "witnesses": [
+                  {
+                    "sourceId": "RETURN",
+                    "path": "abilities/return.md",
+                    "quote": "[RET01] Aster's Return ability has one available token RETURN for card CA across this whole turn. If an instance of CA is discarded by Fork's resolved batch, Return is eligible, consumes RETURN when queued, and remembers that departing instance's last-known controller."
+                  },
+                  {
+                    "sourceId": "RETURN",
+                    "path": "abilities/return.md",
+                    "quote": "[RET02] Resolving Return creates garden instance A2 of card CA under the remembered last-known controller, integrity2, damage0 and growth0, with no attachment. A1 remains the discarded old instance in the history; A2 does not refresh RETURN or any other turn-use token."
+                  },
+                  {
+                    "sourceId": "RETURN",
+                    "path": "abilities/return.md",
+                    "quote": "[RET03] Return does not choose the card's controller at Fork announcement, the owner of Mantle, or Fork's caster. Its controller basis is exactly the departing instance's last-known controller."
+                  }
+                ]
+              }
+            ],
+            "references": [],
+            "witnesses": [
+              {
+                "sourceId": "RETURN",
+                "path": "abilities/return.md",
+                "quote": "[RET01] Aster's Return ability has one available token RETURN for card CA across this whole turn. If an instance of CA is discarded by Fork's resolved batch, Return is eligible, consumes RETURN when queued, and remembers that departing instance's last-known controller."
+              },
+              {
+                "sourceId": "RETURN",
+                "path": "abilities/return.md",
+                "quote": "[RET02] Resolving Return creates garden instance A2 of card CA under the remembered last-known controller, integrity2, damage0 and growth0, with no attachment. A1 remains the discarded old instance in the history; A2 does not refresh RETURN or any other turn-use token."
+              }
+            ]
+          },
+          "decisions": [],
+          "reservedTokenIds": [],
+          "unresolved": []
+        }
+      ],
+      "differences": [],
+      "choice": {
+        "selectedCandidateId": "order:RETURN",
+        "basis": "sole-legal-order",
+        "sourceChoiceClauseIds": [],
+        "reason": "The source-governed per-lineage precedence and independent display order yield this representative sequence.",
+        "witnesses": [
+          {
+            "sourceId": "WINDOWS",
+            "path": "rules/windows.md",
+            "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+          }
+        ],
+        "unresolved": []
+      },
+      "unresolved": []
+    },
+    {
+      "plan": {
+        "applications": [],
+        "constraints": [],
+        "candidates": [
+          {
+            "candidateId": "order:SCRIBE",
+            "applications": [],
+            "witnesses": [
+              {
+                "sourceId": "WINDOWS",
+                "path": "rules/windows.md",
+                "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+              }
+            ]
+          }
+        ],
+        "choiceClauses": [],
+        "unresolved": [],
+        "witnesses": [
+          {
+            "sourceId": "WINDOWS",
+            "path": "rules/windows.md",
+            "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+          }
+        ]
+      },
+      "previews": [
+        {
+          "candidateId": "order:SCRIBE",
+          "beforeRevision": "after-RETURN",
+          "bundle": {
+            "bundleId": "batch-scribe",
+            "causeSlotId": "SCRIBE",
+            "intentId": "SCR01",
+            "beforeRevision": "after-RETURN",
+            "parts": [
+              {
+                "partId": "scribe-part",
+                "lineagePartId": "scribe-part",
+                "printedOrder": 1,
+                "kind": "ink",
+                "targetInstanceId": null,
+                "amount": 1,
+                "recipient": "Ilex",
+                "objectValue": null,
+                "attachmentTarget": null,
+                "appliedRuleIds": [],
+                "witnesses": [
+                  {
+                    "sourceId": "SCRIBE",
+                    "path": "abilities/scribe.md",
+                    "quote": "[SCR01] If Fork's resolved batch dealt positive actual damage in any part and SCRIBE is available, Scribe emits one consequence and spends SCRIBE when queued. If more than one part qualifies, choose the earliest qualifying part in Fork's printed order."
+                  },
+                  {
+                    "sourceId": "SCRIBE",
+                    "path": "abilities/scribe.md",
+                    "quote": "[SCR02] The consequence gives1 ink to the controller captured for that chosen part's target at Fork announcement. It does not give ink to S1's controller or to the target's current or last-known controller merely because they differ."
+                  },
+                  {
+                    "sourceId": "SCRIBE",
+                    "path": "abilities/scribe.md",
+                    "quote": "[SCR03] A converted growth part is not positive damage. Scribe's recipient is fixed from the captured field when the consequence is queued; later Return does not rebind it to a new instance."
+                  }
+                ]
+              }
+            ],
+            "references": [],
+            "witnesses": [
+              {
+                "sourceId": "SCRIBE",
+                "path": "abilities/scribe.md",
+                "quote": "[SCR01] If Fork's resolved batch dealt positive actual damage in any part and SCRIBE is available, Scribe emits one consequence and spends SCRIBE when queued. If more than one part qualifies, choose the earliest qualifying part in Fork's printed order."
+              },
+              {
+                "sourceId": "SCRIBE",
+                "path": "abilities/scribe.md",
+                "quote": "[SCR02] The consequence gives1 ink to the controller captured for that chosen part's target at Fork announcement. It does not give ink to S1's controller or to the target's current or last-known controller merely because they differ."
+              }
+            ]
+          },
+          "decisions": [],
+          "reservedTokenIds": [],
+          "unresolved": []
+        }
+      ],
+      "differences": [],
+      "choice": {
+        "selectedCandidateId": "order:SCRIBE",
+        "basis": "sole-legal-order",
+        "sourceChoiceClauseIds": [],
+        "reason": "The source-governed per-lineage precedence and independent display order yield this representative sequence.",
+        "witnesses": [
+          {
+            "sourceId": "WINDOWS",
+            "path": "rules/windows.md",
+            "quote": "[WIN03] For each damage part, apply Cover before Mantle. A replacement acts on the current rewritten part. An instruction that changes damage into growth removes the damage event for that part; it does not both deal damage and add growth."
+          }
+        ],
+        "unresolved": []
+      },
+      "unresolved": []
+    }
   ]
 }
