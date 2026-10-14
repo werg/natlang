@@ -1,0 +1,70 @@
+{
+  "author_receipt": {
+    "path": "plans/semantic_stack/CAVE_SUPPORT_CLOSURE_V9_AUTHOR_SOL.json",
+    "sha256": "24d9dd2b956c86fb906806957351fef622bcefe35c36ada792622a6dfb1a9593"
+  },
+  "canonical_reference_replay": {
+    "opening_sha256": "407f0834bf48f45779d3ecd476c6931e7fe1ff8537a4a080ea662a4c25a3298d",
+    "path": "training/semantic_applications/astra/cave-mission/mirrored-vault/reference-report.json",
+    "reference_ok": true,
+    "reference_problems": [],
+    "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission",
+    "sha256": "3f2efe03c7e7b14608a0fa336ec8b43a3d890ebb3796b8136afa91c450713f90"
+  },
+  "controls": {
+    "frame_progress": {
+      "negative": 24,
+      "passed": true,
+      "path": "training/semantic_applications/astra/cave-mission/frame-v8-controls/check-controls.mjs",
+      "positive": 9,
+      "sha256": "498a5c293b0d46f1041177495d34dd5ad59f87bb2e640c03d85bfcb28cd1e7dc"
+    },
+    "mission_exact": {
+      "negative": 17,
+      "passed": true,
+      "path": "training/semantic_applications/astra/cave-mission/check-verifier.mjs",
+      "positive": 5,
+      "sha256": "2976ae764e730533cfda88e6a55cb902171107606aa40e0c35a9725966d15db1"
+    },
+    "survey_item": {
+      "negative": 15,
+      "passed": true,
+      "path": "training/semantic_applications/astra/cave-mission/survey-v5-controls/check-controls.mjs",
+      "positive": 13,
+      "sha256": "280c9f04a4e90d0e09c4352bcfb7e1c635070b5343dcf05fb3bf37b12c32f6df"
+    }
+  },
+  "generation_prep_ready": true,
+  "independently_matched_changed_paths": {
+    "applications/cave-mission/DECOMPOSITION.md": "22d9ff1a3ddb6c00b487e2ae219430c33ac8923b363923922f4a5e5b6364f809",
+    "applications/cave-mission/planMission/survey/readFrames/advanceFrameUnit.nl": "4d1573ecd9f6b66b58b4005d2af0d5e3a59569e444463b3c8f070cefec70c1cd",
+    "applications/cave-mission/types.ts": "acc8adfd192c1da4d1d54499522bbfb82d17a647d5ad64daa886008096831e7d",
+    "training/semantic_applications/astra/cave-mission/frame-v8-controls/check-controls.mjs": "498a5c293b0d46f1041177495d34dd5ad59f87bb2e640c03d85bfcb28cd1e7dc",
+    "training/semantic_applications/astra/cave-mission/frame-v8-controls/progress-witness.json": "420edd0aec2df1c2391a9a87b22ead8dc0418c2efb4582ee38edee22a4db2775",
+    "training/semantic_applications/astra/cave-mission/project.json": "e00b42f2566169ef247509409b953e137b7b832c5dfd44c3b96e1e48e46b3530"
+  },
+  "live_samples": 0,
+  "manifest_sha256": "e00b42f2566169ef247509409b953e137b7b832c5dfd44c3b96e1e48e46b3530",
+  "package_report_sha256": "e8df00b1f470ab0764a7f314e55f5b2658061b58951cf913fe5f709ea41d640c",
+  "reviewer": "pop-semantic-curriculum",
+  "schema": "natlang.cave-fixed-point-closure-independent-review/1",
+  "source_semantic_review": {
+    "limitations": [
+      "Canonical reference replay proves type/source shape only.",
+      "Exact controls prove bindings and selected corruptions, not full semantic entailment or actual teacher adherence.",
+      "No live v9 literal consumption, final answer, or trajectory idiomaticity qualification."
+    ],
+    "observed_v8_bug": "Amber support omitted F01 global J point; named interpretation then returned no alternatives rather than inventing origin.",
+    "status": "pass_source_only",
+    "verified_v9_handoff": [
+      "Scoped NL FrameSupportClosure owns local origin, identity bridge, fixed global point and orientation groups; no case-specific coordinate table in visible source.",
+      "Parent requires original clause IDs and exact source quotes for each cited group, unions every actual group into supportingClauses, retains raw closure and named convention return.",
+      "Original F03 origin disk, L03 same disk as J, F01 J=(0,1), F04 direct east or reflected west and v north together license exactly two Amber bases.",
+      "Missing fixed-point evidence remains typed unresolved and cannot produce an accepted numeric convention.",
+      "FrameReadFrontier continues one original unit at a time and preserves prior completed child returns."
+    ]
+  },
+  "source_sha256": "8c6abf02132553c8d2fad66a3a8b8cc2f8d880ccb72327f743179dbebd2cbbe7",
+  "source_variant": "fixed-point-support-closure-v9",
+  "training_admission": false
+}
