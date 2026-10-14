@@ -31,3 +31,31 @@ The LFM and Mellum R8 teacher delta must include this witness in addition to
 its existing protected held and source-quality references. Do not train from
 the unfiltered backlog-v5 render. The currently running CoreWeave PH snapshot
 does not include this proposed delta and needs no mutation.
+
+## Source-design cause and new allocation
+
+The same failure recurred in the live s52065/s52066 Luna batches: eight
+accepted composed-process programs used no `iterateOn`; eight accepted edit
+streams used no `iterateOn`; 14 of 15 accepted folder reducers made no inline
+NL criterion call. In the source builders, `curriculum.minimum_sequence` and
+`iterate: required` describe the intended training shape, but the executable
+root instructions for these families do not clearly ask for it. The teacher
+can satisfy the visible task and exact final oracle with ordinary loops,
+string edits, or literal file names. This is a source-design and admission
+defect, not evidence that the teacher cannot use the natlang operators.
+
+Commit `a61035ac` stops *new* Luna allocation for composed_process,
+edit_stream, folder_criteria_reducer, actor_greenhouse, and
+counterexample_revision while their task surfaces and process checks are
+reworked. Existing campaign workers finish and their rows remain available
+for review. The 100-case target stays supplied by the other families, with
+one additional inline_review_each case.
+
+For folder reducers, Pop prepared a paired 48-case-per-arm live-executor
+comparison under
+`/srv/storage/natlang-artifacts/free-provider-generation-20261013-v1/folder-criteria-process-ab-20261014-v1`.
+Arm A keeps the original root instruction; arm B asks for an inline NL
+function applied to each ticket and the criteria. Both use the same 48
+source cases and request seeds. The campaign is evaluation-only and has no
+training admission. Measure exact task success, actual NL-per-ticket use,
+requests, and latency before adopting B or changing the source builder.
