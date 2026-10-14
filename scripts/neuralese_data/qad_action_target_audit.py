@@ -25,10 +25,14 @@ def digest(value):
 
 def selected(path, ids):
     found = {}
-    for line in path.read_bytes().splitlines():
-        row = json.loads(line)
-        if row.get('id') in ids:
-            found[row['id']] = (row, hashlib.sha256(line).hexdigest())
+    wanted = set(ids)
+    with path.open('rb') as source:
+        for line in source:
+            row = json.loads(line)
+            if row.get('id') in wanted:
+                found[row['id']] = (row, hashlib.sha256(line.rstrip(b'\n')).hexdigest())
+                if len(found) == len(wanted):
+                    break
     if set(found) != set(ids):
         raise ValueError('selected IDs absent from native source')
     return found
@@ -221,19 +225,25 @@ def run(args, selection, natives, params, engine, gpu):
               'cases': []}
     for mode in ('program-header', 'full'):
         path = args.render / mode / 'lfm25' / 'text-data.jsonl'
-        rows = [json.loads(line) for line in path.read_text().splitlines() if line]
-        for row in rows:
-            native, native_sha = natives[row['id']]
-            case = {'id': row['id'], 'mode': mode, 'native_row_sha256': native_sha,
-                    'render_sha256': sha256_file_hex(path),
-                    'data': data_audit(engine, row, params)}
-            if gpu:
-                case['serving_boundary'] = serving_boundary(engine, native, row)
-                case['gold_scoring'] = score_gold(engine, row)
-                if mode == 'full' and args.sample_seeds:
-                    case['sampled_live_actions'] = [sample_live_action(engine, native, seed=820100 + i)
-                                                    for i in range(args.sample_seeds)]
-            report['cases'].append(case)
+        render_sha = sha256_file_hex(path)
+        with path.open() as source:
+            for line in source:
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if row['id'] not in natives:
+                    continue
+                native, native_sha = natives[row['id']]
+                case = {'id': row['id'], 'mode': mode, 'native_row_sha256': native_sha,
+                        'render_sha256': render_sha,
+                        'data': data_audit(engine, row, params)}
+                if gpu:
+                    case['serving_boundary'] = serving_boundary(engine, native, row)
+                    case['gold_scoring'] = score_gold(engine, row)
+                    if mode == 'full' and args.sample_seeds:
+                        case['sampled_live_actions'] = [sample_live_action(engine, native, seed=820100 + i)
+                                                        for i in range(args.sample_seeds)]
+                report['cases'].append(case)
     return report
 
 
