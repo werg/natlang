@@ -122,3 +122,7 @@ The original fictional corpus now contains14documents/67clauses, three authentic
 Correction interpretation receives a selected original primary and its actual original authority/adoption context. Actual note and correction children receive the governing rules, and effective-version resolution groups repeated support of one replacement without inventing competing versions. The source-authorized patch scope protects accepted transcription and independent uncertain gloss slots.
 
 Visible task snapshot and an external draft invariant landscape are authored. Native/type and project-tree packaging pass; full typed reference, exact comparator/control qualification, independent semantic review and actual NL execution remain pending. The project stays generation-held/live-false/training-false.
+
+### Peer source precision
+
+The actual original prompt clauses now reach `judgeResponseScope` as a typed argument and the actual scoped literal capture; session IDs alone cannot establish which semantic fields were unasked. Each actual `MeaningReading` has a generated `readingId`, retained by equivalence groups directly, with no undeclared delimiter serialization. Original target/hypothesis joins remain independent exact fields.

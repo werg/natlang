@@ -21,13 +21,13 @@
     "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/sessions/s3/productivity.md": "650c0febe021150848b3a41a8bf1751423da9428e3d8debec86b378cf80f8a2a",
     "training/semantic_applications/sol/field-gloss-workbench/reed-court/fixture/targets/discourse.md": "7c533c813712ba46787441104c395f06a5d9969f78efa688d779add5520e50a8",
     "training/semantic_applications/sol/field-gloss-workbench/reed-court/oracle.json": "db157d1c5da9d04b3cd0abb82a17917c3d7ef0f08948efd315a622e204261740",
-    "training/semantic_applications/sol/field-gloss-workbench/reed-court/project.json": "e3bd2765c0271e730c7ef2e38dc39b8e744a2ba8258c328e01b72c5c8a1d2ae4",
+    "training/semantic_applications/sol/field-gloss-workbench/reed-court/project.json": "3a4cc8cdcafcb65205db40c00579037ae1dec76a43450349117e962bd84c5087",
     "training/semantic_applications/sol/field-gloss-workbench/reed-court/request.json": "dee1c09fb1c3059878e2a2d4b1ee8d684e18fee10f1ea169bb520e72053b1499",
     "training/semantic_applications/sol/field-gloss-workbench/reed-court/snapshot.json": "77723424f95327856d412957b2485b0071f9759ac0d8dabe393c4eaf9b884a8a"
   },
   "source_composition": {
     "nl_files": 34,
-    "nl_lines": 524,
+    "nl_lines": 525,
     "numbered_steps": 239,
     "type_aliases": 55,
     "visible_executable_crisp_policy": 0
@@ -63,10 +63,14 @@
   "training_admission": false,
   "source_commit": "1d686490",
   "project_tree_preflight": {
-    "path": "/tmp/sol-field-reed-source-draft-v3/package-report.json",
-    "source_sha256": "ed3a7e1e5868bf61314e9ddb1aec94c9c869b0e5dca483be1767be179492c669",
+    "path": "/tmp/sol-field-reed-source-peer-v1/package-report.json",
+    "source_sha256": "72056bb7c3a0a8bd5f0790a55baa3f28ebbee00ced79a2234c8c260dd80c341b",
     "source_status": "held_invariant_oracle_requires_external_verifier",
     "reference_checked": false,
-    "scope": "Preservedprojecttree/type/sourceplumbingonly;invariantdraftrequiresfullreference/comparator"
-  }
+    "scope": "Preserved project tree/type/source plumbing only; invariant draft requires full reference/comparator"
+  },
+  "closed_peer_findings": [
+    "Prompt text now travels original-ID selection to named child to actual scoped literal",
+    "Reading identity is a declared typed field; groups retain actual returned IDs without delimiter grammar"
+  ]
 }

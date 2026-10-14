@@ -122,6 +122,7 @@
           "utterance": "UtteranceReading",
           "session": "SessionReading | null",
           "situation": "SituationReading | null",
+          "prompts": "SourceClause[]",
           "notes": "NoteReading[]",
           "rules": "SourceClause[]"
         },
@@ -698,7 +699,7 @@
   ],
   "composition": {
     "nl_files": 34,
-    "nl_total_lines": 524,
+    "nl_total_lines": 525,
     "numbered_steps": 239,
     "type_aliases": 55,
     "visible_crisp_policy_lines": 0
