@@ -885,20 +885,7 @@ def stage_data(engine, a, text_data):
         rows_meta = []
         receipt = None
         backing = WindowBackingSpool(getattr(a, 'out', None))
-        # The mixed run (Option A, owner 2026-10-13): a Neuralese output span whose value an e2e edge trains is
-        # context only in direct updates (the e2e update supervises it through the reader). Option B (spans without
-        # an edge read lm_head(norm(TCP(h.detach())))) is not implemented: they keep the plain token CE.
-        from ..common.paths import root as path_root
-        spans = neuralese_spans(getattr(a, 'e2e_mix', None), path_root('repo'))
-        if spans is not None:
-            print(json.dumps({'event': 'neuralese_spans', 'documents_with_edges': len(spans[0]),
-                              'edge_spans': sum(map(len, spans[0].values())), 'spans_without_edge': spans[1],
-                              'option_b': 'not implemented (TODO): spans without an edge keep the token CE'}),
-                  flush=True)
         for row in stage_rows(a, text_data, engine.tokenizer):
-            if spans is not None and row.get('id') in spans[0]:
-                row = {**row, 'context_only_spans': merged_context_only_spans(row.get('context_only_spans'),
-                                                                              spans[0][row['id']])}
             one, current = prepare_text_windows(engine, [row], tokens=a.tokens,
                 prefix_tokens=a.prefix_tokens, target_tokens=a.target_tokens,
                 mask_system_prompt=True,
@@ -944,15 +931,29 @@ def stage_rows(a, text_data, tokenizer):
     stage merges them (``merge_prefix_rows``; bounded memory, text_warmup.stream_merge_prefix_rows)."""
     from .recovery_selection import load_selection, mark_row
     selected = load_selection(getattr(a, 'recovery_selection', None))
+    from ..common.paths import root as path_root
+    mix = getattr(a, 'e2e_mix', None)
+    spans = neuralese_spans(mix, path_root('repo'))
+    if spans is not None:
+        print(json.dumps({'event': 'neuralese_spans', 'documents_with_edges': len(spans[0]),
+                          'edge_spans': sum(map(len, spans[0].values())), 'spans_without_edge': spans[1],
+                          'option_b': 'not implemented (TODO): spans without an edge keep the token CE'}),
+              flush=True)
     def source():
         for row in stream_text_rows(text_data, tokenizer):
-            yield mark_row(row, selected)
+            row = mark_row(row, selected)
+            if spans is not None and row.get('id') in spans[0]:
+                row = {**row, 'context_only_spans': merged_context_only_spans(row.get('context_only_spans'),
+                                                                          spans[0][row['id']])}
+            yield row
     if not getattr(a, 'merge_prefix_rows', False):
         return source()
     from .text_warmup import stream_merge_prefix_rows
     import json as _json
-    cache_key = row_index_key('merge-prefix-rows/1', text_data, tokenizer,
-                              _json.dumps(getattr(a, 'recovery_selection', None), sort_keys=True))
+    cache_inputs = [_json.dumps(getattr(a, 'recovery_selection', None), sort_keys=True)]
+    if spans is not None:
+        cache_inputs.append(_json.dumps(mix['neuralese_spans'], sort_keys=True))
+    cache_key = row_index_key('merge-prefix-rows/1', text_data, tokenizer, *cache_inputs)
     rows, merge = stream_merge_prefix_rows(source, cache_key=cache_key,
                                            spool_directory=a.out if getattr(a, 'out', None) and Path(a.out).is_dir() else None)
     print(json.dumps({'event': 'merge_prefix_rows', **merge}), flush=True)
