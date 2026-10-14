@@ -105,7 +105,10 @@ def durable_progress(journals, missing, finished):
 
 def launch_budget_gb(queue_dir):
     """Allow a growing resumable partial enough RAM for its retained context."""
-    partials = queue_dir.glob('case-*/jobs/*.partial.json')
+    # Ordinary workers store one job directory per case; a retry queue writes
+    # directly into retry-NNN-NN/jobs. Inspect both before admitting the unit.
+    partials = list(queue_dir.glob('case-*/jobs/*.partial.json'))
+    partials.extend(queue_dir.glob('jobs/*.partial.json'))
     if any(path.stat().st_size >= 8_000_000 for path in partials):
         return '2.0'
     return '1.5' if queue_dir.name.startswith('retry-') else '0.9'

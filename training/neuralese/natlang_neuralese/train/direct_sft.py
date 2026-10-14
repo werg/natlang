@@ -1618,6 +1618,8 @@ def main(argv=None):
         # Project once over the whole turn so every chunk sees its full causal history, then keep the
         # vocabulary-sized readout chunked as before.
         fused = token_choice is None and os.environ.get('NATLANG_FUSED_READOUT', '1') != '0'
+        real = valid.sum().clamp_min(1)
+        loss_denominator = accumulation['valid_positions'] if accumulation is not None else real
         with profile_scope('readout'):
             detach_mask = None
             if detached_by_document:
@@ -1628,12 +1630,13 @@ def main(argv=None):
             read = project_token_states(hidden, token_choice, segments, detach_mask)
             if fused:  # text_warmup.fused_readout: logits once per chunk
                 training_ce, prediction, token_losses = fused_readout(
-                    backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights)
+                    backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights,
+                    loss_denominator=loss_denominator)
             else:
                 _, training_ce, prediction, _, token_losses = chunked_readout(
                     backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights)
-        real = valid.sum().clamp_min(1)
-        training_ce = training_ce * (span.numel() / real)  # the token mean over real positions (padding excluded)
+        if not fused:
+            training_ce = training_ce * (span.numel() / loss_denominator)
         ce = (token_losses * valid).sum() / real
         metrics = {'ce': float(ce), 'gold_accuracy': float(((prediction == span) & valid).sum() / real)}
         if torch.is_grad_enabled():
@@ -1641,9 +1644,6 @@ def main(argv=None):
                            target_tokens=int(suffix.sum()), real_tokens=sum(len(r['ids']) - 1 for r in rows_),
                            forward_tokens=int(ids.shape[0] * (ids.shape[1] - 1)))
         loss = training_ce
-        if accumulation is not None:
-            training_ce = training_ce * (real / accumulation['valid_positions'])
-            loss = training_ce
         if teacher is not None:
             from ..maple.family import member_kl
             from .joint_kd import IGNORE
