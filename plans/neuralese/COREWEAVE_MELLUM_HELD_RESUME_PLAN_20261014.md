@@ -104,3 +104,56 @@ capacity. Allocate only after releasing the old GPU, then verify actual device
 and root disk before fetching/launching model state. If96GB constraint is
 rejected, preserve exact failure and retry a documented placement/profile;
 never silently call an80GB alternative qualified.
+
+## Refreshed preparation at22:14UTC
+
+Both existing GPUs continue training; no replacement allocation or stop was
+performed. Latest independently private-SHA-verified full state is step800,
+46,821,479,895bytes, SHA
+`bd4591b05077043ca9eaf8aca42a62eaa96044de5ba8231ae374865dab18689f`.
+The eight-file fetch bundle including completed800 task/evaluation history is
+`9fcd1643a229204a796d6e85baee7db158cfa4d3f1720c26c41c734e3e83a6dc`,
+46,821,686,066bytes. Its local capability manifest is private mode600 and must
+be refreshed before actual transfer; signed capabilities are not committed.
+
+The refreshed metadata archive has26,497files,29,900,695decodedbytes and
+8,787,524compressedbytes, SHA
+`e8e4536803c8224916e14fdcc36771c21f901baa2ea370236f1e8cf8c3a19f01`;
+existing snapshot/collect bundle
+`f849501a1c9ddcd5db7d1104dba5056145bd44c4668fb8f1c1e546b947de10aa`.
+D36 completed, leaving16acquired and4access-blocked sources, no pending source
+in this catalog. This preserves acquisition facts, not raw-file survival.
+The supervisor repaired acquisition reuse to validate every raw-file size/full
+SHA and known LFS SHA before accepting an acquired receipt. Use that repaired
+script on replacement; never restore historical receipt-only acquired markers
+as proof that missing raw bytes exist.
+
+Existing private allocation plumbing now refuses replacement while the old
+allocation is nonterminal, records a separate candidate ID, and requests96GB
+minimum GPU memory. Existing release plumbing accepts the supervisor-selected
+recipe and explicit handoff; its syntax check passed under the memory ledger.
+These paths have not allocated or resumed a replacement. A code-only resume
+recipe and the supervisor's migration instruction remain required.
+
+Task800 is3/16 versus inherited13base, with zero infrastructure/unresolved
+outcomes; the lineage remains unqualified. LFM's separate task3000 is0/16,
+within its qualified410 predecessor1/noise1 and base0, though capability is weak.
+Neither successful checkpoint transport nor training progress grants promotion.
+
+The concrete code-only continuation recipe is
+`training/neuralese/recipes/neuralese-direct-mellum-r8-clean-warmup-coreweave-held-resume-20261014-v1.json`.
+Its194-file package inventory was sealed at source37697f0dff96; both the
+inherited fresh recipe and actual preserved cloud plan pass
+`recipe_handoff_epoch_changes` with no changes outside package code. Origin
+runtime metadata, all R8 inputs, optimization and evaluation controls inherit
+unchanged. Checkpoint selection remains an exact private transport receipt;
+refresh the latest independently verified full state immediately before handoff.
+
+The existing handoff requires the original frozen runtime to exist and match
+its recorded inventory. All194 original file hashes were independently checked
+against Git revision8c8d1e06a29d261d6cb94c94b6aeb231334c7a20. Reconstruct that
+package through Git archive into the original output's runtime folder before
+handoff; do not copy executable source trees from the old sandbox or omit this
+check. Stage current code separately, then let existing handoff replace and
+record the frozen runtime. Ledgered recipe/code-only validation passed; actual
+replacement restore/update remains unexecuted.
