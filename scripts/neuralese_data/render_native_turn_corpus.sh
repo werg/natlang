@@ -27,7 +27,10 @@ trap 'rm -f "$ERRLOG"' EXIT
 # The image has no Node; candidate-selection admission runs scripts/verify_candidate_selection_packet.mjs (needs a
 # built ts-host/dist), so the host's Node binary is mounted in.
 NODE_BIN=$(readlink -f "$(command -v node || echo /home/werg/.local/bin/node)")
-ZSTD_BIN=$(command -v zstd)
+# Homebrew may precede /usr/bin in PATH, but its zstd binary needs a loader
+# absent from the render image. Mount the host system binary instead.
+ZSTD_BIN=/usr/bin/zstd
+[ -x "$ZSTD_BIN" ] || { echo "missing system zstd: $ZSTD_BIN" >&2; exit 1; }
 [ $stopped = 1 ] && exit 0  # stopped before the container started: do not start it
 docker run --rm --name "$NAME" --network none --user "$(id -u):$(id -g)" --memory "${MEM:-24g}" --cpus "${CPUS:-16}" \
   -v "$NODE_BIN:/usr/local/bin/node:ro" \
