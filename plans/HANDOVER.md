@@ -1,5 +1,52 @@
 # Continuation guide — updated 2026-10-14
 
+## 02:40 CEST: deeper application variants, live crisp-code concern, green TS gate
+
+The connected Procedure Compiler closure variant is on main (`c17258f8`,
+`e00a57b7`, `fccf8d34`, independent review `d4e8e456`, readiness
+`b1b25b76`): 30 `.nl` functions and about 730 lines, with actual generated
+code/type closure traversed through NL children and 13 connected exact controls.
+Turn Window's isolated alternative-order branch and consequential Mirror Garden
+submitted/unsubmitted pair are on main (`fab8d1da`, `d4f95a8e`, exact verifier
+fix `3e2a32a7`, independent reviews `6d514c15`, `cb1d1884`): 30 `.nl`
+functions/about 761 lines, 35 baseline plus 24 ordering controls. These
+source/review achievements do not admit training rows. Keep the frozen
+baseline one-case queues distinct from new variants until repackaged.
+
+Ecology v14 live (`d93fefa7`) verified Stage1–3 typed NL handoff and exact
+plural source-key preservation; Stage4's depth-five ad hoc lambda guard fired
+as designed. The root still delegated repeatedly, then used a crisp graph
+propagation loop in the audit child and hit an unbound `stagedValue` error.
+Stopped around 80 turns; no final/admission/model-negative result. Astra is
+preparing v15 with narrower scoped decisions and structural NL graph
+iteration. Cave v4 matched diagnostic is active. Its early `readPassages`,
+`readFrames` and equipment children have written multi-kilobyte case-specific
+JS assertion tables despite source-grounded facts; later NL landmark decisions
+are still running. Treat this as source ergonomics debt even if the answer is
+correct. Revise to per-record scoped NL typed extraction and inspect actual
+downstream consumption. Non-gating trace signals live in
+`scripts/audit_semantic_trace_idiomaticity.py` (`a9b0c21c`).
+
+Pop's ledgered full TypeScript side of `check-main` passed at `a9b0c21c`:
+node build, browser/app builds, types, layering, all TS tests (463 seconds)
+and 22 conformance programs; log
+`/tmp/natlang-pop-check-main-ts-20261014-0225.log` ends `exit=0`.
+The first attempt exposed two independent test-environment defects. Restored
+12 missing `dist/browser` files in a sealed skill-authoring parent snapshot
+from byte-identical sources; its full 20,748-file seal matches again and the
+targeted positive e2e passes. The trusted verifier test assumed repo cwd when
+run from `ts-host`; `ecb420a4` fixes its paths and targeted 5/5 passes. DGX
+was asked for the full Python/GPU check, which needs more memory than Pop's
+safe envelope; no full-cross-machine green claim yet.
+
+The Pop GPU now runs a same-packet QAD **base** model full-prompt task eval
+under `natlang-pop-qad-base-full-20261014.service` (clean untrained-head
+checkpoint, no SFT weights). It will localize whether the step15000 0–1/16
+task success was already present at base or arose during SFT. It is an eval,
+not training. Do not train on the protected held packet or its failed traces;
+create fresh train-only recovery analogues for the observed proof-service
+shadowing loop instead.
+
 ## 02:22 CEST: source corrections, exact JSONL framing, and QAD prompt evidence
 
 The owner's current source target is connected, application-sized programs
