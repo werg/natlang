@@ -1,0 +1,4 @@
+[REP01] Cover is a standing rule: if a damage part's target has another garden creature controlled by that target's current controller in the batch's before-state, reduce that part's damage by1, to a minimum0. Cover applies at most once to each original part lineage.
+[REP02] Mantle's WARD replacement applies to a damage part targeting W1's attached creature when WARD is available. Replace that part's current damage quantity with the same quantity of growth added to that target, and spend WARD. A growth part cannot receive this damage replacement again.
+[REP03] WARD is shared by W1 across the turn. Cover's once-per-lineage application histories are distinct for PA and PM. These are source-defined finite capacities, not a generic iteration cutoff.
+[REP04] Prevention or conversion is judged from the actual rewritten part. An announced quantity that was reduced or converted does not count as damage dealt or as the converted amount.

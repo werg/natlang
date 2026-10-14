@@ -1,0 +1,10 @@
+{
+  "caseId": "mirror-garden-unsubmitted-v1",
+  "announcedIntentId": "FORK",
+  "responseIntentIds": [
+    "TAKE",
+    "MOVE"
+  ],
+  "initialSnapshot": "before-announcement",
+  "resultScope": "Resolve only supported work, retain actual legal previews, and preserve any missing consequential player choice without committing that batch."
+}

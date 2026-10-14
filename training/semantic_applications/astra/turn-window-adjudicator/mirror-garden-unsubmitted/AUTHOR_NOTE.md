@@ -1,0 +1,3 @@
+# Mirror Garden with no submitted order
+
+This is the same connected world and split unit as Glass/Mirror Garden, with CHO01 explicitly recording no submitted PM order. Permission to choose cannot choose for Ilex. Both branch-local previews may be evaluated, but the unresolved choice stops before Fork commits. The two response windows remain actual; all Fork damage/growth, departure, token spending and after-batch triggers remain uncommitted. Full typed reference and exact verifier controls pass; independent final certificate review is pending; no live or training admission.

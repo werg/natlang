@@ -1,0 +1,3 @@
+[SCR01] If Fork's resolved batch dealt positive actual damage in any part and SCRIBE is available, Scribe emits one consequence and spends SCRIBE when queued. If more than one part qualifies, choose the earliest qualifying part in Fork's printed order.
+[SCR02] The consequence gives1 ink to the controller captured for that chosen part's target at Fork announcement. It does not give ink to S1's controller or to the target's current or last-known controller merely because they differ.
+[SCR03] A converted growth part is not positive damage. Scribe's recipient is fixed from the captured field when the consequence is queued; later Return does not rebind it to a new instance.

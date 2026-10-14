@@ -18,6 +18,28 @@ export function verifyCandidate({value:r,oracle:o,inputs,fixture}){
   const supports=(v,id)=>v.witnesses.some(w=>w.sourceId===clauses.get(id)?.sourceId&&w.path===clauses.get(id)?.path&&clauses.get(id)?.quote.includes(w.quote)&&w.quote.length>0);
   const expectedCoverage=manifest.documents.map(d=>({sourceId:d.id,clauseIds:[...clauses.entries()].filter(([,c])=>c.sourceId===d.id).map(([id])=>id).sort()}));
   require(bag(r.sourceCoverage.map(c=>({...c,clauseIds:[...c.clauseIds].sort()})))===bag(expectedCoverage),'complete original clause coverage');
+  function verifyRewrite(decisions,parts,announcement){
+     const current=new Map(announcement.parts.map(p=>[p.partId,{partId:p.partId,lineagePartId:p.partId,printedOrder:p.printedOrder,kind:'damage',targetInstanceId:p.targetInstanceId,amount:p.amount,recipient:null,objectValue:null,attachmentTarget:null,appliedRuleIds:[]} ]));
+     for(const d of decisions){require(d.beforeParts.length===1&&d.afterParts.length===1&&eq(partFacts(d.beforeParts[0]),current.get(d.lineagePartId)),'rewrite actual before lineage');const before=d.beforeParts[0],after=d.afterParts[0];require(after.lineagePartId===d.lineagePartId&&after.partId===before.partId&&after.targetInstanceId===before.targetInstanceId,'rewrite lineage identity');
+      if(d.applicable===false)require(eq(partFacts(before),partFacts(after))&&d.consumedTokenIds.length===0,'negative rewrite preserves current part');
+      else{require(d.applicable===true,'decided replacement');if(after.kind==='damage')require(before.kind==='damage'&&after.amount===Math.max(0,before.amount-1)&&d.consumedTokenIds.length===0&&supports(d,'REP01'),'Cover exact reduction');else require(before.kind==='damage'&&after.kind==='growth'&&after.amount===before.amount&&eq(d.consumedTokenIds,['WARD'])&&supports(d,'REP02'),'Mantle exact conversion');require(after.appliedRuleIds.includes(d.ruleId),'actual applied rule history');}
+      current.set(d.lineagePartId,partFacts(after));}
+     require(bag([...current.values()])===bag(parts.map(partFacts)),'rewrite final lineage coverage');
+  }
+  if(o.uncommittedIntentId){
+   require(r.unresolved.length>0&&r.findings.some(f=>f.kind==='unresolved')&&!r.findings.some(f=>f.kind==='defect'),'explicit missing choice');
+   require(eq(r.windows.map(w=>w.sourceIdentity),o.committedWindowOrder)&&r.windows.every(w=>w.kind==='response'&&w.bundle===null&&w.batch===null&&w.replacements.length===0&&w.triggers.length===0),'only submitted responses committed');
+   require(r.announcements.length===1&&r.announcements[0].intentId===o.uncommittedIntentId&&bag(r.announcements[0].parts.map(p=>[p.partId,p.amount]))===bag([['PA',3],['PM',2]]),'uncommitted announced parts');
+   require(eq(boardFacts(r.windows[0].before),boardFacts(o.initialBoardFacts)),'initial unresolved-case source board');
+   let previous=r.windows[0].before;for(const w of r.windows){require(eq(boardFacts(w.before),boardFacts(previous))&&w.before.revision===previous.revision,'unresolved-case actual state continuity');const expected=structuredClone(w.before);if(w.sourceIdentity==='TAKE')expected.objects.find(x=>x.instanceId==='A1').controller='Rowan';else expected.objects.find(x=>x.instanceId==='W1').attachedTo='M1';require(eq(boardFacts(expected),boardFacts(w.after))&&w.after.revision!==w.before.revision,'only response delta applied');previous=w.after;}
+   require(eq(boardFacts(r.finalBoard),boardFacts(previous))&&r.finalBoard.revision===previous.revision&&r.triggerDecisions.length===0,'uncommitted batch leaves board and triggers untouched');
+   require(r.orderResolutions.length===1,'one retained uncommitted ordering dispute');const resolution=r.orderResolutions[0];require(resolution.choice.selectedCandidateId===null&&resolution.choice.basis==='unresolved'&&resolution.unresolved.length>0,'no invented order selection');
+   require(eq(resolution.choice.sourceChoiceClauseIds,[o.missingChoice.sourceClauseId])&&supports(resolution.choice,o.missingChoice.sourceClauseId),'missing submission source support');
+   require(resolution.plan.candidates.length===2&&resolution.previews.length===2&&new Set(resolution.previews.map(p=>p.candidateId)).size===2,'two actual uncommitted previews');
+   for(const p of resolution.previews){const candidate=resolution.plan.candidates.find(c=>c.candidateId===p.candidateId);require(candidate&&eq(candidate.applications.map(a=>a.applicationId),p.decisions.map(d=>d.applicationId)),'uncommitted preview application identity');require(p.beforeRevision===r.finalBoard.revision&&p.bundle.beforeRevision===p.beforeRevision&&p.bundle.intentId===o.uncommittedIntentId,'uncommitted preview common input');verifyRewrite(p.decisions,p.bundle.parts,r.announcements[0]);require(eq(p.reservedTokenIds,['WARD'])&&r.finalBoard.tokens.find(t=>t.id==='WARD')?.status==='available','isolated preview capacity');}
+   require(eq(resolution.previews.map(p=>p.bundle.parts.find(x=>x.lineagePartId==='PM')?.amount).sort(),[1,2])&&resolution.differences.length===1&&resolution.differences[0].equivalent===false,'retained consequential alternatives');
+   return {ok:issues.length===0,issues,semantic_review_required:true,training_admission:false,scope:'Exact uncommitted-choice state and branch-local rewrite replay; source choice entailment and actual NL execution remain reviewed separately.'};
+  }
   require(r.unresolved.length===0&&!r.findings.some(f=>f.kind!=='defended'),'determinate audited certificate');
   require(r.announcements.length===1&&r.announcements[0].intentId===inputs.request.announcedIntentId,'announced intent identity');
   const announcement=r.announcements[0];require(bag(announcement.parts.map(p=>[p.partId,p.printedOrder,p.targetInstanceId,p.amount]))===bag([['PA',1,'A1',3],['PM',2,'M1',2]]),'announced parts');
@@ -29,6 +51,7 @@ export function verifyCandidate({value:r,oracle:o,inputs,fixture}){
   const ret=byCapacity.get('RETURN'),scribe=byCapacity.get('SCRIBE');
   require(ret?.controllerBasis==='last-known'&&ret?.recipient==='Rowan'&&ret?.priority===10,'return binding');require(scribe?.controllerBasis==='captured'&&scribe?.recipient==='Ilex'&&scribe?.priority===20,'scribe binding');
   require(eq(ret?.qualifyingPartIds,['PA'])&&eq(scribe?.qualifyingPartIds,['PA']),'qualifying resolved part');
+  if(o.emittedTriggers.includes('MIRROR')){const mirror=byCapacity.get('MIRROR');require(mirror?.controllerBasis==='current'&&mirror?.recipient==='Ilex'&&mirror?.priority===30&&eq(mirror?.qualifyingPartIds,['PM']),'Mirror current controller binding');}
   const roles=r.windows.map(w=>w.kind==='trigger'?[...byCapacity].find(([,d])=>d.ruleId===w.sourceIdentity)?.[0]:w.sourceIdentity);
   require(r.orderResolutions.length===r.windows.filter(w=>w.bundle).length,'one ordering resolution per committed batch');
   const resolvedSlots=new Set();for(const resolution of r.orderResolutions){
@@ -37,7 +60,7 @@ export function verifyCandidate({value:r,oracle:o,inputs,fixture}){
    require(resolution.unresolved.length===0&&plan.unresolved.length===0&&resolution.choice.unresolved.length===0,'resolved source ordering');
    require(resolution.previews.length===candidates.size&&new Set(resolution.previews.map(p=>p.candidateId)).size===candidates.size,'complete distinct previews');
    for(const candidate of candidates.values()){const order=candidate.applications.map(a=>a.applicationId);require(bag(order)===bag(ids),'candidate application permutation');for(const edge of plan.constraints)require(order.includes(edge.beforeApplicationId)&&order.includes(edge.afterApplicationId)&&order.indexOf(edge.beforeApplicationId)<order.indexOf(edge.afterApplicationId),'source order constraint');}
-   for(const preview of resolution.previews){const candidate=candidates.get(preview.candidateId);require(candidate&&eq(preview.decisions.map(d=>d.applicationId),candidate.applications.map(a=>a.applicationId)),'actual preview application order');require(preview.unresolved.length===0&&preview.beforeRevision===preview.bundle.beforeRevision,'preview common input revision');require(new Set(preview.reservedTokenIds).size===preview.reservedTokenIds.length,'preview token uniqueness');}
+   for(const preview of resolution.previews){if(preview.bundle.intentId===announcement.intentId)verifyRewrite(preview.decisions,preview.bundle.parts,announcement);else require(preview.decisions.length===0,'non-damage consequence has no replacement applications');const candidate=candidates.get(preview.candidateId);require(candidate&&eq(preview.decisions.map(d=>d.applicationId),candidate.applications.map(a=>a.applicationId)),'actual preview application order');require(preview.unresolved.length===0&&preview.beforeRevision===preview.bundle.beforeRevision,'preview common input revision');require(new Set(preview.reservedTokenIds).size===preview.reservedTokenIds.length,'preview token uniqueness');}
    const selected=resolution.previews.find(p=>p.candidateId===resolution.choice.selectedCandidateId),window=selected&&r.windows.find(w=>w.slotId===selected.bundle.causeSlotId);
    require(window&&window.bundle&&!resolvedSlots.has(window.slotId),'selected preview window identity');if(!window)continue;resolvedSlots.add(window.slotId);
    require(selected.beforeRevision===window.before.revision&&selected.bundle.bundleId===window.bundle.bundleId,'selected preview immutable input');
@@ -50,6 +73,11 @@ export function verifyCandidate({value:r,oracle:o,inputs,fixture}){
    else if(resolution.choice.basis==='equivalent-orders')require(resolution.differences.every(d=>d.equivalent===true),'equivalent order evidence');
    else require(resolution.choice.basis==='submitted-choice'&&resolution.choice.sourceChoiceClauseIds.length>0,'consequential order source choice');
    require(resolution.choice.sourceChoiceClauseIds.every(id=>plan.choiceClauses.some(c=>c.id===id)&&clauses.has(id)),'submitted choice source domain');
+   if(o.orderPreviewInvariants&&window.sourceIdentity==='FORK'){
+    require(resolution.previews.length===2&&resolution.choice.basis==='submitted-choice'&&eq(resolution.choice.sourceChoiceClauseIds,[o.orderPreviewInvariants.choiceClauseId]),'authored consequential order choice');
+    const quantities=resolution.previews.map(p=>p.bundle.parts.find(x=>x.lineagePartId==='PM')?.amount).sort();require(eq(quantities,[1,2]),'both actual PM quantity alternatives');
+    require(selected.bundle.parts.find(x=>x.lineagePartId==='PM')?.amount===2&&resolution.differences.length===1&&resolution.differences[0].equivalent===false,'selected non-equivalent PM preview');
+   }
   }
   require(eq(roles,o.windowOrder),'source-governed window chronology');require(new Set(r.windows.map(w=>w.slotId)).size===r.windows.length,'window slot uniqueness');
   const initial=r.windows[0]?.before;require(initial&&eq(boardFacts(initial),boardFacts(o.initialBoardFacts)),'initial source board');
@@ -72,19 +100,16 @@ export function verifyCandidate({value:r,oracle:o,inputs,fixture}){
     require(eq(boardFacts(applied),boardFacts(w.after)),'actual declared deltas applied');
     if(role==='FORK'){
      require(w.kind==='announcement'&&w.bundle.intentId==='FORK'&&w.causeSlotId===null,'Fork identity');require(bag(w.triggers.map(triggerFacts))===bag(triggers.map(triggerFacts)),'actual trigger decisions retained');
-     const current=new Map(announcement.parts.map(p=>[p.partId,{partId:p.partId,lineagePartId:p.partId,printedOrder:p.printedOrder,kind:'damage',targetInstanceId:p.targetInstanceId,amount:p.amount,recipient:null,objectValue:null,attachmentTarget:null,appliedRuleIds:[]} ]));
-     for(const d of w.replacements){require(d.beforeParts.length===1&&d.afterParts.length===1&&eq(partFacts(d.beforeParts[0]),current.get(d.lineagePartId)),'rewrite actual before lineage');const before=d.beforeParts[0],after=d.afterParts[0];require(after.lineagePartId===d.lineagePartId&&after.partId===before.partId&&after.targetInstanceId===before.targetInstanceId,'rewrite lineage identity');
-      if(d.applicable===false)require(eq(partFacts(before),partFacts(after))&&d.consumedTokenIds.length===0,'negative rewrite preserves current part');
-      else{require(d.applicable===true,'decided replacement');if(after.kind==='damage')require(before.kind==='damage'&&after.amount===Math.max(0,before.amount-1)&&d.consumedTokenIds.length===0&&supports(d,'REP01'),'Cover exact reduction');else require(before.kind==='damage'&&after.kind==='growth'&&after.amount===before.amount&&eq(d.consumedTokenIds,['WARD'])&&supports(d,'REP02'),'Mantle exact conversion');require(after.appliedRuleIds.includes(d.ruleId),'actual applied rule history');}
-      current.set(d.lineagePartId,partFacts(after));}
-     require(bag([...current.values()])===bag(w.bundle.parts.map(partFacts)),'rewrite final lineage coverage');
+     verifyRewrite(w.replacements,w.bundle.parts,announcement);
      for(const p of w.batch.outcomes){const gold=o.parts[p.part.lineagePartId];require(gold&&p.actualDamage===gold.actualDamage&&p.actualGrowth===gold.growthAdded,'resolved actual quantity');}
      require(eq(w.batch.consumedTokenIds,['WARD']),'replacement capacity spent once');require(w.batch.departures.length===1&&w.batch.departures[0].instanceId==='A1'&&w.batch.departures[0].lastKnownController==='Rowan'&&eq(w.batch.departures[0].causePartIds,['PA']),'simultaneous departure provenance');
-     obj(expected,'A1').damage=2;obj(expected,'A1').zone='discard';obj(expected,'M1').growth=1;spend(expected,['WARD','RETURN','SCRIBE']);
+     obj(expected,'A1').damage=o.parts.PA.actualDamage;obj(expected,'A1').zone='discard';obj(expected,'M1').growth=o.parts.PM.growthAdded;spend(expected,['WARD',...o.emittedTriggers]);
     }else if(role==='RETURN'){
      require(w.kind==='trigger'&&w.causeSlotId===r.windows[2].slotId&&w.bundle.intentId===ret.ruleId,'return causal identity');require(bag(w.bundle.parts.map(partFacts))===bag(ret.consequenceParts.map(partFacts)),'queued return consumed');require(w.batch.objects.length===1&&w.batch.resources.length===0&&w.batch.departures.length===0&&w.batch.consumedTokenIds.length===0,'return effect domain');expected.objects.push({...o.returnObjectFacts,witnesses:[]});
     }else if(role==='SCRIBE'){
      require(w.kind==='trigger'&&w.causeSlotId===r.windows[2].slotId&&w.bundle.intentId===scribe.ruleId,'scribe causal identity');require(bag(w.bundle.parts.map(partFacts))===bag(scribe.consequenceParts.map(partFacts)),'queued scribe consumed');require(w.batch.objects.length===0&&w.batch.resources.length===1&&w.batch.departures.length===0&&w.batch.consumedTokenIds.length===0,'scribe effect domain');expected.resources.find(x=>x.player==='Ilex').ink=1;
+    }else if(role==='MIRROR'){
+     const mirror=byCapacity.get('MIRROR');require(w.kind==='trigger'&&w.causeSlotId===r.windows[2].slotId&&w.bundle.intentId===mirror.ruleId,'Mirror causal identity');require(bag(w.bundle.parts.map(partFacts))===bag(mirror.consequenceParts.map(partFacts)),'queued Mirror consumed');require(w.batch.objects.length===0&&w.batch.resources.length===1&&w.batch.departures.length===0&&w.batch.consumedTokenIds.length===0,'Mirror effect domain');expected.resources.find(x=>x.player==='Ilex').ink=3;
     }
    }
    require(eq(boardFacts(expected),boardFacts(w.after)),'source-governed window delta '+role);previous=w.after;

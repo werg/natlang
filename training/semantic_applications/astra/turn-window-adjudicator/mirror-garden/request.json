@@ -1,0 +1,10 @@
+{
+  "caseId": "mirror-garden-v1",
+  "announcedIntentId": "FORK",
+  "responseIntentIds": [
+    "TAKE",
+    "MOVE"
+  ],
+  "initialSnapshot": "before-announcement",
+  "resultScope": "Resolve the supplied turn using the actual submitted PM order; preserve both legal order previews and the selected downstream consequences."
+}

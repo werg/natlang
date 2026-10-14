@@ -1,0 +1,619 @@
+{
+  "schema": "natlang.semantic-application-connected-case-check/1",
+  "author": "semantic_slate_astra",
+  "application": "turn-window-adjudicator",
+  "source_commit": "fab8d1da",
+  "world_split_key": "astra-turn-window-glass-garden-v1",
+  "independent_world_count_added": 0,
+  "connected_case_count_added": 2,
+  "hashes": {
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/reference-report.json": "200cce3de94a663cf0e08840d3a6f50ae0bf84bbc4df040f6cc852fac69930b0",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/project.json": "cbd5218af0b77d52cd563cfaac1e4cce697887c37235be6da7d2c94d708761c4",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/oracle.json": "1d2489f0bd57bb68223787557e00c27295c8e503cecf9ed337660533a3015649",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/request.json": "7eb096b6bbb307002aad06847caa721f26dde7038923e8cb04e1ac54a6d28156",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/AUTHOR_NOTE.md": "158a3c52aec60fb01b580cb97144595146346cb69cbf01f2d4c62ceda5e7eb0c",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/manifest.json": "4a0745da4785b716c3d7e5c979233941f796deaccfe544300d86aadbd3d42d64",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/responses/submitted.md": "6bedbe35bc3659b1c23a2db3a4f2427157ab75db755ed59ba8f782df0b351e06",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/choices/order.md": "47841f879c0f1f5e3c215bb68f8d987a5cb06d2d7e6855ad17798a72cd68badd",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/board/before.md": "33c865446024a8cda916c5add50f4be2ccfdbb7ddcf89ba051c022668b2702ee",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/rules/windows.md": "73f46fa2af3030428ad6527d97769073b0673610f066ca0ed1c549cad16bdda5",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/rules/identity.md": "f3511e682db70dd45a0066654db150c257cb5dfff87b0dd6a5e798d308489576",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/rules/replacements.md": "23899827e4660ca4aa0a6878f4528c6cba5f2aac00c6b3b6c9ca03ffc95500e8",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/announcements/fork.md": "6eec0f84eff5749f92588df9b83192c9a52658ccd1b1ae8984cc207cba4538bc",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/abilities/scribe.md": "eec0a41893a3c67b347268f1acd63b74c35607ad21a0e1505f476726c39650d7",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/abilities/return.md": "fd31c768e864beb8baef34db300c5255bf2a5b5200e5201dcee62cb3fcef3149",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/abilities/other.md": "39330c23512037029f5b64a430adbc5dc2a0a3ee13fa38784dbd6eba6a74e77b",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/fixture/contracts/result.md": "33438606b10ffc33245591ae66f514c3f954a5db7677304d88f7cce0dece51b8",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/reference-report.json": "e5d2b25f33111ec694438329c52a92b5327edd6e95a4126466dd8901225b5898",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/project.json": "5372b1bffe615b49f77f09aa4c7fe04ddf00909e777dd76845169264508faeaf",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/oracle.json": "ecca3ab14d700baeca12d4199a7cef84bbc61036cf576356e0ed24a4334ced98",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/request.json": "3ec6940c43c7a17bdf30b2d1a567d4efc8ac011ee79318c7c063fb45fd61da07",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/AUTHOR_NOTE.md": "fd0d538fd74ab679f52f4f5ff08e0ec100f9ac37a0691195a08db1c75e7dc302",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/manifest.json": "ce37bc61e8ed7213dfa7bd85e0b40d98af88366811a86642f618b1f211e26f19",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/responses/submitted.md": "6bedbe35bc3659b1c23a2db3a4f2427157ab75db755ed59ba8f782df0b351e06",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/choices/order.md": "2d0d01e2f2c0143dc019a0bf47a0b9454550b828a836acd106169f4b8ded66dd",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/board/before.md": "33c865446024a8cda916c5add50f4be2ccfdbb7ddcf89ba051c022668b2702ee",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/rules/windows.md": "73f46fa2af3030428ad6527d97769073b0673610f066ca0ed1c549cad16bdda5",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/rules/identity.md": "f3511e682db70dd45a0066654db150c257cb5dfff87b0dd6a5e798d308489576",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/rules/replacements.md": "23899827e4660ca4aa0a6878f4528c6cba5f2aac00c6b3b6c9ca03ffc95500e8",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/announcements/fork.md": "6eec0f84eff5749f92588df9b83192c9a52658ccd1b1ae8984cc207cba4538bc",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/abilities/scribe.md": "eec0a41893a3c67b347268f1acd63b74c35607ad21a0e1505f476726c39650d7",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/abilities/return.md": "fd31c768e864beb8baef34db300c5255bf2a5b5200e5201dcee62cb3fcef3149",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/abilities/other.md": "39330c23512037029f5b64a430adbc5dc2a0a3ee13fa38784dbd6eba6a74e77b",
+    "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/fixture/contracts/result.md": "33438606b10ffc33245591ae66f514c3f954a5db7677304d88f7cce0dece51b8",
+    "training/semantic_applications/astra/turn-window-adjudicator/verify-result.mjs": "e41e9caf3e2f952400a9fae66e9a22cdce3eae5ce14a1403244028ff9bb63882",
+    "training/semantic_applications/astra/turn-window-adjudicator/check-ordering-cases.mjs": "f65aadc935f8a3df61909a3e0297a7d41d2e5d03e7fea9719462a65cd7d9f761"
+  },
+  "typed_replays": [
+    {
+      "case": "mirror-garden",
+      "source_sha256": "1aee56897ec9296f1f667067f58428727169d9792246f1cac2a9dc9eaa6188c7",
+      "canonical_replay": {
+        "path": "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden/reference-report.json",
+        "sha256": "200cce3de94a663cf0e08840d3a6f50ae0bf84bbc4df040f6cc852fac69930b0",
+        "reference_ok": true,
+        "reference_problems": [],
+        "opening_sha256": "c6da996dbaadf0e4f770c3f12e322f626c60a134f1cbc73160a88788febb883f",
+        "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
+      }
+    },
+    {
+      "case": "mirror-garden-unsubmitted",
+      "source_sha256": "480a83e32ad314a885494ea4dfb7e6fd9aa191fc6f740bd992676c7cec533f3a",
+      "canonical_replay": {
+        "path": "training/semantic_applications/astra/turn-window-adjudicator/mirror-garden-unsubmitted/reference-report.json",
+        "sha256": "e5d2b25f33111ec694438329c52a92b5327edd6e95a4126466dd8901225b5898",
+        "reference_ok": true,
+        "reference_problems": [],
+        "opening_sha256": "618c53fb77b5e865b52d5d8aa3e8b02c70887bd685680d97a4f8d778f48475b8",
+        "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
+      }
+    }
+  ],
+  "baseline_controls": {
+    "scope": "External exact certificate controls; no application or NL literal execution",
+    "passed": true,
+    "checks": [
+      {
+        "name": "full canonical certificate",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "unordered boards witnesses and sibling parts",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "consistent generated trace and revision IDs",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "consistent internal rule IDs",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "independent reason wording",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "consistent generated candidate IDs",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "name": "selected candidate absent",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "selected preview window identity"
+        ]
+      },
+      {
+        "name": "preview input revision detached",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "preview common input revision",
+          "selected preview immutable input"
+        ]
+      },
+      {
+        "name": "preview order not actually consumed",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "rewrite actual before lineage",
+          "rewrite actual before lineage",
+          "rewrite actual before lineage",
+          "rewrite actual before lineage",
+          "rewrite final lineage coverage",
+          "actual preview application order",
+          "actual selected preview consumed"
+        ]
+      },
+      {
+        "name": "preview reservation leaks unselected capacity",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "only selected reservations committed"
+        ]
+      },
+      {
+        "name": "choice claimed without source submission",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "consequential order source choice"
+        ]
+      },
+      {
+        "name": "candidate precedence violated",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "source order constraint",
+          "source order constraint",
+          "actual preview application order"
+        ]
+      },
+      {
+        "name": "wrong case identity",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "case identity"
+        ]
+      },
+      {
+        "name": "captured controller replaced by live controller",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "captured controller PA"
+        ]
+      },
+      {
+        "name": "announced damage altered",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "announced parts",
+          "rewrite actual before lineage",
+          "rewrite actual before lineage"
+        ]
+      },
+      {
+        "name": "source window order changed",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "source-governed window chronology",
+          "initial source board",
+          "window state continuity",
+          "window state continuity"
+        ]
+      },
+      {
+        "name": "source identity mislabeled",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "source-governed window chronology",
+          "source-governed window delta MOVE"
+        ]
+      },
+      {
+        "name": "initial controller corrupted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "initial source board"
+        ]
+      },
+      {
+        "name": "common before revision corrupted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "common before-batch revision"
+        ]
+      },
+      {
+        "name": "Cover reduction omitted on second part",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual selected preview consumed",
+          "Cover exact reduction",
+          "rewrite actual before lineage"
+        ]
+      },
+      {
+        "name": "Mantle converts original rather than reduced quantity",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual selected preview consumed",
+          "Mantle exact conversion",
+          "rewrite final lineage coverage"
+        ]
+      },
+      {
+        "name": "wrong actual damage",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "resolved actual quantity"
+        ]
+      },
+      {
+        "name": "replacement capacity omitted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "only selected reservations committed",
+          "actual declared deltas applied",
+          "replacement capacity spent once"
+        ]
+      },
+      {
+        "name": "last known departing controller corrupted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "simultaneous departure provenance"
+        ]
+      },
+      {
+        "name": "declared object delta unapplied",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual declared deltas applied"
+        ]
+      },
+      {
+        "name": "Scribe recipient is source controller",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "scribe binding",
+          "actual trigger decisions retained"
+        ]
+      },
+      {
+        "name": "Mirror falsely emits",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "trigger eligibility MIRROR",
+          "actual trigger decisions retained"
+        ]
+      },
+      {
+        "name": "negative trigger loses capacity owner",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "trigger capacity ownership",
+          "trigger capacity domain",
+          "actual trigger decisions retained"
+        ]
+      },
+      {
+        "name": "missing printed trigger judgment",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "four printed trigger judgments",
+          "trigger capacity domain",
+          "actual trigger decisions retained"
+        ]
+      },
+      {
+        "name": "returned instance reuses departed identity",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "delta object identity",
+          "actual declared deltas applied"
+        ]
+      },
+      {
+        "name": "return refreshes spent token",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual declared deltas applied",
+          "source-governed window delta RETURN",
+          "window state continuity"
+        ]
+      },
+      {
+        "name": "return inherits departed damage",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual declared deltas applied",
+          "source-governed window delta RETURN",
+          "window state continuity"
+        ]
+      },
+      {
+        "name": "final ink paid to wrong player",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual final board"
+        ]
+      },
+      {
+        "name": "invented source quotation",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "exact source witness"
+        ]
+      },
+      {
+        "name": "missing relevant source clause",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "complete original clause coverage"
+        ]
+      }
+    ]
+  },
+  "new_controls": {
+    "scope": "Exact selected/uncommitted ordering certificate controls; no NL application execution",
+    "passed": true,
+    "checks": [
+      {
+        "caseName": "mirror-garden",
+        "name": "authored submitted-order certificate",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "caseName": "mirror-garden-unsubmitted",
+        "name": "authored missing-choice certificate",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "caseName": "mirror-garden",
+        "name": "candidate and preview set permutations",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "caseName": "mirror-garden-unsubmitted",
+        "name": "candidate and preview set permutations",
+        "expected": true,
+        "actual": true,
+        "passed": true,
+        "issues": []
+      },
+      {
+        "caseName": "mirror-garden",
+        "name": "unselected preview substituted for actual selection",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual selected preview consumed",
+          "selected non-equivalent PM preview"
+        ]
+      },
+      {
+        "caseName": "mirror-garden",
+        "name": "missing source choice evidence",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "consequential order source choice",
+          "authored consequential order choice"
+        ]
+      },
+      {
+        "caseName": "mirror-garden",
+        "name": "inequivalent alternatives claimed equivalent",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "selected non-equivalent PM preview"
+        ]
+      },
+      {
+        "caseName": "mirror-garden",
+        "name": "missing pairwise comparison",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "complete pairwise preview comparisons",
+          "selected non-equivalent PM preview"
+        ]
+      },
+      {
+        "caseName": "mirror-garden",
+        "name": "unselected preview lineage falsified",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "rewrite final lineage coverage",
+          "both actual PM quantity alternatives"
+        ]
+      },
+      {
+        "caseName": "mirror-garden",
+        "name": "preview inherited token spending",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "each preview starts with source token availability",
+          "each preview starts with source token availability",
+          "window state continuity",
+          "one-use token WARD",
+          "one-use token WARD"
+        ]
+      },
+      {
+        "caseName": "mirror-garden",
+        "name": "Mirror recipient rebound to Rowan",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "Mirror current controller binding",
+          "actual trigger decisions retained"
+        ]
+      },
+      {
+        "caseName": "mirror-garden",
+        "name": "Mirror actual ink omitted",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "actual final board"
+        ]
+      },
+      {
+        "caseName": "mirror-garden-unsubmitted",
+        "name": "missing choice silently selects",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "no invented order selection"
+        ]
+      },
+      {
+        "caseName": "mirror-garden-unsubmitted",
+        "name": "preview token committed despite missing choice",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "uncommitted batch leaves board and triggers untouched",
+          "isolated preview capacity",
+          "isolated preview capacity"
+        ]
+      },
+      {
+        "caseName": "mirror-garden-unsubmitted",
+        "name": "preview growth committed despite missing choice",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "uncommitted batch leaves board and triggers untouched"
+        ]
+      },
+      {
+        "caseName": "mirror-garden-unsubmitted",
+        "name": "preview damage committed despite missing choice",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "uncommitted batch leaves board and triggers untouched"
+        ]
+      },
+      {
+        "caseName": "mirror-garden-unsubmitted",
+        "name": "negative alternative lost",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "two actual uncommitted previews",
+          "retained consequential alternatives"
+        ]
+      },
+      {
+        "caseName": "mirror-garden-unsubmitted",
+        "name": "missing choice source quote invented",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "exact source witness"
+        ]
+      },
+      {
+        "caseName": "mirror-garden-unsubmitted",
+        "name": "preview wrongly inherits reduction",
+        "expected": false,
+        "actual": false,
+        "passed": true,
+        "issues": [
+          "rewrite actual before lineage",
+          "Mantle exact conversion"
+        ]
+      }
+    ]
+  },
+  "source_reconstruction": "Sol independently reconstructed both source outcomes; full new reference/checker review requested and pending.",
+  "exact_scope": "Original source identities/quotes, actual branch-local rewrite arithmetic and histories, selected preview consumption, unchanged live state for unresolved choice, token and ink invariants. Semantic rule entailment remains independent review.",
+  "live_qualified": false,
+  "training_admitted": false
+}
