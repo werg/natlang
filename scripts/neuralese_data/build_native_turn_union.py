@@ -518,14 +518,16 @@ def main(argv=None):
             if a.compress_text:
                 stats.update(text_data_file=target.name, decoded_text_data_sha256=dst.decoded_sha256,
                              decoded_text_data_bytes=dst.decoded_bytes)
-            stats['identity_sha256'] = sha(canonical(order_check).encode())
+            # Tokenizer renderers may finish source shards in different orders. The selected
+            # document multiset must match; row order is irrelevant to shuffled training.
+            stats['identity_sha256'] = sha(canonical(sorted(order_check)).encode())
             rendering_receipt['by_tokenizer'][tok] = stats
             print(json.dumps({rendering: tok, 'documents': stats['documents'], 'by_split': stats['by_split'],
                               'seconds': round(time.time() - t0)}), flush=True)
         identities = {s['identity_sha256'] for s in rendering_receipt['by_tokenizer'].values()}
         rendering_receipt['twin_identity_equal'] = len(identities) == 1
         if len(identities) != 1:
-            raise SystemExit(f'{rendering}: tokenizer twins differ in id/split/groups order')
+            raise SystemExit(f'{rendering}: tokenizer twins differ in id/split/groups identities')
         receipt['renderings'][rendering] = rendering_receipt
     receipt['seconds'] = round(time.time() - t0)
     (a.out_dir / 'receipt.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
