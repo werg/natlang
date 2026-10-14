@@ -952,9 +952,9 @@ def merge(out: Path, mode: str, tok_name: str, shards: list[str], held_external:
     omissions, seen = [], {}
     stats = {'documents': 0, 'by_split': {}, 'max_document_tokens': 0}
     roles_total = Counter()
-    target = final / ('text-data.jsonl.zst' if compress_text else 'text-data.jsonl')
+    text_path = final / ('text-data.jsonl.zst' if compress_text else 'text-data.jsonl')
     decoded_digest, decoded_bytes = hashlib.sha256(), 0
-    with write_jsonl_text(target) as dst:
+    with write_jsonl_text(text_path) as dst:
         for p in src:
             with open_jsonl_text(p) as f:
                 for line in f:
@@ -1002,9 +1002,9 @@ def merge(out: Path, mode: str, tok_name: str, shards: list[str], held_external:
     stats['internal_train_test_group_overlap'] = len(overlap)
     (final / 'omissions.jsonl').write_text(''.join(canonical(o) + '\n' for o in omissions))
     stats['merge_omissions'] = dict(Counter(o['reason'] for o in omissions))
-    stats['text_data_sha256'] = file_sha(target)
+    stats['text_data_sha256'] = file_sha(text_path)
     if compress_text:
-        stats.update(text_data_file=target.name, decoded_text_data_sha256=decoded_digest.hexdigest(), decoded_text_data_bytes=decoded_bytes)
+        stats.update(text_data_file=text_path.name, decoded_text_data_sha256=decoded_digest.hexdigest(), decoded_text_data_bytes=decoded_bytes)
     return stats
 
 
