@@ -49,7 +49,7 @@ SCHEMA = 'natlang.native-text-union/2'
 
 
 @contextmanager
-def union_text_writer(path, compressed=False):
+def union_text_writer(path, compressed=False, reuse_existing=False):
     """Exact UTF-8 output, optionally streamed through zstd without a raw working copy."""
     digest = hashlib.sha256()
     class Writer:
@@ -60,6 +60,27 @@ def union_text_writer(path, compressed=False):
             digest.update(data)
             self.decoded_bytes += len(data)
     writer = Writer()
+    if reuse_existing:
+        from natlang_neuralese.common.jsonio import open_jsonl_text
+        before = path.stat()
+        with open_jsonl_text(path) as existing:
+            class ExistingWriter:
+                decoded_bytes = 0
+                def write(self, text):
+                    if next(existing, None) != text:
+                        raise ValueError(f'existing union differs from selected output: {path}')
+                    data = text.encode('utf-8')
+                    digest.update(data)
+                    self.decoded_bytes += len(data)
+            writer = ExistingWriter()
+            yield writer
+            if next(existing, None) is not None:
+                raise ValueError(f'existing union has extra output: {path}')
+        after = path.stat()
+        if (before.st_size, before.st_mtime_ns, before.st_ino) != (after.st_size, after.st_mtime_ns, after.st_ino):
+            raise ValueError(f'existing union changed during reuse verification: {path}')
+        writer.decoded_sha256 = digest.hexdigest()
+        return
     with open(path, 'wb') as raw:
         proc = subprocess.Popen(['zstd', '-q', '-3', '--long=27', '-T2', '-c'],
                                 stdin=subprocess.PIPE, stdout=raw) if compressed else None
@@ -311,6 +332,8 @@ def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--out-dir', type=Path, required=True)
     p.add_argument('--compress-text', action='store_true', help='write verified zstd text directly, without raw intermediates')
+    p.add_argument('--reuse-existing', action='append', default=[], metavar='RENDERING:TOKENIZER',
+                   help='verify and reuse a completed file without rewriting it; exact decoded output must match')
     p.add_argument('--held-reference', type=Path, action='append', default=[],
                    help='excluded source snapshot whose test groups/texts remain protected')
     p.add_argument('--quarantine-reference', type=Path, action='append', default=[],
@@ -348,6 +371,14 @@ def main(argv=None):
         for name, paths in by_name.items():
             if set(paths) != set(tokenizer_dirs):
                 p.error(f'member {name}:{rendering} lacks a tokenizer twin: has {sorted(paths)}')
+    known_outputs = {f'{rendering}:{tok}' for rendering in members for tok in tokenizer_dirs}
+    if set(a.reuse_existing) - known_outputs:
+        p.error('unknown --reuse-existing output: ' + ', '.join(sorted(set(a.reuse_existing) - known_outputs)))
+    for output in a.reuse_existing:
+        rendering, tok = output.split(':', 1)
+        target = a.out_dir / rendering / tok / ('text-data.jsonl.zst' if a.compress_text else 'text-data.jsonl')
+        if not target.is_file():
+            p.error(f'--reuse-existing target is missing: {target}')
     supersedes = defaultdict(set)
     for item in a.supersedes:
         try:
@@ -448,7 +479,8 @@ def main(argv=None):
             target.parent.mkdir(parents=True, exist_ok=True)
             stats = {'documents': 0, 'by_member': {}, 'by_split': {}}
             order_check = []
-            with union_text_writer(target, a.compress_text) as dst:
+            with union_text_writer(target, a.compress_text,
+                                   reuse_existing=f'{rendering}:{tok}' in a.reuse_existing) as dst:
                 for name in order[rendering]:
                     m = stats['by_member'].setdefault(name, {'documents': 0, 'tokens': 0, 'supervised_tokens': 0,
                                                              'train_documents': 0, 'test_documents': 0})

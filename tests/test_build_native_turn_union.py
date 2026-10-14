@@ -31,6 +31,43 @@ def test_union_compression_preserves_exact_utf8_and_decoded_receipt(tmp_path):
     assert compressed.decoded_bytes == len(restored)
 
 
+def test_reuse_verifies_plain_and_compressed_files_without_rewriting(tmp_path):
+    from build_native_turn_union import union_text_writer
+    lines = ['{"text":"café 😀"}\r\n', '{"text":"next"}\n']
+    for compressed in (False, True):
+        path = tmp_path / ('text.jsonl.zst' if compressed else 'text.jsonl')
+        with union_text_writer(path, compressed) as writer:
+            for line in lines:
+                writer.write(line)
+        before = path.stat()
+        original = path.read_bytes()
+        with union_text_writer(path, compressed, reuse_existing=True) as reused:
+            for line in lines:
+                reused.write(line)
+        after = path.stat()
+        assert path.read_bytes() == original
+        assert (before.st_ino, before.st_mtime_ns) == (after.st_ino, after.st_mtime_ns)
+        assert reused.decoded_sha256 == writer.decoded_sha256
+        assert reused.decoded_bytes == writer.decoded_bytes
+
+
+def test_reuse_rejects_changed_selection_and_extra_rows_without_mutating_file(tmp_path):
+    import pytest
+    from build_native_turn_union import union_text_writer
+    path = tmp_path / 'text.jsonl.zst'
+    with union_text_writer(path, True) as writer:
+        writer.write('{"id":"one"}\n')
+        writer.write('{"id":"two"}\n')
+    original = path.read_bytes()
+    for selected in [['{"id":"different"}\n'], ['{"id":"one"}\n'],
+                     ['{"id":"one"}\n', '{"id":"two"}\n', '{"id":"three"}\n']]:
+        with pytest.raises(ValueError, match='existing union'):
+            with union_text_writer(path, True, reuse_existing=True) as writer:
+                for line in selected:
+                    writer.write(line)
+        assert path.read_bytes() == original
+
+
 def test_removed_quality_reference_blocks_derivatives_in_both_splits():
     candidates = {
         'base': {tok: {'train-copy': identity('train', groups=('question-held',)),

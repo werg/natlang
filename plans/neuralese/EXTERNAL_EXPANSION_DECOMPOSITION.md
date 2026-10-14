@@ -86,6 +86,17 @@ source serialization; earlier immutable views are not rewritten in place.
 
 ## Direct compressed union output
 
+### Resume with immutable completed outputs
+
+Training admission may preempt a union build after some tokenizer files close.
+For a file already used by a published prefix, resume by comparing every newly
+selected output line against the existing decoded file, including exact order
+and end of stream. Reuse only an exact match and preserve its bytes and stat
+identity. Recompute split/source decisions and receipts through the same planner;
+if they differ, fail without rewriting the admitted file. Only unfinished,
+unpublished outputs may be regenerated. This is crisp verification and durability
+for the existing policy; it changes no model-visible content or source admission.
+
 The MuSiQue family hold requires a corrected broad union before the next main-line launch. Keep the existing admission, protected split, deduplication and tokenizer-twin decisions; explicitly remove the held member. Serialize selected rows directly into zstd, recording compressed identity plus independently decoded SHA-256 and byte count. Compression and durability extend the existing crisp union builder and compressed registry contract. This avoids another roughly140GB raw working copy without changing model-visible data or granting source admission.
 
 ## Protection survives member removal
