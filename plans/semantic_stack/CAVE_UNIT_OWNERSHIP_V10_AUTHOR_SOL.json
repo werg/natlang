@@ -1,0 +1,88 @@
+{
+  "schema": "natlang.cave-selected-unit-author-review/1",
+  "reviewer": "semantic_slate_sol",
+  "source_variant": "selected-unit-support-ownership-v10",
+  "status": "author_source_checks_pass_independent_review_pending",
+  "source_bug": {
+    "partial": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/cave-app-fixed-point-v9-diagnostic-v1/worker-01/case-000/jobs/000000-b0e3f823c701b101.partial.json",
+    "sha256": "85259f220bf73ecc99ab19ec29af1d9283ae43116fdb9cad3c8818a5b0508797",
+    "observed": [
+      "Inventory literal used string JSON and overbroad coordinates; parent retried identity-only inventory",
+      "Evidence-only inline closure prematurely attempted convention sibling calls",
+      "Global unit closure selected Amber convention source and emitted two Amber alternatives under global label"
+    ],
+    "scope": "Diagnostic assigned source-repair evidence; no model-negative/admission"
+  },
+  "changed_paths": {
+    "applications/cave-mission/DECOMPOSITION.md": "b3f37b0d2fc05f6928f2c7123374721a5f2f549644b1db402acec6010c068d85",
+    "applications/cave-mission/types.ts": "ad2c7ac4dbe8398d5aada1ad77e4221efc3f976ad582f40363a16055673b324c",
+    "applications/cave-mission/planMission/survey/readFrames.nl": "92bb6de3221e7641f2d825f4937029450352d09efc9a70a85412fa24fd79e9f6",
+    "applications/cave-mission/planMission/survey/readFrames/advanceFrameUnit.nl": "97b819a32abb5e3ba0d7d0b2b62e283c78d385897e5b430503c5d2a15ba4b672",
+    "applications/cave-mission/planMission/survey/readFrames/advanceFrameUnit/discoverFrameSupport.nl": "ff71a67b57fd109e63be57e221d5911cb9df681c84099c9b54957090284c8cde",
+    "applications/cave-mission/planMission/survey/readFrames/interpretConvention.nl": "5f0e0c2f631b74b7305ee6a43afaf33b382551f07ba666a16bef4c0c082c27fc",
+    "training/semantic_applications/astra/cave-mission/project.json": "a29bafaead9c5d337b14ec342fdc1c49a768edc28f1043ced0207ccb8c38591d",
+    "training/semantic_applications/astra/cave-mission/frame-v8-controls/check-controls.mjs": "b793db8cf546e40b5a076f1ad354a27a6923e11ad843bf302c3f95af55b47ccd",
+    "training/semantic_applications/astra/cave-mission/frame-v8-controls/progress-witness.json": "8def6abc4a2dff4a22e98dc0609d5975b6fca086a203f00a55bb1678dc45f22f",
+    "training/semantic_applications/astra/cave-mission/survey-v5-controls/item-witnesses.json": "638a03b69f633d11da4346e66cb8dad6da59ae52601c1d8811390641fe03839d"
+  },
+  "source_ownership": {
+    "discovery": "New substantive numbered typed NL function, data-only scoped FrameSupportClosure; owns per-unit role/primary convention/actual dependent source selection, not geometry.",
+    "convention": "Consumes actual role/owned primary/point context. NL chooses source-licensed interpretation; parent validates declared reference-grid identity property.",
+    "frontier": "Actual selected support refines only support IDs; raw closure/child retained; completed results not re-solved.",
+    "inventory": "Typed SurveyUnitInventory identity/scope only, generic own-frame grouping and context distinction.",
+    "crisp_semantic_helper_added": false,
+    "exact_seams": [
+      "Original source names, clause IDs/quotes",
+      "Owned-ID subsets and actual selected support union",
+      "Declared identity-matrix property after NL role",
+      "Raw typed return preservation and one-item progress"
+    ]
+  },
+  "composition": {
+    "nl_files": 31,
+    "nl_total_lines": 873,
+    "nl_body_lines": 669,
+    "numbered_steps": 229,
+    "type_aliases": 60,
+    "visible_crisp_policy_lines": 0
+  },
+  "controls": {
+    "frame_progress": {
+      "passed": true,
+      "positive": 11,
+      "negative": 27
+    },
+    "survey_item": {
+      "passed": true,
+      "positive": 13,
+      "negative": 15
+    },
+    "mission_exact": {
+      "passed": true,
+      "positive": 5,
+      "negative": 17
+    }
+  },
+  "preflight": {
+    "native_loader": true,
+    "typescript": true,
+    "quick": true,
+    "package_path": "/tmp/sol-cave-v10-source-preflight/package-report.json",
+    "source_sha256": "003d288005c9a1580e5233650999965be7275613d1fcb1f4c6ff7ef8c0cbeb62",
+    "canonical_reference_ok": true,
+    "scope": "Authored typed source witness only, not callable execution"
+  },
+  "unchanged_private_oracle": {
+    "training/semantic_applications/astra/cave-mission/mirrored-vault/oracle.json": "652c18267e79c61c0b2b12d4626e979578a880b81f2c03c955e0248f2036c786",
+    "training/semantic_applications/astra/cave-mission/mirrored-vault/reference-report.json": "3f2efe03c7e7b14608a0fa336ec8b43a3d890ebb3796b8136afa91c450713f90",
+    "training/semantic_applications/astra/cave-mission/verify-result.mjs": "5be4d8fa2c646d9c73d96adbf8fd2c9991c7b8f40ae04a36ce4f3ed779ea9737"
+  },
+  "generation_ready": false,
+  "training_admission": false,
+  "measurement": {
+    "live_samples": 0,
+    "planned_samples": 48,
+    "semantic_entailment_review": false,
+    "actual_literal_consumption_review": false
+  }
+}

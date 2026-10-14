@@ -4,9 +4,17 @@ args:
   clauses: SourceClause[]
 returns: FrameSurvey
 ---
-1. Capture immutable original clauses. Directly await a scoped NL SurveyUnitInventory literal on them.
+1. Capture immutable original clauses. Directly await an nl<SurveyUnitInventory> literal on those actual clauses.
    Its numbered inventory policy identifies frame-convention units and individual landmark units,
    original primary/supporting IDs, consistent sourceFrame and each local interpretation focus.
+   Its output is the actual typed inventory; this stage receives identity/scope data only. A clause
+   declaring a frame or naming a point in its stated frame contributes a reading unit. Identity links,
+   reused appearances and supporting observations remain original context unless they also declare
+   such a named coordinate item. Group each frame's own grid/axis/export declarations into its one
+   primary frame unit; shared anchor/identity clauses remain supporting context. All original clauses
+   remain available to later evidence discovery.
+   The inventory's focus names the judgment still to be made; convention alternatives, positions and
+   physical counterpart meanings are owned by their subsequent typed children.
 2. For every landmark unit return originalLocalName as the exact source-local name identifying that
    item, with its original primary clause. Several named items in one clause require distinct units.
    For frame units originalLocalName is null. Names and source scope are inventory data; position,

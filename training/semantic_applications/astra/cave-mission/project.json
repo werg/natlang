@@ -46,7 +46,8 @@
     "planMission/survey/readPassages/interpretPassage.nl",
     "planMission/survey/readEquipment/interpretGear.nl",
     "planMission/survey/readEquipment/interpretSensor.nl",
-    "planMission/survey/readFrames/advanceFrameUnit.nl"
+    "planMission/survey/readFrames/advanceFrameUnit.nl",
+    "planMission/survey/readFrames/advanceFrameUnit/discoverFrameSupport.nl"
   ],
   "fixture_files": [
     "contracts/mission.md",
@@ -263,7 +264,8 @@
         "args": {
           "unit": "SurveyReadingUnit",
           "frameClauses": "SourceClause[]",
-          "supportingClauses": "SourceClause[]"
+          "supportingClauses": "SourceClause[]",
+          "closure": "FrameSupportClosure"
         },
         "returns": "ConventionInterpretation",
         "owned_delta": "Translate one frame convention into explicit origin and basis alternatives."
@@ -349,6 +351,16 @@
         },
         "returns": "FrameReadFrontier",
         "owned_delta": "One original unit actual child judgment, original-name/quote binding, preserved prior results and one shorter pending frontier."
+      },
+      {
+        "path": "planMission/survey/readFrames/advanceFrameUnit/discoverFrameSupport.nl",
+        "args": {
+          "unit": "SurveyReadingUnit",
+          "primaryClauses": "SourceClause[]",
+          "clauses": "SourceClause[]"
+        },
+        "returns": "FrameSupportClosure",
+        "owned_delta": "Selected-unit reference/local role, owned primary convention scope and actual origin/identity/point/orientation dependency evidence; no convention evaluation."
       }
     ],
     "edges": [
@@ -469,6 +481,10 @@
         "caller": "planMission/survey/readFrames/advanceFrameUnit.nl",
         "callee": "planMission/survey/readFrames/interpretLandmark.nl",
         "resolution": "explicit uses"
+      },
+      {
+        "caller": "planMission/survey/readFrames/advanceFrameUnit.nl",
+        "callee": "planMission/survey/readFrames/advanceFrameUnit/discoverFrameSupport.nl"
       }
     ]
   },
@@ -542,9 +558,9 @@
       "consumed_by": "Actual inventory selects original reading units; actual child meanings supply typed survey fields and original source evidence."
     },
     {
-      "site": "planMission/survey/readFrames/advanceFrameUnit.nl",
+      "site": "planMission/survey/readFrames/advanceFrameUnit/discoverFrameSupport.nl",
       "result_type": "FrameSupportClosure",
-      "consumed_by": "All actual origin/identity/fixed-point/orientation group IDs unioned into supportedUnit and child supportingClauses; raw closure retained in completed FrameUnitResult."
+      "consumed_by": "Actual role and owned/cited clauses refine only the selected unit support, retained in FrameUnitResult; later convention receives actual closure and parent validates reference identity-map property."
     }
   ],
   "iteration_reducers": [
@@ -615,25 +631,25 @@
     "source_loader_checked": true,
     "typed_declarations_checked": true,
     "typed_reference_checked": true,
-    "independent_oracle_review": true,
+    "independent_oracle_review": false,
     "exact_result_replay": true,
     "exact_checker_controls_passed": 22,
     "live_qualified": false,
     "training_admitted": false,
-    "source_variant_review": "Focused v9 dependency-closure source/type/progress independently reviewed; actual live pending"
+    "source_variant_review": "Current v10 selected-unit scope and evidence-only discovery pending independent review"
   },
   "fixture_document_count": 10,
   "fixture_clause_count": 31,
   "composition": {
-    "nl_files": 30,
-    "nl_total_lines": 817,
-    "nl_body_lines": 621,
-    "numbered_steps": 219,
+    "nl_files": 31,
+    "nl_total_lines": 873,
+    "nl_body_lines": 669,
+    "numbered_steps": 229,
     "type_aliases": 60,
     "visible_crisp_policy_lines": 0
   },
   "reference_scope": "Full typed canonical source-validity witness, separate from actual callable execution. Equivalent policies are replayed rather than compared bytewise.",
-  "model_facing_debt": "v8 live omitted fixed point and correctly returned unknown conventions; v9 remains0/48 live, source-only.",
+  "model_facing_debt": "v9 global-unit contamination is assigned source-repair evidence; v10 0/48 live, no model-negative/training credit.",
   "source_replay": {
     "path": "/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/cave-app-consumer-depth-v6-package-v1",
     "scope": "Current consumer-depth v6 shared-loader full typed canonical source-validity replay only"
@@ -645,17 +661,16 @@
     "scope": "Independent source/oracle, exact lower-bound and policy-equivalence review. No actual application execution or training admission."
   },
   "source_variant": {
-    "id": "fixed-point-support-closure-v9",
-    "parent_source_sha256": "5feb77fce81170aa08a9970d847aa6de5c690ff8479c5deecffd5f24d4c6c620",
-    "parent_review": "c759e85e",
-    "live_parent_finding": "v8 partial be16f95d, Amber support /49turn106 and convention /51turn114",
-    "meaning": "Actual typed origin/identity/fixed-point/orientation groups and exact source evidence are unioned into convention input and retained in FrameUnitResult; no numerical fallback.",
-    "independent_source_review": true,
+    "id": "selected-unit-support-ownership-v10",
+    "parent_review": "1a1524a4",
+    "live_parent_partial_sha256": "85259f220bf73ecc99ab19ec29af1d9283ae43116fdb9cad3c8818a5b0508797",
+    "meaning": "Isolated typed NL evidence-discovery callable owns per-unit reference/local role and primary convention scope; parent consumes actual support and convention with exact structural/math guards.",
+    "independent_source_review": false,
     "author_controls": {
-      "frame_progress": 33,
+      "frame_progress": 38,
       "item_witness": 28,
       "mission_mechanism": 22,
-      "scope": "Authored exact controls, not NL execution or entailment"
+      "scope": "Exact authored type/provenance/progress/declared identity-map controls only; no semantic entailment or NL execution"
     }
   },
   "independent_reviews": [
@@ -712,9 +727,9 @@
       "scope": "Focused consumer-depth and actual Assay/input-scope follow-up; no live credit"
     }
   },
-  "readiness_scope": "Pinned one-case v9 diagnostic preparation only; actual live semantic/consumed-literal review and training admission false.",
-  "generation_ready": true,
+  "readiness_scope": "v10 source-only until focused peer; preserved v9 diagnostic has no admission.",
+  "generation_ready": false,
   "training_admission": false,
-  "pending_independent_source_review": null,
+  "pending_independent_source_review": "Selected-unit owned convention scope, typed evidence-only helper and actual role/closure/convention consumer",
   "historical_source_world_review_status": "Original mirrored-vault oracle remains independently reviewed; current v8 source handoff has not yet been independently reviewed."
 }

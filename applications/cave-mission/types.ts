@@ -90,4 +90,4 @@ export type SensorItemMeaning = { meaning: SensorMeaning | null; evidence: Surve
 export type FrameUnitResult = { unit: SurveyReadingUnit; status: 'accepted' | 'unresolved' | 'failed'; supportClosure: FrameSupportClosure | null; convention: ConventionInterpretation | null; landmark: LandmarkItemMeaning | null; alternatives: FrameAlternative[]; landmarks: LandmarkMention[]; failure: string | null; unresolved: string[] };
 export type FrameReadFrontier = { clauses: SourceClause[]; pendingUnits: SurveyReadingUnit[]; completed: FrameUnitResult[]; unresolved: string[] };
 
-export type FrameSupportClosure = { localOriginClauseIds: string[]; identityBridgeClauseIds: string[]; fixedPointClauseIds: string[]; orientationClauseIds: string[]; supportingClauseIds: string[]; evidence: SurveyQuote[]; unresolved: string[] };
+export type FrameSupportClosure = { frameRole: 'reference-grid' | 'local-export' | 'unresolved'; ownedConventionClauseIds: string[]; localOriginClauseIds: string[]; identityBridgeClauseIds: string[]; fixedPointClauseIds: string[]; orientationClauseIds: string[]; supportingClauseIds: string[]; evidence: SurveyQuote[]; unresolved: string[] };
