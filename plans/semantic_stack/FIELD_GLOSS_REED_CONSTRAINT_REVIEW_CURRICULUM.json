@@ -1,0 +1,50 @@
+{
+  "schema": "natlang.semantic-application-independent-constraint-review/1",
+  "case_id": "sol-field-reed-court-v1",
+  "reviewer": "semantic_stack_curriculum",
+  "source_package": "/tmp/field-gloss-independent-source-review-20261014",
+  "source_sha256": "72056bb7c3a0a8bd5f0790a55baa3f28ebbee00ced79a2234c8c260dd80c341b",
+  "visible_sha256": "c5c9b99651f2e0dd99437f804734259709e2c4c22a8016149cee3511460892c",
+  "manifest_sha256": "3a4cc8cdcafcb65205db40c00579037ae1dec76a43450349117e962bd84c5087",
+  "fixture_oracle_sha256": "db157d1c5da9d04b3cd0abb82a17917c3d7ef0f08948efd315a622e204261740",
+  "review_scope": "Independent reconstruction from original K01-K09, D01-D05, S1-S3, J1-J6, C1-C3 and X1-X3 source clauses. The invariant oracle was compared after derivation. No full typed reference, exact verifier or application execution is certified here.",
+  "finite_candidate_derivation": {
+    "declared_choice_vectors": 16,
+    "u1_constraint": "J1 has Ila agent and Ema patient/topic. F_NA=agent predicts the wrong agent or two distinct agents; F_NA=topic with F_RA=patient predicts the reversed event roles. Thus F_NA=topic and F_RA=agent remain across both B_NA and F_MI choices.",
+    "u4_constraint": "U4's new Nara NA form is absent from D01's frozen whole-word inventory. B_NA=productive remains; no new frozen entry may be invented.",
+    "u5_scope": "J5 establishes denied LIFT with Ema agent, Ila patient and Ila topic. P5 explicitly excludes future expectation, so event-negative and not-yet F_MI choices both survive.",
+    "surviving_vectors": [
+      { "B_NA": "productive", "F_NA": "topic", "F_RA": "agent", "F_MI": "event-negative" },
+      { "B_NA": "productive", "F_NA": "topic", "F_RA": "agent", "F_MI": "not-yet" }
+    ],
+    "canonical_u1_to_u6_pair_order_only": "For a frontier that tries each hypothesis against U1,U2,U3,U4,U5,U6 in that order: 96 original pairs, 32 actual attempts and 64 rejection-linked skips. This count is not a replacement for validating the emitted dependency-respecting frontier and its first-contradiction prefixes."
+  },
+  "heldout_meanings": {
+    "T_NEG": "Ema agent, Nara patient/topic, LIFT denied. The two surviving readings differ in prospective contribution: null versus true. Neither proves a future event.",
+    "T_STACK": "Nara agent/topic and Ila patient, LIFT occurs; productive stem-ra-na is needed for Nara.",
+    "T_SWAP": "Ila agent, Nara patient/topic, LIFT occurs; nominal order does not choose the agent."
+  },
+  "repair": "C1/C2 authorize replacement of only N1/NA_GLOSS's quoted agent value with a free equivalent topic explanation. N2's transcription, N3's reminder and the independent F_MI distinction remain unchanged.",
+  "exact_verifier_controls_requested": [
+    "positive generated hypothesis/attempt/reading ID alpha-renaming with consistent references",
+    "positive equivalent topic-replacement prose and set presentation permutations",
+    "negative scene truth or held-out X1-X3 used as a consultant constraint",
+    "negative futureExpected false inferred from P5's unasked future horizon",
+    "negative frozen B_NA lexicon silently expanded to narana",
+    "negative NA topic conflated with event agent or RA agent reversed by word order",
+    "negative X1's distinct prospective readings merged or one survivor omitted",
+    "negative patch beyond exact authorized agent span or loss of N2/N3/F_MI",
+    "negative missing original candidate/evidence pair, first contradiction prefix or rejection-linked skip"
+  ],
+  "source_package_preflight": {
+    "program_file_count": 37,
+    "nl_file_count": 34,
+    "call_graph_edges": 35,
+    "declared_scoped_sites": 13,
+    "status": "pass_source_only"
+  },
+  "full_typed_reference_review": false,
+  "exact_verifier_review": false,
+  "live_qualified": false,
+  "training_admission": false
+}
