@@ -73,7 +73,7 @@
         "clauseId": "P02",
         "sourceId": "CB02",
         "path": "controls/format.md",
-        "text": "[P02] Original turn IDs: P17,W18,S18,T18_DOUBT,T18_ADOPT,N18,B18,B19,C18,S19_EARLY,C19,O19_REPORT,REM19,O19_ADOPT. Receipt IDs: HP17,HW18_S,RW18_T,HN18,HB19,HC18,RC19_S,RADOPT_O,HREM19. Physical IDs: F_COLLECTION,F_KEY,F_CODE,F_BRIEF,F_ADOPTIONS."
+        "text": "[P02] Original turn IDs: P17,W18,S18,T18_DOUBT,T18_ADOPT,N18,B18,B19,C18,S19_EARLY,C19,O19_REPORT,REM19,O19_ADOPT. Receipt IDs: HP17,HW18_S,RW18_T,HN18,HB19,HC18,RC19_S,RC19_N,RADOPT_O,HREM19. Physical IDs: F_COLLECTION,F_KEY,F_CODE,F_BRIEF,F_ADOPTIONS."
       },
       {
         "clauseId": "P03",
@@ -206,6 +206,12 @@
         "sourceId": "CB09",
         "path": "conversation/reports/collection.md",
         "text": "[RC19_S] C19 with verified F_COLLECTION is dispatched at day19 hour10.5 and received/read by Sada only at day20 hour1. Receipt makes evidence available but supplies no adoption; no signed Sada correction-adoption note exists in this packet."
+      },
+      {
+        "clauseId": "RC19_N",
+        "sourceId": "CB09",
+        "path": "conversation/reports/collection.md",
+        "text": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
       },
       {
         "clauseId": "O19_REPORT",
@@ -1532,6 +1538,32 @@
               "sourceId": "CB10",
               "path": "conversation/reports/issuer-and-forward.md",
               "quote": "[RADOPT_O] The signed S18/T18_ADOPT records and verified F_ADOPTIONS summary reach Oren at day19 hour12, not earlier. Their authentic content includes both actual adoption times, but arrival alone is not an Oren endorsement."
+            }
+          ]
+        },
+        {
+          "receiptId": "RC19_N",
+          "turnIds": [],
+          "recipientId": "Noor",
+          "dispatchedAt": null,
+          "receivedAt": {
+            "day": 19,
+            "hour": 10.25
+          },
+          "readAt": {
+            "day": 19,
+            "hour": 10.25
+          },
+          "verifiedEvidence": true,
+          "verifiedFactIds": [
+            "F_COLLECTION"
+          ],
+          "witnesses": [
+            {
+              "clauseId": "RC19_N",
+              "sourceId": "CB09",
+              "path": "conversation/reports/collection.md",
+              "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
             }
           ]
         },
@@ -4205,6 +4237,51 @@
         ]
       },
       {
+        "episodeId": "E_19_10p25",
+        "at": {
+          "day": 19,
+          "hour": 10.25
+        },
+        "kind": "receipt",
+        "turnIds": [],
+        "actIds": [],
+        "factIds": [],
+        "availability": [
+          {
+            "participantId": "Noor",
+            "turnIds": [],
+            "actIds": [],
+            "receiptIds": [
+              "RC19_N"
+            ],
+            "verifiedFactIds": [
+              "F_COLLECTION"
+            ],
+            "availableAt": {
+              "day": 19,
+              "hour": 10.25
+            },
+            "reason": "Actual original speaker access or documented receipt; evidence availability does not imply adoption.",
+            "witnesses": [
+              {
+                "clauseId": "RC19_N",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+              }
+            ]
+          }
+        ],
+        "witnesses": [
+          {
+            "clauseId": "RC19_N",
+            "sourceId": "CB09",
+            "path": "conversation/reports/collection.md",
+            "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+          }
+        ]
+      },
+      {
         "episodeId": "E_19_10p5",
         "at": {
           "day": 19,
@@ -5271,7 +5348,9 @@
           "A_C18_0",
           "A_C19_0"
         ],
-        "availableVerifiedFactIds": [],
+        "availableVerifiedFactIds": [
+          "F_COLLECTION"
+        ],
         "beliefs": [
           {
             "beliefId": "B_C18_0",
@@ -5315,7 +5394,9 @@
             "availabilityEpisodeIds": [
               "E_19_10p5"
             ],
-            "verifiedFactIds": [],
+            "verifiedFactIds": [
+              "F_COLLECTION"
+            ],
             "witnesses": [
               {
                 "clauseId": "C19",
@@ -5341,7 +5422,9 @@
             "availabilityEpisodeIds": [
               "E_19_10p5"
             ],
-            "verifiedFactIds": [],
+            "verifiedFactIds": [
+              "F_COLLECTION"
+            ],
             "witnesses": [
               {
                 "clauseId": "C19",
@@ -10587,6 +10670,641 @@
         ]
       },
       {
+        "episodeId": "E_19_10p25",
+        "at": {
+          "day": 19,
+          "hour": 10.25
+        },
+        "views": [
+          {
+            "participantId": "Oren",
+            "availableTurnIds": [
+              "P17",
+              "W18",
+              "N18",
+              "B18",
+              "B19"
+            ],
+            "availableActIds": [
+              "A_P17_0",
+              "A_W18_0",
+              "A_N18_0",
+              "A_B18_0",
+              "A_B19_0"
+            ],
+            "availableVerifiedFactIds": [],
+            "beliefs": [],
+            "commitments": [
+              {
+                "commitmentId": "K_P17",
+                "issuerId": "Oren",
+                "beneficiaryIds": [
+                  "Sada",
+                  "Tavi"
+                ],
+                "sourceActId": "A_P17_0",
+                "propositionIds": [
+                  "P_KEY20",
+                  "P_CODE20"
+                ],
+                "due": {
+                  "day": 20,
+                  "hour": null
+                },
+                "conditions": [
+                  {
+                    "predicateId": "P17_COLLECT",
+                    "actual": true,
+                    "issuerKnows": false,
+                    "beneficiaryBelieves": null,
+                    "reason": "Authored actual predicate timeline; issuer has no predicate endorsement with available verified support. Divergent beneficiary views stay null, with actual individual views retained in history.",
+                    "witnesses": [
+                      {
+                        "clauseId": "P17",
+                        "sourceId": "CB04",
+                        "path": "conversation/promises/original.md",
+                        "quote": "[P17] Authenticated original turn P17: Oren, day17 hour10, to Sada and Tavi: \"If Noor collects the crate before day20 noon, I promise to release the key to Sada and provide the access code to Tavi on day20.\" Both beneficiaries and both promised consequent events belong to this one original promise."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      },
+                      {
+                        "clauseId": "R05",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      }
+                    ]
+                  }
+                ],
+                "fulfillment": [
+                  {
+                    "predicateId": "P17_KEY",
+                    "actual": null,
+                    "issuerKnows": false,
+                    "beneficiaryBelieves": null,
+                    "reason": "Authored actual predicate timeline; issuer has no predicate endorsement with available verified support. Divergent beneficiary views stay null, with actual individual views retained in history.",
+                    "witnesses": [
+                      {
+                        "clauseId": "P17",
+                        "sourceId": "CB04",
+                        "path": "conversation/promises/original.md",
+                        "quote": "[P17] Authenticated original turn P17: Oren, day17 hour10, to Sada and Tavi: \"If Noor collects the crate before day20 noon, I promise to release the key to Sada and provide the access code to Tavi on day20.\" Both beneficiaries and both promised consequent events belong to this one original promise."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      },
+                      {
+                        "clauseId": "R05",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      }
+                    ]
+                  },
+                  {
+                    "predicateId": "P17_CODE",
+                    "actual": null,
+                    "issuerKnows": false,
+                    "beneficiaryBelieves": null,
+                    "reason": "Authored actual predicate timeline; issuer has no predicate endorsement with available verified support. Divergent beneficiary views stay null, with actual individual views retained in history.",
+                    "witnesses": [
+                      {
+                        "clauseId": "P17",
+                        "sourceId": "CB04",
+                        "path": "conversation/promises/original.md",
+                        "quote": "[P17] Authenticated original turn P17: Oren, day17 hour10, to Sada and Tavi: \"If Noor collects the crate before day20 noon, I promise to release the key to Sada and provide the access code to Tavi on day20.\" Both beneficiaries and both promised consequent events belong to this one original promise."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      },
+                      {
+                        "clauseId": "R05",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      }
+                    ]
+                  }
+                ],
+                "status": "retracted",
+                "establishedAt": {
+                  "day": 17,
+                  "hour": 10
+                },
+                "witnesses": [
+                  {
+                    "clauseId": "P17",
+                    "sourceId": "CB04",
+                    "path": "conversation/promises/original.md",
+                    "quote": "[P17] Authenticated original turn P17: Oren, day17 hour10, to Sada and Tavi: \"If Noor collects the crate before day20 noon, I promise to release the key to Sada and provide the access code to Tavi on day20.\" Both beneficiaries and both promised consequent events belong to this one original promise."
+                  }
+                ]
+              },
+              {
+                "commitmentId": "K_N18",
+                "issuerId": "Oren",
+                "beneficiaryIds": [
+                  "Sada"
+                ],
+                "sourceActId": "A_N18_0",
+                "propositionIds": [
+                  "P_KEY19"
+                ],
+                "due": {
+                  "day": 19,
+                  "hour": null
+                },
+                "conditions": [
+                  {
+                    "predicateId": "N18_COLLECT",
+                    "actual": true,
+                    "issuerKnows": false,
+                    "beneficiaryBelieves": true,
+                    "reason": "Authored actual predicate timeline; issuer has no predicate endorsement with available verified support. Divergent beneficiary views stay null, with actual individual views retained in history.",
+                    "witnesses": [
+                      {
+                        "clauseId": "N18",
+                        "sourceId": "CB07",
+                        "path": "conversation/promises/fresh.md",
+                        "quote": "[N18] Authenticated original turn N18: Oren, day18 hour5, to Sada only: \"If Noor collects before day20 noon and Sada personally acknowledges shipping brief B3, I make a new promise to release the key to Sada on day19.\" This is a fresh performed promise, not a quotation, revival or amendment of P17. Tavi has no beneficiary role in N18."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      },
+                      {
+                        "clauseId": "R05",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      }
+                    ]
+                  },
+                  {
+                    "predicateId": "N18_ACK",
+                    "actual": true,
+                    "issuerKnows": false,
+                    "beneficiaryBelieves": true,
+                    "reason": "Authored actual predicate timeline; issuer has no predicate endorsement with available verified support. Divergent beneficiary views stay null, with actual individual views retained in history.",
+                    "witnesses": [
+                      {
+                        "clauseId": "N18",
+                        "sourceId": "CB07",
+                        "path": "conversation/promises/fresh.md",
+                        "quote": "[N18] Authenticated original turn N18: Oren, day18 hour5, to Sada only: \"If Noor collects before day20 noon and Sada personally acknowledges shipping brief B3, I make a new promise to release the key to Sada on day19.\" This is a fresh performed promise, not a quotation, revival or amendment of P17. Tavi has no beneficiary role in N18."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      },
+                      {
+                        "clauseId": "R05",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      }
+                    ]
+                  }
+                ],
+                "fulfillment": [
+                  {
+                    "predicateId": "N18_KEY",
+                    "actual": null,
+                    "issuerKnows": false,
+                    "beneficiaryBelieves": null,
+                    "reason": "Authored actual predicate timeline; issuer has no predicate endorsement with available verified support. Divergent beneficiary views stay null, with actual individual views retained in history.",
+                    "witnesses": [
+                      {
+                        "clauseId": "N18",
+                        "sourceId": "CB07",
+                        "path": "conversation/promises/fresh.md",
+                        "quote": "[N18] Authenticated original turn N18: Oren, day18 hour5, to Sada only: \"If Noor collects before day20 noon and Sada personally acknowledges shipping brief B3, I make a new promise to release the key to Sada on day19.\" This is a fresh performed promise, not a quotation, revival or amendment of P17. Tavi has no beneficiary role in N18."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      },
+                      {
+                        "clauseId": "R05",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      }
+                    ]
+                  }
+                ],
+                "status": "active",
+                "establishedAt": {
+                  "day": 18,
+                  "hour": 5
+                },
+                "witnesses": [
+                  {
+                    "clauseId": "N18",
+                    "sourceId": "CB07",
+                    "path": "conversation/promises/fresh.md",
+                    "quote": "[N18] Authenticated original turn N18: Oren, day18 hour5, to Sada only: \"If Noor collects before day20 noon and Sada personally acknowledges shipping brief B3, I make a new promise to release the key to Sada on day19.\" This is a fresh performed promise, not a quotation, revival or amendment of P17. Tavi has no beneficiary role in N18."
+                  }
+                ]
+              }
+            ],
+            "revisionIds": [],
+            "adoptedRevisionActIds": []
+          },
+          {
+            "participantId": "Sada",
+            "availableTurnIds": [
+              "P17",
+              "W18",
+              "S18",
+              "N18",
+              "B18",
+              "C18",
+              "S19_EARLY",
+              "B19"
+            ],
+            "availableActIds": [
+              "A_P17_0",
+              "A_W18_0",
+              "A_S18_0",
+              "A_N18_0",
+              "A_B18_0",
+              "A_C18_0",
+              "A_S19_EARLY_0",
+              "A_B19_0"
+            ],
+            "availableVerifiedFactIds": [],
+            "beliefs": [
+              {
+                "beliefId": "B_B18_0",
+                "participantId": "Sada",
+                "propositionId": "P_ACK_B2",
+                "value": true,
+                "status": "endorsed",
+                "acquiredAt": {
+                  "day": 18,
+                  "hour": 6
+                },
+                "sourceActIds": [
+                  "A_B18_0"
+                ],
+                "availabilityEpisodeIds": [
+                  "E_18_6"
+                ],
+                "verifiedFactIds": [],
+                "witnesses": [
+                  {
+                    "clauseId": "B18",
+                    "sourceId": "CB08",
+                    "path": "conversation/acknowledgments/versions.md",
+                    "quote": "[B18] Authenticated turn B18: Sada, day18 hour6, to Oren: \"I personally acknowledge shipping brief B2, not B3.\""
+                  }
+                ]
+              },
+              {
+                "beliefId": "B_B18_1",
+                "participantId": "Sada",
+                "propositionId": "P_ACK_B3",
+                "value": false,
+                "status": "endorsed",
+                "acquiredAt": {
+                  "day": 18,
+                  "hour": 6
+                },
+                "sourceActIds": [
+                  "A_B18_0"
+                ],
+                "availabilityEpisodeIds": [
+                  "E_18_6"
+                ],
+                "verifiedFactIds": [],
+                "witnesses": [
+                  {
+                    "clauseId": "B18",
+                    "sourceId": "CB08",
+                    "path": "conversation/acknowledgments/versions.md",
+                    "quote": "[B18] Authenticated turn B18: Sada, day18 hour6, to Oren: \"I personally acknowledge shipping brief B2, not B3.\""
+                  }
+                ]
+              },
+              {
+                "beliefId": "B_S19_EARLY_0",
+                "participantId": "Sada",
+                "propositionId": "P_COLLECT18",
+                "value": true,
+                "status": "endorsed",
+                "acquiredAt": {
+                  "day": 19,
+                  "hour": 8
+                },
+                "sourceActIds": [
+                  "A_S19_EARLY_0",
+                  "A_C18_0"
+                ],
+                "availabilityEpisodeIds": [
+                  "E_19_8"
+                ],
+                "verifiedFactIds": [],
+                "witnesses": [
+                  {
+                    "clauseId": "S19_EARLY",
+                    "sourceId": "CB09",
+                    "path": "conversation/reports/collection.md",
+                    "quote": "[S19_EARLY] Signed private note S19_EARLY: Sada, day19 hour8: \"I believe Noor's C18 claim that the crate was collected on day18; therefore I also believe it was collected before day20 noon.\" This endorses both named propositions but has no verified corroboration yet."
+                  }
+                ]
+              },
+              {
+                "beliefId": "B_S19_EARLY_1",
+                "participantId": "Sada",
+                "propositionId": "P_COLLECT20",
+                "value": true,
+                "status": "endorsed",
+                "acquiredAt": {
+                  "day": 19,
+                  "hour": 8
+                },
+                "sourceActIds": [
+                  "A_S19_EARLY_0",
+                  "A_C18_0"
+                ],
+                "availabilityEpisodeIds": [
+                  "E_19_8"
+                ],
+                "verifiedFactIds": [],
+                "witnesses": [
+                  {
+                    "clauseId": "S19_EARLY",
+                    "sourceId": "CB09",
+                    "path": "conversation/reports/collection.md",
+                    "quote": "[S19_EARLY] Signed private note S19_EARLY: Sada, day19 hour8: \"I believe Noor's C18 claim that the crate was collected on day18; therefore I also believe it was collected before day20 noon.\" This endorses both named propositions but has no verified corroboration yet."
+                  }
+                ]
+              },
+              {
+                "beliefId": "B_B19_0",
+                "participantId": "Sada",
+                "propositionId": "P_ACK_B3",
+                "value": true,
+                "status": "endorsed",
+                "acquiredAt": {
+                  "day": 19,
+                  "hour": 9
+                },
+                "sourceActIds": [
+                  "A_B19_0"
+                ],
+                "availabilityEpisodeIds": [
+                  "E_19_9"
+                ],
+                "verifiedFactIds": [],
+                "witnesses": [
+                  {
+                    "clauseId": "B19",
+                    "sourceId": "CB08",
+                    "path": "conversation/acknowledgments/versions.md",
+                    "quote": "[B19] Authenticated turn B19: Sada, day19 hour9, to Oren: \"I now personally acknowledge shipping brief B3.\""
+                  }
+                ]
+              }
+            ],
+            "commitments": [],
+            "revisionIds": [],
+            "adoptedRevisionActIds": [
+              "A_W18_0"
+            ]
+          },
+          {
+            "participantId": "Tavi",
+            "availableTurnIds": [
+              "P17",
+              "T18_DOUBT",
+              "W18",
+              "T18_ADOPT"
+            ],
+            "availableActIds": [
+              "A_P17_0",
+              "A_T18_DOUBT_0",
+              "A_W18_0",
+              "A_T18_ADOPT_0"
+            ],
+            "availableVerifiedFactIds": [],
+            "beliefs": [
+              {
+                "beliefId": "B_T18_DOUBT_0",
+                "participantId": "Tavi",
+                "propositionId": "P_ALL_ADOPT",
+                "value": null,
+                "status": "doubted",
+                "acquiredAt": {
+                  "day": 18,
+                  "hour": 2.5
+                },
+                "sourceActIds": [
+                  "A_T18_DOUBT_0"
+                ],
+                "availabilityEpisodeIds": [
+                  "E_18_2p5"
+                ],
+                "verifiedFactIds": [],
+                "witnesses": [
+                  {
+                    "clauseId": "T18_DOUBT",
+                    "sourceId": "CB06",
+                    "path": "conversation/revisions/adoptions.md",
+                    "quote": "[T18_DOUBT] Signed private note T18_DOUBT: Tavi, day18 hour2.5: \"I do not yet have W18. I doubt that the original promise has been jointly withdrawn; I adopt no withdrawal.\" This is explicit nonadoption before arrival."
+                  }
+                ]
+              }
+            ],
+            "commitments": [],
+            "revisionIds": [
+              "REV_T18_ADOPT"
+            ],
+            "adoptedRevisionActIds": [
+              "A_W18_0"
+            ]
+          },
+          {
+            "participantId": "Noor",
+            "availableTurnIds": [
+              "C18"
+            ],
+            "availableActIds": [
+              "A_C18_0"
+            ],
+            "availableVerifiedFactIds": [
+              "F_COLLECTION"
+            ],
+            "beliefs": [
+              {
+                "beliefId": "B_C18_0",
+                "participantId": "Noor",
+                "propositionId": "P_COLLECT18",
+                "value": true,
+                "status": "endorsed",
+                "acquiredAt": {
+                  "day": 18,
+                  "hour": 8
+                },
+                "sourceActIds": [
+                  "A_C18_0"
+                ],
+                "availabilityEpisodeIds": [
+                  "E_18_8"
+                ],
+                "verifiedFactIds": [],
+                "witnesses": [
+                  {
+                    "clauseId": "C18",
+                    "sourceId": "CB09",
+                    "path": "conversation/reports/collection.md",
+                    "quote": "[C18] Authenticated turn C18: Noor, day18 hour8, to Sada: \"I collected the crate today.\" This is Noor's asserted claim; the complete physical log supplies actual timing separately."
+                  }
+                ]
+              }
+            ],
+            "commitments": [],
+            "revisionIds": [],
+            "adoptedRevisionActIds": []
+          },
+          {
+            "participantId": "Remy",
+            "availableTurnIds": [],
+            "availableActIds": [],
+            "availableVerifiedFactIds": [],
+            "beliefs": [],
+            "commitments": [],
+            "revisionIds": [],
+            "adoptedRevisionActIds": []
+          }
+        ]
+      },
+      {
         "episodeId": "E_19_10p5",
         "at": {
           "day": 19,
@@ -11176,7 +11894,9 @@
               "A_C18_0",
               "A_C19_0"
             ],
-            "availableVerifiedFactIds": [],
+            "availableVerifiedFactIds": [
+              "F_COLLECTION"
+            ],
             "beliefs": [
               {
                 "beliefId": "B_C18_0",
@@ -11220,7 +11940,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -11246,7 +11968,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -11867,7 +12591,9 @@
               "A_C18_0",
               "A_C19_0"
             ],
-            "availableVerifiedFactIds": [],
+            "availableVerifiedFactIds": [
+              "F_COLLECTION"
+            ],
             "beliefs": [
               {
                 "beliefId": "B_C18_0",
@@ -11911,7 +12637,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -11937,7 +12665,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -12566,7 +13296,9 @@
               "A_C18_0",
               "A_C19_0"
             ],
-            "availableVerifiedFactIds": [],
+            "availableVerifiedFactIds": [
+              "F_COLLECTION"
+            ],
             "beliefs": [
               {
                 "beliefId": "B_C18_0",
@@ -12610,7 +13342,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -12636,7 +13370,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -13298,7 +14034,9 @@
               "A_C18_0",
               "A_C19_0"
             ],
-            "availableVerifiedFactIds": [],
+            "availableVerifiedFactIds": [
+              "F_COLLECTION"
+            ],
             "beliefs": [
               {
                 "beliefId": "B_C18_0",
@@ -13342,7 +14080,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -13368,7 +14108,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -14033,7 +14775,9 @@
               "A_C18_0",
               "A_C19_0"
             ],
-            "availableVerifiedFactIds": [],
+            "availableVerifiedFactIds": [
+              "F_COLLECTION"
+            ],
             "beliefs": [
               {
                 "beliefId": "B_C18_0",
@@ -14077,7 +14821,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -14103,7 +14849,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -14773,7 +15521,9 @@
               "A_C18_0",
               "A_C19_0"
             ],
-            "availableVerifiedFactIds": [],
+            "availableVerifiedFactIds": [
+              "F_COLLECTION"
+            ],
             "beliefs": [
               {
                 "beliefId": "B_C18_0",
@@ -14817,7 +15567,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -14843,7 +15595,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -15517,7 +16271,9 @@
               "A_C18_0",
               "A_C19_0"
             ],
-            "availableVerifiedFactIds": [],
+            "availableVerifiedFactIds": [
+              "F_COLLECTION"
+            ],
             "beliefs": [
               {
                 "beliefId": "B_C18_0",
@@ -15561,7 +16317,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -15587,7 +16345,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -16261,7 +17021,9 @@
               "A_C18_0",
               "A_C19_0"
             ],
-            "availableVerifiedFactIds": [],
+            "availableVerifiedFactIds": [
+              "F_COLLECTION"
+            ],
             "beliefs": [
               {
                 "beliefId": "B_C18_0",
@@ -16305,7 +17067,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -16331,7 +17095,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -17005,7 +17771,9 @@
               "A_C18_0",
               "A_C19_0"
             ],
-            "availableVerifiedFactIds": [],
+            "availableVerifiedFactIds": [
+              "F_COLLECTION"
+            ],
             "beliefs": [
               {
                 "beliefId": "B_C18_0",
@@ -17049,7 +17817,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -17075,7 +17845,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -17628,6 +18400,37 @@
         ],
         "revisions": [
           {
+            "selection": {
+              "revisionActId": "A_W18_0",
+              "targetActIds": [
+                "A_P17_0"
+              ],
+              "targetPropositionIds": [],
+              "kind": "commitment-retraction",
+              "communicated": true,
+              "reason": "The actual performed/adopted original revision targets its exact source lineage; belief correction and promise withdrawal remain distinct scopes.",
+              "witnesses": [
+                {
+                  "clauseId": "W18",
+                  "sourceId": "CB05",
+                  "path": "conversation/revisions/withdrawal.md",
+                  "quote": "[W18] Authenticated original turn W18: Oren, day18 hour0, addressed to Sada and Tavi: \"I withdraw my original promise P17. This withdrawal names P17 only; no later new promise is withdrawn.\" It is dispatched separately to both named beneficiaries at that time."
+                },
+                {
+                  "clauseId": "W18",
+                  "sourceId": "CB05",
+                  "path": "conversation/revisions/withdrawal.md",
+                  "quote": "[W18] Authenticated original turn W18: Oren, day18 hour0, addressed to Sada and Tavi: \"I withdraw my original promise P17. This withdrawal names P17 only; no later new promise is withdrawn.\" It is dispatched separately to both named beneficiaries at that time."
+                },
+                {
+                  "clauseId": "R06",
+                  "sourceId": "CB01",
+                  "path": "controls/model.md",
+                  "quote": "[R06] Withdrawing a promise requires the issuer's communicated retraction of its exact original promise plus explicit adoption by every named beneficiary. Partial adoption preserves the actual adopter set without globally retracting. Final adoption changes the issuer-owned normative commitment, even if the issuer has not learned that adoption occurred. Belief/knowledge of adoption is separately tracked."
+                }
+              ],
+              "unresolved": []
+            },
             "revisionId": null,
             "participantId": "Oren",
             "commitmentOwnerId": null,
@@ -18102,6 +18905,37 @@
         ],
         "revisions": [
           {
+            "selection": {
+              "revisionActId": "A_W18_0",
+              "targetActIds": [
+                "A_P17_0"
+              ],
+              "targetPropositionIds": [],
+              "kind": "commitment-retraction",
+              "communicated": true,
+              "reason": "The actual performed/adopted original revision targets its exact source lineage; belief correction and promise withdrawal remain distinct scopes.",
+              "witnesses": [
+                {
+                  "clauseId": "S18",
+                  "sourceId": "CB06",
+                  "path": "conversation/revisions/adoptions.md",
+                  "quote": "[S18] Signed private note S18: Sada, day18 hour2: \"I adopt Oren's communicated withdrawal W18 of P17.\" It adopts that exact revision. It is not a new withdrawal issued by Sada and is not sent to Oren at this time."
+                },
+                {
+                  "clauseId": "W18",
+                  "sourceId": "CB05",
+                  "path": "conversation/revisions/withdrawal.md",
+                  "quote": "[W18] Authenticated original turn W18: Oren, day18 hour0, addressed to Sada and Tavi: \"I withdraw my original promise P17. This withdrawal names P17 only; no later new promise is withdrawn.\" It is dispatched separately to both named beneficiaries at that time."
+                },
+                {
+                  "clauseId": "R06",
+                  "sourceId": "CB01",
+                  "path": "controls/model.md",
+                  "quote": "[R06] Withdrawing a promise requires the issuer's communicated retraction of its exact original promise plus explicit adoption by every named beneficiary. Partial adoption preserves the actual adopter set without globally retracting. Final adoption changes the issuer-owned normative commitment, even if the issuer has not learned that adoption occurred. Belief/knowledge of adoption is separately tracked."
+                }
+              ],
+              "unresolved": []
+            },
             "revisionId": null,
             "participantId": "Sada",
             "commitmentOwnerId": null,
@@ -18843,6 +19677,37 @@
         ],
         "revisions": [
           {
+            "selection": {
+              "revisionActId": "A_W18_0",
+              "targetActIds": [
+                "A_P17_0"
+              ],
+              "targetPropositionIds": [],
+              "kind": "commitment-retraction",
+              "communicated": true,
+              "reason": "The actual performed/adopted original revision targets its exact source lineage; belief correction and promise withdrawal remain distinct scopes.",
+              "witnesses": [
+                {
+                  "clauseId": "T18_ADOPT",
+                  "sourceId": "CB06",
+                  "path": "conversation/revisions/adoptions.md",
+                  "quote": "[T18_ADOPT] Signed private note T18_ADOPT: Tavi, day18 hour4: \"I have read W18 and adopt Oren's withdrawal of P17.\" This exact adoption joins Sada's earlier adoption. No other adoption exists before it; it is not yet shared with Oren."
+                },
+                {
+                  "clauseId": "W18",
+                  "sourceId": "CB05",
+                  "path": "conversation/revisions/withdrawal.md",
+                  "quote": "[W18] Authenticated original turn W18: Oren, day18 hour0, addressed to Sada and Tavi: \"I withdraw my original promise P17. This withdrawal names P17 only; no later new promise is withdrawn.\" It is dispatched separately to both named beneficiaries at that time."
+                },
+                {
+                  "clauseId": "R06",
+                  "sourceId": "CB01",
+                  "path": "controls/model.md",
+                  "quote": "[R06] Withdrawing a promise requires the issuer's communicated retraction of its exact original promise plus explicit adoption by every named beneficiary. Partial adoption preserves the actual adopter set without globally retracting. Final adoption changes the issuer-owned normative commitment, even if the issuer has not learned that adoption occurred. Belief/knowledge of adoption is separately tracked."
+                }
+              ],
+              "unresolved": []
+            },
             "revisionId": "REV_T18_ADOPT",
             "participantId": "Tavi",
             "commitmentOwnerId": "Oren",
@@ -21583,6 +22448,383 @@
         "availability": []
       },
       {
+        "episodeId": "E_19_10p25",
+        "endorsements": [],
+        "beliefs": [],
+        "commitments": [
+          {
+            "participantId": "Oren",
+            "add": [],
+            "replace": [
+              {
+                "commitmentId": "K_P17",
+                "issuerId": "Oren",
+                "beneficiaryIds": [
+                  "Sada",
+                  "Tavi"
+                ],
+                "sourceActId": "A_P17_0",
+                "propositionIds": [
+                  "P_KEY20",
+                  "P_CODE20"
+                ],
+                "due": {
+                  "day": 20,
+                  "hour": null
+                },
+                "conditions": [
+                  {
+                    "predicateId": "P17_COLLECT",
+                    "actual": true,
+                    "issuerKnows": false,
+                    "beneficiaryBelieves": null,
+                    "reason": "Authored actual predicate timeline; issuer has no predicate endorsement with available verified support. Divergent beneficiary views stay null, with actual individual views retained in history.",
+                    "witnesses": [
+                      {
+                        "clauseId": "P17",
+                        "sourceId": "CB04",
+                        "path": "conversation/promises/original.md",
+                        "quote": "[P17] Authenticated original turn P17: Oren, day17 hour10, to Sada and Tavi: \"If Noor collects the crate before day20 noon, I promise to release the key to Sada and provide the access code to Tavi on day20.\" Both beneficiaries and both promised consequent events belong to this one original promise."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      },
+                      {
+                        "clauseId": "R05",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      }
+                    ]
+                  }
+                ],
+                "fulfillment": [
+                  {
+                    "predicateId": "P17_KEY",
+                    "actual": null,
+                    "issuerKnows": false,
+                    "beneficiaryBelieves": null,
+                    "reason": "Authored actual predicate timeline; issuer has no predicate endorsement with available verified support. Divergent beneficiary views stay null, with actual individual views retained in history.",
+                    "witnesses": [
+                      {
+                        "clauseId": "P17",
+                        "sourceId": "CB04",
+                        "path": "conversation/promises/original.md",
+                        "quote": "[P17] Authenticated original turn P17: Oren, day17 hour10, to Sada and Tavi: \"If Noor collects the crate before day20 noon, I promise to release the key to Sada and provide the access code to Tavi on day20.\" Both beneficiaries and both promised consequent events belong to this one original promise."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      },
+                      {
+                        "clauseId": "R05",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      }
+                    ]
+                  },
+                  {
+                    "predicateId": "P17_CODE",
+                    "actual": null,
+                    "issuerKnows": false,
+                    "beneficiaryBelieves": null,
+                    "reason": "Authored actual predicate timeline; issuer has no predicate endorsement with available verified support. Divergent beneficiary views stay null, with actual individual views retained in history.",
+                    "witnesses": [
+                      {
+                        "clauseId": "P17",
+                        "sourceId": "CB04",
+                        "path": "conversation/promises/original.md",
+                        "quote": "[P17] Authenticated original turn P17: Oren, day17 hour10, to Sada and Tavi: \"If Noor collects the crate before day20 noon, I promise to release the key to Sada and provide the access code to Tavi on day20.\" Both beneficiaries and both promised consequent events belong to this one original promise."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      },
+                      {
+                        "clauseId": "R05",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      }
+                    ]
+                  }
+                ],
+                "status": "retracted",
+                "establishedAt": {
+                  "day": 17,
+                  "hour": 10
+                },
+                "witnesses": [
+                  {
+                    "clauseId": "P17",
+                    "sourceId": "CB04",
+                    "path": "conversation/promises/original.md",
+                    "quote": "[P17] Authenticated original turn P17: Oren, day17 hour10, to Sada and Tavi: \"If Noor collects the crate before day20 noon, I promise to release the key to Sada and provide the access code to Tavi on day20.\" Both beneficiaries and both promised consequent events belong to this one original promise."
+                  }
+                ]
+              },
+              {
+                "commitmentId": "K_N18",
+                "issuerId": "Oren",
+                "beneficiaryIds": [
+                  "Sada"
+                ],
+                "sourceActId": "A_N18_0",
+                "propositionIds": [
+                  "P_KEY19"
+                ],
+                "due": {
+                  "day": 19,
+                  "hour": null
+                },
+                "conditions": [
+                  {
+                    "predicateId": "N18_COLLECT",
+                    "actual": true,
+                    "issuerKnows": false,
+                    "beneficiaryBelieves": true,
+                    "reason": "Authored actual predicate timeline; issuer has no predicate endorsement with available verified support. Divergent beneficiary views stay null, with actual individual views retained in history.",
+                    "witnesses": [
+                      {
+                        "clauseId": "N18",
+                        "sourceId": "CB07",
+                        "path": "conversation/promises/fresh.md",
+                        "quote": "[N18] Authenticated original turn N18: Oren, day18 hour5, to Sada only: \"If Noor collects before day20 noon and Sada personally acknowledges shipping brief B3, I make a new promise to release the key to Sada on day19.\" This is a fresh performed promise, not a quotation, revival or amendment of P17. Tavi has no beneficiary role in N18."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      },
+                      {
+                        "clauseId": "R05",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      }
+                    ]
+                  },
+                  {
+                    "predicateId": "N18_ACK",
+                    "actual": true,
+                    "issuerKnows": false,
+                    "beneficiaryBelieves": true,
+                    "reason": "Authored actual predicate timeline; issuer has no predicate endorsement with available verified support. Divergent beneficiary views stay null, with actual individual views retained in history.",
+                    "witnesses": [
+                      {
+                        "clauseId": "N18",
+                        "sourceId": "CB07",
+                        "path": "conversation/promises/fresh.md",
+                        "quote": "[N18] Authenticated original turn N18: Oren, day18 hour5, to Sada only: \"If Noor collects before day20 noon and Sada personally acknowledges shipping brief B3, I make a new promise to release the key to Sada on day19.\" This is a fresh performed promise, not a quotation, revival or amendment of P17. Tavi has no beneficiary role in N18."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      },
+                      {
+                        "clauseId": "R05",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      }
+                    ]
+                  }
+                ],
+                "fulfillment": [
+                  {
+                    "predicateId": "N18_KEY",
+                    "actual": null,
+                    "issuerKnows": false,
+                    "beneficiaryBelieves": null,
+                    "reason": "Authored actual predicate timeline; issuer has no predicate endorsement with available verified support. Divergent beneficiary views stay null, with actual individual views retained in history.",
+                    "witnesses": [
+                      {
+                        "clauseId": "N18",
+                        "sourceId": "CB07",
+                        "path": "conversation/promises/fresh.md",
+                        "quote": "[N18] Authenticated original turn N18: Oren, day18 hour5, to Sada only: \"If Noor collects before day20 noon and Sada personally acknowledges shipping brief B3, I make a new promise to release the key to Sada on day19.\" This is a fresh performed promise, not a quotation, revival or amendment of P17. Tavi has no beneficiary role in N18."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      },
+                      {
+                        "clauseId": "R05",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+                      },
+                      {
+                        "clauseId": "R08",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R08] A future condition window remains pending before occurrence or closure; a claim of occurrence is not an actual event. Personal acknowledgment is specific to actor and brief version. A B2 acknowledgment does not satisfy B3."
+                      },
+                      {
+                        "clauseId": "R09",
+                        "sourceId": "CB01",
+                        "path": "controls/model.md",
+                        "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+                      }
+                    ]
+                  }
+                ],
+                "status": "active",
+                "establishedAt": {
+                  "day": 18,
+                  "hour": 5
+                },
+                "witnesses": [
+                  {
+                    "clauseId": "N18",
+                    "sourceId": "CB07",
+                    "path": "conversation/promises/fresh.md",
+                    "quote": "[N18] Authenticated original turn N18: Oren, day18 hour5, to Sada only: \"If Noor collects before day20 noon and Sada personally acknowledges shipping brief B3, I make a new promise to release the key to Sada on day19.\" This is a fresh performed promise, not a quotation, revival or amendment of P17. Tavi has no beneficiary role in N18."
+                  }
+                ]
+              }
+            ],
+            "unresolved": []
+          }
+        ],
+        "revisions": [],
+        "availability": [
+          {
+            "participantId": "Noor",
+            "turnIds": [],
+            "actIds": [],
+            "receiptIds": [
+              "RC19_N"
+            ],
+            "verifiedFactIds": [
+              "F_COLLECTION"
+            ],
+            "availableAt": {
+              "day": 19,
+              "hour": 10.25
+            },
+            "reason": "Actual original speaker access or documented receipt; evidence availability does not imply adoption.",
+            "witnesses": [
+              {
+                "clauseId": "RC19_N",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+              }
+            ]
+          }
+        ]
+      },
+      {
         "episodeId": "E_19_10p5",
         "endorsements": [
           {
@@ -21634,7 +22876,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -21660,7 +22904,9 @@
                 "availabilityEpisodeIds": [
                   "E_19_10p5"
                 ],
-                "verifiedFactIds": [],
+                "verifiedFactIds": [
+                  "F_COLLECTION"
+                ],
                 "witnesses": [
                   {
                     "clauseId": "C19",
@@ -22024,6 +23270,40 @@
         ],
         "revisions": [
           {
+            "selection": {
+              "revisionActId": "A_C19_0",
+              "targetActIds": [
+                "A_C18_0"
+              ],
+              "targetPropositionIds": [
+                "P_COLLECT18",
+                "P_COLLECT20"
+              ],
+              "kind": "belief-correction",
+              "communicated": true,
+              "reason": "The actual performed/adopted original revision targets its exact source lineage; belief correction and promise withdrawal remain distinct scopes.",
+              "witnesses": [
+                {
+                  "clauseId": "C19",
+                  "sourceId": "CB09",
+                  "path": "conversation/reports/collection.md",
+                  "quote": "[C19] Authenticated correction C19: Noor, day19 hour10.5, to Sada: \"Correct C18: I first collected at day19 hour10, not on day18.\" A verified collection log is attached. This is a correction of the collection claim, not a withdrawal of either Oren promise."
+                },
+                {
+                  "clauseId": "C19",
+                  "sourceId": "CB09",
+                  "path": "conversation/reports/collection.md",
+                  "quote": "[C19] Authenticated correction C19: Noor, day19 hour10.5, to Sada: \"Correct C18: I first collected at day19 hour10, not on day18.\" A verified collection log is attached. This is a correction of the collection claim, not a withdrawal of either Oren promise."
+                },
+                {
+                  "clauseId": "R06",
+                  "sourceId": "CB01",
+                  "path": "controls/model.md",
+                  "quote": "[R06] Withdrawing a promise requires the issuer's communicated retraction of its exact original promise plus explicit adoption by every named beneficiary. Partial adoption preserves the actual adopter set without globally retracting. Final adoption changes the issuer-owned normative commitment, even if the issuer has not learned that adoption occurred. Belief/knowledge of adoption is separately tracked."
+                }
+              ],
+              "unresolved": []
+            },
             "revisionId": "REV_C19",
             "participantId": "Noor",
             "commitmentOwnerId": null,
@@ -31390,6 +32670,1245 @@
         ]
       },
       "explanation": "The complete day20 code log establishes no promised delivery to Tavi, without altering terminal retraction."
+    },
+    {
+      "queryId": "Q19",
+      "focus": {
+        "query": {
+          "queryId": "Q19",
+          "perspective": "Noor",
+          "asOf": {
+            "day": 19,
+            "hour": 10.3
+          },
+          "targetId": "P_COLLECT18",
+          "dimension": "knowledge",
+          "question": "Does the verified event record qualify as endorsed knowledge before Noor corrects the old claim?"
+        },
+        "participantId": "Noor",
+        "asOf": {
+          "day": 19,
+          "hour": 10.3
+        },
+        "propositionIds": [
+          "P_COLLECT18"
+        ],
+        "actIds": [],
+        "view": {
+          "participantId": "Noor",
+          "availableTurnIds": [
+            "C18"
+          ],
+          "availableActIds": [
+            "A_C18_0"
+          ],
+          "availableVerifiedFactIds": [
+            "F_COLLECTION"
+          ],
+          "beliefs": [
+            {
+              "beliefId": "B_C18_0",
+              "participantId": "Noor",
+              "propositionId": "P_COLLECT18",
+              "value": true,
+              "status": "endorsed",
+              "acquiredAt": {
+                "day": 18,
+                "hour": 8
+              },
+              "sourceActIds": [
+                "A_C18_0"
+              ],
+              "availabilityEpisodeIds": [
+                "E_18_8"
+              ],
+              "verifiedFactIds": [],
+              "witnesses": [
+                {
+                  "clauseId": "C18",
+                  "sourceId": "CB09",
+                  "path": "conversation/reports/collection.md",
+                  "quote": "[C18] Authenticated turn C18: Noor, day18 hour8, to Sada: \"I collected the crate today.\" This is Noor's asserted claim; the complete physical log supplies actual timing separately."
+                }
+              ]
+            }
+          ],
+          "commitments": [],
+          "revisionIds": [],
+          "adoptedRevisionActIds": []
+        },
+        "kind": "knowledge",
+        "reason": "Actual source target lineage, dimension and at-or-before participant view.",
+        "witnesses": [
+          {
+            "clauseId": "RC19_N",
+            "sourceId": "CB09",
+            "path": "conversation/reports/collection.md",
+            "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+          },
+          {
+            "clauseId": "C18",
+            "sourceId": "CB09",
+            "path": "conversation/reports/collection.md",
+            "quote": "[C18] Authenticated turn C18: Noor, day18 hour8, to Sada: \"I collected the crate today.\" This is Noor's asserted claim; the complete physical log supplies actual timing separately."
+          },
+          {
+            "clauseId": "R04",
+            "sourceId": "CB01",
+            "path": "controls/model.md",
+            "quote": "[R04] Belief requires explicit endorsement, including a signed private note. Receipt, silence, doubt and reporting alone do not establish belief. A false claim can remain endorsed until this actor adopts a defeating correction."
+          },
+          {
+            "clauseId": "R05",
+            "sourceId": "CB01",
+            "path": "controls/model.md",
+            "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+          }
+        ],
+        "unresolved": []
+      },
+      "observable": {
+        "performed": null,
+        "truthValue": null,
+        "beliefValue": null,
+        "knowledgeValue": false,
+        "due": null,
+        "actorIds": [],
+        "actKinds": [],
+        "commitmentStatus": null,
+        "referentIds": []
+      },
+      "status": "refuted",
+      "proof": {
+        "nodes": [
+          {
+            "proofId": "PF_Q19_0",
+            "kind": "source",
+            "originalIds": [
+              "RC19_N"
+            ],
+            "participantId": "Noor",
+            "propositionId": "P_COLLECT18",
+            "witnesses": [
+              {
+                "clauseId": "RC19_N",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q19_1",
+            "kind": "source",
+            "originalIds": [
+              "C18"
+            ],
+            "participantId": "Noor",
+            "propositionId": "P_COLLECT18",
+            "witnesses": [
+              {
+                "clauseId": "C18",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[C18] Authenticated turn C18: Noor, day18 hour8, to Sada: \"I collected the crate today.\" This is Noor's asserted claim; the complete physical log supplies actual timing separately."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q19_2",
+            "kind": "source",
+            "originalIds": [
+              "R04"
+            ],
+            "participantId": "Noor",
+            "propositionId": "P_COLLECT18",
+            "witnesses": [
+              {
+                "clauseId": "R04",
+                "sourceId": "CB01",
+                "path": "controls/model.md",
+                "quote": "[R04] Belief requires explicit endorsement, including a signed private note. Receipt, silence, doubt and reporting alone do not establish belief. A false claim can remain endorsed until this actor adopts a defeating correction."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q19_3",
+            "kind": "source",
+            "originalIds": [
+              "R05"
+            ],
+            "participantId": "Noor",
+            "propositionId": "P_COLLECT18",
+            "witnesses": [
+              {
+                "clauseId": "R05",
+                "sourceId": "CB01",
+                "path": "controls/model.md",
+                "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q19_belief_0",
+            "kind": "endorsement",
+            "originalIds": [
+              "C18"
+            ],
+            "participantId": "Noor",
+            "propositionId": "P_COLLECT18",
+            "witnesses": [
+              {
+                "clauseId": "C18",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[C18] Authenticated turn C18: Noor, day18 hour8, to Sada: \"I collected the crate today.\" This is Noor's asserted claim; the complete physical log supplies actual timing separately."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q19_query",
+            "kind": "query",
+            "originalIds": [
+              "Q19",
+              "P_COLLECT18"
+            ],
+            "participantId": "Noor",
+            "propositionId": "P_COLLECT18",
+            "witnesses": [
+              {
+                "clauseId": "RC19_N",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+              },
+              {
+                "clauseId": "C18",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[C18] Authenticated turn C18: Noor, day18 hour8, to Sada: \"I collected the crate today.\" This is Noor's asserted claim; the complete physical log supplies actual timing separately."
+              },
+              {
+                "clauseId": "R04",
+                "sourceId": "CB01",
+                "path": "controls/model.md",
+                "quote": "[R04] Belief requires explicit endorsement, including a signed private note. Receipt, silence, doubt and reporting alone do not establish belief. A false claim can remain endorsed until this actor adopts a defeating correction."
+              },
+              {
+                "clauseId": "R05",
+                "sourceId": "CB01",
+                "path": "controls/model.md",
+                "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+              }
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "fromProofId": "PF_Q19_0",
+            "toProofId": "PF_Q19_query",
+            "role": "supports"
+          },
+          {
+            "fromProofId": "PF_Q19_1",
+            "toProofId": "PF_Q19_query",
+            "role": "supports"
+          },
+          {
+            "fromProofId": "PF_Q19_2",
+            "toProofId": "PF_Q19_query",
+            "role": "supports"
+          },
+          {
+            "fromProofId": "PF_Q19_3",
+            "toProofId": "PF_Q19_query",
+            "role": "supports"
+          },
+          {
+            "fromProofId": "PF_Q19_belief_0",
+            "toProofId": "PF_Q19_query",
+            "role": "supports"
+          }
+        ],
+        "rootProofIds": [
+          "PF_Q19_query"
+        ],
+        "challenge": {
+          "passed": true,
+          "unsupportedProofIds": [],
+          "reason": "Authored source certificate preserves target, owner, actual adoption, participant access and original reported force.",
+          "witnesses": [
+            {
+              "clauseId": "RC19_N",
+              "sourceId": "CB09",
+              "path": "conversation/reports/collection.md",
+              "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+            },
+            {
+              "clauseId": "C18",
+              "sourceId": "CB09",
+              "path": "conversation/reports/collection.md",
+              "quote": "[C18] Authenticated turn C18: Noor, day18 hour8, to Sada: \"I collected the crate today.\" This is Noor's asserted claim; the complete physical log supplies actual timing separately."
+            },
+            {
+              "clauseId": "R04",
+              "sourceId": "CB01",
+              "path": "controls/model.md",
+              "quote": "[R04] Belief requires explicit endorsement, including a signed private note. Receipt, silence, doubt and reporting alone do not establish belief. A false claim can remain endorsed until this actor adopts a defeating correction."
+            },
+            {
+              "clauseId": "R05",
+              "sourceId": "CB01",
+              "path": "controls/model.md",
+              "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+            }
+          ]
+        },
+        "unresolved": []
+      },
+      "challenge": {
+        "passed": true,
+        "unsupportedProofIds": [],
+        "reason": "Authored source certificate preserves target, owner, actual adoption, participant access and original reported force.",
+        "witnesses": [
+          {
+            "clauseId": "RC19_N",
+            "sourceId": "CB09",
+            "path": "conversation/reports/collection.md",
+            "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+          },
+          {
+            "clauseId": "C18",
+            "sourceId": "CB09",
+            "path": "conversation/reports/collection.md",
+            "quote": "[C18] Authenticated turn C18: Noor, day18 hour8, to Sada: \"I collected the crate today.\" This is Noor's asserted claim; the complete physical log supplies actual timing separately."
+          },
+          {
+            "clauseId": "R04",
+            "sourceId": "CB01",
+            "path": "controls/model.md",
+            "quote": "[R04] Belief requires explicit endorsement, including a signed private note. Receipt, silence, doubt and reporting alone do not establish belief. A false claim can remain endorsed until this actor adopts a defeating correction."
+          },
+          {
+            "clauseId": "R05",
+            "sourceId": "CB01",
+            "path": "controls/model.md",
+            "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+          }
+        ]
+      },
+      "explanation": "Noor has read the verified past record, but the old day18 claim remains endorsed until his actual correction; its value lacks corroboration."
+    },
+    {
+      "queryId": "Q20",
+      "focus": {
+        "query": {
+          "queryId": "Q20",
+          "perspective": "Noor",
+          "asOf": {
+            "day": 19,
+            "hour": 10.75
+          },
+          "targetId": "P_COLLECT18",
+          "dimension": "knowledge",
+          "question": "After the actual correction and verified record, does knowing the day18 proposition is false qualify?"
+        },
+        "participantId": "Noor",
+        "asOf": {
+          "day": 19,
+          "hour": 10.75
+        },
+        "propositionIds": [
+          "P_COLLECT18"
+        ],
+        "actIds": [],
+        "view": {
+          "participantId": "Noor",
+          "availableTurnIds": [
+            "C18",
+            "C19"
+          ],
+          "availableActIds": [
+            "A_C18_0",
+            "A_C19_0"
+          ],
+          "availableVerifiedFactIds": [
+            "F_COLLECTION"
+          ],
+          "beliefs": [
+            {
+              "beliefId": "B_C18_0",
+              "participantId": "Noor",
+              "propositionId": "P_COLLECT18",
+              "value": true,
+              "status": "defeated",
+              "acquiredAt": {
+                "day": 18,
+                "hour": 8
+              },
+              "sourceActIds": [
+                "A_C18_0"
+              ],
+              "availabilityEpisodeIds": [
+                "E_18_8"
+              ],
+              "verifiedFactIds": [],
+              "witnesses": [
+                {
+                  "clauseId": "C18",
+                  "sourceId": "CB09",
+                  "path": "conversation/reports/collection.md",
+                  "quote": "[C18] Authenticated turn C18: Noor, day18 hour8, to Sada: \"I collected the crate today.\" This is Noor's asserted claim; the complete physical log supplies actual timing separately."
+                }
+              ]
+            },
+            {
+              "beliefId": "B_C19_0",
+              "participantId": "Noor",
+              "propositionId": "P_COLLECT18",
+              "value": false,
+              "status": "endorsed",
+              "acquiredAt": {
+                "day": 19,
+                "hour": 10.5
+              },
+              "sourceActIds": [
+                "A_C19_0"
+              ],
+              "availabilityEpisodeIds": [
+                "E_19_10p5"
+              ],
+              "verifiedFactIds": [
+                "F_COLLECTION"
+              ],
+              "witnesses": [
+                {
+                  "clauseId": "C19",
+                  "sourceId": "CB09",
+                  "path": "conversation/reports/collection.md",
+                  "quote": "[C19] Authenticated correction C19: Noor, day19 hour10.5, to Sada: \"Correct C18: I first collected at day19 hour10, not on day18.\" A verified collection log is attached. This is a correction of the collection claim, not a withdrawal of either Oren promise."
+                }
+              ]
+            },
+            {
+              "beliefId": "B_C19_1",
+              "participantId": "Noor",
+              "propositionId": "P_COLLECT20",
+              "value": true,
+              "status": "endorsed",
+              "acquiredAt": {
+                "day": 19,
+                "hour": 10.5
+              },
+              "sourceActIds": [
+                "A_C19_0"
+              ],
+              "availabilityEpisodeIds": [
+                "E_19_10p5"
+              ],
+              "verifiedFactIds": [
+                "F_COLLECTION"
+              ],
+              "witnesses": [
+                {
+                  "clauseId": "C19",
+                  "sourceId": "CB09",
+                  "path": "conversation/reports/collection.md",
+                  "quote": "[C19] Authenticated correction C19: Noor, day19 hour10.5, to Sada: \"Correct C18: I first collected at day19 hour10, not on day18.\" A verified collection log is attached. This is a correction of the collection claim, not a withdrawal of either Oren promise."
+                }
+              ]
+            }
+          ],
+          "commitments": [],
+          "revisionIds": [
+            "REV_C19"
+          ],
+          "adoptedRevisionActIds": [
+            "A_C19_0"
+          ]
+        },
+        "kind": "knowledge",
+        "reason": "Actual source target lineage, dimension and at-or-before participant view.",
+        "witnesses": [
+          {
+            "clauseId": "RC19_N",
+            "sourceId": "CB09",
+            "path": "conversation/reports/collection.md",
+            "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+          },
+          {
+            "clauseId": "C19",
+            "sourceId": "CB09",
+            "path": "conversation/reports/collection.md",
+            "quote": "[C19] Authenticated correction C19: Noor, day19 hour10.5, to Sada: \"Correct C18: I first collected at day19 hour10, not on day18.\" A verified collection log is attached. This is a correction of the collection claim, not a withdrawal of either Oren promise."
+          },
+          {
+            "clauseId": "F01",
+            "sourceId": "CB11",
+            "path": "events/complete-log.md",
+            "quote": "[F01] Complete crate log through day21 hour12: Noor's first and only collection is day19 hour10. There is no collection on day18. Physical ID F_COLLECTION supports the corresponding collection propositions; before-day20-noon becomes actually true only when the day19 event occurs."
+          },
+          {
+            "clauseId": "R05",
+            "sourceId": "CB01",
+            "path": "controls/model.md",
+            "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+          }
+        ],
+        "unresolved": []
+      },
+      "observable": {
+        "performed": null,
+        "truthValue": null,
+        "beliefValue": null,
+        "knowledgeValue": true,
+        "due": null,
+        "actorIds": [],
+        "actKinds": [],
+        "commitmentStatus": null,
+        "referentIds": []
+      },
+      "status": "supported",
+      "proof": {
+        "nodes": [
+          {
+            "proofId": "PF_Q20_0",
+            "kind": "source",
+            "originalIds": [
+              "RC19_N"
+            ],
+            "participantId": "Noor",
+            "propositionId": "P_COLLECT18",
+            "witnesses": [
+              {
+                "clauseId": "RC19_N",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q20_1",
+            "kind": "source",
+            "originalIds": [
+              "C19"
+            ],
+            "participantId": "Noor",
+            "propositionId": "P_COLLECT18",
+            "witnesses": [
+              {
+                "clauseId": "C19",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[C19] Authenticated correction C19: Noor, day19 hour10.5, to Sada: \"Correct C18: I first collected at day19 hour10, not on day18.\" A verified collection log is attached. This is a correction of the collection claim, not a withdrawal of either Oren promise."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q20_2",
+            "kind": "source",
+            "originalIds": [
+              "F01"
+            ],
+            "participantId": "Noor",
+            "propositionId": "P_COLLECT18",
+            "witnesses": [
+              {
+                "clauseId": "F01",
+                "sourceId": "CB11",
+                "path": "events/complete-log.md",
+                "quote": "[F01] Complete crate log through day21 hour12: Noor's first and only collection is day19 hour10. There is no collection on day18. Physical ID F_COLLECTION supports the corresponding collection propositions; before-day20-noon becomes actually true only when the day19 event occurs."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q20_3",
+            "kind": "source",
+            "originalIds": [
+              "R05"
+            ],
+            "participantId": "Noor",
+            "propositionId": "P_COLLECT18",
+            "witnesses": [
+              {
+                "clauseId": "R05",
+                "sourceId": "CB01",
+                "path": "controls/model.md",
+                "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q20_belief_0",
+            "kind": "endorsement",
+            "originalIds": [
+              "C18"
+            ],
+            "participantId": "Noor",
+            "propositionId": "P_COLLECT18",
+            "witnesses": [
+              {
+                "clauseId": "C18",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[C18] Authenticated turn C18: Noor, day18 hour8, to Sada: \"I collected the crate today.\" This is Noor's asserted claim; the complete physical log supplies actual timing separately."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q20_belief_1",
+            "kind": "endorsement",
+            "originalIds": [
+              "C19"
+            ],
+            "participantId": "Noor",
+            "propositionId": "P_COLLECT18",
+            "witnesses": [
+              {
+                "clauseId": "C19",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[C19] Authenticated correction C19: Noor, day19 hour10.5, to Sada: \"Correct C18: I first collected at day19 hour10, not on day18.\" A verified collection log is attached. This is a correction of the collection claim, not a withdrawal of either Oren promise."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q20_query",
+            "kind": "query",
+            "originalIds": [
+              "Q20",
+              "P_COLLECT18"
+            ],
+            "participantId": "Noor",
+            "propositionId": "P_COLLECT18",
+            "witnesses": [
+              {
+                "clauseId": "RC19_N",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+              },
+              {
+                "clauseId": "C19",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[C19] Authenticated correction C19: Noor, day19 hour10.5, to Sada: \"Correct C18: I first collected at day19 hour10, not on day18.\" A verified collection log is attached. This is a correction of the collection claim, not a withdrawal of either Oren promise."
+              },
+              {
+                "clauseId": "F01",
+                "sourceId": "CB11",
+                "path": "events/complete-log.md",
+                "quote": "[F01] Complete crate log through day21 hour12: Noor's first and only collection is day19 hour10. There is no collection on day18. Physical ID F_COLLECTION supports the corresponding collection propositions; before-day20-noon becomes actually true only when the day19 event occurs."
+              },
+              {
+                "clauseId": "R05",
+                "sourceId": "CB01",
+                "path": "controls/model.md",
+                "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+              }
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "fromProofId": "PF_Q20_0",
+            "toProofId": "PF_Q20_query",
+            "role": "supports"
+          },
+          {
+            "fromProofId": "PF_Q20_1",
+            "toProofId": "PF_Q20_query",
+            "role": "supports"
+          },
+          {
+            "fromProofId": "PF_Q20_2",
+            "toProofId": "PF_Q20_query",
+            "role": "supports"
+          },
+          {
+            "fromProofId": "PF_Q20_3",
+            "toProofId": "PF_Q20_query",
+            "role": "supports"
+          },
+          {
+            "fromProofId": "PF_Q20_belief_0",
+            "toProofId": "PF_Q20_query",
+            "role": "defeats"
+          },
+          {
+            "fromProofId": "PF_Q20_belief_1",
+            "toProofId": "PF_Q20_query",
+            "role": "supports"
+          }
+        ],
+        "rootProofIds": [
+          "PF_Q20_query"
+        ],
+        "challenge": {
+          "passed": true,
+          "unsupportedProofIds": [],
+          "reason": "Authored source certificate preserves target, owner, actual adoption, participant access and original reported force.",
+          "witnesses": [
+            {
+              "clauseId": "RC19_N",
+              "sourceId": "CB09",
+              "path": "conversation/reports/collection.md",
+              "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+            },
+            {
+              "clauseId": "C19",
+              "sourceId": "CB09",
+              "path": "conversation/reports/collection.md",
+              "quote": "[C19] Authenticated correction C19: Noor, day19 hour10.5, to Sada: \"Correct C18: I first collected at day19 hour10, not on day18.\" A verified collection log is attached. This is a correction of the collection claim, not a withdrawal of either Oren promise."
+            },
+            {
+              "clauseId": "F01",
+              "sourceId": "CB11",
+              "path": "events/complete-log.md",
+              "quote": "[F01] Complete crate log through day21 hour12: Noor's first and only collection is day19 hour10. There is no collection on day18. Physical ID F_COLLECTION supports the corresponding collection propositions; before-day20-noon becomes actually true only when the day19 event occurs."
+            },
+            {
+              "clauseId": "R05",
+              "sourceId": "CB01",
+              "path": "controls/model.md",
+              "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+            }
+          ]
+        },
+        "unresolved": []
+      },
+      "challenge": {
+        "passed": true,
+        "unsupportedProofIds": [],
+        "reason": "Authored source certificate preserves target, owner, actual adoption, participant access and original reported force.",
+        "witnesses": [
+          {
+            "clauseId": "RC19_N",
+            "sourceId": "CB09",
+            "path": "conversation/reports/collection.md",
+            "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+          },
+          {
+            "clauseId": "C19",
+            "sourceId": "CB09",
+            "path": "conversation/reports/collection.md",
+            "quote": "[C19] Authenticated correction C19: Noor, day19 hour10.5, to Sada: \"Correct C18: I first collected at day19 hour10, not on day18.\" A verified collection log is attached. This is a correction of the collection claim, not a withdrawal of either Oren promise."
+          },
+          {
+            "clauseId": "F01",
+            "sourceId": "CB11",
+            "path": "events/complete-log.md",
+            "quote": "[F01] Complete crate log through day21 hour12: Noor's first and only collection is day19 hour10. There is no collection on day18. Physical ID F_COLLECTION supports the corresponding collection propositions; before-day20-noon becomes actually true only when the day19 event occurs."
+          },
+          {
+            "clauseId": "R05",
+            "sourceId": "CB01",
+            "path": "controls/model.md",
+            "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+          }
+        ]
+      },
+      "explanation": "Noor now endorses false for the day18 proposition with actual available verified record; the knowledge criterion qualifies although the proposition is false."
+    },
+    {
+      "queryId": "Q21",
+      "focus": {
+        "query": {
+          "queryId": "Q21",
+          "perspective": "Sada",
+          "asOf": {
+            "day": 20,
+            "hour": 1.25
+          },
+          "targetId": "P_COLLECT20",
+          "dimension": "knowledge",
+          "question": "Does her already endorsed before-noon proposition qualify once matching verified evidence is actually read, without adopting the separate day18 correction?"
+        },
+        "participantId": "Sada",
+        "asOf": {
+          "day": 20,
+          "hour": 1.25
+        },
+        "propositionIds": [
+          "P_COLLECT20"
+        ],
+        "actIds": [],
+        "view": {
+          "participantId": "Sada",
+          "availableTurnIds": [
+            "P17",
+            "W18",
+            "S18",
+            "N18",
+            "B18",
+            "C18",
+            "S19_EARLY",
+            "B19",
+            "C19"
+          ],
+          "availableActIds": [
+            "A_P17_0",
+            "A_W18_0",
+            "A_S18_0",
+            "A_N18_0",
+            "A_B18_0",
+            "A_C18_0",
+            "A_S19_EARLY_0",
+            "A_B19_0",
+            "A_C19_0"
+          ],
+          "availableVerifiedFactIds": [
+            "F_COLLECTION"
+          ],
+          "beliefs": [
+            {
+              "beliefId": "B_B18_0",
+              "participantId": "Sada",
+              "propositionId": "P_ACK_B2",
+              "value": true,
+              "status": "endorsed",
+              "acquiredAt": {
+                "day": 18,
+                "hour": 6
+              },
+              "sourceActIds": [
+                "A_B18_0"
+              ],
+              "availabilityEpisodeIds": [
+                "E_18_6"
+              ],
+              "verifiedFactIds": [],
+              "witnesses": [
+                {
+                  "clauseId": "B18",
+                  "sourceId": "CB08",
+                  "path": "conversation/acknowledgments/versions.md",
+                  "quote": "[B18] Authenticated turn B18: Sada, day18 hour6, to Oren: \"I personally acknowledge shipping brief B2, not B3.\""
+                }
+              ]
+            },
+            {
+              "beliefId": "B_B18_1",
+              "participantId": "Sada",
+              "propositionId": "P_ACK_B3",
+              "value": false,
+              "status": "endorsed",
+              "acquiredAt": {
+                "day": 18,
+                "hour": 6
+              },
+              "sourceActIds": [
+                "A_B18_0"
+              ],
+              "availabilityEpisodeIds": [
+                "E_18_6"
+              ],
+              "verifiedFactIds": [],
+              "witnesses": [
+                {
+                  "clauseId": "B18",
+                  "sourceId": "CB08",
+                  "path": "conversation/acknowledgments/versions.md",
+                  "quote": "[B18] Authenticated turn B18: Sada, day18 hour6, to Oren: \"I personally acknowledge shipping brief B2, not B3.\""
+                }
+              ]
+            },
+            {
+              "beliefId": "B_S19_EARLY_0",
+              "participantId": "Sada",
+              "propositionId": "P_COLLECT18",
+              "value": true,
+              "status": "endorsed",
+              "acquiredAt": {
+                "day": 19,
+                "hour": 8
+              },
+              "sourceActIds": [
+                "A_S19_EARLY_0",
+                "A_C18_0"
+              ],
+              "availabilityEpisodeIds": [
+                "E_19_8"
+              ],
+              "verifiedFactIds": [],
+              "witnesses": [
+                {
+                  "clauseId": "S19_EARLY",
+                  "sourceId": "CB09",
+                  "path": "conversation/reports/collection.md",
+                  "quote": "[S19_EARLY] Signed private note S19_EARLY: Sada, day19 hour8: \"I believe Noor's C18 claim that the crate was collected on day18; therefore I also believe it was collected before day20 noon.\" This endorses both named propositions but has no verified corroboration yet."
+                }
+              ]
+            },
+            {
+              "beliefId": "B_S19_EARLY_1",
+              "participantId": "Sada",
+              "propositionId": "P_COLLECT20",
+              "value": true,
+              "status": "endorsed",
+              "acquiredAt": {
+                "day": 19,
+                "hour": 8
+              },
+              "sourceActIds": [
+                "A_S19_EARLY_0",
+                "A_C18_0"
+              ],
+              "availabilityEpisodeIds": [
+                "E_19_8"
+              ],
+              "verifiedFactIds": [],
+              "witnesses": [
+                {
+                  "clauseId": "S19_EARLY",
+                  "sourceId": "CB09",
+                  "path": "conversation/reports/collection.md",
+                  "quote": "[S19_EARLY] Signed private note S19_EARLY: Sada, day19 hour8: \"I believe Noor's C18 claim that the crate was collected on day18; therefore I also believe it was collected before day20 noon.\" This endorses both named propositions but has no verified corroboration yet."
+                }
+              ]
+            },
+            {
+              "beliefId": "B_B19_0",
+              "participantId": "Sada",
+              "propositionId": "P_ACK_B3",
+              "value": true,
+              "status": "endorsed",
+              "acquiredAt": {
+                "day": 19,
+                "hour": 9
+              },
+              "sourceActIds": [
+                "A_B19_0"
+              ],
+              "availabilityEpisodeIds": [
+                "E_19_9"
+              ],
+              "verifiedFactIds": [],
+              "witnesses": [
+                {
+                  "clauseId": "B19",
+                  "sourceId": "CB08",
+                  "path": "conversation/acknowledgments/versions.md",
+                  "quote": "[B19] Authenticated turn B19: Sada, day19 hour9, to Oren: \"I now personally acknowledge shipping brief B3.\""
+                }
+              ]
+            }
+          ],
+          "commitments": [],
+          "revisionIds": [],
+          "adoptedRevisionActIds": [
+            "A_W18_0"
+          ]
+        },
+        "kind": "knowledge",
+        "reason": "Actual source target lineage, dimension and at-or-before participant view.",
+        "witnesses": [
+          {
+            "clauseId": "S19_EARLY",
+            "sourceId": "CB09",
+            "path": "conversation/reports/collection.md",
+            "quote": "[S19_EARLY] Signed private note S19_EARLY: Sada, day19 hour8: \"I believe Noor's C18 claim that the crate was collected on day18; therefore I also believe it was collected before day20 noon.\" This endorses both named propositions but has no verified corroboration yet."
+          },
+          {
+            "clauseId": "RC19_S",
+            "sourceId": "CB09",
+            "path": "conversation/reports/collection.md",
+            "quote": "[RC19_S] C19 with verified F_COLLECTION is dispatched at day19 hour10.5 and received/read by Sada only at day20 hour1. Receipt makes evidence available but supplies no adoption; no signed Sada correction-adoption note exists in this packet."
+          },
+          {
+            "clauseId": "F01",
+            "sourceId": "CB11",
+            "path": "events/complete-log.md",
+            "quote": "[F01] Complete crate log through day21 hour12: Noor's first and only collection is day19 hour10. There is no collection on day18. Physical ID F_COLLECTION supports the corresponding collection propositions; before-day20-noon becomes actually true only when the day19 event occurs."
+          },
+          {
+            "clauseId": "R04",
+            "sourceId": "CB01",
+            "path": "controls/model.md",
+            "quote": "[R04] Belief requires explicit endorsement, including a signed private note. Receipt, silence, doubt and reporting alone do not establish belief. A false claim can remain endorsed until this actor adopts a defeating correction."
+          },
+          {
+            "clauseId": "R05",
+            "sourceId": "CB01",
+            "path": "controls/model.md",
+            "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+          }
+        ],
+        "unresolved": []
+      },
+      "observable": {
+        "performed": null,
+        "truthValue": null,
+        "beliefValue": null,
+        "knowledgeValue": true,
+        "due": null,
+        "actorIds": [],
+        "actKinds": [],
+        "commitmentStatus": null,
+        "referentIds": []
+      },
+      "status": "supported",
+      "proof": {
+        "nodes": [
+          {
+            "proofId": "PF_Q21_0",
+            "kind": "source",
+            "originalIds": [
+              "S19_EARLY"
+            ],
+            "participantId": "Sada",
+            "propositionId": "P_COLLECT20",
+            "witnesses": [
+              {
+                "clauseId": "S19_EARLY",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[S19_EARLY] Signed private note S19_EARLY: Sada, day19 hour8: \"I believe Noor's C18 claim that the crate was collected on day18; therefore I also believe it was collected before day20 noon.\" This endorses both named propositions but has no verified corroboration yet."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q21_1",
+            "kind": "source",
+            "originalIds": [
+              "RC19_S"
+            ],
+            "participantId": "Sada",
+            "propositionId": "P_COLLECT20",
+            "witnesses": [
+              {
+                "clauseId": "RC19_S",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[RC19_S] C19 with verified F_COLLECTION is dispatched at day19 hour10.5 and received/read by Sada only at day20 hour1. Receipt makes evidence available but supplies no adoption; no signed Sada correction-adoption note exists in this packet."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q21_2",
+            "kind": "source",
+            "originalIds": [
+              "F01"
+            ],
+            "participantId": "Sada",
+            "propositionId": "P_COLLECT20",
+            "witnesses": [
+              {
+                "clauseId": "F01",
+                "sourceId": "CB11",
+                "path": "events/complete-log.md",
+                "quote": "[F01] Complete crate log through day21 hour12: Noor's first and only collection is day19 hour10. There is no collection on day18. Physical ID F_COLLECTION supports the corresponding collection propositions; before-day20-noon becomes actually true only when the day19 event occurs."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q21_3",
+            "kind": "source",
+            "originalIds": [
+              "R04"
+            ],
+            "participantId": "Sada",
+            "propositionId": "P_COLLECT20",
+            "witnesses": [
+              {
+                "clauseId": "R04",
+                "sourceId": "CB01",
+                "path": "controls/model.md",
+                "quote": "[R04] Belief requires explicit endorsement, including a signed private note. Receipt, silence, doubt and reporting alone do not establish belief. A false claim can remain endorsed until this actor adopts a defeating correction."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q21_4",
+            "kind": "source",
+            "originalIds": [
+              "R05"
+            ],
+            "participantId": "Sada",
+            "propositionId": "P_COLLECT20",
+            "witnesses": [
+              {
+                "clauseId": "R05",
+                "sourceId": "CB01",
+                "path": "controls/model.md",
+                "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q21_belief_0",
+            "kind": "endorsement",
+            "originalIds": [
+              "S19_EARLY",
+              "C18"
+            ],
+            "participantId": "Sada",
+            "propositionId": "P_COLLECT20",
+            "witnesses": [
+              {
+                "clauseId": "S19_EARLY",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[S19_EARLY] Signed private note S19_EARLY: Sada, day19 hour8: \"I believe Noor's C18 claim that the crate was collected on day18; therefore I also believe it was collected before day20 noon.\" This endorses both named propositions but has no verified corroboration yet."
+              }
+            ]
+          },
+          {
+            "proofId": "PF_Q21_query",
+            "kind": "query",
+            "originalIds": [
+              "Q21",
+              "P_COLLECT20"
+            ],
+            "participantId": "Sada",
+            "propositionId": "P_COLLECT20",
+            "witnesses": [
+              {
+                "clauseId": "S19_EARLY",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[S19_EARLY] Signed private note S19_EARLY: Sada, day19 hour8: \"I believe Noor's C18 claim that the crate was collected on day18; therefore I also believe it was collected before day20 noon.\" This endorses both named propositions but has no verified corroboration yet."
+              },
+              {
+                "clauseId": "RC19_S",
+                "sourceId": "CB09",
+                "path": "conversation/reports/collection.md",
+                "quote": "[RC19_S] C19 with verified F_COLLECTION is dispatched at day19 hour10.5 and received/read by Sada only at day20 hour1. Receipt makes evidence available but supplies no adoption; no signed Sada correction-adoption note exists in this packet."
+              },
+              {
+                "clauseId": "F01",
+                "sourceId": "CB11",
+                "path": "events/complete-log.md",
+                "quote": "[F01] Complete crate log through day21 hour12: Noor's first and only collection is day19 hour10. There is no collection on day18. Physical ID F_COLLECTION supports the corresponding collection propositions; before-day20-noon becomes actually true only when the day19 event occurs."
+              },
+              {
+                "clauseId": "R04",
+                "sourceId": "CB01",
+                "path": "controls/model.md",
+                "quote": "[R04] Belief requires explicit endorsement, including a signed private note. Receipt, silence, doubt and reporting alone do not establish belief. A false claim can remain endorsed until this actor adopts a defeating correction."
+              },
+              {
+                "clauseId": "R05",
+                "sourceId": "CB01",
+                "path": "controls/model.md",
+                "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+              }
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "fromProofId": "PF_Q21_0",
+            "toProofId": "PF_Q21_query",
+            "role": "supports"
+          },
+          {
+            "fromProofId": "PF_Q21_1",
+            "toProofId": "PF_Q21_query",
+            "role": "supports"
+          },
+          {
+            "fromProofId": "PF_Q21_2",
+            "toProofId": "PF_Q21_query",
+            "role": "supports"
+          },
+          {
+            "fromProofId": "PF_Q21_3",
+            "toProofId": "PF_Q21_query",
+            "role": "supports"
+          },
+          {
+            "fromProofId": "PF_Q21_4",
+            "toProofId": "PF_Q21_query",
+            "role": "supports"
+          },
+          {
+            "fromProofId": "PF_Q21_belief_0",
+            "toProofId": "PF_Q21_query",
+            "role": "supports"
+          }
+        ],
+        "rootProofIds": [
+          "PF_Q21_query"
+        ],
+        "challenge": {
+          "passed": true,
+          "unsupportedProofIds": [],
+          "reason": "Authored source certificate preserves target, owner, actual adoption, participant access and original reported force.",
+          "witnesses": [
+            {
+              "clauseId": "S19_EARLY",
+              "sourceId": "CB09",
+              "path": "conversation/reports/collection.md",
+              "quote": "[S19_EARLY] Signed private note S19_EARLY: Sada, day19 hour8: \"I believe Noor's C18 claim that the crate was collected on day18; therefore I also believe it was collected before day20 noon.\" This endorses both named propositions but has no verified corroboration yet."
+            },
+            {
+              "clauseId": "RC19_S",
+              "sourceId": "CB09",
+              "path": "conversation/reports/collection.md",
+              "quote": "[RC19_S] C19 with verified F_COLLECTION is dispatched at day19 hour10.5 and received/read by Sada only at day20 hour1. Receipt makes evidence available but supplies no adoption; no signed Sada correction-adoption note exists in this packet."
+            },
+            {
+              "clauseId": "F01",
+              "sourceId": "CB11",
+              "path": "events/complete-log.md",
+              "quote": "[F01] Complete crate log through day21 hour12: Noor's first and only collection is day19 hour10. There is no collection on day18. Physical ID F_COLLECTION supports the corresponding collection propositions; before-day20-noon becomes actually true only when the day19 event occurs."
+            },
+            {
+              "clauseId": "R04",
+              "sourceId": "CB01",
+              "path": "controls/model.md",
+              "quote": "[R04] Belief requires explicit endorsement, including a signed private note. Receipt, silence, doubt and reporting alone do not establish belief. A false claim can remain endorsed until this actor adopts a defeating correction."
+            },
+            {
+              "clauseId": "R05",
+              "sourceId": "CB01",
+              "path": "controls/model.md",
+              "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+            }
+          ]
+        },
+        "unresolved": []
+      },
+      "challenge": {
+        "passed": true,
+        "unsupportedProofIds": [],
+        "reason": "Authored source certificate preserves target, owner, actual adoption, participant access and original reported force.",
+        "witnesses": [
+          {
+            "clauseId": "S19_EARLY",
+            "sourceId": "CB09",
+            "path": "conversation/reports/collection.md",
+            "quote": "[S19_EARLY] Signed private note S19_EARLY: Sada, day19 hour8: \"I believe Noor's C18 claim that the crate was collected on day18; therefore I also believe it was collected before day20 noon.\" This endorses both named propositions but has no verified corroboration yet."
+          },
+          {
+            "clauseId": "RC19_S",
+            "sourceId": "CB09",
+            "path": "conversation/reports/collection.md",
+            "quote": "[RC19_S] C19 with verified F_COLLECTION is dispatched at day19 hour10.5 and received/read by Sada only at day20 hour1. Receipt makes evidence available but supplies no adoption; no signed Sada correction-adoption note exists in this packet."
+          },
+          {
+            "clauseId": "F01",
+            "sourceId": "CB11",
+            "path": "events/complete-log.md",
+            "quote": "[F01] Complete crate log through day21 hour12: Noor's first and only collection is day19 hour10. There is no collection on day18. Physical ID F_COLLECTION supports the corresponding collection propositions; before-day20-noon becomes actually true only when the day19 event occurs."
+          },
+          {
+            "clauseId": "R04",
+            "sourceId": "CB01",
+            "path": "controls/model.md",
+            "quote": "[R04] Belief requires explicit endorsement, including a signed private note. Receipt, silence, doubt and reporting alone do not establish belief. A false claim can remain endorsed until this actor adopts a defeating correction."
+          },
+          {
+            "clauseId": "R05",
+            "sourceId": "CB01",
+            "path": "controls/model.md",
+            "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+          }
+        ]
+      },
+      "explanation": "Sada before-noon value was already endorsed and remains so; actual later matching verified evidence now qualifies that proposition under the declared model, without revising her separate day18 belief."
     }
   ],
   "findings": [
@@ -32257,6 +34776,131 @@
           "sourceId": "CB01",
           "path": "controls/model.md",
           "quote": "[R09] A promise to do an event on a stated day is timely only through an actual event that day. Preserve an unstated hour. Earlier or later events are not on-day fulfillment. A complete negative day log settles absence only after that day closes."
+        }
+      ]
+    },
+    {
+      "queryId": "Q19",
+      "passed": true,
+      "checkedProofIds": [
+        "PF_Q19_0",
+        "PF_Q19_1",
+        "PF_Q19_2",
+        "PF_Q19_3",
+        "PF_Q19_belief_0",
+        "PF_Q19_query"
+      ],
+      "reason": "Full typed source/historical witness for the declared projection; this is not NL execution.",
+      "witnesses": [
+        {
+          "clauseId": "RC19_N",
+          "sourceId": "CB09",
+          "path": "conversation/reports/collection.md",
+          "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+        },
+        {
+          "clauseId": "C18",
+          "sourceId": "CB09",
+          "path": "conversation/reports/collection.md",
+          "quote": "[C18] Authenticated turn C18: Noor, day18 hour8, to Sada: \"I collected the crate today.\" This is Noor's asserted claim; the complete physical log supplies actual timing separately."
+        },
+        {
+          "clauseId": "R04",
+          "sourceId": "CB01",
+          "path": "controls/model.md",
+          "quote": "[R04] Belief requires explicit endorsement, including a signed private note. Receipt, silence, doubt and reporting alone do not establish belief. A false claim can remain endorsed until this actor adopts a defeating correction."
+        },
+        {
+          "clauseId": "R05",
+          "sourceId": "CB01",
+          "path": "controls/model.md",
+          "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+        }
+      ]
+    },
+    {
+      "queryId": "Q20",
+      "passed": true,
+      "checkedProofIds": [
+        "PF_Q20_0",
+        "PF_Q20_1",
+        "PF_Q20_2",
+        "PF_Q20_3",
+        "PF_Q20_belief_0",
+        "PF_Q20_belief_1",
+        "PF_Q20_query"
+      ],
+      "reason": "Full typed source/historical witness for the declared projection; this is not NL execution.",
+      "witnesses": [
+        {
+          "clauseId": "RC19_N",
+          "sourceId": "CB09",
+          "path": "conversation/reports/collection.md",
+          "quote": "[RC19_N] At day19 hour10.25 Noor receives and reads the authenticated first-collection event record F_COLLECTION. It establishes collection at day19 hour10 and no collection on day18; it makes no future-horizon claim. Its dispatch time is unspecified. Receipt supplies verified evidence but does not by itself change Noor's earlier C18 endorsement."
+        },
+        {
+          "clauseId": "C19",
+          "sourceId": "CB09",
+          "path": "conversation/reports/collection.md",
+          "quote": "[C19] Authenticated correction C19: Noor, day19 hour10.5, to Sada: \"Correct C18: I first collected at day19 hour10, not on day18.\" A verified collection log is attached. This is a correction of the collection claim, not a withdrawal of either Oren promise."
+        },
+        {
+          "clauseId": "F01",
+          "sourceId": "CB11",
+          "path": "events/complete-log.md",
+          "quote": "[F01] Complete crate log through day21 hour12: Noor's first and only collection is day19 hour10. There is no collection on day18. Physical ID F_COLLECTION supports the corresponding collection propositions; before-day20-noon becomes actually true only when the day19 event occurs."
+        },
+        {
+          "clauseId": "R05",
+          "sourceId": "CB01",
+          "path": "controls/model.md",
+          "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
+        }
+      ]
+    },
+    {
+      "queryId": "Q21",
+      "passed": true,
+      "checkedProofIds": [
+        "PF_Q21_0",
+        "PF_Q21_1",
+        "PF_Q21_2",
+        "PF_Q21_3",
+        "PF_Q21_4",
+        "PF_Q21_belief_0",
+        "PF_Q21_query"
+      ],
+      "reason": "Full typed source/historical witness for the declared projection; this is not NL execution.",
+      "witnesses": [
+        {
+          "clauseId": "S19_EARLY",
+          "sourceId": "CB09",
+          "path": "conversation/reports/collection.md",
+          "quote": "[S19_EARLY] Signed private note S19_EARLY: Sada, day19 hour8: \"I believe Noor's C18 claim that the crate was collected on day18; therefore I also believe it was collected before day20 noon.\" This endorses both named propositions but has no verified corroboration yet."
+        },
+        {
+          "clauseId": "RC19_S",
+          "sourceId": "CB09",
+          "path": "conversation/reports/collection.md",
+          "quote": "[RC19_S] C19 with verified F_COLLECTION is dispatched at day19 hour10.5 and received/read by Sada only at day20 hour1. Receipt makes evidence available but supplies no adoption; no signed Sada correction-adoption note exists in this packet."
+        },
+        {
+          "clauseId": "F01",
+          "sourceId": "CB11",
+          "path": "events/complete-log.md",
+          "quote": "[F01] Complete crate log through day21 hour12: Noor's first and only collection is day19 hour10. There is no collection on day18. Physical ID F_COLLECTION supports the corresponding collection propositions; before-day20-noon becomes actually true only when the day19 event occurs."
+        },
+        {
+          "clauseId": "R04",
+          "sourceId": "CB01",
+          "path": "controls/model.md",
+          "quote": "[R04] Belief requires explicit endorsement, including a signed private note. Receipt, silence, doubt and reporting alone do not establish belief. A false claim can remain endorsed until this actor adopts a defeating correction."
+        },
+        {
+          "clauseId": "R05",
+          "sourceId": "CB01",
+          "path": "controls/model.md",
+          "quote": "[R05] Knowledge qualification requires endorsement of the actual proposition value and corroborating verified evidence actually available to that actor. Application-visible global truth does not enter participant access automatically."
         }
       ]
     }

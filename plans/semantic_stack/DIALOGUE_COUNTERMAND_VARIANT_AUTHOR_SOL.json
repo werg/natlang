@@ -1,0 +1,136 @@
+{
+  "schema": "natlang.dialogue-connected-variant-author-check/1",
+  "variant": "countermand-target-lineage-v2",
+  "author": "semantic_slate_sol",
+  "hashes": {
+    "applications/dialogue-perspective-ledger/DECOMPOSITION.md": "619a8d2dacefcf6e15377ad7d0ed0c798614341e2752c8898562ca12ba151d16",
+    "applications/dialogue-perspective-ledger/analyzeConversation/answerQuestions/joinProof/challengePerspective.nl": "534404721f51b252f3881d46b70c4ae4ab5efc871845220a7aed940945b75067",
+    "applications/dialogue-perspective-ledger/analyzeConversation/answerQuestions/joinProof.nl": "45c168b00b730b096a2975c07191254065a2ac81f52b72d513962f2b0e4cc037",
+    "applications/dialogue-perspective-ledger/analyzeConversation/answerQuestions/resolveQueryFocus.nl": "4e2d5b3999d4660d0ca05e8dd2e4c51e8731e0f555b0181cedf06f0c3cff2c3c",
+    "applications/dialogue-perspective-ledger/analyzeConversation/answerQuestions.nl": "732953583525fc9bd2cef1683fc7d62ce5ab92f7b7526e1947c83d753f41f8e9",
+    "applications/dialogue-perspective-ledger/analyzeConversation/assembleEpisodes/joinAvailability.nl": "1d25536d3ecde0d4f35e661c97d1f03fde6e6439d120e93f56a46614e382db1b",
+    "applications/dialogue-perspective-ledger/analyzeConversation/assembleEpisodes.nl": "cc2181c3b17f31a8e2788f1c3f9479a5407d11c1db45b4988ea22a98e2d51dce",
+    "applications/dialogue-perspective-ledger/analyzeConversation/auditReport/checkNoKnowledgeLeak.nl": "46e85f378fc40bf747ac5b1d95ceaa7ecbcaea6131a508bdd3c5f83120992f22",
+    "applications/dialogue-perspective-ledger/analyzeConversation/auditReport/replayAnswer.nl": "7c691ace5b9e9e2191361f293dfd25d69fba6b0d35aeef7d632b39f4da6800c1",
+    "applications/dialogue-perspective-ledger/analyzeConversation/auditReport.nl": "c5afb92eefaf9978a9436296349318342fff39501bf814a36a49884e663efc81",
+    "applications/dialogue-perspective-ledger/analyzeConversation/evolveViews/advanceEpisode/judgeEndorsement.nl": "93bfb508a2245a3e597c8d6b793ea02f195e82e53787df79a7f509e87f4673a4",
+    "applications/dialogue-perspective-ledger/analyzeConversation/evolveViews/advanceEpisode/resolveRetraction/selectRevisionTarget.nl": "c3c131107aa3693f9a2988c1f86a41f3709f3c6b0b08a52b164a56149a7345ac",
+    "applications/dialogue-perspective-ledger/analyzeConversation/evolveViews/advanceEpisode/resolveRetraction.nl": "42bb90e5cccf13f4913f37225492f58cad2abc66f950f8578de4a04f74361306",
+    "applications/dialogue-perspective-ledger/analyzeConversation/evolveViews/advanceEpisode/updateBelief.nl": "c5eb14036ac75e4e70f3c2fe7fd955f9ee7be3f285392b76816e3dd02db6de25",
+    "applications/dialogue-perspective-ledger/analyzeConversation/evolveViews/advanceEpisode/updateCommitment/judgeCondition.nl": "f62f76ab6d979dfa8abef7c220bc58bb7c28fe76d710292969ffeba15484b93f",
+    "applications/dialogue-perspective-ledger/analyzeConversation/evolveViews/advanceEpisode/updateCommitment.nl": "c156e98e03275e672a708752f2d5b2e4e37d67dfb49c9e0f146cc18c0dc8a4d6",
+    "applications/dialogue-perspective-ledger/analyzeConversation/evolveViews/advanceEpisode.nl": "f4c1535738f9497d7422f7a4d5bc131fcb4916daae958422a81977cc9d9e2935",
+    "applications/dialogue-perspective-ledger/analyzeConversation/evolveViews.nl": "f8f89a0304d4fa133882cc5f51ee3916170c28ca8210395389a6149f7b590081",
+    "applications/dialogue-perspective-ledger/analyzeConversation/intake/readChronology.nl": "02a326be1be9cd36878a9b08a934fc10d643be1fae16214aee3654afc685b9a0",
+    "applications/dialogue-perspective-ledger/analyzeConversation/intake/readParticipation.nl": "0833c980ebeaa9e477d7288f7dce5becb59666d3a079a811599e5d7f6d0ee942",
+    "applications/dialogue-perspective-ledger/analyzeConversation/intake/readReceipts.nl": "a59b4374cf47f18e0d95ae1418a7607d96e9f765c1009414853eae4a52f8b6df",
+    "applications/dialogue-perspective-ledger/analyzeConversation/intake.nl": "ea8253e0aef961abb1922620ff4701b5d26968545bda00cfc322b5ec299985cd",
+    "applications/dialogue-perspective-ledger/analyzeConversation/scopeTurns/classifySpeechActs/judgeIllocution.nl": "fd48044c0117ed19946e617ccbc6d45eb8726c86ad87da893d41b7509db1fd18",
+    "applications/dialogue-perspective-ledger/analyzeConversation/scopeTurns/classifySpeechActs.nl": "14042865403661775ae0cd030907e5e4f0215a062c129cb949ae21b05bfef92b",
+    "applications/dialogue-perspective-ledger/analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan/judgeQuotationFrame.nl": "96c2f92bef8b5a5fc00c29c3cbf2167a079348e27d5f64d86660bd66a0aeb8da",
+    "applications/dialogue-perspective-ledger/analyzeConversation/scopeTurns/partitionQuotation/advanceQuoteSpan.nl": "9fb2eef20ddc7918f060f4fe820e3c7abbe87d2c1d22e3bc47b336c7eb3fe97b",
+    "applications/dialogue-perspective-ledger/analyzeConversation/scopeTurns/partitionQuotation.nl": "f4f500c03529637c984244e9c4379f1bfe623c0fec2283abdcc8bc66d716c495",
+    "applications/dialogue-perspective-ledger/analyzeConversation/scopeTurns/resolveReferences/judgeDeixis.nl": "e6446c4afe4b7bb09be2625bfb5a680607527b8a2249c022745d0e685ee358df",
+    "applications/dialogue-perspective-ledger/analyzeConversation/scopeTurns/resolveReferences.nl": "b66f35c48a7ed84c520fdec6507493dede40798f87f55a2c7bbcae94f05b912e",
+    "applications/dialogue-perspective-ledger/analyzeConversation/scopeTurns.nl": "05d1ed8c9acb11d8888e9961d87bd0bd3871bbbde340e7c447aa4641bee850fa",
+    "applications/dialogue-perspective-ledger/analyzeConversation.nl": "9c1a712655c47881e91288715f05e83e1d4565723924cde1998ca75ff69c262c",
+    "applications/dialogue-perspective-ledger/types.ts": "d61ca0042e1f8d12794c0dc501e0638c72e5f79bebc9dba2d4ef8de52819272a",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/check-countermand.mjs": "be7b0664ad4748d24fc1ee424c286631b627545854bb33a291f3a471f5e9138b",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/DECOMPOSITION.md": "d9ffea71de5263b5162a870ebd5821d0cbd6edaec3b307f47f95d2d3d4c34732",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/author-reference.py": "a6909a98f935bd4e71cede936b0a27a830090e3bbe578182aac5784f88e6289c",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/controls/format.md": "b6658e36ef1bb17e58e5bc5410a93752872459c0144640b5236e6260b5a8c050",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/controls/model.md": "c106bb55cc76ca99716bca211246983358b5cee15fb1a93867e56502b0b287f0",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/acknowledgments/versions.md": "2ee8be902f14d67808fb6562fac2447a0ff97213efbbd68c5109ba143b912a2e",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/promises/fresh.md": "29895e8ecc778962d28617f7b2d01ddd07460c792e400144684428aee3d8632a",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/promises/original.md": "e03fc39cfdd07e7193dbaee73712b471730fbca1f413ef413af399911feb779d",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/reports/collection.md": "92be861a7f0c91514124ded84025c2b87a7285bc28861b52a1c871bcc740bb72",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/reports/issuer-and-forward.md": "8a6329b4e7f2ef0489666273634ca9425d4f460fea7c91310a7e6778e87b1a56",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/revisions/adoptions.md": "8512f61eb14b9418341a4788636e6b08459045c531c36ba5839486a95c18d002",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/conversation/revisions/withdrawal.md": "3d14b3982af90112f35d4d56e430a7ea1aa89b4b088bd85bc3d6c0561ce95338",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/events/complete-log.md": "c9505d872ef4b516ede46a9a9dcca0f726cea0999be1428371fb8d5d81c6a81d",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/manifest.json": "f8631e8a533b18da2ebf0070e8db63daeb6c03b24f9ac9865e717a1c0a0b48e4",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/fixture/participants/channels.md": "35cdb959f7e569028817fe58da7396010c5e1da99662ce8d97776904777acd8d",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/oracle.json": "5ad414b279fcd76b21d83696db326bbb97940ae07cbf079a357ab43c38b96314",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/project.json": "874ad1a2b07ac40e8ec6cabca573b9161caacee3e027b408598f4fe5aa25b5f7",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/reference-report.json": "444e4085d6404ee7e003ea521480629c91750d635c6b926e9133f2cf5a5e9efd",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/request.json": "2d1fa1e4bced00d436508d406583fcb496f7dd5614a1483da92a49fc7bb6a16d",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/snapshot.json": "754749a64261fd1894047e6e394df21541d7b5fbe8e01b94048fa43739ad6f32",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/portico-packet/author-reference.py": "0a964f893c49897b3d251d5534449194a96ff471d6c700ae390379523924cf65",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/portico-packet/reference-report.json": "ba33cf9b1e73a7328d93f8c465310b3a618fe8fc63fbb12c29e0f5e68d1a055e",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/project.json": "0d00f5b88599f4207b1b4fb9ff84da5ed7d95bb117586d1e4a4814f43bdbc697",
+    "training/semantic_applications/sol/dialogue-perspective-ledger/verify-result.mjs": "47d19b2d67e12389077852f007c65bc488cc01f3d727aacc7604c3518fb31894"
+  },
+  "quality": {
+    "nl_files": 30,
+    "nl_total_lines": 802,
+    "numbered_steps": 215,
+    "type_aliases": 60,
+    "visible_crisp_policy_lines": 0
+  },
+  "source_world": {
+    "key": "sol-app-world:countermand-bridge-v1",
+    "documents": 11,
+    "clauses": 45,
+    "queries": 21,
+    "turns": 14,
+    "acts": 15,
+    "episodes": 23
+  },
+  "checks": {
+    "native_project": true,
+    "typed_declarations": true,
+    "full_typed_reference_replays": 2,
+    "first_world_controls": {
+      "positive": 9,
+      "negative": 42
+    },
+    "countermand_controls": {
+      "positive": 7,
+      "negative": 24
+    }
+  },
+  "closed_findings": [
+    "Actual typed RevisionSelection retained/consumed rather than effects inventing original lineage",
+    "Aggregate commitment replacement cannot bypass actual owner-specific retraction effect",
+    "Only declared query ambiguity constraints apply; Q13 index is not a semantic role",
+    "Receipt evidence and endorsement remain distinct; known false values and later matching corroboration exercise source knowledge criterion",
+    "Original sender is not re-executed at a later received-content episode"
+  ],
+  "crisp_seams": {
+    "visible": "Type declarations only; no executable semantic helper",
+    "private": "Explicit hand-authored source certificates assembled with exact JSON/offset/set application; verifier checks IDs/quotes/state/declared observables, not NL semantic interpretation"
+  },
+  "packages": [
+    {
+      "source_sha256": "338eb9da4085ebd4c53618aba76fee1f4368eeca501da70407855e845a2a2810",
+      "canonical_reference_replay": {
+        "path": "training/semantic_applications/sol/dialogue-perspective-ledger/portico-packet/reference-report.json",
+        "sha256": "ba33cf9b1e73a7328d93f8c465310b3a618fe8fc63fbb12c29e0f5e68d1a055e",
+        "reference_ok": true,
+        "reference_problems": [],
+        "opening_sha256": "4c862467d7c40d2e70be2aa16da57b1d429a993b9d0aa56c87d8d0dc1d347716",
+        "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
+      }
+    },
+    {
+      "source_sha256": "e6f9a6c76a211a773972d8b9e9d00a11b767f2ec4840cdfa73650ca7b93be5f5",
+      "canonical_reference_replay": {
+        "path": "training/semantic_applications/sol/dialogue-perspective-ledger/countermand-bridge/reference-report.json",
+        "sha256": "444e4085d6404ee7e003ea521480629c91750d635c6b926e9133f2cf5a5e9efd",
+        "reference_ok": true,
+        "reference_problems": [],
+        "opening_sha256": "c9a1ad3b921ed1b28439b01cb564b68a8ba46f2270d34cc435bb8ef36e42b805",
+        "scope": "source/type replay of one canonical witness, not complete semantic grading or teacher admission"
+      }
+    }
+  ],
+  "remaining_gates": [
+    "Independent current-variant source/oracle/checker review",
+    "Actual typed literal/child-result consumption and whole application execution",
+    "Approximately48 live samples before adoption"
+  ],
+  "independent_review": false,
+  "actual_application_execution": false,
+  "generation_ready": false,
+  "training_admission": false
+}

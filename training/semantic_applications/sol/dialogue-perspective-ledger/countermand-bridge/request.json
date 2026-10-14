@@ -198,6 +198,39 @@
       "targetId": "P_CODE20",
       "dimension": "verified",
       "question": "Was the old second beneficiary consequent actually delivered?"
+    },
+    {
+      "queryId": "Q19",
+      "perspective": "Noor",
+      "asOf": {
+        "day": 19,
+        "hour": 10.3
+      },
+      "targetId": "P_COLLECT18",
+      "dimension": "knowledge",
+      "question": "Does the verified event record qualify as endorsed knowledge before Noor corrects the old claim?"
+    },
+    {
+      "queryId": "Q20",
+      "perspective": "Noor",
+      "asOf": {
+        "day": 19,
+        "hour": 10.75
+      },
+      "targetId": "P_COLLECT18",
+      "dimension": "knowledge",
+      "question": "After the actual correction and verified record, does knowing the day18 proposition is false qualify?"
+    },
+    {
+      "queryId": "Q21",
+      "perspective": "Sada",
+      "asOf": {
+        "day": 20,
+        "hour": 1.25
+      },
+      "targetId": "P_COLLECT20",
+      "dimension": "knowledge",
+      "question": "Does her already endorsed before-noon proposition qualify once matching verified evidence is actually read, without adopting the separate day18 correction?"
     }
   ]
 }
