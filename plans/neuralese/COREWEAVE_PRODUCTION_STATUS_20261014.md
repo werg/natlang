@@ -206,3 +206,32 @@ because all outcomes are known and infrastructure/unresolved counts are zero.
 This permits its noise repeat; incomplete result files alone do not invalidate
 that success count. Final noise and the matched reference comparison are still
 pending.
+
+V2 was stopped with zero PH updates at20:59:40 after static review found a second
+concrete shared continuation bug: later-phase restoration copied weights and
+optimizer but omitted saved Python/Torch/device RNG restoration. Exact trainer
+10422 and zstd child10539 stopped; parent checkpoint remained unchanged and
+namespace-init1 retained the root/caches. Shared fix `cca530d20d` restores the
+predecessor RNG after optimizer restoration and before dropping its mmap.
+V3 recipe published `7290d972ab` pins integrated source
+`0f45f447b94cdefbc592c4ca8a48846dba02e5bd`,194 verified Python files and
+unchanged parent/head/PH SHA bindings. Actual same-sandbox relaunch21:03:20 uses
+bootstrap11935 under the original collect hold. V3 recipe SHA
+`8de9be5af065d521c9f610078fb20ca2ec541e7ff5dc83ea7b70560aaaef1fde`;
+shared plan-only and quick gate passed. First restore/update remains pending.
+
+Final Mellum task400 first pass5/16, repeat3/16, measured noise2, zero
+infrastructure/unresolved outcomes. Owner base-task qualification FAIL versus
+inherited13; evaluator eligible/min0 is accounting, not promotion or a
+certificate. Actual trainer resumed and reached422 at21:03. Evaluation+repeat
+5244.40seconds; first-pass actor_route_replan recorded26,211completion tokens
+and25fresh replies over3451.9seconds, repeat logic_proof_verifier26,102tokens
+and36fresh replies over1712.4seconds. Both ended as known supervisor repetition
+failures without terminal result rows. Parent's narrow matched base control
+succeeded on all three tested semantic failures; trained-weight/carried-state
+cause remains under investigation, with DGXsm121/cloudsm120 explicitly distinct.
+Final evidence archive `task400-evidence-1792011799.tar.gz` is durably
+SHA-verified on DGX,37,463,184bytes,
+`53e673a25582202fbb31c561f8e11618b967a774053016c66791c63abb795873`.
+Its sibling timing, first-action and partial-exchange exports preserve exact
+final/noise controls and failure feedback for the assigned diagnosis.
