@@ -42,7 +42,10 @@ def test_duplicate_ids_dropped_from_later_member_and_zst_streamed(tmp_path):
         got = [json.loads(line) for line in (out / 'program-header' / tok / 'text-data.jsonl').read_text().splitlines()]
         assert [(r['id'], r['text']) for r in got] == [('a', 'A'), ('b', 'B from first member'), ('c', 'C')]
     omissions = [json.loads(line) for line in (out / 'program-header' / 'omissions.jsonl').read_text().splitlines()]
-    assert omissions == [{'id': 'b', 'member': 'second', 'reason': 'duplicate_document_id (first in first)'}]
+    assert omissions == [{'id': 'b', 'member': 'second', 'reason': 'duplicate_document_id',
+                          'kept_member': 'first',
+                          'kept_text_sha256': hashlib.sha256(b'B from first member').hexdigest(),
+                          'omitted_text_sha256': hashlib.sha256(b'B rendered differently').hexdigest()}]
     receipt = json.loads((out / 'receipt.json').read_text())
     bound = receipt['member_files']['program-header']['second']['lfm25']
     packed = Path(bound['path'])

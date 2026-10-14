@@ -2,6 +2,7 @@
 interleaves e2e producer->consumer updates (train.trajectories.build_e2e_objective) with its direct updates on one
 engine, one pair of projections and one optimizer."""
 
+import hashlib
 import json
 
 import pytest
@@ -124,7 +125,9 @@ def test_neuralese_spans_with_an_edge_become_context_only_merged_with_declared_s
     sidecar.write_text(json.dumps({'id': 'a', 'spans': [[10, 14, 'result:x', True], [20, 25, 'note:y', False]]}) + '\n'
                        + json.dumps({'id': 'b', 'spans': [[3, 5, 'result:z', False]]}) + '\n')
     assert neuralese_spans({'fraction': 0.25}, tmp_path) is None
-    edges, plain = neuralese_spans({'neuralese_spans': {'path': sidecar.name, 'sha256': '0' * 64}}, tmp_path)
+    edges, plain = neuralese_spans({'neuralese_spans': {'path': sidecar.name,
+                                                      'sha256': hashlib.sha256(sidecar.read_bytes()).hexdigest()}},
+                                   tmp_path)
     assert edges == {'a': [[10, 14]]} and plain == 2
     merged = merged_context_only_spans([[0, 4], [12, 18]], edges['a'] + [[30, 31]])
     assert merged == [[0, 4], [10, 18], [30, 31]]
