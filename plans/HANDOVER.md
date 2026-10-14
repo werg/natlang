@@ -37,6 +37,18 @@ changing assertions. Pop's `source-reviews-20261014-v1` now pins all 185 hold
 records. Existing frozen training rows still require source-review exclusion
 at the next union; a hold registry update alone does not rewrite them.
 
+A later ordinary Luna case, MuSiQue `2hop__146823_377891`, exhausted 384
+requests and began a 768-request resumed retry. Its source asks for the city
+where Ibn Zaydún died, but the visible Ibn Zaydún paragraph says only that he
+was a poet of Cordoba and Seville; the authored first-hop reference returns
+that whole paragraph, not a city. This is another unsupported source join,
+not a trustworthy model/DPO failure. Stop of the exact retry unit
+`natlang-pop-luna-s52047-w05-r015-01.service` freed capacity. Registry manifest
+`source-reviews-20261014-v2` holds the source across derived variants, and
+campaign s52047 has an exact zero-result `reviewed-exclusions.json` entry so
+the replenisher does not reattempt it. The partial is assigned to this source
+diagnosis; prune redundant raw partial/evidence after durable receipt review.
+
 ## 06:51 CEST: deep pseudocode source and FP8 reference update
 
 The owner clarified that large examples should be substantive structured
