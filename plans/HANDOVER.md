@@ -29,12 +29,25 @@ recovery. Held48 remains evaluation only (clean base1/48, trained1/48, trained
 21 repetition exits). The supporting evidence is in
 `plans/neuralese/QAD_MATCHED48_RECOVERY_DRAGNET_20261014.md`.
 
-The Python gate `natlang-pop-python-after-student-root-v1` is now active on
-the Pop GPU following the QAD rollout. It includes the DGX detached token
-readout and native returned-value span-matching commits; inspect its three
-logs and summary before claiming a full gate. Field Gloss v3 source fixes
-`e69f393f` are pushed; its independent reference/certificate update is in
-progress, so live 48 sampling remains held.
+The Python gate `natlang-pop-python-after-student-root-v1` finished: 955
+general passes/2 skips and 3 missing-zstd container failures; 1,271
+Neuralese passes/270 skips and one missing-zstd failure; 14 GPU passes/1 skip.
+Commit `0821ddd3` mounts the host zstd binary, and the four exact failed
+cases then passed 4/4 in the corrected container. This is combined evidence,
+not a single green full-gate rerun. Field Gloss v3 source/certificate is
+reviewed and pushed at `9acf9846`; its onecase Luna pilot is active and
+durably resumes after ledger preemption, with 48 live samples held pending
+pilot review.
+
+`build-handoffs.mjs` produced 66 replay-checked sites from 22 nonempty
+train-only QAD results; 12 diverse, source-disjoint handoffs are selected,
+with two Luna recovery workers queued/running against a frozen runtime. No
+recovery answer is admitted yet. A GPU probe found large nontext-token
+probability in the trained QAD checkpoint (0.265/0.050/0.008 over three
+same-context sites at temperature 0.6), effectively zero in clean base. This
+supports a real distribution-drift bug dragnet; details and next exact
+reference comparison are in the QAD diagnostic plan. The serving variant is
+not changed yet.
 
 Luna/Gemini replenishers remain active around ledger headroom. The s52048
 worker-06 eight-message workbench attempt expanded to 824 replies/433

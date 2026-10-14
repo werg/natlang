@@ -172,3 +172,43 @@ def test_cohort_write_cache_is_invalidated_by_records_edges_and_extractor_code(t
         code.write_text('extractor = 2\n')
         patch.setattr(T, 'handover_notes', lambda record: {'answer': 'new extractor'})
         assert spans_module.cohort_writes(tmp_path) == {'r': [('answer', 'new extractor', False)]}
+
+
+def test_canonical_nested_write_path_masks_only_its_field_even_when_another_value_is_equal():
+    import json
+    value = {'answer': 'same', 'facts': 'same'}
+    for target in ["return_result(status='success', value=" + json.dumps(value) + ')',
+                   '<tool_call>' + json.dumps({'name': 'return_result',
+                                              'arguments': {'status': 'success', 'value': value}}) + '</tool_call>']:
+        site = {'tool': 'return_result', 'value_path': ['value', 'facts'], 'source_kind': 'json-write-marker'}
+        spans, missing = spans_module.spans_for_row(row('', target), [('fact', 'same', True, site)], CharTokenizer())
+        begin = target.rindex('same')
+        assert missing == 0 and spans == [[begin, begin + 4, 'fact', True]]
+        site = {**site, 'value_path': ['value', 'missing']}
+        assert spans_module.spans_for_row(row('', target), [('fact', 'same', True, site)], CharTokenizer()) == ([], 1)
+
+
+def test_nested_array_field_paths_preserve_exact_unicode_literal_offsets():
+    import json
+    value = {'items': [{'facts': 'wrong'}, {'facts': 'café'}]}
+    for target in ["return_result(value=" + json.dumps(value, ensure_ascii=False) + ')',
+                   '<tool_call>' + json.dumps({'name': 'return_result', 'arguments': {'value': value}},
+                                              ensure_ascii=False) + '</tool_call>']:
+        site = {'tool': 'return_result', 'value_path': ['value', 'items', 1, 'facts']}
+        spans, missing = spans_module.spans_for_row(row('', target), [('fact', 'café', True, site)], CharTokenizer())
+        begin = target.index('café')
+        assert missing == 0 and spans == [[begin, begin + 4, 'fact', True]]
+
+
+def test_real_cohort_write_join_retains_the_shared_extractor_value_path(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
+    monkeypatch.setenv('NATLANG_HASH_CACHE', str(tmp_path / 'hashes.jsonl'))
+    args = {'status': 'success', 'value': {'answer': 'same', 'facts': {
+        '$write': {'name': 'fact', 'type': 'Neuralese<string>', 'source': 'same'}}}}
+    record = {'id': 'r', 'messages': [], 'target': {'tool_calls': [
+        {'function': {'name': 'return_result', 'arguments': json.dumps(args)}}]}}
+    (tmp_path / 'records.jsonl').write_text(json.dumps(record) + '\n')
+    (tmp_path / 'edges.jsonl').write_text(json.dumps({'writer_record_id': 'r', 'write_name': 'fact'}) + '\n')
+    assert spans_module.cohort_writes(tmp_path) == {'r': [('fact', 'same', True, {
+        'tool': 'return_result', 'value_path': ['value', 'facts'], 'source_kind': 'json-write-marker'})]}

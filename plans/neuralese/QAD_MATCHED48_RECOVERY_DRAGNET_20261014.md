@@ -143,6 +143,58 @@ Next review first failed actions and produce replay-checked teacher handoffs
 from these train sources only. The held48 remains entirely outside the train
 packet and all recovery queues.
 
+`build-handoffs.mjs` replay-checked all 22 nonempty train results and produced
+66 candidate sites (51 failed actions, 15 wrong results). Five proposed sites
+failed same-state replay and were excluded. `select_repair_handoffs.py` chose
+12, one per source group/family, with zero protected held source-group overlap;
+the resulting train-only teacher queue is
+`runs/qad-student-recovery-teacher-20261014-v1`. Two Luna workers collect from
+the pinned frozen runtime, and every output still requires exact-oracle,
+continuation and native-render review before training admission.
+
+## Random nontext token drift in the trained checkpoint
+
+The clean QAD base emitted no `<|reserved_N|>` or image-row tokens among 130
+nonempty assistant content turns in the matched held run; step 15000 emitted
+them in six of nine terminal-result content turns. The train-only whole-student
+rollout had 20 of 50 content turns with such tokens. One row in the 8.3 GB
+broad r3 LFM text render contains a reserved-token literal; that isolated row
+is a quality defect to remove in a future union, but is too sparse to explain
+the widespread trained emission on its own.
+
+An exact same-context, same-clean-head GPU probe compared the base with the
+step-15000 backbone at three live rollout contexts (full rendering, temperature
+0.6). Combined probability over 477 reserved/image-row IDs (including the two
+reserved IDs repurposed as Neuralese controls) was effectively zero in the base
+and 0.26477, 0.05024 and 0.00819 in
+the trained checkpoint. At the first two contexts, the trained logits for the
+near-identical filler rows averaged 13.95 and 12.45, versus -3.28 and -3.29
+in the base. The first context's sampling entropy rose from 0.427 to 7.38
+nats. The fixed QAD input/output embedding table has 475 such rows with nearly
+identical embeddings (centroid RMS 0.00860, median deviation RMS 0.0000043);
+the trained hidden states align with this filler direction. The step-15000
+checkpoint changes 146 backbone tensors by median relative RMS 0.049 against
+the clean QAD weights; the tied embedding table and clean heads are fixed.
+This is a measurable output-distribution drift, not merely odd decoded text.
+The local probe report is `/tmp/natlang-pop-qad-special-mass-v2.json`; DGX
+was briefed. Next compare the exact in-trainer FP32 logits to restored BF16
+serving logits at these contexts, inspect training data and loss/optimizer
+flow, and measure any output-token suppression variant on about 48 live
+samples before adoption. Do not infer from these three positions that the
+training approach is intrinsically unsound; the on-policy recovery campaign
+is running in parallel.
+
+Precision and rendering controls narrowed the cause. Restoring the same
+checkpoint in FP32 gave bad-token masses 0.263862/0.044576/0.007791, very
+close to BF16 0.264770/0.050242/0.008190, so BF16 serving conversion is not
+the large drift. Rendering the same messages in short program-header mode
+gave trained masses 0.207423/0.000271/0.000131; full rendering amplifies two
+sites, but one short child prompt still has 20.7% bad-token probability.
+The base remains effectively zero in either rendering. The two supplementary
+probe reports are `/tmp/natlang-pop-qad-special-mass-v3.json` and
+`/tmp/natlang-pop-qad-special-mass-header-v1.json` on Pop. These are
+diagnostics, not training data or a blanket verdict on the objective.
+
 Separate Luna generation triage: `s52048/worker-06/case-009` is an eight-message
 dataset workbench program. Its first run exhausted the model-request budget;
 the retry reached 824 model replies, about 95,000 completion tokens and 433
