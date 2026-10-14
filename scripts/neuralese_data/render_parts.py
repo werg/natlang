@@ -23,6 +23,7 @@ parts are skipped.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -34,6 +35,8 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / 'training' / 'neuralese'))
+from natlang_neuralese.common.hashing import sha256_file_hex
 # io-quiet markers (checkpoint writes in progress); loaded by path so no package import is needed.
 _spec = importlib.util.spec_from_file_location(
     'io_quiet', REPO / 'training/neuralese/natlang_neuralese/common/io_quiet.py')
@@ -186,6 +189,12 @@ def part_files(out: Path, rendering: str, tok: str) -> list[Path]:
     return files
 
 
+def compress_part_views(part: Path) -> None:
+    """Compress completed part text before accumulating the next part."""
+    for path in sorted(part.glob('*/*/text-data.jsonl')):
+        subprocess.run(['zstd', '-q', '-3', '--long=27', '-T2', '--rm', '-f', str(path)], check=True)
+
+
 def read_rows(path: Path):
     if path.suffix == '.zst':
         proc = subprocess.Popen(['zstd', '-dcq', '--long=27', str(path)], stdout=subprocess.PIPE)
@@ -204,7 +213,7 @@ def text_sha(row: dict) -> str:
     return hashlib.sha256(row['text'].encode()).hexdigest()
 
 
-def merge_parts(out: Path) -> dict:
+def merge_parts(out: Path, *, compress_all: bool = False) -> dict:
     """Join the parts into one member file per rendering and tokenizer (OUT/RENDERING/TOK/text-data.jsonl, the layout
     the target-set manifest reads), restoring the renderer's corpus-level rules across parts (Pop 2026-10-12: part
     renders must keep global split decontamination): held stays held; a train document sharing a source group with a
@@ -241,9 +250,10 @@ def merge_parts(out: Path) -> dict:
                 continue
             dst = out / rendering / tok
             dst.mkdir(parents=True, exist_ok=True)
-            compress = rendering == 'full'
+            compress = compress_all or rendering == 'full'
             target = dst / ('text-data.jsonl.zst' if compress else 'text-data.jsonl')
             tmp = target.with_name(target.name + '.tmp')
+            decoded_digest, decoded_bytes = hashlib.sha256(), 0
             with open(tmp, 'wb') as raw:
                 zp = subprocess.Popen(['zstd', '-q', '-3', '--long=27', '-T2', '-c'], stdin=subprocess.PIPE,
                                       stdout=raw) if compress else None
@@ -254,7 +264,10 @@ def merge_parts(out: Path) -> dict:
                     for line, row in read_rows(path):
                         if row['id'] in drop:
                             continue
-                        sink.write(line if line.endswith(b'\n') else line + b'\n')
+                        data = line if line.endswith(b'\n') else line + b'\n'
+                        sink.write(data)
+                        decoded_digest.update(data)
+                        decoded_bytes += len(data)
                         splits[row['split']] = splits.get(row['split'], 0) + 1
                         kept += 1
                 if zp:
@@ -266,6 +279,10 @@ def merge_parts(out: Path) -> dict:
                 for doc, reason in sorted(drop.items()):
                     f.write(json.dumps({'id': doc, 'reason': reason}) + '\n')
             counts[f'{rendering}/{tok}'] = {'documents': kept, 'documents_by_split': splits,
+                                            'text_data_file': target.name,
+                                            'text_data_sha256': sha256_file_hex(target),
+                                            **({'decoded_text_data_sha256': decoded_digest.hexdigest(),
+                                                'decoded_text_data_bytes': decoded_bytes} if compress else {}),
                                             'merge_omissions': dict(sorted(
                                                 {r: list(drop.values()).count(r) for r in set(drop.values())}.items()))}
             for path in files:
@@ -291,23 +308,29 @@ def merge_receipts(receipts: list[dict], cuts: list[int], merged: dict | None = 
             renders[key]['documents_before_merge'] = renders[key]['documents']
             renders[key]['documents'] = info['documents']
             renders[key]['merge_omissions'] = info['merge_omissions']
+            for field in ('text_data_file', 'text_data_sha256', 'decoded_text_data_sha256',
+                          'decoded_text_data_bytes'):
+                if field in info:
+                    renders[key][field] = info[field]
     return {'schema': 'natlang.render-parts/2', 'parts': len(receipts), 'cuts': cuts, 'renders': renders,
             'cross_part_merge': {k: v for k, v in (merged or {}).items() if k != 'merged'},
             'note': 'by_split token counts are summed over parts before the cross-part merge; documents are after it'}
 
 
 def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpus: int = 6, budget_gb: int = 6,
-           docker_gb: int = 8, part_decisions: int = PART_DECISIONS) -> dict:
+           docker_gb: int = 8, part_decisions: int = PART_DECISIONS, *, compress_all: bool = False) -> dict:
     if (out / 'receipt.json').exists():
         return load(out / 'receipt.json')
     cuts = plan(sources, out, part_decisions)
     receipts = []
     for k, (start, stop) in enumerate(zip(cuts, cuts[1:])):
         render_part(sources, out, k, start, stop, corpus_id, unit_prefix, cpus, budget_gb, docker_gb)
+        if compress_all:
+            compress_part_views(out / 'parts' / f'p{k:02d}')
         receipts.append(load(out / 'parts' / f'p{k:02d}' / 'receipt.json'))
     merged = load(out / 'merge.json') if (out / 'merge.json').exists() else None
     if merged is None:
-        merged = merge_parts(out)
+        merged = merge_parts(out, compress_all=compress_all)
         save(out / 'merge.json', merged)
     receipt = merge_receipts(receipts, cuts, merged)
     save(out / 'receipt.json', receipt)
@@ -325,7 +348,9 @@ def render_summary(receipt: dict) -> dict:
     for key, info in receipt['renders'].items():
         mode, tok = key.split('/')
         out.setdefault(mode, {})[tok] = {k: v for k, v in info.items()
-                                         if k in ('documents', 'by_split', 'max_document_tokens')}
+                                         if k in ('documents', 'by_split', 'max_document_tokens', 'text_data_file',
+                                                  'text_data_sha256', 'decoded_text_data_sha256',
+                                                  'decoded_text_data_bytes')}
     return out
 
 
@@ -359,13 +384,15 @@ def main() -> None:
     p.add_argument('--cpus', type=int, default=6)
     p.add_argument('--budget-gb', type=int, default=6)
     p.add_argument('--docker-gb', type=int, default=8)
+    p.add_argument('--compress-all', action='store_true',
+                   help='compress completed parts and every merged view; decoded rows and selection are unchanged')
     p.add_argument('--register', type=Path, metavar='REL_PATH',
                    help='register the render (repo-relative path of OUT) through register_corpora.py')
     p.add_argument('--link', action='store_true',
                    help='with --register: create the REL_PATH symlink to OUT in the shared checkout')
     args = ap.parse_args()
     receipt = render(args.source, args.out, args.corpus_id, args.unit_prefix or f'render-{args.corpus_id}'[:60],
-                     args.cpus, args.budget_gb, args.docker_gb)
+                     args.cpus, args.budget_gb, args.docker_gb, compress_all=args.compress_all)
     print(json.dumps({'rendered': args.corpus_id, 'parts': receipt['parts']}), flush=True)
     if args.register:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
