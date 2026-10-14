@@ -788,20 +788,22 @@
     "license": "Repository license"
   },
   "readiness": {
-    "source_loader_checked": false,
-    "typed_declarations_checked": false,
-    "typed_reference_checked": false,
-    "independent_source_review": false,
+    "source_loader_checked": true,
+    "typed_declarations_checked": true,
+    "typed_reference_checked": true,
+    "independent_source_review": true,
     "independent_oracle_review": true,
-    "exact_result_replay": false,
+    "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
   },
   "source_review_binding": {
-    "reviewed": false,
-    "scope": "Current v4 original-role completion boundary awaits independent source review, source replay and matched live consumption; the v3 private certificate and oracle are unchanged",
-    "source_commit": null,
-    "source_review_commit": null,
+    "reviewed": true,
+    "scope": "Independent v4 source and exact handoff review; canonical type/reference replay; live D03 role judgment and downstream F_RA retention still unmeasured",
+    "source_commit": "a178aecf",
+    "source_review_commit": "9044e68f",
+    "source_review_receipt": "plans/semantic_stack/FIELD_GLOSS_ROLE_COVERAGE_V4_REVIEW_SOL.json",
+    "source_review_sha256": "cbadf4ff4f45ef220d9ec6ac02dc68a75bc0d18e9dc78c0245e8c0fdccbd2fc3",
     "private_review_receipt": "plans/semantic_stack/FIELD_GLOSS_NAMED_READERS_V3_PRIVATE_REVIEW_CURRICULUM.json"
   },
   "independent_reviews": [
@@ -810,6 +812,12 @@
       "sha256": "f73487fcfc91b4a696e0e8018bbd340e60e286afa0ed1f9a9d3f2520268d2f8b",
       "reviewer": "semantic_stack_curriculum",
       "scope": "Private typed certificate and exact checker bytes unchanged by v4 role-reader wording; current v4 source and live handoff remain unreviewed"
+    },
+    {
+      "path": "plans/semantic_stack/FIELD_GLOSS_ROLE_COVERAGE_V4_REVIEW_SOL.json",
+      "sha256": "cbadf4ff4f45ef220d9ec6ac02dc68a75bc0d18e9dc78c0245e8c0fdccbd2fc3",
+      "reviewer": "semantic_slate_sol",
+      "scope": "Current v4 original role return/coverage source, 90 exact controls, canonical typed replay; no live semantic credit"
     }
   ],
   "historical_reviews_for_prior_source": [
@@ -844,8 +852,8 @@
       "scope": "Current private exact certificate: original64 plus four adversarial controls all pass; session context, correction attribution/exclusions and scope disjointness bound; linguistic entailment/live execution unqualified"
     }
   ],
-  "source_variant": "role-return-coverage-v4-source-review-pending",
-  "generation_ready": false,
+  "source_variant": "role-return-coverage-v4",
+  "generation_ready": true,
   "training_admission": false,
   "model_facing_debt": "0/48 role-return-coverage v4 live samples; v3 one-case stopped after D03 malformed role child and missing F_RA domain selection. Matched v4 child recovery, domain coverage, full result and idiomaticity remain unmeasured",
   "reference_scope": "One full typed privately authored source-validity witness plus qualified declared exact comparator; not execution of the NL application, a complete linguistic classifier or a teaching trajectory",

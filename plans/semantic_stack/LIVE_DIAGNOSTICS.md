@@ -3,6 +3,12 @@
 Source/reference replay establishes type and fixture validity only. These live
 observations do not grant training admission or count as model-negative rows.
 
+## Field Gloss v4 matched role-return repair, live pending (2026-10-14)
+
+- Independent source review `9044e68f` and 90 existing exact controls accept the v4 handoff contract. Canonical package source SHA-256 `1c0f63c9c00456e403dcd018c928915e80bc0ec6ebcd7131e1eb0e592d14cb2d` replays its full typed reference; this proves source/type plumbing only.
+- The matched one-case queue SHA-256 is `285d43948a68643c68a93c1c9908030ae3ab3288b5fdba2ab4f889ae6c87e10c`; the 48-attempt queue SHA-256 is `69631c6ccc064acf805d3799766ac54fa4d58110caa870d32e62285a2fdf365d`. Both are pinned by `/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/field-gloss-role-v4-live48-v1/manifest.json` (SHA-256 `5524463751332991931d35c6faa8d5897cfcf0fea2b4479938c2129d569e4c10`) to runtime manifest SHA-256 `108aa515571c0c2461380b7ae489c043095c97013bd1c599ba14b4c71e33c2bb`.
+- Live checks must establish that a valid D03 role result retains F_RA in the candidate-domain reader, followed by downstream typed use and semantic outcome. Source readiness permits a one-case diagnostic; 0/48 v4 samples and no training admission are claimed.
+
 ## Field Gloss v3 lost definition after a malformed role child (2026-10-14)
 
 - Frozen named-reader source SHA-256 `ed18183033de3174db12d223b9964a5c8dcecb2a3be252ad218da706b4780f14`, one-case queue SHA-256 `5faa4a787dc9b276a0345fc8fff5ce2bbe35a8dca549fe852c957ce224c2e5e6`, runtime manifest SHA-256 `108aa515571c0c2461380b7ae489c043095c97013bd1c599ba14b4c71e33c2bb`. Low-priority 2.0 GiB unit `natlang-pop-field-gloss-v3-onecase.service` was stopped after first candidate-domain selection, with no final result. Its assigned diagnostic partial is `/srv/storage/natlang-artifacts/semantic-stack-20261013-v1/field-gloss-named-readers-v3-live48-v1/case-000/collection/jobs/000000-046add4db4e941a1.partial.json`, SHA-256 `3c00fcdb6c93663dea7e0e26e138be7fbd87183b6f2a52062210c73a680dffb2`.
