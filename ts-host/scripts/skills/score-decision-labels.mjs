@@ -5,15 +5,14 @@
  * Legacy label contracts use choice probabilities by Brier, noul probability by Brier, and score probabilities by
  * ranked probability score. `natlang.choice-label-confidence/1` reports exact class accuracy and confidence
  * calibration separately; confidence is never expanded into a synthetic probability distribution. */
-import { createReadStream } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { createInterface } from 'node:readline';
+import { jsonlRows } from '../jsonl-stream.mjs';
 import { scoreGraded } from '../../dist/skills/graded.js';
 
 const arg = name => { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1]; };
 const [casesPath, labelsPath, out] = [arg('--cases'), arg('--labels'), arg('--out')];
 if (!casesPath || !labelsPath || !out) throw Error('Usage: score-decision-labels.mjs --cases FILE --labels FILE --out FILE');
-const lines = async function* (path) { for await (const line of createInterface({ input: createReadStream(path) })) if (line.trim()) yield JSON.parse(line); };
+const lines = jsonlRows;
 
 const cases = new Map();
 for await (const c of lines(casesPath)) cases.set(c.id, c);

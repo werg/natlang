@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { jsonlRows } from '../jsonl-stream.mjs';
 import { isDeepStrictEqual } from 'node:util';
 import { curriculumCase, evalCall, returnCall } from '../inline-curriculum/lib.mjs';
 
@@ -9,9 +9,7 @@ export const sha = value => createHash('sha256').update(typeof value === 'string
 export const equal = isDeepStrictEqual;
 export function requireValue(condition, reason) { if (!condition) throw new Error(reason); }
 export async function* jsonLines(path) {
-  const lines = createInterface({input:createReadStream(path), crlfDelay:Infinity});
-  try { for await (const line of lines) if (line.trim()) yield JSON.parse(line); }
-  finally { lines.close(); }
+  yield* jsonlRows(path);
 }
 export async function fileHash(path) {
   const hash = createHash('sha256');

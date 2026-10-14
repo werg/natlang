@@ -9,20 +9,18 @@
  * unexecuted proposal') and which were approved. A site is one or more failed turns of a call followed directly by an
  * approved turn of the same call. The variants are rows like the collector's; the materializer trains only the fix.
  */
-import { createReadStream } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { correctedVariant } from '../../dist/teacher/corrections.js';
 import { TOOLS_PROMPT } from '../../dist/native/prompt.js';
 import { classifyAdmissionReason } from '../admission-dispositions.mjs';
-import { fileDigest } from '../jsonl-stream.mjs';
+import { fileDigest, jsonlRows } from '../jsonl-stream.mjs';
 
 const FAILED = 'decision contains a failed or unexecuted proposal';
 
 async function* lines(path) {
-  for await (const line of createInterface({ input: createReadStream(path), crlfDelay: Infinity })) if (line.trim()) yield JSON.parse(line);
+  yield* jsonlRows(path);
 }
 
 /** Sites per trajectory, from its materialized decisions. */

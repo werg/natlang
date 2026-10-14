@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 // Stream JSONL identities using the collector's canonical digest implementation.
-import {createReadStream} from 'node:fs';
-import {createInterface} from 'node:readline';
-import {createGunzip} from 'node:zlib';
+import {jsonlLines} from './jsonl-stream.mjs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
@@ -14,11 +12,8 @@ for(let i=0;i<args.length;i+=2){
 if(!options.input)throw new Error('--input JSONL path is required');
 const host=path.resolve(options.runtime??path.join(import.meta.dirname,'..'));
 const {recordDigest}=await import(pathToFileURL(path.join(host,'dist/teacher/collector.js')));
-const source=createReadStream(options.input),input=options.input.endsWith('.gz')?source.pipe(createGunzip()):source;
-// Forward source errors to the reader even when it is consuming a gzip transform.
-if(input!==source)source.on('error',error=>input.destroy(error));
 let physicalLine=0;
-for await(const line of createInterface({input,crlfDelay:Infinity})){
+for await(const line of jsonlLines(options.input)){
   physicalLine++;
   if(!line.trim())continue;
   let record=JSON.parse(line);

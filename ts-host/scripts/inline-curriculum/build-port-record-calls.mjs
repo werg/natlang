@@ -33,10 +33,10 @@
 // Writes DIR/<family>/NNNNN.ir.jsonl shards (rewritten deterministically), DIR/<family>/omissions.jsonl and
 // DIR/<family>/build.json. Replay each shard with replay-port-record-calls.mjs (driver: scripts/neuralese_data/port_record_calls.sh).
 import { createHash } from 'node:crypto';
-import { createReadStream, existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
-import { createInterface } from 'node:readline';
+import { jsonlLines } from '../jsonl-stream.mjs';
 import { parseArgs } from 'node:util';
 import { curriculumCase, evalCall, returnCall } from './lib.mjs';
 import { normalizeSourceText } from './source-split.mjs';
@@ -199,8 +199,7 @@ async function emit(split) {
   await flushShard();
 }
 
-const input = createInterface({ input: createReadStream(resolve(values.input)), crlfDelay: Infinity });
-for await (const line of input) {
+for await (const line of jsonlLines(resolve(values.input))) {
   if (!line) continue;
   if (stats.records >= LIMIT) break;
   stats.records++;

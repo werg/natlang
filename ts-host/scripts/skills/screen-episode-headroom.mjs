@@ -17,10 +17,9 @@
  * is resumable (episodes already screened for this executor are skipped). With --keep, episodes whose support
  * quality lies inside the band are written with `provenance.headroom` (host-only; authors never see provenance).
  */
-import { createReadStream } from 'node:fs';
 import { headroomIdentity, resumedHeadroomRows } from './headroom-identity.mjs';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
-import { createInterface } from 'node:readline';
+import { jsonlLines } from '../jsonl-stream.mjs';
 import { createHash } from 'node:crypto';
 import { Folder } from '../../dist/native/scoped-fs.js';
 import { UsageGateway } from '../../dist/evaluation/usage.js';
@@ -65,7 +64,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => controlle
 const kept = [], families = {};
 let seen = 0;
 const selected = [];
-for await (const line of createInterface({ input: createReadStream(options.episodes) })) {
+for await (const line of jsonlLines(options.episodes)) {
   if (!line.trim()) continue;
   const episode = JSON.parse(line);
   if (options.split !== 'all' && episode.split !== options.split) continue;

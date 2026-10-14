@@ -15,10 +15,9 @@
  *   node scripts/skills/build-repair-episodes.mjs --episodes <episodes.jsonl> --library <context dir with skills/> \
  *     --out <dir> [--limit N]
  */
-import { createReadStream } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { createInterface } from 'node:readline';
+import { jsonlRows } from '../jsonl-stream.mjs';
 import { loadSkills } from '../../dist/skills/registry.js';
 import { directorySkillSource } from '../../dist/skills/node.js';
 import { AUTHORING_OPERATIONS, validateEpisode } from '../../dist/skills/episode.js';
@@ -110,7 +109,7 @@ export function repairEpisodes(base, seeds) {
 }
 
 async function* jsonl(path) {
-  for await (const line of createInterface({ input: createReadStream(path), crlfDelay: Infinity })) if (line.trim()) yield JSON.parse(line);
+  yield* jsonlRows(path);
 }
 
 /** Seed skills with their raw folder contents and the families they serve. */
