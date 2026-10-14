@@ -73872,26 +73872,6 @@
       "notes": "Upstream success labels retained as provenance; independent task execution not claimed. Producer flags and train-only quality exclusions retained as provenance. Native replay/render and recipe bindings are separate steps."
     },
     {
-      "id": "external-expansion-agentic-coding-native-20261014-v1",
-      "owner": "dgx",
-      "path": "data/neuralese/corpora/external-expansion-agentic-coding-native-20261014-v1",
-      "include": [
-        "turns/**/*.turns.jsonl.zst",
-        "turns/**/*.summary.json",
-        "ir/**/build.json",
-        "runtime-page.json",
-        "admission-review.json"
-      ],
-      "source_class": "statically-lowered-external-native-teacher-turns",
-      "training_admission": false,
-      "training_admission_reason": "Superseded by exact content-identity repaired v2; reused upstream IDs caused42 parent collisions in downstream selection.",
-      "admission": "External teacher targets unknown; static native plumbing exact. One wrong-return omission assigned repair.",
-      "derived_from": [
-        "external-expansion-agentic-coding-handoffs-20261014-v1"
-      ],
-      "license": "Facts retained in pinned original source snapshot and port records"
-    },
-    {
       "id": "external-expansion-gatc-native-20261014-v1",
       "owner": "dgx",
       "path": "data/neuralese/corpora/external-expansion-gatc-native-20261014-v1",
