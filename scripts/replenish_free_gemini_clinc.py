@@ -125,6 +125,39 @@ def quality_summary(batch, cases, labels):
     return summary
 
 
+def convert_closed(batch, number, campaign):
+    """Keep validated labels flowing into held Natlang static references."""
+    out = campaign / f'gemini-clinc-batch{number:02d}-static-adapter-v2-full-replay'
+    unit = f'natlang-pop-gemini-clinc-static-batch{number:02d}'
+    if out.exists():
+        summary = out / 'summary.json'
+        if not summary.exists() and not unit_active(unit + '.service'):
+            print(json.dumps({'event': 'static_conversion_needs_review', 'batch': number,
+                              'reason': 'nonempty_or_partial_output'}), flush=True)
+        elif summary.exists():
+            result = json.loads(summary.read_text())
+            if (result.get('replay_failures') or
+                    result.get('replay_attempted') != result.get('cases')):
+                print(json.dumps({'event': 'static_conversion_needs_review', 'batch': number,
+                                  'reason': 'incomplete_reference_replay'}), flush=True)
+        return
+    command = ['node', 'ts-host/scripts/static-adapters/teacher-decision-labels.mjs',
+               '--cases', str((batch / 'cases.jsonl').relative_to(ROOT)),
+               '--labels', str((batch / 'labels.jsonl').relative_to(ROOT)),
+               '--out', str(out.relative_to(ROOT)), '--batch-size', '8', '--replay-limit', '64']
+    run = subprocess.run(['python3', 'scripts/memory_ledger.py', 'run', '--unit', unit,
+                          '--budget-gb', '0.7', '--reserve-gb', '0.2', '--class', 'collection',
+                          '--priority', 'low', '--workdir', str(ROOT), '--', *command],
+                         cwd=ROOT, capture_output=True, text=True)
+    if run.returncode:
+        if 'not admitted:' in run.stderr:
+            print(json.dumps({'event': 'static_conversion_deferred_memory', 'batch': number}), flush=True)
+            return
+        raise subprocess.CalledProcessError(run.returncode, run.args, run.stdout, run.stderr)
+    print(json.dumps({'event': 'static_conversion_launched', 'batch': number,
+                      'unit': unit}), flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, default=SOURCE)
@@ -159,6 +192,7 @@ def main():
                     print(json.dumps({'event': 'quality_pause', 'batch': number,
                                       'valid': valid, 'exact': exact, 'target': len(cases)}))
                     return
+                convert_closed(batch, number, campaign)
         if len(batches) >= 99:
             print('{"event":"campaign_limit"}')
             return
