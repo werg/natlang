@@ -1,0 +1,56 @@
+{
+  "schema": "natlang.application-nl-depth-independent-delta-review/1",
+  "reviewer": "semantic_slate_sol",
+  "date": "2026-10-14",
+  "result": "passed_focused_numbered_policy_refinement",
+  "hashes": {
+    "applications/seed-lineage-laboratory/designExperiments/predictExperiments/partitionAnswers.nl": "2a08ebb6391ec7ae65a9f1d577ca4c941f13aae0b3d5e22fb959b8527790ea0c",
+    "applications/seed-lineage-laboratory/designExperiments/planPolicy/valueBeliefNode/compareCandidates.nl": "f2dae5ae2fd3cfb1f4497736c32ff242e432e8fe5b96e80599d7e0a36e3f70a5",
+    "applications/cave-mission/planMission/designPolicy/evaluateBranches/settleValue.nl": "7c4831ceecd01c69c30b98f6a03a9199cd114a2fe91a72e9982445c6182c4a77",
+    "applications/seed-lineage-laboratory/designExperiments/predictExperiments.nl": "155e8edfcb1c2b7aee6d8c6b397d1a0ab7f9e414050da708d17551a0209d64fc"
+  },
+  "source_semantics": [
+    {
+      "path": "applications/seed-lineage-laboratory/designExperiments/predictExperiments/partitionAnswers.nl",
+      "judgment": "Actual assay readout equivalence determines finite observation classes before exact weighting. Every posterior world has a likelihood row including zero; missing and zero differ. Positive-branch goal membership preserves within-mechanism genotype alternatives. Later conditional node reweighting is explicit. Established invalidity stays usable=false; unresolved meaning or missing evidence stays usable=null, preserving typed uncertainty. The parent passes actual linked Assay; child directly consumes its readout, answerGrammar, compartment, stage and regime."
+    },
+    {
+      "path": "applications/seed-lineage-laboratory/designExperiments/planPolicy/valueBeliefNode/compareCandidates.nl",
+      "judgment": "Complete candidates are filtered by source priority order. Expected and worst costs differ; first losing priority determines rejection and source tie rule determines selection. Empty or singleton unique-winner tie encoding remains accepted. Completion is the actual upstream verdict and branch evidence; comparator does not reconstruct an unavailable goal."
+    },
+    {
+      "path": "applications/cave-mission/planMission/designPolicy/evaluateBranches/settleValue.nl",
+      "judgment": "Universal successor success uses actual world/outcome coverage. Missing dependency is repair, not losing world. Separate worst coordinates may have different realizing branches. Source energy/observation priority and equivalent tied-action witnesses are preserved. Objective is taken from state.request, matching the sole declared state argument."
+    },
+    {
+      "path": "applications/seed-lineage-laboratory/designExperiments/predictExperiments.nl",
+      "judgment": "Actual selected assay passed as third child argument in declared experiment,cross,assay,predictions,posterior order; actual partitions consumed by PredictionIndex."
+    }
+  ],
+  "controls": {
+    "seed": {
+      "passed": true,
+      "positive": 8,
+      "negative": 35
+    },
+    "cave": {
+      "passed": true,
+      "positive": 5,
+      "negative": 17
+    }
+  },
+  "loader": {
+    "seed": "pass",
+    "cave": "pass"
+  },
+  "fixture_type_oracle_changes": "None in these three source refinements. Native loader and exact certificate controls do not execute new semantic stages.",
+  "open_findings": [],
+  "remaining_gates": [
+    "New frozen variant package and receipt binding",
+    "Actual named-stage contribution live execution",
+    "Approximately48 samples before adoption"
+  ],
+  "live_qualified": false,
+  "training_admission": false,
+  "precision_followup": "Final four-body receipt accepts nullable usability, actual Assay parent-child scope, upstream complete verdict and state.request.objective binding; fixture/types/oracle/reference unchanged."
+}

@@ -84,3 +84,9 @@ A second reducer values dependency-ready states from leaves upward. Its measure 
 ## Qualification plan
 
 Author source and connected fixture first, then a full typed canonical certificate and positive/negative verifier controls. Obtain independent Sol reconstruction before source readiness. A small live diagnostic must show actual parentage/scope/cross/readout/use/comparison decisions entering typed state, including the uninformative coat and invalid warm assay. A successful canonical replay only certifies packaging/type compatibility. Model-facing source remains debt until measured; no training admission is implied.
+
+## Connected consumer-depth revision
+
+The source audit found declaration-only visible TypeScript and no crisp biological/planning engine. It found two compressed NL consumers. partitionAnswers expands six steps to nine: original-world completeness, unusable versus missing likelihood, assay-resolution equivalence, complete world-by-answer rows, goal-class preservation and local reweighting. compareCandidates expands five steps to eight: source priority interpretation, complete versus partial continuation, successive contender reduction, independent expected/worst objectives, explicit numerical ties and source-supported tie resolution. These stages consume existing actual typed predictions and candidate values; no new forwarding modules, fixture tables or semantic services are added. Exact arithmetic/provenance remains mechanical. Current Lantern evidence, types, reference and oracle stay byte-stable; the new source needs focused peer review and live measurement.
+
+Consumer input audit: partitionAnswers now receives the actual Assay from predictExperiments, so its readout-resolution/grammar judgment has the declared input it needs. Candidate comparison consumes upstream completeness instead of referring to an unavailable goal argument. These are typed source handoffs; no new policy helper or fixture outcome is added.

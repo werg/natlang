@@ -6,11 +6,11 @@ Status: source-only application; no live execution or training admission. Progra
 
 The application reconciles two uncertain coordinate frames, derives physical worlds, explores a belief-state graph and constructs a policy whose every observation outcome returns a sealed sample. All decisions live in numbered NL functions. The visible TypeScript file contains declarations only. The external checker replays a supplied policy and checks exact arithmetic/topology; it never selects an action or interprets evidence for the application.
 
-Actual size: 25 NL files, 599 total lines, 415 body lines and 182 numbered steps;44 named typed contracts. Four branches own survey interpretation, world construction, all-outcome planning and independent replay. The initial architecture was reduced from 29 proposed modules by folding small phrase interpretations into their owning functions; there are no placeholder stages.
+Current size: 29 NL files, 745 physical lines, 526 body lines and 210 numbered steps;57 named typed contracts. Four branches own survey interpretation, world construction, all-outcome planning and independent replay. The initial architecture was reduced from 29 proposed modules by folding small phrase interpretations into their owning functions; there are no placeholder stages.
 
 ## Callable graph and stage deltas
 
-Companion folders define visibility. Every row below is an actual file; `project.json` records all 24 parent-child edges and exact signatures.
+Companion folders define visibility. The base rows below are actual files; the survey-v5 table below adds four connected item interpreters. Current `project.json` records all 28 parent-child edges and exact signatures.
 
 | Callable | Input → result | Owned semantic delta |
 |---|---|---|
@@ -114,3 +114,7 @@ parent owns source identity. Missing decisive evidence is explicit unresolved da
 world, fixture and external canonical certificate remain unchanged. No crisp extraction classifier is
 introduced. The new source needs native type/source replay, per-item control review, independent peer
 review and roughly48 live samples; none of those preparation receipts is training admission.
+
+## Connected value-consumer depth revision
+
+The audit found no visible executable TypeScript policy. Survey-v5 already obtains actual per-unit NL meanings; its frozen package stays separately reviewed. settleValue expands seven steps to ten, making the action-choice versus uncontrollable-observation distinction explicit, joining every actual world/outcome dependency, separating missing graph evidence from a losing world, valuing both worst-case coordinates and retaining tied optimal witnesses. It consumes existing typed expansions and child StateValues without reselecting routes or rebuilding source assertions. No new leaf or crisp decision helper is added. Exact maxima/arithmetic project already established policy alternatives. Fixture, report types and canonical policy remain unchanged; the source delta needs its own peer/live qualification.

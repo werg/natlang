@@ -1,5 +1,53 @@
 # Continuation guide — updated 2026-10-14
 
+## 04:05 CEST: rich-source revisions, live diagnostics, corpus mirror
+
+Seed and Cave source refinements now deepen existing semantic consumers rather
+than adding wrapper functions: Seed 165 numbered steps and Cave 210, with no
+executable TypeScript policy. Independent focused controls, typed canonical
+replay and quick checks passed; the revised source plus fifteen distinct
+proposed whole-world fixtures are on main in `76048e66` (merged/pushed as
+`b71d16ff`). A further audit found that `partitionAnswers` needed the actual
+Assay in its typed inputs and `compareCandidates` referred to an absent goal
+argument. The follow-up `3725bcda` corrects both, refreshes the independent
+receipt and reseals the packages. These are source-reviewed, not live or
+training-admitted.
+Dialogue's two-layer quotation and timed promise refinement is on main; its
+canonical/checker and independent review remain active.
+
+The v15d ecology diagnostic is active under
+`natlang-pop-semstack-v15d-ecology.service` with current-batch return and
+source-ID guards. Cave v5 was stopped after about 34 turns when one teacher
+request streamed over 86 KB of partial tool-call deltas without completing;
+its `action_max_tokens:4096` transport path is under investigation. The Cave
+trace is diagnostic for the earlier frozen source only. The refined source
+requires a separately sealed run. Pop's QAD held48 GPU evaluation continues.
+
+DGX's new bulk SWE cohort was merged to main. All four text training manifests
+(two whole-trajectory and two program-header views, about 3.56 GiB total) are
+now mirrored to Pop with exact local verification. The underlying record
+snapshot is about 50.65 GiB and remains explicitly `missing` on Pop while the
+main disk has about 24 GiB free; it is registered and retained by owner DGX.
+Do not delete the historical `run-v13-group-resplit-r2/prepared` directory
+while cleaning storage: `data/neuralese/corpora/native-sft-v13-r2` is a symlink
+to it, and its 8.45 GB `teacher.jsonl` is current corpus input. Older run-v11
+looks superseded but still needs a source/provenance dependency audit before
+deletion; a failed old recipe alone does not prove its rows are disposable.
+
+Pop's sampled QAD step15000 held48 run completed with four task successes.
+The original scorer marked the run ineligible because an explicit
+`return_result({status:"blocked"})` for a task requiring a successful answer
+was misclassified as unresolved. Shared fix `a6ed8d03` recognizes this as a
+scored semantic failure after the exact terminal model action. The immutable
+result was rescored at
+`/srv/storage/natlang-artifacts/qad15000-close-boundary-live48-v1/task-score-rescored-a6ed8d03.json`:
+eligible 4/48, with 14 semantic mismatches, 14 repetitions, 12 invalid
+actions, four budget exhaustions and no infrastructure errors. Eighteen
+repetition/budget cases lack result exports but have exact terminal queue
+receipts; the original report remains unchanged. The close marker did not
+appear visibly in any completed response; this does not prove it was never
+sampled as an invisible stop. No matched 48-case base comparison exists.
+
 ## 03:50 CEST: deep NL source bar, ecology state repair, live QAD evaluation
 
 The owner clarified that the new source cohort should resemble substantial

@@ -42,3 +42,13 @@ def test_recovered_nested_host_abort_is_infrastructure_error():
                                               "message": "This operation was aborted"}]}}
     recovered_finish = {"status": "complete", "resource_limit_reason": None}
     assert classify_case(result, recovered_finish) == "infrastructure_error"
+
+
+def test_explicit_wrong_blocked_return_is_scored_semantic_failure():
+    result = {"outcome": {"status": "quiesced", "accepted": False,
+                          "rejection_reasons": ["expected_status", "answer"],
+                          "scope_failures": [{"failure_kind": "runtime", "message": "sample not delivered"}],
+                          "action_ledger": [{"name": "return_result", "outcome": "blocked",
+                                             "arguments": {"status": "blocked", "reason": "sample not delivered"}}]}}
+    finish = {"status": "complete", "resource_limit_reason": None}
+    assert classify_case(result, finish) == "semantic_mismatch"

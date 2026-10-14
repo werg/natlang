@@ -1,0 +1,112 @@
+{
+  "schema": "natlang.nl-policy-depth-audit/1",
+  "author": "semantic_slate_astra",
+  "status": "independent_source_review_passed_live_pending",
+  "applications": {
+    "seed-lineage-laboratory": {
+      "before": {
+        "nl_files": 27,
+        "physical_lines": 533,
+        "body_lines": 330,
+        "numbered_steps": 159
+      },
+      "after": {
+        "nl_files": 27,
+        "physical_lines": 568,
+        "body_lines": 364,
+        "numbered_steps": 165
+      },
+      "changed_files": [
+        {
+          "path": "applications/seed-lineage-laboratory/designExperiments/predictExperiments/partitionAnswers.nl",
+          "before_sha256": "8839df639719ec473c5eb9cc6c393444d5b8e1f6dd07ffc6e032f0d47ee9b4bb",
+          "after_sha256": "2a08ebb6391ec7ae65a9f1d577ca4c941f13aae0b3d5e22fb959b8527790ea0c"
+        },
+        {
+          "path": "applications/seed-lineage-laboratory/designExperiments/planPolicy/valueBeliefNode/compareCandidates.nl",
+          "before_sha256": "30f17e6de7b21556336f163d9bee2458cdf52b764f81d33c23b3b373da494490",
+          "after_sha256": "f2dae5ae2fd3cfb1f4497736c32ff242e432e8fe5b96e80599d7e0a36e3f70a5"
+        },
+        {
+          "path": "applications/seed-lineage-laboratory/designExperiments/predictExperiments.nl",
+          "before_sha256": "d721d62667cf8e0735461ed058f9b29b98e50bd40578f465ffda37e5b8968fb7",
+          "after_sha256": "155e8edfcb1c2b7aee6d8c6b397d1a0ab7f9e414050da708d17551a0209d64fc"
+        }
+      ],
+      "fixture_oracle_reference_unchanged": true,
+      "native_check_passed": true,
+      "package": {
+        "path": "/tmp/astra-seed-depth-v2-assay-final",
+        "source_sha256": "03c6f6c0bde1e47dfc549fec5c011e3524154568d4b48e046c5f3d5f46ecd59a",
+        "manifest_sha256": "f7866bc7e95f796819d326d2aee009a847d899086b7a419fe1c37c95a1d7eab2",
+        "reference_ok": true,
+        "source_status": "candidate_source_reviewed_live_pending"
+      },
+      "shared_declaration_types_unchanged": true,
+      "child_signature_change": "partitionAnswers receives actual Assay"
+    },
+    "cave-mission": {
+      "before": {
+        "nl_files": 29,
+        "physical_lines": 728,
+        "body_lines": 509,
+        "numbered_steps": 207
+      },
+      "after": {
+        "nl_files": 29,
+        "physical_lines": 745,
+        "body_lines": 526,
+        "numbered_steps": 210
+      },
+      "changed_files": [
+        {
+          "path": "applications/cave-mission/planMission/designPolicy/evaluateBranches/settleValue.nl",
+          "before_sha256": "095fe93bc40dd1be657d95c7b62256719b86e9e1221a5e90d8d11b27400fdd88",
+          "after_sha256": "7c4831ceecd01c69c30b98f6a03a9199cd114a2fe91a72e9982445c6182c4a77"
+        }
+      ],
+      "fixture_oracle_reference_unchanged": true,
+      "native_check_passed": true,
+      "package": {
+        "path": "/tmp/astra-cave-depth-v6-scope-final",
+        "source_sha256": "f990a454e08dbbd5c574ad94c61e4f36e7f5231beec8104e371a520143c92b0d",
+        "manifest_sha256": "4e4b0eacb7762678c37e8400e407388c70b77f60b50cb3ec0b42d600a0788da5",
+        "reference_ok": true,
+        "source_status": "candidate_source_reviewed_live_pending"
+      },
+      "shared_declaration_types_unchanged": true,
+      "child_signature_change": null
+    }
+  },
+  "findings": [
+    "Visible TypeScript is declarations/configuration only; neither application has a visible crisp policy engine.",
+    "Source planning decisions were already NL-owned. Three compressed consumers needed explicit semantic completeness, uncertainty and comparison branches; no wrapper leaves added.",
+    "Structured return construction in eval is not itself policy leakage. Live qualification must check whether values follow actual typed inputs/child judgments or a fixture-specific table.",
+    "Post-commit input audit found missing actual Assay scope in partitionAnswers and unavailable goal in comparison prose; parent/signature now pass Assay, comparison consumes upstream completeness, Cave objective names state.request explicitly."
+  ],
+  "shared_semantics": [
+    "Exact rational arithmetic applies actual NL-decided partitions/priority; it does not infer biological category.",
+    "Cave all-outcome reachability is separated from observation availability and exact cost projection.",
+    "Missing dependencies remain repair obligations; they cannot be silently converted to losing worlds or zero probabilities."
+  ],
+  "live_qualified": false,
+  "training_admitted": false,
+  "controls": {
+    "seed": {
+      "positive": 8,
+      "negative": 35,
+      "passed": true
+    },
+    "cave": {
+      "total": 22,
+      "passed": true
+    },
+    "meaning": "Existing external exact result seams, not actual NL execution."
+  },
+  "independent_review": {
+    "path": "plans/semantic_stack/SEED_CAVE_NL_DEPTH_REVIEW_SOL.json",
+    "sha256": "bf30e58a4130db9420c42afb89e6c9add4be5e146076c366b9c553cb30578e46",
+    "reviewer": "semantic_slate_sol",
+    "scope": "Focused consumer-depth and actual Assay/input-scope follow-up; no live credit"
+  }
+}

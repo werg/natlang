@@ -407,3 +407,23 @@ Dialogue initial-source precision now has200 numbered steps and46clauses. It sup
 ### 2026-10-14 — Ecology current-batch contribution ownership v15d
 
 The v15c cursor visited the next folder correctly, but Stage1 and Stage5 copied earlier-folder arrays into the current batch, contradicting the single root append. V15d makes input.prior batch-local in all five stages, keeps completed folders exclusively in context.priorCompletedState, and returns current arrays with a global effectAudit. Exact root guards validate original source ownership and decision→edge→assessment→scope projections while allowing older supporting witnesses. Parent provenance retention is exact field transfer; relation meaning and global propagation remain numbered NL stages. Final source218d59b2... replays23/23; type/frontier/fixture/oracle unchanged. **Measurement debt:**0/48 live samples. Inspect second-folder owned arrays, legitimate cross-folder joins, one root append and final global audit before adoption. Frozen v15c remains assigned source diagnosis, not a model-negative or admitted trajectory.
+
+### 2026-10-14 — Codex Responses action output budget reaches the provider
+
+Cave v5 request 70 streamed 101,522 bytes of tool-call deltas over 203 seconds
+without finishing, despite the collector's 4,096-token action ceiling. The
+collector passed that ceiling to Pi, but Pi's Codex Responses adapter omitted
+`max_output_tokens` from its request body. Natlang now binds the effective
+ceiling in that body for Codex Responses only, after payload overrides. An
+intercepted local request proved the outgoing 4,096 value and a short authenticated
+16-token turn completed. **Measurement debt:** the prior Cave v5 diagnostic is
+0/48 for this transport variant and supplies no training row. Future live
+samples should record output-length stops, useful typed contributions and
+completion behavior under the bound; a provider budget stop is not a model
+semantic rejection.
+
+### 2026-10-14 — Seed and Cave connected NL consumer depth
+
+Three existing NL consumers now spell out their semantic decisions more fully: Seed partitionAnswers preserves assay-resolution equivalence, complete per-world likelihoods and mechanism-versus-genotype uncertainty; Seed compareCandidates interprets source priorities, incomplete policies and exact ties before consuming actual candidate values; Cave settleValue distinguishes missing outcome dependencies from losing physical worlds and compares complete all-outcome values. The visible TS remains declarations only. Seed grows27NL/533→567lines and159→165numbered steps; Cave29NL/728→745lines and207→210steps. No added wrapper leaves, fixture assertions, type changes or crisp policy helper. Native source/type checks and existing43Seed/22Cave external controls pass; those controls are not model execution. **Measurement debt:**0/48 samples per source variant, focused peer source review and actual typed contribution-consumption traces required. Earlier frozen packages retain their own receipts; no new live/training credit is inherited.
+
+Seed consumer follow-up: observable partitioning now explicitly receives the actual Assay (readout, answerGrammar and compartment/stage/regime) from its prediction parent; comparison consumes upstream completeness rather than an undeclared goal input. The new typed argument and source instructions are covered by this variant's0/48 live debt; packages before this input correction remain held for source repair.

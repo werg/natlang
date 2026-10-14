@@ -108,6 +108,17 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
             if action.get("outcome") in {"invalid", "rejected"} or (isinstance(diagnostics, list) and diagnostics):
                 return "invalid_action"
     if outcome.get("status") in {"failed", "quiesced"} and scope_failures:
+        # A deliberate terminal `return_result({status:"blocked"})` can leave a
+        # scope-failure trace when the task expected an answer. The case has an
+        # exact model outcome, so it is a scored failure, not an unresolved run.
+        last_action = actions[-1] if isinstance(actions, list) and actions else None
+        if (finish and finish.get("status") in {"complete", "complete_with_skips"}
+                and isinstance(last_action, dict)
+                and last_action.get("name") == "return_result"
+                and last_action.get("outcome") == "blocked"
+                and isinstance(last_action.get("arguments"), dict)
+                and last_action["arguments"].get("status") == "blocked"):
+            return "semantic_mismatch"
         return "unresolved"
     if outcome.get("status") not in {"done", "failed", "quiesced"}:
         return "infrastructure_error"
