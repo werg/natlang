@@ -114,6 +114,7 @@ def test_the_guard_runs_one_walk_at_a_time_backs_off_after_a_poor_one_and_skips_
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     monkeypatch.setattr(ledger, 'mem_free', lambda: 4 * GIB)
     monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'cuda_headroom', lambda *_: 0)
     reclaim = {'bytes': 5 * GIB}
     monkeypatch.setattr(ledger, 'reclaimable', lambda: reclaim['bytes'])
     monkeypatch.setattr(ledger, 'mem_available', lambda: 4 * GIB + reclaim['bytes'])
@@ -158,6 +159,7 @@ def test_the_guard_walks_again_after_a_pause_when_the_last_walk_freed_little(mon
     monkeypatch.setattr(ledger, 'STATE', str(tmp_path / 'ledger.json'))
     monkeypatch.setattr(ledger, 'mem_free', lambda: 4 * GIB)
     monkeypatch.setattr(ledger, 'gpu_usage', lambda: {})
+    monkeypatch.setattr(ledger, 'cuda_headroom', lambda *_: 0)
     monkeypatch.setattr(ledger, 'reclaimable', lambda: 5 * GIB)
     monkeypatch.setattr(ledger, 'mem_available', lambda: 9 * GIB)
     clock = {'now': 1000.0}
