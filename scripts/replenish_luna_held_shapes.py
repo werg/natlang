@@ -215,6 +215,28 @@ def complete(campaign):
     return not pending
 
 
+def has_launchable_waiting_worker(campaign):
+    """Prefer unfinished workers of an older prepared campaign over a new seed."""
+    manifest = json.loads((campaign / 'campaign-manifest.json').read_text())
+    prefix = luna_unit_prefix(campaign, manifest['seed'], repair=manifest.get('repair_cycle', False))
+    for number in range(1, manifest.get('workers', WORKERS) + 1):
+        worker = campaign / f'worker-{number:02d}'
+        if active(f'{prefix}-w{number:02d}.service') or any(
+                active(f'{prefix}-w{number:02d}-r{path.name.removeprefix("retry-")}.service')
+                for path in worker.glob('retry-*')):
+            continue
+        state_path = worker / 'relaunch-state.json'
+        state = json.loads(state_path.read_text()) if state_path.exists() else {}
+        if state.get('failures', 0) >= 4:
+            continue  # this worker needs investigation; other campaigns may proceed
+        journals = [worker / 'journal.jsonl', *(path / 'journal.jsonl' for path in worker.glob('retry-*'))]
+        finished = {event['key'] for journal in journals if journal.exists()
+                    for event in rows(journal) if event.get('event') == 'finish'}
+        if any(job['key'] not in finished for job in rows(worker / 'queue.jsonl')):
+            return True
+    return False
+
+
 def launch_queue(queue_dir, unit):
     # The worker cap is global across overlapping campaigns and retries. The
     # memory ledger constrains RAM independently; it is not a concurrency cap.
@@ -680,7 +702,8 @@ def main():
         # Bound the overlap to three campaigns so a stalled pilot plus a
         # draining ordinary campaign can still replenish free worker slots.
         # Repair cycles still require their preceding campaigns to close.
-        if len(pending_campaigns) >= 3 or active_luna_workers() >= WORKERS:
+        if (len(pending_campaigns) >= 3 or active_luna_workers() >= WORKERS or
+                any(has_launchable_waiting_worker(campaign) for campaign in pending_campaigns)):
             return
         if campaigns and not pending_campaigns and run_repair_cycle(campaigns):
             return
