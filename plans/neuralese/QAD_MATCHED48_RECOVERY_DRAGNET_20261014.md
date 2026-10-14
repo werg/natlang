@@ -249,3 +249,38 @@ gradients; synthetic hidden-state objective). This rules out that local
 gradient path, but not historical optimizer state, accumulation or the real
 teacher training objective. The nontext-token drift remains under diagnosis;
 no output mask or serving suppression has been adopted.
+
+## Fresh protected-R8 QAD warmup, matched train-root check
+
+Pop discarded R7 for protected MuSiQue overlap and trained the QAD base afresh
+on the independently audited R8 full prefix. The 410-update warmup qualified:
+step-zero logits equal base, held CE 5.17465 to 3.36524, response KL warning
+without a stop, task probe gate 0.667, full optimizer checkpoint SHA-256
+`13ebca2a4c2f2f087ce2cfc4a635114b4aa2b91a017714958bed71cd33551761`.
+Its exact certificate is under
+`/home/werg/natlang-artifacts/neuralese-direct-lfm-qad-r8-clean-warmup-20261014-v1/`.
+
+The matched *train-only* student-root packet reused the first 11 prior groups
+and both prior seeds; the `dataset_workbench` group was removed because its
+source-label oracle conflicts with semantic questions. Source, packet and
+student-generated-root contract were pinned before running. The 22 rollouts
+finished and scored with no infrastructure error. New warmup: 3/22 exact
+successes, nine invalid actions, nine semantic mismatches, one request-budget
+exit; old step-15000 QAD on those same 11 groups: 2/22 successes, nine invalid,
+eight semantic mismatches, three budget exits. New score SHA-256
+`7637719f788040dcbc8a88cdc1c8101259129ea3ae1a210ed96f44ece4520986`,
+packet SHA-256 `901c4810196e44d04326b8dc2efbec36a3ad3f6d7ecdd77f2fa79a2cb9aa59df`.
+This is a small matched improvement, not a broad capability claim. The easy
+in-stage 48-probe gate does not measure these longer root tasks' success.
+
+The first observed invalid actions include service-binding shadowing (`proof`
+and `customers`), undeclared service fields (`shipments.offeredTool`,
+`docs.page`), and iterating a plain object as an array. The runtime returned
+specific correction text, but some trajectories still repeated guessed
+`read_page` IDs such as `doc.assess` and `page 47`. The latter may merit an
+error that lists available cut-off IDs; any model-facing change needs about
+48 live samples before adoption. Keep all failed rollouts out of training by
+default. Replay-check failed train-only sites and have a teacher repair only
+selected source-disjoint ones; approved continuations require the same native
+decision and quality review as the earlier recovery corpus. A second
+22-rollout seed batch is running to improve failure-family coverage.
