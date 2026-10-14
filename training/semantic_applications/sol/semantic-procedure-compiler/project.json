@@ -581,8 +581,8 @@
   "readiness": {
     "source_loader_checked": true,
     "typed_declarations_checked": true,
-    "full_typed_reference": "baseline witness preserved; extension type/source replay pending",
-    "independent_oracle_review": false,
+    "full_typed_reference": "passed full baseline witness and internal EmittedClosure source/type replay",
+    "independent_oracle_review": true,
     "exact_result_replay": true,
     "live_qualified": false,
     "training_admitted": false
@@ -605,8 +605,13 @@
       "path": "plans/semantic_stack/PROCEDURE_COMPILER_REFERENCE_REVIEW_ASTRA.json",
       "sha256": "daba516b630362e3f5216308d1b74d3be5002f5467aececaf7e7e4f3da3b1129",
       "scope": "Source/oracle and authored canonical/checker review, no live qualification"
+    },
+    {
+      "path": "plans/semantic_stack/PROCEDURE_COMPILER_CLOSURE_REVIEW_ASTRA.json",
+      "sha256": "fca223cf9ed08c51b7c594c053986ec4a617d63b65f5a78a1785647239274bf4",
+      "scope": "Connected NL closure source and authored control witness; no live execution credit."
     }
   ],
-  "diagnostic_readiness": "Baseline reviewed-v1 package remains pinned; connected closure source needs its own peer and live review.",
+  "diagnostic_readiness": "Connected closure variant independently source/control reviewed; eligible fresh pinned diagnostic. Frozen baseline reviewed-v1 queue unchanged; training admission false.",
   "variant": "connected-emitted-closure-v2"
 }
