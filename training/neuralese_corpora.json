@@ -72304,6 +72304,26 @@
         "receipt": "runs/natlang-target-union-20261014-r7/receipt.json"
       },
       "notes": "R6 admitted members with whole MuSiQue relation-defect member removed; original evidence retained for semantic repair. Added reviewed QAD recovery,curated81-parent and shallow7-parent sources. Exact tokenizer twins; inherited held/source-review exclusions; direct compressed text independently decoded and hashed. No new source admission inferred."
+    },
+    {
+      "id": "external-expansion-codeagent-native-20261014-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-codeagent-native-20261014-v1",
+      "include": [
+        "turns/**/*.turns.jsonl.zst",
+        "turns/**/*.summary.json",
+        "ir/**/build.json",
+        "runtime-page.json",
+        "admission-review.json"
+      ],
+      "source_class": "statically-lowered-external-native-teacher-turns",
+      "training_admission": true,
+      "training_admission_reason": "Owner2026-10-14 static natlang-like conversion and general coding/Neuralese training",
+      "admission": "External teacher targets unknown; static native plumbing exact. One linkage omission assigned repair.",
+      "derived_from": [
+        "external-expansion-codeagent-handoffs-20261014-v1"
+      ],
+      "license": "Facts retained in pinned original source snapshot and port records"
     }
   ],
   "coverage_backlog": [
