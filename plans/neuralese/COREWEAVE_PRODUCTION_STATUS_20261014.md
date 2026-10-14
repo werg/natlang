@@ -100,3 +100,72 @@ objects across uploadmethods ([official quotas](https://docs.cloud.google.com/st
 At19:25 scoped PUT process had read~22GB/46.8GB in370seconds (~59MB/s),
 with24MB RSS, while actual trainer continued326updates/GPU100%.
 HTTP completion and independent remote SHA verification remain pending.
+
+## Current lifecycle and real task evidence, 20:25 UTC
+
+LFM's first direct recipe PID1 exited/restarted around19:32:45, before its
+first update. The new container reset ephemeral root files, including training
+logs and auxiliary CPU acquisition/conversion jobs. New cgroup OOM counters
+were zero and kernel logs showed no OOM kill; these observations do not prove
+that the previous container avoided OOM. A recipe/continuation exception is
+also possible; redirected old logs were lost. Cause remains unproven.
+
+The SAME sandbox was fully restaged and released19:59:14 using existing
+`bootstrap.sh`: central stdout plus a local tee, explicit child exit receipt,
+API output manifests and30day collect hold. Current code archive commit
+`33d0f44b7450508ed52192efb7a13ce6ad825afe`, SHA
+`6497389dd94d0f5b75cf81272de34ef5dc7849c81558f738a3fddb8b0ae66372`.
+Exact225recipe, QAD410 parent/optimizer/RNG and protected PH bindings remain.
+A20second external resource sampler records cgroup current/peak/events and
+process RSS from onset to central logs. No auxiliary LFM data jobs run during
+startup. Parent files now also have durable PRIVATE run `werg/natlang/jer8wefd`;
+owner-side checkpoint PUT took615.9seconds, followed by fast cloud fetch.
+
+Existing row-index/prefix-map caches for this exact PH input were independently
+exported20:23: `coreweave-production-lfm-ph-row-index-caches-20261014.tar.gz`,
+36,031,901bytes, SHA
+`679bc25486eb3d092d593b4c80b950354f293ad8b5e7bcd7775452db8d438a0e`.
+Assigned consumer: active LFM restart diagnosis/relaunch, avoiding repeated
+validation and prefix-map scans. No data admission or model code changes.
+
+Mellum full checkpoints170 and400 are durably PRIVATE and independently
+re-read from GCS with full SHA equality:
+
+-170:46,821,474,583bytes, SHA
+`93737f4e87454a3f07c642bec2fe36e5d9fcb8fa0b8e8027d4999c363f442381`,
+verified19:37:29; full readback201.882seconds.
+-400:46,821,477,015bytes, SHA
+`f598a6598293ad14df4b18012377fb25992c794921454ee28ec55451fdf93276`,
+verified20:11:26; PUT868.177seconds, full readback151.959seconds.
+
+Run `werg/natlang/ywcj2mvb`; content-addressed run-file paths are
+`mellum/<SHA>/mellum-first-checkpoint.pt` and
+`mellum/<SHA>/mellum-checkpoint-step-400.pt`.
+`cw-mellum-periodic-private-checkpoint-export` serializes newest atomic state
+exports and stores verified progress in external dgxops. A download URL requires
+owner-side authenticated redirect resolution; only final scoped GCS capability
+enters cloud. The initial readback guard failed safely on an API redirect and
+was fixed; no second upload was required. Parent gracefully stopped local DGX
+production duplicate after first cloud full-state durability was verified.
+
+At400, heldCE0.87935 versus1.81925base (delta−0.93990), responseKL0.2393.
+Drift330's report-only probe gate37/48 compared with28/48base. Actual16task
+pass is still incomplete:10finished,4success,1invalid action,3repetition,
+2semantic mismatch,6unresolved. This is an assigned bug investigation; no
+qualification or approach judgement. Reference13 is inherited, not a freshly
+executed cloud base task reference. Actual recipe/queue temperature0.6 is
+honored. A separately found generic omitted-zero bug does not explain these
+specific controls. The parent is reproducing exact failures against base with
+matching controls/runtime while cloud evaluation continues.
+
+All available task400/noise evidence was SHA-verified on DGX20:02:
+`task400-evidence-1792008149.tar.gz`,35,092,343bytes, SHA
+`79c2361750d1ac4dc0c9d904e9f9224d84d6b4ba234ba611fc10bb9586dec030`.
+Its manifest binds exact packet, evaluator/runtime and traces; snapshot is
+explicitly incomplete. `first-failing-actions.json` and
+`partial-failure-exchanges.json` alongside the unpacked evidence contain exact
+request messages/tools/controls, actions and feedback. They are protected
+assigned diagnosis inputs, never training admission. Final/noise evidence must
+be collected after completion. Progress collectors now read growing logs via
+bounded≤1MiB tails. Mellum root CPU runs only owner-selected bounded public
+source acquisition, with no parsing/model work; raw sources remain unadmitted.
