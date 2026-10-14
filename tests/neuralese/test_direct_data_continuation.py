@@ -317,7 +317,8 @@ def test_compressed_text_matches_plain_eager_and_cached_streams(tmp_path, monkey
     assert load_text_rows(None, text_data=plain) == load_text_rows(None, text_data=packed)
 
 
-def test_edged_value_masks_precede_prefix_merge_and_have_distinct_cache_identity(tmp_path, monkeypatch):
+@pytest.mark.parametrize('has_edge', [True, False])
+def test_edged_value_masks_precede_prefix_merge_and_have_distinct_cache_identity(tmp_path, monkeypatch, has_edge):
     import hashlib
     from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
@@ -332,14 +333,15 @@ def test_edged_value_masks_precede_prefix_merge_and_have_distinct_cache_identity
     assert len(list(trainer.stage_rows(a, data, tokenizer))) == 1
     for index in (0, 1):
         path = tmp_path / f'mask{index}.jsonl'
-        path.write_text(json.dumps({'id': f'r{index}', 'spans': [[65, 70, 'value', True]]}) + '\n')
+        path.write_text(json.dumps({'id': f'r{index}', 'spans': [[65, 70, 'value', has_edge]]}) + '\n')
         a.e2e_mix = {'neuralese_spans': {'path': str(path),
                                        'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}}
         cold = list(trainer.stage_rows(a, data, tokenizer))
         warm = list(trainer.stage_rows(a, data, tokenizer))
         assert cold == warm and len(cold) == 2
         assert {r['id'] for r in cold} == {f'r{index}', 'r2'}
-        assert next(r for r in cold if r['id'] == f'r{index}')['context_only_spans'] == [[65, 70]]
+        field = 'context_only_spans' if has_edge else 'token_choice_detached_spans'
+        assert next(r for r in cold if r['id'] == f'r{index}')[field] == [[65, 70]]
 
 
 def test_the_prefix_merge_decisions_are_cached_under_their_key(tmp_path, monkeypatch):

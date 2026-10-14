@@ -398,7 +398,7 @@ def mixed_additions(state, mix, keys):
     return [key for key in keys if not isinstance(state.get(key), dict) or is_legacy_projection_state(state[key])]
 
 
-def neuralese_spans(mix, repo):
+def neuralese_spans(mix, repo, *, include_uncovered=False):
     """The mixed run's Neuralese output spans (``e2e_mix.neuralese_spans``, a {path, sha256} sidecar beside a union
     rendering: one row per direct document, {"id", "spans": [[begin, end, write_name, has_edge], ...]} in the row's
     token_ids, end exclusive; plans/neuralese/NEURALESE_DIRECT_V1.md "Neuralese outputs in direct samples").
@@ -412,7 +412,7 @@ def neuralese_spans(mix, repo):
         from ..common.hashing import sha256_file_hex
         if sha256_file_hex(path) != binding.get('sha256'):
             raise ValueError('mixed Neuralese span hash mismatch: ' + str(path))
-    edges, plain = {}, 0
+    edges, plain = {}, {}
     with open_jsonl_text(path) as stream:
         for line in stream:
             if not line.strip():
@@ -422,8 +422,15 @@ def neuralese_spans(mix, repo):
                 if has_edge:
                     edges.setdefault(row['id'], []).append([begin, end])
                 else:
-                    plain += 1
-    return edges, plain
+                    plain.setdefault(row['id'], []).append([begin, end])
+    return edges, plain if include_uncovered else sum(map(len, plain.values()))
+
+
+def detached_target_mask(window, spans):
+    """Absolute target-token spans mapped to the window's next-token readout columns."""
+    start = window['start'] + window['prefix']
+    size = len(window['ids']) - window['prefix']
+    return [any(begin <= start + i < end for begin, end in spans) for i in range(size)]
 
 
 def merged_context_only_spans(declared, added):
@@ -899,9 +906,10 @@ def stage_data(engine, a, text_data):
             receipt['masked_system_tokens'] += current['masked_system_tokens']
             receipt['documents'] += 1
             meta = {'prompt_rendering': row.get('prompt_rendering')}
-            if row.get('context_only_spans'):
-                meta.update(text=row['text'], context_only_spans=row['context_only_spans'],
+            if row.get('context_only_spans') or row.get('token_choice_detached_spans'):
+                meta.update(text=row['text'], context_only_spans=row.get('context_only_spans', []),
                             token_ids=range(len(row.get('token_ids', ()))))
+                meta['token_choice_detached_spans'] = row.get('token_choice_detached_spans', [])
             rows_meta.append(meta)
         backing.flush()
         print(json.dumps({'event': 'window_backing_spooled', 'shards': backing.shards,
@@ -933,11 +941,12 @@ def stage_rows(a, text_data, tokenizer):
     selected = load_selection(getattr(a, 'recovery_selection', None))
     from ..common.paths import root as path_root
     mix = getattr(a, 'e2e_mix', None)
-    spans = neuralese_spans(mix, path_root('repo'))
+    spans = neuralese_spans(mix, path_root('repo'), include_uncovered=True)
     if spans is not None:
         print(json.dumps({'event': 'neuralese_spans', 'documents_with_edges': len(spans[0]),
-                          'edge_spans': sum(map(len, spans[0].values())), 'spans_without_edge': spans[1],
-                          'option_b': 'not implemented (TODO): spans without an edge keep the token CE'}),
+                          'edge_spans': sum(map(len, spans[0].values())),
+                          'spans_without_edge': sum(map(len, spans[1].values())),
+                          'option_b': 'token-choice readout with detached backbone history'}),
               flush=True)
     def source():
         for row in stream_text_rows(text_data, tokenizer):
@@ -945,6 +954,9 @@ def stage_rows(a, text_data, tokenizer):
             if spans is not None and row.get('id') in spans[0]:
                 row = {**row, 'context_only_spans': merged_context_only_spans(row.get('context_only_spans'),
                                                                           spans[0][row['id']])}
+            if spans is not None and row.get('id') in spans[1]:
+                row = {**row, 'token_choice_detached_spans': merged_context_only_spans(
+                    row.get('token_choice_detached_spans'), spans[1][row['id']])}
             yield row
     if not getattr(a, 'merge_prefix_rows', False):
         return source()
@@ -953,6 +965,7 @@ def stage_rows(a, text_data, tokenizer):
     cache_inputs = [_json.dumps(getattr(a, 'recovery_selection', None), sort_keys=True)]
     if spans is not None:
         cache_inputs.append(_json.dumps(mix['neuralese_spans'], sort_keys=True))
+        cache_inputs.append('neuralese-output-routing/2')
     cache_key = row_index_key('merge-prefix-rows/1', text_data, tokenizer, *cache_inputs)
     rows, merge = stream_merge_prefix_rows(source, cache_key=cache_key,
                                            spool_directory=a.out if getattr(a, 'out', None) and Path(a.out).is_dir() else None)
@@ -1479,9 +1492,13 @@ def main(argv=None):
 
     failed_by_document = {}
     declared_by_document = {}
+    detached_by_document = {}
     for row in rows:  # producer-declared context-only token spans (excluded assistant targets kept as history)
         if row.get('context_only_spans'):
             declared_by_document[hashlib.sha256(row['text'].encode()).hexdigest()] = context_only_spans(row)
+        if row.get('token_choice_detached_spans'):
+            detached_by_document[hashlib.sha256(row['text'].encode()).hexdigest()] = context_only_spans(
+                {**row, 'context_only_spans': row['token_choice_detached_spans']})
     # prepare_text_windows gives each window its own token/label arrays. The raw
     # corpus rows (including their JSON text and source arrays) are no longer
     # needed after extracting these producer-declared context masks; keeping
@@ -1595,7 +1612,13 @@ def main(argv=None):
         # vocabulary-sized readout chunked as before.
         fused = token_choice is None and os.environ.get('NATLANG_FUSED_READOUT', '1') != '0'
         with profile_scope('readout'):
-            read = project_token_states(hidden, token_choice, segments)
+            detach_mask = None
+            if detached_by_document:
+                detach_mask = torch.zeros_like(valid)
+                for b, window in enumerate(rows_):
+                    mask = detached_target_mask(window, detached_by_document.get(window['document'], ()))
+                    detach_mask[b, :len(mask)] = torch.tensor(mask, device=valid.device)
+            read = project_token_states(hidden, token_choice, segments, detach_mask)
             if fused:  # text_warmup.fused_readout: logits once per chunk
                 training_ce, prediction, token_losses = fused_readout(
                     backbone, read, span, backbone.controls.close_id, gradients=gradients, position_weights=weights)

@@ -1028,7 +1028,7 @@ def merge_prefix_rows(rows):
     for index, row in enumerate(rows):
         ids = row.get('token_ids')
         if (row.get('split') != 'train' or ids is None or row.get('supervised_suffix_start') is None
-                or row.get('context_only_spans') or len(ids) < MERGE_KEY_TOKENS):
+                or row.get('context_only_spans') or row.get('token_choice_detached_spans') or len(ids) < MERGE_KEY_TOKENS):
             continue
         key = (row.get('text_cohort', 'native'), row.get('sampling_group'),
                array('I', ids[:MERGE_KEY_TOKENS]).tobytes())
@@ -1110,7 +1110,7 @@ def _merge_decisions(rows_source, spool_directory):
             rows += 1
             ids = row.get('token_ids')
             if (row.get('split') != 'train' or ids is None or row.get('supervised_suffix_start') is None
-                    or row.get('context_only_spans') or len(ids) < MERGE_KEY_TOKENS):
+                    or row.get('context_only_spans') or row.get('token_choice_detached_spans') or len(ids) < MERGE_KEY_TOKENS):
                 continue
             data = array('I', ids).tobytes()
             buckets[(row.get('text_cohort', 'native'), row.get('sampling_group'),

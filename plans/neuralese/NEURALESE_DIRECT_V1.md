@@ -538,7 +538,7 @@ recipes: `neuralese-mixed-mellum-v4` and `neuralese-mixed-lfm-qad-broad-v1`, eac
 recipe with the same `e2e_mix` (fraction 0.25 placeholder until the ratio runs below). Neuralese outputs in direct
 samples: the optional `e2e_mix.neuralese_spans` {path, sha256} pins the union rendering's span sidecar; spans with an
 e2e edge join the row's context-only spans in direct updates (Option A, `direct_sft.neuralese_spans`); spans without
-an edge are counted and keep the token CE (Option B is not implemented yet). The sidecar is part of the component, not
+an edge use token CE through the TCP with the entire backbone history detached (Option B). The sidecar is part of the component, not
 a stage input, so it joins a running stage with the objective continuation. `parent_readiness` is removed
 from the recipes, `train/e2e_acceptance.py` and its tests. Not yet: `e2e_acceptance` reading the mixed run's
 e2e-eval.jsonl, and the layer-staged backward inside the mixed run.
