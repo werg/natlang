@@ -1493,6 +1493,7 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
     const executionGraph = invocationTraces.flat().filter(event => typeof event.node === 'string' && Array.isArray(event.inputs));
     const bindingSpec = (record.curriculum as { item_result_binding?: ItemResultBindingSpec } | undefined)?.item_result_binding;
     const bindingSources = new Set(bindingSpec?.sites.map(site => site.owner_source_path) ?? []);
+    const seedCoverage = bindingSpec?.joined_seed_coverage;
     const possibleBindingStore = bindingSpec ? runtime.frame?.task.runtime.callStore() as Partial<CaptureSource> | undefined : undefined;
     const bindingStore: CaptureSource | undefined = possibleBindingStore &&
       typeof possibleBindingStore.call === 'function' && typeof possibleBindingStore.value === 'function' ?
@@ -1510,8 +1511,11 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
         (inline as { returns?: { natlang?: unknown; text?: unknown } }).returns : undefined;
       const scopedChild = bindingSpec?.sites.some(site =>
         String(inlineReturns?.natlang ?? inlineReturns?.text ?? output?.result_type ?? '')
-          .includes(site.inline_child_site.return_type));
-      const inputNames = bindingSources.has(String(source)) ? ['state'] :
+          .includes(site.inline_child_site.return_type)) ||
+        (seedCoverage && String(inlineReturns?.natlang ?? inlineReturns?.text ?? output?.result_type ?? '')
+          .includes(seedCoverage.child_return_type));
+      const inputNames = seedCoverage?.owner_source_path === source ? ['input'] :
+        bindingSources.has(String(source)) ? ['state'] :
         scopedChild ? ['input'] : [];
       let hostInputs: ReturnType<typeof hostCaptures>;
       if (inputNames.length && bindingStore) {
@@ -1529,11 +1533,19 @@ export async function executeProgram(record: ProgramRecord, driver: (request: Mo
         ...(hostInputs ? { host_inputs: hostInputs } : {}) }];
     });
     const itemResultBinding = bindingSpec ? checkItemResultBinding(bindingSpec, invocationLedger) : undefined;
+    const bindingAccepted = !bindingSpec || itemResultBinding?.status === 'pass';
+    const outcomeChecks = bindingSpec ? { ...checks, item_result_binding: bindingAccepted } : checks;
+    const outcomeRejections = bindingAccepted ? rejectionReasons : [...rejectionReasons, 'item_result_binding'];
+    const qualityPending = [...(filesCheck?.pending ?? []),
+      ...(oracle.needs_review ? ['answer_needs_review'] : []),
+      ...(itemResultBinding?.status === 'unverified_hold' ? ['item_result_binding_unverified'] : [])];
     return { trace, outcome: { status: result.outcome.kind, detail: result.outcome.detail, value: actual,
       effects: effects.observed, ...(actualFiles ? { files: actualFiles } : {}), ...(authoring ? { authoring } : {}),
       ...(worldScore ? { world: worldScore } : {}),
       ...(hostCertificateRequired ? { host_completion_certificate: hostCertificateReadOk ? hostCertificate ?? null : { read_error: true } } : {}),
-      ...(!filesCheck && oracle.needs_review ? { quality_pending: ['answer_needs_review'] } : {}), ...(filesCheck ? { files_check: filesCheck, quality_pending: [...filesCheck.pending, ...(oracle.needs_review ? ['answer_needs_review'] : [])] } : {}), oracle, accepted, checks, rejection_reasons: rejectionReasons,
+      ...(filesCheck ? { files_check: filesCheck } : {}),
+      ...(qualityPending.length || filesCheck ? { quality_pending: qualityPending } : {}),
+      oracle, accepted: accepted && bindingAccepted, checks: outcomeChecks, rejection_reasons: outcomeRejections,
       ...(seededFailure ? { seeded_failure: { observed: seededFailureObserved, replaced_by_handoff: replacesSeed } } : {}),
       // Every call's actions, children included: a child nl call runs in its own runtime and reports its trace to
       // the task (call_id tells them apart), so its decisions can be linked to what they did.

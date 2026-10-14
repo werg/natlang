@@ -1,5 +1,65 @@
 # Continuation guide — updated 2026-10-14
 
+## 10:43 CEST: discrete-GPU admission correction and queued checks
+
+The Pop ledger treated `--cuda-budget-gb` as a trainer hint but admitted jobs
+against host memory alone. At 10:34 CEST it launched the queued clean-base
+QAD arm while the trained arm still occupied the single RTX 4060. The base
+unit/container was stopped by exact name; its 49 overlapped partial files
+(4,255,810 bytes) were listed in
+`/tmp/prune_overlapped_qad_base_20261014.list` and deleted because that arm
+was operationally invalid. The trained arm continued without CUDA OOM.
+
+Shared commits `547723a8` and `b2eddf99` now require driver-reported free
+VRAM minus unspent CUDA claims for direct admission and guard relaunch, and
+show driver free/headroom in ledger status. The guard was restarted on the new
+code. A live check showed 0.1 GiB CUDA headroom and held the second 7.5-GiB
+arm. Clean-base retry `natlang-pop-qad-matched48-w1-base-v2-20261014` has an
+active waiter and will start only when its GPU budget fits; the full main gate
+`natlang-pop-full-main-547723a8-20261014` also waits for a GPU/memory window.
+Quick gate passed after the shared scheduler fix. DGX received decision
+`2026-10-14T08:42:05.002475Z-pop-1c3f`. Monitor both waiters and verify that
+only one 7.5-GiB GPU unit is active at a time.
+
+Ecology v18c opt-in joined-seed source/checker is committed in `57d8efe2`;
+independent unchanged-model-facing source review is `90ff4022`. The collector
+acceptance gap for declared binding failures was fixed in `82ae4516`. Source
+replay is 220/220 with zero reference failures, but the one-case live runtime
+remains pending the full gate and semantic review. v18b source-only partial
+resume is near its 600-turn bound; it cannot retroactively prove joined seed
+lineage because the frozen collector did not capture those inputs.
+
+## 10:28 CEST: Pop active work after replenisher repair
+
+The Luna replenisher fix is committed and pushed as `9658fc88`; focused tests
+2/2 and the quick gate passed, with the full main gate still due in a host
+memory window. Its previously blocked s52046 worker-04 case016 resumed under a
+2.0-GiB claim and produced an exact accepted result after 272 saved turns.
+The timer subsequently started s52049 worker-05's large partial retry and
+s52050's next source campaign. At 10:27 CEST the ledger counted three active
+Luna workers plus Gemini batch30. The s52049 retry had 400 durable saved
+turns and was receiving provider output. The ecology v18b one-case resume is
+queued at 2.0 GiB behind those collectors and the GPU evaluation; its
+source-only status is unchanged. DGX was briefed of the shared fix via coord
+message `2026-10-14T08:27:24.442763Z-pop-a2ae`.
+
+The QAD step-15000 one-worker held48 evaluation remained on GPU at 10:27
+CEST: 28 cases finished (nine complete trajectories, all nine exact-answer
+rejections; twelve repetition exits; seven request-budget incomplete), and
+case28 was active. Its completed rejections span ticket classification,
+document editing, proof checking, relational aggregation and dynamic roster
+tasks. Do not attribute the gap to one cause or train on these held packets.
+When this arm finishes, run the clean-base arm using the same pinned image,
+script, one worker and per-case seeds before drawing a trained-versus-base
+conclusion. The GPU arm used 7.6/8.2 GiB at its peak without a one-worker
+CUDA OOM. The DGX E2E handoff and repetition requests remain open pending
+this matched evaluation and further diagnosis.
+
+Root has about 43 GiB free after the superseded v11 and discarded FP8
+cleanup; `/srv/storage` has about 7.1 GiB free. Preserve current v13 corpus,
+held evaluation packets and active checkpoint lineage. Three untracked Luna
+manifest files are owned by another process and must not be staged casually.
+
 ## 10:05 CEST: Pop GPU evaluation, source handoff and storage
 
 The 09:12 section below is historical: its clean full TS gate finished green

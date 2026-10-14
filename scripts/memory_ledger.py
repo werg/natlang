@@ -230,6 +230,34 @@ def gpu_usage():
     return usage
 
 
+def cuda_free_bytes():
+    """Free discrete GPU memory reported by the driver, including non-ledger users."""
+    try:
+        result = subprocess.run(['nvidia-smi', '--query-gpu=memory.free', '--format=csv,noheader,nounits'],
+                                capture_output=True, text=True, timeout=20, check=True)
+        values = [int(line.strip()) for line in result.stdout.splitlines() if line.strip().isdigit()]
+    except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError):
+        return None
+    return sum(values) * 2**20 if values else None
+
+
+def cuda_headroom(live, gpu):
+    """VRAM left after reserving each running discrete-GPU claim's unspent budget."""
+    free = cuda_free_bytes()
+    if free is None:
+        return None
+    for unit, claim in live.items():
+        if claim.get('cuda_budget'):
+            used = unit_cuda(unit, gpu, claim.get('command'), claim.get('spec', {}).get('containers') or ())
+            free -= max(0, claim['cuda_budget'] - used)
+    return free
+
+
+def cuda_fits_entry(entry, free):
+    budget = entry.get('cuda_budget') or entry.get('spec', {}).get('cuda_budget')
+    return not budget or (free is not None and free >= budget)
+
+
 def unit_state(unit):
     out = subprocess.run(['systemctl', '--user', 'show', unit, '-p', 'ActiveState', '-p', 'ControlGroup'],
                          capture_output=True, text=True).stdout
@@ -468,12 +496,14 @@ def may_start(order, unit, can_backfill, fit):
     return fit and (order[0][0] == unit or can_backfill)
 
 
-def head_blocked(live, free, wanted, head=None):
+def head_blocked(live, free, wanted, head=None, cuda_free=None):
     """Whether a waiting head can neither start nor be helped by preemption now: it does not fit, and stopping every
     unit it may preempt would not make it fit. Only then may a unit backfill behind it. Otherwise the room is the head's
     (it fits, or the guard is about to make it fit), and a backfill would only take that room until the guard preempts
     it again (2026-10-12: renders admitted by `run` between two polls of the head were preempted a second later)."""
-    return not fits(free, wanted['budget'], wanted['reserve']) and not preemption_plan(live, free, wanted, head=head)
+    return (not cuda_fits_entry(wanted, cuda_free) or
+            (not fits(free, wanted['budget'], wanted['reserve']) and
+             not preemption_plan(live, free, wanted, head=head)))
 
 
 def backfill_held(claim, head, now=None):
@@ -507,13 +537,14 @@ def unreachable(live, free, wanted, available=None):
             'remedy': 'lower its budget (reset-peak --to-gb for a learned peak) or free the memory outside the ledger'}
 
 
-def plan_launch(state, head, wanted, backfill, free):
+def plan_launch(state, head, wanted, backfill, free, cuda_free=None):
     """Whether the guard relaunches a requeued unit now: the backfill candidate when the head waits for room, else the
     head itself when it fits. Never while it is still active or one of its containers still runs."""
     name, entry = backfill if backfill else (head, wanted)
     return bool(entry.get('requeued') and time.time() >= entry['not_before'] and name not in state['claims']
                 and unit_state(name)[0] not in ('active', 'activating', 'deactivating')
                 and (backfill or fits(free, entry['budget'], entry['reserve']))
+                and cuda_fits_entry(entry, cuda_free)
                 and not any(container_running(n) for n in entry.get('containers', ())))
 
 
@@ -677,7 +708,9 @@ def run(args):
     since = time.time()
     while True:
         with ledger() as state:
-            free, live = headroom(state, gpu_usage())
+            gpu = gpu_usage()
+            free, live = headroom(state, gpu)
+            cuda_free = cuda_headroom(live, gpu) if cuda_budget is not None else None
             if unit in live:
                 raise SystemExit(f'{unit} already holds a claim')
             learned = learned_budget(state, unit, budget)
@@ -690,14 +723,15 @@ def run(args):
             waiting = state.setdefault('waiting', {})
             now = time.time()
             waiting[unit] = {'priority': priority, 'since': waiting.get(unit, {}).get('since', since), 'seen': now,
-                             'budget': budget, 'reserve': reserve}
+                             'budget': budget, 'reserve': reserve, 'cuda_budget': cuda_budget}
             order = waiting_order(state, now)
             head = order[0][0]
             # The head of the priority queue starts when it fits (the guard preempts lower units for it when real
             # headroom is short); others backfill when they fit and are resumable.
             backfill = (args.resumable if args.resumable is not None else args.cls != 'service') \
-                and head != unit and head_blocked(live, free, order[0][1], head)
-            if may_start(order, unit, backfill, fits(free, budget, reserve)):
+                and head != unit and head_blocked(live, free, order[0][1], head, cuda_free)
+            cuda_fits = cuda_fits_entry(waiting[unit], cuda_free)
+            if may_start(order, unit, backfill, fits(free, budget, reserve) and cuda_fits):
                 spec = {'unit': unit, 'budget': budget, 'host_max_gb': args.host_max_gb, 'cls': args.cls,
                         'cuda_budget': cuda_budget,
                         'oom_policy': args.oom_policy, 'workdir': os.path.abspath(args.workdir), 'env': args.env,
@@ -716,8 +750,11 @@ def run(args):
         if time.time() >= deadline:
             with ledger() as state:
                 state.get('waiting', {}).pop(unit, None)
+            cuda_detail = (f', {cuda_free / GIB:.1f} GiB CUDA headroom for {args.cuda_budget_gb} GiB requested'
+                           if cuda_budget is not None and cuda_free is not None else
+                           ', CUDA headroom unavailable' if cuda_budget is not None else '')
             raise SystemExit(f'not admitted: {free / GIB:.1f} GiB free after reservations{blockers}, '
-                             f'{args.budget_gb} GiB requested, {reserve / GIB:.1f} GiB reserve')
+                             f'{args.budget_gb} GiB requested, {reserve / GIB:.1f} GiB reserve{cuda_detail}')
         time.sleep(30)
     if launch(spec):
         with ledger() as state:
@@ -778,7 +815,10 @@ def adopt(args):
 
 def status(args):
     with ledger() as state:
-        free, live = headroom(state, gpu_usage())
+        gpu = gpu_usage()
+        free, live = headroom(state, gpu)
+        driver_cuda_free = cuda_free_bytes()
+        cuda_free = cuda_headroom(live, gpu) if driver_cuda_free is not None else None
         queue = waiting_order(state)
         graces = {}
         plans = {}
@@ -792,9 +832,14 @@ def status(args):
                       **({'fixed_claim': True} if fixed_claim(c) else {}),
                       'command': shlex.join(c['command'])[:160]} for u, c in live.items()}
     print(json.dumps({'available_gb': round(mem_available() / GIB, 1), 'headroom_gb': round(free / GIB, 1),
+                      **({'driver_cuda_free_gb': round(driver_cuda_free / GIB, 1),
+                          'cuda_headroom_gb': round(cuda_free / GIB, 1)} if cuda_free is not None else {}),
                       'claims': claims,
                       'waiting': [{'position': n + 1, 'unit': name, 'priority': w['priority'],
                                    'budget_gb': round(w['budget'] / GIB, 1), 'requeued': bool(w.get('requeued')),
+                                   **({'cuda_budget_gb': round((w.get('cuda_budget') or w.get('spec', {}).get('cuda_budget')) / GIB, 1),
+                                       'cuda_fits': cuda_fits_entry(w, cuda_free)}
+                                      if w.get('cuda_budget') or w.get('spec', {}).get('cuda_budget') else {}),
                                    'would_preempt': plans[name],
                                    'blocked_by': non_preemptible(live, w),
                                    **({'cannot_fit': why} if (why := unreachable(live, free, w)) else {})}
@@ -1013,10 +1058,12 @@ def guard(args):
                                        stdout=subprocess.PIPE, text=True, start_new_session=True)
             release_started = time.time()
         with ledger() as state:
-            all_live = live_claims(state, gpu_usage())
+            gpu = gpu_usage()
+            all_live = live_claims(state, gpu)
             live = {u: c for u, c in all_live.items() if time.time() - stopped.get(u, 0) > 60}
             available = mem_available()
             free = available - sum(outstanding(c) for c in all_live.values())
+            cuda_free = cuda_headroom(all_live, gpu)
             writes = checkpoint_writes()
             sizes, throughput = family_state_bytes(writes), write_throughput(writes)
             graces = {name: grace_seconds(name, state['claims'].get(name, {}), sizes, throughput) for name in live}
@@ -1036,7 +1083,7 @@ def guard(args):
             if queue and not pending:
                 head, wanted = queue[0]
                 backfill = None
-                if not unit and not fits(free, wanted['budget'], wanted['reserve']):
+                if not unit and not fits(free, wanted['budget'], wanted['reserve']) and cuda_fits_entry(wanted, cuda_free):
                     # A waiting higher priority job: stop the lowest priority resumable units (one graceful stop at a
                     # time; the next cycle re-plans with what that stop freed).
                     plan = preemption_plan({u: c for u, c in live.items() if u not in stopped or
@@ -1050,15 +1097,17 @@ def guard(args):
                     warned[head] = time.time()
                     state['events'].append({'time': time.time(), 'event': 'head cannot fit', 'unit': head, **why})
                     print(json.dumps({'head_cannot_fit': head, **why}), flush=True)
-                if not unit and not fits(free, wanted['budget'], wanted['reserve']):
+                if not unit and (not fits(free, wanted['budget'], wanted['reserve']) or
+                                 not cuda_fits_entry(wanted, cuda_free)):
                     # Nothing to preempt for the head (or its blockers are protected): relaunch the first requeued unit
                     # behind it that fits now instead of leaving the room idle.
                     for name, entry in queue[1:]:
                         if (entry.get('requeued') and time.time() >= entry['not_before']
-                                and fits(free, entry['budget'], entry['reserve'])):
+                                and fits(free, entry['budget'], entry['reserve'])
+                                and cuda_fits_entry(entry, cuda_free)):
                             backfill = (name, entry)
                             break
-                if not unit and plan_launch(state, head, wanted, backfill, free):
+                if not unit and plan_launch(state, head, wanted, backfill, free, cuda_free):
                     behind = head
                     head, wanted = backfill if backfill else (head, wanted)
                     state['claims'][head] = claim_for(wanted['spec'])
