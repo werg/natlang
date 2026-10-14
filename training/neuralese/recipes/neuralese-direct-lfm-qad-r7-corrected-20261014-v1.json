@@ -215,7 +215,8 @@
         "train/write_sites.py": "71b42b7989597f33610c65151558d5c3f42b13345ffb638e1a74818f51e5a5cf",
         "view.py": "4ee2b3d93cac3df4e154a539a2b2dc7eddeb25efb6e58982b79daaadde27c4dd",
         "write.py": "a93b47350bbf40c93d7a8a213739c081471b42d2d6994374dfc2304ea61a356e"
-      }
+      },
+      "image": "sha256:170d746f59d6e6114bb90b957b3acd3d7f1b8c042b308e47c7cbfec26834eca6"
     },
     "outputs": {
       "directory": "/home/werg/natlang-artifacts/neuralese-direct-lfm-qad-r7-corrected-20261014-v1"
