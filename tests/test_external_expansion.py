@@ -94,3 +94,25 @@ def test_codeagent_task_handoff_keeps_problem_and_prior_history_out_of_consumer(
     assert 'Write a sum function.' not in json.dumps(row['consumer'])
     assert row['target']['value']['content'] == 'def sum_two(a, b): return a + b'
     assert row['writer']['result_type'] == 'Neuralese<Background>'
+
+
+def test_evidence_subagent_keeps_published_eval_split_and_legacy_tool_observation(tmp_path, monkeypatch):
+    import json
+    import pytest
+    pa = pytest.importorskip('pyarrow')
+    import pyarrow.parquet as pq
+    from neuralese_data import agents
+    root = tmp_path / 'D10'
+    root.mkdir()
+    (root / 'acquisition.json').write_text(json.dumps({'repo': 'test/evidence', 'revision': 'pinned'}))
+    example = {'conversations': [{'role': 'user', 'content': 'Find evidence'},
+        {'role': 'function', 'content': 'Exact observed result', 'name': 'search'},
+        {'role': 'assistant', 'content': 'Report the result'}]}
+    for filename in ('train.parquet', 'eval.parquet'):
+        pq.write_table(pa.Table.from_pylist([example]), root / filename)
+    monkeypatch.setattr(agents, 'EXPANSION_ROOT', tmp_path)
+    rows = dict(agents.evidence_subagent())
+    assert rows['eval.parquet:0'].split == 'test'
+    assert rows['train.parquet:0'].split == 'train'
+    observation = rows['eval.parquet:0'].messages[1]
+    assert observation['role'] == 'tool' and observation['content'] == 'Exact observed result'

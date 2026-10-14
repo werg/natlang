@@ -479,6 +479,8 @@ def expansion_messages(raw):
     prepared = []
     for original in raw:
         item = dict(original)
+        if item.get('role') == 'function':
+            item['role'] = 'tool'
         content = item.get("content")
         if isinstance(content, list):
             # Keep non-text blocks too: silently dropping them destroys observations.
@@ -522,7 +524,7 @@ def expansion_trajectory(ref, receipt, rid, row):
     license_name = card.get("license") or "LicenseRef-upstream-unspecified"
     if not isinstance(license_name, str):
         license_name = "LicenseRef-upstream-custom"
-    research = ref in ("D01", "D02", "D21")
+    research = ref in ("D01", "D02", "D10", "D21")
     return Trajectory(
         id=f"upstream:expansion:{ref}:{trajectory_id}:{session_id}",
         family="trajectory_continuation_research" if research else "trajectory_continuation_coding",
@@ -532,7 +534,7 @@ def expansion_trajectory(ref, receipt, rid, row):
                             "observed_graph_snapshot": str(EXPANSION_ROOT / ref),
                             "native_execution_verified": False}),
         license=licence(license_name, "nc" in license_name.lower(), "Pinned upstream card; owner accepts all licenses."),
-        split="train", split_groups=[group_key(f"expansion-{ref.lower()}-task", trajectory_id),
+        split=row.get('_expansion_split', 'train'), split_groups=[group_key(f"expansion-{ref.lower()}-task", trajectory_id),
                                      group_key("task", task_hash(request))],
         outcome={"label": "teacher", "checked": None},
         tools=json.loads(row["tools"]) if isinstance(row.get("tools"), str) else row.get("tools"),
@@ -550,6 +552,8 @@ def _expansion(ref, limit=None):
                         yield f"{path.relative_to(root)}:{i}", json.loads(line)
         for path in sorted(root.rglob("*.parquet")):
             for i, row in _parquet_groups(path):
+                if ref == 'D10' and path.name == 'eval.parquet':
+                    row = {**row, '_expansion_split': 'test'}
                 yield f"{path.relative_to(root)}:{i}", row
     for rid, row in _limited(rows(), limit):
         if ref == "D02":
@@ -585,6 +589,18 @@ def owl_sft(limit=None):
     yield from _expansion("D21", limit)
 
 
+def evidence_subagent(limit=None):
+    yield from _expansion('D10', limit)
+
+
+def openthoughts_agent(limit=None):
+    yield from _expansion('D29', limit)
+
+
+def terminaltraj(limit=None):
+    yield from _expansion('D33', limit)
+
+
 def codeagent_sft(limit=None):
     """Alpaca coding responses as derived typed task handoffs; upstream outcomes remain unknown."""
     root = EXPANSION_ROOT / 'D05'
@@ -610,4 +626,6 @@ def codeagent_sft(limit=None):
 
 
 CORPORA.update({"wideseek": (wideseek, 4), "cooperator-dual-policy": (cooperator_dual_policy, 4),
-                "searchswarm": (searchswarm, 4), "owl-sft": (owl_sft, 4), "codeagent-sft": (codeagent_sft, 1)})
+                "searchswarm": (searchswarm, 4), "owl-sft": (owl_sft, 4), "codeagent-sft": (codeagent_sft, 1),
+                'evidence-subagent': (evidence_subagent, 4), 'openthoughts-agent': (openthoughts_agent, 4),
+                'terminaltraj': (terminaltraj, 4)})
