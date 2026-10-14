@@ -350,3 +350,18 @@ Procedure Compiler closure v2 peer correction: the dependency judgment now sees 
 ### 2026-10-14 — Ecology narrow scope and NL graph frontier v15
 
 V14's source-owned extraction/edge/assessment handoffs worked, but the scope child repeatedly delegated and the graph stage attempted an open-ended eval algorithm. V15 captures a short one-edge condition task and requests its ScopeDecision directly. Graph propagation is now a named typed NL child advancing one ready entity through a fixed finite frontier; the parent alone invokes iterateOn and consumes actual returned paths/conflict findings. Exact operations validate provenance/keys, maintain the copied frontier and multiply already selected source signs. No case-specific graph or gold labels are encoded in the program. **Measurement debt:** zero v15 live samples; renderer/source/type review and canonical replay are preparation only. Inspect actual scope return, parent/child ownership, node contributions, uncertainty propagation and final consumption in the next pinned diagnostic, then approximately48 reviewed samples for adoption. Frozen v14 remains diagnostic-only.
+
+### 2026-10-14 — Train-only service-result collision recovery
+
+The new `service_result_recovery` inline-curriculum family gives ordinary
+numbered task instructions in dispatch, catalog and permit worlds, then seeds
+one actual compiler rejection when a local result declaration collides with
+the injected service name. The teacher sees the runtime's corrective error and
+continues; the planted rejected action remains a zero-target prefix. No held
+proof packet wording, inputs or trajectory was copied. The 48-case train shard
+at seed 52054 passes source/reference replay, exact acceptance and zero held
+ID/source-group intersection. **Measurement debt:** 0/48 live teacher
+continuations reviewed; its Luna queue is pending. Review corrected service
+use, exact result, duplicates and idiomatic continuation before training
+admission. This small recovery family supplements the larger deep-NL
+application sources; it does not meet their application-scale target itself.
