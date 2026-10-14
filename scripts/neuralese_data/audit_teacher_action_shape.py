@@ -13,9 +13,13 @@ import hashlib
 import json
 import os
 import re
+import sys
 import tempfile
 from collections import Counter
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
+from natlang_neuralese.common.jsonio import open_jsonl_text
 
 
 NL_CALL = re.compile(r'\bnl\s*(?:<|\.|`|\()')
@@ -87,7 +91,7 @@ def main() -> None:
     args = parser.parse_args()
 
     parents = {}
-    with args.turns.open(encoding='utf-8') as stream:
+    with open_jsonl_text(args.turns) as stream:
         for line in stream:
             if not line.strip():
                 continue
