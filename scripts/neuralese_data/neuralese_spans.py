@@ -61,7 +61,7 @@ def token_offsets(token_ids, text, tokenizer):
     return offsets, ''.join(pieces)
 
 
-def return_value_literals(text, start):
+def return_value_literals(text, start, value_path=('value',)):
     """Literal value arguments in the native call rendering; None for another dialect."""
     # Mellum renders real tool calls as JSON objects inside explicit tool tags.
     # Read member boundaries with the decoder, never substring-search status/code.
@@ -110,7 +110,27 @@ def return_value_literals(text, start):
                 recognized = True
                 arguments = call.get('arguments')
                 if arguments is not None and isinstance(arguments[2], dict):
-                    value = members(arguments[0]).get('value')
+                    value = members(arguments[0]).get(value_path[0])
+                    for part in value_path[1:]:
+                        if value is None:
+                            break
+                        if isinstance(part, str) and isinstance(value[2], dict):
+                            value = members(value[0]).get(part)
+                        elif type(part) is int and isinstance(value[2], list) and 0 <= part < len(value[2]):
+                            at = value[0] + 1
+                            items = []
+                            for _ in value[2]:
+                                while text[at].isspace():
+                                    at += 1
+                                begin = at
+                                item, at = decoder.raw_decode(text, at)
+                                items.append((begin, at, item))
+                                while text[at].isspace():
+                                    at += 1
+                                at += 1  # verified JSON comma or closing bracket
+                            value = items[part]
+                        else:
+                            value = None
                     if value is not None:
                         values.append(value)
             except (ValueError, IndexError):
@@ -161,8 +181,16 @@ def return_value_literals(text, start):
         rendered = text[begin:end]
         try:
             call = ast.parse(rendered, mode='eval').body
-            node = next((kw.value for kw in call.keywords if kw.arg == 'value'),
-                        call.args[0] if len(call.args) == 1 else None)
+            node = next((kw.value for kw in call.keywords if kw.arg == value_path[0]),
+                        call.args[0] if len(call.args) == 1 and value_path[0] == 'value' else None)
+            for part in value_path[1:]:
+                if isinstance(node, ast.Dict):
+                    node = next((v for k, v in zip(node.keys, node.values)
+                                 if isinstance(k, ast.Constant) and k.value == part), None)
+                elif isinstance(node, (ast.List, ast.Tuple)) and type(part) is int and 0 <= part < len(node.elts):
+                    node = node.elts[part]
+                else:
+                    node = None
             if node is None:
                 continue
             class JsonConstants(ast.NodeTransformer):
@@ -200,8 +228,14 @@ def spans_for_row(row: dict, writes: list[tuple[str, str, bool]], tokenizer) -> 
             return [], len(writes)
         supervised_from = end_think + len('</think>')
     spans, missing = [], 0
-    literals = return_value_literals(text, supervised_from)
-    for name, value, has_edge in writes:
+    literal_cache = {}
+    for write in writes:
+        name, value, has_edge = write[:3]
+        site = write[3] if len(write) > 3 else {}
+        path = tuple(site.get('value_path', ('value',))) if site.get('tool', 'return_result') == 'return_result' else ('value',)
+        if path not in literal_cache:
+            literal_cache[path] = return_value_literals(text, supervised_from, path)
+        literals = literal_cache[path]
         if not isinstance(value, str) or not value:
             missing += 1
             continue
@@ -250,7 +284,7 @@ def cohort_writes(cohort: Path) -> dict[str, list[tuple[str, str, bool]]]:
     package = ROOT / 'training/neuralese/natlang_neuralese'
     code = hashlib.sha256('\n'.join(str(p.relative_to(package)) + ':' + sha256_file_hex(p)
                                    for p in sorted(package.rglob('*.py'))).encode()).hexdigest()
-    cache = row_index.entry_path('neuralese-cohort-writes-v1', code, sha256_file_hex(Path(__file__)),
+    cache = row_index.entry_path('neuralese-cohort-writes-v2', code, sha256_file_hex(Path(__file__)),
                                  sha256_file_hex_cached(cohort / 'records.jsonl'),
                                  sha256_file_hex_cached(cohort / 'edges.jsonl'))
     stored = row_index.load(cache)
@@ -266,7 +300,15 @@ def cohort_writes(cohort: Path) -> dict[str, list[tuple[str, str, bool]]]:
         names = T.target_writes(record)
         if names:
             notes = T.handover_notes(record)
-            writers[record['id']] = [(n, notes.get(n), n in edged.get(record['id'], ())) for n in sorted(names)]
+            sites = {site.name: site for site in T.extract_write_sites(record)}
+            writers[record['id']] = []
+            for n in sorted(names):
+                value = (n, notes.get(n), n in edged.get(record['id'], ()))
+                if n in sites:
+                    site = sites[n]
+                    value += ({'tool': site.tool, 'value_path': list(site.value_path),
+                               'source_kind': site.source_kind},)
+                writers[record['id']].append(value)
     row_index.save(cache, {'writers': writers})
     return writers
 
