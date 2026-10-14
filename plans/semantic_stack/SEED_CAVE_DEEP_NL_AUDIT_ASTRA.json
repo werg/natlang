@@ -1,0 +1,104 @@
+{
+  "schema": "natlang.nl-policy-depth-audit/1",
+  "author": "semantic_slate_astra",
+  "status": "independent_source_review_passed_live_pending",
+  "applications": {
+    "seed-lineage-laboratory": {
+      "before": {
+        "nl_files": 27,
+        "physical_lines": 533,
+        "body_lines": 330,
+        "numbered_steps": 159
+      },
+      "after": {
+        "nl_files": 27,
+        "physical_lines": 567,
+        "body_lines": 364,
+        "numbered_steps": 165
+      },
+      "changed_files": [
+        {
+          "path": "applications/seed-lineage-laboratory/designExperiments/predictExperiments/partitionAnswers.nl",
+          "before_sha256": "8839df639719ec473c5eb9cc6c393444d5b8e1f6dd07ffc6e032f0d47ee9b4bb",
+          "after_sha256": "8cafeaa5394078e141b848a3e8ee15c9770c5af5f1c0e1b895da69a435743454"
+        },
+        {
+          "path": "applications/seed-lineage-laboratory/designExperiments/planPolicy/valueBeliefNode/compareCandidates.nl",
+          "before_sha256": "30f17e6de7b21556336f163d9bee2458cdf52b764f81d33c23b3b373da494490",
+          "after_sha256": "8980f58cf2c036e0a1ddabc00610017d2e22199ab1cb77aa62bb84d4223e44be"
+        }
+      ],
+      "types_unchanged": true,
+      "fixture_oracle_reference_unchanged": true,
+      "native_check_passed": true,
+      "package": {
+        "path": "/tmp/astra-seed-depth-v2-source",
+        "source_sha256": "7d3e3e12b3f581b0864f2ab0a6d55a74d55bedad4319d2b87bbc9332a5a5ef19",
+        "manifest_sha256": "f52aad76192baadab5cc5df719eab52678276448a808e131fd038d078a5a2c29",
+        "reference_ok": true,
+        "source_status": "candidate_source_reviewed_live_pending"
+      }
+    },
+    "cave-mission": {
+      "before": {
+        "nl_files": 29,
+        "physical_lines": 728,
+        "body_lines": 509,
+        "numbered_steps": 207
+      },
+      "after": {
+        "nl_files": 29,
+        "physical_lines": 745,
+        "body_lines": 526,
+        "numbered_steps": 210
+      },
+      "changed_files": [
+        {
+          "path": "applications/cave-mission/planMission/designPolicy/evaluateBranches/settleValue.nl",
+          "before_sha256": "095fe93bc40dd1be657d95c7b62256719b86e9e1221a5e90d8d11b27400fdd88",
+          "after_sha256": "8ddb52ead53c6106df4196e8a9e96470cc45ca565080e65faef141ed0ec2098f"
+        }
+      ],
+      "types_unchanged": true,
+      "fixture_oracle_reference_unchanged": true,
+      "native_check_passed": true,
+      "package": {
+        "path": "/tmp/astra-cave-depth-v6-source",
+        "source_sha256": "1ef0ff19499628f01754b274b3d913a724d26a92ef734c091e57ace14b6c7b95",
+        "manifest_sha256": "21b4beb2898c9cce061ee5ede733255eb5071c6b2134b3fa6080627a3986aa33",
+        "reference_ok": true,
+        "source_status": "candidate_source_reviewed_live_pending"
+      }
+    }
+  },
+  "findings": [
+    "Visible TypeScript is declarations/configuration only; neither application has a visible crisp policy engine.",
+    "Source planning decisions were already NL-owned. Three compressed consumers needed explicit semantic completeness, uncertainty and comparison branches; no wrapper leaves added.",
+    "Structured return construction in eval is not itself policy leakage. Live qualification must check whether values follow actual typed inputs/child judgments or a fixture-specific table."
+  ],
+  "shared_semantics": [
+    "Exact rational arithmetic applies actual NL-decided partitions/priority; it does not infer biological category.",
+    "Cave all-outcome reachability is separated from observation availability and exact cost projection.",
+    "Missing dependencies remain repair obligations; they cannot be silently converted to losing worlds or zero probabilities."
+  ],
+  "live_qualified": false,
+  "training_admitted": false,
+  "controls": {
+    "seed": {
+      "positive": 8,
+      "negative": 35,
+      "passed": true
+    },
+    "cave": {
+      "total": 22,
+      "passed": true
+    },
+    "meaning": "Existing external exact result seams, not actual NL execution."
+  },
+  "independent_review": {
+    "path": "plans/semantic_stack/SEED_CAVE_NL_DEPTH_REVIEW_SOL.json",
+    "sha256": "aff571bb803ccd98969f560d3609dbc3ee9b86b31c61634714e820664e633baf",
+    "reviewer": "semantic_slate_sol",
+    "scope": "Focused source consumer-depth delta and existing exact controls; no live credit"
+  }
+}

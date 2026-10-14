@@ -592,7 +592,7 @@
     "exact_checker_controls_passed": 22,
     "live_qualified": false,
     "training_admitted": false,
-    "source_variant_review": "Passed v5 source/control peer review; original fixture/oracle/canonical unchanged"
+    "source_variant_review": "Focused semantic-consumer-depth-v2 peer source review passes; fixture/type/oracle/reference unchanged; live pending."
   },
   "fixture_document_count": 10,
   "fixture_clause_count": 31,
@@ -641,6 +641,29 @@
       "sha256": "775f92dc4210d5df4de73534578a501fd7e6730d46d398f0ea5589244a9d3292",
       "reviewer": "semantic_slate_sol",
       "scope": "Existing conditional binding and physical-direction source review; initial source-world oracle linked in receipt"
+    },
+    {
+      "path": "plans/semantic_stack/SEED_CAVE_NL_DEPTH_REVIEW_SOL.json",
+      "sha256": "aff571bb803ccd98969f560d3609dbc3ee9b86b31c61634714e820664e633baf",
+      "reviewer": "semantic_slate_sol",
+      "scope": "Focused source consumer-depth delta and existing exact controls; no live credit"
     }
-  ]
+  ],
+  "current_policy_source_revision": {
+    "id": "semantic-consumer-depth-v2",
+    "source_files": [
+      "planMission/designPolicy/evaluateBranches/settleValue.nl"
+    ],
+    "status": "independent_source_review_passed_live_pending",
+    "fixture_oracle_reference_unchanged": true,
+    "live_qualified": false,
+    "training_admitted": false,
+    "review_receipt": {
+      "path": "plans/semantic_stack/SEED_CAVE_NL_DEPTH_REVIEW_SOL.json",
+      "sha256": "aff571bb803ccd98969f560d3609dbc3ee9b86b31c61634714e820664e633baf",
+      "reviewer": "semantic_slate_sol",
+      "scope": "Focused source consumer-depth delta and existing exact controls; no live credit"
+    }
+  },
+  "readiness_scope": "Original fixture/oracle and exact reference reviewed; current consumer-depth source independently reviewed by pinned delta receipt. Actual application execution and live/training qualification remain pending."
 }
