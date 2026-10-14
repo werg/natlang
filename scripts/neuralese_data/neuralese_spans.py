@@ -19,9 +19,11 @@ TokenChoiceProjection with h detached.
 from __future__ import annotations
 
 import argparse
+import ast
 import collections
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -59,11 +61,136 @@ def token_offsets(token_ids, text, tokenizer):
     return offsets, ''.join(pieces)
 
 
+def return_value_literals(text, start):
+    """Literal value arguments in the native call rendering; None for another dialect."""
+    # Mellum renders real tool calls as JSON objects inside explicit tool tags.
+    # Read member boundaries with the decoder, never substring-search status/code.
+    if '<tool_call>' in text[start:]:
+        values = []
+        decoder = json.JSONDecoder()
+        def members(begin):
+            at = begin
+            while at < len(text) and text[at].isspace():
+                at += 1
+            if text[at:at + 1] != '{':
+                raise ValueError('tool arguments must be an object')
+            at += 1
+            result = {}
+            while True:
+                while at < len(text) and text[at].isspace():
+                    at += 1
+                if text[at:at + 1] == '}':
+                    return result
+                key, at = decoder.raw_decode(text, at)
+                if not isinstance(key, str) or key in result:
+                    raise ValueError('tool arguments need unique string keys')
+                while at < len(text) and text[at].isspace():
+                    at += 1
+                if text[at:at + 1] != ':':
+                    raise ValueError('missing member colon')
+                at += 1
+                while at < len(text) and text[at].isspace():
+                    at += 1
+                begin = at
+                value, at = decoder.raw_decode(text, at)
+                result[key] = (begin, at, value)
+                while at < len(text) and text[at].isspace():
+                    at += 1
+                if text[at:at + 1] == '}':
+                    return result
+                if text[at:at + 1] != ',':
+                    raise ValueError('missing member comma')
+                at += 1
+        recognized = False
+        for match in re.finditer(re.escape('<tool_call>'), text[start:]):
+            try:
+                call = members(start + match.end())
+                if call.get('name', (None, None, None))[2] != 'return_result':
+                    continue
+                recognized = True
+                arguments = call.get('arguments')
+                if arguments is not None and isinstance(arguments[2], dict):
+                    value = members(arguments[0]).get('value')
+                    if value is not None:
+                        values.append(value)
+            except (ValueError, IndexError):
+                continue
+        return values if recognized else None
+    candidates = {start + match.start(): match for match in re.finditer(r'\breturn_result\s*\(', text[start:])}
+    calls, quote, escaped = [], None, False
+    for index in range(start, len(text)):
+        char = text[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == '\\':
+                escaped = True
+            elif char == quote:
+                quote = None
+        elif char in ('"', "'"):
+            quote = char
+        elif index in candidates:
+            calls.append(candidates[index])
+    if not calls:
+        return None
+    values = []
+    for match in calls:
+        begin = start + match.start()
+        opening = start + match.end() - 1
+        depth, quote, escaped, end = 1, None, False, None
+        for index in range(opening + 1, len(text)):
+            char = text[index]
+            if quote:
+                if escaped:
+                    escaped = False
+                elif char == '\\':
+                    escaped = True
+                elif char == quote:
+                    quote = None
+            elif char in ('"', "'"):
+                quote = char
+            elif char == '(':
+                depth += 1
+            elif char == ')':
+                depth -= 1
+                if depth == 0:
+                    end = index + 1
+                    break
+        if end is None:
+            continue
+        rendered = text[begin:end]
+        try:
+            call = ast.parse(rendered, mode='eval').body
+            node = next((kw.value for kw in call.keywords if kw.arg == 'value'),
+                        call.args[0] if len(call.args) == 1 else None)
+            if node is None:
+                continue
+            class JsonConstants(ast.NodeTransformer):
+                def visit_Name(self, item):
+                    if item.id in ('true', 'false', 'null'):
+                        return ast.copy_location(ast.Constant({'true': True, 'false': False, 'null': None}[item.id]), item)
+                    return item
+            literal = ast.literal_eval(JsonConstants().visit(node))
+            lines = rendered.split('\n')
+            def position(line, column):
+                return begin + sum(len(s) + 1 for s in lines[:line - 1]) + len(lines[line - 1].encode()[:column].decode())
+            left = position(node.lineno, node.col_offset)
+            right = position(node.end_lineno, node.end_col_offset)
+        except (SyntaxError, ValueError, TypeError, AttributeError, UnicodeDecodeError):
+            continue
+        values.append((left, right, literal))
+    return values
+
+
 def spans_for_row(row: dict, writes: list[tuple[str, str, bool]], tokenizer) -> tuple[list, int]:
     """(spans, writes not found) of one direct row. ``writes``: (write name, value text, has edge) of the row's source
     records. A value is searched in the row's supervised part only (it also appears in later prompts as an input)."""
     token_ids = list(row['token_ids'])
     offsets, text = token_offsets(token_ids, row['text'], tokenizer)
+    if text != row['text']:
+        # A byte fragment decoded in isolation can become a replacement
+        # character. Its invented character offsets cannot locate gold tokens.
+        return [], len(writes)
     start_token = int(row.get('supervised_suffix_start') or 0)
     supervised_from = offsets[start_token][0] if start_token < len(offsets) else len(text)
     target_start = supervised_from + len(text[supervised_from:]) - len(text[supervised_from:].lstrip())
@@ -73,16 +200,34 @@ def spans_for_row(row: dict, writes: list[tuple[str, str, bool]], tokenizer) -> 
             return [], len(writes)
         supervised_from = end_think + len('</think>')
     spans, missing = [], 0
+    literals = return_value_literals(text, supervised_from)
     for name, value, has_edge in writes:
         if not isinstance(value, str) or not value:
             missing += 1
             continue
         found = None
-        for form in value_forms(value):
-            at = text.find(form, supervised_from)
-            if at >= 0:
-                found = (at, at + len(form))
-                break
+        if literals is not None:
+            try:
+                expected = json.loads(value)
+            except json.JSONDecodeError:
+                expected = value
+            for begin, end, literal in literals:
+                if isinstance(literal, str):
+                    if literal not in (value, expected):
+                        continue
+                    rendered = text[begin:end]
+                    if len(rendered) >= 2 and rendered[0] in ('"', "'") and rendered[-1] == rendered[0]:
+                        found = (begin + 1, end - 1)
+                        break
+                elif json.dumps(literal, sort_keys=True, ensure_ascii=False) == json.dumps(expected, sort_keys=True, ensure_ascii=False):
+                    found = (begin, end)
+                    break
+        else:
+            for form in value_forms(value):
+                at = text.find(form, supervised_from)
+                if at >= 0:
+                    found = (at, at + len(form))
+                    break
         if found is None:
             missing += 1
             continue
