@@ -207,3 +207,39 @@ the collection budget ended it. It stays out of training and automatic retries.
 The failed attempt's redundant partial/evidence files have no repair or DPO
 consumer; keep the compact review and queue status, prune those large files,
 and review this task shape before producing another variant.
+
+## Train-only recovery admission and broader student rollout
+
+The selected 12 same-state student handoffs all finished. Luna returned ten
+exact-oracle accepted continuations and two exact rejections. Native
+materialization of those ten yielded 95 decisions: 58 mechanically eligible
+teacher targets, 21 student-prefix context decisions, and 16 failed or
+unexecuted teacher proposals. The preference builder causally verified seven
+of ten candidate pairs; three remain unapproved. Neither exact parent success
+nor causal pair verification by itself admits a training target.
+
+The decision review held one otherwise exact parent in
+`curriculum_composed_process`: it replaced the requested iterative operation
+with an arbitrary 10,000-step loop. The nine other parents contribute 57
+successful teacher decision targets across nine families. Their source IDs and
+groups have zero overlap with the protected QAD held48. The source, materialized
+decisions, explicit exclusion, and approved target hashes are bound in
+`runs/qad-student-recovery-teacher-20261014-v1/admission-review.json`.
+Corpus `qad-student-root-recovery-s52052-v1` is registered and synchronized to
+DGX; only `approved-turns.jsonl` is a training input. DGX owns its LFM and
+Mellum rendering and next union inclusion. Preference pairs remain review-only.
+
+Pop's next exact step-15000 GPU run is
+`/home/werg/natlang-artifacts/qad-student-train-rollouts-20261014-v2`:
+60 train-only cases, three from each of 20 families, two seeds per case, full
+prompt and student-generated root and children. The selection is source-group
+disjoint from both held48 and the prior 12-case train rollout. Score and review
+all resulting failures before teacher recovery; do not count empty result files
+as model negatives.
+
+DGX's exact one-context in-backward MuonSR gradient comparison matched ordinary
+backward bitwise with and without layer checkpointing (all 146 backbone
+gradients; synthetic hidden-state objective). This rules out that local
+gradient path, but not historical optimizer state, accumulation or the real
+teacher training objective. The nontext-token drift remains under diagnosis;
+no output mask or serving suppression has been adopted.
