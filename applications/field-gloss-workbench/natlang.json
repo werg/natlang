@@ -1,0 +1,1 @@
+{"schema":"natlang.package/1","name":"@natlang/field-gloss-workbench","version":"0.1.0","description":"Ground competing segmentation and discourse-role analyses in actual elicitation and correction evidence.","include":["analyzeCorpus.nl","analyzeCorpus","types.ts","DECOMPOSITION.md","tsconfig.json"]}

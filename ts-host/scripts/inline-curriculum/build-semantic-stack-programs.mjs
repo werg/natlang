@@ -360,6 +360,27 @@ function checkedStageSpecs(entry, steps) {
       ...paragraphs(variant.idiom_preconditions),
       variant.direct_await_idiom, variant.no_op_criterion, ...variant.invariants];
     stage.no_op_policy = variant.no_op_criterion;
+    const scopeFrontier = variant.scope_frontier;
+    if (scopeFrontier) {
+      if (scopeFrontier.schema !== 'semantic-named-scope-frontier/1' ||
+          scopeFrontier.owner_stage !== stage.name ||
+          scopeFrontier.step_name !== 'advanceScopeFrontier' ||
+          scopeFrontier.relative_child_path !== `${stage.name}/${scopeFrontier.step_name}.nl` ||
+          scopeFrontier.args?.state !== 'ScopeFrontier' || scopeFrontier.returns !== 'ScopeFrontier' ||
+          typeof variant.types.ScopeFrontier !== 'string' ||
+          !Array.isArray(scopeFrontier.numbered_plan) || scopeFrontier.numbered_plan.length < 5 ||
+          !Array.isArray(scopeFrontier.parent_numbered_plan ?? variant.numbered_plan) ||
+          (scopeFrontier.parent_numbered_plan ?? variant.numbered_plan).length < 5 ||
+          scopeFrontier.iteration?.measure !== 'pending.length' ||
+          !scopeFrontier.direct_await_idiom?.includes('await judgeScope(scopeInput)') ||
+          scopeFrontier.finish_contract?.positive_idiom !== 'eval({code:"return next;",finish:true})')
+        throw Error(`${entry.id}: invalid named scope frontier contract`);
+      stage.numbered_plan = scopeFrontier.parent_numbered_plan ?? variant.numbered_plan;
+      stage.scoped_literal_required = false;
+      stage.scoped_literal_plan = [];
+      stage.new_semantic_transformation = scopeFrontier.owned_delta;
+      stage.no_op_policy = 'Only an empty current-batch causal assessment list has no scope input; each actual pending relation requires one completed scoped decision.';
+    }
     const carried = variant.cross_folder_accumulation;
     if (carried) {
       const fields = Object.keys(carried.initial_state ?? {});
@@ -639,6 +660,22 @@ function render(entry, provider) {
       description: `${title}: ${step.name}`, instructions: instructionBody });
   }
   const graphFrontier = stageSpec && variant?.program_id === id ? variant.graph_audit_frontier : null;
+  const scopeFrontier = stageSpec && variant?.program_id === id ? variant.scope_frontier : null;
+  if (scopeFrontier) {
+    const ownerIndex = steps.findIndex(step => step.name === scopeFrontier.owner_stage);
+    if (ownerIndex < 0 || ownerIndex >= steps.length - 1)
+      throw Error(`${id}: named scope frontier owner is not an intermediate stage`);
+    const path = ['solve', ...steps.slice(0, ownerIndex + 1).map(step => step.name),
+      `${scopeFrontier.step_name}.nl`].join('/');
+    if (Object.hasOwn(files, path)) throw Error(`${id}: duplicate named scope frontier path`);
+    files[path] = nlFile({ args: scopeFrontier.args, returns: scopeFrontier.returns,
+      description: scopeFrontier.description,
+      instructions: scopeFrontier.numbered_plan.join('\n') + '\n' +
+        scopeFrontier.direct_await_idiom + '\n' + scopeFrontier.finish_contract.instruction + '\n' +
+        scopeFrontier.finish_contract.positive_idiom + '\n' +
+        `${scopeFrontier.owner_stage} owns iterateOn with measure ${scopeFrontier.iteration.measure}. ` +
+        `This callable returns one actual typed decision and does not start another frontier step.` });
+  }
   if (graphFrontier) {
     const child = graphFrontier.step_name;
     const nodeJudgment = graphFrontier.node_judgment;
@@ -731,6 +768,14 @@ function render(entry, provider) {
     expectedFiles: { ...fixture, ...(entry.oracle?.expected_files ?? {}) },
   }) : null;
   if (caseRow) {
+    if (variant?.program_id === id && variant.item_result_binding) {
+      if (variant.item_result_binding.schema !== 'semantic-actual-child-result-binding/1' ||
+          !Array.isArray(variant.item_result_binding.sites) ||
+          variant.item_result_binding.sites.length !== 2 ||
+          variant.item_result_binding.sites.some(site => !Object.hasOwn(files, site.owner_source_path)))
+        throw Error(`${id}: item-result binding site is not an emitted named callable`);
+      caseRow.curriculum.item_result_binding = variant.item_result_binding;
+    }
     caseRow.semantics.oracle = { level: 'normalized', normalization: 'semantic-structured',
       comparison_spec: comparison,
       context: { objective, semantic_rule: rule, source_files: fixture } };

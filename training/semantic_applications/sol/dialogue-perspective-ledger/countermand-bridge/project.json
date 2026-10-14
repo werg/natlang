@@ -685,8 +685,8 @@
     "visible_crisp_policy_lines": 0
   },
   "canonical_preflight": {
-    "path": "/tmp/sol-countermand-target-variant-v1/package-report.json",
-    "source_sha256": "e6f9a6c76a211a773972d8b9e9d00a11b767f2ec4840cdfa73650ca7b93be5f5",
+    "path": "/tmp/sol-countermand-target-variant-v2/package-report.json",
+    "source_sha256": "1d4790e8d82f932009842a06e89a951a15ae19d318ad939c4a1eaa62b7d52ee7",
     "reference_ok": true,
     "scope": "Private full typed source witness only; not actual callable execution"
   }

@@ -16,7 +16,7 @@ It must preserve genuine alternative analyses and distinguish unattested from co
 No answer gloss table enters an executing callable. The first world will use explicitly closed
 candidate inventories so finite coverage is verifiable; those are candidate spaces, not gold labels.
 
-## Connected call graph: 32 planned NL functions
+## Connected call graph: 34 authored NL functions
 
 Each row denotes a separate typed callable and the semantic contribution it owns. Paths are
 relative to the application. Stages are numbered NL pseudocode; crisp policy is absent.
@@ -25,6 +25,8 @@ relative to the application. Stages are numbered NL pseudocode; crisp policy is 
 | --- | --- |
 | analyzeCorpus | Join actual intake, analysis, translation and repair reports; retain unresolved premises. |
 | analyzeCorpus/intake | CorpusSource with original sessions, observations, note versions and visible candidate domains. |
+| intake/inventoryCorpus | Actual original per-clause role inventory with completed/failed/unresolved entries; no linguistic answers. |
+| intake/inventoryCorpus/advanceClause | One actual typed ClauseRoleReading, original quote binding and immediate shorter frontier handoff. |
 | intake/readSessions | SessionIndex: consultant, time, elicitation frame and actual access/context. |
 | intake/readSessions/readSituation | SituationReading: depicted roles, named entities and known contrast; no gloss inference. |
 | intake/readUtterances | UtteranceIndex: exact surface units and original utterance/record identity. |
@@ -38,10 +40,10 @@ relative to the application. Stages are numbered NL pseudocode; crisp policy is 
 | analyzeCorpus/inferGrammar | GrammarFrontier over finite source-visible segmentation and role candidates. |
 | inferGrammar/seedCandidates | CandidateInventory from permitted candidate domains plus surface compatibility; no final winner. |
 | inferGrammar/advanceHypothesis | One hypothesis interpreted against the next actual evidence unit, then retained or rejected. |
-| advanceHypothesis/interpretSegmentation | SegmentationReading preserving exact surface spans and alternative morpheme boundaries. |
-| interpretSegmentation/judgeBoundary | Scoped NL boundary judgment from actual reuse/correction evidence and current hypothesis. |
-| advanceHypothesis/interpretRoles | RoleAssignment joining stems, case/focus candidates and the depicted participant relation. |
-| interpretRoles/judgeDiscourseRole | Scoped NL literal distinguishing event role from actual contrast/topic scope. |
+| analyzeCorpus/interpretSegmentation | SegmentationReading preserving exact surface spans and alternative morpheme boundaries. |
+| analyzeCorpus/interpretSegmentation/judgeBoundary | Scoped NL boundary judgment from actual reuse/correction evidence and current hypothesis. |
+| analyzeCorpus/interpretRoles | RoleAssignment joining stems, case/focus candidates and the depicted participant relation. |
+| analyzeCorpus/interpretRoles/judgeDiscourseRole | Scoped NL literal distinguishing event role from actual contrast/topic scope. |
 | advanceHypothesis/compareJudgment | One grounded support/contradiction/unknown constraint with actual prior candidate identity. |
 | compareJudgment/judgeCompatibility | Scoped NL literal consumes predicted meaning and consultant judgment without repairing the prediction. |
 | inferGrammar/closeEvidenceRound | Preserve surviving analyses and complete rejected-prefix proofs; never collapse unknown into false. |
@@ -54,6 +56,7 @@ relative to the application. Stages are numbered NL pseudocode; crisp policy is 
 | repairGlossNotes/judgePatch | Scoped NL replacement judgment from actual supported/rejected analyses and note scope. |
 | analyzeCorpus/auditReport | Independent source-coverage, rejection and translation challenge results. |
 | auditReport/challengeReading | Judge whether returned roles/glosses have actual source support, separately from exact certificate validity. |
+| auditReport/challengePatch | Independently challenge actual slot authority, survivor support, uncertainty and untouched text. |
 
 These paths imply multiple call shapes. Grammar inference nests evidence, segmentation and boundary
 judgments; held-out translation instead nests phrase/context interpretation. Correction-version
@@ -99,3 +102,15 @@ Author visible source first, independently reconstruct the finite analysis lands
 full typed certificate and exact positive/negative controls, obtain independent review, then run a
 pinned live diagnostic. All source-only stages are held; live qualification and training admission
 are false. File count is an architecture description, not a quality gate or a reason to add wrappers.
+
+## Initial authored source scope
+
+The34callables now contain substantive numbered NL procedures, not executable grammar classifiers. Shared segmentation/role interpretation lives directly in the root callable folder and is explicitly used by both candidate attempts and held-out phrase interpretation; their boundary/discourse children remain owned nested callables. This lexical placement permits real cross-branch reuse under the existing loader, without ancestor reloading or duplicate implementations. Grammar and translation frontiers each consume one original item and finish actual returned next state. Actual evidence graph travels into both branches, so held-out interpretation retains original correction/reuse context rather than constructing an empty source substitute.
+
+The initial tree is author-only: visible corpus world, full typed witness, exact checker, independent source review and live execution remain pending. No source eligibility or training admission follows from file count.
+
+## Source-scope and licensing refinement
+
+Original clause-role discovery now has its own typed one-item frontier: the actual `ClauseRoleReading` is retained in `ClauseInventoryEntry` and the actual `CorpusInventory` is retained by `CorpusSource`. Role discovery exposes original evidence scope only; candidate/stem meanings are separately returned by typed NL judgments over actual definitions. This prevents a broad inventory operation from standing in for later segmentation, role or translation policy.
+
+`DiscourseRoleJudgment` now retains actual `RoleContribution` rows and a nullable `licensed` verdict. An established conflicting two-agent assignment is false licensing, while missing role evidence is unknown. The actual role child owns that distinction under the supplied candidate/source rules, and compatibility consumes it without repairing the prediction. No crisp role classifier or fixed fixture table was added.

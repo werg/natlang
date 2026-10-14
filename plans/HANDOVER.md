@@ -1,5 +1,48 @@
 # Continuation guide — updated 2026-10-14
 
+## 09:12 CEST: Pop GPU handoff, deterministic Flash and FP8 repeat
+
+The Pop GPU had an avoidable idle handoff after QAD v14's hard drift stop at
+step 15600 (held48 4/48 versus base16 0/16; response KL 1.518 above 1.5).
+It was put to work on a native BF16 and TE FP8 same-seed dragnet. At 2,048
+tokens the former default Flash path disagreed on 109/146 first-update
+gradient hashes and 106/146 final parameter tensors. Math SDPA was bitwise
+repeatable but OOMed at 6,144 tokens. PyTorch deterministic algorithms keep
+Flash active and made the complete BF16 trainer's 146/146 gradients,
+optimizer, RNG, checkpoint bytes and held loss identical. A 6,144-token
+complete-model run fit with 2.955 GiB CUDA allocator reservation and about
+5% warm-update slowdown. Shared direct-trainer fix `f35f2633` sets cuBLAS
+workspace and deterministic algorithms before CUDA/model work. The TE FP8
+paired repeat then matched all 146 first gradients, both scalar updates,
+all final student tensors and held CE. Its raw TE state/checkpoint bytes
+differed only in generated storage IDs: all 368 deserialized embedded
+storages across 92 modules had equal dtype/values; four pickle frame lengths
+changed accordingly. Details:
+`plans/neuralese/BF16_SDPA_REPEATABILITY_DIAGNOSTIC_20261012.md`.
+Five disposable two-update checkpoint payloads and their hard links were
+listed and deleted after the audit, reclaiming 5,749,497,751 bytes; reports,
+recipes and digest receipts remain. Earlier diagnostic cleanup reclaimed
+another 6,898,858,146 bytes.
+
+Post-change neuralese Python ordinary passed 1253 (270 skipped) and GPU-heavy
+passed 14 (one skipped). Python-other full rerun passed 946 (two skipped, 11
+subtests). A full TS gate initially found a new `teacher -> calls` layering
+edge from collector capture; `0741ce69` moved the exact helper below both
+layers, and focused layering 68/68 plus binding 5/5 and quick check passed.
+The clean full TS rerun is running as
+`natlang-pop-final-full-ts-compact-20261014.service` and has passed builds
+and layering; it is in `ts-tests`. Publish the local commits and brief DGX
+after this gate finishes green. Three untracked Luna corpus manifests belong
+to another process; do not stage or discard them. The DGX D13 SWE corpus is
+mounted and schema/hash verified on Pop but has no automatic admission.
+
+Luna replenishment workers s52048/s52049 and Gemini batch29 are active.
+The GPU is currently idle only while the CPU full gate holds the available
+host-memory headroom. Next GPU work after publication: production-length
+repeatability/quality probe from the current direct recipe or the next
+qualified lineage, then semantic source live diagnostics. Do not interpret
+two-update parity as a production training qualification.
+
 ## 08:05 CEST: profiler order localized, D13 packed corpus available
 
 The Pop GPU was idle after QAD v14 stopped at its hard drift gate; no useful
