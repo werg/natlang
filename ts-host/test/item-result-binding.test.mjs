@@ -39,3 +39,35 @@ test('altered semantic field or foreign witness cannot qualify', () => {
     witnesses: [{ sourcePath: 'elsewhere', quote: 'different' }] };
   assert.equal(checkItemResultBinding(spec, foreign).status, 'fail');
 });
+test('scope permits only the declared exact owner-witness union', () => {
+  const augmented = structuredClone(ledger);
+  const owner = { sourcePath: 'plot/r04.txt', quote: 'Hares reduce grass.' };
+  augmented[1].host_inputs[0].value.relation.witnesses.push(owner);
+  augmented[1].host_result.value = { ...augmented[1].host_result.value,
+    witnesses: [relation.witnesses[0]] };
+  augmented[0].host_result.value.decisions[0] = { ...augmented[0].host_result.value.decisions[0],
+    witnesses: [relation.witnesses[0], owner] };
+  assert.equal(checkItemResultBinding(spec, augmented).status, 'pass');
+});
+test('effect finding must be the actual child value for the newly completed entity', () => {
+  const effectSite = proposal.item_result_binding.sites[1];
+  const effectSpec = { schema: spec.schema, sites: [effectSite] };
+  const finding = { entity: 'grass', status: 'unresolved', reason: 'opposing signed paths',
+    witnesses: [{ sourcePath: 'plot/r04.txt', quote: 'Hares reduce grass.' }] };
+  const effectPrior = { remainingEntityKeys: ['grass'], completedEntityKeys: [], nodeFindings: [], edges: [], seeds: [] };
+  const effectNext = { remainingEntityKeys: [], completedEntityKeys: ['grass'], nodeFindings: [finding], edges: [], seeds: [] };
+  const rows = [
+    { invocation_id: 'effect-parent', completion_status: 'done',
+      host_inputs: [inputCapture('state', effectPrior, effectSite.owner_source_path)],
+      host_result: outputCapture(effectNext, effectSite.owner_source_path, 'EffectFrontier') },
+    { invocation_id: 'effect-child', parent_invocation_id: 'effect-parent', completion_status: 'done',
+      inline_instruction_site: { returns: { natlang: 'EffectNodeFinding' } },
+      host_inputs: [inputCapture('input', { entity: 'grass' })],
+      host_result: outputCapture(finding, 'eval', 'EffectNodeFinding') },
+  ];
+  assert.equal(checkItemResultBinding(effectSpec, rows).status, 'pass');
+  const bypass = structuredClone(rows);
+  bypass[0].host_result.value.nodeFindings[0] = { ...bypass[0].host_result.value.nodeFindings[0],
+    status: 'increase' };
+  assert.equal(checkItemResultBinding(effectSpec, bypass).status, 'fail');
+});
