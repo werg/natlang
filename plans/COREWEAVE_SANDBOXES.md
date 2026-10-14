@@ -596,3 +596,43 @@ The smoke records all of these: `cwctl.py smoke --gpu`, then `--attach` for an e
    (`Secret(store="wandb", name=…)`); the owner creates that secret in W&B, ideally a service-account key scoped to the
    team, and we never copy a key. This is the W&B-native storage for outputs and checkpoints, and it works across all
    machines.
+
+
+## 9. Vendor-fix retest, 2026-10-14
+
+The W&B tenant and default data-plane blockers are fixed in measured tests with
+cwsandbox 1.19.0. `auto` and explicit `gateway` exec/file roundtrips now work;
+`get_snapshot_bucket_config` returns `CW_MANAGED`. Mounted files also work.
+
+GPU sandbox `a60ee9b5-258d-4d97-8ef7-fbda04242979` ran the same rich request
+as `3d8a0c75-d951-478c-a90a-bb9f9984657d`, omitting only the scratch volume:
+PyTorch `2.8.0+cu128`, CUDA 12.8, four CPUs, 16 GiB RAM, mounted file, env,
+tags and one-hour lifetime. It reached running in 93 seconds. On RTX PRO 6000
+sm_120, a deterministic tiny network completed 30 AdamW backward/optimizer
+updates, loss 1.078510 -> 0.053739; saved and reloaded model/optimizer state,
+then produced bitwise-identical finite CUDA inference. This qualifies the basic
+GPU mechanism; it does not qualify natlang model throughput, kernels, task
+quality, serving endpoints, or full training resume.
+
+Plain control `df5c4154-01c4-4322-a527-e21b2bccd579` booted in 23 seconds;
+mounted-file control `3a83865e-fdfe-4e71-8926-441360f76c8c` in 52 seconds.
+Both passed default/gateway exec and file roundtrips. Scratch-only control
+`7c62f59b-8ba3-4719-aa58-489fa7123d31` remained creating through a four-minute
+observation window and was explicitly stopped. Rich requests with scratch
+volumes, including default-image `941d1bb3-fb75-4be2-8b6a-079e83ff4e18`,
+are being observed to a 15-minute bound. A quiet creating status is not a
+terminal platform failure. These controls isolate scratch-volume provisioning
+as the remaining suspected blocker.
+
+Use an explicit job declaration `"scratch": {"path": "/work", "size":
+"50Gi", "storage": "root"}` to omit the vendor volume and retain the existing
+bootstrap/input/output paths. The work directory lives on ephemeral root;
+size is a planning estimate rather than reserved capacity. Collect verified
+outputs before completion/stop. Existing declarations still request volumes.
+No live lineage moved. The successful CUDA diagnostic was explicitly stopped.
+
+Reproducible bounded diagnostics and JSON receipts are in
+`/home/werg/data/dgxops/coreweave-{retest,control}-20261014.py` and
+`coreweave-{pytorch-root,controls}-20261014.json`; their local units run through
+the memory ledger. HF, PyPI, Node and GitHub HTTPS egress each returned 200.
+No credentials were placed in a sandbox or output record.

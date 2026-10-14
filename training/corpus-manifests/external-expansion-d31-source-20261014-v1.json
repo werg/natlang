@@ -1,0 +1,44 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-d31-source-20261014-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/external-expansion-20261014/D31",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 3797,
+      "sha256": "d1dc11a3f1466afdb7e578ed0c387935102916a7e5637e34c1e51e7bebb10492"
+    },
+    {
+      "path": "acquisition.json",
+      "bytes": 2499,
+      "sha256": "c19829269da9180bc6dfc71c38c0ca421ce203ef2e2b6bbc5c43f7c299bfe532"
+    },
+    {
+      "path": "assets/combine_head_figure.svg",
+      "bytes": 335175,
+      "sha256": "a17d01a1c31bcd9cc552cc38409245136ddf77f2e7190c3c1f36ab939efc8444"
+    },
+    {
+      "path": "assets/kg_data_pipeline.svg",
+      "bytes": 338644,
+      "sha256": "d9da19ccf749e7cc41763c58852778160cd28a6f32deb175528e320b2b8ae3e9"
+    },
+    {
+      "path": "data/qa_rl-00000-of-00001.parquet",
+      "bytes": 1364161,
+      "sha256": "cfde3734fb4367cc748fefb7ac6df034269a8f40f20bfa05c81e69eaea7eeadb"
+    },
+    {
+      "path": "data/qa_sft-00000-of-00001.parquet",
+      "bytes": 600602,
+      "sha256": "4265643ce84abb1149ba8366b89105db52e55d0619a242af7de7ecacd9064f02"
+    },
+    {
+      "path": "data/trajectories_sft-00000-of-00001.parquet",
+      "bytes": 33043904,
+      "sha256": "1e9f6545b460980bc894ce1c1ce60e0ae18fd2b2843d9a728ce3f16ca6dcd551"
+    }
+  ],
+  "bytes": 35688782
+}
