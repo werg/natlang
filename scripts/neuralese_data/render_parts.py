@@ -117,15 +117,16 @@ def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, c
     prefix = f'{unit_prefix}-p{k:02d}-'
     # Its decompressed input is kept until the part has a receipt (a requeued unit reads it when relaunched), and a
     # complete one is reused after a restart of this process.
-    plain = out / f'.p{k:02d}.turns.jsonl'
+    plain = out / (f'.p{k:02d}.turns.jsonl.zst' if compress_all else f'.p{k:02d}.turns.jsonl')
     if not plain.exists():
-        tmp = plain.with_name(plain.name + '.tmp')
-        with open(tmp, 'wb') as f:
+        from natlang_neuralese.common.jsonio import write_jsonl_text
+        tmp = plain.with_name(plain.stem + '.tmp' + plain.suffix)
+        with write_jsonl_text(tmp) as f:
             for i, line in enumerate(stream(sources)):
                 if i >= stop:
                     break
                 if i >= start:
-                    f.write(line)
+                    f.write(line.decode('utf-8'))
         tmp.rename(plain)
     while pending_units(prefix) and not (part / 'receipt.json').exists():
         time.sleep(60)
