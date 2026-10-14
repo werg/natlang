@@ -89,7 +89,12 @@
     "source_sha256": "e8834ab768b5ad79b721578a5eb104288b1ae4ffb2677b9048d3a6f273cd0039"
   },
   "fixture_oracle_reference_changed": false,
-  "independent_review": "Astra source/control peer pass; final inventory-integrity wording receipt being pinned",
+  "independent_review": {
+    "path": "plans/semantic_stack/CAVE_SURVEY_V5_REVIEW_ASTRA.json",
+    "sha256": "bdfe2102c1b6aeac9c3b81b83aedfdc9609852566d8db048f3b25d6a162fb843",
+    "commit": "f65589de",
+    "scope": "Passed author-independent source/typed handoff/control review, no live or admission credit"
+  },
   "live_samples": 0,
   "training_admission": false,
   "inventory_integrity": "NonemptyprimaryIDs,reader-domainkind,originalIDmembership,uniquegeneratedunit IDs; invalidresultreportsoriginalunitforrepair"
