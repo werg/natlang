@@ -81,7 +81,7 @@ function targetText(record) {
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
 const richMessage = message => Boolean(message?.reasoning || message?.tool_calls?.length);
-const transcript = messages => messages.map(message => `${message.role}: ${richMessage(message) ? JSON.stringify(message) : text(message.content)}`).join('\n\n');
+const transcript = messages => messages.map(message => `${message.role}: ${richMessage(message) || message.name || message.tool_call_id ? JSON.stringify(message) : text(message.content)}`).join('\n\n');
 function sourceText(source) {
   const head = source.title ? `${source.role} (${source.title})` : source.role;
   const body = typeof source.text === 'string' ? source.text : Array.isArray(source.messages) ? transcript(source.messages) : '';
@@ -89,7 +89,8 @@ function sourceText(source) {
 }
 function requestText(record) {
   const context = record.consumer?.context ?? [];
-  if (record.task === 'continue') return `Continue this session with its next assistant message.\n\n${transcript(context)}`.trim();
+  const schemas = record.consumer?.tools?.length ? `\n\nAvailable tool schemas:\n${JSON.stringify(record.consumer.tools)}` : '';
+  if (record.task === 'continue') return `Continue this session with its next assistant message.\n\n${transcript(context)}${schemas}`.trim();
   if (context.length === 1 && context[0].role === 'user') return text(context[0].content).trim();
   return transcript(context).trim();
 }

@@ -563,3 +563,7 @@ The external expansion reuses typed SessionHistory continuation records and the 
 ### 2026-10-14 — CodeAgent static task-background handoffs
 
 Alpaca-style CodeAgent problems and prior history become the existing typed Background source; the consumer requests completion of the coding task using its requested format. The acquired output is preserved as an external teacher response with unknown execution outcome. **Measurement debt:** 0/48 live samples for this static request. This is owner-authorized general coding/Neuralese training expansion; exact source/consumer separation checks do not establish live task success.
+
+### 2026-10-14 — Static external tool contracts and short action sessions
+
+Dolci and Cognitive Kernel reuse the task-background instruction above for short action sessions. The native call builder now retains supplied consumer tool schemas and names/call IDs on observations, which earlier static views could omit. Existing immutable views stay unchanged; newly built views bind the corrected builder. **Measurement debt:** 0/48 live samples for tool-contract context serialization. Static expansion is owner-authorized; fidelity checks prove source retention and causality, not upstream task correctness or native behavior lift.
