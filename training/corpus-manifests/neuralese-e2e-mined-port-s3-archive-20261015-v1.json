@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-mined-port-s3-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-port-s3-archive-20261015-v1",
+  "files": [
+    {
+      "path": "port-record-s3-v1.receipt.json",
+      "bytes": 682166,
+      "sha256": "403c577aa55d7e9abba162ee2c2f06822535f470cccab9488fa4c0b41a657796"
+    },
+    {
+      "path": "port-record-s3-v1.roundtrip-proof.json",
+      "bytes": 373,
+      "sha256": "19cd7cde3c9869629576ae2a6b0e2fe54765ef8891818a1e027c811b4e1ba1a0"
+    },
+    {
+      "path": "port-record-s3-v1.tar.zst",
+      "bytes": 547812322,
+      "sha256": "8433bba402539a90b2ed70258770d90c8d65d1a67321b129c1e4800d7200f23c"
+    }
+  ],
+  "bytes": 548494861
+}

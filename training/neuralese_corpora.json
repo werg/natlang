@@ -93651,6 +93651,21 @@
         "held_text": {}
       },
       "notes": "Seed 52097 independently reviewed native decisions; LFM and Mellum full, program-header, and whole-trajectory train-only twins; one exact decision hold, semantic holds, current union exclusions apply."
+    },
+    {
+      "id": "neuralese-e2e-mined-port-s3-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-port-s3-archive-20261015-v1",
+      "include": [
+        "port-record-s3-v1.tar.zst",
+        "port-record-s3-v1.receipt.json",
+        "port-record-s3-v1.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact source relocation only.Independent roundtrip of4501members/154382308785bytes verified; originals reconstructable at canonical mine work path. Complete source-admission mapping, protected closure, graph reauthentication and model transport qualification remain separate.",
+      "license": "Original source lineage facts retained in archived records; all accepted by owner.",
+      "notes": "Assigned bulk cloud protected assembly; private object upload pending. Local assembler refuses archived-source marker until exact restore verification completes."
     }
   ],
   "coverage_backlog": [
