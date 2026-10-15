@@ -176,6 +176,8 @@ def make_handler(engine: Engine):
                                         "projections": {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
                                                         for name, p in engine.projections.items()},
                                         "server": "reference",
+                                        **({"rl_policy_binding": engine.rl_policy_binding}
+                                           if getattr(engine, "rl_policy_binding", None) else {}),
                                         "prompt_rendering": engine.prompt_rendering,
                                         "prompt_rendering_identity_sha256": prompt_identity["identity_sha256"],
                                         # Owner-scoped holds only once the store implements them.

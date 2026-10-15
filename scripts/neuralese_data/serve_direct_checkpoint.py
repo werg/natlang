@@ -26,18 +26,22 @@ def main() -> None:
     parser.add_argument('--checkpoint', type=Path, required=True)
     parser.add_argument('--checkpoint-sha256', required=True)
     parser.add_argument('--heads', type=Path, required=True)
+    parser.add_argument('--base', type=Path, help='relocated pinned base; same inventory required')
     parser.add_argument('--heads-sha256', required=True)
     parser.add_argument('--prompt-rendering', choices=('full', 'program-header'), default='full')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8097)
     parser.add_argument('--neuralese', action='store_true', help='restore the mixed checkpoint writer/readout too')
+    parser.add_argument('--sdpa-backend', choices=['default', 'flash', 'math'], default='default')
     parser.add_argument('--threads', type=int, default=4)
     args = parser.parse_args()
 
     import torch
 
     torch.set_num_threads(args.threads)
+    from natlang_neuralese.common.attention_backend import configure_sdpa_backend
+    configure_sdpa_backend(args.sdpa_backend)
     checkpoint = args.checkpoint.resolve(strict=True)
     heads = args.heads.resolve(strict=True)
     for label, path, expected in (
@@ -51,7 +55,10 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix='natlang-direct-serve-') as temp:
         (Path(temp) / 'request.json').write_text(json.dumps({'weights': str(checkpoint)}))
         engine = restore_engine({'dir': temp, 'heads': str(heads), 'device': args.device,
-                                 'prompt_rendering': args.prompt_rendering, 'neuralese': args.neuralese})
+                                 'prompt_rendering': args.prompt_rendering, 'neuralese': args.neuralese,
+                                 'base': str(args.base) if args.base else None})
+        engine.rl_policy_binding = {'checkpoint_sha256': args.checkpoint_sha256,
+                                    'heads_sha256': args.heads_sha256, 'neuralese': args.neuralese}
         engine.start()
         server = serve(engine, args.host, args.port)
         print(json.dumps({'event': 'direct_training_checkpoint_serving',

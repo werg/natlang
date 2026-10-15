@@ -179,3 +179,35 @@ def test_rl_never_silently_ignores_family_distillation(tmp_path):
     with pytest.raises(SystemExit):
         parse(['--heads', 'heads.pt', '--out', str(tmp_path), '--records', 'r.jsonl',
                '--rl-objective', 'rl.json', '--family', '{}'])
+
+
+def test_capture_only_blocks_require_durable_bundle():
+    r = rollout(1)
+    r['turns'][0]['sampling']['prompt'] = [['block', 'nz1_' + 'a' * 52]]
+    with pytest.raises(ValueError, match='graph/block'):
+        validate_rollouts([r], 'policy')
+
+
+def test_registered_rft_only_rollouts_cannot_become_grpo():
+    with pytest.raises(ValueError, match='RFT-only'):
+        validate_rollouts([rollout(1, training_admission='rft-only')], 'policy')
+
+
+def test_replay_memory_counts_transitive_writer_context(tmp_path):
+    from natlang_neuralese.rl.full_policy import exact_replay_windows
+    from natlang_neuralese.train.direct_sft import _window_length
+    block = 'nz1_' + 'a' * 52
+    reader = rollout(1)['turns'][0]['sampling']
+    reader['prompt'] = [['block', block]]
+    writer = {**reader, 'prompt': [['tokens', list(range(30))]], 'items': [['block', block]], 'samples': []}
+    manifest = tmp_path / 'blocks.json'
+    manifest.write_text(json.dumps({'blocks': {block: {'length': 2}}}))
+    spec = tmp_path / 'spec.json'
+    spec.write_text(json.dumps({'block_bundle': str(manifest), 'documents': [{
+        'document_sha256': 'doc', 'sampling': reader, 'producers': [{'sampling': writer}]}]}))
+    engine = SimpleNamespace(backbone=SimpleNamespace(controls=SimpleNamespace(open_id=62, close_id=63)),
+                             heads=SimpleNamespace(read_markers=False), context=64)
+    train, _, _ = exact_replay_windows(engine, spec, [{'document': 'doc', 'groups': []}], [])
+    assert train[0]['visible_forward_tokens'] == 3
+    assert train[0]['producer_forward_tokens'] == 32
+    assert _window_length(train[0]) == 35

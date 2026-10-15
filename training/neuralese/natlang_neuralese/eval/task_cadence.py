@@ -639,6 +639,7 @@ def restore_engine(request: dict, *, dtype=None):
     from ..train.text_warmup import copy_restored_values
 
     engine = load_engine(heads_checkpoint=request['heads'], device=request['device'],
+                         **({'base': request['base']} if request.get('base') else {}),
                          dtype=dtype or (torch.bfloat16 if request['device'] != 'cpu' else torch.float32),
                          prompt_rendering=request['prompt_rendering'])
     state = load_state(request_weights(Path(request['dir'])))

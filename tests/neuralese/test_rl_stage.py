@@ -162,3 +162,20 @@ def test_registered_production_held_rows_are_evaluation_only(tmp_path, monkeypat
     receipt = json.loads((out / 'rl-data-receipt.json').read_text())
     assert receipt['held']['kind'] == 'ordinary-production-token-CE'
     assert 'rl_held_text_data' in recipe.HANDLERS['neuralese_rl']['optional_inputs']
+
+
+def test_rft_epoch_exposes_each_distinct_trajectory_turn(monkeypatch):
+    from natlang_neuralese.data import text_corpus
+    from natlang_neuralese.train.direct_sft import direct_schedule, parse
+    monkeypatch.setattr(text_corpus, 'tokenizer_fingerprint', lambda _: 'fp')
+    monkeypatch.setattr(text_corpus, 'native_gold_packet', lambda tok, messages, target, tools, **kw:
+                        (target['content'], [1, 2, 3], 1))
+    documents = [{'task_id': 'same-task', 'split': 'train', 'messages': [], 'tools': None,
+                  'target': {'content': 'turn-' + str(i)}} for i in range(7)]
+    rows = rl_stage.render_rows(documents, object(), 'full')
+    windows = [{'document': row['text'], 'sampling_group': row['sampling_group'],
+                'cohort': 's7-rft', 'ids': [1, 2, 3]} for row in rows]
+    a = parse(['--heads', 'h.pt', '--out', 'out', '--records', 'r.jsonl', '--epochs', '1', '--batch', '1'])
+    _, plan = direct_schedule(windows, a)
+    seen = {window['document'] for batch, *_ in plan for window in batch}
+    assert seen == {document['target']['content'] for document in documents}

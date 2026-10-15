@@ -74,7 +74,7 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
 # the window geometry: on the same data by a windowing continuation, or with a data continuation.
 WINDOWING_KEYS = ('train_target_tokens', 'merge_prefix_rows', 'cohort_repeats',
                   'recovery_selection', 'train_min_context_tokens')
-OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
+OPERATIONAL = frozenset({'base', 'out', 'weight_drift_base', 'stop_at', 'steps', 'checkpoint_every', 'eval_every', 'drift_every', 'drift_gate_every', 'drift_gate_rise', 'drift_ce_windows', 'gate_response_kl', 'device', 'save_state', 'moe_kernel', 'checkpoint_layers', 'drift_rows', 'drift_warn',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
                          'continue_monitor_reference', 'gradient_digest_steps', 'state_hash_steps',
@@ -121,6 +121,7 @@ def parse(argv=None):
         p.add_argument('--' + name, type=Path, required=True)
     for name in ('records', 'pieces', 'text-data'):  # the data: prepared --text-data, or --records (+ --pieces)
         p.add_argument('--' + name, type=Path)
+    p.add_argument('--base', type=Path, help='relocated backbone directory; pinned head inventory must match')
     p.add_argument('--device', default='cuda')
     p.add_argument('--steps', type=int, help='legacy budget in updates (default 1000); a recipe declares --epochs')
     p.add_argument('--epochs', type=float, help='the stage budget: passes over the target-bearing train windows, '
@@ -673,7 +674,7 @@ def direct_sampler(targets, cohort_repeats=None):
 
 
 def _window_length(window):
-    return len(window['ids']) - 1
+    return window.get('replay_forward_tokens', len(window['ids']) - 1)
 
 
 def window_occurrence_key(window):
@@ -1521,6 +1522,13 @@ def main(argv=None):
     # A handoff into the mixed run (objective continuation adding e2e_mix) adds the TokenChoiceProjection and the
     # writer (mixed_additions).
     mixed_addition = mixed_additions(resume_state, a.e2e_mix, ('token_choice_projection', 'neuralese_projection'))
+    rl_projection_state = None
+    if a.rl_objective and (resume_state is not None or a.continue_from is not None):
+        parent = resume_state if resume_state is not None else CheckpointPolicy.load(a.continue_from)
+        if parent.get('neuralese_projection') is not None:
+            rl_projection_state = {key: parent.get(key) for key in (
+                'neuralese_projection', 'token_choice_projection', 'identity', 'step')}
+        parent = None
     continuation_launch, continuation = continuation_mode(a, resume_state, inputs)
     resume_state = None
     if continuation_launch == 'continue':
@@ -1536,7 +1544,8 @@ def main(argv=None):
                           if not policy.slot.exists() else 'the checkpoint does not read --continued-text-data'}),
               flush=True)
 
-    engine = load_engine(heads_checkpoint=str(a.heads), device=a.device)
+    engine = load_engine(heads_checkpoint=str(a.heads), device=a.device,
+                         **({'base': str(a.base)} if a.base is not None else {}))
     backbone = engine.backbone
     backbone.checkpoint_layers = True if a.checkpoint_layers is None else a.checkpoint_layers
     from ..maple.model import set_dense_moe_kernel
@@ -1601,6 +1610,17 @@ def main(argv=None):
         neuralese = neuralese.to(a.device)
         projections['neuralese_projection'] = neuralese
         print(json.dumps({'event': 'mixed_writer', **writer_alignment}), flush=True)
+    if rl_projection_state is not None and a.e2e_mix is None:
+        from ..eval.task_cadence import restore_neuralese_projections
+        restore_neuralese_projections(engine, rl_projection_state)
+        neuralese, token_choice = engine.neuralese_projection, engine.token_choice_projection
+        projections = {'neuralese_projection': neuralese}
+        if token_choice is not None:
+            projections['token_choice_projection'] = token_choice
+        for module in projections.values():
+            module.train()
+            module.requires_grad_(True)
+        rl_projection_state = None
     head_named = [(key + '.' + n, q) for key, module in projections.items() for n, q in module.named_parameters()]
     # The latent split, entries and options are shared with the end-to-end stage (train/optim.py).
     from .optim import beta_for_half_life, latent_entries, latent_options as latent_options_for, latent_split
@@ -2058,7 +2078,7 @@ def main(argv=None):
         # the TokenChoiceProjection (identity-initialised, its optimizer state fresh) and the projections' own rates.
         mixed_keys = mixed_additions(state, a.e2e_mix, projections)
         mixed_added = [key + '.' + n for key in mixed_keys for n, _ in projections[key].named_parameters()]
-        if a.e2e_mix is not None:
+        if a.e2e_mix is not None or a.rl_objective:
             phase_keys |= {'e2e_mix', 'token_choice_projection', 'token_choice_lr', 'token_choice_optimizer',
                            'neuralese_projection_lr', 'neuralese_projection_optimizer'}
         changed_objective = sorted(key for key in set(previous_options) & set(current_options)
@@ -2424,7 +2444,7 @@ def main(argv=None):
             mode = 'packed'
         else:
             mode = 'sequential'
-        context = max(len(window['ids']) - 1 for window in batch)
+        context = max(_window_length(window) for window in batch)
         target = max(len(window['ids']) - window['prefix'] for window in batch)
         rows = 1 if mode == 'sequential' else len(batch)
         optimizer_floor = _warmup_update_floor_bytes(direct_trainables, optimizer, bootstrap=False, in_backward=mode == "packed")  # packed: the latents step in backward

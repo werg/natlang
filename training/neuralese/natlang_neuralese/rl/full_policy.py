@@ -50,6 +50,8 @@ def validate_rollouts(rollouts, policy_id, *, block_bundle=None):
     for r in rollouts:
         if r.get('reward') is None:
             continue
+        if r.get('training_admission') not in (None, 'grpo'):
+            raise ValueError('RFT-only diagnostic rollouts are not on-policy GRPO data')
         if r.get('split') != 'train':
             raise ValueError('RL rejects missing/non-train rollout split')
         quality = r['reward'].get('quality')
@@ -246,6 +248,32 @@ def exact_replay_windows(engine, spec_path, train_windows, held_windows):
                         values.extend([0] * (blocks[value]['length'] + markers))
                 return values
             prefix, suffix = coordinates(prompt), coordinates(target)
+            # Writer replay retains transitive graphs in the same backward.
+            # Account every reachable writer occurrence conservatively; equal
+            # payload IDs never hide distinct producer contexts from admission.
+            candidates = {}
+            for producer in row.get('producers', []):
+                pp, pt, _ = capture_items(producer['sampling'], require_samples=False)
+                for at, (kind, bid) in enumerate(pt):
+                    if kind == 'block':
+                        candidates.setdefault(bid, []).append((producer, pp + pt[:at], at))
+            visited = set()
+            def producer_tokens(bid):
+                total = 0
+                for producer, context, at in candidates.get(bid, []):
+                    occurrence = (producer.get('graph_turn'), json.dumps(producer['sampling'], sort_keys=True), at)
+                    if occurrence in visited:
+                        continue
+                    visited.add(occurrence)
+                    count = len(coordinates(context)) + blocks[bid]['length']
+                    if count > engine.context:
+                        raise ValueError('RL producer trajectory exceeds served model context')
+                    total += count
+                    for kind, inner in context:
+                        if kind == 'block':
+                            total += producer_tokens(inner)
+                return total
+            producer_footprint = sum(producer_tokens(bid) for kind, bid in prompt + target if kind == 'block')
             if len(prefix) + len(suffix) > engine.context:
                 raise ValueError('complete RL turn exceeds the served model context')
             ids = array('I', [engine.backbone.controls.open_id])
@@ -255,7 +283,10 @@ def exact_replay_windows(engine, spec_path, train_windows, held_windows):
             result.append({'ids': ids, 'prefix': 1, 'offset': 0, 'start': 0,
                 'supervised_suffix_start': len(prefix), 'document': key,
                 'document_id': key, 'cohort': 's7-grpo', 'groups': window['groups'],
-                'sampling_group': key})
+                'sampling_group': key,
+                'visible_forward_tokens': len(prefix) + len(suffix),
+                'producer_forward_tokens': producer_footprint,
+                'replay_forward_tokens': len(prefix) + len(suffix) + producer_footprint})
         return result
     train, held = convert(train_windows), convert(held_windows)
     return train, list(train), held

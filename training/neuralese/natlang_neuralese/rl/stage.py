@@ -95,7 +95,7 @@ def render_rows(documents: list[dict[str, Any]], tokenizer, prompt_rendering: st
                                                  document["tools"], prompt_rendering=prompt_rendering)
         rows.append({"text": text, "token_ids": ids, "supervised_suffix_start": boundary,
                      "tokenizer_sha256": fingerprint, "split": document["split"],
-                     "source_groups": ["s7-task:" + document["task_id"]], "sampling_group": document["task_id"],
+                     "source_groups": ["s7-task:" + document["task_id"]], "sampling_group": hashlib.sha256(text.encode()).hexdigest(),
                      "text_cohort": "s7-rft", "prompt_rendering": prompt_rendering})
     return rows
 
