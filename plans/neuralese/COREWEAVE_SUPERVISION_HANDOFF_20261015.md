@@ -1,43 +1,68 @@
-# CoreWeave supervision — 2026-10-15 17:11 UTC
+# CoreWeave supervision — 2026-10-15 18:53 UTC
 
-Exactly three owned sandboxes are active. Both students train the replacement native positional-KV/hybrid-state architecture. The strong teacher is independent of either student. Pop and local GPU actor generation remain closed. Never manage unrelated sandbox `456d8127-1b99-48fa-9a64-edb1bc15de36`.
+Exactly three owned sandboxes remain active. Both students train native positional-KV/hybrid-state graphs; an independent strong teacher generates verified trajectories. Pop and local GPU actor generation remain closed. Never manage unrelated sandbox `456d8127-1b99-48fa-9a64-edb1bc15de36`.
 
-| Role | Sandbox | Current execution |
+| Role | Sandbox | Actual latest execution |
 | --- | --- | --- |
-| LFM H10080GB | `7ee701ae-8e56-49d8-b97a-594f7eb33fe9` | Native SFT step1395, finite loss0.54339,2122.5 supervised tokens/s on an intact31085-token graph; GPU96%/27249MiB |
-| Mellum Blackwell96GB | `5ffa592c-5f88-4b4f-b3cc-1507ab94a5dc` | Native SFT step1311, finite loss0.23514,2679.7 supervised tokens/s on an intact62593-token graph; GPU75%/82349MiB |
-| Qwen teacher Blackwell96GB | `dadd0462-0175-470d-b1ee-4d52edfe110e` | Penny Royal server68164/scheduler68332; eight collectors, server concurrency4; all384 protected code/recovery cases now queued |
+| LFM H10080GB | `7ee701ae-8e56-49d8-b97a-594f7eb33fe9` | 18:42:53 UTC step1836, loss1.13516,4388 supervised tokens/s, GPU86%/23025MiB; recipe312461/trainer312478 |
+| Mellum Blackwell96GB | `5ffa592c-5f88-4b4f-b3cc-1507ab94a5dc` | 18:42:53 UTC step1559, loss0.115014,4588 supervised tokens/s, GPU100%/63567MiB; recipe146157/trainer146209 |
+| Qwen teacher Blackwell96GB | `dadd0462-0175-470d-b1ee-4d52edfe110e` | Server68164/scheduler68332; eight collectors/server concurrency4; 18:47 batch12 finished939/3826queued,904 actual successful executions |
 
-Both students have actually completed37/37 required genuine producer/consumer communication graph visits. Ordinary training continues; this does not establish communication lift or final qualification. Current source `0c9eab0576435521aeba559086c3027cf2987f06` uses FP32 QAD LFM/BF16 Mellum,8192-token packing, intact graphs, hourly checkpoints, rotating held budget524288tokens and task cadence5000. All current OOM counters remain zero. Held step1000 subsets: LFM CE0.845135 on512839forward tokens; Mellum CE0.245855 on519694tokens. Full held and task qualification remain outstanding.
+Student health unit1492 terminal0; zero OOM/errors, H100 anon14.4GB and Mellum anon4.2GB of64GiB host limits. Live runtime `e4dd6aabd3b071d3775f81ae71664a4ad52a3fa0`, FP32 pinned QAD LFM/BF16 Mellum, IEEE native arithmetic, whole-graph32768-token packing/chunk1024. Both preserved optimizer/RNG/row credits across the V4 data handoff. Both have completed37/37 currently declared genuine communication visits; no broader communication completion, task lift or final qualification is claimed.
 
-Current exact native private full-state parents are LFM553,2003768331bytes SHA `3b3f6730b0b88c18bfb07dda408066fb895bd36df15c1a308b835effbe764e71`, and Mellum562,47738204413bytes SHA `6771976dafc5c2a4d9bbe088ee5c1a30ed2fd87339b4dbd96451a31256f13e22`; both passed independent complete private readback. Exporter states in dgxops are authoritative as they advance. Retired diagnostic parents34713/4665 remain only for assigned regression diagnosis; no old diagnostic trainer/exporter remains active.
+Task cadence is1000updates with exact same-invocation/action/feedback repetition limit3; held/checkpoints250updates, hourly checkpoint fallback, held rotation524288tokens and mandatory full final held. Absolute modulo means next task evaluation is step2000 for both. Data and task cadence can change at useful safe handoffs.
 
-## Immediate data handoff
+## Current exact state and input
 
-Live input has54456 rows/model: FULL53223 → admitted Qwen624(priority1) → REST ordinary572 → corrected pair37. Both admitted QwenV3(2451 additional unique graphs/model) and full REST ordinary tails(125643 LFM/125644 Mellum) are now SHA-verified on both boxes. New manifests preserve that entire old prefix, append QwenV3(priority1), then the REST tail. New totals182550/182551; downloaded or staged data is not yet trained exposure.
+Privately durable independent full-object GET/SHA-verified parents:
 
-Prepared manifest hashes are LFM `aedef9e2581b587aec2c764d620417e15a2bf669cd5d2f6546f42943dd902f7c`, Mellum `9802435d045978d1399fc5beaa3931c9bff26ee0952601e3a7861d4a2c4dabe7`, under `/work/native-production/data/native-state-rest-qwen-v3-append-20261015-v1/<model>/train-sources.json`. Recipes `native-state-production-{lfm,mellum}-rest-qwen-v3-append-20261015-v1.json` retain optimizer/RNG and row credits, change packing to32768tokens and loss chunks1024, and preserve mandatory full final held evaluation. Arithmetic remains IEEE; no diagnostic precision mode is enabled.
+- LFM1750:2027511243bytes SHA `6e97d601e32f2ad1316601e277c97eeff1046fd3945de3e2f2c6f203ae166df7`.
+- Mellum1500:47761947901bytes SHA `fe66c38b383ff191f107ca6a13db2e3aadca2aebccf7d60761300ac1a043f404`.
 
-Published code `e4dd6aabd3b071d3775f81ae71664a4ad52a3fa0` includes readiness identity repair and the native-only chunk handoff guard. CPU preparation/prewarming is in progress while existing GPU updates continue. Automatic release controllers wait for successful exact index/prefix/held-group/plan checks, then signal the explicit current trainer, drain the committed full checkpoint and resume the same output with exact state. No manual release barrier remains. Obsolete d8-only CPU preparation/watchers were stopped without touching trainers. Current preparation receipts: `coreweave-native-rest-v3-preparation-20261015.json`; remote controls `/work/native-production/control/{lfm,mellum}-rest-v3-preparation-e4dd6aabd3b0`.
+Periodic exporter services remain active on the same sandbox IDs/output paths; their private `coreweave-native-{lfm,mellum}-periodic-export-state-20261015.json` files are authoritative as newer checkpoints become durable. Current rolling optimizer updates beyond these parents are not yet independently privately exported.
 
-## Teacher and data work
+Current train sources185954 LFM/185955 Mellum rows: FULL53223 → Qwen624(priority1) → REST ordinary572 → corrected pair37 → QwenV3 2451(priority1) → REST ordinary125643/125644 → QwenV4 3404(priority1). Previous source order and actual per-row exposure credits remain exact. Availability is not trained exposure.
 
-Teacher `RadixArk/Qwen3.8-Flash-Next-NVFP4@7b719225242aacd3dbd3f9407468c2ee9a9d2594`, Penny Royal3.0.1 source `fa9c2673131621cafb9a527e61d97c25eac130a9`, serves actual plaintext natlang tool execution with full trajectories and oracle verification. No student/on-policy claim is made. Current384-case packet SHA `d2fd44e24ef36d7620b34448133d611fd6aea63dbfbcdb0dcf362590a4050860` includes all eligible admitted source siblings,192 protected train groups. At17:03 batch9 had516 successful executions/518completed from768queued. Previous code batches3–8 produced764/768 successes. These are execution counts, not unique admitted examples. C8 collectors measured261.3 decode tokens/s over60seconds versus136.0 with C4, with server/model settings unchanged.
+Source manifests `/work/native-production/data/native-state-qwen-v4-append-20261015-v1/{lfm25,mellum21}/train-sources.json`:
 
-V4 positive export is active, preserving each batch's exact selected packet, selection/protection witness and immutable teacher-source receipt in `batch-source-bindings.json` (`natlang.teacher-batch-source-bindings/1`). Historical extraction batch2's six successes remain assigned to oracle/provenance repair and are not silently admitted. Existing V3 was independently deduplicated/admitted by the owner; future positives still require current protection review and native conversion.
+- LFM SHA `dbb154941dcc28654f52cac0d019503b65a931352e0baad929da61d08e0f0434`.
+- Mellum SHA `0f2564469a0914bc2377bdf10e6d8fd2076a7696bddcabe7e76e5e289a1c1a0c`.
 
-Big2 source assembly is terminal:1333791records,70656chains,1373067authenticated edges. Exact archive747382444bytes SHA `d8946b1242119d4900540f2347fc6619c3fd3958307d98ecfeaec5988d9f7978` and both archive receipts are independently privately durable. Source185636995853bytes remains on the H10029TB-free root. Existing byte-range native conversion is being prepared there with bounded low-priority CPU workers; no185GB DGX copy, admission or training exposure is claimed. Dolci/Cognitive native replay is healthy216/644shards at17:10, two workers on cores7,8/nice19. Current protected split/source review must be checked before admitting any new outputs.
+Current flat recipes `/work/native-production/control/{lfm,mellum}-qwen-v4-cached-handoff-20261015/declared-cadence-recipe.json`, current resolved identities equal their flat-file hashes:
 
-## Controls and remaining bridge work
+- LFM2933bytes SHA `1bc8dd7491539343e514ddc486bf380bdf550fcbdda03f362feb4a06de06d0fe`.
+- Mellum2956bytes SHA `235e7c3a1300b9a3a0452ea4621fe50f054f55851669f779ea6e5c50fecef949`.
 
-Run all local monitoring through the memory ledger with SDK interpreter `/home/werg/.local/share/natlang/cw-venv/bin/python`. Private helpers under `/home/werg/data/dgxops`:
+Original lineage identities are preserved separately in recipe plans. Outputs remain `/work/native-production/{lfm25,mellum21}/native_full_sft`. Final `native-training-receipt.json` and readiness do not exist yet; current runtime does not emit the new foundation/mandatory-SFT contract.
 
-- `coreweave-native-health-20261015.py`: compact current output `progress.json`/`metrics.json`, exact active control, GPU/cgroup/errors. Unit1396 terminal0 verified. The earlier compact1381 failed and is not evidence.
-- `coreweave-native-rest-v3-progress-20261015.py`: preparation/release phase and bounded logs.
-- `coreweave-penny-collection-health-20261015.py`: actual oracle-classified executions; matching JSON retains exact output paths.
-- `coreweave-native-{lfm,mellum}-periodic-export-state-20261015.json`: independently verified full-state private durability.
-- `coreweave-remote-cpu-job-20261014.py poll <spec>`: owned CPU jobs; use Dolci frontier spec with output_path to count actual completed shards.
+## Interrupted evaluations and next useful handoff
 
-Student outputs remain `/work/native-production/{lfm25,mellum21}/native_full_sft`. Current recipe PIDs276225/118821; Mellum trainer118916; use active launch receipts and exact child ownership before signals. Namespace PID1 is an independent holder. Preserve/export useful state before any sandbox stop.
+The owner authorized preserving and stopping pathological synchronous evaluations to resume useful V4 training. Exact eval process trees were stopped and drained without forced kills; exact privately verified pre-eval parents were reused. LFM1750 partial:0successes,2budget-exhausted,14unresolved. Mellum1500 partial:3successes,1budget-exhausted,1invalid,1semantic mismatch,10unresolved. Both complete=false/eligible=false, never a completed0/16 or3/16 score. No new-native base reference has been measured.
 
-Provider coordinator will live in Mellum `/work/native-production/shared`, IPC `bridge-ipc`; account credentials remain DGX-only. Draft `scripts/coreweave/provider_{bridge,worker}.py` reuses exact owned-process and artifact mechanisms. Eight focused tests passed1392 and a real48-byte signed-URL cloud-to-cloud ferry passed1319. Full typed dependency closure and actual SDK round/refresh/TERM/restart fault qualification remain unfinished. Do not call the provider bridge operational or launch production RL yet.
+Complete partial archives and explicit supervisor cancellation receipts are SHA-verified on DGX under `/home/werg/data/dgxops/native-interrupted-evaluations-20261015/`; retained solely for assigned held-only runtime/model diagnosis, never training admission. Mellum repeated an invalid Promise.all expression with identical feedback55+times. LFM nested children generated8192-token no-call responses. Request walltimes include queue/prefill/decode, not isolated decode measurements.
+
+Next admitted data is corrected REST pair V3:26312train pairs including exact37prefix,9896held; append only26275new train rows after the ENTIRE current source prefix. Strict two-model/protection proof is admitted `c4502012a`. Recovery512 historical successful ordinary rows/model are admitted `e006813d6` and already SHA-verified on both sandboxes. Pair staging and frozen `c4502012a` runtime staging are active while GPUs train. Prewarm exact new-code indexes, verify prefix/held separation/plan, then introduce the explicit communication-foundation cohort while retaining mandatory ordinary deficits. Do not wait for the later18010+605 repair cohort or call all ordinary exposure complete.
+
+## Teacher and CPU data work
+
+Teacher `RadixArk/Qwen3.8-Flash-Next-NVFP4@7b719225242aacd3dbd3f9407468c2ee9a9d2594`, Penny Royal3.0.1 source `fa9c2673131621cafb9a527e61d97c25eac130a9`, uses the actual natlang plaintext tool harness. It is independent, never student/on-policy. Current1913-case packet SHA `e29b52fe990707e580df947dc152cedbebc98a23daa9f7aeec9e5043ec02433b` includes384 code/recovery cases plus1529 protected CLINC factual-choice programs. New queue generation preserves each immutable batch's actual source packet and protection witnesses. Exact duplicates are removed before admission.
+
+Batch12 at18:47:904successes/939completed,13semantic,21invalid,1budget. Some exact label mistakes are classified invalid_action because the expected decisions.json file differs despite valid executed actions; inspect underlying ledgers before attributing parser failure. Wrong chart-depth final expressions and CLINC pet/meeting/directions labels have exact CPU-only diagnosis artifacts under `dgxops/qwen-broad-1913-failure-diagnosis-20261015/`. Rejected rows remain assigned repair/oracle investigations, not admitted positives. Independently correct rows can be retained through explicit verification. Current V4 admitted3404 unique graphs/model is LIVE, not merely exported.
+
+Big2 byte-range conversion is active,2nice19 workers on cores5,6; Dolci uses7,8. At18:50 Big2 committed800chains/18352source edges,8chunks,17989ordinary rows/model,0render omissions; source185636995853bytes remains on29TB-free H100 root. Four Big2 workers on3,4,5,6 are approved after a durable frontier if GPU feed/headroom remain healthy.
+
+First100-chain chunk is independently privately durable and restored to DGX:9006326byte archive SHA `f37ec195b626e75c7c935261ad26d017cbbd90a086f56848b7e22bd15eb32cab`. It contains2115train/154held ordinary rows/model,2153train/150held pairs,2303source edge IDs, exact100chainIDs, all protection/source receipts and per-file hashes. Actual strict admission audit is pending with data agent; no complete-Big2 claim. Private pack/export receipts `coreweave-big2-first-shard-pack-20261015.json` and `coreweave-big2-first100-private-export-20261015.json`. Dolci latest252/644native shards at18:42;643106closed source records,22paged-evidence conversions remain explicit.
+
+## Monitoring and provider bridge
+
+Every local probe runs through the memory ledger using `/home/werg/.local/share/natlang/cw-venv/bin/python`. Helpers in `/home/werg/data/dgxops`:
+
+- `coreweave-native-health-20261015.py`: actual active control, current output progress/metrics, GPU/cgroup/errors.
+- `coreweave-native-live-binding-20261015.py`: actual recipe/trainer PID and receipt recipe identity.
+- `coreweave-native-v4-release-progress-20261015.py`: release/stop/cache-hit evidence.
+- `coreweave-penny-collection-health-20261015.py`: exact oracle-classified teacher executions/output paths.
+- `coreweave-big2-native-frontier-20261015.py`; `coreweave-remote-cpu-job-20261014.py poll coreweave-dolci-frontier-spec-20261015.json`.
+
+Coord reader is `dgx-coreweave-sandbox`; inbox ACK18:35, next no later19:25UTC. Maintain monitoring at least every50minutes, normally10minutes during changes. Explicit owned PIDs only for signals. PID1 is an independent allocation holder; no allocation stop is currently planned.
+
+Published provider implementation `scripts/coreweave/provider_{bridge,worker,dependencies}.py` uses exact request/result/stop bindings, owned PID/boot/start/argv/nonce recovery, signed private cloud-to-cloud transfers and complete consumed dependency closure.21 focused tests plus quick check passed; broad containing suite is not yet claimed green. Real48-byte SDK ferry passed earlier. Actual persistent two-port CPU fixture1490 staged14payloads through real private storage, then failed BEFORE worker launch in target asset preflight (remoteexit7); precise SDK diagnostic1502 is active. No orphan worker was launched, no production RL is released, and actual round/refresh/TERM/restart qualification remains unfinished. Production coordinator will reside in Mellum `/work/native-production/shared/bridge-ipc`; all account credentials remain on DGX.
