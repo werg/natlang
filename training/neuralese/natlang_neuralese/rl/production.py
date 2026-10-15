@@ -475,10 +475,10 @@ def configure(args):
         'actor_command': [python, repo + '/scripts/neuralese_data/serve_direct_checkpoint.py',
             '--checkpoint', '{checkpoint}', '--checkpoint-sha256', '{policy_id}',
             '--heads', '{heads}', '--heads-sha256', '{heads_sha256}', '--base', '{base}',
-            '--neuralese', '--sdpa-backend', 'flash', '--port', str(args.port)],
+            '--neuralese', '--prompt-rendering', 'full', '--sdpa-backend', 'flash', '--port', str(args.port)],
         'learner_command': [python, '-m', 'natlang_neuralese.rl.stage', '--rollouts', '{rollouts}',
             '--rl-tokenizer', '{base}', '--rl-mode', '{mode}', '--rft-document-kind', '{rft_document_kind}',
-            '--rl-policy-id', '{policy_id}',
+            '--rl-policy-id', '{policy_id}', '--rl-prompt-rendering', 'full',
             '--rl-block-bundle', '{block_bundle}', '--rl-held-text-data', '{held_text_data}',
             '--heads', '{heads}', '--continue-from', '{checkpoint}', '--continue-identity', '{continue_identity}',
             '--continue-monitor-reference', '{continue_monitor_reference}', '--out', '{learner_out}', '{trainer_args}']}

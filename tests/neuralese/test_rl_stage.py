@@ -53,8 +53,11 @@ def test_stage_forwards_to_direct_trainer_with_fresh_reference(tmp_path, monkeyp
     rows = [_rollout(f"t{i}", q) for i in range(40) for q in (1.0, 0.0)]
     rollouts.write_text("".join(json.dumps(r) + "\n" for r in rows))
     calls = {}
-    monkeypatch.setattr(rl_stage, "render_rows", lambda documents, tokenizer, mode: [
-        {"text": "x" + d["task_id"], "split": d["split"], "source_groups": [d["task_id"]]} for d in documents])
+    def render(documents, tokenizer, mode):
+        calls['rendering'] = mode
+        return [{"text": "x" + d["task_id"], "split": d["split"],
+                 "source_groups": [d["task_id"]]} for d in documents]
+    monkeypatch.setattr(rl_stage, "render_rows", render)
     import transformers
     monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", staticmethod(lambda path: object()))
     from natlang_neuralese.train import direct_sft
@@ -66,6 +69,8 @@ def test_stage_forwards_to_direct_trainer_with_fresh_reference(tmp_path, monkeyp
     assert "--fresh-monitor-reference" in argv and argv[argv.index("--text-data") + 1].endswith("rl-text-data.jsonl")
     receipt = json.loads((tmp_path / "out" / "rl-data-receipt.json").read_text())
     assert receipt["documents"] == 40 and len(receipt["tasks_selected"]) == 40
+    assert calls['rendering'] == 'full'  # preserve the managed actor's system text and tool schemas
+    assert receipt['training_prompt_source'] == 'full'
 
 
 def test_stage_refuses_without_train_and_held_documents(tmp_path):

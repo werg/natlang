@@ -17,7 +17,7 @@ corpus may supply ordinary CE checks without withholding fresh RL train tasks.
 
 usage: python -m natlang_neuralese.rl.stage --rollouts R.jsonl [--rollouts T.jsonl] --rl-tokenizer SNAPSHOT
        --out OUT [--rl-mode rft] [--rft-max-success-rate 0.75] [--rft-held-fraction 0.125]
-       [--rl-prompt-rendering program-header] <direct_sft arguments: --heads, --continue-from, ...>
+       [--rl-prompt-rendering full] <direct_sft arguments: --heads, --continue-from, ...>
 """
 from __future__ import annotations
 
@@ -124,7 +124,8 @@ def parse(argv=None) -> tuple[argparse.Namespace, list[str]]:
     p.add_argument("--rl-clip-high", type=float, default=0.28)
     p.add_argument("--rft-max-success-rate", type=float, default=0.75)
     p.add_argument("--rft-held-fraction", type=float, default=0.125)
-    p.add_argument("--rl-prompt-rendering", choices=("full", "program-header"), default="program-header")
+    p.add_argument("--rl-prompt-rendering", choices=("full", "program-header"), default="full",
+                   help="match the actor's serving rendering; managed production actors use full")
     p.add_argument("--out", type=Path, required=True)
     return p.parse_known_args(argv)
 
@@ -233,7 +234,9 @@ def main(argv=None) -> None:
     data.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
     from ..common.hashing import sha256_file_hex
     receipt.update(rollout_files={str(p): sha256_file_hex(p) for p in a.rollouts}, text_data=str(data),
-                   text_data_sha256=sha256_file_hex(data))
+                   text_data_sha256=sha256_file_hex(data),
+                   training_prompt_source=('captured-sampling-coordinates' if a.rl_mode == 'grpo' or value_rft
+                                           else a.rl_prompt_rendering))
     (a.out / "rl-data-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"event": "rl_data", **{k: receipt[k] for k in ("documents", "skipped")},
                       "tasks_selected": len(receipt["tasks_selected"])}), flush=True)

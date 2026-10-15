@@ -1,5 +1,17 @@
 # Model-facing changes and their measurement
 
+### 2026-10-15 — RL text training matches the serving prompt
+
+The managed RL actor serves `full` prompts, but the RFT stage's implicit default
+was `program-header`, which removes generic runtime instructions and native tool
+schemas. The local 48-update LFM diagnostic used that mismatch before its 0/4
+post-training check. Generated actor and learner commands now both explicitly
+use `full`; standalone RFT defaults to `full` too. Captured-coordinate GRPO and
+value replay retain their original sampled prompts. **Measurement debt:** no
+matched live task comparison for the corrected RFT rendering yet; use the next
+train-task RL window, keeping held tasks protected. This repairs the training
+contract and makes no claim of task-success improvement.
+
 Every change to what the executing model sees is listed here: prompts, value rendering, tool and feedback text, error
 text, type text in signatures, and instruction sentences added or removed. The owner rule is to sample the live
 executor (about 48 samples per variant) before adopting a change. A change that landed without measurement is debt,

@@ -58,6 +58,11 @@ requiring explicit per-turn policy provenance and recovery of in-flight groups.
   Value-bearing RFT preserves the producer graph rather than flattening blocks
   into text. When both kinds are selected, the controller runs complete text and
   value substages with checkpoint/optimizer continuation between them.
+  Managed actors and text RFT explicitly use `full` prompt rendering. The earlier
+  local 48-update LFM diagnostic accidentally trained `program-header` text and
+  served `full`; its checkpoint/resume checks remain useful, but it does not
+  validate matching actor/learner text prompts. The default and generated
+  commands now agree, and data receipts record the actual training prompt source.
 - Preserve checkpoint projections and optimizer groups. A direct checkpoint with
   no NeuraleseProjection first enters the declared shared mixed stage. The older
   standalone trajectories checkpoint schema is not a substitute for that path.

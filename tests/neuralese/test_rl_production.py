@@ -220,6 +220,9 @@ def test_configure_retains_declared_task_quality_cadence(tmp_path, monkeypatch):
     assert saved['trainer_parameters']['task_eval'] == parameters['task_eval']
     assert saved['trainer_parameters']['checkpoint_layers'] is True
     assert saved['production_stage'] == 'mixed'
+    actor, learner = saved['actor_command'], saved['learner_command']
+    assert actor[actor.index('--prompt-rendering') + 1] == 'full'
+    assert learner[learner.index('--rl-prompt-rendering') + 1] == 'full'
     state['optimizer'] = None
     with pytest.raises(ValueError, match='optimizer state'):
         production.configure(args)
