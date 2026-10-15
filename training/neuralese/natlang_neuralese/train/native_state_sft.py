@@ -676,7 +676,10 @@ def main(argv=None):
             previous_config = {**previous_config, 'token_override_ids': config['token_override_ids']}
             if 'token_override_dtype' in config:
                 previous_config['token_override_dtype'] = config['token_override_dtype']
-        if token_upgrade and (token_upgrade['added'] or token_upgrade.get('promoted_parameters')):
+        # A shared/RL parent may already carry promoted rows while this CE
+        # frame predates their addition. The explicit upgrade flag remains
+        # idempotent; no new model promotion is needed to adopt that contract.
+        if token_upgrade and 'sparse_row_dtype' in config:
             previous_config = {**previous_config, 'sparse_row_dtype':config['sparse_row_dtype']}
         if not same_source_precision_identity(previous_config, config):
             raise ValueError('native SFT continuation changes model identity beyond declared GEMM arithmetic')
