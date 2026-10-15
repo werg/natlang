@@ -123,6 +123,59 @@ def source_stat_identity(path):
             'mtime_ns': stat.st_mtime_ns}
 
 
+def _edge_ids_from_part(part, *, pair_rows):
+    """Read exact selected-edge coverage from a legacy or current chunk part."""
+    path = Path(part['path'])
+    if pair_rows:
+        process = subprocess.Popen(['zstd', '-q', '-d', '-c', str(path)], stdout=subprocess.PIPE)
+        stream = process.stdout
+    else:
+        stream = open(path, 'rb')
+        process = None
+    values = set()
+    try:
+        for line in stream:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if pair_rows:
+                identity = row.get('id', '')
+                if not identity.startswith('e2e-edge:'):
+                    raise ValueError('pair chunk contains an unrecognized edge identity')
+                values.add(identity.removeprefix('e2e-edge:'))
+            else:
+                edge = row.get('edge')
+                if isinstance(edge, dict):
+                    values.add(hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest())
+    finally:
+        if process is not None:
+            stream.close()
+            if process.wait():
+                raise ValueError('could not read compressed pair coverage part')
+        else:
+            stream.close()
+    return values
+
+
+def _remaining_edges_by_chain(edges_by_chain, completed_edge_ids):
+    """Return only uncovered source edges, preserving their trajectory groups."""
+    remaining = {}
+    for chain, edges in edges_by_chain.items():
+        pending = [edge for edge in edges if hashlib.sha256(
+            json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+            not in completed_edge_ids]
+        if pending:
+            remaining[chain] = pending
+    return remaining
+
+
+def _selected_edge_ids(edges_by_chain, split='all'):
+    """Hash every source edge independently; never reuse a prior loop identity."""
+    return {hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+            for edges in edges_by_chain.values() for edge in edges
+            if split == 'all' or edge.get('split') == split}
+
+
 def jsonl_with_offsets(path, start=0, digest=None):
     with open(path, 'rb') as source:
         source.seek(start)
@@ -481,6 +534,7 @@ def _render_trajectory(task):
     pairs = {split: [] for split in ('train', 'test')}
     omitted_pairs = []
     render_omissions = []
+    processed_edge_ids = []
     local['trajectories'] += 1
     if not pair_only:
         rendered = {}
@@ -505,6 +559,7 @@ def _render_trajectory(task):
         edge_id = hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
         edge_identity = edge_id
         local['source_edges'] += 1
+        processed_edge_ids.append(edge_id)
         try:
             writer_record = record_map[edge['writer_record_id']]
             reader_record = record_map[edge['reader_record_id']]
@@ -523,7 +578,7 @@ def _render_trajectory(task):
                 'reader_record_id': edge['reader_record_id'], 'write_name': edge['write_name'],
                 'occurrence': json.dumps(occurrence_binding, sort_keys=True, separators=(',', ':'),
                                          ensure_ascii=False),
-                'source_binding': {'corpus_id': 'neuralese-e2e-cloud-rest27-protected-20261015-v2',
+                'source_binding': {'corpus_id': args.source_corpus_id,
                     'records': {'path': str(args.records), 'sha256': args.records_sha256},
                     'edges': {'path': str(args.edges), 'sha256': args.edges_sha256}}}
             communication_sha = hashlib.sha256(json.dumps(communication, sort_keys=True,
@@ -576,7 +631,8 @@ def _render_trajectory(task):
             local['pair_omissions'] += 1
             omitted_pairs.append({'edge': edge, 'reason': str(exc)})
     return {'graphs': graphs, 'pairs': pairs, 'omissions': omitted_pairs,
-            'render_omissions': render_omissions, 'totals': dict(local)}
+            'render_omissions': render_omissions, 'processed_edge_ids': processed_edge_ids,
+            'totals': dict(local)}
 
 
 def _initialize_render_worker(config):
@@ -609,7 +665,8 @@ def _initialize_render_worker(config):
     _RENDER_CONTEXT.clear()
     _RENDER_CONTEXT.update({'args': SimpleNamespace(records=Path(config['records_path']),
         records_sha256=config['records_sha256'], edges=Path(config['edges_path']),
-        edges_sha256=config['edges_sha256']), 'tokenizers': tokenizers, 'pieces': pieces,
+        edges_sha256=config['edges_sha256'], source_corpus_id=config['source_corpus_id']),
+        'tokenizers': tokenizers, 'pieces': pieces,
         'expanded_fps': expanded_fps, 'role_ids': role_ids,
         'model_ids': config['model_ids'], 'edges_by_chain': edges_by_chain,
         'pair_only': config.get('pair_only', False)})
@@ -625,6 +682,8 @@ def main():
     parser.add_argument('--mellum-tokenizer', type=Path, required=True)
     parser.add_argument('--records-sha256', required=True)
     parser.add_argument('--edges-sha256', required=True)
+    parser.add_argument('--source-corpus-id', default='neuralese-e2e-cloud-rest27-protected-20261015-v2',
+                        help='exact registered source corpus ID recorded in each communication witness')
     parser.add_argument('--max-trajectories', type=int, default=None,
                         help='bounded converter test only; omit for corpus admission')
     parser.add_argument('--resume', action='store_true',
@@ -639,6 +698,10 @@ def main():
                         help='convert exactly the omitted edges listed by a prior complete build into a pair-only supplement')
     parser.add_argument('--rebuild-all-pairs', action='store_true',
                         help='re-render every admitted edge into a pair-only output (for a corrected pair policy)')
+    parser.add_argument('--pair-split', choices=('all', 'train', 'test'), default='all',
+                        help='restrict a pair-only replay to the exact source split; use for early split-complete shards')
+    parser.add_argument('--selected-edge-ids', type=Path, default=None,
+                        help='newline-delimited exact edge SHA-256 subset; requires --rebuild-all-pairs')
     args = parser.parse_args()
     if args.max_trajectories is not None and args.max_trajectories < 1:
         parser.error('--max-trajectories must be positive')
@@ -649,7 +712,14 @@ def main():
     if args.repair_pair_omissions and args.max_trajectories is not None:
         parser.error('--repair-pair-omissions cannot be combined with a bounded test run')
     if args.rebuild_all_pairs and (args.repair_pair_omissions or args.max_trajectories is not None):
-        parser.error('--rebuild-all-pairs cannot be combined with omission repair or a bounded test run')
+        if args.repair_pair_omissions:
+            parser.error('--rebuild-all-pairs cannot be combined with omission repair')
+        # A bounded pair split is useful as an early, explicitly partial
+        # source-bound shard while the full corrected replay continues.
+    if args.pair_split != 'all' and not args.rebuild_all_pairs:
+        parser.error('--pair-split requires --rebuild-all-pairs')
+    if args.selected_edge_ids is not None and not args.rebuild_all_pairs:
+        parser.error('--selected-edge-ids requires --rebuild-all-pairs')
     tokenizers, source_fps, expanded_fps, role_ids = {}, {}, {}, {}
     model_ids, base_inventory_shas = {}, {}
     from natlang_neuralese.model.native_model import base_inventory
@@ -684,7 +754,33 @@ def main():
         # A corrected pair transformation changes every row, not just prior
         # omissions. Bind a complete source-edge replay without rewriting the
         # already useful ordinary graph outputs from the previous build.
-        repair_edge_ids = set(edge_ids)
+        repair_edge_ids = _selected_edge_ids(edges_by_chain, args.pair_split)
+        if args.selected_edge_ids is not None:
+            selected_rows = [line.strip() for line in args.selected_edge_ids.read_text().splitlines() if line.strip()]
+            selected = set(selected_rows)
+            if (not selected or any(len(value) != 64 or any(c not in '0123456789abcdef' for c in value)
+                                    for value in selected) or len(selected_rows) != len(selected)):
+                raise ValueError('selected edge file must contain nonempty lowercase SHA-256 identities')
+            if not selected <= repair_edge_ids:
+                raise ValueError('selected edge file includes an edge outside the admitted split/source')
+            repair_edge_ids = selected
+            for chain in list(edges_by_chain):
+                selected_rows = [edge for edge in edges_by_chain[chain]
+                    if hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                    in repair_edge_ids]
+                if selected_rows: edges_by_chain[chain] = selected_rows
+                else: del edges_by_chain[chain]
+        if not repair_edge_ids:
+            raise ValueError('selected source split contains no admitted semantic edges')
+        if args.pair_split != 'all':
+            for chain in list(edges_by_chain):
+                selected = [edge for edge in edges_by_chain[chain]
+                            if hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                            in repair_edge_ids]
+                if selected:
+                    edges_by_chain[chain] = selected
+                else:
+                    del edges_by_chain[chain]
     elif pair_only:
         repair_sha = sha256_file(args.repair_pair_omissions)
         previous_receipt_path = args.repair_pair_omissions.parent / 'receipt.json'
@@ -719,11 +815,21 @@ def main():
     input_identity = {'records': {'path': str(args.records.resolve()), 'sha256': args.records_sha256},
         'pieces': {'path': str(args.pieces.resolve()), 'sha256': pieces_digest.hexdigest()},
         'edges': {'path': str(args.edges.resolve()), 'sha256': args.edges_sha256}}
+    if args.source_corpus_id != 'neuralese-e2e-cloud-rest27-protected-20261015-v2':
+        input_identity['source_corpus_id'] = args.source_corpus_id
     # Keep the original normal-build input identity byte-for-byte compatible
     # with resume manifests written before pair-repair support was added. A
     # pair-only supplement still binds its exact omission receipt and source.
     if args.rebuild_all_pairs:
-        input_identity['rebuild_all_pairs'] = {'mode': 'all-admitted-edges', 'edges_sha256': args.edges_sha256}
+        if args.pair_split == 'all' and args.max_trajectories is None:
+            input_identity['rebuild_all_pairs'] = {'mode': 'all-admitted-edges', 'edges_sha256': args.edges_sha256}
+        else:
+            input_identity['rebuild_all_pairs'] = {'mode': 'admitted-edge-split', 'split': args.pair_split,
+                'edges_sha256': args.edges_sha256, 'max_trajectories': args.max_trajectories}
+        if args.selected_edge_ids is not None:
+            input_identity['rebuild_all_pairs']['selected_edge_ids'] = {
+                'path': str(args.selected_edge_ids.resolve()), 'sha256': sha256_file(args.selected_edge_ids),
+                'count': len(repair_edge_ids)}
     elif pair_only:
         input_identity['repair_pair_omissions'] = {
             'path': str(args.repair_pair_omissions.resolve()), 'sha256': repair_sha}
@@ -735,7 +841,7 @@ def main():
     # workers load their own tokenizers. Releasing the parent copies avoids
     # multiplying several GiB of tokenizer memory across the process pool.
     del tokenizers, tok
-    chunks, totals, completed_chains, resume_offset = [], defaultdict(int), [], 0
+    chunks, totals, completed_chains, completed_edge_ids, resume_offset = [], defaultdict(int), [], set(), 0
     if resume_mode:
         if not state_path.is_file():
             raise ValueError('--resume requires a durable resume-manifest.json')
@@ -752,6 +858,15 @@ def main():
             raise ValueError('records source changed since the last durable conversion frontier')
         chunks = previous['chunks']
         completed_chains = previous['completed_chain_ids']
+        for chunk in chunks:
+            for split in ('train', 'test'):
+                part = chunk.get('pairs', {}).get(split)
+                if part:
+                    completed_edge_ids.update(_edge_ids_from_part(part, pair_rows=True))
+            omission_part = chunk.get('omissions')
+            if omission_part:
+                completed_edge_ids.update(_edge_ids_from_part(omission_part, pair_rows=False))
+            completed_edge_ids.update(chunk.get('source_edge_ids', []))
         if (len(completed_chains) != previous['completed_trajectories']
                 or len(set(completed_chains)) != len(completed_chains)):
             raise ValueError('resume manifest trajectory frontier is inconsistent')
@@ -780,6 +895,7 @@ def main():
     seen_chains = set(completed_chains)
     chunk_start_count = len(completed_chains)
     writers, pair_writers, omissions, render_omissions_writer = {}, {}, None, None
+    current_chunk_edge_ids = set()
 
     def open_chunk(index):
         nonlocal writers, pair_writers, omissions, render_omissions_writer
@@ -793,10 +909,11 @@ def main():
         render_omissions_writer = JsonlRows(root / f'render-omissions-{index:06d}.jsonl')
 
     def close_chunk(next_offset):
-        nonlocal chunk_start_count
+        nonlocal chunk_start_count, current_chunk_edge_ids
         index = len(chunks)
         current = {'graphs': ({} if pair_only else {model: {} for model in tokenizer_models}), 'pairs': {},
-                   'omissions': None, 'render_omissions': None}
+                   'omissions': None, 'render_omissions': None,
+                   'source_edge_ids': sorted(current_chunk_edge_ids)}
         try:
             if not pair_only:
                 for model in tokenizer_models:
@@ -817,9 +934,11 @@ def main():
         manifest = {'schema': RESUME_SCHEMA, 'build_policy': BUILD_POLICY,
             'inputs': input_identity, 'tokenizers': tokenizer_identity, 'records_stat': records_stat,
             'completed_trajectories': len(completed_chains), 'completed_chain_ids': completed_chains,
-            'resume_offset': next_offset, 'totals': dict(totals), 'chunks': chunks, 'complete': False}
+            'completed_edge_ids': sorted(completed_edge_ids), 'resume_offset': next_offset,
+            'totals': dict(totals), 'chunks': chunks, 'complete': False}
         atomic_json(state_path, manifest)
         chunk_start_count = len(completed_chains)
+        current_chunk_edge_ids = set()
         open_chunk(len(chunks))
 
     def abort_chunk():
@@ -834,10 +953,13 @@ def main():
 
 
     def commit_result(chain, result, next_offset):
-        if chain in seen_chains:
+        if chain in seen_chains and not pair_only:
             raise ValueError('trajectory rows are not contiguous in their admitted source')
         seen_chains.add(chain)
-        edges_by_chain.pop(chain, None)
+        if not pair_only:
+            edges_by_chain.pop(chain, None)
+        current_chunk_edge_ids.update(result.get('processed_edge_ids', []))
+        completed_edge_ids.update(result.get('processed_edge_ids', []))
         for name, count in result['totals'].items():
             totals[name] += count
         for split, by_model in result['graphs'].items():
@@ -856,6 +978,7 @@ def main():
                                          'mellum21': str(args.mellum_tokenizer)},
         'expanded_fps': expanded_fps, 'role_ids': {model: list(ids) for model, ids in role_ids.items()},
         'model_ids': model_ids, 'pair_only': pair_only,
+        'source_corpus_id': args.source_corpus_id,
         'selected_edge_ids': sorted(repair_edge_ids) if repair_edge_ids is not None else [],
         'records_path': str(args.records),
         'records_sha256': args.records_sha256, 'pieces_path': str(args.pieces),
@@ -863,8 +986,11 @@ def main():
         'edges_sha256': args.edges_sha256}
     try:
         if resume_mode:
-            completed_set = set(completed_chains)
-            for chain in completed_set: edges_by_chain.pop(chain, None)
+            if pair_only:
+                edges_by_chain = _remaining_edges_by_chain(edges_by_chain, completed_edge_ids)
+            else:
+                completed_set = set(completed_chains)
+                for chain in completed_set: edges_by_chain.pop(chain, None)
         last_offset = resume_offset
         pending = []
         stopped_at_limit = False
@@ -923,6 +1049,10 @@ def main():
                 raise ValueError('source records SHA differs from the admitted immutable source binding')
             if pair_only and totals['source_edges'] != len(repair_edge_ids):
                 raise ValueError('pair-only build did not revisit every exact selected source edge')
+            if pair_only and completed_edge_ids != repair_edge_ids:
+                missing = len(repair_edge_ids - completed_edge_ids)
+                extra = len(completed_edge_ids - repair_edge_ids)
+                raise ValueError(f'pair-only edge coverage differs from the selected source set: missing={missing}, extra={extra}')
         abort_chunk()
     except BaseException:
         abort_chunk()
@@ -968,8 +1098,13 @@ def main():
                            'sha256': sha256_file(omissions_path)},
         'render_omissions': render_omission_output,
         'pair_repair': ({'source_edge_count': len(repair_edge_ids),
-                         'mode': ('pairs-only-complete-rebuild' if args.rebuild_all_pairs
+                         'mode': ('pairs-only-complete-rebuild' if args.rebuild_all_pairs and args.pair_split == 'all' and args.max_trajectories is None
+                                  else 'pairs-only-split-shard' if args.rebuild_all_pairs
                                   else 'pairs-only-static-multiread'),
+                         **({'split': args.pair_split} if args.rebuild_all_pairs else {}),
+                         **({'selected_edge_ids': {'path': str(args.selected_edge_ids.resolve()),
+                              'sha256': sha256_file(args.selected_edge_ids), 'count': len(repair_edge_ids)}
+                             } if args.selected_edge_ids is not None else {}),
                          **({'source_omissions': str(args.repair_pair_omissions),
                              'source_omissions_sha256': repair_sha} if not args.rebuild_all_pairs else {})}
                         if pair_only else None),

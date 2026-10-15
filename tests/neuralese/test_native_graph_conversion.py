@@ -294,3 +294,34 @@ def test_empty_authenticated_payload_keeps_structural_native_import_without_fake
     assert consumer.token_ids[consumer.imports[0].at] == tok.marker_ids[3]
     assert parsed.target_weights[parsed.plan.offsets[1] + consumer.imports[0].at] == 0.
     assert tok.decode(consumer.token_ids) == 'read' + tok.markers[2] + tok.markers[3] + ':answer'
+
+
+def test_pair_resume_expansion_processes_uncovered_edges_in_a_completed_chain():
+    import hashlib
+    import importlib.util
+    import json
+    from pathlib import Path
+
+    script = Path(__file__).parents[2] / 'scripts/neuralese_data/build_native_semantic_pairs_e2e.py'
+    spec = importlib.util.spec_from_file_location('e2e_pair_builder_resume', script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    edges = [{'trajectory': 'same-chain', 'id': i, 'split': 'train'} for i in range(3)]
+    def identity(edge):
+        return hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+    # A prior selected-edge pass covered one edge. Expanding to all source
+    # edges must revisit the same chain for both uncovered edge identities.
+    pending = module._remaining_edges_by_chain({'same-chain': edges}, {identity(edges[0])})
+    assert pending == {'same-chain': edges[1:]}
+    assert {identity(edge) for group in pending.values() for edge in group} == {
+        identity(edges[1]), identity(edges[2])}
+    # Rebuild selection must hash each edge (including the final item) and
+    # preserve both source splits when completing the full edge set.
+    mixed = [{'trajectory': 'chain-a', 'id': 0, 'split': 'train'},
+             {'trajectory': 'chain-a', 'id': 1, 'split': 'test'},
+             {'trajectory': 'chain-b', 'id': 2, 'split': 'train'}]
+    all_ids = module._selected_edge_ids({'chain-a': mixed[:2], 'chain-b': mixed[2:]})
+    train_ids = module._selected_edge_ids({'chain-a': mixed[:2], 'chain-b': mixed[2:]}, 'train')
+    assert all_ids == {identity(edge) for edge in mixed}
+    assert train_ids == {identity(mixed[0]), identity(mixed[2])}
