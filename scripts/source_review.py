@@ -38,7 +38,7 @@ MANIFESTS = ROOT / "training" / "corpus-manifests"
 RECEIPT_SCHEMA = "natlang.source-review-receipt/1"
 MANIFEST_SCHEMA = "natlang.source-review-registry-manifest/1"
 REGISTRY_FILES = ("holds.jsonl", "family-holds.json", "datasets.json")
-REVIEW_KEYS = ("dataset", "id", "aliases", "text", "annotatedLabel", "status", "reason",
+REVIEW_KEYS = ("dataset", "id", "aliases", "sourceGroups", "text", "annotatedLabel", "status", "reason",
                "sourceRevision", "sourceSnapshotSha256", "sourcePrompt")
 ITEM_CONCERNS = ("none", "label-disagrees-with-source", "unstated-premise", "ambiguous-question",
                  "contract-mismatch", "needs-context")
@@ -86,7 +86,11 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 def pending_unpinned_source_groups(registry: Path = REGISTRY) -> set[str]:
     """Dataset:item identities whose pending review applies across source revisions.
 
-    Rendered training rows retain these original identities in ``source_groups``.
+    Rendered training rows usually retain these original identities in
+    ``source_groups``. Some authored static programs instead carry an opaque
+    source group for each input item; an explicitly reviewed ``sourceGroups``
+    list binds those exact rendered groups without broadening the hold to
+    unrelated groups or rewriting an immutable render.
     A SHA/revision-pinned review needs exact source provenance and must not be
     broadened to every revision of the same item by this group-only matcher.
     """
@@ -100,6 +104,11 @@ def pending_unpinned_source_groups(registry: Path = REGISTRY) -> set[str]:
         if not isinstance(dataset, str) or not dataset or not isinstance(item, str) or not item:
             raise ReviewError(f"holds.jsonl:{number}: missing dataset or id")
         groups.add(f"{dataset}:{item}")
+        rendered_groups = review.get('sourceGroups', [])
+        if (not isinstance(rendered_groups, list) or
+                any(not isinstance(group, str) or not group for group in rendered_groups)):
+            raise ReviewError(f"holds.jsonl:{number}: sourceGroups must be nonempty strings")
+        groups.update(rendered_groups)
     return groups
 
 
