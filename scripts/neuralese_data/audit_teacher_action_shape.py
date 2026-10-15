@@ -65,9 +65,17 @@ def action_code(turn: dict) -> str:
     return '\n'.join(codes)
 
 
-def hold_reason(family: str, code: str) -> str | None:
+def hold_reason(family: str, code: str, inline: str | None = None,
+                iterate: str | None = None) -> str | None:
     has_nl = bool(NL_CALL.search(code))
     has_iterate = 'iterateOn' in code
+    # The task's declared process requirements apply to every curriculum
+    # family. Family checks below retain stricter requirements for older
+    # source generations whose metadata did not yet express the contract.
+    if iterate == 'required' and not has_iterate:
+        return 'declared_iterateOn_missing'
+    if inline == 'required' and not has_nl:
+        return 'declared_inline_nl_missing'
     if family == 'curriculum_composed_process' and not has_iterate:
         return 'required_iterateOn_missing'
     if family == 'curriculum_edit_stream' and (not has_iterate or not has_nl):
@@ -101,9 +109,13 @@ def main() -> None:
                 raise ValueError('input must contain approved train decisions only')
             parent_id = turn['teacher_trajectory_id']
             family = turn['task_family']
+            curriculum = turn['task']['program_ir'].get('curriculum') or {}
+            requirements = (curriculum.get('inline'), curriculum.get('iterate'))
             groups = tuple(turn['source_groups'])
-            parent = parents.setdefault(parent_id, {'family': family, 'groups': groups, 'codes': []})
-            if parent['family'] != family or parent['groups'] != groups:
+            parent = parents.setdefault(parent_id, {'family': family, 'groups': groups,
+                                                    'requirements': requirements, 'codes': []})
+            if (parent['family'] != family or parent['groups'] != groups or
+                    parent['requirements'] != requirements):
                 raise ValueError(f'parent source identity changed across decisions: {parent_id}')
             parent['codes'].append(action_code(turn))
 
@@ -112,7 +124,7 @@ def main() -> None:
     all_families = Counter()
     for parent_id, parent in parents.items():
         all_families[parent['family']] += 1
-        reason = hold_reason(parent['family'], '\n'.join(parent['codes']))
+        reason = hold_reason(parent['family'], '\n'.join(parent['codes']), *parent['requirements'])
         if reason:
             held[parent_id] = reason
             by_reason[reason] += 1
