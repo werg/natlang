@@ -55,8 +55,9 @@ requiring explicit per-turn policy provenance and recovery of in-flight groups.
   failures are unscored, never fabricated negative rewards.
 - Text RFT uses the existing whole-context rendering. Every distinct selected turn
   must appear in the epoch; task-level balancing must not make turns alternatives.
-  Value-bearing RFT must preserve the producer graph rather than flatten blocks
-  into text. The implementation status is recorded in the controller delivery.
+  Value-bearing RFT preserves the producer graph rather than flattening blocks
+  into text. When both kinds are selected, the controller runs complete text and
+  value substages with checkpoint/optimizer continuation between them.
 - Preserve checkpoint projections and optimizer groups. A direct checkpoint with
   no NeuraleseProjection first enters the declared shared mixed stage. The older
   standalone trajectories checkpoint schema is not a substitute for that path.
@@ -124,8 +125,12 @@ from parent 6257 and wrote a new recoverable checkpoint. Its report is
 `/home/werg/data/dgxops/rl-lfm-shared-rft-validation-20261015/report.json`.
 This validates a real seed-stage continuation, not rewarded model improvement
 or adoption by the current cloud lineage. The existing full-size mixed-stage
-resume test also passed, with 13.4 GiB measured peak memory. Controller restart
-checks remain separate from this learner result. The standing full-check service
+resume test also passed, with 13.4 GiB measured peak memory. The matched post-seed
+train-task check again scored zero successes in four
+rollouts, all with model action failures and no infrastructure errors. This seed
+pass has not demonstrated task improvement. Controller restart checks remain
+separate from this learner result. The controller also passed focused restart,
+publication, policy-binding and new-task admission checks. The standing full-check service
 validates integrated main; focused checks resolve concrete changes without
 repeatedly occupying a second full-suite allocation.
 

@@ -264,3 +264,23 @@ python3 scripts/memory_ledger.py run --unit s7rl-round0-muon10006 --container s7
    recipe), drift monitor against the pre-RL checkpoint; task-selection pluggable (crisp default, NL shadow).
 4. Held eval re-scores the base under `full` rendering (Pop; requested 2026-10-12).
 5. End-to-end rollouts with Neuralese consumers.
+
+## Production controller, 2026-10-15
+
+`rl.production configure` generates a shared local/CoreWeave loop from the full
+mixed checkpoint and its declared `--production-recipe` / `--production-stage`.
+Recipe inheritance retains operational quality cadence omitted from checkpoint
+identity. `rl.production run` collects sealed rounds, archives transitive value
+graphs before releasing actors, and continues the same trainer/optimizer. It
+records actual trained exposure separately from collection, resumes partial
+updates and publication, and admits new tasks after an exhausted source changes.
+
+Ordinary RFT teacher text is rendered with the learner tokenizer. Captured value
+RFT retains the exact action/block graph. Mixed inputs run complete text and value
+substages through `--rft-document-kind text|value`, preserving projections and
+optimizer state between them. This prevents cross-model teacher token IDs from
+being replayed as learner tokens. Synchronous parallel actor collection is
+implemented; asynchronous actor/learner overlap is not.
+
+See [operating guidance and researched framework reuse](RL_OPERATIONS_20261015.md)
+and [local/CoreWeave commands](../../training/neuralese/rl-configs/README.md).

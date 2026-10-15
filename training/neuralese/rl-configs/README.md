@@ -1,9 +1,11 @@
 # Shared local and CoreWeave RL configuration
 
 Generate configuration from the actual full mixed checkpoint. The generator
-inherits the parent's optimizer, precision and training options; keeps a whole
+inherits the parent's optimizer, precision and training options, together with
+operational controls from the declared production stage; keeps a whole
 epoch of selected data; and uses the same controller and learner for both models.
-It requires checkpoint NeuraleseProjection state and the existing direct trainer
+The recipe and stage must describe the actual selected checkpoint's production
+path. It requires checkpoint NeuraleseProjection state and the existing direct trainer
 schema. Family-member KD is currently unsupported in RL; use a declared full-model
 continuation rather than silently omitting that objective.
 
@@ -21,6 +23,8 @@ published ready-made checkpoints:
 PYTHONPATH=training/neuralese .venv-neuralese/bin/python \
   -m natlang_neuralese.rl.production configure \
   --model lfm \
+  --production-recipe training/neuralese/recipes/neuralese-mixed-lfm-qad-r11-ph-coreweave-20261015-v1.json \
+  --production-stage direct_sft \
   --checkpoint /path/to/lfm-mixed/checkpoint.pt \
   --heads /path/to/lfm/canonical-raw-heads.pt \
   --base /path/to/pinned-lfm-qad-base \
@@ -32,6 +36,8 @@ PYTHONPATH=training/neuralese .venv-neuralese/bin/python \
 PYTHONPATH=training/neuralese .venv-neuralese/bin/python \
   -m natlang_neuralese.rl.production configure \
   --model mellum \
+  --production-recipe training/neuralese/recipes/neuralese-mixed-mellum-r11-full-coreweave-20261015-v1.json \
+  --production-stage direct_warmup \
   --checkpoint /path/to/mellum-mixed/checkpoint.pt \
   --heads /path/to/mellum/heads-raw-token.pt \
   --base /path/to/pinned-mellum-base \
