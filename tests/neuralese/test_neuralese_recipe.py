@@ -1070,3 +1070,67 @@ def test_lineage_handoff_lets_only_an_unstarted_stage_take_new_inputs(tmp_path):
     objective['recipe']['stages'][1]['parameters']['lr'] = 2
     with pytest.raises(ValueError, match='more than operational'):
         runner.lineage_handoff(updated, objective, frozen, package, plan_path, out)
+
+
+def test_running_recipe_can_append_future_training_stages_without_restarting(tmp_path):
+    import copy
+    from natlang_neuralese.train import recipe as runner
+
+    out = tmp_path / 'run'
+    frozen = out / 'runtime' / 'natlang_neuralese'
+    frozen.mkdir(parents=True)
+    (frozen / 'a.py').write_text('x = 1\n')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / 'a.py').write_text('x = 1\n')
+    (out / 'warmup').mkdir()
+    old_recipe = {'id': 'r', 'stages': [{'id': 'warmup', 'kind': 'neuralese_direct',
+                                        'parameters': {'epochs': 1}}]}
+    old = {'recipe': old_recipe, 'recipe_sha256': 'lineage', 'device': 'cuda',
+           'inputs': {'/heads': 'H'}, 'stage_inputs': {'warmup': {}},
+           'code': {'a.py': runner.sha(frozen / 'a.py')}}
+    plan = copy.deepcopy(old)
+    plan['recipe']['input_bindings'] = {'header': {'path': 'h.jsonl', 'sha256': 'h'}}
+    # Absence versus empty catalogs isn't a semantic change to an old stage.
+    old['recipe']['input_bindings'] = {}
+    plan['recipe']['stages'] += [
+        {'id': 'sft', 'kind': 'neuralese_direct', 'requires': ['warmup'],
+         'inputs': {'text_data': 'header'}, 'parameters': {'epochs': 1}},
+        {'id': 'trajectory', 'kind': 'neuralese_direct', 'requires': ['sft'],
+         'parameters': {'epochs': 1}}]
+    plan['stage_inputs'].update(sft={'text_data': {'binding': 'header', 'path': '/d/h', 'sha256': 'h'}},
+                                trajectory={})
+    plan['inputs']['/d/h'] = 'h'
+    old['recipe']['quantization'] = {'stage_progress': {}, 'points': ['unchanged']}
+    plan['recipe']['quantization'] = {'stage_progress': {'sft': [0, 0.75], 'trajectory': [0.75, 1]},
+                                      'points': ['unchanged']}
+    plan['recipe']['family'] = {'stages': ['sft', 'trajectory'], 'members': {'small': 0.1}}
+    path = out / 'recipe-plan.json'
+    path.write_text(json.dumps(old))
+    result = runner.lineage_handoff(copy.deepcopy(old), plan, frozen, package, path, out, dry_run=True)
+    assert result['recipe_sha256'] == 'lineage'
+    assert result['recipe']['stages'] == plan['recipe']['stages']
+    assert set(result['handoffs'][-1]['appended_stages']) == {'sft', 'trajectory'}
+    assert result['stage_inputs'] == plan['stage_inputs']
+    assert json.loads(path.read_text()) == old
+    assert not (out / 'sft').exists()
+    mutated = copy.deepcopy(plan)
+    mutated['recipe']['stages'][0]['parameters']['lr'] = 2
+    with pytest.raises(ValueError, match='more than operational'):
+        runner.lineage_handoff(copy.deepcopy(old), mutated, frozen, package, path, out, dry_run=True)
+    active_family = copy.deepcopy(plan)
+    active_family['recipe']['family']['stages'].append('warmup')
+    with pytest.raises(ValueError, match='objective_continuation'):
+        runner.lineage_handoff(copy.deepcopy(old), active_family, frozen, package, path, out, dry_run=True)
+    for stages in [plan['recipe']['stages'][1:], list(reversed(plan['recipe']['stages']))]:
+        invalid = copy.deepcopy(plan)
+        invalid['recipe']['stages'] = stages
+        with pytest.raises(ValueError, match='only append'):
+            runner.lineage_handoff(copy.deepcopy(old), invalid, frozen, package, path, out, dry_run=True)
+    invalid = copy.deepcopy(plan)
+    invalid['recipe']['stages'][1]['requires'] = ['trajectory']
+    with pytest.raises(ValueError, match='must depend'):
+        runner.lineage_handoff(copy.deepcopy(old), invalid, frozen, package, path, out, dry_run=True)
+    (out / 'sft').mkdir()
+    with pytest.raises(ValueError, match='already has output'):
+        runner.lineage_handoff(copy.deepcopy(old), plan, frozen, package, path, out, dry_run=True)
