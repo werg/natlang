@@ -109,7 +109,12 @@ export function hotpotRows(split = 'train') {
         if (supportSentences.some(group => !group.length)) {
           quarantine('hotpotqa', row.id, 'missing_support_sentence'); continue;
         }
-        rows.push({ id: sourceRecordId('hotpotqa', String(row.question).normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim(), ''), question: String(row.question),
+        const sourceId = sourceRecordId('hotpotqa', String(row.question).normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim(), '');
+        if (pendingSourceReview('hotpotqa', sourceId)) {
+          quarantine('hotpotqa', sourceId, 'source_review_pending');
+          continue;
+        }
+        rows.push({ id: sourceId, question: String(row.question),
           answer: String(row.answer), type: String(row.type ?? ''), supports, supportSentences, context });
       }
     }
