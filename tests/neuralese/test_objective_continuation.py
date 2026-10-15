@@ -230,3 +230,23 @@ def test_the_mellum_lineage_declares_the_continuation_of_its_running_quantizatio
 def test_a_handoff_ignores_the_fresh_lineage_backbone_source():
     a = {'id': 'a', 'stages': [], 'backbone': {'model': 'x'}}
     assert runner._without_operational(a) == runner._without_operational({'id': 'b', 'stages': []})
+
+
+def test_bf16_stage_adds_only_e2e_mixing_without_inventing_a_curriculum():
+    old = {'quantization': None, 'family': None, 'e2e_mix': None}
+    new = dict(old, e2e_mix=json.dumps({'fraction': 0.25}))
+    declaration = {'stage': 'warmup', 'previous': {'e2e_mix': None}}
+    record = trainer.objective_continuation(old, new, declaration, step=3400, steps=22032,
+                                            continuation=None, previous_record=None)
+    assert record['changed'] == ['e2e_mix']
+    assert record['progress'] is None and record['previous_stage'] is None
+    assert record['mixes_at_step'] == {} and record['previous_sha256'] == {'e2e_mix': None}
+    assert trainer.objective_continuation(new, new, None, step=3401, steps=22032,
+                                         continuation=None, previous_record=record) is None
+    # Adding mixing must never make removal of an existing QAT curriculum permissible.
+    with_qat = dict(old, quantization=option(quantization(), (0.0, 0.35)))
+    pinned = dict(declaration, previous={'e2e_mix': None,
+                  'quantization': trainer.objective_component_sha256(with_qat['quantization'])})
+    with pytest.raises(ValueError, match='keeps a quantization component'):
+        trainer.objective_continuation(with_qat, new, pinned, step=3400, steps=22032,
+                                       continuation=None, previous_record=None)

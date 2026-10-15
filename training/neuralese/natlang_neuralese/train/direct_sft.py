@@ -985,7 +985,17 @@ def objective_continuation(previous_options, current_options, declared, *, step,
     old_q = json.loads(previous_options['quantization']) if previous_options.get('quantization') else None
     new_q = json.loads(current_options['quantization']) if current_options.get('quantization') else None
     if new_q is None:
-        raise ValueError('objective continuation keeps a quantization component (the stage curriculum)')
+        if old_q is not None or changed != ['e2e_mix']:
+            raise ValueError('objective continuation keeps a quantization component (the stage curriculum)')
+        # A BF16-only stage can add the shared E2E objective without creating a QAT schedule.
+        # There is no curriculum progress to rebase, and the already pinned other components stay exact.
+        return {'schema': OBJECTIVE_SCHEMA, 'step': step, 'changed': changed, 'start': step, 'end': steps,
+                'progress': None, 'previous_stage': None,
+                'previous_sha256': {'e2e_mix': objective_component_sha256(previous_options.get('e2e_mix'))},
+                'sha256': {'e2e_mix': objective_component_sha256(current_options.get('e2e_mix'))},
+                'mixes_at_step': {}, 'family_weights_at_step': {},
+                'lr_schedule': 'constant (direct_sft has no LR schedule or warm-up): unchanged',
+                'previous': previous_record}
     old_stage = effective_quantization_stage(old_q, steps, continuation, previous_record)
     # A stage that trained without a curriculum (no quantization component, e.g. a BF16 LFM lineage) starts the new
     # one at the handoff update, from its declared start: every ramp then begins at zero there.
