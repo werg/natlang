@@ -7,6 +7,37 @@ from neuralese_data.agents import expansion_messages, expansion_trajectory
 from neuralese_data.trajectory import record
 
 
+def test_deepdive_groups_sibling_sessions_without_loading_qa_targets(tmp_path, monkeypatch):
+    import json
+    from neuralese_data import agents
+    from neuralese_data.records import group_key
+    root = tmp_path / 'D31'; root.mkdir()
+    (root / 'acquisition.json').write_text(json.dumps({'repo':'zai-org/DeepDive', 'revision':'pin'}))
+    for filename in ['trajectories_sft-00000-of-00001.parquet', 'qa_rl-00000-of-00001.parquet']:
+        (root / filename).touch()
+    question = 'Which report contains the observed measurement?'
+    messages = [{'role':'user', 'content':question},
+                {'role':'assistant', 'content':'<think>Inspect the source.</think><tool_call>{"name":"search","arguments":{"query":"measurement"}}</tool_call>'},
+                {'role':'tool', 'content':'SOURCE MEASUREMENT', 'tool_call_id':'c1'},
+                {'role':'assistant', 'content':'The report.'}]
+    def rows(path):
+        assert path.name.startswith('trajectories_sft-')
+        return iter([(0, {'id':0, 'question':question, 'conversations':messages}),
+                     (1, {'id':9, 'question':question, 'conversations':messages})])
+    monkeypatch.setattr(agents, 'EXPANSION_ROOT', tmp_path)
+    monkeypatch.setattr(agents, '_parquet_groups', rows)
+    values = [t for _, t in agents.deepdive_trajectories()]
+    assert len(values) == 2 and values[0].id != values[1].id
+    assert values[0].id.endswith(':0')
+    assert values[0].split_groups == values[1].split_groups
+    assert group_key('question', agents.task_hash(question)) in values[0].split_groups
+    assert values[0].family == 'trajectory_continuation_research'
+    assert values[0].messages[1]['tool_calls'][0]['function']['name'] == 'search'
+    assert values[0].messages[2]['content'] == 'SOURCE MEASUREMENT'
+    assert values[0].lineage['upstream_revision'] == 'pin'
+    assert values[0].lineage['notes']['native_execution_verified'] is False
+
+
 def test_gatc_preserves_tools_and_protects_family_through_flagged_parent(tmp_path, monkeypatch):
     import json
     from neuralese_data import agents

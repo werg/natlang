@@ -543,7 +543,7 @@ def expansion_trajectory(ref, receipt, rid, row):
     license_name = card.get("license") or "LicenseRef-upstream-unspecified"
     if not isinstance(license_name, str):
         license_name = "LicenseRef-upstream-custom"
-    research = ref in ("D01", "D02", "D10", "D21")
+    research = ref in ("D01", "D02", "D10", "D21", "D31")
     return Trajectory(
         id=f"upstream:expansion:{ref}:{trajectory_id}:{session_id}",
         family="trajectory_continuation_research" if research else "trajectory_continuation_coding",
@@ -606,6 +606,28 @@ def searchswarm(limit=None):
 
 def owl_sft(limit=None):
     yield from _expansion("D21", limit)
+
+
+def deepdive_trajectories(limit=None):
+    """Published SFT sessions only; QA/RL rows are not observed tool histories."""
+    root = EXPANSION_ROOT / 'D31'
+    receipt = json.loads((root / 'acquisition.json').read_text())
+    def rows():
+        for path in sorted(root.rglob('trajectories_sft-*.parquet')):
+            for index, row in _parquet_groups(path):
+                yield f'{path.relative_to(root)}:{index}', row
+    for rid, row in _limited(rows(), limit):
+        question = row.get('question')
+        if not isinstance(question, str) or not question.strip():
+            raise Reject('missing-deepdive-question')
+        metadata = {'trajectory_id': task_hash(question),
+                    'session_id': str(row.get('id') if row.get('id') is not None else rid),
+                    'source_row_id': row.get('id'), 'question': question,
+                    'relationship': 'observed-research-session'}
+        trajectory = expansion_trajectory('D31', receipt, rid,
+            {**row, 'metadata': metadata, '_expansion_task_group_text': question})
+        trajectory.split_groups.append(group_key('question', task_hash(question)))
+        yield rid, trajectory
 
 
 def evidence_subagent(limit=None):
@@ -895,6 +917,7 @@ CORPORA.update({'gatc-sessions': (gatc_sessions, 4), "wideseek": (wideseek, 4), 
                 'evidence-subagent': (evidence_subagent, 4), 'openthoughts-agent': (openthoughts_agent, 4),
                 'terminaltraj': (terminaltraj, 4), 'dolci-tool-use': (dolci_tool_use, 4),
                 'cognitive-kernel': (cognitive_kernel, 4),
+                'deepdive-trajectories': (deepdive_trajectories, 4),
                 'agentsynth': (agentsynth, 4),
                 'deepnlp-orchestration': (deepnlp_orchestration, 4),
                 'finding-right-fit': (finding_right_fit, 4),

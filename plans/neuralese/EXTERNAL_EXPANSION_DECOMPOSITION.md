@@ -71,6 +71,18 @@ completed expansion.
 
 ## Exact scripted action capture
 
+### DeepDive research histories
+
+Use the existing typed session-history continuation stages for D31's published
+SFT trajectories. Keep observed messages, reasoning, tool dispatches and outputs
+in order, and bind all trajectories and QA forms of the same question to one
+question group. Preserve source row IDs, revision and license facts. Do not
+fabricate parent/child links or claim that replay establishes the research
+answer's correctness. The separate QA/RL files remain explicitly outside this
+adapter until their target and reward schemas have been checked. JSON/Parquet
+decoding and exact grouping are crisp mechanisms; the existing native lowering,
+protected finalizer and token renderers implement the stages above.
+
 Large typed reference returns can be shortened to diagnostic previews in the
 runtime action ledger. The static reference driver must retain the exact action
 arguments it submitted, using the collector's existing raw-call serialization,
