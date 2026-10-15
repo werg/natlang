@@ -331,6 +331,16 @@ def test_prepared_window_cache_restores_roles_invalidates_and_rebuilds_corruptio
                         target_tokens=4, train_target_tokens=4, train_min_context_tokens=2,
                         held_documents=1, merge_prefix_rows=False, recovery_selection=None, e2e_mix=None,
                         out=tmp_path)
+    # Missing pinned annotations must never share a cache key with an
+    # unannotated preparation (or any previously prepared pinned input).
+    a.recovery_selection = {'path': str(tmp_path / 'missing-recovery.jsonl'),
+                            'sha256': '0' * 64, 'rules': ['failed'], 'rendering': 'full'}
+    assert prepared_windows.cache_spec(engine, a, data) is None
+    a.recovery_selection = None
+    a.e2e_mix = {'neuralese_spans': {'path': str(tmp_path / 'missing-spans.jsonl'),
+                                     'sha256': '0' * 64}}
+    assert prepared_windows.cache_spec(engine, a, data) is None
+    a.e2e_mix = None
     calls = []
 
     def counted(*args, **kwargs):

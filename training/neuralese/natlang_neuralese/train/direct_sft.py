@@ -907,8 +907,10 @@ def stage_data(engine, a, text_data):
                 if held_selection != expected_held_selection:
                     cached = None
             if cached is None and path is not None and path.exists():
-                # The per-key lock makes removal safe: no concurrent reader or
-                # writer can publish/use this entry while it is replaced.
+                # The per-key lock serializes cache validation/replacement.
+                # A prior stage may still hold read-only mmaps after releasing
+                # this lock; on the Linux training hosts, unlinking their files
+                # leaves those mappings valid until that stage releases them.
                 import shutil
                 shutil.rmtree(path, ignore_errors=True)
             return _stage_text_data(engine, a, text_data, spec, path, cached)

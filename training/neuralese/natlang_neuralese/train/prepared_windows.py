@@ -61,6 +61,24 @@ def cache_spec(engine, args, text_data):
         recovery = getattr(args, "recovery_selection", None)
         recovery_path = recovery.get("path") if isinstance(recovery, dict) else recovery
         recovery_binding = recovery.get("sha256") if isinstance(recovery, dict) else None
+        # A pinned annotation is part of the rows' meaning. Never allow an
+        # absent or stale sidecar to collapse to the same ``None`` digest as a
+        # cache entry made without that sidecar. The normal row loader will
+        # report the actionable input error after this deliberately uncached
+        # path is selected.
+        recovery_digest = _file_digest(recovery_path)
+        if recovery is not None and (recovery_digest is None or
+                                     (recovery_binding is not None and recovery_digest != recovery_binding)):
+            return None
+        spans_path = (mix_spans or {}).get("path") if isinstance(mix_spans, dict) else mix_spans
+        if spans_path and not Path(spans_path).is_absolute():
+            from ..common.paths import root as path_root
+            spans_path = Path(path_root("repo")) / spans_path
+        spans_digest = _file_digest(spans_path)
+        spans_binding = (mix_spans or {}).get("sha256") if isinstance(mix_spans, dict) else None
+        if mix_spans and (spans_digest is None or
+                          (spans_binding is not None and spans_digest != spans_binding)):
+            return None
         return {
             "policy": PREPARATION_POLICY,
             "input_sha256": sha256_file_hex_cached(text_data),
@@ -87,13 +105,13 @@ def cache_spec(engine, args, text_data):
             "mask_system_prompt": True,
             "row_policy": "stream-text-rows/1",
             "merge_policy": "merge-prefix-rows/1" if getattr(args, "merge_prefix_rows", False) else None,
-            "recovery_selection_sha256": _file_digest(recovery_path),
+            "recovery_selection_sha256": recovery_digest,
             "recovery_selection_binding_sha256": recovery_binding,
             "recovery_selection_policy": ({"rules": recovery.get("rules"),
                                             "rendering": recovery.get("rendering")}
                                            if isinstance(recovery, dict) else None),
-            "neuralese_spans_sha256": _file_digest((mix_spans or {}).get("path")),
-            "neuralese_spans_binding_sha256": (mix_spans or {}).get("sha256"),
+            "neuralese_spans_sha256": spans_digest,
+            "neuralese_spans_binding_sha256": spans_binding,
             "neuralese_routing_policy": "neuralese-output-routing/2" if mix_spans else None,
         }
     except Exception:
