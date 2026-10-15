@@ -120,7 +120,12 @@ def dependency_closure(request, *, namespace='/work/native-production'):
 
     for key in ('parent_checkpoint',):
         if request.get(key): checkpoint(request[key])
-    for value in request.get('updates', {}).values(): checkpoint(value)
+    for value in request.get('updates', {}).values():
+        checkpoint(value)
+        update_path = Path(value['path'])
+        receipt_path = add(update_path.parent/'native-training-receipt.json')
+        receipt = json.loads(receipt_path.read_text())
+        bound(receipt['training_receipt'])
     for key in ('config', 'semantic_config'):
         if request.get(key): config(bound(request[key]))
     if request.get('state'):
