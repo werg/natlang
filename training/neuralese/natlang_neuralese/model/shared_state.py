@@ -154,6 +154,12 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
         for start, stop in node.logical_producing:
             if not 0 <= start < stop <= len(logical):
                 raise ValueError('logical producing span is outside invocation state')
+            # Logical exports may mix own queries with already-produced aliases.
+            # Apply the embedding transform to their own physical rows only;
+            # imports retain the originating producer's existing transform.
+            for local, position in enumerate(own):
+                if start <= position < stop:
+                    producer[local] = True
         if not logical:
             raise ValueError('an invocation must contain tokens or imported state')
         producing.extend(producer)

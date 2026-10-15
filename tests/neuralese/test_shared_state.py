@@ -464,3 +464,34 @@ def test_marker_free_backbone_has_only_native_role_rows(family):
     assert port.forward_ids(ids)['logits'].shape == (1, 3, port.embedding_weight.shape[0])
     model = SharedStateModel(port, (60, 61, 62, 63), rank=4)
     assert not any('control_rows' in name for name, _ in model.named_parameters())
+
+
+@pytest.mark.parametrize('family', ['lfm', 'qwen', 'mellum'])
+def test_mixed_logical_producer_adapts_own_queries_once_and_matches_incremental(family):
+    from natlang_neuralese.model.shared_state import SharedStateModel, capture_block, native_step, splice_block
+    port = tiny(family)
+    model = SharedStateModel(port, (60, 61, 62, 63), rank=4)
+    torch.nn.init.normal_(model.adapter.up.weight, std=.05)
+    source = Invocation('source', (2, 3, 4), producing=((1, 3),))
+    edge = (ImportSpan(2, 'source', 1, 3),)
+    logical = compile_graph([source,
+        Invocation('mixed', (5, 6, 7), imports=edge, logical_producing=((1, 5),)),
+        Invocation('consumer', (8, 9), imports=(ImportSpan(1, 'mixed', 1, 5, logical=True),))])
+    explicit = compile_graph([source,
+        Invocation('mixed', (5, 6, 7), imports=edge, producing=((1, 3),)),
+        Invocation('consumer', (8, 9), imports=(ImportSpan(1, 'mixed', 1, 3),))])
+    assert logical.producing == explicit.producing == (False, True, True, False, True, True, False, False)
+    actual, expected = model(logical), model(explicit)
+    torch.testing.assert_close(actual['h_final'], expected['h_final'], rtol=0, atol=0)
+    loss_weight = torch.randn_like(actual['h_final'])
+    grad_actual = torch.autograd.grad((actual['h_final'] * loss_weight).sum(), model.adapter.up.weight)[0]
+    grad_expected = torch.autograd.grad((expected['h_final'] * loss_weight).sum(), model.adapter.up.weight)[0]
+    torch.testing.assert_close(grad_actual, grad_expected, rtol=0, atol=0)
+    identity = dict(checkpoint_sha256='1'*64, tokenizer_fingerprint='2'*64,
+                    embedding_weight_sha256='3'*64, architecture=port.config.model_type)
+    block = capture_block(actual, 'source', 1, 3, text='source payload', **identity)
+    prefix = native_step(model, torch.tensor([[5, 6]]), producing=torch.tensor([[False, True]]))
+    cache = splice_block(model, prefix['cache'], block, **{k:v for k,v in identity.items() if k != 'architecture'})
+    suffix = native_step(model, torch.tensor([[7]]), cache, producing=True)
+    mixed = torch.cat([prefix['h_final'], suffix['h_final']], dim=1)
+    torch.testing.assert_close(mixed, actual['h_final'][:, 3:6], atol=3e-6, rtol=2e-5)
