@@ -106469,6 +106469,96 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "external-expansion-search-owl-native-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-search-owl-native-20261015-v1",
+      "include": [
+        "search-owl-native-20261015/turns/**/*.turns.jsonl.zst",
+        "search-owl-native-20261015/turns/**/*.summary.json",
+        "search-owl-native-20261015/ir/**/build.json",
+        "search-owl-native-20261015/ir/**/omissions.jsonl",
+        "search-owl-native-20261015/runtime-page.json",
+        "search-owl-native-20261015/selective-restore-proof.json",
+        "search-owl-native-20261015/admission-review.json",
+        "search-owl-native-20261015/source-program-exclusions.jsonl",
+        "search-owl-native-20261015/source-program-exclusions.proof.json",
+        "search-owl-native-20261015/provenance/**/*",
+        "search-owl-native-20261015/program-group-index/*.json",
+        "search-owl-native-20261015.download-proof.json",
+        "search-owl-provenance-20261015.download-proof.json",
+        "search-owl-provenance-20261015/selective-restore-proof.json"
+      ],
+      "source_class": "external-native-teacher-turn-trajectories",
+      "training_admission": true,
+      "training_admission_reason": "Owner 2026-10-15: use all approved native Search/OWL trajectories with whole-program source protection and exact decision holds applied in the shared renderer.",
+      "admission": {
+        "schema": "natlang.search-owl-native-admission-review/1",
+        "approved": true,
+        "source_id": "external-expansion-search-owl-native-20261015-v1",
+        "source_archive": {
+          "name": "search-owl-native-20261015",
+          "bytes": 11382584581,
+          "sha256": "0bb13659806aa6ffed12a4ca61c68db9caf30f6f4ccc65a7d472d953611b9a75",
+          "receipt": "/home/werg/data/dgxops/search-owl-native-20261015.receipt.json",
+          "receipt_sha256": "042b508f31aba19845fc2839018260a7c96bd3de0260a20769082d1790691aed",
+          "roundtrip_proof": "/home/werg/data/dgxops/search-owl-native-20261015.roundtrip-proof.json",
+          "roundtrip_proof_sha256": "868ec277a8d167e8288308fc8d36437a7eadeaac1f67adbc9856429d58e5540e",
+          "download_proof_sha256": "78d1ebcb45a03f717e1e7084a8c53660c107729e75e65f97d7b8877d98927b92"
+        },
+        "native_restore": {
+          "proof": "/mnt/external/natlang-development-data/external-expansion-20261015/search-owl-native-v1/search-owl-native-20261015/selective-restore-proof.json",
+          "proof_sha256": "1452409b03fb2b790253fd118866e8f0b0af70236eb6544bcf54042156afb05a",
+          "files": 331,
+          "bytes": 6909476941,
+          "provenance_restore_sha256": "fd5eaf364e638beac0f0fe1cf198e904ef3fd548c30c1fd0b745896b726f8ebd"
+        },
+        "native_decisions": {
+          "cases": 40818,
+          "admitted": 40818,
+          "decisions": 658396,
+          "approved": 658396
+        },
+        "archive_audit_sha256": "886dbf8a6617290aea0543e73027c145d1bdbc36702aaa7758ae1f9b0bf4df78",
+        "whole_program_exclusions": {
+          "path": "/mnt/external/natlang-development-data/external-expansion-20261015/search-owl-native-v1/search-owl-native-20261015/source-program-exclusions.jsonl",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "proof_path": "/mnt/external/natlang-development-data/external-expansion-20261015/search-owl-native-v1/search-owl-native-20261015/source-program-exclusions.proof.json",
+          "proof_sha256": "75af455c982ec74e63a8dabca41bd7f74a3cb7ff17898ce8a711c8abb754b75f",
+          "excluded_program_count": 0,
+          "quality_groups": 65161,
+          "held_groups": 16133,
+          "pending_source_review_groups": 398,
+          "source_review_manifest_sha256": "8d15b6e0ce4cd533b85ea2b8f537aa1d747aff3180a5fc030f0d73d175e31d56",
+          "global_protection_index_sha256": "182cefe30eff6138c251ddeccf6dc1d59785d78c60388469256761d59d551415"
+        },
+        "decision_hold_files": [
+          {
+            "path": "/home/werg/natlang/training/decision-holds/native-non-success-20261015-v1.jsonl",
+            "sha256": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177",
+            "rows": 7
+          },
+          {
+            "path": "/home/werg/natlang/training/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+            "sha256": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9",
+            "rows": 4589
+          }
+        ],
+        "required_conversion_omissions": {
+          "count": 7002,
+          "kind": "evidence-over-cap-needs-paged-program",
+          "source_build": "/mnt/external/natlang-development-data/external-expansion-20261015/search-owl-native-v1/search-owl-native-20261015/ir/trajectory_continuation_research/build.json",
+          "status": "explicit pending conversion; not claimed included in the 40,818-case native corpus"
+        },
+        "selection_note": "All 40,818 completed cases and 658,396 native decisions were approved in every shard summary. Current global source holds and exact decision-hold files remain separately bound and are applied to rendered training views. Original native turns retain full program_ir and complete model-turn context."
+      },
+      "derived_from": [
+        "external-expansion-d02-source-20261014-v1",
+        "external-expansion-d21-source-20261014-v1"
+      ],
+      "license": "MIT for SearchSwarm D02 and Apache-2.0 for OWL-SFT D21, as pinned in provenance/input-bindings.json; owner accepts all licenses.",
+      "notes": "The separate 7,002 evidence-over-cap cases remain explicit paged-conversion work; not included in the completed native decisions."
     }
   ],
   "coverage_backlog": [
