@@ -9,6 +9,7 @@ import fcntl
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import time
 
@@ -39,6 +40,12 @@ def lines(path):
 def unit_active(unit):
     status = subprocess.run(['systemctl', '--user', 'is-active', '--quiet', unit], check=False)
     return status.returncode == 0
+
+
+def unit_result(unit):
+    result = subprocess.run(['systemctl', '--user', 'show', unit, '-p', 'Result', '--value'],
+                            check=False, capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 else None
 
 
 def launch(batch, number, retry=0):
@@ -132,21 +139,31 @@ def convert_closed(batch, number, campaign):
     if out.exists():
         summary = out / 'summary.json'
         if not summary.exists() and not unit_active(unit + '.service'):
-            print(json.dumps({'event': 'static_conversion_needs_review', 'batch': number,
-                              'reason': 'nonempty_or_partial_output'}), flush=True)
+            if unit_result(unit + '.service') == 'oom-kill':
+                # A failed static conversion has no admitted output. Its replay
+                # and native files may be partial; rebuild them from pinned labels.
+                paths = sorted(str(path) for path in out.rglob('*') if path.is_file())
+                print(json.dumps({'event': 'prune_oom_partial_conversion', 'batch': number,
+                                  'paths': paths}), flush=True)
+                shutil.rmtree(out)
+            else:
+                print(json.dumps({'event': 'static_conversion_needs_review', 'batch': number,
+                                  'reason': 'nonempty_or_partial_output'}), flush=True)
+                return
         elif summary.exists():
             result = json.loads(summary.read_text())
             if (result.get('replay_failures') or
                     result.get('replay_attempted') != result.get('cases')):
                 print(json.dumps({'event': 'static_conversion_needs_review', 'batch': number,
                                   'reason': 'incomplete_reference_replay'}), flush=True)
-        return
+        if out.exists():
+            return
     command = ['node', 'ts-host/scripts/static-adapters/teacher-decision-labels.mjs',
                '--cases', str((batch / 'cases.jsonl').relative_to(ROOT)),
                '--labels', str((batch / 'labels.jsonl').relative_to(ROOT)),
                '--out', str(out.relative_to(ROOT)), '--batch-size', '8', '--replay-limit', '64']
     run = subprocess.run(['python3', 'scripts/memory_ledger.py', 'run', '--unit', unit,
-                          '--budget-gb', '0.7', '--reserve-gb', '0.2', '--class', 'collection',
+                          '--budget-gb', '1.3', '--reserve-gb', '0.3', '--class', 'collection',
                           '--priority', 'low', '--workdir', str(ROOT), '--', *command],
                          cwd=ROOT, capture_output=True, text=True)
     if run.returncode:
