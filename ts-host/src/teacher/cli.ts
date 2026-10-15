@@ -162,7 +162,9 @@ async function main(): Promise<void> {
         'serve with a larger context per slot or lower --context-tokens');
     if (served === undefined) process.stderr.write('note: the server does not report its context size; not checked against --context-tokens\n');
   }
-  const records = await loadRecords(ir, integer(flags, '--start', 0), flags.has('--all') ? 0 : integer(flags, '--limit', 10));
+  const source = await readFile(ir);
+  config.sourceSha256 = sha256(source);
+  const records = await loadRecords(ir, integer(flags, '--start', 0), flags.has('--all') ? 0 : integer(flags, '--limit', 10), source.toString('utf8'));
   const controller = new AbortController();
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => controller.abort());
   const admissionController = new AbortController();
@@ -181,7 +183,6 @@ async function main(): Promise<void> {
     collectBatch(records, config, nativeJobRunner(config), controller.signal, admissionController.signal),
     () => collectionSnapshot); }
   finally { if (drainPoll) clearInterval(drainPoll); }
-  const source = await readFile(ir);
   const outputHash = createHash('sha256');
   for await (const chunk of createReadStream(output)) outputHash.update(chunk);
   const requestTotals = new CollectorRequestTelemetryAccumulator();
