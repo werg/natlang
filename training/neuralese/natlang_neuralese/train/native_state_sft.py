@@ -381,12 +381,20 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None)
     previous_mode = model.training
     model.eval()
     scope = backend.native_modules() if backend is not None else contextlib.nullcontext()
+    boundary_ids = tuple(dict.fromkeys((*getattr(model, 'marker_ids', ()),
+                                        *getattr(model, 'token_override_ids', ()))))
+    boundary_sums = {str(token): dict.fromkeys(
+        ('count', 'weight', 'nll_sum', 'correct_weight', 'probability_sum'), 0.)
+        for token in boundary_ids}
     try:
         with scope, torch.no_grad():
             total_weight, total_loss, total_correct, total_tokens, total_graphs, forward_tokens = 0., 0., 0., 0, 0, 0
             for example in examples:
                 loss, detail = graph_loss(model, example, checkpoint_layers=checkpoint_layers,
-                                          chunk_tokens=chunk_tokens)
+                                          chunk_tokens=chunk_tokens, boundary_token_ids=boundary_ids)
+                for token, sums in detail['boundary_sums'].items():
+                    for key, value in sums.items():
+                        boundary_sums[token][key] += value
                 weight = detail['weight']
                 total_loss += float(loss) * weight
                 total_correct += detail['accuracy'] * weight
@@ -398,9 +406,14 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None)
         model.train(previous_mode)
     if not math.isfinite(total_loss) or total_weight <= 0:
         raise FloatingPointError('native held evaluation is nonfinite or empty')
+    boundaries = {token: {**sums, 'count': int(sums['count']),
+        'mean_nll': sums['nll_sum']/sums['weight'] if sums['weight'] else None,
+        'weighted_accuracy': sums['correct_weight']/sums['weight'] if sums['weight'] else None,
+        'mean_probability': sums['probability_sum']/sums['weight'] if sums['weight'] else None}
+        for token, sums in boundary_sums.items()}
     return {'loss': total_loss / total_weight, 'weighted_accuracy': total_correct / total_weight,
             'weight': total_weight, 'supervised_tokens': total_tokens, 'examples': total_graphs,
-            'forward_tokens': forward_tokens}
+            'forward_tokens': forward_tokens, 'boundaries': boundaries}
 
 
 def held_cadence_indices(entries, cursor=0, *, token_budget=0, graph_budget=0):
