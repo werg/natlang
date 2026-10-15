@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-agentsynth-handoffs-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-agentsynth-handoffs-20261015-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 699,
+      "sha256": "9d7db2061c64d8c72571e759867c64326be950ac6103d9c1d676f5450341e619"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 2538,
+      "sha256": "3f0e568846ba9265cfd4b6583c0c213797146b0d0f7b2f65f16110f82fec4b84"
+    },
+    {
+      "path": "trajectory_continuation_coding.port-records.jsonl",
+      "bytes": 4755073,
+      "sha256": "d17386d352cb592fbf9def1620bbecf2a49634498321c54daba2c40d3e34319e",
+      "lines": 874
+    }
+  ],
+  "bytes": 4758310
+}

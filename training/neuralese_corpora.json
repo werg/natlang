@@ -82996,6 +82996,72 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "external-expansion-agentsynth-handoffs-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-agentsynth-handoffs-20261015-v1",
+      "include": [
+        "*.port-records.jsonl",
+        "manifest.json",
+        "admission-review.json"
+      ],
+      "source_class": "external-static-typed-handoff",
+      "training_admission": true,
+      "training_admission_reason": "Owner authorizes static Natlang-like external coding/Neuralese data",
+      "admission": {
+        "schema": "natlang.external-static-admission/1",
+        "approved": true,
+        "policy": "Owner authorizes static Natlang-like external coding/Neuralese data",
+        "generator_model": "mock",
+        "upstream_verification": "reported only, not independent semantic correctness",
+        "native_replay": "219/219 exact static plumbing replays, 2186 native decisions",
+        "closure": "874 all-train records after107 exact duplicates, zero protected hits or closure violations",
+        "runtime": {
+          "page_size": "28672",
+          "dist_commit": "dirty-380717bfdec22b1413d7e83969a962dcd96d130c",
+          "context_tokens": 65536
+        },
+        "certificate_limit": "No real teacher, model transport, gradient replay or Neuralese lift certificate claimed"
+      },
+      "derived_from": [
+        "external-expansion-d11-source-20261014-v1"
+      ],
+      "license": "Pinned source acquisition card facts retained; unspecified license accepted"
+    },
+    {
+      "id": "external-expansion-agentsynth-native-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-agentsynth-native-20261015-v1",
+      "include": [
+        "turns/**/*.turns.jsonl.zst",
+        "turns/**/*.summary.json",
+        "ir/**/build.json",
+        "runtime-page.json",
+        "admission-review.json"
+      ],
+      "source_class": "statically-lowered-external-native-teacher-turns",
+      "training_admission": true,
+      "training_admission_reason": "Owner authorizes static Natlang-like external coding/Neuralese data",
+      "admission": {
+        "schema": "natlang.external-static-admission/1",
+        "approved": true,
+        "policy": "Owner authorizes static Natlang-like external coding/Neuralese data",
+        "generator_model": "mock",
+        "upstream_verification": "reported only, not independent semantic correctness",
+        "native_replay": "219/219 exact static plumbing replays, 2186 native decisions",
+        "closure": "874 all-train records after107 exact duplicates, zero protected hits or closure violations",
+        "runtime": {
+          "page_size": "28672",
+          "dist_commit": "dirty-380717bfdec22b1413d7e83969a962dcd96d130c",
+          "context_tokens": 65536
+        },
+        "certificate_limit": "No real teacher, model transport, gradient replay or Neuralese lift certificate claimed"
+      },
+      "derived_from": [
+        "external-expansion-agentsynth-handoffs-20261015-v1"
+      ],
+      "license": "Pinned source acquisition card facts retained; unspecified license accepted"
     }
   ],
   "coverage_backlog": [

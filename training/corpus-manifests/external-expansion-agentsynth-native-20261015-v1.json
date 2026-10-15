@@ -1,0 +1,34 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-agentsynth-native-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-agentsynth-native-20261015-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 699,
+      "sha256": "9d7db2061c64d8c72571e759867c64326be950ac6103d9c1d676f5450341e619"
+    },
+    {
+      "path": "ir/trajectory_continuation_coding/build.json",
+      "bytes": 740,
+      "sha256": "916f37b15b3e2497218bc2ec335e6d2b893527a73e21f0ba31ce92899667f1ee"
+    },
+    {
+      "path": "runtime-page.json",
+      "bytes": 113,
+      "sha256": "814dad314ede1e73b05f8b3a34a0e1f206c242bfccfa0177193fb2f6404e6300"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00000.summary.json",
+      "bytes": 256,
+      "sha256": "b6a0e6cd421fcf208dbafd580f04181c97ee4e53a83a50e01bd669bc7068ee8a"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+      "bytes": 693915,
+      "sha256": "cce097a4580e2f8ad6e804b62ca28435204197e84919d661ba3e03c6718d1072"
+    }
+  ],
+  "bytes": 695723
+}
