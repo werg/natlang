@@ -157,7 +157,7 @@ def compile_declared_glob(pattern):
     return re.compile('(?s:' + ''.join(chunks) + r')\Z')
 
 
-def publish(repo, entry):
+def publish(repo, entry, reuse_cache=None):
     root = repo / relative(entry['path'])
     files = []
     patterns = entry.get('include', ['**/*'])
@@ -202,23 +202,74 @@ def publish(repo, entry):
     files.sort()
     if not files:
         raise ValueError(f"empty corpus: {entry['id']} at {root}")
+    cache_entry_sha = hashlib.sha256(json.dumps(entry, sort_keys=True, ensure_ascii=False,
+                                                separators=(',', ':')).encode()).hexdigest()
+    selected_paths = [str(path.relative_to(root)) for path in files]
+    if reuse_cache is not None:
+        try:
+            cache = json.loads(Path(reuse_cache).read_text())
+        except (OSError, ValueError):
+            cache = None
+        if (isinstance(cache, dict) and cache.get('schema') == 'natlang.corpus-publish-cache/1'
+                and cache.get('entry_sha256') == cache_entry_sha
+                and isinstance(cache.get('manifest'), dict)
+                and isinstance(cache.get('file_stats'), dict)):
+            cached_manifest = cache['manifest']
+            cached_files = cached_manifest.get('files', [])
+            if ([item.get('path') for item in cached_files] == selected_paths and
+                    cached_manifest.get('id') == entry['id'] and
+                    cached_manifest.get('owner') == entry['owner'] and
+                    cached_manifest.get('path') == entry['path'] and
+                    cache.get('manifest_sha256') == hashlib.sha256(
+                        json.dumps(cached_manifest, sort_keys=True, ensure_ascii=False,
+                                   separators=(',', ':')).encode()).hexdigest()):
+                unchanged = True
+                for item, path in zip(cached_files, files):
+                    try:
+                        current = file_stat(path)
+                    except OSError:
+                        unchanged = False
+                        break
+                    if (cache['file_stats'].get(item['path']) != current or
+                            item.get('bytes') != current[2]):
+                        unchanged = False
+                        break
+                if unchanged:
+                    value = cached_manifest
+                    target = manifest_path(repo, entry['id'])
+                    if target.exists() and json.loads(target.read_text()) != value:
+                        raise ValueError(f"immutable snapshot changed: {entry['id']}; publish a new id")
+                    save(target, value)
+                    print(json.dumps({'published': entry['id'], 'files': len(cached_files),
+                                      'bytes': value['bytes'], 'reused_verified_manifest': True}), flush=True)
+                    return value
     rows = []
+    file_stats = {}
     for p in files:
-        before = p.stat()
+        before = file_stat(p)
         sha, count = digest(p)
-        after = p.stat()
-        if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+        after = file_stat(p)
+        if before != after:
             raise ValueError(f'file changed during publication: {p}')
-        item = {'path': str(p.relative_to(root)), 'bytes': after.st_size, 'sha256': sha}
+        item = {'path': str(p.relative_to(root)), 'bytes': after[2], 'sha256': sha}
         if p.suffix == '.jsonl':
             item['lines'] = count
         rows.append(item)
+        file_stats[item['path']] = after
     value = {'schema': 'natlang.corpus-snapshot/1', 'id': entry['id'], 'owner': entry['owner'],
              'path': entry['path'], 'files': rows, 'bytes': sum(x['bytes'] for x in rows)}
     target = manifest_path(repo, entry['id'])
     if target.exists() and json.loads(target.read_text()) != value:
         raise ValueError(f"immutable snapshot changed: {entry['id']}; publish a new id")
     save(target, value)
+    if reuse_cache is not None:
+        cached = {'schema': 'natlang.corpus-publish-cache/1', 'entry_sha256': cache_entry_sha,
+                  'manifest': value, 'manifest_sha256': hashlib.sha256(
+                      json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest(),
+                  'file_stats': file_stats}
+        cache_path = Path(reuse_cache)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        save(cache_path, cached)
     print(json.dumps({'published': entry['id'], 'files': len(rows), 'bytes': value['bytes'],
                       'manifest_file_sha256': digest(target)[0]}), flush=True)
 
@@ -655,6 +706,8 @@ def main():
     parser.add_argument('--machine', choices=['pop', 'dgx'], required=True,
                         help='identity of the machine running this command, not a verification destination')
     parser.add_argument('--id', action='append', dest='ids')
+    parser.add_argument('--reuse-cache', type=Path,
+                        help='private publish receipt; reuses an exact manifest only when entry and all file stats match')
     parser.add_argument('--file', action='append', dest='files', help='select exact manifest paths for sync, restore or offload')
     parser.add_argument('--execute', action='store_true', help='for offload, transfer/verify then unlink selected local files')
     parser.add_argument('--host', default='dgx')
@@ -678,7 +731,7 @@ def main():
             continue
         if args.action == 'publish':
             if entry['owner'] == args.machine:
-                publish(args.repo, entry)
+                publish(args.repo, entry, args.reuse_cache)
             continue
         path = manifest_path(args.repo, entry['id'])
         if not path.exists():

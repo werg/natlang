@@ -18,8 +18,9 @@ touches the shared checkout's files:
      the worktree (it links the main checkout's venv and node packages);
   5. commit only the registry and those manifests, push to origin main;
   6. on a lost push race, a fetch conflict or a red check, back off and redo 1-5 from the new origin/main (the registry
-     change is regenerated, never merged textually). Afterwards advance the shared checkout without touching dirty
-     files (scripts/git_publish.py --sync-only), best effort.
+     change is regenerated, never merged textually). A private publish receipt reuses a corpus manifest only when its
+     entry, selected file set and full file stat identities still match; a changed file is hashed again. Afterwards
+     advance the shared checkout without touching dirty files (scripts/git_publish.py --sync-only), best effort.
 
 Python: ``register(entries, message, replace=False, links=None)``; ``registered_ids()`` reads origin/main's registry.
 CLI:    register_corpora.py --entries FILE.json [--entries ...] -m SUBJECT [--replace] [--link REL=TARGET ...]
@@ -128,8 +129,10 @@ def attempt(entries: list[dict], message: str, replace: bool, check: bool) -> li
         path.write_text(text)
     for entry in changed:
         resolve_data(wt, entry['path'])
+        publish_cache = LOCK.parent / 'register-corpora-manifest-cache' / (entry['id'] + '.json')
         published = subprocess.run([sys.executable, str(wt / 'scripts/sync_training_corpora.py'), 'publish',
-                                    '--repo', str(wt), '--machine', entry['owner'], '--id', entry['id']],
+                                    '--repo', str(wt), '--machine', entry['owner'], '--id', entry['id'],
+                                    '--reuse-cache', str(publish_cache)],
                                    cwd=wt, capture_output=True, text=True)
         if published.returncode:
             raise ValueError(f"publish {entry['id']}: {published.stderr.strip()[-1500:]}")
