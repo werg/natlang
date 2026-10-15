@@ -74,6 +74,22 @@ def test_native_boolean_recipe_flags_parse_both_declared_values(tmp_path,enabled
     assert all(getattr(parsed,name) is enabled for name in parameters)
 
 
+@pytest.mark.parametrize('kind',['native_state_sft','native_state_rl'])
+def test_guarded_native_arithmetic_is_operational_tuning_not_a_new_lineage(tmp_path,kind):
+    from copy import deepcopy
+    from natlang_neuralese.train import recipe
+    before={'stages':[{'id':'full','kind':kind,'parameters':{
+        'native_linear_precision':'ieee','base':'/pinned-base'}}]}
+    after=deepcopy(before)
+    after['stages'][0]['parameters']['native_linear_precision']='bf16x6'
+    changes,left,right=recipe.direct_windowing_handoffs(before,after,tmp_path)
+    assert changes=={'full':{'native_linear_precision':['ieee','bf16x6']}}
+    assert left==right
+    after['stages'][0]['parameters']['base']='/different-base'
+    _,left,right=recipe.direct_windowing_handoffs(before,after,tmp_path)
+    assert left!=right  # Arithmetic permission never licenses a backbone replacement.
+
+
 def test_native_shared_controller_is_a_headless_recipe_stage(tmp_path):
     from natlang_neuralese.train.recipe import (HANDLERS, HEADLESS_NATIVE_KINDS,
         NATIVE_IDENTITY_QUALIFICATION, SHARED_NATIVE_KINDS, stage_input_args,
