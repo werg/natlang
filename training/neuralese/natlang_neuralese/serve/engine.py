@@ -610,6 +610,7 @@ class Engine:
         block = record.block
         exact = self._native_exact(block)
         adaptation = None
+        observed_id = block_id if exact else None
         open_out = self._native_forward([self.role_tokens.consume_open], seq.cache)
         seq.cache = open_out["cache"]
         if seq.request.rl_capture:
@@ -641,6 +642,7 @@ class Engine:
             mode = 'learned-semantic-state-deltas'
             if seq.request.rl_capture:
                 adapted_record = self.store.put_native_state(adapted)
+                observed_id = adapted_record.id
                 seq.native_rl_prompt.append({'kind': 'native_state', 'id': adapted_record.id,
                     'native_identity': self._native_block_identity(adapted)})
         else:
@@ -665,6 +667,7 @@ class Engine:
         seq.native_own_position += 1
         seq.logits = self._native_logits(close_out["h_final"])
         seq.native_imports.append({"id": block_id, "mode": mode,
+                                   **({'observed_native_state_id': observed_id} if observed_id is not None else {}),
                                    **({'semantic_adaptation': adaptation} if adaptation is not None else {})})
 
     @staticmethod
@@ -907,6 +910,7 @@ class Engine:
         cache = None
         captured = None
         source_segments = []
+        source_imports = []
         source_own_position = 0
         payload_start = None
         payload_stop = None
@@ -927,6 +931,7 @@ class Engine:
                     self._native_consume(temp, block_id)
                     cache = temp.cache
                     source_segments.extend(temp.native_rl_prompt)
+                    source_imports.extend(temp.native_imports)
                     source_own_position += temp.native_own_position
                 elif index == body_segment:
                     if left:
@@ -966,6 +971,7 @@ class Engine:
                           "source_position_start": captured["cache"].lengths[0] - len(body)}
         result["gate"] = None
         result["source_capture"] = {"policy": self._native_block_identity(block), "segments": source_segments,
+                                    "imports": source_imports,
                                     "payload_start": payload_start, "payload_stop": payload_stop}
         result["source_text_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
         return result

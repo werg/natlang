@@ -18,24 +18,13 @@ import subprocess
 import tempfile
 
 from transformers import AutoTokenizer
+from natlang_neuralese.common.hashing import sha256_hex as sha256_bytes, sha256_file_hex as sha256_file
 
 from natlang_neuralese.data.native_graph_conversion import text_row_graph, witnessed_pair_graph
 from natlang_neuralese.data.text_corpus import gold_text_rows, tokenizer_fingerprint
 from natlang_neuralese.model.shared_state import ROLE_MARKERS
 
 PAIR_SCHEMA = 'natlang.native-semantic-pair/1'
-
-
-def sha256_bytes(value):
-    return hashlib.sha256(value).hexdigest()
-
-
-def sha256_file(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as source:
-        for block in iter(lambda: source.read(8 * 1024 * 1024), b''):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def jsonl(path, digest=None):

@@ -7,7 +7,6 @@ ordinary one-node invocations. It does not infer role edges from visible text.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -15,18 +14,11 @@ import subprocess
 import tempfile
 
 from transformers import AutoTokenizer
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256
 
 from natlang_neuralese.data.native_graph_conversion import text_row_graph
 from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
 from natlang_neuralese.model.shared_state import ROLE_MARKERS
-
-
-def sha256(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as source:
-        for block in iter(lambda: source.read(8 * 1024 * 1024), b''):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def read_jsonl_zstd(path):

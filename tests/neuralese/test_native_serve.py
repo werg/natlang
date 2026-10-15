@@ -113,7 +113,8 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         read = post({'messages': [{'role': 'user', 'content': [
             {'type': 'text', 'text': 'use '}, {'type': 'native_state', 'id': record.id}]}],
             'max_tokens': 2, 'temperature': 1.0, 'seed': 14, 'x_natlang_rl_capture': True})
-        assert read['native_state']['imports'] == [{'id': record.id, 'mode': 'exact-native-state'}]
+        assert read['native_state']['imports'] == [{'id': record.id, 'mode': 'exact-native-state',
+            'observed_native_state_id': record.id}]
         prompt = read['x_natlang_rl_capture']['prompt']
         state_at = next(i for i, segment in enumerate(prompt) if segment['kind'] == 'native_state')
         assert prompt[state_at - 1] == {'kind': 'tokens', 'token_ids': [roles.consume_open], 'producing': [False]}

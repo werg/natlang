@@ -7,6 +7,13 @@ operations; do not defer work to a Pop agent. Only Pop's generation was to
 finish: DGX-supervised data generation must continue. Generate new training
 data only with our own models through the CoreWeave sandboxes, not Luna or
 other external teachers. Existing admitted third-party data remains usable.
+Owner clarification (2026-10-15): "our own models" here means self-hosted
+teachers in our sandboxes, not the student models we are trying to improve.
+Use a substantially stronger teacher; Mellum and LFM are students. The selected
+generation teacher is Qwen3.8-Flash-Next NVFP4 on the existing dedicated
+generation sandbox, using the GPU-specific optimized serving engine. Preserve
+verified full trajectories for both students and expand beyond a narrow task
+pilot. Do not allocate an additional sandbox merely to change the teacher.
 Coordinate sandbox inference with training so generation uses available
 capacity without unnecessarily starving training. Preserve exact actor,
 checkpoint, runtime and split provenance; base-model generations are not

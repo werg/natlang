@@ -179,6 +179,7 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
             raise ValueError('semantic serving requires its explicit shared checkpoint participant')
         engine.semantic_channel.require_target(participant, identity)
         engine.semantic_participant = participant
+        engine.dialect = 'semantic-state/' + engine.semantic_channel.adapter_sha256
     engine.rl_policy_binding = {'schema': 'natlang.rl-policy-binding/2',
         'checkpoint_sha256': checkpoint_sha256, 'communication': 'native-state',
         'native_identity': dict(identity)}

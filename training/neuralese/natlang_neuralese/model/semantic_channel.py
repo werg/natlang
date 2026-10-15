@@ -105,6 +105,8 @@ class SemanticChannel:
         message = block if isinstance(block, SemanticStateMessage) else self.message(block)
         message.validate()
         source_name = self.model_name(message)
+        if message.embeddings.shape[1] != self.vae.layouts[source_name].embedding_width:
+            raise ValueError('semantic message source embedding width differs from its trained model')
         if message.adapter_sha256 != self.adapter_sha256 or message.source_model != source_name:
             raise ValueError('semantic message requires the exact trained adapter and source model')
         offsets, policy = retained_source_offsets(self.tokenizers[source_name], message.text,
