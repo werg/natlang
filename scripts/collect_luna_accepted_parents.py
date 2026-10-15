@@ -16,6 +16,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'training/neuralese'))
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256
+from source_review import pending_unpinned_source_groups
 
 
 def rows(path):
@@ -54,6 +55,7 @@ def main():
     seen_worlds = {world(row) for row in held_rows}
     held_groups = {group for row in held_rows for group in row.get('source_groups', [])}
     previous_ids = set()
+    pending_source_groups = pending_unpinned_source_groups()
     for path in args.previous_parents:
         # Previously admitted snapshots can be hundreds of MB. Only their
         # identities/worlds are needed; do not retain full trajectories here.
@@ -69,7 +71,7 @@ def main():
                                      prefix=args.out.name + '.', suffix='.building', delete=False) as stream:
         temporary = Path(stream.name)
         try:
-            collect(args, stream, held_groups, previous_ids, seen_worlds, selected_worlds,
+            collect(args, stream, held_groups, pending_source_groups, previous_ids, seen_worlds, selected_worlds,
                     source_files, outcomes, evidence)
             stream.flush()
             os.fsync(stream.fileno())
@@ -86,6 +88,7 @@ def main():
         os.replace(temporary, args.out)
     review = {'schema': 'natlang.luna-parent-candidate-review/1', 'training_admission': False,
               'held_sha256': sha256(args.held),
+              'source_review_sha256': sha256(ROOT / 'training/source-reviews/holds.jsonl'),
               'previous_parent_sha256': {str(p): sha256(p) for p in args.previous_parents},
               'sources_sha256': {str(p): sha256(p) for p in source_files},
               'campaign_manifests_sha256': {str(p / 'campaign-manifest.json'): sha256(p / 'campaign-manifest.json')
@@ -106,7 +109,7 @@ def main():
     print(json.dumps({'out': str(args.out), 'counts': dict(outcomes)}))
 
 
-def collect(args, stream, held_groups, previous_ids, seen_worlds, selected_worlds,
+def collect(args, stream, held_groups, pending_source_groups, previous_ids, seen_worlds, selected_worlds,
             source_files, outcomes, evidence):
     for campaign in args.campaign:
         manifest_path = campaign / 'campaign-manifest.json'
@@ -169,6 +172,12 @@ def collect(args, stream, held_groups, previous_ids, seen_worlds, selected_world
                             outcome.get('checks') and all(value is True for value in outcome['checks'].values()))
                 if not accepted:
                     outcomes['rejected'] += 1
+                    continue
+                source_group = {f"{original['dataset']}:{record}"
+                                for record in original.get('dataset_records', [])}
+                source_group.update(original.get('source_groups', []))
+                if pending_source_groups.intersection(source_group):
+                    outcomes['source_review_hold'] += 1
                     continue
                 key = world(original)
                 if original['id'] in previous_ids or key in seen_worlds or key in selected_worlds:
