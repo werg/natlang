@@ -18,7 +18,11 @@
       "native_full_sft": {
         "parameters": {
           "batch_tokens": 32768,
-          "chunk_tokens": 1024
+          "chunk_tokens": 1024,
+          "eval_every": 250,
+          "task_eval_every": 250,
+          "checkpoint_every": 250,
+          "checkpoint_seconds": 3600
         }
       }
     }

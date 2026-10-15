@@ -250,3 +250,17 @@ class RowReceiptTests(RegistryCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_family_hold_structured_dataset_matches_executor_without_hashing_dict(tmp_path):
+    (tmp_path / 'datasets.json').write_text(json.dumps({'displayNames': {'display': 'dataset'}, 'familyDataset': {}}))
+    (tmp_path / 'family-holds.json').write_text(json.dumps({'schema': 'natlang.source-review-family-holds/1',
+        'holds': [{'dataset': 'dataset', 'family': 'held-family', 'primarySourceId': None, 'reason': 'pending'}]}))
+    record = {'dataset': {'source': 'dataset', 'family': 'typed-metadata'}, 'curriculum': {'family': 'held-family'}}
+    assert sr.pending_family_hold_reason(record, tmp_path) is None
+    assert sr.pending_family_hold_reason({**record, 'dataset': 'display'}, tmp_path) == 'pending'
+
+
+def test_family_hold_structured_family_is_not_a_dataset_mapping_key(tmp_path):
+    (tmp_path / 'datasets.json').write_text(json.dumps({'familyDataset': {}}))
+    assert sr.pending_family_hold_reason({'curriculum': {'family': {'kind': 'typed'}}}, tmp_path) is None

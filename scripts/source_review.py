@@ -124,9 +124,13 @@ def pending_family_hold_reason(record: dict[str, Any], registry: Path = REGISTRY
     family that the executor already quarantines.
     """
     curriculum = record.get("curriculum")
-    family = curriculum.get("family") if isinstance(curriculum, dict) else None
+    family_value = curriculum.get("family") if isinstance(curriculum, dict) else None
+    family = family_value if isinstance(family_value, str) else None
     datasets = json.loads((registry / "datasets.json").read_text(encoding="utf-8"))
     declared_dataset = record.get("dataset") or datasets.get("familyDataset", {}).get(family) or record.get("source")
+    # Match the executor: structured dataset metadata is not a family key.
+    if not isinstance(declared_dataset, str):
+        return None
     dataset = datasets.get("displayNames", {}).get(declared_dataset, declared_dataset)
     records = record.get("dataset_records")
     primary = records[0] if isinstance(records, list) and records else None
