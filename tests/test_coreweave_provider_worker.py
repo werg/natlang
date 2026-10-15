@@ -6,11 +6,54 @@ from pathlib import Path
 import subprocess
 import sys
 from types import SimpleNamespace
+import contextlib
+import io
+import shutil
 
 
 spec = importlib.util.spec_from_file_location('cw_provider_worker', Path(__file__).parents[1] / 'scripts/coreweave/provider_worker.py')
 worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)
+
+
+def test_metadata_inventory_uses_one_exact_archive_and_preserves_original_namespace(tmp_path):
+    class Local(worker.SDKIO):
+        def __init__(self):
+            super().__init__({'receipts':str(tmp_path/'receipts'),'sandboxes':{
+                name:{'runtime':str(Path(__file__).parents[1])} for name in ('source','target')}})
+            self.ferries=[]
+        def remote(self,sid,code,**kwargs):
+            physical=str(tmp_path/sid)
+            capture=io.StringIO()
+            code=code.replace('/work/native-production',physical)
+            if sid=='target':
+                # Both real sandboxes share a lexical namespace. Preserve the
+                # source-origin field inside the sealed archive receipt while
+                # virtualizing only the target's filesystem accesses.
+                code=code.replace("'source': '"+physical,"'source': '"+str(tmp_path/'source'))
+            with contextlib.redirect_stdout(capture):
+                exec(code,{'__name__':'local_sdk_control'})
+            return json.loads(capture.getvalue().replace(physical,'/work/native-production'))
+        def mirror(self,source,target,item):
+            relative=Path(item['path']).relative_to('/work/native-production')
+            original=tmp_path/source/relative;destination=tmp_path/target/relative
+            assert original.stat().st_size==item['bytes']
+            destination.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(original,destination)
+            self.ferries.append(item)
+    client=Local();items=[]
+    for name,payload in [('state.json',b'{"actual":"RNG"}\r\n'),('nested/optimizer.pt',b'optimizer\x00')]:
+        path=tmp_path/'source'/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(payload)
+        items.append({'path':'/work/native-production/'+name,'bytes':len(payload),
+            'sha256':worker.hashlib.sha256(payload).hexdigest()})
+    assert client.mirror_many('source','target',items)
+    assert len(client.ferries)==1 and client.ferries[0]['path'].endswith('.tar.zst')
+    for item in items:
+        relative=Path(item['path']).relative_to('/work/native-production')
+        assert (tmp_path/'target'/relative).read_bytes()==(tmp_path/'source'/relative).read_bytes()
+    # A retry verifies the inventory in one probe and does not ferry again.
+    assert client.mirror_many('source','target',items) and len(client.ferries)==1
+    with pytest.raises(ValueError,match='conflicting'):
+        client.mirror_many('source','target',[items[0],{**items[0],'bytes':999}])
 
 
 def test_large_metadata_uses_hash_checked_file_and_removes_it(tmp_path, monkeypatch):

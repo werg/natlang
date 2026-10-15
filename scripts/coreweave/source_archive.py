@@ -229,7 +229,8 @@ def restore(spool, name, target):
         if process.wait()!=0 or restored!=len(expected):raise ValueError('archive restore decoder/member count differs')
     except BaseException:
         process.terminate();process.wait();raise
-    return {**proof,'target':str(target),'restored_files':restored}
+    return {**proof,'target':str(target),'restored_files':restored,
+        'control':'Decoded archive and every target SHA/size verified; each member fsynced and atomically replaced; no training admission'}
 
 
 def main(argv=None):

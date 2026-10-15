@@ -114,6 +114,15 @@ class ProviderBridge:
     def __init__(self, io, coordinator, allowed):
         self.io, self.coordinator, self.allowed = io, coordinator, set(allowed)
 
+    def mirror_inventory(self, source, target, bindings, should_stop=lambda: False):
+        bindings=[checked_binding(value) for value in bindings]
+        if hasattr(self.io,'mirror_many'):
+            return self.io.mirror_many(source,target,bindings,should_stop=should_stop)
+        for binding in bindings:
+            if should_stop():return False
+            self.io.mirror(source,target,binding)
+        return True
+
     def prepare(self, envelope, *, should_stop=lambda: False):
         raw = self.io.read(self.coordinator, envelope['request']['path'])
         request, target = validate_envelope(envelope, raw, self.allowed)
@@ -126,14 +135,11 @@ class ProviderBridge:
             return request, target, receipt
         self.io.save_receipt(key, {**ownership, 'phase': 'staging'})
         closure = self.io.dependency_closure(self.coordinator, request)
-        for binding in closure["files"]:
-            if should_stop():
-                return request, target, {**ownership, "phase": "staging_stopped"}
-            self.io.mirror(self.coordinator, target, checked_binding(binding))
+        if not self.mirror_inventory(self.coordinator,target,[*closure['files'],envelope['request']],should_stop):
+            return request,target,{**ownership,'phase':'staging_stopped'}
         self.io.verify_assets(target, closure["assets"])
         if should_stop():
             return request, target, {**ownership, "phase": "staging_stopped"}
-        self.io.mirror(self.coordinator, target, checked_binding(envelope['request']))
         # Keep the worker's result private until every result artifact is safe
         # on the coordinator, including when both roles share one sandbox.
         worker_result = '/work/native-production/shared/bridge-workers/' + key + '/result.json'
@@ -177,8 +183,7 @@ class ProviderBridge:
         else:
             result_data = status['result']
         result = json.loads(result_data)
-        for binding in validate_result(request, envelope['request'], result):
-            self.io.mirror(target, self.coordinator, binding)
+        self.mirror_inventory(target,self.coordinator,validate_result(request,envelope['request'],result))
         # The native queue client performs the complete semantic verifier only
         # after these local bytes exist. Its result path is the commit marker.
         self.io.write_atomic(self.coordinator, envelope['result'], result_data)

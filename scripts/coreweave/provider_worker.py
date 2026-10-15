@@ -179,6 +179,76 @@ class SDKIO:
         if not self.remote(target, code, timeout=600):
             raise ValueError('target artifact failed exact post-transfer verification')
 
+    def mirror_many(self, source, target, items, *, should_stop=lambda: False):
+        """Batch small closed artifacts; retain the reusable large-object ferry."""
+        from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+        unique={}
+        for value in items:
+            item=checked_binding(value)
+            if item['path'] in unique and unique[item['path']]!=item:
+                raise ValueError('provider inventory has conflicting path bindings')
+            unique[item['path']]=item
+        items=list(unique.values())
+        code=('import pathlib,json,sys;sys.path.insert(0,'+repr(self.config['sandboxes'][target]['runtime']+'/training/neuralese')+');'
+              'from natlang_neuralese.common.hashing import sha256_file_hex_cached;'
+              'items='+repr(items)+';print(json.dumps([x for x in items if not '
+              '(pathlib.Path(x["path"]).is_file() and pathlib.Path(x["path"]).stat().st_size==x["bytes"] '
+              'and sha256_file_hex_cached(x["path"])==x["sha256"])]))')
+        missing=self.remote(target,code,timeout=900)
+        if source==target and missing:
+            raise ValueError('coordinator artifact differs from its own inventory')
+        groups=[];group=[];size=0
+        for item in missing:
+            if item['path'].startswith('/work/native-production/runtime/'):
+                raise ValueError('provider cannot overwrite published runtime through its alias')
+            if item['bytes']>16*1024**2:
+                if should_stop():return False
+                self.mirror(source,target,item)
+                continue
+            if group and size+item['bytes']>64*1024**2:
+                groups.append(group);group=[];size=0
+            group.append(item);size+=item['bytes']
+        if group:groups.append(group)
+        for group in groups:
+            if should_stop():return False
+            if len(group)==1:
+                self.mirror(source,target,group[0]);continue
+            batch=canonical_json_sha256_hex(sorted(group,key=lambda x:x['path']))
+            directory='/work/native-production/shared/bridge-transfer-batches/'+batch
+            name='artifacts-'+batch
+            archive_source=Path(__file__).with_name('source_archive.py').read_text()
+            common=('import pathlib,json,types,hashlib,os,shutil;'
+                    'archive=types.ModuleType("provider_sealed_archive");'
+                    'exec(compile('+repr(archive_source)+',"source_archive.py","exec"),archive.__dict__);'
+                    'directory=pathlib.Path('+repr(directory)+');name='+repr(name)+';')
+            prepare=common+"""
+items=ITEMS;tree=directory/'source';spool=directory/'spool';tree.mkdir(parents=True,exist_ok=True)
+for item in items:
+ source=pathlib.Path(item['path']);target=tree/source.relative_to('/work/native-production');target.parent.mkdir(parents=True,exist_ok=True)
+ if not target.exists():
+  try:os.link(source,target)
+  except OSError:shutil.copyfile(source,target)
+ if target.stat().st_size!=item['bytes'] or archive.digest_file(target)!=item['sha256']:raise ValueError('provider batch source changed')
+receipt=spool/(name+'.receipt.json')
+if receipt.exists():
+ value=json.loads(receipt.read_text());archive.verify(spool,name)
+else:
+ value=archive.pack(tree,spool,name,reserve_bytes=0);archive.verify(spool,name)
+expected={str(pathlib.Path(x['path']).relative_to('/work/native-production')):(x['sha256'],x['bytes']) for x in items}
+if {x['path']:(x['sha256'],x['bytes']) for x in value['manifest']['files']}!=expected:raise ValueError('provider batch member set changed')
+print(json.dumps(value))
+""".replace('ITEMS',repr(group))
+            receipt=self.remote(source,prepare,timeout=900)
+            binding={'path':receipt['archive'],'sha256':receipt['archive_sha256'],'bytes':receipt['archive_bytes']}
+            self.mirror(source,target,binding)
+            restore=common+'directory.mkdir(parents=True,exist_ok=True);archive._write_json(directory/"spool"/(name+".receipt.json"),'+repr(receipt)+');print(json.dumps(archive.restore(directory/"spool",name,"/work/native-production")))'
+            result=self.remote(target,restore,timeout=900)
+            if result['restored_files']!=len(group):
+                raise ValueError('provider batch target member count differs')
+        if self.remote(target,code,timeout=900):
+            raise ValueError('provider batch target failed exact final verification')
+        return True
+
     def launch(self, sid, request, request_path, result_path):
         resource = self.config['sandboxes'][sid]
         directory = str(Path(result_path).parent)

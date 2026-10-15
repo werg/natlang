@@ -74,3 +74,40 @@ RPC latency for 1.4 MB. This is crisp transport plumbing, not a new scheduling
 policy: large reusable checkpoint objects retain the existing private ferry.
 The source archive verifier binds every member; atomic restore rejects escaped
 paths and links and verifies each destination byte before the result commit.
+
+## Participant-sharded shared checkpoint storage
+
+The existing recipe still chooses and serializes participant updates, shared
+adaptation and publication. One joint optimizer history remains authoritative
+on Mellum. The following is storage and exact-consumption plumbing, not a second
+training protocol.
+
+1. Extend `save_shared` to commit immutable participant payloads containing each
+   model, its complete optimizer/FP8 state, global step and mandatory CE frames;
+   commit separate VAE/specification and global RNG/training payloads. Publish
+   one small shared manifest last, binding every payload by SHA and size.
+2. Use that actual manifest's SHA as the existing global checkpoint identity
+   for both participants and their semantic adapter. Do not rewrite an identity
+   to pretend a smaller selected checkpoint has the full parent's bytes.
+3. Extend the existing shared loader to restore only the requested participant
+   plus global training/RNG metadata. Extend `SemanticChannel` to read the VAE
+   payload from the same manifest. The other participant's tensors are not a
+   consumed inference dependency.
+4. Extend existing native bundle/composite dependency enumeration: complete
+   recovery exports contain all payloads; an explicitly selected worker closure
+   contains its participant, global continuation state, VAE and tokenizers.
+   Composite parents already carry a participant selector. Keep all saved base
+   inventory, optimizer, row-credit and semantic identity checks.
+5. Preserve `native_refresh`'s exact global-parent continuation check. Return
+   updated participant artifacts to the joint owner before any next publication;
+   drain workers before another stage can update their optimizer stream.
+6. Qualify with actual two-port restored weights, all optimizer tensors, RNG,
+   exposure frames, semantic outputs and a subsequent update. Delete an unused
+   peer payload on the selected worker to prove that it is not opened; complete
+   recovery on the coordinator must still require every payload.
+
+Current blockers to simply filtering transfers: `native_composite` recursively
+requires the monolithic parent, `SemanticChannel.load` opens that same full file
+for VAE tensors, and adapter/refresh checks bind both models to its SHA. All
+three must consume the same new storage form together. Loader changes are
+coordinated with the reasoning-row repair owner before implementation.
