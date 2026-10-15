@@ -812,7 +812,8 @@ def test_relative_binding_paths_resolve_against_the_repository_root_not_the_work
     assert resolved['records']['path'] == str(data.resolve())
 
 
-def test_lineage_handoff_takes_newest_code_and_operational_recipe_changes_only(tmp_path):
+@pytest.mark.parametrize('hourly_checkpoint', [False, True])
+def test_lineage_handoff_takes_newest_code_and_operational_recipe_changes_only(tmp_path, hourly_checkpoint):
     import json as _json
 
     from natlang_neuralese.train import recipe as runner
@@ -837,6 +838,10 @@ def test_lineage_handoff_takes_newest_code_and_operational_recipe_changes_only(t
     plan_path = out / 'recipe-plan.json'
     plan_path.write_text(_json.dumps(existing))
     plan = {'recipe': new_recipe, 'recipe_sha256': 'v11', 'inputs': {'x': '1'}, 'device': 'cuda'}
+    if hourly_checkpoint:
+        old_recipe['stages'][0]['kind'] = 'native_state_sft'
+        new_recipe['stages'][0]['kind'] = 'native_state_sft'
+        new_recipe['stages'][0]['parameters']['checkpoint_seconds'] = 3600
     updated = runner.lineage_handoff(existing, plan, frozen, package, plan_path)
     assert updated['recipe_sha256'] == 'lineage'  # stage reports keep matching the lineage
     assert updated['recipe'] == new_recipe and (frozen / 'b.py').read_text() == 'added = 1\n'
