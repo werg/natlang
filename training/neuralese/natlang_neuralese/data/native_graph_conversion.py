@@ -253,7 +253,7 @@ def witnessed_pair_graph(writer_row: Mapping[str, Any], reader_row: Mapping[str,
                for previous_left, previous_right in original_ranges):
             raise ValueError("consumer occurrence spans overlap")
         original_ranges.append((left, right))
-    consumer_starts = []
+    consumer_ranges = []
     for span in ordered_spans:
         before = len(rids)
         rids, rweights, rstart, rstop, read_body, read_sha, _ = _wrap_span(
@@ -262,22 +262,53 @@ def witnessed_pair_graph(writer_row: Mapping[str, Any], reader_row: Mapping[str,
         if read_body != body or read_sha != body_sha:
             raise ValueError("consumer span text is not the exact producer payload")
         delta = len(rids) - before
-        consumer_starts = [start + delta for start in consumer_starts]
-        consumer_starts.append(rstart)
-    consumer_starts.sort()
-    # The supplied imported body is teacher-forced state context, not a
-    # consumer-authored output target. Preserve loss on the role markers and
-    # on all later consumer response tokens.
-    for start in consumer_starts:
-        rweights[start:start + (wstop - wstart)] = [0.] * (wstop-wstart)
-    # Inject imported state at the first token of the consumer payload, after
-    # its consume-open marker. The own text remains present as aligned context.
+        container_start = span.get("container_start", span.get("start"))
+        consumer_ranges = [(start + delta, stop + delta) if start >= container_start else (start, stop)
+                           for start, stop in consumer_ranges]
+        consumer_ranges.append((rstart, rstop))
+    consumer_ranges.sort()
+
+    # The source payload is not a consumer-authored token sequence. Keep its
+    # original bytes in source_pairing provenance, but remove those tokens from
+    # the consumer's physical input. The imported positional state is inserted
+    # at the boundary immediately before consume_close, so the actual causal
+    # path is consume_open -> imported KV/state -> consume_close -> response.
+    # Mapping boundaries through all removals also supports exact multi-read
+    # transformations without leaving a plaintext bypass at any occurrence.
+    consumer_ids, consumer_weights = [], []
+    payload_by_start = {start: stop for start, stop in consumer_ranges}
+    removed = 0
+    consumer_imports = []
+    index = 0
+    while index < len(rids):
+        stop = payload_by_start.get(index)
+        if stop is None:
+            consumer_ids.append(rids[index])
+            consumer_weights.append(rweights[index])
+            index += 1
+            continue
+        mapped = index - removed
+        consumer_imports.append(mapped)
+        removed += stop - index
+        index = stop
+        if index >= len(rids) or rids[index] != c_close:
+            raise ValueError("consumed payload is not followed by its exact consume-close marker")
+        # This forced closing marker follows imported state and has no own
+        # predecessor query; native_graph.parse_graph enforces zero weight here.
+        consumer_ids.append(rids[index])
+        consumer_weights.append(0.)
+        index += 1
+    # The removed interval must be exactly the body immediately after each
+    # consume-open marker, never context or control text.
+    for start, _ in consumer_ranges:
+        if start <= 0 or rids[start - 1] != c_open:
+            raise ValueError("consumed payload must immediately follow its consume-open marker")
     nodes = [
         {"name": "producer", "token_ids": wids, "target_weights": wweights,
          "producing": producing},
-        {"name": "consumer", "token_ids": rids, "target_weights": rweights,
+        {"name": "consumer", "token_ids": consumer_ids, "target_weights": consumer_weights,
          "imports": [{"at": start, "source": "producer", "start": wstart, "stop": wstop}
-                     for start in consumer_starts]},
+                     for start in consumer_imports]},
     ]
     source_ids = sorted({wid, rid})
     pair_id = canonical_json_sha256_hex({"edge": edge_id, "source_ids": source_ids,
@@ -290,4 +321,10 @@ def witnessed_pair_graph(writer_row: Mapping[str, Any], reader_row: Mapping[str,
             "edge_id": edge_id, "chain_id": chain_id, "source_ids": source_ids,
             "payloads": [{"invocation": "producer", "start": wstart, "stop": wstop,
                 "text": body, "source_span_id": source_span_id,
-                "text_sha256": body_sha, "coordinates": "own-token-rows"}]}}
+                "text_sha256": body_sha, "coordinates": "own-token-rows"}],
+            "consumer_source_row_id": rid,
+            "consumer_original_text_sha256": _sha_text(rtext),
+            "consumed_occurrences": [{"source_row_id": rid, "payload_sha256": body_sha,
+                "wrapped_token_start": start, "wrapped_token_stop": stop,
+                "consumer_import_at": consumer_imports[position]}
+                for position, (start, stop) in enumerate(consumer_ranges)]}}

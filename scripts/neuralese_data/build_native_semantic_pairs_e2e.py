@@ -545,6 +545,15 @@ def _render_trajectory(task):
                     expanded_fingerprint=expanded_fps[model], role_ids=role_ids[model],
                     communication_sha256=communication_sha,
                     writer_span=writer_span, reader_span=reader_span)
+                # Keep the exact structured source occurrence alongside the
+                # converted graph so audits can reconstruct why plaintext was
+                # removed and which authenticated read(s) the imported state
+                # replaced, without reopening or guessing from token strings.
+                views[model_ids[model]]['graph']['source_pairing'].update({
+                    'communication_sha256': communication_sha,
+                    'communication_occurrence': occurrence_binding,
+                    'transformation': occurrence['transform'],
+                })
             model_views = list(views.values())
             groups = sorted(set(model_views[0]['graph']['source_groups']) |
                             set(model_views[1]['graph']['source_groups']))
