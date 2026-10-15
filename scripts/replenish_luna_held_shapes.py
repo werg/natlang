@@ -259,13 +259,17 @@ def has_launchable_waiting_worker(campaign):
     return False
 
 
-def runtime_for_queue(queue_dir):
-    """Resume a queue with its campaign's frozen runtime, including retries."""
+def campaign_for_queue(queue_dir):
     campaign = next((parent for parent in queue_dir.parents
                      if (parent / 'campaign-manifest.json').is_file()), None)
     if campaign is None:
         raise ValueError(f'queue has no campaign manifest: {queue_dir}')
-    manifest = json.loads((campaign / 'campaign-manifest.json').read_text())
+    return campaign, json.loads((campaign / 'campaign-manifest.json').read_text())
+
+
+def runtime_for_queue(queue_dir):
+    """Resume a queue with its campaign's frozen runtime, including retries."""
+    campaign, manifest = campaign_for_queue(queue_dir)
     pin_path = campaign / 'runtime-pin.json'
     pin = json.loads(pin_path.read_text()) if pin_path.is_file() else manifest
     runtime = Path(pin.get('runtime', RUNTIME))
@@ -275,6 +279,12 @@ def runtime_for_queue(queue_dir):
     if expected and sha256_file_hex(runtime / 'frozen-runtime.json') != expected:
         raise ValueError(f'campaign runtime fingerprint changed: {runtime}')
     return runtime
+
+
+def teacher_for_queue(queue_dir):
+    """Use the teacher recorded with the repair campaign, including retries."""
+    _, manifest = campaign_for_queue(queue_dir)
+    return manifest.get('teacher_model', 'gpt-6-luna'), manifest.get('reasoning_effort', 'low')
 
 
 def pin_runtime(campaign):
@@ -291,11 +301,12 @@ def launch_queue(queue_dir, unit):
         print(json.dumps({'event': 'deferred_parallelism', 'unit': unit,
                           'active_luna_workers': WORKERS}), flush=True)
         return False
+    model, reasoning = teacher_for_queue(queue_dir)
     command = ['python3', 'scripts/run_bonsai_queue.py', str(queue_dir / 'queue.jsonl'),
                str(queue_dir / 'journal.jsonl'), '--runtime', str(runtime_for_queue(queue_dir)),
                '--case-seconds', '1800', '--provider', 'openai-codex',
-               '--model-id', 'gpt-6-luna', '--model-concurrency', '1',
-               '--execution-plans', '--reasoning-effort', 'low', '--min-free-mib', '1024']
+               '--model-id', model, '--model-concurrency', '1',
+               '--execution-plans', '--reasoning-effort', reasoning, '--min-free-mib', '1024']
     # A retry may process a much larger partially completed program than its
     # original one-case queue. Give its collector enough cgroup RAM to resume.
     budget = launch_budget_gb(queue_dir)
@@ -458,7 +469,8 @@ def prepare_repair_cycle(campaigns, seed):
                            case_seconds=1800)
     manifest_path = cycle / 'teacher/campaign-manifest.json'
     manifest = json.loads(manifest_path.read_text())
-    manifest.update(seed=seed, repair_cycle=True, runtime=str(RUNTIME),
+    manifest.update(seed=seed, repair_cycle=True, teacher_model='gpt-6-sol',
+                    reasoning_effort='medium', runtime=str(RUNTIME),
                     runtime_sha256=sha256_file_hex(RUNTIME / 'frozen-runtime.json'),
                     source_campaigns={str(source): sha256_file_hex(source / 'campaign-manifest.json')
                                       for source in recent})

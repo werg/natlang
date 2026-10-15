@@ -84,3 +84,15 @@ def test_repair_queue_uses_manifest_runtime(tmp_path, monkeypatch):
     monkeypatch.setattr(luna, 'RUNTIME', tmp_path / 'new-default')
 
     assert luna.runtime_for_queue(worker) == pinned
+    assert luna.teacher_for_queue(worker) == ('gpt-6-luna', 'low')
+
+
+def test_new_repair_teacher_stays_pinned_for_retries(tmp_path):
+    campaign = tmp_path / 'repair' / 'teacher'
+    retry = campaign / 'worker-01' / 'retry-000-01'
+    retry.mkdir(parents=True)
+    (campaign / 'campaign-manifest.json').write_text(json.dumps({
+        'repair_cycle': True, 'teacher_model': 'gpt-6-sol',
+        'reasoning_effort': 'medium'}))
+
+    assert luna.teacher_for_queue(retry) == ('gpt-6-sol', 'medium')
