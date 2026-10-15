@@ -83436,6 +83436,86 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "external-expansion-deepnlp-handoffs-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-deepnlp-handoffs-20261015-v1",
+      "include": [
+        "*.port-records.jsonl",
+        "manifest.json",
+        "admission-review.json"
+      ],
+      "source_class": "external-static-typed-handoff",
+      "training_admission": true,
+      "training_admission_reason": "Owner authorizes static Natlang-like external coding/Neuralese data",
+      "admission": {
+        "schema": "natlang.external-static-admission/1",
+        "approved": true,
+        "policy": "Owner authorizes static Natlang-like external coding/Neuralese data",
+        "source": "4 tasks,9 alternative model sessions,18 entries repeating9 distinct full histories",
+        "closure": "20 typed records,8 exact duplicates removed,12 all-train records; zero protected hits/closure violations",
+        "replay": {
+          "cases": 3,
+          "admitted": 3,
+          "decisions": 30,
+          "approved": 30,
+          "held": {},
+          "omitted": {},
+          "omissions": [],
+          "runtime": {
+            "page_size": "28672",
+            "dist_commit": "dirty-380717bfdec22b1413d7e83969a962dcd96d130c",
+            "context_tokens": 65536
+          }
+        },
+        "certificate_limit": "Exact native plumbing only; semantic upstream correctness unknown; alternative sessions are not observed producer-consumer graph edges"
+      },
+      "derived_from": [
+        "external-expansion-d07-source-20261014-v1"
+      ],
+      "license": "Pinned acquired source-card facts; unspecified license accepted"
+    },
+    {
+      "id": "external-expansion-deepnlp-native-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-deepnlp-native-20261015-v1",
+      "include": [
+        "turns/**/*.turns.jsonl.zst",
+        "turns/**/*.summary.json",
+        "ir/**/build.json",
+        "runtime-page.json",
+        "admission-review.json"
+      ],
+      "source_class": "statically-lowered-external-native-teacher-turns",
+      "training_admission": true,
+      "training_admission_reason": "Owner authorizes static Natlang-like external coding/Neuralese data",
+      "admission": {
+        "schema": "natlang.external-static-admission/1",
+        "approved": true,
+        "policy": "Owner authorizes static Natlang-like external coding/Neuralese data",
+        "source": "4 tasks,9 alternative model sessions,18 entries repeating9 distinct full histories",
+        "closure": "20 typed records,8 exact duplicates removed,12 all-train records; zero protected hits/closure violations",
+        "replay": {
+          "cases": 3,
+          "admitted": 3,
+          "decisions": 30,
+          "approved": 30,
+          "held": {},
+          "omitted": {},
+          "omissions": [],
+          "runtime": {
+            "page_size": "28672",
+            "dist_commit": "dirty-380717bfdec22b1413d7e83969a962dcd96d130c",
+            "context_tokens": 65536
+          }
+        },
+        "certificate_limit": "Exact native plumbing only; semantic upstream correctness unknown; alternative sessions are not observed producer-consumer graph edges"
+      },
+      "derived_from": [
+        "external-expansion-deepnlp-handoffs-20261015-v1"
+      ],
+      "license": "Pinned acquired source-card facts; unspecified license accepted"
     }
   ],
   "coverage_backlog": [

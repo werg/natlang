@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-deepnlp-handoffs-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-deepnlp-handoffs-20261015-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 805,
+      "sha256": "53c5f569b36ac5b4c7a35ecd9572c49b05e708c9251b696ea6c8fa6b5478c77c"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 2568,
+      "sha256": "c28744f1d746866a4d6a1aababe42170c375bf5cdb1bef980bcab680a2941e42"
+    },
+    {
+      "path": "trajectory_continuation_coding.port-records.jsonl",
+      "bytes": 124245,
+      "sha256": "639c2ddb1a792ed4274b84efd3458769ad4a47085d643d70d15c6af0f7750b83",
+      "lines": 12
+    }
+  ],
+  "bytes": 127618
+}

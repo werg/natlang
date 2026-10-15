@@ -1,0 +1,34 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-deepnlp-native-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-deepnlp-native-20261015-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 805,
+      "sha256": "53c5f569b36ac5b4c7a35ecd9572c49b05e708c9251b696ea6c8fa6b5478c77c"
+    },
+    {
+      "path": "ir/trajectory_continuation_coding/build.json",
+      "bytes": 729,
+      "sha256": "268fe6d698959fa118738b335d244822f4e53953685f788e5c230279e39d5f7b"
+    },
+    {
+      "path": "runtime-page.json",
+      "bytes": 113,
+      "sha256": "814dad314ede1e73b05f8b3a34a0e1f206c242bfccfa0177193fb2f6404e6300"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00000.summary.json",
+      "bytes": 248,
+      "sha256": "1904f66ebfb75b070414d815d0f3e182bbee00e64e82f1c9a38bae18afef16b2"
+    },
+    {
+      "path": "turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+      "bytes": 36259,
+      "sha256": "347081a223532059bdd572c0edb5faa9cd4d28d8a9832e26581a5a9d4ecb72cf"
+    }
+  ],
+  "bytes": 38154
+}
