@@ -107769,6 +107769,68 @@
           }
         }
       }
+    },
+    {
+      "derived_from": [
+        "native-state-rest27-ordinary-graphs-20261015-v1",
+        "neuralese-e2e-cloud-rest27-protected-20261015-v2"
+      ],
+      "id": "native-state-rest27-reviewed-ordinary-recovery-20261015-v1",
+      "include": [
+        "individual-child-success-admission.json",
+        "lfm25/individual-child-success-dedup-receipt.json",
+        "lfm25/individual-child-success-render-receipt.json",
+        "lfm25/parent-success-dedup-receipt.json",
+        "lfm25/parent-success-render-receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/train-sources.json",
+        "mellum21/individual-child-success-dedup-receipt.json",
+        "mellum21/individual-child-success-render-receipt.json",
+        "mellum21/parent-success-dedup-receipt.json",
+        "mellum21/parent-success-render-receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/train-sources.json",
+        "parent-success-admission.json",
+        "receipt.json",
+        "source-row-inventory.json"
+      ],
+      "license_provenance": "Original dataset/model license provenance remains in the immutable REST27 source records. Historical teacher observations are reused; no new Luna or external API generation.",
+      "owner": "dgx",
+      "path": "runs/native-state-rest27-reviewed-ordinary-recovery-20261015-v1",
+      "source_binding": {
+        "models": {
+          "lfm25": {
+            "tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+            "tokens": 4253906,
+            "train": {
+              "bytes": 424074,
+              "path": "/home/werg/natlang/runs/native-state-rest27-reviewed-ordinary-recovery-20261015-v1/lfm25/train/native-graphs.jsonl.zst",
+              "rows": 512,
+              "sha256": "70d06f89bf5b7a789fb403af57e9e8721bbba4c1cb704dfb8e395c39e48344db"
+            }
+          },
+          "mellum21": {
+            "tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f",
+            "tokens": 4321084,
+            "train": {
+              "bytes": 393485,
+              "path": "/home/werg/natlang/runs/native-state-rest27-reviewed-ordinary-recovery-20261015-v1/mellum21/train/native-graphs.jsonl.zst",
+              "rows": 512,
+              "sha256": "759a2ad1785bd745b698e743e013e1abe4b80575d1d7a16803a648694e9eea9a"
+            }
+          }
+        },
+        "original_records_sha256": "e23ea20b684bce525a297ba5767ed82f84fc5097045bbcf68e13784decf9a17e",
+        "receipt": {
+          "path": "/home/werg/natlang/runs/native-state-rest27-reviewed-ordinary-recovery-20261015-v1/receipt.json",
+          "sha256": "fab5b5f55c71bc87bad9c2979bfc2dd9f5dc9b1a88911f1636afb365fa9c9d51"
+        }
+      },
+      "source_class": "reviewed-static-recovery-of-recorded-clean-native-decisions",
+      "split": "Train only; current held, quality and pending source protections checked. No new held evaluation artifact.",
+      "trace_admission": false,
+      "training_admission": true,
+      "training_admission_reason": "512 original clean decisions:506 exact accepted-parent actions and6 exact scoped successful child actions from failed parents. Existing shared renderer, source-context witnesses, current protection closure, both actual tokenizer schemas and exact active-prefix content deduplication passed. Full contexts at0.05weight; actual assistant targets at1.0. No fabricated communication credit."
     }
   ],
   "coverage_backlog": [

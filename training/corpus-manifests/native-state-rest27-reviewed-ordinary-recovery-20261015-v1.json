@@ -1,0 +1,89 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "native-state-rest27-reviewed-ordinary-recovery-20261015-v1",
+  "owner": "dgx",
+  "path": "runs/native-state-rest27-reviewed-ordinary-recovery-20261015-v1",
+  "files": [
+    {
+      "path": "individual-child-success-admission.json",
+      "bytes": 10583,
+      "sha256": "411058ec8ca384a4896ad9ca0a180768793a1622b7f16e07fc72953aa220532b"
+    },
+    {
+      "path": "lfm25/individual-child-success-dedup-receipt.json",
+      "bytes": 2657,
+      "sha256": "bb600e625bb42dc996021f2e560c2ceb4000f956f2e3df286c5b24ef433f66e7"
+    },
+    {
+      "path": "lfm25/individual-child-success-render-receipt.json",
+      "bytes": 16899,
+      "sha256": "c27861d482d6c76a6efc9c853ce8d4726069087718989ebdeb8ad12b72bca339"
+    },
+    {
+      "path": "lfm25/parent-success-dedup-receipt.json",
+      "bytes": 2401,
+      "sha256": "c4ed3d56fa3d8d6e92b1580830c6308edb720ca68c43cd0aee12acf9f721231b"
+    },
+    {
+      "path": "lfm25/parent-success-render-receipt.json",
+      "bytes": 1462607,
+      "sha256": "87a0a6e802b06367186d1d696e380e18b30cad726184c22b0fe02b7d1c57962c"
+    },
+    {
+      "path": "lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 424074,
+      "sha256": "70d06f89bf5b7a789fb403af57e9e8721bbba4c1cb704dfb8e395c39e48344db"
+    },
+    {
+      "path": "lfm25/train-sources.json",
+      "bytes": 270,
+      "sha256": "9cd0624bb0b1081db7a5dd9ea0bc1afec34ac798b9df897fc7337134397144da"
+    },
+    {
+      "path": "mellum21/individual-child-success-dedup-receipt.json",
+      "bytes": 2687,
+      "sha256": "616d078425cf5c07719422d98670f834f736e6b098e2e30e8530465f95103938"
+    },
+    {
+      "path": "mellum21/individual-child-success-render-receipt.json",
+      "bytes": 16843,
+      "sha256": "39c802d22c9385eff10808c89bbdf8d585b31c355ba36369a55a5a2ab9341047"
+    },
+    {
+      "path": "mellum21/parent-success-dedup-receipt.json",
+      "bytes": 2428,
+      "sha256": "f798f18b705c0e8dba4e15f43dbef9fef864ce2af84763de3184fc6f64f9256d"
+    },
+    {
+      "path": "mellum21/parent-success-render-receipt.json",
+      "bytes": 1462549,
+      "sha256": "548bf6f7ba9b71655198366f129c00d6dafeae72861dfa943a351b7500ff085b"
+    },
+    {
+      "path": "mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 393485,
+      "sha256": "759a2ad1785bd745b698e743e013e1abe4b80575d1d7a16803a648694e9eea9a"
+    },
+    {
+      "path": "mellum21/train-sources.json",
+      "bytes": 270,
+      "sha256": "7f106e3fd29c4068983dbf22a88158173467386dd6bb1ca2b41f1141af765863"
+    },
+    {
+      "path": "parent-success-admission.json",
+      "bytes": 584784,
+      "sha256": "16f9f5ebee49618c6dfee97fe86908e1574bd4938286db67b8c9fc7bb49068fa"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 326948,
+      "sha256": "fab5b5f55c71bc87bad9c2979bfc2dd9f5dc9b1a88911f1636afb365fa9c9d51"
+    },
+    {
+      "path": "source-row-inventory.json",
+      "bytes": 580088,
+      "sha256": "9b2286497bdd215e770b211ad95479728e44e58038606ae3e331b616d7750053"
+    }
+  ],
+  "bytes": 5289573
+}
