@@ -94,6 +94,8 @@ def parse_task_eval(value):
         raise ValueError('task_eval.reference_successes must be a nonnegative integer or null (unmeasured)')
     if not isinstance(spec.setdefault('async', False), bool):
         raise ValueError('task_eval.async must be true or false')
+    if not isinstance(spec.setdefault('neuralese_server', False), bool):
+        raise ValueError('task_eval.neuralese_server must be true or false')
     if spec.get('prompt_rendering') not in (None, 'full', 'program-header'):
         raise ValueError('task_eval.prompt_rendering must be full or program-header')
     spec.setdefault('prompt_rendering', 'full')
@@ -202,7 +204,8 @@ class TaskEval:
                                 'transport_retries': 0,
                                 'seed': 400000 + self.spec['cases'][index] + (100000 * repeat if self.spec.get('temperature') else 0),
                                 'text_neuralese_emulation': False,
-                                'temperature': self.spec['temperature']})
+                                'temperature': self.spec['temperature'],
+                                'neuralese_server': self.spec.get('neuralese_server',False)})
             queue = directory / 'queue.jsonl'
             queue.write_text(''.join(json.dumps(e, sort_keys=True) + '\n' for e in entries), encoding='utf-8')
             queues.append((queue, directory / 'journal.jsonl', entries))
@@ -244,7 +247,8 @@ class TaskEval:
                      '--runtime', str(self.spec.get('runtime') or self.repo / 'ts-host'), '--server', url,
                      '--model-id', engine.model_name,
                      '--chat-completions-url', url + '/v1/chat/completions', '--model-concurrency', '2',
-                     '--identical-turn-limit', str(self.spec['identical_turn_limit'])],
+                     '--identical-turn-limit', str(self.spec['identical_turn_limit']),
+                     *(['--neuralese-server'] if self.spec.get('neuralese_server') else [])],
                     cwd=self.repo, env=env, stdout=log, stderr=subprocess.STDOUT), log))
             codes = []
             for child, log in children:
@@ -320,6 +324,14 @@ class TaskEval:
                    'regressed': bool(previous) and score['task_successes'] < previous['task_successes'] - noise,
                    'code_commit': _git_head(),
                    'seconds': time.time() - started, 'run': str(run)}
+        if getattr(self,'evaluation_provenance',None):
+            from .native_async import verify_environment
+            summary['evaluation_provenance']=verify_environment(self.evaluation_provenance)
+            summary['historical']=True
+            summary['qualifies_current_weights']=False
+            if not eligible:
+                summary.update(observed_task_successes=score['task_successes'],
+                    task_successes=None,task_success_rate=None,model_outcome='unscored')
         (run / 'task-score.json').write_text(json.dumps({**summary, 'cases_detail': score['cases']}, indent=1) + '\n')
         with (self.out / 'task-eval.jsonl').open('a') as handle:
             handle.write(json.dumps(summary) + '\n')
@@ -501,6 +513,10 @@ class TaskEval:
                    'outcome_counts': None, 'eligible': False, 'error': error, 'async': True,
                    'packet_sha256': self.spec['packet']['sha256'], 'case_indices': self.spec['cases'],
                    'code_commit': _git_head(), 'seconds': 0.0, 'run': str(self.root / f'step-{step:07d}')}
+        if getattr(self,'evaluation_provenance',None):
+            summary.update(task_successes=None,task_success_rate=None,complete=False,
+                historical=True,qualifies_current_weights=False,model_outcome='unscored',
+                evaluation_provenance=self.evaluation_provenance)
         with (self.out / 'task-eval.jsonl').open('a') as handle:
             handle.write(json.dumps(summary) + '\n')
         return summary
@@ -641,6 +657,27 @@ def restore_engine(request: dict, *, dtype=None):
     import torch
     from ..common.attention_backend import configure_sdpa_backend
     configure_sdpa_backend(request.get('sdpa_backend', 'default'))
+    if request.get('native_state'):
+        from .native_async import file_binding,verify_request
+        from ..serve import load_native_engine
+        provenance=request['evaluation_provenance']
+        verify_request(request)
+        weights=request_weights(Path(request['dir']))
+        actual=file_binding(weights)
+        expected=provenance['checkpoint']
+        if any(actual[key]!=expected[key] for key in ('sha256','bytes')):
+            raise ValueError('native async eval checkpoint bytes changed')
+        engine=load_native_engine(str(weights),base=request['base'],device=request['device'],
+            prompt_rendering=request['prompt_rendering'])
+        saved=provenance['model_config']
+        for key in ('architecture','rank','marker_ids','tokenizer_fingerprint','base_inventory_sha256',
+                    'dtype','sparse_row_dtype','token_override_ids','token_override_dtype','native_linear_precision','precision'):
+            expected_value=saved.get(key,'ieee' if key=='native_linear_precision' else None)
+            if engine.model_config.get(key)!=expected_value:
+                raise ValueError('native async eval model contract changed: '+key)
+        if engine.native_identity['checkpoint_sha256']!=expected['sha256']:
+            raise ValueError('native async eval restored another checkpoint identity')
+        return engine
     from ..serve import load_engine
     from ..train.backbone_policy import plain_named_tensors
     from ..train.checkpoint_offload import load_state
@@ -671,12 +708,24 @@ def run_request(request_dir: Path, *, engine_factory=restore_engine) -> dict:
     step = request['step']
     evaluator = TaskEval(request['spec'], Path(request['stage_out']), None,
                          prompt_rendering=request['prompt_rendering'])
+    evaluator.evaluation_provenance=request.get('evaluation_provenance')
     summary = evaluator.landed(step)
+    if summary is not None and request.get('native_state'):
+        if (summary.get('evaluation_provenance') or {}).get('source_checkpoint_sha256') != request['evaluation_provenance']['source_checkpoint_sha256']:
+            raise ValueError('native async landed result belongs to different weights')
     if summary is None:
         started = time.time()
         try:
-            prune_snapshot(request_dir)
+            if not request.get('native_state'):prune_snapshot(request_dir)
+            evaluator.evaluation_provenance=request.get('evaluation_provenance')
             evaluator.engine = engine_factory(request)
+            if request.get('native_state'):
+                evaluator.evaluation_provenance={**evaluator.evaluation_provenance,
+                    'native_identity':evaluator.engine.native_identity,
+                    'torch_version':__import__('torch').__version__,
+                    'cuda_device':(__import__('torch').cuda.get_device_name()
+                                   if str(request['device']).startswith('cuda') else None),
+                    'request_sha256':__import__('hashlib').sha256((request_dir/'request.json').read_bytes()).hexdigest()}
             summary = evaluator.run(step)
         except SnapshotSpaceError as error:
             summary = evaluator.record_failure(step, str(error), skipped=True)

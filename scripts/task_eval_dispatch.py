@@ -11,11 +11,11 @@ dispatcher's job.
 Requests are found through the pointers the trainer writes to ``<data_nvme>/task-eval-queue`` (eval/task_cadence.py
 ``request_queue``), never by walking runs/ (minutes on the DGX).
 
-Crisp plumbing (process launch, retry count); where a job runs is the placement policy's decision. CoreWeave sandboxes
-do not yet take eval snapshots (the snapshot transfer through the bucketless data path is not built), so every job
-is placed on this machine's ledger, which admits it when memory allows: beside a running Mellum lineage (~96 GB of
-121) a Mellum eval (~38 GB) is admitted only in pause windows and handoff gaps, which is why the Mellum recipe keeps
-its synchronous evaluation (plans/neuralese/DECISIONS.md "Asynchronous in-run task evaluation"). A request whose job ended without a row (a hard crash) is
+Crisp plumbing (process launch, retry count). Optional --native-export-state ingestion uses the existing verified
+private CoreWeave LFM periodic export and owner-host ferry to seal a native request on this machine. New exports
+coalesce until the admitted evaluation drains. These reports describe historical weights; they never qualify the
+current cloud model. Mellum exports are not downloaded through this path. Native loads preserve original full-file
+identity, arithmetic and sparse-row dtype without legacy projection fallback. A request whose job ended without a row (a hard crash) is
 relaunched up to --max-attempts times, then recorded as an ineligible evaluation (the trainer counts it) and its
 snapshot deleted.
 """
@@ -101,8 +101,8 @@ def launch(request_dir: Path, request: dict, unit: str, budget: float, dry_run: 
                '--budget-gb', str(budget), '--reserve-gb', '2', '--class', 'experiment', '--priority', 'medium',
                '--resumable', '--wait', str(7 * 86400), '--workdir', str(repo), '--',
                'env', 'HF_HUB_OFFLINE=1', f'NATLANG_REPO={repo}', f'PYTHONPATH={repo / "training" / "neuralese"}',
-               'sh', '-c', f'exec {python} -m natlang_neuralese.eval.task_cadence --async-request {request_dir} '
-                           f'>> {log} 2>&1']
+               'sh', '-c', 'exec "$@" >> "$0" 2>&1', str(log), str(python),
+               '-m', 'natlang_neuralese.eval.task_cadence', '--async-request', str(request_dir)]
     if dry_run:
         return {'unit': unit, 'command': command}
     with open(log, 'a') as handle:
@@ -127,6 +127,7 @@ def dispatch(queue: Path, *, max_attempts: int = 3, dry_run: bool = False) -> li
             continue
         evaluator = TaskEval(request['spec'], Path(request['stage_out']), None,
                              prompt_rendering=request['prompt_rendering'])
+        evaluator.evaluation_provenance=request.get('evaluation_provenance')
         if evaluator.landed(request['step']) is not None:
             drop_request(request_dir)  # the row landed; a leftover snapshot goes
             events.append({'event': 'cleaned', 'dir': str(request_dir)})
@@ -158,10 +159,29 @@ def main(argv=None) -> int:
     parser.add_argument('--every', type=float, default=120.0)
     parser.add_argument('--max-attempts', type=int, default=3)
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--native-export-state', type=Path)
+    parser.add_argument('--native-eval-spec', type=Path)
+    parser.add_argument('--native-eval-out', type=Path)
+    parser.add_argument('--native-base', type=Path)
+    parser.add_argument('--native-fetch-python', type=Path, default=Path.home()/'.local/share/natlang/cw-venv/bin/python')
     args = parser.parse_args(argv)
+    native_options=(args.native_export_state,args.native_eval_spec,args.native_eval_out,args.native_base)
+    if any(native_options) and not all(native_options):
+        parser.error('native export ingestion requires --native-export-state, --native-eval-spec, --native-eval-out and --native-base')
     from natlang_neuralese.eval.task_cadence import request_queue
     queue = args.queue or request_queue()
     while True:
+        if args.native_export_state and not args.dry_run:
+            from natlang_neuralese.eval.native_async import poll_latest
+            try:
+                event=poll_latest(args.native_export_state,out=args.native_eval_out,
+                    spec=json.loads(args.native_eval_spec.read_text()),base=args.native_base,queue=queue,
+                    fetch_command=[str(args.native_fetch_python),str(ROOT/'scripts/coreweave/fetch_native_eval_export.py'),
+                                   '--receipt','{receipt}','--out','{out}'])
+            except Exception as error:
+                # Private-provider failures can contain scoped URLs; log no credentials.
+                event={'event':'native_eval_ingest_wait','error_type':type(error).__name__}
+            print(json.dumps(event),flush=True)
         for event in dispatch(queue, max_attempts=args.max_attempts, dry_run=args.dry_run):
             print(json.dumps(event), flush=True)
         if args.once:
