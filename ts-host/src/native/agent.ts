@@ -20,7 +20,7 @@ import { listingViewInstructions, viewNote } from './prompt.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
 import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
-  sentinelIds, type NeuraleseRuntimeOptions } from './neuralese.js';
+  sentinelIds, nativeStateSentinelIds, type NeuraleseRuntimeOptions } from './neuralese.js';
 import { resolveNeuralesePreviews } from './neuralese-preview.js';
 import { blockInput, graphNode, invocationNodeId } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
@@ -517,11 +517,14 @@ export class NativeToolAgent {
    * written as marker text (stored through the write port) become block markers in the reply and call arguments.
    */
   private async decodeNeuralese(response: ModelTurn, session: NativeSession, turn: number, turnNode?: string): Promise<ModelTurn> {
-    const carries = (value: unknown): boolean => typeof value === 'string' ? value.includes('<|neuralese|>') :
+    const carries = (value: unknown): boolean => typeof value === 'string' ?
+      value.includes('<|neuralese|>') || nativeStateSentinelIds(value).length > 0 :
       Array.isArray(value) ? value.some(carries) : !!value && typeof value === 'object' &&
-        ((value as { type?: unknown }).type === 'neuralese' || Object.values(value).some(carries));
+        (['neuralese', 'native_state'].includes(String((value as { type?: unknown }).type)) ||
+          Object.values(value).some(carries));
     const serverBlocks = (response.raw_response?.neuralese as { blocks?: NeuraleseBlockMeta[] } | undefined)?.blocks ?? [];
-    if (!carries(response.text) && !carries(response.calls) && !serverBlocks.length) return response;
+    const nativeBlocks = (response.raw_response?.native_state as { blocks?: Record<string, unknown>[] } | undefined)?.blocks ?? [];
+    if (!carries(response.text) && !carries(response.calls) && !serverBlocks.length && !nativeBlocks.length) return response;
     const returnType = session.lam.type.kind === 'lambda' ? formatType(session.lam.type.returns) : undefined;
     const producer = { call_id: session.runtime.currentCallId ?? null, turn,
       ...(returnType ? { result_type: returnType } : {}) };
@@ -557,6 +560,24 @@ export class NativeToolAgent {
           'emulation_version', 'learned_vectors', 'text_body_sha256', 'result_type', 'marker_context']
           .filter(key => reported[key] !== undefined)
           .map(key => [key, reported[key]])) }, turnNode ? [{ node: turnNode, port: 'turn' }] : []);
+    }
+    for (const block of new Map(nativeBlocks.filter(block => typeof block.id === 'string')
+      .map(block => [block.id as string, block])).values()) {
+      const id = block.id as string;
+      const artifact = await this.options.neuralese?.store.getNativeState?.(id);
+      const tokenIds = artifact?.tensors.token_ids;
+      const embeddings = artifact?.tensors.embeddings;
+      graphNode(session.runtime.trace, 'native_state_write', { call_id: producer.call_id,
+        turn: turnNode ?? '', native_state: id, source_kind: 'native-state-producer',
+        token_count: tokenIds?.shape[0] ?? null, embedding_width: embeddings?.shape[1] ?? null,
+        native_identity: artifact ? { architecture: artifact.metadata.architecture,
+          checkpoint_sha256: artifact.metadata.checkpoint_sha256,
+          tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
+          embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 } : null,
+        tensor_inventory: artifact ? Object.fromEntries(Object.entries(artifact.tensors)
+          .map(([name, tensor]) => [name, { dtype: tensor.dtype, shape: tensor.shape }])) : null,
+        metadata: block },
+        turnNode ? [{ node: turnNode, port: 'turn' }] : []);
     }
     return decoded;
   }

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import itertools
+import json
 import queue
 import threading
 import time
@@ -233,9 +234,17 @@ class Sequence:
     native_capture_open: bool = False
     native_imports: list = field(default_factory=list)
     native_rl_prompt: list = field(default_factory=list)
+    native_rl_inputs: list = field(default_factory=list)
     native_rl_writes: list = field(default_factory=list)
     native_write_start_sample: int | None = None
+    native_write_close_sample: int | None = None
+    native_write_start_own: int | None = None
+    native_write_open_sample: int | None = None
+    native_own_position: int = 0
     native_sampling_seed: int | None = None
+    native_forced_tokens: list[int] = field(default_factory=list)
+    native_template_suffix: list[int] = field(default_factory=list)
+    native_template_value_type: str | None = None
 
 
 class Engine:
@@ -587,6 +596,7 @@ class Engine:
         if seq.request.rl_capture:
             seq.native_rl_prompt.append({"kind": "tokens", "token_ids": [self.role_tokens.consume_open],
                                          "producing": [False]})
+        seq.native_own_position += 1
         if exact:
             seq.cache = splice_block(self.shared_model, seq.cache, block,
                                      checkpoint_sha256=self.checkpoint_sha256,
@@ -608,11 +618,13 @@ class Engine:
             if seq.request.rl_capture:
                 seq.native_rl_prompt.append({"kind": "tokens", "token_ids": fallback_ids,
                                              "producing": [False] * len(fallback_ids)})
+            seq.native_own_position += len(fallback_ids)
         close_out = self._native_forward([self.role_tokens.consume_close], seq.cache)
         seq.cache = close_out["cache"]
         if seq.request.rl_capture:
             seq.native_rl_prompt.append({"kind": "tokens", "token_ids": [self.role_tokens.consume_close],
                                          "producing": [False]})
+        seq.native_own_position += 1
         seq.logits = self._native_logits(close_out["h_final"])
         seq.native_imports.append({"id": block_id, "mode": mode})
 
@@ -621,27 +633,60 @@ class Engine:
         return {name: getattr(block, name) for name in
                 ("checkpoint_sha256", "tokenizer_fingerprint", "embedding_weight_sha256", "architecture")}
 
+    @staticmethod
+    def _native_record_input(seq, token, *, producing, sample_index=None):
+        """Record one actual own-token input; imported KV slots never advance this coordinate."""
+        if seq.request.rl_capture:
+            seq.native_rl_inputs.append({'token_id': int(token),
+                'input_role': 'produce' if producing else 'ordinary', 'sample_index': sample_index})
+        seq.native_own_position += 1
+
     def _native_prefill(self, seq):
         if seq.request.guidance is not None:
             raise RequestError("native-guidance-unsupported", "native shared-state serving does not yet implement guided sampling")
         if seq.request.adapters:
             raise RequestError("native-adapters-unsupported", "native shared-state serving does not yet implement legacy block adapters")
-        if seq.request.template or seq.request.forced or seq.request.neuralese_length is not None or seq.request.neuralese_passes is not None:
+        if seq.request.forced or seq.request.neuralese_length is not None or seq.request.neuralese_passes is not None:
             raise RequestError("native-write-controls-unsupported", "native shared-state serving uses sampled role markers, not legacy forced writes")
         if seq.request.neuralese_max_length is not None or seq.request.neuralese_temperature:
             raise RequestError("native-write-controls-unsupported", "native shared-state spans have no legacy write length or temperature control")
-        if seq.request.rl_capture:
-            if seq.request.temperature <= 0:
-                raise RequestError("native-rl-sampling-law", "native rollout capture requires positive temperature")
+        if seq.request.rl_capture and seq.request.temperature <= 0:
+            raise RequestError("native-rl-sampling-law", "native rollout capture requires positive temperature")
         seq.cache = None
         seq.native_sampling_seed = (int(seq.request.seed) if seq.request.seed is not None else
                                     derive_seed("native-chat", seq.request.request_id))
         seq.rng = torch.Generator(device="cpu").manual_seed(seq.native_sampling_seed)
+        template_prefix = template_suffix = None
+        if seq.request.template:
+            from .chat import call_reply, write_reply
+            template = seq.request.template
+            mode = template.get('value')
+            if not isinstance(template.get('call'), str) or mode not in ('write', 'decode'):
+                raise RequestError('neuralese-template', "a template needs a call name and value 'write' or 'decode'")
+            argument_path = template.get('argument_path')
+            if argument_path is not None and (not isinstance(argument_path, list) or
+                    any(not isinstance(part, str) and type(part) is not int for part in argument_path)):
+                raise RequestError('neuralese-template', 'argument_path must contain string or integer keys')
+            apply = lambda messages, generation: self.tokenizer.apply_chat_template(
+                messages, tools=seq.request.tools or None, tokenize=False, add_generation_prompt=generation)
+            arguments = template.get('arguments') or {}
+            argument = template.get('argument') or 'value'
+            if mode == 'decode':
+                prefix, suffix = call_reply(apply, template['call'], arguments, argument,
+                    quoted=False, argument_path=argument_path)
+                template_prefix, template_suffix = self._tokens(prefix), []
+            else:
+                value_type = template.get('value_type', 'string')
+                prefix, suffix = write_reply(apply, template['call'], arguments, argument, value_type,
+                                             argument_path=argument_path)
+                template_prefix, template_suffix = self._tokens(prefix), self._tokens(suffix)
+                seq.native_template_value_type = value_type
         for kind, value in seq.prompt_plan or ():
             if kind == "tokens":
                 if seq.request.rl_capture and value:
                     seq.native_rl_prompt.append({"kind": "tokens", "token_ids": list(value),
                                                  "producing": [False] * len(value)})
+                seq.native_own_position += len(value)
                 if value:
                     output = self._native_forward(value, seq.cache)
                     seq.cache = output["cache"]
@@ -655,6 +700,27 @@ class Engine:
         seq.prompt_positions = seq.cache.lengths[0]
         if seq.prompt_positions >= self.context:
             raise RequestError("context-length", f"prompt uses {seq.prompt_positions} positions, context is {self.context}")
+        if template_prefix is not None:
+            needed = len(template_prefix) + (1 if seq.request.template.get('value') == 'write' else 0)
+            if seq.prompt_positions + seq.generated_positions + needed >= self.context:
+                raise RequestError('context-length', 'templated native reply prefix exceeds remaining context')
+            for token in template_prefix:
+                output = self._native_forward([token], seq.cache)
+                seq.cache, seq.logits = output['cache'], self._native_logits(output['h_final'])
+                seq.items.append(token)
+                seq.generated_positions += 1
+                self._native_record_input(seq, token, producing=False)
+            if seq.request.template.get('value') == 'write':
+                seq.native_write_start_own = seq.native_own_position
+                seq.native_write_open_sample = None
+                opened = self._native_forward([self.role_tokens.produce_open], seq.cache)
+                seq.cache, seq.logits = opened['cache'], self._native_logits(opened['h_final'])
+                seq.generated_positions += 1
+                seq.native_capture_open = True
+                seq.native_capture_chunks = []
+                seq.native_capture_ids = []
+                seq.native_template_suffix = template_suffix
+                self._native_record_input(seq, self.role_tokens.produce_open, producing=False)
         seq.phase = "text"
 
     def _native_token(self, seq):
@@ -681,15 +747,24 @@ class Engine:
         seq.native_capture_chunks.clear()
         seq.native_capture_ids.clear()
         seq.native_capture_open = False
+        if seq.native_template_suffix:
+            seq.native_forced_tokens = seq.native_template_suffix
+            seq.native_template_suffix = []
         if seq.request.rl_capture:
-            if seq.native_write_start_sample is None:
-                raise RuntimeError("native RL write has no sampled opening marker")
-            end_sample = len(seq.rl_samples)
             seq.native_rl_writes.append({"state_id": record.id,
-                "begin_sample": seq.native_write_start_sample, "end_sample": end_sample,
-                "payload_begin": seq.native_write_start_sample + 1, "payload_end": end_sample - 1,
+                "begin_sample": seq.native_write_start_sample,
+                "end_sample": (seq.native_write_close_sample + 1
+                               if seq.native_write_close_sample is not None else None),
+                "own_begin": seq.native_write_start_own,
+                "own_end": seq.native_own_position,
+                "payload_own_begin": (seq.native_write_start_own + 1
+                                       if seq.native_write_start_own is not None else None),
+                "payload_own_end": seq.native_own_position - 1,
                 "native_identity": self._native_block_identity(block)})
             seq.native_write_start_sample = None
+            seq.native_write_close_sample = None
+            seq.native_write_start_own = None
+            seq.native_write_open_sample = None
         if seq.request.on_delta is not None:
             seq.request.on_delta({"native_state": record.meta()})
 
@@ -705,6 +780,20 @@ class Engine:
                 if seq.phase == "prefill":
                     self._native_prefill(seq)
                     continue
+                if seq.native_forced_tokens:
+                    token = seq.native_forced_tokens.pop(0)
+                    if token in self.stop_ids:
+                        self._finish(seq, 'stop')
+                        continue
+                    output = self._native_forward([token], seq.cache)
+                    seq.cache, seq.logits = output['cache'], self._native_logits(output['h_final'])
+                    seq.generated_positions += 1
+                    self._native_record_input(seq, token,
+                        producing=seq.native_capture_open and token not in (
+                            self.role_tokens.produce_open, self.role_tokens.produce_close))
+                    seq.items.append(token)
+                    self._emit(seq, token=token)
+                    continue
                 if seq.generated_positions >= seq.request.max_tokens:
                     if seq.native_capture_open:
                         raise RequestError("neuralese-native-state-open", "generation ended inside a produce span")
@@ -712,13 +801,15 @@ class Engine:
                     continue
                 token, sampled_logp = self._native_token(seq)
                 sample_index = len(seq.rl_samples)
+                query_own_position = seq.native_own_position
                 terminal = token in self.stop_ids
                 producing_input = seq.native_capture_open and token not in (
                     self.role_tokens.produce_open, self.role_tokens.produce_close)
                 if seq.request.rl_capture:
                     seq.rl_samples.append({"index": sample_index, "token_id": token, "logp": sampled_logp,
                                            "input_role": "produce" if producing_input else "ordinary",
-                                           "terminal": terminal})
+                                           "terminal": terminal,
+                                           "query_own_position": query_own_position})
                 if terminal:
                     if seq.native_capture_open:
                         raise RequestError("neuralese-native-state-open", "generation stopped inside a produce span")
@@ -731,15 +822,21 @@ class Engine:
                     raise RequestError("neuralese-native-state-consume-marker",
                                        "consume markers are inserted only around an imported native-state part")
                 if seq.native_capture_open and token == marker.produce_close:
+                    seq.native_write_close_sample = sample_index if seq.request.rl_capture else None
                     output = self._native_forward([token], seq.cache)
                     seq.cache, seq.logits = output["cache"], self._native_logits(output["h_final"])
                     seq.generated_positions += 1
+                    self._native_record_input(seq, token, producing=False, sample_index=sample_index)
                     self._native_finish_block(seq)
                     continue
                 producing = seq.native_capture_open and token != marker.produce_open
+                if token == marker.produce_open:
+                    seq.native_write_start_own = seq.native_own_position
+                    seq.native_write_open_sample = sample_index if seq.request.rl_capture else None
                 output = self._native_forward([token], seq.cache, producing=producing)
                 seq.cache, seq.logits = output["cache"], self._native_logits(output["h_final"])
                 seq.generated_positions += 1
+                self._native_record_input(seq, token, producing=producing, sample_index=sample_index)
                 if token == marker.produce_open:
                     if seq.native_capture_open:
                         raise RequestError("neuralese-native-state-nested", "produce spans cannot nest")
@@ -1254,6 +1351,25 @@ class Engine:
                 call["function"]["arguments"] = arguments_text(native_parts(args))
             except (KeyError, json.JSONDecodeError):
                 continue
+        if seq.native_template_value_type is not None:
+            for call in message.get('tool_calls') or []:
+                try:
+                    arguments = json.loads(call['function']['arguments'])
+                    template = seq.request.template or {}
+                    argument = template.get('argument') or 'value'
+                    path = template.get('argument_path') or [argument]
+                    value = arguments
+                    for part in path:
+                        value = value[part]
+                    def mark_value(item):
+                        if isinstance(item, list):
+                            for nested in item: mark_value(nested)
+                        elif isinstance(item, dict) and item.get('type') == 'native_state':
+                            item['value_type'] = seq.native_template_value_type
+                    mark_value(value)
+                    call['function']['arguments'] = arguments_text(arguments)
+                except (KeyError, TypeError, json.JSONDecodeError):
+                    continue
         records = [item for item in seq.items if hasattr(item, "block") and hasattr(item, "meta")]
         response = {"id": seq.request.request_id, "object": "chat.completion", "created": int(time.time()),
                 "model": self.model_name,
@@ -1262,12 +1378,13 @@ class Engine:
                           "total_tokens": seq.prompt_positions + seq.generated_positions},
                 "native_state": {"blocks": [record.meta() for record in records], "imports": seq.native_imports}}
         if seq.request.rl_capture:
-            response["x_natlang_rl_capture"] = {"schema": "natlang.native-rl-sampling/1",
+            response["x_natlang_rl_capture"] = {"schema": "natlang.native-rl-sampling/2",
                 "policy": {"checkpoint_sha256": self.checkpoint_sha256,
                            "tokenizer_fingerprint": self.model_config["tokenizer_fingerprint"],
                            "embedding_weight_sha256": self.embedding_weight_sha256,
                            "architecture": self.model_config["architecture"]},
-                "prompt": seq.native_rl_prompt, "samples": seq.rl_samples, "writes": seq.native_rl_writes,
+                "prompt": seq.native_rl_prompt, "samples": seq.rl_samples,
+                "generated_inputs": seq.native_rl_inputs, "writes": seq.native_rl_writes,
                 "finish_reason": seq.finish_reason,
                 "sample_range_convention": "half-open",
                 "sampling_law": {"temperature": seq.request.temperature, "seed": seq.native_sampling_seed,

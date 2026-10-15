@@ -57,6 +57,89 @@ def _load_examples(path, tokenizer_fingerprint, *, required_split):
     return examples
 
 
+class NativeGraphSource:
+    """Stream-validated graph rows with a compact in-memory identity index.
+
+    The graph plans and token arrays are deliberately not retained. Full/PH/WT
+    unions and authenticated E2E archives are large enough that keeping parsed
+    plans for every row can exceed host memory by orders of magnitude.
+    """
+    def __init__(self, path, tokenizer_fingerprint, *, required_split):
+        from ..data.native_graph import parse_graph
+        self.path = Path(path)
+        before = self.path.stat()
+        self.tokenizer_fingerprint = tokenizer_fingerprint
+        self.required_split = required_split
+        self.entries = []
+        self.bindings = {}
+        self.groups = set()
+        for row in _jsonl(self.path):
+            example = parse_graph(row, tokenizer_fingerprint=tokenizer_fingerprint)
+            if example.split != required_split:
+                raise ValueError(f'{self.path}: expected {required_split} rows, got {example.split!r} in {example.id}')
+            if example.id in self.bindings:
+                raise ValueError(f'{self.path}: duplicate example id {example.id!r}')
+            binding = _row_bindings([example])[example.id]
+            visits = {'id': example.id, 'groups': example.source_groups, 'binding': binding,
+                      'supervised_tokens': sum(weight > 0 for weight in example.target_weights)}
+            self.entries.append(visits)
+            self.bindings[example.id] = binding
+            self.groups.update(example.source_groups)
+            del example
+        if not self.entries:
+            raise ValueError(f'{self.path}: no {required_split} native graph rows')
+        after = self.path.stat()
+        if (before.st_size, before.st_mtime_ns, before.st_ino) != (after.st_size, after.st_mtime_ns, after.st_ino):
+            raise ValueError(f'{self.path}: source changed during streaming graph validation')
+        self.file_binding = (after.st_size, after.st_mtime_ns, after.st_ino)
+        self.file_sha256 = sha256_file_hex_cached(self.path)
+
+    def __len__(self):
+        return len(self.entries)
+
+    def __iter__(self):
+        return self.iter_from(0)
+
+    def iter_from(self, start=0):
+        from ..data.native_graph import parse_graph
+        if not 0 <= start <= len(self.entries):
+            raise ValueError(f'{self.path}: row cursor outside indexed source')
+        with open_jsonl_text(self.path) as handle:
+            index = 0
+            for line_number, line in enumerate(handle, 1):
+                if not line.strip():
+                    continue
+                if index >= start:
+                    try:
+                        row = json.loads(line)
+                    except json.JSONDecodeError as exc:
+                        raise ValueError(f'{self.path}:{line_number}: invalid JSONL') from exc
+                    example = parse_graph(row, tokenizer_fingerprint=self.tokenizer_fingerprint)
+                    entry = self.entries[index]
+                    if (example.id != entry['id'] or _row_bindings([example])[example.id] != entry['binding']):
+                        raise ValueError(f'{self.path}:{line_number}: graph source changed after index validation')
+                    yield example
+                index += 1
+            if index != len(self.entries):
+                raise ValueError(f'{self.path}: row count changed after index validation')
+        after = self.path.stat()
+        if (after.st_size, after.st_mtime_ns, after.st_ino) != self.file_binding:
+            raise ValueError(f'{self.path}: source changed while streaming examples')
+
+    def receipt(self):
+        counts = {}
+        for entry in self.entries:
+            for group in entry['groups']:
+                value = counts.setdefault(group, {'examples': 0, 'supervised_tokens': 0})
+                value['examples'] += 1
+                value['supervised_tokens'] += entry['supervised_tokens']
+        return {'path': str(self.path.resolve()), 'sha256': self.file_sha256,
+                'rows': len(self.entries), 'by_source_group': counts}
+
+    def ordered_ids(self):
+        return [entry['id'] for entry in self.entries]
+
+
 def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in_backward=True):
     """Reuse the production port optimizer and its in-backward MuonSR memory path."""
     from .backbone_policy import configure_backbone_training
@@ -129,12 +212,102 @@ def _source_hash(examples):
     return digest.hexdigest()
 
 
+def pack_native_graphs(examples):
+    """Join disjoint examples into one graph plan so shared weights update once."""
+    from ..model.shared_state import Invocation, ImportSpan, compile_graph
+    invocations, weights, ownership, external_sizes, external_name_maps = [], [], [], {}, []
+    for graph_index, example in enumerate(examples):
+        names = {node.name: f'b{graph_index}/{node.name}' for node in example.plan.invocations}
+        external_names = {name: f'b{graph_index}/external/{name}' for name in example.plan.external_names}
+        names.update(external_names)
+        external_name_maps.append(external_names)
+        external_sizes.update({names[name]: size for name, size in
+                               zip(example.plan.external_names, example.plan.external_sizes)})
+        for node in example.plan.invocations:
+            imports = tuple(ImportSpan(source=names[edge.source], start=edge.start,
+                                       stop=edge.stop, at=edge.at, logical=edge.logical)
+                            for edge in node.imports)
+            invocations.append(Invocation(name=names[node.name], token_ids=node.token_ids,
+                imports=imports, producing=node.producing,
+                logical_producing=node.logical_producing))
+        weights.extend(example.target_weights)
+        ownership.append((len(invocations) - len(example.plan.invocations), len(invocations)))
+    packed = compile_graph(invocations, external_sizes=external_sizes)
+    return packed, tuple(weights), tuple(ownership), tuple(external_name_maps)
+
+
+def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=128, objective=None):
+    """One backbone graph forward for a minibatch; mean the original per-graph losses."""
+    import torch.nn.functional as F
+    from torch.utils.checkpoint import checkpoint
+    plan, target_weights, ownership, external_name_maps = pack_native_graphs(examples)
+    model.port.checkpoint_layers = checkpoint_layers
+    row_offsets = {example.id: {'node_start': first_node, 'node_stop': last_node,
+        'physical_start': plan.offsets[first_node],
+        'physical_stop': plan.offsets[last_node - 1] + len(plan.invocations[last_node - 1].token_ids),
+        'external_names': external_name_maps[index]}
+        for index, (example, (first_node, last_node)) in enumerate(zip(examples, ownership))}
+    context = {'plan': plan, 'examples': examples, 'target_weights': target_weights,
+               'ownership': ownership, 'row_offsets': row_offsets,
+               'external_names': {example.id: external_name_maps[index]
+                                  for index, example in enumerate(examples)},
+               'external_states': {example.id: getattr(example, 'external_states', {})
+                                   for example in examples}}
+    forward_inputs = objective.forward_inputs(context) if objective is not None else {}
+    result = model(plan, retain_states=False, **(forward_inputs or {}))
+    if objective is not None:
+        loss, details = objective(model, result, context)
+        if not isinstance(loss, torch.Tensor) or loss.ndim != 0 or not torch.isfinite(loss.detach()):
+            raise FloatingPointError('native policy objective must return a finite scalar loss')
+        return loss, details
+    hidden = result['h_final'][0]
+    losses, details = [], []
+    for graph_index, (first_node, last_node) in enumerate(ownership):
+        queries, targets, weights = [], [], []
+        for node_index in range(first_node, last_node):
+            node, offset = plan.invocations[node_index], plan.offsets[node_index]
+            for local in range(1, len(node.token_ids)):
+                target = offset + local
+                weight = target_weights[target]
+                if weight > 0:
+                    queries.append(target - 1)
+                    targets.append(int(node.token_ids[local]))
+                    weights.append(weight)
+        if not queries:
+            raise ValueError(f'native graph {examples[graph_index].id!r} has no supervised target')
+        query_ids = torch.tensor(queries, device=hidden.device)
+        target_ids = torch.tensor(targets, device=hidden.device)
+        token_weights = torch.tensor(weights, device=hidden.device, dtype=torch.float32)
+        total = hidden.new_zeros((), dtype=torch.float32)
+        correct = hidden.new_zeros((), dtype=torch.float32)
+        for start in range(0, len(queries), chunk_tokens):
+            stop = start + chunk_tokens
+            def loss_chunk(states, labels, selected):
+                logits = model.logits(states)
+                ce = F.cross_entropy(logits.float(), labels, reduction='none')
+                return ((ce * selected).sum(),
+                        ((logits.argmax(-1) == labels).float() * selected).sum())
+            chunk_loss, chunk_correct = checkpoint(loss_chunk, hidden[query_ids[start:stop]],
+                target_ids[start:stop], token_weights[start:stop], use_reentrant=False)
+            total = total + chunk_loss
+            correct = correct + chunk_correct
+        denominator = token_weights.sum()
+        losses.append(total / denominator)
+        details.append({'weight': float(denominator.detach()),
+                        'supervised_tokens': len(queries),
+                        'accuracy': float((correct / denominator).detach())})
+    return torch.stack(losses).mean(), details
+
+
 def _row_bindings(examples):
     """Exact semantic identities needed to prove an append-only data continuation."""
     result = {}
     for item in examples:
         value = {'id': item.id, 'groups': item.source_groups, 'split': item.split,
                  'tokenizer': item.tokenizer_fingerprint, 'targets': item.target_weights,
+                 'external_names': item.plan.external_names,
+                 'external_sizes': item.plan.external_sizes,
+                 'external_states': getattr(item, 'external_states', {}),
                  'nodes': [{'name': node.name, 'token_ids': node.token_ids,
                             'imports': [edge.__dict__ for edge in node.imports],
                             'producing': node.producing, 'logical_producing': node.logical_producing}
@@ -193,7 +366,9 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
           architecture, options, fp8_state=None):
     state = {'schema': CHECKPOINT_SCHEMA, 'model_config': config, **model_state(model), 'step': global_step,
              'training': {'schema': TRAINING_SCHEMA, 'identity': identity, 'step': step,
-                          'global_step': global_step, 'source_row_bindings': source_row_bindings,
+                          'global_step': global_step, 'epoch': epoch,
+                          'source_row_bindings': source_row_bindings,
+                          'source_row_order': options.get('_source_row_order', []),
                           'held_row_bindings': held_row_bindings,
                           'exposure_counts': exposure_counts,
                           'cursor': cursor, 'source_hash': source_hash, 'source_receipts': source_receipts,
@@ -226,11 +401,12 @@ def build_parser():
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--task-eval', default=None)
     parser.add_argument('--task-eval-every', type=int, default=0)
-    parser.add_argument('--forward-atol', type=float, default=1e-3)
-    parser.add_argument('--gradient-atol', type=float, default=1e-3)
+    parser.add_argument('--forward-atol', type=float, default=None)
+    parser.add_argument('--gradient-atol', type=float, default=None)
     parser.add_argument('--recipe-binding', default=None)
     parser.add_argument('--stage-id', default=None)
     parser.add_argument('--prerequisite-stages', default='[]')
+    parser.add_argument('--objective-spec', type=Path, default=None)
     return parser
 
 
@@ -241,8 +417,9 @@ def main(argv=None):
         raise ValueError('native SFT requires positive epochs/batch/eval/chunk/rank and nonnegative checkpoint cadence')
     if args.checkpoint_every and args.checkpoint_every % args.eval_every:
         raise ValueError('checkpoint cadence must be an evaluation cadence multiple')
-    if args.task_eval_every < 0 or min(args.forward_atol, args.gradient_atol) <= 0:
-        raise ValueError('task cadence must be nonnegative and native numerical tolerances positive')
+    tolerances = [value for value in (args.forward_atol, args.gradient_atol) if value is not None]
+    if args.task_eval_every < 0 or any(not math.isfinite(value) or value <= 0 for value in tolerances):
+        raise ValueError('task cadence must be nonnegative and supplied native numerical tolerances positive')
     args.out.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(args.seed)
     random.seed(args.seed)
@@ -276,39 +453,63 @@ def main(argv=None):
     fingerprint = tokenizer_fingerprint(tokenizer)
     if fingerprint != config['tokenizer_fingerprint']:
         raise ValueError('loaded tokenizer differs from native model configuration')
-    train = _load_examples(args.native_graphs, fingerprint, required_split='train')
-    held = _load_examples(args.held_native_graphs, fingerprint, required_split='test')
-    train_groups = {group for item in train for group in item.source_groups}
-    held_groups = {group for item in held for group in item.source_groups}
+    train = NativeGraphSource(args.native_graphs, fingerprint, required_split='train')
+    held = NativeGraphSource(args.held_native_graphs, fingerprint, required_split='test')
+    train_groups, held_groups = train.groups, held.groups
     if train_groups & held_groups:
         raise ValueError('native train/held source groups overlap: ' + ', '.join(sorted(train_groups & held_groups)[:8]))
-    source_receipts = [_source_receipt(args.native_graphs, train), _source_receipt(args.held_native_graphs, held)]
-    source_hash = hashlib.sha256((_source_hash(train) + _source_hash(held)).encode()).hexdigest()
-    source_row_bindings = _row_bindings(train)
-    held_row_bindings = _row_bindings(held)
+    source_receipts = [train.receipt(), held.receipt()]
+    source_row_bindings = train.bindings
+    held_row_bindings = held.bindings
+    source_hash = hashlib.sha256(json.dumps(
+        [source_receipts[0]['sha256'], source_receipts[1]['sha256'],
+         sorted(source_row_bindings.items()), sorted(held_row_bindings.items())],
+        ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+    source_order = train.ordered_ids()
+    objective = None
+    objective_binding = None
+    if args.objective_spec is not None:
+        spec_sha256 = sha256_file_hex_cached(args.objective_spec)
+        objective_binding = {'path': str(args.objective_spec.resolve()), 'sha256': spec_sha256}
+        spec = json.loads(args.objective_spec.read_text())
+        if spec.get('schema') != 'natlang.native-policy-objective/1' or spec.get('kind') != 'native-policy':
+            raise ValueError('native replay objective spec must declare natlang.native-policy-objective/1 kind native-policy')
+        from ..rl.native_replay import NativePolicyObjective
+        objective = NativePolicyObjective(args.objective_spec)
     training_identity = {'schema': TRAINING_SCHEMA, 'config': config, 'train_source_hash': source_hash,
+                'schedule': 'source-order-stream/1',
                 'held_sha256': source_receipts[1]['sha256'], 'optimizer': 'shared-muon-sr-in-backward-v1',
                 'optimizer_options': {'lr': args.learning_rate, 'weight_decay': args.weight_decay,
                                       'latent_ns': args.latent_ns},
                 'batch_graphs': args.batch_graphs, 'seed': args.seed, 'rank': config['rank'],
                 'fp8': {'kind': args.fp8_training, 'recipe': args.fp8_recipe,
-                        'amax_history_len': args.fp8_amax_history_len}}
+                        'amax_history_len': args.fp8_amax_history_len},
+                'objective': objective_binding}
     appended_ids = set()
     if resume is not None:
         previous = resume.get('identity') or {}
-        stable = ('schema', 'config', 'optimizer', 'optimizer_options',
-                  'batch_graphs', 'seed', 'rank', 'fp8')
+        stable = ('schema', 'config', 'schedule', 'optimizer', 'batch_graphs', 'seed', 'rank', 'fp8', 'objective')
         if any(previous.get(key) != training_identity.get(key) for key in stable):
             raise ValueError('native SFT continuation changes model/held/optimizer/schedule identity')
+        old_optimizer_options = previous.get('optimizer_options') or {}
+        if (old_optimizer_options.get('weight_decay') != args.weight_decay or
+                old_optimizer_options.get('latent_ns') != args.latent_ns):
+            raise ValueError('native SFT continuation changes optimizer state semantics; only the learning rate may be tuned')
         prior_bindings = resume.get('source_row_bindings') or {}
         appended_ids = append_only_rows(prior_bindings, source_row_bindings, label='training-source')
+        prior_order = resume.get('source_row_order') or []
+        if source_order[:len(prior_order)] != prior_order:
+            raise ValueError('native SFT continuation reordered prior training rows; exact cursor cannot be resumed')
         prior_held = resume.get('held_row_bindings') or {}
         append_only_rows(prior_held, held_row_bindings, label='held-source')
         if appended_ids:
             print(json.dumps({'event': 'native_data_append', 'prior_rows': len(prior_bindings),
                               'new_rows': len(appended_ids), 'optimizer_state': 'restored',
-                              'cursor': resume.get('cursor'), 'policy': 'prior epoch order prefix then appended rows'}),
+                              'cursor': resume.get('cursor'), 'policy': 'immutable source-order prefix then appended rows'}),
                   flush=True)
+        training_identity['optimizer_options'] = {'lr': args.learning_rate,
+            'weight_decay': args.weight_decay, 'latent_ns': args.latent_ns,
+            'continued_from': previous.get('optimizer_options')}
         training_identity['prior_source_hash'] = previous.get('train_source_hash')
     if args.fp8_training != 'off':
         arch = config['architecture']
@@ -351,6 +552,10 @@ def main(argv=None):
     schedule_prefix_ids = set(resume['source_row_bindings']) if resume is not None and appended_ids else None
     if resume is not None:
         optimizer.load_state_dict(resume['optimizer'])
+        # Adaptive production may tune the step size without discarding moments.
+        # The new value is recorded in optimizer_options while moments/RNG stay exact.
+        for group in optimizer.param_groups:
+            group['lr'] = args.learning_rate
         if backend is not None:
             if resume.get('fp8') is None:
                 raise ValueError('native SFT checkpoint lacks the declared FP8 state')
@@ -375,12 +580,8 @@ def main(argv=None):
             del state
         if 'parent_state' in locals():
             del parent_state
-    append_epoch = epoch
-    # Each epoch visits every admitted graph once. The order is keyed by epoch
-    # and seed; cursor is a consumed prefix so signal-boundary resumes are exact.
-    def epoch_order(e):
-        prior_ids = schedule_prefix_ids if e == append_epoch else None
-        return scheduled_indices(train, seed=args.seed, epoch=e, prior_ids=prior_ids)
+    # Source order is the exact epoch order. This keeps compressed corpora
+    # streaming and makes the row cursor a real resumable position.
     whole_epochs = int(args.epochs)
     fractional_rows = math.ceil((args.epochs - whole_epochs) * len(train))
     target_rows = whole_epochs * len(train) + fractional_rows
@@ -394,19 +595,22 @@ def main(argv=None):
         raise ValueError('native checkpoint update is beyond the declared epoch exposure')
     resumed_step = step
     last_saved_step = step if policy.slot.is_file() and not parent_continuation else -1
+    source_iter = train.iter_from(cursor) if cursor else iter(train)
     eval_at = max(1, args.eval_every)
     started = time.time()
     while step < total_end and not policy.signaled:
         batch = []
-        while len(batch) < args.batch_graphs and epoch < math.ceil(args.epochs):
-            order = epoch_order(epoch)
-            limit = (fractional_rows if epoch == whole_epochs and fractional_rows else len(order))
-            while cursor < limit and len(batch) < args.batch_graphs:
-                batch.append(train[order[cursor]])
-                cursor += 1
-            if cursor >= limit:
-                epoch += 1
-                cursor = 0
+        limit = fractional_rows if epoch == whole_epochs and fractional_rows else len(train)
+        while len(batch) < args.batch_graphs and epoch < math.ceil(args.epochs) and cursor < limit:
+            try:
+                batch.append(next(source_iter))
+            except StopIteration as error:
+                raise ValueError('native graph source ended before its validated row count') from error
+            cursor += 1
+        if cursor >= limit:
+            epoch += 1
+            cursor = 0
+            source_iter = iter(train)
         if not batch:
             break
         if backend is not None:
@@ -419,15 +623,16 @@ def main(argv=None):
             context = nullcontext()
         try:
             with context:
-                losses = []
-                for example in batch:
-                    if backend is not None:
-                        with backend.autocast():
-                            loss, detail = _graph_loss(model, example, args)
-                    else:
-                        loss, detail = _graph_loss(model, example, args)
-                    losses.append(loss)
-                torch.stack(losses).mean().backward()
+                if backend is not None:
+                    with backend.autocast():
+                        loss, details = packed_graph_loss(model, batch,
+                            checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens,
+                            objective=objective)
+                else:
+                    loss, details = packed_graph_loss(model, batch,
+                        checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens,
+                        objective=objective)
+                loss.backward()
             if optimizer.latent is not None:
                 optimizer.latent._armed = None
             params = [p for p in model.parameters() if p.requires_grad and p.grad is not None]
@@ -449,7 +654,7 @@ def main(argv=None):
                     bool(args.task_eval_every and step % args.task_eval_every == 0))
         due_eval = step % eval_at == 0 or step == total_end or due_task
         if due_eval:
-            metrics = {'train_loss': float(torch.stack([item.detach() for item in losses]).mean()),
+            metrics = {'train_loss': float(loss.detach()),
                        'held': _evaluate(model, held, checkpoint_layers=args.checkpoint_layers,
                                          chunk_tokens=args.chunk_tokens, backend=backend),
                        'step': step, 'epoch': epoch, 'cursor': cursor,
@@ -463,7 +668,7 @@ def main(argv=None):
                   source_hash=source_hash, source_row_bindings=source_row_bindings,
                   held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
                   rng=capture_training_rng_state(args.device), metrics=metrics,
-                  architecture=config['architecture'], options=vars(args),
+                  architecture=config['architecture'], options={**vars(args), '_source_row_order': source_order},
                   fp8_state=backend.extra_state() if backend is not None else None)
             last_saved_step = step
             checkpoint_sha = sha256_file_hex_cached(policy.slot)
@@ -483,25 +688,16 @@ def main(argv=None):
             finally:
                 model.train()
                 restore_training_rng_state(saved_rng, args.device)
+            metrics['task_checkpoint_sha256'] = checkpoint_sha
+            metrics['task_native_identity'] = serving_identity
             write_json(args.out / 'metrics.json', metrics)
-            # Keep the exact task receipt resumable with these same weights and
-            # optimizer state. TaskEval restores the training RNG above, so
-            # this write does not advance the training stream.
-            _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
-                  global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
-                  source_hash=source_hash, source_row_bindings=source_row_bindings,
-                  held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
-                  rng=capture_training_rng_state(args.device), metrics=metrics,
-                  architecture=config['architecture'], options=vars(args),
-                  fp8_state=backend.extra_state() if backend is not None else None)
-            last_saved_step = step
         if policy.due(step, end=step == total_end) and not due_task:
             _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
                   global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
                   source_hash=source_hash, source_row_bindings=source_row_bindings,
                   held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
                   rng=capture_training_rng_state(args.device), metrics=metrics,
-                  architecture=config['architecture'], options=vars(args),
+                  architecture=config['architecture'], options={**vars(args), '_source_row_order': source_order},
                   fp8_state=backend.extra_state() if backend is not None else None)
             last_saved_step = step
     if (step != resumed_step or policy.signaled) and last_saved_step != step:
@@ -513,7 +709,7 @@ def main(argv=None):
               source_hash=source_hash, source_row_bindings=source_row_bindings,
               held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
               rng=capture_training_rng_state(args.device), metrics=metrics,
-              architecture=config['architecture'], options=vars(args),
+              architecture=config['architecture'], options={**vars(args), '_source_row_order': source_order},
               fp8_state=backend.extra_state() if backend is not None else None)
         last_saved_step = step
     completed = epoch >= args.epochs and (whole_epochs == int(args.epochs) or fractional_rows > 0)
@@ -521,7 +717,7 @@ def main(argv=None):
     # summaries were checkpointed. At the same final weights, make one real
     # cadence call; do not reuse an unbound log row or enter final_at's retry
     # loop merely to force an eligible score.
-    if task_eval is not None and completed and not metrics.get('task_eval'):
+    if task_eval is not None and completed and not metrics.get('task_checkpoint_sha256'):
         current_sha = sha256_file_hex_cached(policy.slot)
         serving_identity = native_identity(model, config, checkpoint_sha256=current_sha)
         engine = task_eval.engine
@@ -539,23 +735,20 @@ def main(argv=None):
         finally:
             model.train()
             restore_training_rng_state(saved_rng, args.device)
+        metrics['task_checkpoint_sha256'] = current_sha
+        metrics['task_native_identity'] = serving_identity
         write_json(args.out / 'metrics.json', metrics)
-        _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
-              global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
-              source_hash=source_hash, source_row_bindings=source_row_bindings,
-              held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
-              rng=capture_training_rng_state(args.device), metrics=metrics,
-              architecture=config['architecture'], options=vars(args),
-              fp8_state=backend.extra_state() if backend is not None else None)
     checkpoint_sha = sha256_file_hex_cached(policy.slot)
     model_identity = native_identity(model, config, checkpoint_sha256=checkpoint_sha)
     task_summary = metrics.get('task_eval')
     task_receipt_path = None
     if task_summary:
         task_receipt_path = args.out / 'native-task-execution-receipt.json'
+        task_checkpoint_sha = metrics.get('task_checkpoint_sha256')
+        task_identity = metrics.get('task_native_identity')
         score_path = Path(task_summary['run']) / 'task-score.json' if task_summary.get('run') else None
         task_receipt = {'schema': 'natlang.native-task-execution-receipt/1',
-            'checkpoint_sha256': checkpoint_sha, 'native_identity': model_identity,
+            'checkpoint_sha256': task_checkpoint_sha, 'native_identity': task_identity,
             'packet_sha256': task_summary.get('packet_sha256'),
             'case_indices': task_summary.get('case_indices'), 'cases': task_summary.get('cases'),
             'complete': task_summary.get('complete'), 'eligible': task_summary.get('eligible'),
@@ -563,7 +756,8 @@ def main(argv=None):
             'task_successes_are_qualification_barrier': False,
             'score_path': str(score_path.resolve()) if score_path and score_path.is_file() else None,
             'score_sha256': sha256_file_hex_cached(score_path) if score_path and score_path.is_file() else None}
-        task_receipt['passed'] = bool(task_receipt['complete'] and task_receipt['eligible'] and
+        task_receipt['passed'] = bool(task_checkpoint_sha == checkpoint_sha and task_identity and
+                                      task_receipt['complete'] and task_receipt['eligible'] and
                                       task_receipt['score_sha256'])
         write_json(task_receipt_path, task_receipt)
     runtime_path = args.out / 'native-runtime-certificate.json'
@@ -576,6 +770,8 @@ def main(argv=None):
                           'deferred': True, 'reason': 'declared native graph exposure is incomplete'}
     else:
         try:
+            if args.forward_atol is None or args.gradient_atol is None:
+                raise ValueError('runtime qualification requires recipe-bound forward and gradient tolerances')
             from ..eval.native_state import qualify_existing
             if backend is not None:
                 with backend.native_modules():
@@ -599,10 +795,10 @@ def main(argv=None):
     recipe_binding = json.loads(args.recipe_binding) if args.recipe_binding else None
     prerequisites = json.loads(args.prerequisite_stages)
     exposure_by_source_group = {}
-    for example in train:
-        visits = int(exposure_counts[example.id])
-        token_visits = visits * sum(weight > 0 for weight in example.target_weights)
-        for group in example.source_groups:
+    for entry in train.entries:
+        visits = int(exposure_counts[entry['id']])
+        token_visits = visits * entry['supervised_tokens']
+        for group in entry['groups']:
             counts = exposure_by_source_group.setdefault(group, {'graph_visits': 0,
                                                                    'supervised_token_visits': 0})
             counts['graph_visits'] += visits
@@ -641,13 +837,13 @@ def main(argv=None):
         'training_receipt': {'path': str((args.out / 'report.json').resolve()),
                                                       'sha256': sha256_file_hex_cached(args.out / 'report.json')},
         'exposure': {'train_rows': len(train), 'held_rows': len(held),
-                     'supervised_tokens': sum(sum(w > 0 for w in x.target_weights) for x in train),
+                     'supervised_tokens': sum(entry['supervised_tokens'] for entry in train.entries),
                      'graph_visits': sum(exposure_counts.values()),
-                     'supervised_token_visits': sum(exposure_counts[x.id] *
-                         sum(weight > 0 for weight in x.target_weights) for x in train),
+                     'supervised_token_visits': sum(exposure_counts[entry['id']] *
+                         entry['supervised_tokens'] for entry in train.entries),
                      'row_update_counts_sha256': exposure_counts_sha256,
                      'by_source_group': exposure_by_source_group,
-                     'consumed_rows': min(target_rows, epoch * len(train) + cursor),
+                     'consumed_rows': min(target_rows, sum(exposure_counts.values())),
                      'consumed_updates': step, 'completed_epochs': epoch}})
     return 0
 

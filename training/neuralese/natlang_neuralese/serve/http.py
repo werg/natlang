@@ -80,8 +80,12 @@ _LORA = re.compile(r"^/v1/neuralese/adapters/(nz1_[a-z2-7]+)/lora$")
 # /v1/neuralese/info and answers a capability it lacks with 501 `neuralese-<capability>-unavailable`.
 CAPABILITIES = sorted([
     "adapters.create", "adapters.direct", "adapters.lora-export", "adapters.projection", "chat", "chat.stream",
-    "decide", "embed", "encode", "grad", "grad.order2", "guidance.check", "init-body", "optim", "parts.value-type",
+    "decide", "embed", "encode", "grad", "grad.order2", "guidance", "guidance.check", "init-body", "optim", "parts.value-type",
     "render", "score", "store", "store.owners", "store.native-state", "template", "template.argument-path", "template.value-type", "view", "write"])
+NATIVE_CAPABILITIES = sorted([
+    "chat", "chat.stream", "guidance.check", "parts.value-type", "render", "store", "store.native-state",
+    "store.owners", "template", "template.argument-path", "template.value-type"])
+NATIVE_CAPABILITY_GAPS = sorted(set(CAPABILITIES) - set(NATIVE_CAPABILITIES))
 
 
 def unavailable_code(capability: str) -> str:
@@ -184,6 +188,8 @@ def make_handler(engine: Engine):
                                             {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
                                              for name, p in engine.projections.items()},
                                         **({"native_state": {"enabled": True, "format": "neuralese.native-state/1",
+                                                              "consumption_modes": ["exact-native-state",
+                                                                                     "best-effort-text-retokenization"],
                                                               "architecture": engine.model_config.get("architecture"),
                                                               "checkpoint_sha256": engine.checkpoint_sha256,
                                                               "tokenizer_fingerprint": engine.model_config.get("tokenizer_fingerprint"),
@@ -196,8 +202,9 @@ def make_handler(engine: Engine):
                                         "prompt_rendering": engine.prompt_rendering,
                                         "prompt_rendering_identity_sha256": prompt_identity["identity_sha256"],
                                         # Owner-scoped holds only once the store implements them.
-                                        "capabilities": [c for c in CAPABILITIES
-                                                         if c != "store.owners" or hasattr(engine.store, "hold")]})
+                                        "capabilities": [c for c in (NATIVE_CAPABILITIES if native_enabled else CAPABILITIES)
+                                                         if c != "store.owners" or hasattr(engine.store, "hold")],
+                                        **({"capability_gaps": NATIVE_CAPABILITY_GAPS} if native_enabled else {})})
             lora = _LORA.match(self.path)
             if lora:
                 try:
@@ -280,6 +287,16 @@ def make_handler(engine: Engine):
 
         def do_POST(self):
             try:
+                if getattr(engine, "native_state_enabled", False):
+                    unavailable = {
+                        "/v1/neuralese/grad": "grad", "/v1/neuralese/optim": "optim",
+                        "/v1/neuralese/adapters": "adapters.create", "/v1/neuralese/embed": "embed",
+                        "/v1/neuralese/write": "write", "/v1/neuralese/view": "view",
+                        "/v1/neuralese/init_body": "init-body", "/v1/neuralese/encode": "encode",
+                        "/v1/natlang/score": "score", "/v1/neuralese/decide_many": "decide",
+                    }.get(self.path)
+                    if unavailable:
+                        return self._unavailable(unavailable)
                 if self.path == "/v1/chat/completions":
                     return self._chat(self._object())
                 if self.path == "/v1/neuralese/collect":
@@ -412,6 +429,9 @@ def make_handler(engine: Engine):
                 self._error(500, "internal", f"{type(error).__name__}: {error}")
 
         def _chat(self, body: dict):
+            if (getattr(engine, "native_state_enabled", False) and
+                    body.get("guidance", getattr(engine, "default_guidance", None)) not in (None, False)):
+                return self._unavailable("guidance")
             request = GenerationRequest(
                 messages=body.get("messages") or [], tools=body.get("tools"),
                 max_tokens=completion_limit(body),
