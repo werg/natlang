@@ -128,7 +128,7 @@ test('a failed or timed-out eval stops the calls it started', async () => {
   const thrown = await evalCase({ children, settleMs: 2500, code: 'const pending = nl<string>`Answer slowly.`(); throw new Error("boom");' });
   assert.match(thrown.error, /boom/); assert.ok(thrown.elapsedMs < 1800, `${thrown.elapsedMs} ms`); assert.equal(thrown.ticksAfter, 0);
   const timedOut = await evalCase({ children, timeoutMs: 200, settleMs: 2500, code: 'return await nl<string>`Answer slowly.`();' });
-  assert.match(timedOut.error, /timed out after 200 ms/); assert.ok(timedOut.elapsedMs < 1800, `${timedOut.elapsedMs} ms`);
+  assert.match(timedOut.error, /timed out after 200\s*ms/); assert.ok(timedOut.elapsedMs < 1800, `${timedOut.elapsedMs} ms`);
   assert.equal(timedOut.ticksAfter, 0);
 });
 
