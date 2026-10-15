@@ -84683,6 +84683,114 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "external-expansion-rightfit-handoffs-20261015-v2",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-rightfit-handoffs-20261015-v2",
+      "include": [
+        "*.port-records.jsonl",
+        "manifest.json",
+        "admission-review.json"
+      ],
+      "source_class": "external-static-typed-handoff",
+      "training_admission": true,
+      "training_admission_reason": "Owner authorizes static Natlang-like external coding and Neuralese training; all source licenses accepted",
+      "derived_from": [
+        "external-expansion-d06-source-20261014-v1"
+      ],
+      "admission": {
+        "schema": "natlang.external-static-admission/1",
+        "approved": true,
+        "policy": "Owner authorizes static Natlang-like external coding and Neuralese training; all source licenses accepted",
+        "source_reports": "6204 scored primary runs,3534 positive rewards,6067 available histories,284 child traces. Parent score is upstream-reported, never independent child correctness.137 missing histories explicit. Viewer parquet duplicate not converted.",
+        "conversion": "14564 typed accepted records,one exact duplicate collapsed;2669 failed/unresolved exclusions and5 oversized consumers assigned failure/paged conversion; original raw histories retained",
+        "semantic_correctness": "Native replay verifies static plumbing and exact recorded targets, not independent external teacher correctness",
+        "license": "cc-by-nc-4.0 and source analysis-only restriction recorded as facts and accepted under standing owner instruction"
+      },
+      "license": "cc-by-nc-4.0 and source analysis-only restriction recorded as facts and accepted under standing owner instruction"
+    },
+    {
+      "id": "external-expansion-rightfit-native-20261015-v2",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-rightfit-native-20261015-v2",
+      "include": [
+        "turns/**/*.turns.jsonl.zst",
+        "turns/**/*.summary.json",
+        "ir/**/build.json",
+        "runtime-page.json",
+        "admission-review.json"
+      ],
+      "source_class": "statically-lowered-external-native-teacher-turns",
+      "training_admission": true,
+      "training_admission_reason": "Owner authorizes static Natlang-like external coding and Neuralese training; all source licenses accepted",
+      "derived_from": [
+        "external-expansion-rightfit-handoffs-20261015-v2"
+      ],
+      "admission": {
+        "schema": "natlang.external-static-admission/1",
+        "approved": true,
+        "policy": "Owner authorizes static Natlang-like external coding and Neuralese training; all source licenses accepted",
+        "source_reports": "6204 scored primary runs,3534 positive rewards,6067 available histories,284 child traces. Parent score is upstream-reported, never independent child correctness.137 missing histories explicit. Viewer parquet duplicate not converted.",
+        "conversion": "14564 typed accepted records,one exact duplicate collapsed;2669 failed/unresolved exclusions and5 oversized consumers assigned failure/paged conversion; original raw histories retained",
+        "semantic_correctness": "Native replay verifies static plumbing and exact recorded targets, not independent external teacher correctness",
+        "license": "cc-by-nc-4.0 and source analysis-only restriction recorded as facts and accepted under standing owner instruction",
+        "range": "base",
+        "items": 6630,
+        "cases": 1658,
+        "decisions": 17330,
+        "replay_omissions": 0,
+        "builder_options": {
+          "items": 4,
+          "shard_cases": 250,
+          "max_evidence": 32000,
+          "min_evidence": 0
+        },
+        "unconverted_after_combined_passes": 2714,
+        "unconverted_consumer": "Assigned paged-program conversion; all originals retained in closed handoffs"
+      },
+      "license": "cc-by-nc-4.0 and source analysis-only restriction recorded as facts and accepted under standing owner instruction"
+    },
+    {
+      "id": "external-expansion-rightfit-native-long-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-rightfit-native-long-20261015-v1",
+      "include": [
+        "turns/**/*.turns.jsonl.zst",
+        "turns/**/*.summary.json",
+        "ir/**/build.json",
+        "runtime-page.json",
+        "admission-review.json"
+      ],
+      "source_class": "statically-lowered-external-native-teacher-turns",
+      "training_admission": true,
+      "training_admission_reason": "Owner authorizes static Natlang-like external coding and Neuralese training; all source licenses accepted",
+      "derived_from": [
+        "external-expansion-rightfit-handoffs-20261015-v2"
+      ],
+      "admission": {
+        "schema": "natlang.external-static-admission/1",
+        "approved": true,
+        "policy": "Owner authorizes static Natlang-like external coding and Neuralese training; all source licenses accepted",
+        "source_reports": "6204 scored primary runs,3534 positive rewards,6067 available histories,284 child traces. Parent score is upstream-reported, never independent child correctness.137 missing histories explicit. Viewer parquet duplicate not converted.",
+        "conversion": "14564 typed accepted records,one exact duplicate collapsed;2669 failed/unresolved exclusions and5 oversized consumers assigned failure/paged conversion; original raw histories retained",
+        "semantic_correctness": "Native replay verifies static plumbing and exact recorded targets, not independent external teacher correctness",
+        "license": "cc-by-nc-4.0 and source analysis-only restriction recorded as facts and accepted under standing owner instruction",
+        "range": "long",
+        "items": 5219,
+        "cases": 5219,
+        "decisions": 33045,
+        "replay_omissions": 0,
+        "builder_options": {
+          "items": 1,
+          "shard_cases": 250,
+          "max_evidence": 120000,
+          "min_evidence": 32000
+        },
+        "unconverted_after_combined_passes": 2714,
+        "unconverted_consumer": "Assigned paged-program conversion; all originals retained in closed handoffs"
+      },
+      "license": "cc-by-nc-4.0 and source analysis-only restriction recorded as facts and accepted under standing owner instruction"
     }
   ],
   "coverage_backlog": [

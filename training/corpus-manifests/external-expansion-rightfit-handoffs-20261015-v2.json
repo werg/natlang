@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-rightfit-handoffs-20261015-v2",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-rightfit-handoffs-20261015-v2",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 919,
+      "sha256": "62173661ff551c84408f3cf243bf74292c1b91b9eb6a144e8919a78b0fa6dd89"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 2586,
+      "sha256": "dd551bc8317c2b46c04d5eca2ac0094485e0ee4ea11f7f86ac135173e05ea23b"
+    },
+    {
+      "path": "trajectory_continuation_coding.port-records.jsonl",
+      "bytes": 1239336509,
+      "sha256": "d627dd257f9461d6dd1bca1dd4bca0f4ffee16ab73ba6c654ceedbcd46a915e4",
+      "lines": 14563
+    }
+  ],
+  "bytes": 1239340014
+}
