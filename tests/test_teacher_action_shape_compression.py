@@ -39,3 +39,34 @@ def test_compressed_quality_review_preserves_holds_and_collateral(tmp_path):
         assert review['held_parent_ids'] == {'missing-iteration': 'required_iterateOn_missing'}
         assert review['collateral_parent_ids'] == ['sound-sibling']
         assert review['source_groups'] == 1
+
+
+def test_child_ticket_keyword_bypass_holds_only_its_parent(tmp_path):
+    def row(parent, code, child):
+        return {
+            'training_admission': {'approved': True}, 'split': 'train',
+            'teacher_trajectory_id': parent, 'task_family': 'curriculum_folder_criteria_reducer',
+            'source_groups': [parent],
+            'source_ref': {'parent_invocation_id': 'root'} if child else {},
+            'target': {'tool_calls': [{'function': {'arguments': json.dumps({'code': code})}}]},
+        }
+
+    cases = [
+        row('regex-child', 'await nl<boolean>`Judge the ticket`(ticket)', False),
+        row('regex-child', 'return /problem.*resolved/i.test(ticket) && /customer.*confirmed/i.test(ticket)', True),
+        row('keyword-child', 'await nl<boolean>`Judge the ticket`(ticket)', False),
+        row('keyword-child', 'return ticket.includes("resolved") && ticket.includes("customer")', True),
+        row('sound-child', 'await nl<boolean>`Judge the ticket`(ticket)', False),
+        row('sound-child', 'return true', True),
+    ]
+    source = tmp_path / 'turns.jsonl'
+    source.write_text(''.join(json.dumps(case) + '\n' for case in cases))
+    review = tmp_path / 'review.json'
+    subprocess.run([sys.executable, str(ROOT / 'scripts/neuralese_data/audit_teacher_action_shape.py'),
+                    '--turns', str(source), '--out', str(tmp_path / 'holds.jsonl'),
+                    '--review', str(review)], check=True)
+    result = json.loads(review.read_text())
+    assert result['held_parent_ids'] == {
+        'regex-child': 'semantic_ticket_judgment_crisp_bypass',
+        'keyword-child': 'semantic_ticket_judgment_crisp_bypass',
+    }

@@ -23,6 +23,10 @@ from natlang_neuralese.common.jsonio import open_jsonl_text
 
 
 NL_CALL = re.compile(r'\bnl\s*(?:<|\.|`|\()')
+SEMANTIC_TICKET_WORD = re.compile(r'\b(?:resolv\w*|fix\w*|customer|confirm\w*)\b', re.I)
+JS_REGEX_LITERAL = re.compile(r'/(?:\\.|[^/\\\n]){1,300}/[gimsuy]*')
+JS_KEYWORD_TEST = re.compile(r'\.(?:includes|startsWith|endsWith)\s*\(\s*[\'\"](?:resolv\w*|fix\w*|customer|confirm\w*)', re.I)
+JS_REGEX_CONSTRUCTOR = re.compile(r'\bnew\s+RegExp\s*\(\s*[\'\"][^\'\"]*(?:resolv\w*|fix\w*|customer|confirm\w*)', re.I)
 
 
 def digest(path: Path) -> str:
@@ -63,6 +67,16 @@ def action_code(turn: dict) -> str:
         if isinstance(arguments, dict) and isinstance(arguments.get('code'), str):
             codes.append(arguments['code'])
     return '\n'.join(codes)
+
+
+def semantic_ticket_bypass(turn: dict) -> bool:
+    """Catch exact crisp substitutes inside the child asked to judge ticket prose."""
+    if (turn.get('task_family') != 'curriculum_folder_criteria_reducer' or
+            not turn.get('source_ref', {}).get('parent_invocation_id')):
+        return False
+    code = action_code(turn)
+    return (bool(JS_KEYWORD_TEST.search(code) or JS_REGEX_CONSTRUCTOR.search(code)) or
+            any(SEMANTIC_TICKET_WORD.search(literal) for literal in JS_REGEX_LITERAL.findall(code)))
 
 
 def hold_reason(family: str, code: str, inline: str | None = None,
@@ -116,11 +130,13 @@ def main() -> None:
             requirements = (curriculum.get('inline'), curriculum.get('iterate'))
             groups = tuple(turn['source_groups'])
             parent = parents.setdefault(parent_id, {'family': family, 'groups': groups,
-                                                    'requirements': requirements, 'codes': []})
+                                                    'requirements': requirements, 'codes': [],
+                                                    'semantic_ticket_bypass': False})
             if (parent['family'] != family or parent['groups'] != groups or
                     parent['requirements'] != requirements):
                 raise ValueError(f'parent source identity changed across decisions: {parent_id}')
             parent['codes'].append(action_code(turn))
+            parent['semantic_ticket_bypass'] |= semantic_ticket_bypass(turn)
 
     held = {}
     by_reason = Counter()
@@ -128,6 +144,8 @@ def main() -> None:
     for parent_id, parent in parents.items():
         all_families[parent['family']] += 1
         reason = hold_reason(parent['family'], '\n'.join(parent['codes']), *parent['requirements'])
+        if not reason and parent['semantic_ticket_bypass']:
+            reason = 'semantic_ticket_judgment_crisp_bypass'
         if reason:
             held[parent_id] = reason
             by_reason[reason] += 1
