@@ -17,8 +17,9 @@ retired along with the superseded Pop run copy. The old
 checkpoint were retired; current production follows the QAD foundation and
 R11 data-integration pipeline. The retired recurring DGX development-data
 sync and completed initial bootstrap units were disabled and removed, so they
-cannot repopulate those
-paths. Pop root free space rose from about 32 GiB to about 74 GiB (a net gain
+cannot repopulate those paths. Inactive v13 training and periodic execution
+evaluation launchers were also disabled and removed. Pop root free space rose
+from about 32 GiB to about 74 GiB (a net gain
 of about 42 GiB while other workloads remained active). Historical paths and
 retention notes below describe their original state, not current storage
 locations.
