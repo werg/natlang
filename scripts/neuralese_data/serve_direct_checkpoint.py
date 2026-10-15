@@ -39,6 +39,7 @@ def main() -> None:
     parser.add_argument('--neuralese', action='store_true', help='restore the mixed checkpoint writer/readout too')
     parser.add_argument('--sdpa-backend', choices=['default', 'flash', 'math'], default='default')
     parser.add_argument('--threads', type=int, default=4)
+    parser.add_argument('--store-dir', type=Path, help='durable actor block store retained across interrupted leases')
     args = parser.parse_args()
     if args.native_state:
         if args.heads is not None or args.heads_sha256 is not None:
@@ -81,6 +82,9 @@ def main() -> None:
                                      'base': str(args.base) if args.base else None})
             engine.rl_policy_binding = {'checkpoint_sha256': args.checkpoint_sha256,
                                         'heads_sha256': args.heads_sha256, 'neuralese': args.neuralese}
+        if args.store_dir is not None:
+            from natlang_neuralese.serve.store import TensorStore
+            engine.store = TensorStore(args.store_dir)
         engine.start()
         server = serve(engine, args.host, args.port)
         print(json.dumps({'event': 'direct_training_checkpoint_serving',

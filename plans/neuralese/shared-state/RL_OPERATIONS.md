@@ -177,3 +177,11 @@ SFT checkpoints are 47,738,195,645 bytes for Mellum and 2,003,763,339 bytes for
 QAD LFM. No production joint checkpoint existed when this protocol was added;
 its size is measured from its eventual artifact inventory. Reuse immutable
 parents and stream cloud-to-cloud rather than downloading full state to DGX.
+
+Managed native actors use `--store-dir {out}/actor-store` inside each sealed
+round. The existing TensorStore preserves exact native block bytes across actor
+restart, so interrupted archival can fetch previously produced blocks. Reuse the
+same store only for that round and immutable policy; later rounds have distinct
+output directories. Existing custom actor argv must include this option before
+using interrupted collection recovery. Do not remove the store while collection
+or a pending archive still references it.
