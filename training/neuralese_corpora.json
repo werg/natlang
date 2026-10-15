@@ -93868,6 +93868,30 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "luna-held-shapes-s52099-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52099-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "80 independently reviewed exact accepted roots; 372 approved native decisions out of 513 materialized from 87 exact parents; seven whole-parent process holds and 14 unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v27 source review, protected-source check, four structural process holds, three prolonged detour holds, and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Seven exact-success roots held whole; no broad source-group collateral. Twelve rejected roots reviewed; eight exact source identities held by v27 and verbose Hotpot answers are not DPO negatives.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins v27. Exact trajectory holds govern. Global union requires ticket-bypass v3 and seven-ID non-success hold list."
     }
   ],
   "coverage_backlog": [
