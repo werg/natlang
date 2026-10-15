@@ -44,6 +44,7 @@ sys.path.insert(0, str(ROOT / 'scripts' / 'neuralese_data'))
 from render_native_turn_corpus import canonical, file_sha, role_counter, sha, whole_trajectory_target_tokens  # noqa: E402
 from text_tokenizer_twin import document_identity, IDENTITY_FIELDS, PROVENANCE_FIELDS  # noqa: E402
 from source_review import pending_unpinned_source_groups, registry_sha256  # noqa: E402
+from neuralese_data.decision_holds import load_decision_holds  # noqa: E402
 
 SCHEMA = 'natlang.native-text-union/2'
 
@@ -406,17 +407,8 @@ def main(argv=None):
                     if row['split'] == 'test':
                         held_groups.update(row['source_groups'])
                         held_texts.add(sha(row['text'].encode()))
-    reference_bindings = []
+    held_decision_ids, reference_bindings = load_decision_holds(a.decision_hold_ids)
     quarantined_groups = set()
-    held_decision_ids = set()
-    for path in a.decision_hold_ids:
-        reference_bindings.append({'kind': 'decision-hold', 'path': str(path), 'sha256': file_sha(path),
-                                   'bytes': path.stat().st_size})
-        for _, row in rows(path):
-            if (not isinstance(row.get('id'), str) or not row['id'] or
-                    not isinstance(row.get('reason'), str) or not row['reason']):
-                raise ValueError(f'invalid native decision hold in {path}')
-            held_decision_ids.add(row['id'])
     for kind, paths in [('held', a.held_reference), ('quarantine', a.quarantine_reference)]:
         for path in paths:
             reference_bindings.append({'kind': kind, 'path': str(path), 'sha256': file_sha(path),
@@ -456,6 +448,7 @@ def main(argv=None):
                'code': {str(f.relative_to(ROOT)): file_sha(f) for f in (
                    Path(__file__).resolve(), ROOT / 'scripts/neuralese_data/render_native_turn_corpus.py',
                    ROOT / 'scripts/neuralese_data/text_tokenizer_twin.py',
+                   ROOT / 'scripts/neuralese_data/decision_holds.py',
                    ROOT / 'scripts/source_review.py')}}
     for rendering in members:
         # Pass 2: index compact row identities in both tokenizer files before resolving any duplicate. This prevents

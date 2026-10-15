@@ -204,3 +204,22 @@ Both native snapshots are registered and renders are in flight. Another
 failed/unresolved source exclusions have explicit conversion assignments.
 None of these changes mutate the running frozen R8 cloud inputs: inclusion
 uses the next independently protected union and a declared continuation.
+
+Bulk E2E assembly applies the same reviewed exact native-decision holds as
+the text union. A held decision excludes its entire training trajectory,
+including dependent contexts and both endpoints of each edge. Held evaluation
+trajectories remain available and their matched IDs are reported. Loading and
+binding the reviewed ID files is shared crisp verification; chain exclusion
+implements this declared data policy in the existing assembler. Archive
+availability and graph authentication alone never grant training admission.
+
+At 2026-10-15 06:37 UTC, R10 training admission is revoked: its build receipt
+used an older source-review snapshot and omitted the exact decision-hold
+files. Neither running cloud lineage consumed R10. R11 is prepared from 58
+admitted source members/348 views, including reviewed teacher additions
+through seed 52098, completed D07/D11 and curated static s7k renders. Its
+frozen runtime binds source-review v26 and both exact decision-hold files;
+an independent audit against current holds is required before registration.
+D06/D40/Evidence renders and cloud Search/OWL/Dolci/Cognitive work remain
+explicit subsequent additions. All 16 newly accessible raw source archives
+are independently privately durable; raw availability is not admission.

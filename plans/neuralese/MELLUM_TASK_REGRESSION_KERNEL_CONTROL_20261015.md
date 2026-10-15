@@ -28,3 +28,13 @@ Private exact probe inputs/results are in DGX `dgxops`:
 `probe_mellum292_moe_kernels.py`, `run_mellum292_moe_kernels.py`,
 `mellum292-moe-kernel-proof.json` and `mellum292-moe-kernels.log`.
 The step-292 checkpoint remains assigned to this unresolved regression.
+
+Ledger unit `diag-mellum292-attention-boundary-2436` further localized the
+first-layer BF16 discrepancy on the 4,946-token real prompt. Post-RoPE Q and
+K are bitwise identical to the official Hugging Face SDPA path. Attention
+output before `o_proj` differs: maximum absolute error 0.0009765625,
+relative RMS error 0.0007513933. This rules out RoPE as the source of this
+measured discrepancy; attention execution remains the numerical boundary.
+It does not establish a cause for the task regression or qualify a production
+kernel change. The probe completed with exit zero; its exact result is
+`dgxops/mellum292-attention-boundary-proof.json` on DGX.

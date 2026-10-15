@@ -154,7 +154,8 @@ def test_held_union_cache_tracks_compressed_relocated_views_and_exact_bytes(tmp_
         module.held_union_groups(work, tmp_path / 'missing-union')
 
 
-def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_path, monkeypatch):
+@pytest.mark.parametrize('hold_kind', ['quality', 'decision'])
+def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_path, monkeypatch, hold_kind):
     from types import SimpleNamespace
     spec = importlib.util.spec_from_file_location('e2e_assemble_quality_test', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
@@ -178,13 +179,33 @@ def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_pa
     Path(str(stem) + '.stats.json').write_text('{}')
     (source / 'sharded.json').write_text('{}')
     witness = tmp_path / 'quality.jsonl'; witness.write_text('{"source_groups":["quality:bad"]}\n')
+    decision_witness = tmp_path / 'decisions.jsonl'
+    decision_witness.write_text(''.join(json.dumps({'id': rid, 'reason': 'reviewed non-success'}) + '\n'
+                                        for rid in ['bad:0', 'held:0']))
     module.cmd_assemble(SimpleNamespace(work=str(work), out_dir=str(tmp_path), id='assembled',
-                                       held_union='bound-union', quarantine_reference=[witness]))
+                                       held_union='bound-union',
+                                       quarantine_reference=[witness] if hold_kind == 'quality' else [],
+                                       decision_hold_ids=[decision_witness] if hold_kind == 'decision' else []))
     out = tmp_path / 'assembled'
     assert {json.loads(l)['id'] for l in (out / 'records.jsonl').open()} == {'good:0', 'good:1', 'held:0', 'held:1'}
     omissions = [json.loads(l) for l in (out / 'omissions.jsonl').open()]
     assert {r['id'] for r in omissions} == {'bad:0', 'bad:1'}
-    assert all(r['reason'] == 'source_quality_quarantine_chain' for r in omissions)
+    reason = 'source_quality_quarantine_chain' if hold_kind == 'quality' else 'native_decision_hold_chain'
+    assert all(r['reason'] == reason for r in omissions)
     receipt = json.loads((out / 'receipt.json').read_text())
     assert receipt['totals']['edges'] == 2
-    assert receipt['source_quality_quarantine_bindings'][0]['sha256'] == module.sha256_file_hex(witness)
+    if hold_kind == 'quality':
+        assert receipt['source_quality_quarantine_bindings'][0]['sha256'] == module.sha256_file_hex(witness)
+    else:
+        assert all(r['decision_ids'] == ['bad:0'] for r in omissions)
+        assert receipt['native_decision_hold_bindings'][0]['sha256'] == module.sha256_file_hex(decision_witness)
+        assert receipt['held_native_decision_flags'] == [{'id': 'held:0', 'source': 'fixture', 'split': 'test'}]
+
+
+def test_native_decision_hold_files_reject_unreviewed_ids(tmp_path):
+    import sys
+    sys.path.insert(0, str(Path(__file__).parents[1] / 'scripts'))
+    from neuralese_data.decision_holds import load_decision_holds
+    witness = tmp_path / 'bad.jsonl'; witness.write_text('{"id":"unreviewed"}\n')
+    with pytest.raises(ValueError, match='invalid native decision hold'):
+        load_decision_holds([witness])

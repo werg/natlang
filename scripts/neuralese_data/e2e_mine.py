@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 sys.path.insert(0, str(ROOT / 'scripts'))
 from source_review import pending_unpinned_source_groups, registry_sha256  # noqa: E402
+from neuralese_data.decision_holds import load_decision_holds  # noqa: E402
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
 from natlang_neuralese.common.jsonio import open_jsonl_text  # noqa: E402
@@ -347,6 +348,8 @@ def content_key(row):
 def cmd_assemble(a):
     review_groups = pending_unpinned_source_groups()
     review_sha = registry_sha256()
+    held_decisions, decision_bindings = load_decision_holds(getattr(a, 'decision_hold_ids', []))
+    held_decision_flags = []
     quality_groups, quality_bindings = set(), []
     for path in getattr(a, 'quarantine_reference', []):
         before = sha256_file_hex(path)
@@ -388,8 +391,18 @@ def cmd_assemble(a):
         edges = [json.loads(l) for l in read_lines(f'{stem}.edges.jsonl')]
         reviewed = reviewed_trajectories(records.values(), review_groups)
         quarantined = reviewed_trajectories(records.values(), quality_groups)
+        decision_held = collections.defaultdict(set)
+        for rid, record in records.items():
+            if rid not in held_decisions:
+                continue
+            if record.get('split') == 'train':
+                decision_held[trajectory_of(record)].add(rid)
+            else:
+                held_decision_flags.append({'id': rid, 'source': source, 'split': record.get('split')})
         keep_ids, drop = set(), {}
         for rid, r in records.items():
+            if r.get('split') == 'train' and trajectory_of(r) in decision_held:
+                drop[rid] = 'native_decision_hold_chain'; continue
             if r.get('split') == 'train' and trajectory_of(r) in quarantined:
                 drop[rid] = 'source_quality_quarantine_chain'; continue
             if r.get('split') == 'train' and trajectory_of(r) in reviewed:
@@ -419,6 +432,8 @@ def cmd_assemble(a):
             groups = (quarantined if why == 'source_quality_quarantine_chain' else
                       reviewed if why == 'source_review_pending_chain' else None)
             detail = {'source_groups': sorted(groups[trajectory_of(records[rid])])} if groups is not None else {}
+            if why == 'native_decision_hold_chain':
+                detail['decision_ids'] = sorted(decision_held[trajectory_of(records[rid])])
             omissions.write(json.dumps({'id': rid, 'source': source, 'stage': 'assemble', 'reason': why, **detail}) + '\n')
             totals['omitted_assemble_' + why.split('_of_')[0]] += 1
         for traj, ces in chains.items():
@@ -452,6 +467,9 @@ def cmd_assemble(a):
         'held_union': a.held_union, 'held_groups': len(held_groups), 'held_union_bindings': held_bindings,
         'piece_conflicts': sorted(piece_conflicts),
         'source_review_registry_sha256': review_sha,
+        'native_decision_hold_bindings': decision_bindings,
+        'native_decision_hold_ids': len(held_decisions),
+        'held_native_decision_flags': held_decision_flags,
         'source_quality_quarantine_bindings': quality_bindings,
         'source_quality_quarantine_groups': len(quality_groups),
         'totals': totals, 'by_source': by_source,
@@ -728,6 +746,8 @@ def main():
     m.add_argument('--held-union', default=resolve_str('repo', 'runs/natlang-target-union-20261011-r3'))
     m.add_argument('--quarantine-reference', action='append', type=Path, default=[],
                    help='canonical source-quality group witnesses; exclude whole affected train chains')
+    m.add_argument('--decision-hold-ids', action='append', type=Path, default=[],
+                   help='reviewed exact native decision IDs; exclude whole affected train chains, preserve held')
     a = ap.parse_args()
     {'shard': cmd_shard, 'convert': cmd_convert, 'assemble': cmd_assemble, 'redo-failed': cmd_redo_failed, 'slice': cmd_slice, 'partition': cmd_partition, 'review-filter': cmd_review_filter}[a.cmd](a)
 
