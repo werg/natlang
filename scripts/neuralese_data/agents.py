@@ -479,6 +479,13 @@ def expansion_messages(raw):
     prepared = []
     for original in raw:
         item = dict(original)
+        if 'reasoning_content' not in item and item.get('reasoning') is not None:
+            item['reasoning_content'] = item['reasoning']
+        if item.get('tool_calls'):
+            item['tool_calls'] = [call if 'function' in call else
+                                  {'id': call.get('id'), 'type': 'function',
+                                   'function': {'name': call['name'], 'arguments': call.get('arguments', '{}')}}
+                                  for call in item['tool_calls']]
         if item.get('role') == 'function':
             # Evidence-subagent Qwen transcripts use this role for dispatches,
             # while legacy OpenAI transcripts use it for observations.
@@ -712,6 +719,43 @@ def cognitive_kernel(limit=None):
         yield rid, _initial_request_background(trajectory)
 
 
+def finding_right_fit(limit=None):
+    """Primary scored parent/child histories; viewer parquet is an alternate view."""
+    root = EXPANSION_ROOT / 'D06'
+    receipt = json.loads((root / 'acquisition.json').read_text())
+
+    def rows():
+        for path in sorted((root / 'trajectories').rglob('*.jsonl.gz')):
+            with gzip.open(path, 'rt') as stream:
+                for index, line in enumerate(stream):
+                    if not line.strip():
+                        continue
+                    row = json.loads(line)
+                    if not row.get('trajectory_available') or not row.get('messages'):
+                        continue
+                    rid = f'{path.relative_to(root)}:{index}'
+                    yield rid, row, row, 'parent'
+                    for child_index, child in enumerate(row.get('subagents') or []):
+                        if child.get('messages'):
+                            yield f'{rid}:child:{child_index}', child, row, 'child'
+
+    for rid, row, parent, role in _limited(rows(), limit):
+        metadata = {'trajectory_id': f"{parent['benchmark']}:{parent['task_id']}",
+                    'session_id': rid, 'benchmark': parent['benchmark'],
+                    'harness': parent.get('harness'), 'harness_version': parent.get('harness_version'),
+                    'source': parent.get('source'), 'canary': parent.get('canary'),
+                    'parent_reward': parent.get('reward'), 'parent_reward_status': parent.get('reward_status'),
+                    'session_role': role, 'observed_child_metadata': {k: v for k, v in row.items() if k != 'messages'} if role == 'child' else None,
+                    'harness_events': row.get('harness_events') or row.get('events')}
+        trajectory = expansion_trajectory('D06', receipt, rid, {**row, 'metadata': metadata})
+        trajectory.lineage['teacher'] = _teacher(parent.get('model_id') or parent.get('model'))
+        trajectory.lineage['notes']['score_is_parent_upstream_report_only'] = True
+        reward = parent.get('reward')
+        if parent.get('reward_status') != 'verified' or not isinstance(reward, (float, int)) or reward <= 0:
+            trajectory.outcome['label'] = 'failed'
+        yield rid, _initial_request_background(trajectory)
+
+
 def deepnlp_orchestration(limit=None):
     """Distinct recorded histories of alternative sessions, without invented edges."""
     root = EXPANSION_ROOT / 'D07'
@@ -852,4 +896,5 @@ CORPORA.update({'gatc-sessions': (gatc_sessions, 4), "wideseek": (wideseek, 4), 
                 'cognitive-kernel': (cognitive_kernel, 4),
                 'agentsynth': (agentsynth, 4),
                 'deepnlp-orchestration': (deepnlp_orchestration, 4),
+                'finding-right-fit': (finding_right_fit, 4),
                 'agentic-coding-sessions': (agentic_coding_sessions, 4)})

@@ -318,6 +318,36 @@ def test_native_replay_disambiguates_reused_upstream_ids(tmp_path):
 
 
 
+def test_right_fit_preserves_flat_calls_reasoning_children_and_parent_score(tmp_path, monkeypatch):
+    import gzip, json
+    from neuralese_data import agents
+    root = tmp_path / 'D06'; folder = root / 'trajectories' / 'benchmark'; folder.mkdir(parents=True)
+    (root / 'acquisition.json').write_text(json.dumps({'repo': 'fixture/right-fit', 'revision': 'pinned'}))
+    messages = [{'role': 'user', 'content': 'Implement task.'},
+                {'role': 'assistant', 'content': None, 'reasoning': 'Original reasoning',
+                 'tool_calls': [{'id': 'c', 'name': 'Bash', 'arguments': '{"command":"pwd"}'}]},
+                {'role': 'tool', 'tool_call_id': 'c', 'content': 'Observed output'},
+                {'role': 'assistant', 'content': 'Original answer'}]
+    row = {'benchmark': 'benchmark', 'task_id': 'shared', 'model': 'teacher', 'harness': 'h',
+           'trajectory_available': True, 'reward_status': 'verified', 'reward': 1,
+           'messages': messages, 'canary': 'source canary',
+           'subagents': [{'session_id': 'child', 'parent': 'root', 'messages': messages}]}
+    with gzip.open(folder / 'runs.jsonl.gz', 'wt') as stream:
+        for value in [row, {**row, 'reward': 0, 'subagents': []}, {**row, 'trajectory_available': False}]:
+            stream.write(json.dumps(value) + '\n')
+    monkeypatch.setattr(agents, 'EXPANSION_ROOT', tmp_path)
+    trajectories = [t for _, t in agents.finding_right_fit()]
+    assert len(trajectories) == 3 and len(list(agents.finding_right_fit(limit=1))) == 1
+    parent, child, failed = trajectories
+    assert parent.id != child.id and parent.split_groups == child.split_groups == failed.split_groups
+    assert parent.messages[1]['reasoning'] == 'Original reasoning'
+    assert parent.messages[1]['tool_calls'][0]['function']['name'] == 'Bash'
+    assert parent.messages[2]['content'] == 'Observed output'
+    assert child.lineage['notes']['metadata']['observed_child_metadata']['parent'] == 'root'
+    assert parent.outcome['checked'] is child.outcome['checked'] is None
+    assert failed.outcome['label'] == 'failed'
+
+
 def test_deepnlp_deduplicates_complete_histories_without_appending_selected_calls(tmp_path, monkeypatch):
     import json
     from neuralese_data import agents

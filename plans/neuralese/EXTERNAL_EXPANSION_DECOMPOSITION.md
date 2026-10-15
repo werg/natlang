@@ -176,3 +176,17 @@ are provenance, not extra actions appended after their own observations. Do
 not invent producer-consumer edges between alternative sessions. Nested JSON
 mapping and exact duplicate-history detection are crisp source plumbing; native
 replay, protected closure and reviewed admission remain shared stages.
+
+### Finding the Right Fit scored primary trajectories (D06, 2026-10-15)
+
+Use primary gzip trajectories, not their duplicate viewer parquet. Normalize
+flat tool calls and explicit reasoning without losing their original content.
+Group all harness/model alternatives and recorded child sessions by benchmark
+task; preserve canaries, source trial identifiers, harness events and original
+parent/child metadata. Positive training targets use available histories from
+source-verified positive-reward runs. Failed/unresolved runs remain source
+provenance for assigned failure-data conversion, and missing histories remain
+explicit omissions. A parent's score is not an independently verified child
+score. These are static typed history handoffs until genuine recorded edges
+are separately reauthenticated for E2E use. License restrictions are recorded
+as facts and accepted under the owner's standing source instruction.
