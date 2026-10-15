@@ -1,0 +1,48 @@
+{
+  "schema": "natlang.native-semantic-training/1",
+  "id": "native-state-semantic-curriculum-rest27-foundation-20261015-v1",
+  "description": "Complete semantic VAE, joint adaptation, and behavioral distillation over the finite, fully admitted initial REST27 communication foundation: all 26,312 training pairs (the exact 37-row trained prefix plus 26,275 new rows) and 9,896 separate held pairs. This is the complete current foundation cohort, not a claim that all REST27 sources are converted: additional admitted communication pairs remain mandatory for subsequent foundation and CE exposure.",
+  "pairs": {
+    "path": "/work/native-production/data/native-state-rest27-semantic-pairs-partial-20261015-v3/train-pairs.jsonl.zst",
+    "sha256": "6ec7db27f849afdaf43f45fed23871eac8be87b9873c76e42a640b711d0f20e4"
+  },
+  "held_pairs": {
+    "path": "/work/native-production/data/native-state-rest27-semantic-pairs-partial-20261015-v3/test-pairs.jsonl.zst",
+    "sha256": "ddec24c6036b18db393ccd76f4dd772a3208a587449597eefd3f29c07f1afeea"
+  },
+  "backbone_lr": 1e-05,
+  "vae_lr": 0.0001,
+  "latent_width": 128,
+  "hidden_width": 512,
+  "checkpoint_every": 250,
+  "eval_every": 250,
+  "checkpoint_seconds": 3600,
+  "adaptive_refresh": {
+    "updates_per_phase": 16
+  },
+  "held_eval_rows": 32,
+  "options": {
+    "chunk_tokens": 64,
+    "allow_nearest": true
+  },
+  "phases": [
+    {
+      "id": "semantic_vae",
+      "kind": "vae",
+      "epochs": 1,
+      "options": {}
+    },
+    {
+      "id": "semantic_joint",
+      "kind": "joint",
+      "epochs": 1,
+      "options": {}
+    },
+    {
+      "id": "semantic_distillation",
+      "kind": "distill",
+      "epochs": 1,
+      "options": {}
+    }
+  ]
+}
