@@ -29,3 +29,12 @@ The batch47 static conversion first hit its 0.7 GB memory claim and left
 partial output. `b9478a3d` raises the claim to 1.3 GB and lets the replenisher
 list and prune only an OOM-failed partial output before relaunching. The rerun
 completed with 29/29 exact reference replays; batch48 completed with 27/27.
+
+A later pass found two source-matching `sync_device` requests that actually ask
+to *unsync* a phone. Their direction remains ambiguous under the intent label,
+so both source items and the previously excluded inverse credit-score item are
+pending in `source-reviews-20261015-v2`. `67675804` lets source reviews bind
+their opaque rendered group IDs. The registered render remains immutable;
+the protected union must omit both additional programs. Its program-header
+view contains 36 affected documents. DGX was asked to apply the updated holds
+before publishing its next union.
