@@ -108405,6 +108405,69 @@
       "split": "Exact source render split; 338989 training documents and 299 held/test documents for both model views, verified against the admitted render receipts.",
       "training_admission": true,
       "training_admission_reason": "Derived from the registered, training-admitted external-expansion render. Current protection closure includes held, quality, and pending-unpinned source groups; model/tokenizer identities, split counts and final file hashes are bound per view. Independent LFM deep verification passed; Mellum deep-scan status is explicitly recorded as not run. This v2 snapshot corrects the proof-file identity mismatch without changing graph or receipt bytes."
+    },
+    {
+      "id": "external-expansion-evidence-terminal-whole-trajectory-native-graphs-20261015-v2",
+      "owner": "dgx",
+      "path": "runs/external-expansion-evidence-terminal-native-graphs-20261015-v2/whole-trajectory",
+      "include": [
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "lfm25/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "mellum21/receipt.json",
+        "validation-proof.json"
+      ],
+      "license": "Inherited from registered rendered source; owner accepts all licenses.",
+      "derived_from": [
+        "external-expansion-evidence-terminal-native-20261015-v2-render"
+      ],
+      "source_class": "static-role-aware-whole-trajectory-native-text-graphs",
+      "split": "Preserves complete admitted train and held/test trajectory views; model twins verified by ordered source ID/group bindings.",
+      "training_admission": true,
+      "training_admission_reason": "Corrected whole-trajectory supervision: retain complete conversations; role-aware targets; prompt/runtime-opening context weight 0.05; tool output weight 0.25; failed assistant actions excluded. Exact source/model/tokenizer/output bindings, current held/quality/pending-unpinned source-group closure, and cross-model twins are in validation-proof.json. No native producer-consumer edges inferred.",
+      "admission": "Both model views preserve all usable whole trajectories with role-aware masks; assistant targets are supervised, prompt/runtime-opening context is downweighted, tool context is downweighted, and failed assistant actions are excluded. Current protection union is disjoint from all train/test source groups; cross-model twins and exact output bytes are verified.",
+      "source_bindings": {
+        "render_corpus_id": "external-expansion-evidence-terminal-native-20261015-v2-render",
+        "render_manifest_sha256": "4a4bfb24066ceb4411a6e23afe0705674e069e473446d1e407027e6a69262822",
+        "render_receipt_sha256": "8f96c481bebc5b878052e2294fb868bc36e077999759fd931eba362ee1a2673d",
+        "conversion_receipt_sha256": {
+          "lfm25": "e37b9f2fb8db313022b36daf672c7ba64eddbfa9c2dd46771a7b542de38ab92e",
+          "mellum21": "9d725004c1e06d9c8445776581eab0f17ef3c66cd9eae340e91f058fdba8b7a5"
+        },
+        "validation_proof_sha256": "5fade61e4ce6f7406e41709067e410449f3c1824e2eeb3217abde87c747e42ad"
+      },
+      "renders": {
+        "whole-trajectory": {
+          "lfm25": {
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "source_sha256": "6a1d9da7c851b3a67dedf1a2475b6a921a76aa427b9296fa6f3859b274b878c9",
+            "expanded_tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+            "train": {
+              "rows": 158565,
+              "sha256": "16bfdfc8a3ec21f1bbc0e69e1535d598530c0fb67622fffcd31a4037a40ee222"
+            },
+            "test": {
+              "rows": 115,
+              "sha256": "10cd385c79f366f926b9c12027536cc3b5899c1ee9bf3ea35b8ca6b115ed6d65"
+            }
+          },
+          "mellum21": {
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "source_sha256": "f3d6d38db00807bc8938fd0cad9657713d61f505fe25a1b4590a0f9e9e1218e4",
+            "expanded_tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f",
+            "train": {
+              "rows": 158565,
+              "sha256": "3ff188c54429e4ae4c92f43bed5c820a511e85c0bc7005dbde26f574e0d30905"
+            },
+            "test": {
+              "rows": 115,
+              "sha256": "629ac27faf21330d8722530dbda4b331ffa6a6b84157b7927e8b235e3058f064"
+            }
+          }
+        }
+      }
     }
   ],
   "coverage_backlog": [
