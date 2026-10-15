@@ -146,11 +146,15 @@ def test_the_fp8_backend_selects_the_expert_path_only_inside_its_autocast():
     """train/fp8_backend.make_backend('triton-experts'): FP8 experts inside autocast (training), BF16 under
     native_modules (evaluation) and outside; a checkpoint envelope without scale state."""
     from types import SimpleNamespace
-    from natlang_neuralese.maple.model import DENSE_MOE, DenseExperts
+    from natlang_neuralese.maple.model import DENSE_MOE, SparseMoE
     from natlang_neuralese.train.fp8_backend import make_backend
     model = torch.nn.Module()
-    model.config = SimpleNamespace(model_type='mellum')
-    model.experts = DenseExperts(2, 16, 8)
+    model.config = SimpleNamespace(model_type='mellum', hidden_size=16, num_experts=2,
+        num_experts_per_tok=2, moe_intermediate_size=16, swiglu_clamp=None, dense_experts=True)
+    model.mlp = SparseMoE(model.config).cuda()
+    model.mlp.experts.gate_up.normal_(std=.1)
+    model.mlp.experts.down.normal_(std=.1)
+    original = dict(DENSE_MOE)
     backend = make_backend('triton-experts', model, device='cuda')
     assert DENSE_MOE['fp8'] is None
     with backend.autocast():
@@ -158,7 +162,18 @@ def test_the_fp8_backend_selects_the_expert_path_only_inside_its_autocast():
         with backend.native_modules():
             assert DENSE_MOE['fp8'] is None
         assert DENSE_MOE['fp8'] == 'grouped'
-    assert DENSE_MOE['fp8'] is None and backend.has_executed
+    assert DENSE_MOE == original and not backend.has_executed
+    assert backend.collect_row_counts()['calls'] == 0
+    # A declared scope is not execution evidence. Exercise the actual model
+    # dispatcher and both real FP8 projections before claiming it ran.
+    inputs = torch.randn(5, 16, device='cuda', dtype=torch.bfloat16)
+    with backend.autocast(), torch.no_grad():
+        output = model.mlp(inputs)
+        assert DENSE_MOE['kernel'] == 'grouped'
+        assert backend.collect_row_counts()['calls'] == 2
+        assert backend.collect_row_counts()['rows'] == 20
+    assert torch.isfinite(output).all() and output.count_nonzero() > 0
+    assert DENSE_MOE == original and backend.has_executed
     backend.restore_extra_state(backend.extra_state())
     with pytest.raises(ValueError):
         make_backend('triton-experts', SimpleNamespace(config=SimpleNamespace(model_type='lfm2')), device='cuda')
