@@ -95761,6 +95761,30 @@
         "external-expansion-deepdive-handoffs-20261015-v1"
       ],
       "license": "Apache-2.0 from pinned D31 acquisition card"
+    },
+    {
+      "id": "luna-held-shapes-s52105-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52105-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with oracle-accepted outcomes and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "74 independently reviewed oracle-accepted roots; 368 approved native decisions out of 489 materialized from 82 candidate parents; eight whole-parent process holds and 12 unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v30 source review, protected-source check, six structural action-shape holds, one long malformed/crisp ticket root and one crisp film-comment child hold, and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Eight oracle-accepted roots held whole; one valid Hotpot source-group sibling retained after collateral review and one crisp film sibling held. Eleven rejected roots reviewed, no clear new source-label error. Rejected roots are not DPO negatives without separate semantic review.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins v30, 93 of 100 source-disjoint target selected. Exact trajectory holds govern. Global union requires current source-review, ticket-bypass and non-success hold checks."
     }
   ],
   "coverage_backlog": [
