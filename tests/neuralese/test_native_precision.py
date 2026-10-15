@@ -108,7 +108,8 @@ def test_real_training_precision_transition_restores_optimizer_rng_and_row_credi
     out = tmp_path/'run'
     argv = ['--base',str(base),'--dtype','float32','--rank','4','--device','cuda',
         '--native-graphs',str(files['train']),'--held-native-graphs',str(files['test']),
-        '--epochs','3','--eval-every','100','--out',str(out)]
+        '--epochs','3','--eval-every','100','--out',str(out),
+        '--forward-atol','1e-4','--gradient-atol','1e-5']
     def stop(policy, step, **kwargs): policy.stop.requested=True; return False
     monkeypatch.setattr(trainer.CheckpointPolicy, 'due', stop)
     assert trainer.main(argv) == 0
@@ -136,7 +137,7 @@ def test_real_training_precision_transition_restores_optimizer_rng_and_row_credi
     monkeypatch.setattr(trainer, 'restore_training_rng_state', restore)
     assert trainer.main(argv+['--native-linear-precision','bf16x6']) == 0
     after = torch.load(out/'checkpoint.pt', weights_only=False)
-    assert len(optimizer_loads) == len(rng_restores) == 1
+    assert len(optimizer_loads) == 1 and len(rng_restores) == 2
     def equal(left, right):
         if torch.is_tensor(left): assert torch.equal(left.cpu(), right.cpu())
         elif isinstance(left, dict):
@@ -148,6 +149,8 @@ def test_real_training_precision_transition_restores_optimizer_rng_and_row_credi
         else: assert left == right
     equal(optimizer_loads[0], before['training']['optimizer'])
     equal(rng_restores[0], before['training']['rng'])
+    equal(rng_restores[1], rng_restores[0])
+    assert after['training']['options']['native_precision_transition']['reference_check']['runtime_reference']['passed']
     assert before['training']['exposure_counts'] == {'train':1}
     assert after['training']['exposure_counts'] == {'train':2}
     assert after['training']['global_step'] == 2
@@ -155,3 +158,18 @@ def test_real_training_precision_transition_restores_optimizer_rng_and_row_credi
     assert after['model_config']['base_inventory_sha256'] == before['model_config']['base_inventory_sha256']
     assert after['model_config']['native_linear_precision'] == 'bf16x6'
     assert after['training']['options']['native_precision_transition']['from'] == 'bf16'
+
+
+def test_failed_destination_transition_restores_rng_before_rejecting(monkeypatch):
+    from natlang_neuralese.eval import native_state
+    from natlang_neuralese.train.native_state_sft import qualify_precision_transition
+    before = torch.random.get_rng_state().clone()
+    def failed(*args, **kwargs):
+        torch.rand(17)
+        return {'passed': False, 'forward_max_abs': .01}
+    monkeypatch.setattr(native_state, 'qualify_existing', failed)
+    with pytest.raises(ValueError, match='unchanged cached-reference'):
+        qualify_precision_transition(None, None, None, {'native_linear_precision': 'bf16x6'},
+            previous_precision='ieee', checkpoint_sha256='a'*64,
+            forward_atol=1e-4, gradient_atol=1e-5, device='cpu')
+    assert torch.equal(before, torch.random.get_rng_state())

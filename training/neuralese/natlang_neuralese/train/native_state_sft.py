@@ -401,6 +401,29 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
     policy.save(state, metric=metrics.get('held', {}).get('loss'))
 
 
+def qualify_precision_transition(model, tokenizer, roles, config, *, previous_precision,
+                                 checkpoint_sha256, forward_atol, gradient_atol, device, backend=None):
+    """Check changed production arithmetic on the restored live weights, once."""
+    if config.get('native_linear_precision', 'ieee') != 'bf16x6' or previous_precision == 'bf16x6':
+        return None
+    if forward_atol is None or gradient_atol is None:
+        raise ValueError('native arithmetic transition requires declared forward and gradient tolerances')
+    from ..eval.native_state import qualify_existing
+    saved_rng = capture_training_rng_state(device)
+    try:
+        with backend.native_modules() if backend is not None else contextlib.nullcontext():
+            report = qualify_existing(model, tokenizer, roles, config,
+                checkpoint_sha256=checkpoint_sha256, forward_atol=forward_atol, gradient_atol=gradient_atol)
+    finally:
+        restore_training_rng_state(saved_rng, device)
+    if not report['passed']:
+        raise ValueError('native arithmetic transition failed the unchanged cached-reference checks: ' +
+                         json.dumps(report, sort_keys=True))
+    return {'schema': 'natlang.native-arithmetic-transition-check/1',
+            'from': previous_precision, 'to': config['native_linear_precision'],
+            'parent_weights_sha256': checkpoint_sha256, 'runtime_reference': report}
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--native-graphs', type=Path, required=True)
@@ -694,6 +717,15 @@ def main(argv=None):
             del state
         if 'parent_state' in locals():
             del parent_state
+    transition_check = qualify_precision_transition(model, tokenizer, roles, config,
+        previous_precision=previous_precision,
+        checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
+            if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'],
+        forward_atol=args.forward_atol, gradient_atol=args.gradient_atol,
+        device=args.device, backend=backend)
+    if transition_check is not None:
+        checkpoint_options['native_precision_transition']['reference_check'] = transition_check
+        write_json(args.out / 'precision-transition.json', transition_check)
     # Actual per-row optimizer credits drive the schedule. Source identity
     # remains append-only while communication deficits execute first.
     whole_epochs = int(args.epochs)

@@ -105,3 +105,18 @@ completion. Task/held evaluation and whole-recipe exposure remain required.
 Outstanding inference completeness work remains the advanced learning-service
 persistence/adapters/order-two/guidance integration. This throughput change does
 not claim those independently tracked gaps are complete.
+
+Arithmetic transitions to bf16x6 check the actual restored destination weights
+against the existing cached/reference forward, consumer loss, producer gradient
+and incremental splice checks before the first optimizer update. The trainer
+reuses its loaded model and FP8 context, preserves RNG, retains exact optimizer
+and row credits, and stores the transition check with its parent weight digest.
+This is a numerical transition check, not full-stage/task qualification. Unchanged
+modes incur no extra reference pass. Tolerances remain explicit recipe inputs;
+a failed check leaves the previous checkpoint available for IEEE continuation.
+
+The reference probe derives producer bounds and the consumer import position
+from actual tokenization, including one-token vocabularies. If its diagnostic
+sentence maps entirely to special/unknown tokens, it round-trips an existing
+lexical vocabulary entry; it never fabricates a payload state or relaxes a zero
+producer-gradient failure. Normal production tokenizations retain their probe.

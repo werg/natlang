@@ -39,17 +39,37 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
 
     start = time.monotonic()
     identity = native_identity(model, config, checkpoint_sha256=checkpoint_sha256)
-    source = tuple(tokenizer('Write a useful state: the account balance is 42 after adding seven units.',
-                             add_special_tokens=False).input_ids)
-    target = tuple(tokenizer('Read the state and return the account balance as an integer.',
-                             add_special_tokens=False).input_ids)
-    source = source[:-4] + (roles.produce_open,) + source[-4:] + (roles.produce_close,)
-    target = target[:2] + (roles.consume_open, roles.consume_close) + target[2:]
-    lo, hi = len(source) - 5, len(source) - 1
+    def probe_tokens(text):
+        tokens = tuple(tokenizer(text, add_special_tokens=False).input_ids)
+        special = set(getattr(tokenizer, 'all_special_ids', ()))
+        if tokens and any(token not in special for token in tokens):
+            return tokens
+        # A tokenizer with a deliberately tiny lexical vocabulary can map the
+        # diagnostic sentence entirely to its zero/padding unknown embedding.
+        # Use actual round-tripped lexical text, never synthetic payload rows.
+        for _, token in sorted(tokenizer.get_vocab().items(), key=lambda item: item[1]):
+            if token in special:
+                continue
+            text = tokenizer.decode([token], skip_special_tokens=False)
+            candidate = tuple(tokenizer(text, add_special_tokens=False).input_ids)
+            if candidate and any(value not in special for value in candidate):
+                return candidate
+        raise ValueError('native runtime reference needs a round-tripped lexical token')
+    source = probe_tokens('Write a useful state: the account balance is 42 after adding seven units.')
+    target = probe_tokens('Read the state and return the account balance as an integer.')
+    if not source or not target:
+        raise ValueError('native runtime reference needs nonempty source and consumer tokenizations')
+    payload_width = min(4, len(source))
+    lo = len(source) - payload_width + 1
+    source = source[:-payload_width] + (roles.produce_open,) + source[-payload_width:] + (roles.produce_close,)
+    hi = lo + payload_width
+    prefix_width = min(2, len(target)-1)
+    target = target[:prefix_width] + (roles.consume_open, roles.consume_close) + target[prefix_width:]
+    import_at = prefix_width + 1
     plan = compile_graph([Invocation('source', source, producing=((lo, hi),)),
-                          Invocation('target', target, imports=(ImportSpan(3, 'source', lo, hi),))])
-    positions = torch.arange(len(source) + 3, plan.token_count - 1, device=model.input_rows.device)
-    labels = torch.tensor(target[4:], device=model.input_rows.device)
+                          Invocation('target', target, imports=(ImportSpan(import_at, 'source', lo, hi),))])
+    positions = torch.arange(len(source) + import_at, plan.token_count - 1, device=model.input_rows.device)
+    labels = torch.tensor(target[import_at+1:], device=model.input_rows.device)
     previous_mode, previous_checkpointing = model.training, model.port.checkpoint_layers
     adapter = model.adapter.up.weight
     try:
@@ -74,11 +94,11 @@ def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forw
             result = model(plan)
             block = capture_block(result, 'source', lo, hi,
                 text=tokenizer.decode(source[lo:hi], skip_special_tokens=False), **identity)
-            prefix = native_step(model, torch.tensor([target[:3]], device=model.input_rows.device))
+            prefix = native_step(model, torch.tensor([target[:import_at]], device=model.input_rows.device))
             cache = splice_block(model, prefix['cache'], block,
                 **{key: value for key, value in identity.items() if key != 'architecture'})
-            suffix = native_step(model, torch.tensor([target[3:]], device=model.input_rows.device), cache)
-            incremental_error = float((suffix['h_final'] - result['h_final'][:, len(source)+3:]).abs().max())
+            suffix = native_step(model, torch.tensor([target[import_at:]], device=model.input_rows.device), cache)
+            incremental_error = float((suffix['h_final'] - result['h_final'][:, len(source)+import_at:]).abs().max())
             saved_channel = copy.deepcopy(channel_checkpoint(model))
             before = {key: value.detach().clone() for key, value in saved_channel['adapter'].items()}
             restore_channel_checkpoint(model, saved_channel)
