@@ -106990,6 +106990,131 @@
         },
         "complete_rest27": false
       }
+    },
+    {
+      "derived_from": [
+        "clef-rich-source-20261005-v1",
+        "qwen-verified-positive-native-graphs-20261015-v1-v2"
+      ],
+      "id": "qwen-verified-positive-native-graphs-20261015-v3",
+      "include": [
+        "receipt.json",
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "mellum21/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst"
+      ],
+      "license_provenance": "Project-generated trajectories; pinned stronger teacher model/runtime licenses recorded in immutable penny-server-binding.json. No license exclusion.",
+      "note": "Incremental source appended with declared teacher training priority; retain all previous row credits. Distinct successful completions of repeated programs retained. Mutable future queue metadata is operational only; immutable per-batch collection witnesses establish historical task provenance.",
+      "owner": "dgx",
+      "path": "runs/qwen-verified-positive-native-graphs-20261015-v3-deduplicated",
+      "source_binding": {
+        "models": {
+          "lfm25": {
+            "build_receipt": {
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v3-deduplicated/lfm25/receipt.json",
+              "sha256": "005b7f27e423272af57e882a552ca2a69facd0db4320b96e1fa6f5f3217a7cf2"
+            },
+            "current_protection": {
+              "held_groups": 16133,
+              "path": "/home/werg/data/e2e-current-protection-bundle-20261015-v2/protection-manifest.json",
+              "quality_groups": 65161,
+              "sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+              "source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593"
+            },
+            "duplicate_omissions": 8,
+            "held": {
+              "bytes": 13,
+              "max_row_tokens": 0,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v3-deduplicated/lfm25/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+              "tokens": 0
+            },
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "new_unique_graphs": 2451,
+            "source_groups": [
+              "authored-bounded-decisions-v1:extraction:fixture-0",
+              "authored-bounded-decisions-v1:extraction:fixture-1",
+              "authored-bounded-decisions-v1:extraction:fixture-2",
+              "authored-bounded-decisions-v1:extraction:fixture-3",
+              "authored-bounded-decisions-v1:extraction:fixture-4",
+              "authored-bounded-decisions-v1:extraction:fixture-5"
+            ],
+            "source_rows": 102,
+            "source_turns": 2459,
+            "train": {
+              "bytes": 1258236,
+              "max_row_tokens": 11121,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v3-deduplicated/lfm25/train/native-graphs.jsonl.zst",
+              "rows": 2451,
+              "sha256": "8c5ebe1956d5888435220279453a8154e15a014f4e1a06104c54514a58863a68",
+              "tokens": 17119287
+            }
+          },
+          "mellum21": {
+            "build_receipt": {
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v3-deduplicated/mellum21/receipt.json",
+              "sha256": "e1b742d714662c61746a37470cb0395cc4be44df5ba7348954b64b82f37678d0"
+            },
+            "current_protection": {
+              "held_groups": 16133,
+              "path": "/home/werg/data/e2e-current-protection-bundle-20261015-v2/protection-manifest.json",
+              "quality_groups": 65161,
+              "sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+              "source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593"
+            },
+            "duplicate_omissions": 8,
+            "held": {
+              "bytes": 13,
+              "max_row_tokens": 0,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v3-deduplicated/mellum21/test/native-graphs.jsonl.zst",
+              "rows": 0,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+              "tokens": 0
+            },
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "new_unique_graphs": 2451,
+            "source_groups": [
+              "authored-bounded-decisions-v1:extraction:fixture-0",
+              "authored-bounded-decisions-v1:extraction:fixture-1",
+              "authored-bounded-decisions-v1:extraction:fixture-2",
+              "authored-bounded-decisions-v1:extraction:fixture-3",
+              "authored-bounded-decisions-v1:extraction:fixture-4",
+              "authored-bounded-decisions-v1:extraction:fixture-5"
+            ],
+            "source_rows": 102,
+            "source_turns": 2459,
+            "train": {
+              "bytes": 1225081,
+              "max_row_tokens": 14412,
+              "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v3-deduplicated/mellum21/train/native-graphs.jsonl.zst",
+              "rows": 2451,
+              "sha256": "683c31ffe162b7d8ce6baf478e4a283f46a165a68b4616197508edad6dffab47",
+              "tokens": 17385879
+            }
+          }
+        },
+        "raw_trajectories": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v3/native-trajectories.jsonl",
+          "sha256": "a5ec901d8a6e8400eccc14e2ba0e6c397c0fbddd3d9c41b83243856ebf543921"
+        },
+        "teacher": {
+          "model": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+          "revision": "7b719225242aacd3dbd3f9407468c2ee9a9d2594",
+          "runtime_commit": "fa9c2673131621cafb9a527e61d97c25eac130a9"
+        },
+        "transfer_receipt": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v3/transfer-receipt.json",
+          "sha256": "18f49791d199bbde44822419d53093053cebc2f7c5e895b938e5bd8c50c2cbed"
+        }
+      },
+      "source_class": "verified-static-transformations-of-own-model-strong-teacher-positive-full-trajectories",
+      "split": "Train only; exact current held, quality and pending source-review intersections excluded. Empty test files are structural, not held evaluation evidence.",
+      "training_admission": true,
+      "training_admission_reason": "102 exact-success executions bound to original response rows and immutable batch case/selection/runtime receipts; current16,133 held and65,161 quality groups plus pending reviews checked.2,459 full action turns/model minus8 exact token+weight duplicates =2,451 new graphs/model. All graphs parsed with actual expanded tokenizer and source groups. Ordinary supervision only; no communication edge claim."
     }
   ],
   "coverage_backlog": [
