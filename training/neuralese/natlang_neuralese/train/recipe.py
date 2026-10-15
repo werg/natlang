@@ -1327,7 +1327,7 @@ DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'coho
 def direct_windowing_handoffs(old_recipe, new_recipe, out):
     """Declared trainer-supported tuning, preserving each trainer's resume checks."""
     tuning = {'neuralese_direct': DIRECT_WINDOWING_PARAMETERS,
-              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'learn_reasoning_boundaries', 'native_linear_precision', 'share_causal_prefixes'),
+              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'learn_reasoning_boundaries', 'native_linear_precision', 'share_causal_prefixes', 'fp8_recipe'),
               'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'learned_row_learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'native_linear_precision')}
     def parameters(recipe, stage):
         merged = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
@@ -1341,6 +1341,17 @@ def direct_windowing_handoffs(old_recipe, new_recipe, out):
         if kind not in tuning or old is None or old.get('kind') != kind:
             continue
         before, after = parameters(old_recipe, old), parameters(new_recipe, stage)
+        if kind == 'native_state_sft' and before.get('fp8_recipe', 'delayed') != after.get('fp8_recipe', 'delayed'):
+            from .fp8_backend import expert_precision_transition
+            def backend_identity(values):
+                return {'kind': values.get('fp8_training', 'off'),
+                        'recipe': values.get('fp8_recipe', 'delayed'),
+                        'amax_history_len': values.get('fp8_amax_history_len', 16)}
+            transition = expert_precision_transition(backend_identity(before), backend_identity(after))
+            if (transition is None or after.get('qualify_training_backend') is not True
+                    or any(after.get(key) is None for key in ('forward_atol', 'gradient_atol'))):
+                raise ValueError('handoff refused: expert recipe changes require an exact stateless transition '
+                                 'and restored-model backend qualification with declared tolerances')
         changed = {key: [before.get(key), after.get(key)] for key in tuning[kind]
                    if before.get(key) != after.get(key)}
         if changed:
