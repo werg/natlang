@@ -86111,6 +86111,30 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "luna-repair-s52026-s52033-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-repair-s52026-s52033-review-20261015-v1",
+      "include": [
+        "selected-handoffs.ir.jsonl",
+        "selected-handoffs.manifest.json",
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna same-state teacher recovery continuations from replay-bound failed train trajectories",
+      "license": "Project-generated curriculum; source dataset licenses carried in selected handoff and accepted parent rows",
+      "split": "train only; protected held packet and source review holds checked; global protected union must filter cross-corpus source groups",
+      "admission": "Eight exact accepted recovery parents; 145 approved native decisions out of 193 materialized, 48 failed or unexecuted decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Source-selected replay-bound repair sites; accepted root oracle; source-review item/family holds and held groups checked at parent collection; independent semantic review, protected check and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Eight parent outcomes independently checked; one edit stream satisfies six constraints rather than exact string equality. Four causal preference pairs remain review-only and are not DPO admitted.",
+      "required_conversion": "Render LFM/Mellum full, program-header and whole-trajectory before protected union",
+      "notes": "The first repair queue was selected before family-hold filtering and included held MuSiQue attempts, none among accepted parents. Recovery prompts contain same-state failure context; train in a recovery cohort."
     }
   ],
   "coverage_backlog": [
