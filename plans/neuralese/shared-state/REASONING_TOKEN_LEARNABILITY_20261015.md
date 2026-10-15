@@ -135,3 +135,24 @@ Any production implementation must extend the existing named
 through changed group layouts, and carry declared rates through SFT, semantic,
 RL, serving checkpoints and distributed continuation. Do not introduce a second
 optimizer or enable a rate that disappears on a later resume.
+
+The diverse follow-up baseline completed 16 updates on 32 distinct complete
+training graphs (16 V5 ordinary graphs interleaved with 16 genuine communication
+graphs), starting from the same exact LF2000 parent and preserved optimizer/RNG.
+Sixteen protected REST27 controls were evaluated without training on them:
+ordinary held loss fell from .585532 to .434922; communication held loss fell
+from .608365 to .450897. These small controls establish useful learning at the
+current rate, not general task competence or comprehensive production coverage.
+V5 has no held split; its empty test file was not repurposed or silently split.
+The diagnostic's first setup attempts rejected an incorrect four-parameter
+assumption for tied LFM rows, the empty V5 test source, and a missing output
+directory before any optimizer updates. All were corrected before this result.
+
+Sparse-only .0003 and .003 follow-ups use the same training sequence and held
+controls. They additionally measure thinking-token targets on eight untouched
+V5 training-source rows; these are explicitly diagnostic controls, not newly
+protected held data or a reason to omit those rows from production. Their
+results are pending. Exact scripts, source hashes, IDs, actual optimizer rates,
+per-update movement and held measurements are under
+`/home/werg/data/dgxops/native-sparse-diverse-20261016/`. The completed baseline
+saved measurements only; no diagnostic model checkpoint was retained.
