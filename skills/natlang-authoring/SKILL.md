@@ -290,3 +290,18 @@ supervised rows and full final held evaluation finished. Preserve `sft_progress`
 credits when continuing through semantic/RL stages, and consume its remaining
 obligations rather than starting row counts again. A semantic-refresh boundary
 is an incomplete continuation with actual optimizer updates and current checks.
+
+An adaptive shared `refresh_ready` publication has executed every declared phase
+quantum and actual current task/runtime/compact-wire checks. It is not full
+curriculum completion or evidence of Neuralese lift. Preserve `semantic_obligations`,
+per-pair exposure, held cursor, optimizers and RNG while continuing. A missing
+phase-work, finite-held or compact learned-transport proof requires completing
+that work against the exact current adapter, rather than changing receipt flags.
+A native production foundation-source error requires restoring its declared
+`foundation_native_graphs` dependency, rather than substituting a smaller shard.
+A changed semantic objective-kind error requires a new declared phase ID so its
+new obligations do not inherit earlier objective credits; keep the earlier phase
+and its actual exposure while adding the new work.
+If changed participant weights require adaptive refresh, declare positive
+`adaptive_refresh.updates_per_phase` for actual VAE/joint/distill work before
+merging; old exposure remains credited but never licenses a stale adapter.

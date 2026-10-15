@@ -314,7 +314,15 @@ credits, actual two-port VAE/joint/distill progress preservation, cohort guards,
 parallel scheduler/publication/restart, bridge, and full SGD/Adam portable actors).
 Earlier foundation/readiness/semantic tests passed20; expanded legacy SFT checks
 passed35 with four subsequently repaired sampler-fixture failures. Quick passed.
-These checks do not qualify production cutover. Controller deployment remains
-blocked on adaptive semantic phase refresh: preserving overall exposure across
-changed weights and replacing repeated full held scans with rotating cadence.
-The existing whole-cohort refresh reset is explicitly open and assigned next.
+These checks do not qualify production cutover. The subsequent adaptive repair preserves cumulative credits across changed
+weights and executes explicit finite work in all semantic phases. Rotating held
+coverage preserves cursor/RNG; formal full exposure triggers a full held sweep.
+Task engines bind the actual learned channel and current immutable adapter SHA;
+all compact cross-model directions require a separate real decode/splice parity
+certificate. No-rollout scheduling continues remaining semantic obligations.
+Focused integrated checks passed48, including exact interrupted resume and
+real two-port wire transport. Supplemental three-cycle/full-held/source-stream and CE/controller checks
+passed24; eligible rotating-held coverage passed1; final six stage tests passed,
+including changed-weight interruption before joint/distillation. Quick passed. Controller deployment still requires
+parent independent review and actual SDK worker proof; production cutover,
+Neuralese lift, direct adapter-value and second-order support remain open.

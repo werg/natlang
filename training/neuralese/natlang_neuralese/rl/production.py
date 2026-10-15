@@ -640,6 +640,14 @@ def configure_native(args):
             '--rl-block-bundle', '{block_bundle}', *common],
         'seed_command': [python, '-m', 'natlang_neuralese.train.native_state_sft',
             '--native-graphs', '{seed_native_graphs}', '--objective-continuation', *common]}
+    if parameters.get('communication_foundation'):
+        from ..train.recipe import resolve_stage_inputs
+        sources=resolve_stage_inputs(recipe,stages[0],{})
+        foundation=sources.get('foundation_native_graphs')
+        if not foundation:
+            raise ValueError('native production foundation requires its exact declared foundation_native_graphs source')
+        config['foundation_native_graphs']=foundation['path']
+        config['seed_command'] += ['--foundation-native-graphs','{foundation_native_graphs}']
     write_json_durable(args.config, config)
     return config
 

@@ -100,6 +100,14 @@ def validate_config(config):
     for key in ('checkpoint_every', 'eval_every'):
         if type(config.get(key)) is not int or config[key] <= 0:
             raise ValueError('semantic checkpoints/evaluation require positive declared cadence: ' + key)
+    adaptive=config.get('adaptive_refresh')
+    if adaptive is not None:
+        if not isinstance(adaptive,dict):raise ValueError('adaptive_refresh must declare phase work')
+        for phase in phases:
+            value=(phase.get('options') or {}).get('refresh_updates',adaptive.get('updates_per_phase'))
+            if type(value) is not int or value<=0:raise ValueError('adaptive refresh needs positive updates for every phase')
+    if config.get('held_eval_rows') is not None and (type(config['held_eval_rows']) is not int or config['held_eval_rows']<=0):
+        raise ValueError('held_eval_rows must be a positive whole-graph count')
     return config
 
 
@@ -307,6 +315,8 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
                                        'participant': name}} for name, identity in identities.items()},
         'step': training['step'], 'communication': 'shared-semantic-state-deltas'}
     export['tokenizers'] = tokenizers
+    export['semantic_obligations']=training.get('semantic_obligations')
+    export['refresh_progress']=training.get('refresh_cycle')
     history=training.get('config_history') or []
     if history:
         qualified=history[-1]['config']
@@ -332,7 +342,7 @@ def _exposure_complete(phases, source, participants, exposure):
     return not missing, missing
 
 
-def measure_tasks(participants, export, config, out, step, device):
+def measure_tasks(participants, export, config, out, step, device, vae=None):
     """Serve the same live trained weights; do not allocate a second backbone."""
     from ..eval.native_state import task_execution_receipt
     from ..eval.task_cadence import TaskEval, parse_task_eval
@@ -340,8 +350,16 @@ def measure_tasks(participants, export, config, out, step, device):
     from ..serve.engine import Engine
     from ..serve.store import TensorStore
     results = {}
+    channel=None
+    if vae is not None:
+        from ..model.semantic_channel import SemanticChannel
+        channel=SemanticChannel(vae,{name:entry['native_identity'] for name,entry in export['models'].items()},
+            {name:entry.tokenizer for name,entry in participants.items()},
+            adapter_sha256=sha256_file_hex_cached(Path(out)/'semantic-adapter.json'))
     rng = capture_training_rng_state(device)
+    vae_mode=vae.training if vae is not None else None
     try:
+        if vae is not None:vae.eval()
         with _native_modules(participants):
             for name, participant in participants.items():
                 declaration = config.get('models', {}).get(name, {}).get('task_eval', config.get('task_eval'))
@@ -359,11 +377,16 @@ def measure_tasks(participants, export, config, out, step, device):
                         model_config=participant.config, checkpoint_sha256=identity['checkpoint_sha256'],
                         embedding_weight_sha256=identity['embedding_weight_sha256'])
                     engine.native_identity = identity
+                    if channel is not None:
+                        from ..serve import bind_native_semantic_channel
+                        bind_native_semantic_channel(engine,channel,name)
                     directory = Path(out)/('participant-' + canonical_json_sha256_hex(name))
                     evaluator = TaskEval(spec, directory, engine, prompt_rendering=spec.get('prompt_rendering', 'full'))
                     summary = evaluator.cadence(step)
                     receipt = task_execution_receipt(summary, identity,
                         checkpoint_sha256=export['checkpoint']['sha256'])
+                    if channel is not None:
+                        receipt.update(communication='shared-semantic-state-deltas',semantic_adapter_sha256=channel.adapter_sha256)
                     path = directory/'native-task-execution-receipt.json'
                     write_json_durable(path, receipt)
                     results[name] = {'path': str(path.resolve()), 'sha256': sha256_file_hex_cached(path),
@@ -371,6 +394,7 @@ def measure_tasks(participants, export, config, out, step, device):
                 finally:
                     participant.model.train(mode)
     finally:
+        if vae is not None:vae.train(vae_mode)
         restore_training_rng_state(rng, device)
     return results
 
@@ -423,12 +447,9 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                 participant.global_step = saved.get('global_step', participant.global_step)
                 if participant.backend is not None:
                     participant.backend.restore_extra_state(saved['fp8'])
+        if changed_models and not config.get('adaptive_refresh'):
+            raise ValueError('changed participant weights require declared adaptive_refresh work in every semantic phase')
         if changed_models:
-            for phase_counts in training.get('exposure', {}).values():
-                for row_counts in phase_counts.values():
-                    for key in list(row_counts):
-                        if changed_models.intersection(json.loads(key)):
-                            del row_counts[key]
             training.setdefault('participant_refreshes', []).append({
                 'step': training['step'], 'parent_sha256': prior_sha,
                 'changed_models': sorted(changed_models), 'participants': bindings,
@@ -456,6 +477,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     initial_bindings = dict(bindings)
     last_config = None
     stream, cached_row = None, None
+    stream_phase,stream_index=None,None
     cursors = {}
     previous_manifest = manifest['signature']
     metrics = {}
@@ -463,6 +485,9 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         updated = validate_config(json.loads(config_path.read_text()))
         config_sha = canonical_json_sha256_hex(updated)
         if config_sha != last_config:
+            prior_kinds={phase['id']:phase['kind'] for item in training.get('config_history',[]) for phase in item['config']['phases']}
+            if any(phase['id'] in prior_kinds and prior_kinds[phase['id']]!=phase['kind'] for phase in updated['phases']):
+                raise ValueError('a changed semantic objective needs a new phase ID; retain earlier phase exposure')
             if (updated.get('latent_width', 128), updated.get('hidden_width', 512)) != (vae.latent_width, vae.hidden_width):
                 raise ValueError('semantic latent width/layout change requires explicit adapter migration')
             if updated['pairs'] != config['pairs'] or updated['held_pairs'] != config['held_pairs']:
@@ -489,10 +514,21 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                 optimizer.add_param_group({'params': [value for _, value in added], 'lr': config['vae_lr']})
         if set(participants) - set(bindings):
             raise ValueError('ready-model manifest removed an active semantic participant')
-        work = first_work(config['phases'], train.entries, participants, training['exposure'], cursors)
+        from . import native_semantic_refresh as refresh_schedule
+        refresh_cycle=refresh_schedule.initialize(training,config,manifest)
+        if refresh_cycle is not None:
+            work=refresh_schedule.work(config['phases'],train.entries,participants,training['exposure'],
+                refresh_cycle,training.setdefault('refresh_source_cursors',{}))
+        else:
+            work=first_work(config['phases'],train.entries,participants,training['exposure'],cursors)
         if work is None:
             break
-        phase, row_id, pairs = work
+        phase,row_id,pairs=work[:3]
+        refresh_row_index=work[3] if refresh_cycle is not None else None
+        if (stream_phase!=phase['id'] or (refresh_row_index is not None and stream_index is not None
+                and refresh_row_index<stream_index)):
+            stream,cached_row=None,None
+        stream_phase,stream_index=phase['id'],refresh_row_index
         if stream is None:
             # Keep compressed JSONL sequential between neighboring updates.
             # A new epoch/new phase intentionally restarts the stream once.
@@ -549,41 +585,26 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         for a, b in itertools.combinations(sorted(selected), 2):
             key = pair_key(a, b)
             counts[key] = counts.get(key, 0) + 1
+        if refresh_cycle is not None:
+            refresh_schedule.committed(training,refresh_cycle,phase,refresh_row_index,len(train.entries))
+        training['semantic_obligations']=refresh_schedule.exposure_summary(config['phases'],train,participants,training['exposure'])
         metrics = {'step': training['step'], 'phase': phase['id'], 'source_row': row_id,
                    'loss': float(loss.detach()), 'gradient_norm': float(norm), 'details': details,
                    'seconds': time.time() - started}
         training['source_bindings'] = {'train': train.bindings, 'held': held.bindings}
         training['participants_signature'] = manifest['signature']
         if training['step'] % config['eval_every'] == 0:
-            held_values = []
-            rng = capture_training_rng_state(device)
-            modes = {name: entry.model.training for name, entry in participants.items()}
-            vae_mode = vae.training
-            try:
-                for entry in participants.values():
-                    entry.model.eval()
-                vae.eval()
-                with torch.no_grad(), _native_modules(participants):
-                    for held_row in held.rows():
-                        if len(set(held_row['models']) & set(participants)) >= 2:
-                            value, _ = joint_loss(vae, participants, held_row, phase=phase['kind'], options=options,
-                                                  fetch_external=resolver)
-                            held_values.append(float(value))
-            finally:
-                for name, entry in participants.items():
-                    entry.model.train(modes[name])
-                vae.train(vae_mode)
-                restore_training_rng_state(rng, device)
-            if not held_values:
-                raise ValueError('ready semantic participants have no paired held evaluation data')
-            metrics['held_loss'] = sum(held_values) / len(held_values)
-            metrics['held_rows'] = len(held_values)
+            held_metrics,coverage=refresh_schedule.held_evaluation(participants,vae,held,
+                phase=phase['kind'],options=options,resolver=resolver,coverage=training.get('held_coverage'),
+                rows=config.get('held_eval_rows'))
+            training['held_coverage']=coverage
+            metrics['held']=held_metrics;metrics['held_loss']=held_metrics['loss'];metrics['held_rows']=held_metrics['rows']
         write_json_durable(out/'metrics.json', metrics)
         due_task = bool(config.get('task_eval')) and training['step'] % config.get('task_eval_every', config['eval_every']) == 0
         if policy.due(training['step']) or due_task:
             current = save_shared(policy, participants, vae, optimizer, training=training, device=device)
             if due_task:
-                metrics['task_execution'] = measure_tasks(participants, current, config, out, training['step'], device)
+                metrics['task_execution'] = measure_tasks(participants, current, config, out, training['step'], device, vae=vae)
                 write_json_durable(out/'metrics.json', metrics)
         if max_updates is not None and training['step'] - started_step >= max_updates:
             break
@@ -595,14 +616,31 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     vae.requires_grad_(True)
     training['source_bindings'] = {'train': train.bindings, 'held': held.bindings}
     training['participants_signature'] = manifest['signature']
+    from . import native_semantic_refresh as refresh_schedule
+    training['semantic_obligations']=refresh_schedule.exposure_summary(config['phases'],train,participants,training['exposure'])
+    refresh_cycle=refresh_schedule.initialize(training,config,manifest)
+    refresh_reached=refresh_schedule.complete(refresh_cycle)
+    exposure_complete, missing = _exposure_complete(config['phases'], train, participants, training['exposure'])
+    final_coverage_key=canonical_json_sha256_hex({'train':train.binding,'held':held.binding,'phases':config['phases']})
+    publication_boundary=refresh_cycle is None or refresh_reached
+    final_due=exposure_complete and publication_boundary and training.get('full_held_curriculum')!=final_coverage_key
+    if final_due:
+        metrics['held'],training['held_coverage']=refresh_schedule.held_evaluation(participants,vae,held,
+            phase='joint',options=config.get('options',{}),resolver=resolver,coverage=training.get('held_coverage'),final=True)
+        training['full_held_curriculum']=final_coverage_key
+    elif (refresh_reached or exposure_complete) and not metrics.get('held'):
+        metrics['held'],training['held_coverage']=refresh_schedule.held_evaluation(participants,vae,held,
+            phase='joint',options=config.get('options',{}),resolver=resolver,coverage=training.get('held_coverage'),rows=config.get('held_eval_rows'))
     export = save_shared(policy, participants, vae, optimizer, training=training, device=device)
     complete, missing = _exposure_complete(config['phases'], train, participants, training['exposure'])
+    complete=bool(complete and publication_boundary)
     certificates = {}
     tasks = {}
-    if complete:
+    semantic_certificate=None
+    if complete or refresh_reached:
         from ..eval.native_state import qualify_existing
         from ..model.shared_state import RoleTokens
-        tasks = measure_tasks(participants, export, config, out, training['step'], device)
+        tasks = measure_tasks(participants, export, config, out, training['step'], device, vae=vae)
         rng = capture_training_rng_state(device)
         try:
             with _native_modules(participants):
@@ -620,10 +658,37 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                                           'passed': certificate['passed']}
         finally:
             restore_training_rng_state(rng, device)
-        complete = all(value['passed'] for value in certificates.values())
+        if set(export['tokenizers'])==set(participants):
+            from ..model.semantic_channel import SemanticChannel
+            from ..eval.native_semantic_runtime import qualify_semantic_transport
+            texts={}
+            for row in train.rows():
+                for name in participants:
+                    if name in texts or name not in row['models']:continue
+                    _,view=parse_pair(row,participants)[name]
+                    text=view['export']['text']
+                    if text:texts[name]=text
+                if set(texts)==set(participants):break
+            channel=SemanticChannel(vae,{name:entry['native_identity'] for name,entry in export['models'].items()},
+                {name:entry.tokenizer for name,entry in participants.items()},
+                adapter_sha256=sha256_file_hex_cached(out/'semantic-adapter.json'))
+            with _native_modules(participants):
+                transport=qualify_semantic_transport(participants,channel,texts=texts,
+                    rtol=config.get('semantic_runtime_rtol',1e-5),atol=config.get('forward_atol',1e-4))
+            path=out/'semantic-runtime-certificate.json'
+            write_json_durable(path,transport)
+            semantic_certificate={'path':str(path.resolve()),'sha256':sha256_file_hex_cached(path),'passed':transport['passed']}
+        numerics_ready=all(value['passed'] for value in certificates.values())
+        complete = bool(exposure_complete and numerics_ready and (metrics.get('held') or {}).get('scope')=='full')
     configuration = out/'completed-curriculum.json'
     write_json_durable(configuration, config)
+    current_checks=bool(certificates and all(value['passed'] for value in certificates.values())
+        and set(export['tokenizers'])==set(participants) and set(tasks)==set(participants)
+        and all(value['passed'] for value in tasks.values())
+        and semantic_certificate is not None and semantic_certificate['passed'])
     report = {'schema': 'natlang.native-shared-stage-completion/1', 'completed': complete,
+        'exposure_complete':exposure_complete,'refresh_ready':bool(refresh_reached and current_checks),
+        'refresh_progress':refresh_cycle,'semantic_obligations':training['semantic_obligations'],
         'participants_signature': manifest['signature'], 'step': training['step'],
         'curriculum_signature': canonical_json_sha256_hex(config),
         'curriculum': {'path': str(configuration.resolve()), 'sha256': sha256_file_hex_cached(configuration)},
@@ -632,10 +697,9 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         'source_bindings': {'train': train.binding, 'held': held.binding},
         'phases': config['phases'], 'exposure': training['exposure'], 'missing_exposure': missing,
         'runtime_certificates': certificates,
+        'semantic_runtime_certificate':semantic_certificate,
         'task_execution_receipts': tasks,
-        'production_ready': bool(complete and set(export['tokenizers']) == set(participants)
-                                 and set(tasks) == set(participants)
-                                 and all(value['passed'] for value in tasks.values())),
+        'production_ready':bool((complete or refresh_reached) and current_checks),
         'task_lift': 'not-claimed', 'metrics': metrics}
     write_json_durable(out/'shared-stage-completion.json', report)
     return report

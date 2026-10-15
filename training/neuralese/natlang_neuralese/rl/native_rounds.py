@@ -262,14 +262,15 @@ def _run_rounds(config_paths, out, *, rounds=None, device='cuda', stop):
                 return {'phase': 'requested_stop', 'states': states, 'production_complete': False}
             updates = {name: state['pending_native_checkpoint'] for name, state in zip(names, states)
                        if state.get('pending_native_checkpoint')}
-            if not updates and rounds is None:
+            semantic_pending=(json.loads(Path(adapter).read_text()).get('semantic_obligations') or {}).get('complete') is False
+            if not updates and not semantic_pending and rounds is None:
                 import time
                 for _ in range(300):
                     if stop.requested:
                         return {'phase': 'requested_stop', 'states': states, 'production_complete': False}
                     time.sleep(.2)
                 continue
-            if not updates:
+            if not updates and not semantic_pending:
                 return {'phase': 'await_useful_rollouts_or_data', 'states': states, 'production_complete': False}
             directory = out/f'round-{cycle:06d}'
             deployment = refresh_job(configs, adapter, updates, next(iter(semantic_configs)), directory, device, stop)

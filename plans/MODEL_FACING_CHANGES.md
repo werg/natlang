@@ -681,3 +681,10 @@ foundation-ready/full-completion distinction, carried per-stage CE credits,
 checkpoint-cadence refresh boundaries and prior-qualified semantic cohort
 recovery advice added to both skills. Live 48-sample validation is debt for the
 next own-model teacher window; state/cursor/optimizer tests prove mechanisms.
+
+2026-10-15 adaptive semantic refresh: live task evaluation now binds the same
+learned compact channel as production serving; receipts explicitly distinguish
+all-phase partial refresh from complete exposure. Both skills document recovery
+for missing work/held/transport/foundation dependencies. Live 48-sample model-facing
+measurement remains debt for the next own-model teacher window; exact two-port
+wire tests and task receipts prove mechanisms/observed tasks only, not lift.

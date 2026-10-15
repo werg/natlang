@@ -10,8 +10,9 @@ communication cohort, plus actual held/task/runtime checks at those exact
 weights. It is not full stage completion. Ordinary deficits remain mandatory,
 are carried through VAE/joint/distillation/RL, and return to supervised training.
 An empty structural import provides no communication credit. New admission
-extends the cohort and exposure obligations; a tiny earlier shard cannot stand
-in for the complete declared cohort.
+extends mandatory exposure and the next explicitly declared cohort; it cannot
+erase the completed foundation while that next cohort is still pending. A tiny
+earlier shard cannot stand in for a larger currently declared foundation.
 
 ## Functions and exact mechanisms
 
@@ -58,9 +59,41 @@ adapter carries that exact qualified config inline and its canonical SHA.
 Initial semantic training has no prior-cohort fallback and must have actual raw
 exposure for its complete requested cohort.
 
-**Open deployment blocker:** the current semantic refresher still resets all
-VAE/joint/distill exposure for changed participants and waits for a full new
-sweep. The next change must retain unchanged credits and add declared, genuinely
-executed VAE/control/joint/distill refresh quanta, with full completion remaining
-honest. Do not deploy the production controller on the CE repair alone. Actual
-SDK worker qualification and independent integrated review also remain required.
+## Adaptive semantic refresh
+
+Keep cumulative phase/source/pair exposure when participant weights change;
+recompute current KV targets using actual current models. Initial and later
+publications may execute declared finite work in all VAE, joint/control and
+distillation phases, provided current held/task/native/compact cross-model
+transport checks pass. This is explicitly `refresh_ready`, with `completed:false`
+while full production exposure remains unfinished; it is no claim of Neuralese
+lift. Exact declared raw communication foundation remains mandatory first.
+
+Use declared `adaptive_refresh.updates_per_phase` (optional
+`phase.options.refresh_updates` override) for useful work in every phase. The
+initial operational production setting is 16 whole-graph updates per phase,
+not a curriculum completion budget. Advance durable per-phase source cursors;
+prioritize remaining quotas, then continue adaptation without erasing visits.
+Preserve optimizers/RNG and operational refresh progress across stops. The next
+publication resumes remaining phase work rather than restarting its quantum.
+
+Use declared `held_eval_rows` (initially 32) for rotating whole held graphs,
+with source, cursor and row visits persisted. A full held sweep is mandatory
+when the complete curriculum first finishes, and after source/quota extensions
+finish; subsequent partial adaptations measure current rotating slices instead
+of repeatedly sweeping all held rows. Formal completion only describes the
+actual full current exposure and full held result at those weights.
+
+Native task execution binds the learned channel to live models through the same
+helper as actor loading. A separate compact-wire certificate exercises all
+cross-model directions against direct learned decode and positional splice,
+including next-token KV/convolution state. It proves transport parity, not useful
+communication or task improvement. Preserve the stable adapter SHA throughout
+these checks; persist receipts separately rather than rewriting the adapter.
+
+The existing joint controller consumes pending semantic obligations even when
+there is no new rollout update, using the same refresh bridge and publication
+transaction. Remaining supervised obligations continue interleaved through the
+existing CE path. Neither empty rollouts nor an initial refresh ends the recipe.
+Actual SDK worker qualification and independent integrated review remain open
+before production controller deployment.

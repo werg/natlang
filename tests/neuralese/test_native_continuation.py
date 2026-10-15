@@ -159,6 +159,13 @@ def test_readiness_foundation_is_explicit_and_checks_full_admitted_cohort(tmp_pa
     selected=validate_ready(path,requirement)
     assert selected['readiness_boundary']=='communication-foundation'
     assert selected['mandatory_sft']['remaining_graph_visits']==1
+    # Later admissions outside the explicitly declared foundation remain
+    # mandatory, but cannot move this already-completed cohort's finish line.
+    pending={**report['communication_exposure'],'complete':False,'required_graph_visits':8,'graph_visits':4}
+    report['communication_exposure']=pending;report_path.write_text(json.dumps(report))
+    receipt['communication_exposure']=pending;receipt['training_receipt']['sha256']=sha256_file_hex(report_path)
+    path.write_text(json.dumps(receipt))
+    assert validate_ready(path,requirement)['readiness_boundary']=='communication-foundation'
     # A larger admitted cohort cannot be qualified by the earlier tiny shard.
     bigger=tmp_path/'bigger';bigger.mkdir()
     full=source_manifest(bigger,ordinary,[authenticated_pair('a',fingerprint=fp),authenticated_pair('b',fingerprint=fp)])

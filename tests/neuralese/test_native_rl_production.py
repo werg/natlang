@@ -27,11 +27,12 @@ def test_joint_publication_finalizes_each_pending_update_once(tmp_path):
     assert 'pending_native_checkpoint' not in result and result['group_stats'] == []
 
 
-def test_native_parallel_round_merges_both_updates_before_refresh(tmp_path, monkeypatch):
+@pytest.mark.parametrize('pending_updates',[True,False])
+def test_native_parallel_round_merges_both_updates_before_refresh(tmp_path, monkeypatch,pending_updates):
     import threading
     from natlang_neuralese.rl import native_refresh
     parent = tmp_path/'parent.pt'; parent.write_bytes(b'joint-parent')
-    adapter = tmp_path/'adapter.json'; adapter.write_text('{}')
+    adapter = tmp_path/'adapter.json'; adapter.write_text(json.dumps({'semantic_obligations':{'complete':False}}))
     configs = []
     updates = {}
     for name in ('lfm', 'mellum'):
@@ -47,24 +48,24 @@ def test_native_parallel_round_merges_both_updates_before_refresh(tmp_path, monk
         assert kwargs['stop'].requested is False
         barrier.wait(timeout=10)  # proves independent learner jobs overlap
         directory = Path(config['out']); directory.mkdir()
-        state = {'checkpoint': str(parent), 'round': 0, 'trained_rounds': 0,
-            'pending_native_checkpoint': updates[config['native_participant']]}
+        state = {'checkpoint': str(parent), 'round': 0, 'trained_rounds': 0}
+        if pending_updates:state['pending_native_checkpoint']=updates[config['native_participant']]
         (directory/'state.json').write_text(json.dumps(state))
         return state
     monkeypatch.setattr(native_rounds, 'run', learner)
     calls = []
     def refresh(**kwargs):
-        assert kwargs['updates'] == updates
+        assert kwargs['updates'] == (updates if pending_updates else {})
         calls.append(kwargs)
         return {'checkpoint': {'path': 'refreshed-shared', 'sha256': 'new'},
             'semantic_adapter': {'path': 'refreshed-adapter', 'sha256': 'adapter'},
-            'updated_participants': {name: {'sha256': sha256_file_hex(path)} for name, path in updates.items()}}
+            'updated_participants': {name: {'sha256': sha256_file_hex(path)} for name, path in updates.items()} if pending_updates else {}}
     monkeypatch.setattr(native_refresh, 'refresh', refresh)
     result = native_rounds.run_rounds(configs, tmp_path/'joint', rounds=1, device='cpu')
     assert len(calls) == 1 and result['deployment']['checkpoint']['path'] == 'refreshed-shared'
     for name in updates:
         state = json.loads((tmp_path/name/'state.json').read_text())
-        assert state['round'] == 1 and state['checkpoint'] == 'refreshed-shared'
+        assert state['round'] == int(pending_updates) and state['checkpoint'] == 'refreshed-shared'
 
 
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
@@ -153,7 +154,8 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path):
     assert sha256_file_hex(slot) == prior_sha  # no repeated update/checkpoint rewrite
 
 
-def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_path, monkeypatch):
+@pytest.mark.parametrize('foundation',[False,True])
+def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_path, monkeypatch,foundation):
     from types import SimpleNamespace
     from natlang_neuralese.train import recipe
     parent = tmp_path/'shared.pt'; parent.write_bytes(b'actual-bound-parent')
@@ -162,14 +164,18 @@ def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_p
         'checkpoint': {'sha256': sha256_file_hex(parent)}, 'models': {'lfm': {}}}))
     monkeypatch.setattr(recipe, 'resolve_recipe_data', lambda path: {'stages': [
         {'id': 'native_full', 'kind': 'native_state_sft', 'parameters': {
-            'epochs': 3, 'dtype': 'float32', 'batch_tokens': 8192,
+            'epochs': 3, 'dtype': 'float32', 'batch_tokens': 8192,'communication_foundation':foundation,
             'task_eval': {'cases': 'registered-held'}, 'task_eval_every': 5000}}]})
     args = SimpleNamespace(model='lfm', native_participant='lfm', checkpoint=parent, semantic_adapter=adapter,
         production_stage='native_full', port=8097, **{key: tmp_path/key for key in (
             'semantic_refresh_config', 'seed_native_graphs', 'held_native_graphs', 'production_recipe',
             'base', 'out', 'config', 'cases', 'runtime')})
+    monkeypatch.setattr(recipe,'resolve_stage_inputs',lambda *args:{'foundation_native_graphs':{'path':str(tmp_path/'exact-foundation')}})
     production.configure_native(args)
     saved = json.loads(args.config.read_text())
+    if foundation:
+        assert saved['foundation_native_graphs']==str(tmp_path/'exact-foundation')
+        assert saved['seed_command'][-2:]==['--foundation-native-graphs','{foundation_native_graphs}']
     assert saved['trainer_parameters']['epochs'] == 3
     assert saved['trainer_parameters']['dtype'] == 'float32'
     assert '--native-state' in saved['actor_command'] and '--heads' not in saved['actor_command']

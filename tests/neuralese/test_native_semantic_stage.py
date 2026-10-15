@@ -108,7 +108,9 @@ def test_appended_data_and_larger_epochs_are_not_mistaken_for_finished(tmp_path,
 
 @pytest.mark.parametrize('changed_count', [1, 2])
 def test_refresh_keeps_rl_participant_and_retrains_all_semantic_phases(tmp_path, monkeypatch, changed_count):
-    path, manifest, _, _ = _fixture(tmp_path, monkeypatch)
+    path, manifest, config, _ = _fixture(tmp_path, monkeypatch)
+    config['adaptive_refresh']={'updates_per_phase':1}
+    path.write_text(json.dumps(config))
     original = stage.run(path, manifest, tmp_path/'original', device='cpu')
     parent = tmp_path/'original/checkpoint.pt'
     parent_sha = sha256_file_hex(parent)
@@ -139,9 +141,17 @@ def test_refresh_keeps_rl_participant_and_retrains_all_semantic_phases(tmp_path,
     import pytest
     with pytest.raises(ValueError, match='changed the declared model lineage'):
         stage.run(path, manifest, tmp_path/'refreshed', resume=parent, device='cpu')
+    without_refresh=copy.deepcopy(config);without_refresh.pop('adaptive_refresh')
+    path.write_text(json.dumps(without_refresh))
+    with pytest.raises(ValueError,match='declared adaptive_refresh'):
+        stage.run(path,manifest,tmp_path/'missing-refresh',resume=parent,refresh_participants=True,device='cpu')
+    path.write_text(json.dumps(config))
+    partial=stage.run(path,manifest,tmp_path/'partial-refresh',resume=parent,refresh_participants=True,device='cpu',max_updates=1)
+    assert partial['exposure_complete'] and not partial['completed'] and not partial['refresh_ready']
+    assert partial['refresh_progress']['completed_updates']=={'vae':1,'joint':0,'distill':0}
     refreshed = stage.run(path, manifest, tmp_path/'refreshed', resume=parent,
         refresh_participants=True, device='cpu')
-    assert refreshed['completed'] and refreshed['step'] == original['step'] + 3
+    assert refreshed['exposure_complete'] and refreshed['step'] == original['step'] + 3
     state = CheckpointPolicy.load(tmp_path/'refreshed/checkpoint.pt')
     assert state['training']['participant_refreshes'][-1]['changed_models'] == sorted(changed_names)
     for binding in bindings['models'][:changed_count]:
@@ -150,7 +160,7 @@ def test_refresh_keeps_rl_participant_and_retrains_all_semantic_phases(tmp_path,
     for name in changed_names:
         torch.testing.assert_close(state['participants'][name]['model_state']['interface_state']['input_rows'],
                                    loaded_values[name], atol=.01, rtol=.01)
-    assert all(counts[stage.pair_key('lfm', 'mellum')] == 1
+    assert all(counts[stage.pair_key('lfm', 'mellum')] == 2
                for values in state['training']['exposure'].values() for counts in values.values())
 
 
@@ -175,3 +185,77 @@ def test_shared_stop_checkpoints_without_publishing_incomplete_curriculum(tmp_pa
     resumed = stage.run(path, manifest, tmp_path/'stopped', resume=checkpoint, device='cpu',
                         stop=SimpleNamespace(requested=False))
     assert resumed['completed'] and resumed['step'] == stopped['step'] + 3
+
+
+def test_adaptive_all_phase_quanta_resume_and_carry_whole_cohort(tmp_path,monkeypatch):
+    path,manifest,config,row=_fixture(tmp_path,monkeypatch)
+    train=Path(config['pairs']['path']);held=Path(config['held_pairs']['path'])
+    rows=[copy.deepcopy(row) for _ in range(3)]
+    for index,value in enumerate(rows):value['id']='train:'+str(index)
+    train.write_text(''.join(json.dumps(value)+'\n' for value in rows))
+    config['pairs']['sha256']=sha256_file_hex(train)
+    held_row=json.loads(held.read_text());held_rows=[copy.deepcopy(held_row) for _ in range(3)]
+    for index,value in enumerate(held_rows):value['id']='held:'+str(index)
+    unavailable=copy.deepcopy(held_rows[0]);unavailable['id']='held:other-participants'
+    unavailable['models']={('other-'+name):view for name,view in unavailable['models'].items()}
+    held_rows.insert(0,unavailable)
+    held.write_text(''.join(json.dumps(value)+'\n' for value in held_rows))
+    config['held_pairs']['sha256']=sha256_file_hex(held)
+    config.update(adaptive_refresh={'updates_per_phase':1},held_eval_rows=1)
+    monkeypatch.setattr(stage.PairedSource,'get',lambda *args:pytest.fail('phase changes must restart the stream, never scan the remaining corpus then randomly reread'))
+    path.write_text(json.dumps(config))
+    torch.manual_seed(1234)
+    whole=stage.run(path,manifest,tmp_path/'whole',device='cpu')
+    assert whole['step']==3 and not whole['completed'] and not whole['exposure_complete']
+    assert whole['semantic_obligations']['remaining_pair_visits']==6
+    assert whole['refresh_progress']['completed_updates']==dict.fromkeys(('vae','joint','distill'),1)
+    assert whole['metrics']['held']['scope']=='rotating'
+    from natlang_neuralese.train.native_semantic_refresh import validate_boundary
+    exported=json.loads((tmp_path/'whole/semantic-adapter.json').read_text())
+    # The verifier isolates exposure/phase accounting here; this mechanism
+    # fixture has no task/tokenizer export and is NOT a qualified deployment.
+    boundary={**whole,'refresh_ready':True}
+    assert validate_boundary(boundary,exported,config) is False
+    incomplete=copy.deepcopy(boundary);incomplete['refresh_progress']['completed_updates']['joint']=0
+    with pytest.raises(ValueError,match='committed work'):
+        validate_boundary(incomplete,exported,config)
+    dishonest=copy.deepcopy(boundary);dishonest['completed']=True
+    with pytest.raises(ValueError,match='full final held'):
+        validate_boundary(dishonest,exported,config)
+    torch.manual_seed(1234)
+    first=stage.run(path,manifest,tmp_path/'resumed',device='cpu',max_updates=2)
+    assert not first['refresh_ready']
+    resumed=stage.run(path,manifest,tmp_path/'resumed',device='cpu',resume=tmp_path/'resumed/checkpoint.pt')
+    assert resumed['step']==3 and resumed['exposure']==whole['exposure']
+    a=CheckpointPolicy.load(tmp_path/'whole/checkpoint.pt');b=CheckpointPolicy.load(tmp_path/'resumed/checkpoint.pt')
+    _assert_same(a['vae_optimizer'],b['vae_optimizer']);_assert_same(a['vae_state'],b['vae_state'])
+    _assert_same(a['training']['rng'],b['training']['rng'])
+    assert a['training']['held_coverage']['cursor']==b['training']['held_coverage']['cursor']
+    # A new actual shared publication starts a new refresh, preserves every old
+    # credit, and consumes row 2 in every phase rather than replaying row 1.
+    bindings=json.loads(manifest.read_text())
+    exported=json.loads((tmp_path/'resumed/semantic-adapter.json').read_text())
+    for binding in bindings['models']:
+        entry=exported['models'][binding['model_id']]
+        binding.update(checkpoint=entry['checkpoint'],native_identity=entry['native_identity'])
+    bindings['signature']=canonical_json_sha256_hex(bindings['models']);manifest.write_text(json.dumps(bindings))
+    original=stage.load_participant
+    def current(name,binding,config,device):
+        value=original(name,binding,config,device);value.identity=binding['native_identity'];return value
+    monkeypatch.setattr(stage,'load_participant',current)
+    next_report=stage.run(path,manifest,tmp_path/'second',device='cpu',resume=tmp_path/'resumed/checkpoint.pt',refresh_participants=True)
+    assert next_report['step']==6 and next_report['semantic_obligations']['remaining_pair_visits']==3
+    assert set(next_report['exposure']['joint'])=={'train:0','train:1'}
+    assert not next_report['completed']
+    exported=json.loads((tmp_path/'second/semantic-adapter.json').read_text())
+    for binding in bindings['models']:
+        entry=exported['models'][binding['model_id']]
+        binding.update(checkpoint=entry['checkpoint'],native_identity=entry['native_identity'])
+    bindings['signature']=canonical_json_sha256_hex(bindings['models']);manifest.write_text(json.dumps(bindings))
+    third=stage.run(path,manifest,tmp_path/'third',device='cpu',resume=tmp_path/'second/checkpoint.pt',refresh_participants=True)
+    assert third['step']==9 and third['completed'] and third['exposure_complete']
+    assert third['metrics']['held']['scope']=='full' and third['metrics']['held']['rows']==3
+    assert third['semantic_obligations']['remaining_pair_visits']==0
+    assert all(len(rows)==3 for rows in third['exposure'].values())
+    final_export=json.loads((tmp_path/'third/semantic-adapter.json').read_text())
+    assert validate_boundary(third,final_export,config) is True

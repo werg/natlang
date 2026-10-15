@@ -79,11 +79,11 @@ def validate_ready(path, requirement):
         raise ValueError('native readiness has no bound completed optimizer/data exposure')
     communication = receipt.get('communication_exposure') or {}
     if (communication != report.get('communication_exposure')
-            or communication.get('complete') is not True
+            or (not foundation_boundary and communication.get('complete') is not True)
             or any(type(communication.get(key)) is not int or communication[key] <= 0
                    for key in ('graphs', 'required_graph_visits', 'graph_visits'))
             or communication['required_graph_visits'] < communication['graphs']
-            or communication['graph_visits'] < communication['required_graph_visits']):
+            or (not foundation_boundary and communication['graph_visits'] < communication['required_graph_visits'])):
         raise ValueError('native readiness requires complete genuine producer/consumer communication training before VAE')
     if foundation_boundary:
         from ..data.native_sources import NativeGraphSource
@@ -156,11 +156,11 @@ def ready_participants(config):
 
 def validate_completion(path, published):
     """An exit code cannot substitute for complete data, models and numerics."""
-    from .native_semantic_stage import PairedSource, _exposure_complete
     proof = json.loads(Path(path).read_text())
     key = (proof.get('participants_signature'), proof.get('curriculum_signature'))
     if (proof.get('schema') != 'natlang.native-shared-stage-completion/1'
-            or proof.get('completed') is not True or proof.get('production_ready') is not True or key not in published):
+            or not (proof.get('completed') is True or proof.get('refresh_ready') is True)
+            or proof.get('production_ready') is not True or key not in published):
         raise ValueError('shared completion does not bind a published participant/curriculum combination')
     checkpoint = _bound(proof['checkpoint'])
     adapter = json.loads(_bound(proof['adapter']).read_text())
@@ -172,12 +172,20 @@ def validate_completion(path, published):
     models = adapter['models']
     if set(models) != set(published[key]['models']):
         raise ValueError('shared adapter omitted or substituted a ready participant')
-    source = PairedSource(proof['source_bindings']['train'], split='train')
-    if proof['phases'] != curriculum['phases']:
-        raise ValueError('shared completion changed its required curriculum')
-    complete, _ = _exposure_complete(proof['phases'], source, models, proof['exposure'])
-    if not complete or proof.get('missing_exposure'):
-        raise ValueError('shared completion left production paired data untrained')
+    from .native_semantic_refresh import validate_boundary
+    validate_boundary(proof,adapter,curriculum)
+    transport=json.loads(_bound(proof['semantic_runtime_certificate']).read_text())
+    expected={(a,b) for a in models for b in models if a!=b}
+    directions=transport.get('directions') or []
+    if (transport.get('schema')!='natlang.native-semantic-transport-certificate/1'
+            or transport.get('passed') is not True or transport.get('adapter_sha256')!=proof['adapter']['sha256']
+            or {(row['source'],row['target']) for row in directions}!=expected
+            or len(directions)!=len(expected)
+            or any(row.get('passed') is not True or row.get('mode')!='learned-semantic-state-deltas'
+                or row.get('wire_layer_tensors')!=0
+                or row.get('source_native_identity')!=models[row['source']]['native_identity']
+                or row.get('target_native_identity')!=models[row['target']]['native_identity'] for row in directions)):
+        raise ValueError('shared boundary lacks actual compact cross-model learned transport qualification')
     for name, entry in models.items():
         identity = entry['native_identity']
         if identity['checkpoint_sha256'] != proof['checkpoint']['sha256']:
@@ -188,7 +196,8 @@ def validate_completion(path, published):
             raise ValueError('shared final model lacks exact trained-state runtime qualification')
         task = json.loads(_bound(proof['task_execution_receipts'][name]).read_text())
         if (task.get('passed') is not True or task.get('complete') is not True
-                or task.get('eligible') is not True or task.get('native_identity') != identity):
+                or task.get('eligible') is not True or task.get('native_identity') != identity
+                or task.get('semantic_adapter_sha256')!=proof['adapter']['sha256']):
             raise ValueError('shared final model lacks actual bound natlang task execution')
         if not task.get('score_path') or sha256_file_hex_cached(Path(task['score_path'])) != task.get('score_sha256'):
             raise ValueError('shared task execution score changed or was never written')
@@ -409,7 +418,8 @@ def _run(config_path, *, once=False, stop):
             ready, pending = ready_participants(config)
             curriculum = (json.loads(Path(config['curriculum']).read_text()) if config.get('curriculum') else {})
             if curriculum.get('pairs') and curriculum.get('held_pairs'):
-                from .native_semantic_stage import PairedSource
+                from .native_semantic_stage import PairedSource,validate_config
+                curriculum=validate_config(curriculum)
                 cache_key = (curriculum['pairs']['sha256'], curriculum['held_pairs']['sha256'])
                 if pair_cache is None or pair_cache[0] != cache_key:
                     pair_cache = (cache_key, PairedSource(curriculum['pairs'], split='train'),

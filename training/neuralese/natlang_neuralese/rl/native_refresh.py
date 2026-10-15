@@ -14,7 +14,7 @@ from ..common.jsonio import write_json_durable
 
 
 def refresh(*, adapter, updates, config, out, device='cuda', stop=None):
-    from ..train.native_semantic_stage import run
+    from ..train.native_semantic_stage import run,validate_config
     adapter, out = Path(adapter).resolve(), Path(out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     source = json.loads(adapter.read_text())
@@ -76,23 +76,31 @@ def refresh(*, adapter, updates, config, out, device='cuda', stop=None):
     # A partially refreshed stage resumes its own full VAE/model/optimizer slot.
     from ..train.native_continuation import qualified_refresh_config
     selected,pending=qualified_refresh_config(source,config,qualification_models)
+    selected=validate_config(selected)
     selected_path=out/'qualified-curriculum.json'
     write_json_durable(selected_path,selected)
     report = run(selected_path, participants, out, resume=own_checkpoint if own_checkpoint.exists() else parent['path'],
                  refresh_participants=True, device=device, stop=stop)
     if stop is not None and stop.requested:
         raise InterruptedError('semantic refresh checkpointed after stop request; deployment unchanged')
-    if not report.get('completed') or not report.get('production_ready'):
+    if not (report.get('completed') or report.get('refresh_ready')) or not report.get('production_ready'):
         raise RuntimeError('semantic refresh incomplete or runtime/task evidence missing; actors retain previous deployment')
     exported = out/'semantic-adapter.json'
     value = json.loads(exported.read_text())
+    from ..train.native_readiness import validate_completion
+    validate_completion(out/'shared-stage-completion.json',
+        {(manifest['signature'],canonical_json_sha256_hex(selected)):{'models':[entry['model_id'] for entry in models],'execution_signature':'semantic-refresh'}})
     deployment = {'schema': 'natlang.native-rl-deployment/1',
         'semantic_adapter': {'path': str(exported), 'sha256': sha256_file_hex_cached(exported)},
         'checkpoint': value['checkpoint'], 'models': value['models'],
         'parent_adapter_sha256': sha256_file_hex_cached(adapter),
         'pending_curriculum':({'path':str(Path(config).resolve()),'sha256':sha256_file_hex_cached(config),
             'raw_communication_deficits':pending} if pending else None),
-        'production_curriculum_complete':not pending,
+        'production_curriculum_complete':bool(not pending and report.get('completed') and
+            all((entry.get('mandatory_sft') or {}).get('complete') is True for entry in value['models'].values())),
+        'semantic_obligations':value.get('semantic_obligations'),
+        'shared_stage_completion':{'path':str((out/'shared-stage-completion.json').resolve()),
+            'sha256':sha256_file_hex_cached(out/'shared-stage-completion.json')},
         'updated_participants': {name: {'path': str(Path(path).resolve()),
              'sha256': sha256_file_hex_cached(path)} for name, path in updates.items()}}
     write_json_durable(out/'deployment.json', deployment)
@@ -102,7 +110,7 @@ def refresh(*, adapter, updates, config, out, device='cuda', stop=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--adapter', type=Path, required=True)
-    parser.add_argument('--update', action='append', required=True, help='participant=full_native_checkpoint')
+    parser.add_argument('--update', action='append', default=[], help='participant=full_native_checkpoint')
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--device', default='cuda')
