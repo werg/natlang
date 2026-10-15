@@ -452,9 +452,23 @@ _RENDER_CONTEXT = {}
 
 
 def _render_trajectory(task):
-    chain, records = task
+    chain, records_start, records_stop = task
     context = _RENDER_CONTEXT
     args = context['args']
+    # Send immutable source byte ranges through the worker queue, not hundreds
+    # of megabytes of decoded Python objects. Complete trajectories remain
+    # intact: only the worker materializes the exact bounded range needed by
+    # the existing cross-row renderer and edge witness checks.
+    records = []
+    with open(args.records, 'rb') as source:
+        source.seek(records_start)
+        while source.tell() < records_stop:
+            line = source.readline()
+            if not line:
+                raise ValueError('trajectory source range ended before its receipted byte boundary')
+            records.append(json.loads(line))
+        if source.tell() != records_stop:
+            raise ValueError('trajectory source range does not end on an exact JSONL record boundary')
     tokenizers = context['tokenizers']
     pieces = context['pieces']
     expanded_fps = context['expanded_fps']
@@ -693,9 +707,14 @@ def main():
     if pair_only:
         input_identity['repair_pair_omissions'] = {
             'path': str(args.repair_pair_omissions.resolve()), 'sha256': repair_sha}
+    tokenizer_models = tuple(tokenizers)
     tokenizer_identity = {model: {'source': source_fps[model], 'expanded': expanded_fps[model],
         'role_ids': list(role_ids[model]), 'model_id': model_ids[model],
-        'base_inventory_sha256': base_inventory_shas[model]} for model in tokenizers}
+        'base_inventory_sha256': base_inventory_shas[model]} for model in tokenizer_models}
+    # The parent only needs model names and tokenizer fingerprints from here;
+    # workers load their own tokenizers. Releasing the parent copies avoids
+    # multiplying several GiB of tokenizer memory across the process pool.
+    del tokenizers, tok
     chunks, totals, completed_chains, resume_offset = [], defaultdict(int), [], 0
     if resume_mode:
         if not state_path.is_file():
@@ -747,7 +766,7 @@ def main():
         root = args.out / 'chunks'
         writers = ({} if pair_only else
             {split: {model: CompressedRows(root / f'graphs-{model}-{split}-{index:06d}.jsonl.zst')
-                     for model in tokenizers} for split in ('train', 'test')})
+                     for model in tokenizer_models} for split in ('train', 'test')})
         pair_writers = {split: CompressedRows(root / f'pairs-{split}-{index:06d}.jsonl.zst')
                         for split in ('train', 'test')}
         omissions = JsonlRows(root / f'omissions-{index:06d}.jsonl')
@@ -756,11 +775,11 @@ def main():
     def close_chunk(next_offset):
         nonlocal chunk_start_count
         index = len(chunks)
-        current = {'graphs': ({} if pair_only else {model: {} for model in tokenizers}), 'pairs': {},
+        current = {'graphs': ({} if pair_only else {model: {} for model in tokenizer_models}), 'pairs': {},
                    'omissions': None, 'render_omissions': None}
         try:
             if not pair_only:
-                for model in tokenizers:
+                for model in tokenizer_models:
                     for split in ('train', 'test'):
                         current['graphs'][model][split] = writers[split][model].finish()
             for split in ('train', 'test'):
@@ -791,7 +810,7 @@ def main():
         if render_omissions_writer is not None: render_omissions_writer.abort()
 
     open_chunk(len(chunks))
-    chain_rows, current = [], None
+    current, chain_start = None, None
 
 
     def commit_result(chain, result, next_offset):
@@ -835,8 +854,8 @@ def main():
             if not pending:
                 return
             batch, pending[:] = list(pending), []
-            results = list(executor.map(_render_trajectory, [(item[0], item[1]) for item in batch]))
-            for (chain_id, _, safe_offset), result in zip(batch, results):
+            results = list(executor.map(_render_trajectory, [(item[0], item[1], item[2]) for item in batch]))
+            for (chain_id, _, _, safe_offset), result in zip(batch, results):
                 commit_result(chain_id, result, safe_offset)
                 if args.max_trajectories and len(completed_chains) >= args.max_trajectories:
                     stopped_at_limit = True
@@ -849,11 +868,12 @@ def main():
                 chain = record.get('teacher_trajectory_id') or (record.get('source_ref') or {}).get('trajectory_id')
                 if not isinstance(chain, str) or not chain:
                     raise ValueError('admitted E2E record lacks its complete trajectory identity')
-                if current is None: current = chain
+                if current is None:
+                    current, chain_start = chain, line_start
                 if chain != current:
                     if current in edges_by_chain:
-                        pending.append((current, chain_rows, line_start))
-                    current, chain_rows = chain, []
+                        pending.append((current, chain_start, line_start, line_start))
+                    current, chain_start = chain, line_start
                     remaining = (args.max_trajectories - len(completed_chains) - len(pending)
                                  if args.max_trajectories else args.workers)
                     until_checkpoint = args.checkpoint_trajectories - (len(completed_chains) - chunk_start_count)
@@ -863,12 +883,11 @@ def main():
                     if stopped_at_limit:
                         last_offset = line_start
                         break
-                if not pair_only or chain in edges_by_chain:
-                    chain_rows.append(record)
                 last_offset = line_stop
             else:
-                if chain_rows and (not pair_only or current in edges_by_chain):
-                    pending.append((current, chain_rows, Path(args.records).stat().st_size))
+                if current is not None and (not pair_only or current in edges_by_chain):
+                    end_offset = Path(args.records).stat().st_size
+                    pending.append((current, chain_start, end_offset, end_offset))
                 flush_pending(executor)
                 if not args.max_trajectories and not resume_mode and records_digest.hexdigest() != args.records_sha256:
                     raise ValueError('source records SHA differs from the admitted immutable source binding')
@@ -904,7 +923,7 @@ def main():
     graph_outputs = {} if pair_only else {model: {split: merge_parts(
         [chunk['graphs'][model][split] for chunk in chunks],
         args.out / 'graphs' / model / split / 'native-graphs.jsonl.zst')
-        for split in ('train', 'test')} for model in tokenizers}
+        for split in ('train', 'test')} for model in tokenizer_models}
     pair_outputs = {split: merge_parts([chunk['pairs'][split] for chunk in chunks],
         args.out / 'pairs' / split / 'semantic-pairs.jsonl.zst') for split in ('train', 'test')}
     omissions_path = args.out / 'pair-omissions.jsonl'
@@ -921,7 +940,7 @@ def main():
                    'pieces': {'path': str(args.pieces), 'sha256': pieces_digest.hexdigest()},
                    'edges': {'path': str(args.edges), 'sha256': args.edges_sha256}},
         'tokenizers': {model: {'source': source_fps[model], 'expanded': expanded_fps[model],
-                               'role_ids': list(role_ids[model])} for model in tokenizers},
+                               'role_ids': list(role_ids[model])} for model in tokenizer_models},
         'model_ids': model_ids, 'base_inventory_sha256': base_inventory_shas,
         'counts': dict(totals), 'bounded_test_only': args.max_trajectories is not None,
         'outputs': {'graphs': graph_outputs, 'pairs': pair_outputs},
