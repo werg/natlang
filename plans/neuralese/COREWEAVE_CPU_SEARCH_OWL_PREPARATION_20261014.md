@@ -122,3 +122,15 @@ in0.905seconds with33,482supervised tokens/second; anon9.23GB and OOM0.
 Monitor matched update throughput and anon pressure, reducing back to one
 replayer if measured competition appears. D30/D34 waits until this entire native
 pipeline is terminal and its artifacts survive; no second converter runs beside it.
+
+### Owner-host private durability (2026-10-15)
+
+The owner selects completed source archives for offload. Reuse the private
+run-file exporter with an owner-host input option: exact file fingerprint and
+streaming SHA, the same private-project check and GCS scoped PUT, followed by
+an independent complete GET/SHA readback. The crisp additions are external
+service transport and exact byte verification. They decide neither source
+quality nor training admission. Account credentials remain on the owner host;
+artifact availability and admission remain separate. No second account route
+or cloud converter is introduced. Keep the original archive until its assigned
+durable-readback consumer completes.
