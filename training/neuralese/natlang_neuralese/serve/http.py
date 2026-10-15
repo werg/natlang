@@ -86,7 +86,7 @@ CAPABILITIES = sorted([
     "decide", "embed", "encode", "grad", "grad.order2", "guidance", "guidance.check", "init-body", "optim", "parts.value-type",
     "native.text-write", "native.init-body", "render", "score", "store", "store.owners", "store.native-state", "template", "template.argument-path", "template.value-type", "view", "write"])
 NATIVE_CAPABILITIES = sorted([
-    "chat", "chat.stream", "decide", "score", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
+    "chat", "chat.stream", "decide", "score", "grad", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
     "store.owners", "template", "template.argument-path", "template.value-type", "view"])
 NATIVE_CAPABILITY_GAPS = sorted(set(CAPABILITIES) - set(NATIVE_CAPABILITIES))
 
@@ -184,7 +184,7 @@ def make_handler(engine: Engine):
                                                   if native_enabled else "f32"),
                                         "store": {"owners": True, "persistent": engine.store.directory is not None},
                                         "max_block_length": engine.max_block, "context": engine.context,
-                                        "grad": not native_enabled, "grad_order": 2 if not native_enabled else 0, "stream": True,
+                                        "grad": True, "grad_order": 2 if not native_enabled else 1, "stream": True,
                                         "cutoff": None if native_enabled else engine.heads.cutoff,
                                         "adapters": [] if native_enabled else ["xs", "tiny"],
                                         "projections": {} if native_enabled else
@@ -319,7 +319,7 @@ def make_handler(engine: Engine):
             try:
                 if getattr(engine, "native_state_enabled", False):
                     unavailable = {
-                        "/v1/neuralese/grad": "grad", "/v1/neuralese/optim": "optim",
+                        "/v1/neuralese/optim": "optim",
                         "/v1/neuralese/adapters": "adapters.create", "/v1/neuralese/embed": "embed",
                         "/v1/neuralese/write": "write",
                         "/v1/neuralese/init_body": "init-body", "/v1/neuralese/encode": "encode",
@@ -346,6 +346,10 @@ def make_handler(engine: Engine):
                     return self._send(200, json.dumps({"removed": engine.store.collect(referenced, self._owner)}).encode())
                 if self.path == "/v1/neuralese/grad":
                     body = self._object()
+                    if getattr(engine, "native_state_enabled", False):
+                        from .native_grad import native_graph_gradient
+                        with grad_lock:
+                            return self._json(200, native_graph_gradient(engine, body, self._owner))
                     with grad_lock:
                         return self._json(200, GradSession(engine).run(body))
                 if self.path == "/v1/neuralese/decide":

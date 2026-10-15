@@ -59,3 +59,50 @@ def test_graph_provenance_and_supervision_are_verified(change):
         bad['nodes'][0]['target_weights'][1] = float('nan')
     with pytest.raises(ValueError):
         parse_graph(bad, tokenizer_fingerprint='f' * 64)
+
+
+def test_native_gradient_service_returns_exact_named_trainable_tensors(tmp_path):
+    from types import SimpleNamespace
+    from natlang_neuralese.serve.native_grad import native_graph_gradient
+    from natlang_neuralese.serve.store import TensorStore
+
+    model = SharedStateModel(tiny('lfm'), marker_ids=(58, 59, 60, 61), rank=4)
+    store = TensorStore(tmp_path)
+    engine = SimpleNamespace(shared_model=model, store=store,
+        checkpoint_sha256='1' * 64, embedding_weight_sha256='2' * 64,
+        model_config={'architecture': 'lfm2', 'tokenizer_fingerprint': 'f' * 64})
+    reply = native_graph_gradient(engine, {
+        'schema': 'natlang.native-gradient-request/1', 'objective': 'graph-ce', 'graph': row(),
+        'target': {'kind': 'model-parameters', 'names': ['adapter.up.weight']}}, 'test-owner')
+    artifact = store.get_native_tensor_artifact(reply['gradient']['id']).artifact
+    assert artifact.kind == 'parameter-gradient'
+    assert artifact.native_identity['checkpoint_sha256'] == '1' * 64
+    assert artifact.provenance['graph_sha256']
+    assert artifact.tensors['adapter.up.weight'].shape == model.adapter.up.weight.shape
+    assert torch.isfinite(artifact.tensors['adapter.up.weight']).all()
+    assert artifact.tensors['adapter.up.weight'].norm() > 0
+    store.close()
+
+
+def test_native_gradient_service_rejects_held_rows_and_unselected_parameters():
+    from types import SimpleNamespace
+    from natlang_neuralese.serve.native_grad import native_graph_gradient
+    from natlang_neuralese.serve.chat import RequestError
+    from natlang_neuralese.serve.store import TensorStore
+
+    model = SharedStateModel(tiny('lfm'), marker_ids=(58, 59, 60, 61), rank=4)
+    store = TensorStore()
+    engine = SimpleNamespace(shared_model=model, store=store,
+        checkpoint_sha256='1' * 64, embedding_weight_sha256='2' * 64,
+        model_config={'architecture': 'lfm2', 'tokenizer_fingerprint': 'f' * 64})
+    request = {'schema': 'natlang.native-gradient-request/1', 'graph': row(),
+               'target': {'kind': 'model-parameters', 'names': ['port.layers.0.weight']}}
+    with pytest.raises(RequestError, match='trainable native model parameters'):
+        native_graph_gradient(engine, request, None)
+    held = row()
+    held['split'] = 'test'
+    request['graph'] = held
+    request['target'] = {'kind': 'model-parameters', 'names': ['adapter.up.weight']}
+    with pytest.raises(RequestError, match='train rows only'):
+        native_graph_gradient(engine, request, None)
+    store.close()
