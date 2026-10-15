@@ -493,6 +493,45 @@ def test_prepared_window_cache_restores_roles_invalidates_and_rebuilds_corruptio
     assert len(calls) == cold_calls + 2 * (len(rows) - 1) + len(rows)
 
 
+def test_eager_rows_keep_masks_for_duplicate_text(monkeypatch):
+    """The eager records/pieces path keeps annotations bound to source rows, not text hashes."""
+    from natlang_neuralese.train import text_warmup
+
+    tokenizer = _FingerprintTokenizer()
+    engine = SimpleNamespace(tokenizer=tokenizer,
+                             backbone=SimpleNamespace(controls=SimpleNamespace(open_id=1, close_id=2)),
+                             _tokens=lambda text: [40, 41])
+    text = 'same text with two distinct supervised annotations'
+    ids = [99, 10, 30, 31, 99, 11, 32, 99, 12, 33, 34, 35, 36]
+    rows = [
+        {'id': 'twin-a', 'text': text, 'token_ids': ids, 'split': 'train', 'source_groups': ['a'],
+         'supervised_suffix_start': 9, 'sampling_group': 'eager-a',
+         'context_only_spans': [[9, 10]], 'token_choice_detached_spans': [[10, 11]]},
+        {'id': 'twin-b', 'text': text, 'token_ids': ids, 'split': 'train', 'source_groups': ['b'],
+         'supervised_suffix_start': 10, 'sampling_group': 'eager-b',
+         'context_only_spans': [[11, 12]], 'token_choice_detached_spans': [[12, 13]]},
+        {'id': 'held', 'text': 'independent held text', 'token_ids': ids, 'split': 'test',
+         'source_groups': ['held']},
+    ]
+    monkeypatch.setattr(text_warmup, 'load_text_rows', lambda *args, **kwargs: (rows, {}))
+    a = SimpleNamespace(records='mock-records.jsonl', pieces=None, text_data=None, tokens=10,
+                        prefix_tokens=3, target_tokens=4, held_documents=1, merge_prefix_rows=False,
+                        train_target_tokens=4, train_min_context_tokens=2)
+    train, *_ = trainer.stage_data(engine, a, None)
+    expected = {
+        'eager-a': ([[9, 10]], [[10, 11]]),
+        'eager-b': ([[11, 12]], [[12, 13]]),
+    }
+    observed = {}
+    for window in train:
+        group = window.get('sampling_group')
+        if group in expected:
+            masks = (window.get('context_only_spans'), window.get('token_choice_detached_spans'))
+            assert masks == expected[group]
+            observed[group] = masks
+    assert observed == expected
+
+
 def test_compressed_text_matches_plain_eager_and_cached_streams(tmp_path, monkeypatch):
     import subprocess
     from natlang_neuralese.train.text_warmup import load_text_rows

@@ -1253,6 +1253,14 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
                 masked_system_tokens+=context
         spans=row.get('supervised_spans')
         document=row.get('document_sha256') or hashlib.sha256(row['text'].encode()).hexdigest()
+        # Keep row-specific supervision attached before windows from distinct
+        # rows can be grouped by their (possibly identical) document text.
+        supervision={}
+        context_only=row.get('context_only_spans') or []
+        detached=row.get('token_choice_detached_spans') or []
+        if context_only or detached:
+            supervision={'context_only_spans':context_only,
+                         'token_choice_detached_spans':detached}
         for window in document_windows(row_tokens,
                 open_id=backbone.controls.open_id,close_id=backbone.controls.close_id,
                 tokens=tokens,prefix_tokens=prefix_tokens,
@@ -1270,6 +1278,7 @@ def prepare_text_windows(engine, rows, *, tokens, prefix_tokens, target_tokens,
                 'document_id':row.get('id'),  # the producer's document id (a data continuation matches by it too)
                 'cohort':row.get('text_cohort','native'),
                 'groups':row['source_groups'],
+                **supervision,
                 **({'sampling_group':row['sampling_group']} if row.get('sampling_group') is not None else {})})
     receipt={'enabled':bool(mask_system_prompt and role_start is not None),
              'requested':bool(mask_system_prompt),'role_start_id':role_start,

@@ -1128,10 +1128,11 @@ def _stage_text_data(engine, a, text_data, cache_spec, cache_path, cached):
                                                  target_tokens=a.target_tokens, mask_system_prompt=True,
                                                  train_target_tokens=getattr(a, 'train_target_tokens', None),
                 train_min_context_tokens=getattr(a, 'train_min_context_tokens', 0))
-    rows_by_document = {hashlib.sha256(row['text'].encode()).hexdigest(): row for row in rows}
     for split_windows in windows.values():
         for window in split_windows:
-            attach_supervision_descriptor(window, rows_by_document.get(window['document']))
+            # prepare_text_windows preserves each source row's mask on its
+            # own windows; matching annotation rows by text aliases twins.
+            attach_supervision_descriptor(window)
     held, held_selection = select_held_document_windows(windows['test'], a.held_documents)
     targets = [w for w in windows['train'] if target_bearing(w)]
     return windows['train'], targets, held, held_selection, mask_receipt, rows
