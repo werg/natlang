@@ -98088,6 +98088,30 @@
         "external-expansion-deepdive-handoffs-20261015-v1"
       ],
       "license": "Apache-2.0 from pinned D31 acquisition card"
+    },
+    {
+      "id": "luna-held-shapes-s52108-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52108-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with oracle-accepted outcomes and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "73 independently reviewed oracle-accepted roots; 304 approved native decisions out of 475 materialized from 84 accepted parents; eleven exact whole-parent process holds and five unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v33 source-review and protected-source check; three exact structural action-shape and eight manual noisy-process parent holds; native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "One zero-result 192-request Hotpot source defect reviewed-excluded under v33; one successful sibling source-held; eleven rejected oracle outcomes are not DPO negatives without separate review.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins v33 source review. Exact trajectory holds govern. Global union requires current source-review and non-success hold checks."
     }
   ],
   "coverage_backlog": [
