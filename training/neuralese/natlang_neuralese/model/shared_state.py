@@ -239,13 +239,14 @@ def graph_block_mask(plan, device, window=None):
     lo = F.pad(starts, (0, padding), value=len(plan.slot_sources))
     hi = F.pad(ends, (0, padding), value=-1)
     min_lo = lo.view(-1, block).amin(1)[None, None, :, None]
-    max_lo = F.pad(starts, (0, padding), value=0).view(-1, block).amax(1)[None, None, :, None]
-    min_hi = F.pad(ends, (0, padding), value=len(plan.slot_sources)).view(-1, block).amin(1)[None, None, :, None]
     max_hi = hi.view(-1, block).amax(1)[None, None, :, None]
     klo = torch.arange(0, len(plan.slot_sources), block, device=device)[None, None, None]
     khi = (klo+block-1).clamp(max=len(plan.slot_sources)-1)
-    full = (klo >= max_lo) & (khi <= min_hi)
-    partial = (khi >= min_lo) & (klo <= max_hi) & ~full
+    # Flex runs partial blocks before full blocks. That changes online
+    # softmax accumulation order when equivalent graph/cache layouts classify
+    # the same visible key differently. One chronological masked traversal
+    # preserves native sparse tensor cores and the exact causal predicate.
+    partial = (khi >= min_lo) & (klo <= max_hi)
 
     def order(mask):
         return (mask.sum(-1).to(torch.int32),
@@ -257,8 +258,7 @@ def graph_block_mask(plan, device, window=None):
         return valid & (kv >= starts[safe_q]) & (kv <= ends[safe_q])
 
     counts, indices = order(partial)
-    full_counts, full_indices = order(full)
-    return BlockMask.from_kv_blocks(counts, indices, full_counts, full_indices,
+    return BlockMask.from_kv_blocks(counts, indices,
         BLOCK_SIZE=block, mask_mod=mask_mod,
         seq_lengths=(plan.token_count, len(plan.slot_sources)))
 

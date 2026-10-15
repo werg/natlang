@@ -236,3 +236,47 @@ closed on incompatible compiler changes; qualification on each destination
 PyTorch/CUDA build remains required. Standing full-suite checks and independent
 integration review remain separate, as do the model-facing marker debt and
 actual full-recipe cloud restart.
+
+Independent full-size prefix qualification uses complete adjacent admitted train
+examples and the unchanged production `packed_graph_loss`. Diagnostic selection
+chooses a small useful whole batch within the existing 32k packed-token policy;
+no target is truncated or reweighted. Crisp code records immutable source/model
+identities, exact original-to-shared physical maps, gathered hidden/logit/loss
+comparisons and summed input gradients through every full-size backbone layer.
+Parameters are frozen only to avoid allocating full-model gradient storage; a
+leaf embedding hook retains the actual backward path. A nonzero producer adapter
+checks that ordinary cached prefixes remain unadapted. RNG/backend state is
+restored between variants. Mellum native BF16 and production FP8 expert modes
+are distinct required cases. Timing under a concurrent held collector is
+telemetry, not an isolated throughput claim. A failed numerical comparison stays
+failed until localized and repaired; the diagnostic does not widen tolerances.
+
+Gradient qualification also requires global relative L2 and cosine agreement;
+small absolute gradients cannot qualify through an absolute tolerance alone.
+FP8 qualification records executed expert projection calls, and rejects an
+entered backend scope that ran no FP8 projections. Configuration metadata alone
+is not execution proof. Numerical failures remain explicit in the report and
+retain exact CPU tensors for the assigned localization.
+
+### Layout-independent native attention accumulation
+
+Equivalent cached and graph executions must visit each query's visible KV
+blocks in the same chronological order. FlexAttention processes partial blocks
+before full blocks; moving a KV block between those lists changes FP32 online
+softmax accumulation and can cross BF16 routing boundaries. Dummy-query ranges
+and query-tile origins change that classification even when every actual query
+sees identical keys. The first Mellum layer reproduced this with bitwise equal
+Q/K/V, and an all-masked chronological sparse traversal restored bitwise output.
+
+1. Keep the existing exact per-query visibility bounds and sparse overlap census.
+2. List every overlapping KV block once, in ascending position, in the masked
+   traversal. Do not separately reorder fully visible blocks.
+3. Execute the existing native sparse tensor-core forward/backward and fixed
+   per-row delta; discard all attention-only dummy outputs as before.
+4. Qualify full graph, cached and import-gap outputs/gradients for both ports,
+   including actual FP8 execution, and measure the mask-fast-path tradeoff.
+
+This is exact numerical mechanism, not data or promotion policy. No causal key,
+loss target, row normalization, learned role or exposure credit changes. Full
+block fast-path restoration requires an ordered kernel implementation with the
+same numerical contract; changing a tolerance is not a repair.
