@@ -1005,9 +1005,9 @@ def main(argv=None):
                 try:
                     if backend is not None:
                         with backend.native_modules():
-                            metrics['task_eval'] = task_eval.cadence(step)
+                            metrics['task_eval'] = task_eval.cadence(step, final=step == total_end)
                     else:
-                        metrics['task_eval'] = task_eval.cadence(step)
+                        metrics['task_eval'] = task_eval.cadence(step, final=step == total_end)
                 finally:
                     model.train()
                     restore_training_rng_state(saved_rng, args.device)
@@ -1077,9 +1077,9 @@ def main(argv=None):
         try:
             if backend is not None:
                 with backend.native_modules():
-                    metrics['task_eval'] = task_eval.cadence(step)
+                    metrics['task_eval'] = task_eval.cadence(step, final=True)
             else:
-                metrics['task_eval'] = task_eval.cadence(step)
+                metrics['task_eval'] = task_eval.cadence(step, final=True)
         finally:
             model.train()
             restore_training_rng_state(saved_rng, args.device)

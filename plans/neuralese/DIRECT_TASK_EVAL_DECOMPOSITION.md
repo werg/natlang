@@ -43,3 +43,20 @@ serving path of a `direct-writer-pending` artifact.
 ## Partial runtime failures during legacy diagnostic training — 2026-10-15
 
 Owner-approved diagnostic policy keeps a partial held evaluation unscored and unqualified, preserves its runtime-failure counter, and lets useful optimizer updates continue while its transport repair is assigned. This applies only when more than half the cases have known model outcomes and the observed successes already meet the existing base/minimum/noise comparisons. A collector exception, all/mostly broken requests, or observed quality below those comparisons retains the failure stop. Final evaluation retains its bounded failure behavior and never issues a partial certificate. Policy is these natural-language steps; the shared evaluator verifies exact outcome counts and enforces the selected `runtime_failure_policy` setting. Default behavior remains `stop`; cloud diagnostic recipes declare `diagnostic-partial` explicitly.
+
+## Explicit routine reporting policy (2026-10-15)
+
+The owner selects `runtime_failure_policy: report` for shared native production
+recipes. Routine task evaluations report incomplete outcomes and retain their
+failure counters without terminating useful optimizer work. Both partially
+functional and wholly failed collector runs remain unscored; supervision owns
+their diagnosis. The legacy default `stop` and explicit `diagnostic-partial`
+policies retain their existing behavior.
+
+This is a declared natural-language operational policy. Its crisp mechanism
+validates the option, writes exact outcome/error evidence, stores observed
+successes separately from a null score, and applies the same reporting choice
+to synchronous cadence and asynchronous submission. Native stage/foundation/
+refresh boundaries explicitly request final handling; reporting cannot certify
+an incomplete mandatory evaluation. Historical DGX export evaluations remain
+historical and never qualify the current live weights.
