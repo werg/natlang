@@ -154,7 +154,7 @@ def test_held_union_cache_tracks_compressed_relocated_views_and_exact_bytes(tmp_
         module.held_union_groups(work, tmp_path / 'missing-union')
 
 
-@pytest.mark.parametrize('hold_kind', ['quality', 'decision', 'held-group'])
+@pytest.mark.parametrize('hold_kind', ['quality', 'decision', 'held-group', 'authentication'])
 def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_path, monkeypatch, hold_kind):
     from types import SimpleNamespace
     spec = importlib.util.spec_from_file_location('e2e_assemble_quality_test', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
@@ -176,7 +176,8 @@ def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_pa
                       'writer_record_id': ids[0], 'reader_record_id': ids[1],
                       'write_name': name, 'body_sha256': 'c' * 64, 'kind': 'result'})
     stem = source / 'shard-0000'
-    for suffix, rows in [('records', records), ('edges', edges), ('pieces', []), ('omissions', [])]:
+    for suffix, rows in [('records', records), ('edges', edges), ('pieces', []), ('omissions', ([{'id': 'bad:2', 'stage': 'authenticate', 'reason': 'missing producer receipt'}]
+                                                           if hold_kind == 'authentication' else []))]:
         Path(str(stem) + '.' + suffix + '.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
     Path(str(stem) + '.stats.json').write_text('{}')
     (source / 'sharded.json').write_text('{}')
@@ -194,8 +195,12 @@ def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_pa
     omissions = [json.loads(l) for l in (out / 'omissions.jsonl').open()]
     assert {r['id'] for r in omissions} == {'bad:0', 'bad:1', 'bad:2'}
     reason = {'quality': 'source_quality_quarantine_chain', 'decision': 'native_decision_hold_chain',
-              'held-group': 'train_trajectory_shares_held_source_group'}[hold_kind]
-    assert all(r['reason'] == reason for r in omissions)
+              'held-group': 'train_trajectory_shares_held_source_group',
+              'authentication': 'unresolved_authentication_chain'}[hold_kind]
+    assert all(r['reason'] == reason for r in omissions if r['stage'] == 'assemble')
+    if hold_kind == 'authentication':
+        assert len(omissions) == 4
+        assert all(r['authentication_failure_ids'] == ['bad:2'] for r in omissions if r['stage'] == 'assemble')
     receipt = json.loads((out / 'receipt.json').read_text())
     assert receipt['totals']['edges'] == 2
     if hold_kind == 'quality':
@@ -252,3 +257,22 @@ def test_neuralese_reference_metadata_retains_two_edges_between_same_records(mon
     review['excluded'] = [{'id': 'reader', 'reason': 'body authentication failed'}]
     with pytest.raises(ValueError, match='failed native authentication'):
         module.repair_legacy_edge_metadata(rows, {}, legacy)
+
+
+def test_derive_does_not_keep_a_known_unresolved_writer_because_it_has_a_valid_outgoing_edge(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location('e2e_unresolved_writer', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    from natlang_neuralese.train import trajectories
+    rows = [{'id': rid, 'split': 'train', 'source_ref': {'trajectory_id': 'chain'},
+             'target': {'role': 'assistant', 'content': rid}} for rid in ['writer', 'reader']]
+    review = {'excluded': [{'id': 'writer', 'reason': 'missing producer receipt'}],
+              'decisions': [{'id': 'reader', 'references': [{'kind': 'read', 'writer_record_id': 'writer',
+                 'name': 'result:body', 'body_sha256': 'a' * 64, 'gradient_edge': True}]}]}
+    monkeypatch.setattr(trajectories, 'authenticated_recurrence_context_view', lambda *args: ([], review))
+    stem = tmp_path / 'shard-0000'
+    module.derive(stem, rows, {}, {}, [], lambda *args, **kwargs: pytest.fail('unresolved chain is not trained'))
+    assert Path(str(stem) + '.records.jsonl').read_text() == ''
+    assert Path(str(stem) + '.edges.jsonl').read_text() == ''
+    omissions = [json.loads(l) for l in Path(str(stem) + '.omissions.jsonl').open()]
+    assert {r['id'] for r in omissions} == {'writer', 'reader'}
+    assert next(r for r in omissions if r['id'] == 'reader')['reason'] == 'trajectory_requires_authentication_repair'

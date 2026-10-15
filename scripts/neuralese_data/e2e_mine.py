@@ -212,6 +212,17 @@ def convert_shard(shard: Path, tokenizer, preconverted_pieces=None):
     return derive(stem, records, pieces, conversion, omissions, tokenizer)
 
 
+def unresolved_authentication_trajectories(records, omissions):
+    """Exact source omissions hold the whole affected chain for context-evidence repair."""
+    by_id = {r['id']: r for r in records}
+    result = collections.defaultdict(set)
+    for omission in omissions:
+        rid = omission.get('id')
+        if omission.get('stage') == 'authenticate' and rid in by_id:
+            result[trajectory_of(by_id[rid])].add(rid)
+    return result
+
+
 def derive(stem, records, pieces, conversion, omissions, tokenizer):
     from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view
     # Producer->consumer edges never cross trajectories, and writer names (handover:<note sha>, result:...) are unique
@@ -231,7 +242,9 @@ def derive(stem, records, pieces, conversion, omissions, tokenizer):
     for e in review['excluded']:
         omissions.append({'id': e.get('id'), 'stage': 'authenticate', 'reason': e.get('reason')})
     by_id = {r['id']: r for r in records}
-    edges = edges_from_authenticated_decisions(records, review['decisions'])
+    unresolved = unresolved_authentication_trajectories(records, omissions)
+    edges = [e for e in edges_from_authenticated_decisions(records, review['decisions'])
+             if e['trajectory'] not in unresolved]
     chains = {e['trajectory'] for e in edges}
     kept = [r for r in records if trajectory_of(r) in chains]
     without_edges = set(groups) - chains
@@ -240,7 +253,8 @@ def derive(stem, records, pieces, conversion, omissions, tokenizer):
         if trajectory_of(r) in without_edges and r.get('id') not in accounted_ids:
             omissions.append({'id': r.get('id'), 'stage': 'select_edge',
                               'trajectory': trajectory_of(r),
-                              'reason': 'trajectory_has_no_authenticated_producer_consumer_edge'})
+                              'reason': ('trajectory_requires_authentication_repair' if trajectory_of(r) in unresolved else
+                                         'trajectory_has_no_authenticated_producer_consumer_edge')})
     used = set()
 
     def walk(v):
@@ -428,13 +442,18 @@ def cmd_assemble(a):
     by_source = collections.defaultdict(collections.Counter)
     for stem in shard_stems:
         source = stem.parent.name
-        for line in read_lines(f'{stem}.omissions.jsonl'):
-            o = json.loads(line); o['source'] = source; omissions.write(json.dumps(o) + '\n'); totals['omitted_' + o['stage']] += 1
+        source_omissions = [json.loads(line) for line in read_lines(f'{stem}.omissions.jsonl')]
+        for o in source_omissions:
+            o['source'] = source; omissions.write(json.dumps(o) + '\n'); totals['omitted_' + o['stage']] += 1
         records = {}
         for line in read_lines(f'{stem}.records.jsonl'):
             r = json.loads(line); records[r['id']] = r
         edges = [json.loads(l) for l in read_lines(f'{stem}.edges.jsonl')]
-        edges, repair = repair_legacy_edge_metadata(list(records.values()), pieces, edges)
+        unresolved = unresolved_authentication_trajectories(records.values(), source_omissions)
+        eligible_edges = [e for e in edges if e['trajectory'] not in unresolved]
+        totals['edges_dropped_unresolved_authentication_chain'] += len(edges) - len(eligible_edges)
+        edges, repair = repair_legacy_edge_metadata(
+            [r for r in records.values() if trajectory_of(r) not in unresolved], pieces, eligible_edges)
         if repair:
             legacy_edge_repairs[str(stem.relative_to(work))] = repair
         reviewed = reviewed_trajectories(records.values(), review_groups)
@@ -450,6 +469,8 @@ def cmd_assemble(a):
                 held_decision_flags.append({'id': rid, 'source': source, 'split': record.get('split')})
         keep_ids, drop = set(), {}
         for rid, r in records.items():
+            if trajectory_of(r) in unresolved:
+                drop[rid] = 'unresolved_authentication_chain'; continue
             if r.get('split') == 'train' and trajectory_of(r) in protected:
                 drop[rid] = 'train_trajectory_shares_held_source_group'; continue
             if r.get('split') == 'train' and trajectory_of(r) in decision_held:
@@ -484,6 +505,9 @@ def cmd_assemble(a):
                       reviewed if why == 'source_review_pending_chain' else
                       protected if why == 'train_trajectory_shares_held_source_group' else None)
             detail = {'source_groups': sorted(groups[trajectory_of(records[rid])])} if groups is not None else {}
+            if why == 'unresolved_authentication_chain':
+                detail.update(authentication_failure_ids=sorted(unresolved[trajectory_of(records[rid])]),
+                              required_conversion='restore authenticated producer/provider context for whole chain')
             if why == 'native_decision_hold_chain':
                 detail['decision_ids'] = sorted(decision_held[trajectory_of(records[rid])])
             omissions.write(json.dumps({'id': rid, 'source': source, 'stage': 'assemble', 'reason': why, **detail}) + '\n')
