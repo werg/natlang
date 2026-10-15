@@ -1,0 +1,67 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-target-union-20261014-r9-teacher-refresh",
+  "owner": "dgx",
+  "path": "runs/natlang-target-union-20261014-r9-teacher-refresh",
+  "files": [
+    {
+      "path": "full/lfm25/text-data.jsonl.zst",
+      "bytes": 42572915,
+      "sha256": "f252df0f9e989f0d401623d9d330854a261f7a8bee957e1197dba0a3a2e58236"
+    },
+    {
+      "path": "full/mellum21/text-data.jsonl.zst",
+      "bytes": 41776508,
+      "sha256": "e5d7ad40ca10067b0e9a0bd42ac212d0f05fcb60a9a7811d28e8399847123866"
+    },
+    {
+      "path": "full/omissions.jsonl",
+      "bytes": 2448,
+      "sha256": "72de70e06a3d699ce9658fc473733e1c89bc061c282d7992797b6ab240bc5a4d",
+      "lines": 6
+    },
+    {
+      "path": "independent-protection-audit.json",
+      "bytes": 12209,
+      "sha256": "2ae9003cdc48abd8691955bd27199cfe31644aa7a5faeac6b0a9444e8b354124"
+    },
+    {
+      "path": "program-header/lfm25/text-data.jsonl.zst",
+      "bytes": 1434889121,
+      "sha256": "4b438d3d66243723f5190adc25038422248498f6d72583c13b7c73c91782f1da"
+    },
+    {
+      "path": "program-header/mellum21/text-data.jsonl.zst",
+      "bytes": 1450389784,
+      "sha256": "cf6ac1e73631b681d59aea52bced4584592e5a65460131e2dbfa6901c3f2c79a"
+    },
+    {
+      "path": "program-header/omissions.jsonl",
+      "bytes": 44472,
+      "sha256": "bff2c690c68ca6baf40f7722c77b6989be0ce2624b7f94090280d5d17e96f1ac",
+      "lines": 109
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 28679,
+      "sha256": "d718dbccc5384eaddea045b9552280db88f853a54eb21e952643ef2b9c266b02"
+    },
+    {
+      "path": "whole-trajectory/lfm25/text-data.jsonl.zst",
+      "bytes": 1056665450,
+      "sha256": "06cd813885369d8f8290db5251183ad8ca2ade20db410bc2d7e38f290dba950e"
+    },
+    {
+      "path": "whole-trajectory/mellum21/text-data.jsonl.zst",
+      "bytes": 1108510039,
+      "sha256": "bc8b12dacdd0943e9850faf411d7c2bd4d585905f7587933ec211e336c159bb8"
+    },
+    {
+      "path": "whole-trajectory/omissions.jsonl",
+      "bytes": 46852,
+      "sha256": "dfc5f6d37014e605c2d9d2ad312a88ebf76166fd397db8a1d53c064dcc6cec9d",
+      "lines": 106
+    }
+  ],
+  "bytes": 5134938477
+}

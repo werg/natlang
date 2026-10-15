@@ -82433,6 +82433,363 @@
       "review_status": "Approved static reference SFT except the held inverse-intent program; source-mismatch labels excluded; global union filters remain",
       "required_conversion": "Render native.held.jsonl.zst via registry-admits-reason scripted source reference requires independent semantic and training review; train-only and global protected/source reservations; render LFM/Mellum twins",
       "notes": "Authored static scaffold and scripted exact child-result reference, not provider-authored trajectory. Freeze receipt pins source/label/provenance/replay manifests for batches47-48. Sampling policy and item hold in semantic-review.json."
+    },
+    {
+      "id": "natlang-target-union-20261014-r9-teacher-refresh",
+      "owner": "dgx",
+      "path": "runs/natlang-target-union-20261014-r9-teacher-refresh",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "shared-natlang-target-training-set",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: natlang-target-union-20261014-r8, natlang-r8-teacher-additions-delta-20261014-v1, folder-criteria-inline-measured-render-20261014-v1, mellum-train-only-recovery-proxy-render-20261014-v1; variants: full/lfm25, full/mellum21, program-header/lfm25, program-header/mellum21, whole-trajectory/lfm25, whole-trajectory/mellum21; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "natlang-target-union-20261014-r8",
+        "natlang-r8-teacher-additions-delta-20261014-v1",
+        "folder-criteria-inline-measured-render-20261014-v1",
+        "mellum-train-only-recovery-proxy-render-20261014-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl.zst",
+            "sha256": "f252df0f9e989f0d401623d9d330854a261f7a8bee957e1197dba0a3a2e58236",
+            "compression": "zstd",
+            "decoded_sha256": "4ce3de4c839e508c381dc47c1e433a6f338cc56c530ec50201069e6af08fc22f",
+            "decoded_bytes": 2356417520,
+            "documents": 35073,
+            "by_split": {
+              "test": {
+                "documents": 2758,
+                "supervised_tokens": 327556,
+                "tokens": 28437327
+              },
+              "train": {
+                "documents": 32315,
+                "supervised_tokens": 4460885,
+                "tokens": 225159299
+              }
+            },
+            "by_member": {
+              "folder-criteria-inline-measured-render-20261014-v1": {
+                "documents": 973,
+                "supervised_tokens": 111932,
+                "test_documents": 0,
+                "tokens": 6140942,
+                "train_documents": 973
+              },
+              "mellum-train-only-recovery-proxy-render-20261014-v1": {
+                "documents": 495,
+                "supervised_tokens": 78221,
+                "test_documents": 0,
+                "tokens": 3406224,
+                "train_documents": 495
+              },
+              "protected-teacher-refresh": {
+                "documents": 1066,
+                "supervised_tokens": 109323,
+                "test_documents": 0,
+                "tokens": 8249388,
+                "train_documents": 1066
+              },
+              "r8-filtered-snapshot": {
+                "documents": 32539,
+                "supervised_tokens": 4488965,
+                "test_documents": 2758,
+                "tokens": 235800072,
+                "train_documents": 29781
+              }
+            }
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl.zst",
+            "sha256": "e5d7ad40ca10067b0e9a0bd42ac212d0f05fcb60a9a7811d28e8399847123866",
+            "compression": "zstd",
+            "decoded_sha256": "4ebe565645e9758a9e72ac230a434d52da00b76fe141c92bb550a1d2e44c8171",
+            "decoded_bytes": 2383061178,
+            "documents": 35073,
+            "by_split": {
+              "test": {
+                "documents": 2758,
+                "supervised_tokens": 350881,
+                "tokens": 32807070
+              },
+              "train": {
+                "documents": 32315,
+                "supervised_tokens": 4965211,
+                "tokens": 247340844
+              }
+            },
+            "by_member": {
+              "folder-criteria-inline-measured-render-20261014-v1": {
+                "documents": 973,
+                "supervised_tokens": 123467,
+                "test_documents": 0,
+                "tokens": 6165209,
+                "train_documents": 973
+              },
+              "mellum-train-only-recovery-proxy-render-20261014-v1": {
+                "documents": 495,
+                "supervised_tokens": 84296,
+                "test_documents": 0,
+                "tokens": 3452222,
+                "train_documents": 495
+              },
+              "protected-teacher-refresh": {
+                "documents": 1066,
+                "supervised_tokens": 125619,
+                "test_documents": 0,
+                "tokens": 8917003,
+                "train_documents": 1066
+              },
+              "r8-filtered-snapshot": {
+                "documents": 32539,
+                "supervised_tokens": 4982710,
+                "test_documents": 2758,
+                "tokens": 261613480,
+                "train_documents": 29781
+              }
+            }
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl.zst",
+            "sha256": "4b438d3d66243723f5190adc25038422248498f6d72583c13b7c73c91782f1da",
+            "compression": "zstd",
+            "decoded_sha256": "008010fffc4f1521d462e47995f2c78f0293b4d56f916c2dfb61fa1f6231749d",
+            "decoded_bytes": 60083605980,
+            "documents": 677859,
+            "by_split": {
+              "test": {
+                "documents": 64683,
+                "supervised_tokens": 14148833,
+                "tokens": 1317997534
+              },
+              "train": {
+                "documents": 613176,
+                "supervised_tokens": 114163058,
+                "tokens": 5333067647
+              }
+            },
+            "by_member": {
+              "folder-criteria-inline-measured-render-20261014-v1": {
+                "documents": 973,
+                "supervised_tokens": 111932,
+                "test_documents": 0,
+                "tokens": 1814703,
+                "train_documents": 973
+              },
+              "mellum-train-only-recovery-proxy-render-20261014-v1": {
+                "documents": 495,
+                "supervised_tokens": 78221,
+                "test_documents": 0,
+                "tokens": 1276096,
+                "train_documents": 495
+              },
+              "protected-teacher-refresh": {
+                "documents": 20128,
+                "supervised_tokens": 1909538,
+                "test_documents": 0,
+                "tokens": 42285574,
+                "train_documents": 20128
+              },
+              "r8-filtered-snapshot": {
+                "documents": 656263,
+                "supervised_tokens": 126212200,
+                "test_documents": 64683,
+                "tokens": 6605688808,
+                "train_documents": 591580
+              }
+            }
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl.zst",
+            "sha256": "cf6ac1e73631b681d59aea52bced4584592e5a65460131e2dbfa6901c3f2c79a",
+            "compression": "zstd",
+            "decoded_sha256": "5e114099a15db85bde63f542b2e8c74bf7ecf8229938945ea82ee6f206aea6b7",
+            "decoded_bytes": 64521498952,
+            "documents": 677859,
+            "by_split": {
+              "test": {
+                "documents": 64683,
+                "supervised_tokens": 14556001,
+                "tokens": 1623082405
+              },
+              "train": {
+                "documents": 613176,
+                "supervised_tokens": 123360189,
+                "tokens": 6689114293
+              }
+            },
+            "by_member": {
+              "folder-criteria-inline-measured-render-20261014-v1": {
+                "documents": 973,
+                "supervised_tokens": 123467,
+                "test_documents": 0,
+                "tokens": 1810145,
+                "train_documents": 973
+              },
+              "mellum-train-only-recovery-proxy-render-20261014-v1": {
+                "documents": 495,
+                "supervised_tokens": 84296,
+                "test_documents": 0,
+                "tokens": 1313336,
+                "train_documents": 495
+              },
+              "protected-teacher-refresh": {
+                "documents": 20128,
+                "supervised_tokens": 2188579,
+                "test_documents": 0,
+                "tokens": 44161172,
+                "train_documents": 20128
+              },
+              "r8-filtered-snapshot": {
+                "documents": 656263,
+                "supervised_tokens": 135519848,
+                "test_documents": 64683,
+                "tokens": 8264912045,
+                "train_documents": 591580
+              }
+            }
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl.zst",
+            "sha256": "06cd813885369d8f8290db5251183ad8ca2ade20db410bc2d7e38f290dba950e",
+            "compression": "zstd",
+            "decoded_sha256": "eef9eac680980078a5e6986d93429e759058babe7914f1f2b10dd6ba4134467c",
+            "decoded_bytes": 15161974058,
+            "documents": 229527,
+            "by_split": {
+              "test": {
+                "documents": 9838,
+                "supervised_tokens": 76103968,
+                "tokens": 285083812
+              },
+              "train": {
+                "documents": 219689,
+                "supervised_tokens": 294117269,
+                "tokens": 1369093513
+              }
+            },
+            "by_member": {
+              "folder-criteria-inline-measured-render-20261014-v1": {
+                "documents": 869,
+                "supervised_tokens": 119386,
+                "test_documents": 0,
+                "tokens": 1548348,
+                "train_documents": 869
+              },
+              "mellum-train-only-recovery-proxy-render-20261014-v1": {
+                "documents": 233,
+                "supervised_tokens": 62499,
+                "test_documents": 0,
+                "tokens": 552851,
+                "train_documents": 233
+              },
+              "protected-teacher-refresh": {
+                "documents": 13070,
+                "supervised_tokens": 1618633,
+                "test_documents": 0,
+                "tokens": 24274813,
+                "train_documents": 13070
+              },
+              "r8-filtered-snapshot": {
+                "documents": 215355,
+                "supervised_tokens": 368420719,
+                "test_documents": 9838,
+                "tokens": 1627801313,
+                "train_documents": 205517
+              }
+            }
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl.zst",
+            "sha256": "bc8b12dacdd0943e9850faf411d7c2bd4d585905f7587933ec211e336c159bb8",
+            "compression": "zstd",
+            "decoded_sha256": "4a65bc98647af4d21c92c0c128988186e8834a87a74d07874153f3b7f329c392",
+            "decoded_bytes": 16268609090,
+            "documents": 229527,
+            "by_split": {
+              "test": {
+                "documents": 9838,
+                "supervised_tokens": 86567869,
+                "tokens": 360027286
+              },
+              "train": {
+                "documents": 219689,
+                "supervised_tokens": 344987673,
+                "tokens": 1702470740
+              }
+            },
+            "by_member": {
+              "folder-criteria-inline-measured-render-20261014-v1": {
+                "documents": 869,
+                "supervised_tokens": 149186,
+                "test_documents": 0,
+                "tokens": 1562273,
+                "train_documents": 869
+              },
+              "mellum-train-only-recovery-proxy-render-20261014-v1": {
+                "documents": 233,
+                "supervised_tokens": 86671,
+                "test_documents": 0,
+                "tokens": 573423,
+                "train_documents": 233
+              },
+              "protected-teacher-refresh": {
+                "documents": 13070,
+                "supervised_tokens": 2429664,
+                "test_documents": 0,
+                "tokens": 25019473,
+                "train_documents": 13070
+              },
+              "r8-filtered-snapshot": {
+                "documents": 215355,
+                "supervised_tokens": 428890021,
+                "test_documents": 9838,
+                "tokens": 2035342857,
+                "train_documents": 205517
+              }
+            }
+          }
+        }
+      },
+      "union_omissions": {
+        "full": {
+          "protected-teacher-refresh: exact_duplicate_document": 6
+        },
+        "program-header": {
+          "protected-teacher-refresh: exact_duplicate_document": 109
+        },
+        "whole-trajectory": {
+          "protected-teacher-refresh: exact_duplicate_document": 106
+        }
+      },
+      "build": {
+        "script": "scripts/neuralese_data/build_native_turn_union.py",
+        "code": {
+          "scripts/neuralese_data/build_native_turn_union.py": "e9de9bba34ea089c74b159644a2fe229b230d8f301508d27218349a2aac9fd29",
+          "scripts/neuralese_data/render_native_turn_corpus.py": "cd22423d7181576175120a299ae1de2511cf3be9048353621840506f98da592f",
+          "scripts/neuralese_data/text_tokenizer_twin.py": "e860b66f5f0281efed48400aa73a922b6b7eea801ae9d3789ca8a81f7c2c2d2a",
+          "scripts/source_review.py": "e23beab163182be47426ced7afe4580b1998ba4002c2d2db80816e861647a4b8"
+        },
+        "receipt": "runs/natlang-target-union-20261014-r9-teacher-refresh/receipt.json"
+      },
+      "notes": "Protected R9 teacher refresh: complete frozen R8 plus admitted protected teacher delta, measured folder criteria and source-disjoint Mellum recovery proxies. Independent all-six-view audit proves exact tokenizer identities, preserved held splits, zero train held group/text and quality-quarantine overlap. No frozen cloud input changes; continuation recipe preparation is separate."
     }
   ],
   "coverage_backlog": [
