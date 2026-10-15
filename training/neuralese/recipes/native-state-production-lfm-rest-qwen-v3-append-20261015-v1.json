@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "native-state-production-lfm-rest-qwen-v3-append-20261015-v1",
+  "extends": "native-state-production-lfm-teacher-comm-append-20261015-v1",
+  "description": "Continue exact native weights, optimizer, RNG and per-row exposure, preserving the entire existing source prefix and adding admitted prioritized Qwen V3 and REST27 ordinary tails. Whole graphs use shared 32768-token packing and 1024-token loss chunks.",
+  "overrides": {
+    "input_bindings": {
+      "native_train_graphs": {
+        "path": "/work/native-production/data/native-state-rest-qwen-v3-append-20261015-v1/lfm25/train-sources.json",
+        "sha256": "aedef9e2581b587aec2c764d620417e15a2bf669cd5d2f6546f42943dd902f7c"
+      },
+      "previous_native_train_graphs": {
+        "path": "/work/native-production/data/native-state-teacher-comm-append-20261015-v1/lfm25/train-sources.json",
+        "sha256": "b89ba6d6ca13651636a43627d0bc091576a486435fdddcdbba3fa2b35efd2ec0"
+      }
+    },
+    "stages": {
+      "native_full_sft": {
+        "parameters": {
+          "batch_tokens": 32768,
+          "chunk_tokens": 1024
+        }
+      }
+    }
+  }
+}
