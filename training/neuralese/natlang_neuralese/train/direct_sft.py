@@ -78,7 +78,7 @@ OPERATIONAL = frozenset({'base', 'out', 'weight_drift_base', 'stop_at', 'steps',
                          'drift_stop', 'drift_agreement_warn', 'drift_agreement_stop', 'drift_gate', 'eval_batch',
                          'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
                          'continue_monitor_reference', 'gradient_digest_steps', 'state_hash_steps',
-                         'continued_text_data', 'plan_only', 'plan_out', 'objective_continuation',
+                         'continued_text_data', 'plan_only', 'plan_out', 'objective_continuation', 'upgrade_window_coverage',
                          'sdpa_backend', 'deterministic_training',
                          # the in-run task-success evaluation (owner 2026-10-12) is a verifier, not the objective
                          'task_eval', 'task_eval_every', 'stop_after_training_seconds'})
@@ -142,6 +142,9 @@ def parse(argv=None):
                    help='data continuation (owner 2026-10-12): the --text-data this stage trained on before; a resume '
                         'whose checkpoint read it continues on --text-data with the same update counter, weights and '
                         'optimizer state, the seen documents counted as seen (data_continuation)')
+    p.add_argument('--upgrade-window-coverage', action=argparse.BooleanOptionalAction, default=False,
+                   help='explicitly replace a legacy document-level continuation with exact window occurrences; '
+                        'unknown earlier windows replay conservatively without resetting state')
     p.add_argument('--plan-only', action='store_true',
                    help='print the data plan (budget, data continuation, QAT range, held set) and exit: no model, no '
                         'writes to --out')
@@ -1393,6 +1396,9 @@ def continuation_mode(a, state, inputs):
     recorded = state.get('data_continuation')
     saved = (state.get('identity') or {}).get('inputs') or {}
     if sorted(saved.values()) == sorted(inputs.values()):
+        if (getattr(a, 'upgrade_window_coverage', False) and recorded is not None
+                and recorded.get('schema') == LEGACY_CONTINUATION_SCHEMA):
+            return 'continue', recorded
         # Same data, new train-window geometry: a windowing continuation (the plan it trained on is rebuilt under
         # the saved geometry; the rest of the epoch is this geometry's windows of the unseen documents).
         if windowing(saved_window_options(a, state)) != windowing(a):
@@ -1417,6 +1423,11 @@ def compute_continuation(a, state, engine, targets, held, recorded, quantization
     record, _ = data_continuation(previous_targets, previous_held, targets, held, consumed=state['step'],
                                   previous=recorded, quantization_stage=quantization_stage, a=a,
                                   previous_a=previous_a)
+    if (getattr(a, 'upgrade_window_coverage', False) and recorded is not None
+            and recorded.get('schema') == LEGACY_CONTINUATION_SCHEMA):
+        record['coverage_upgrade'] = {'requested': True, 'source_schema': LEGACY_CONTINUATION_SCHEMA,
+                                      'target_schema': CONTINUATION_SCHEMA,
+                                      'policy': 'same-data exact-window continuation; unknown legacy coverage replays'}
     return record
 
 

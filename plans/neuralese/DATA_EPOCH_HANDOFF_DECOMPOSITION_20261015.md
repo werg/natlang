@@ -27,3 +27,7 @@ The existing data-continuation program reconstructs the predecessor schedule, re
 2. Validate each MuonSR `grad_norm` against the parameter's leading stack dimensions: the optimizer computes norms over its last two matrix dimensions. Momentum remains full parameter shape.
 3. Keep every saved norm and momentum tensor unchanged, including its original dtype through Torch optimizer loading; reject an incorrect stack size or any other undeclared shape change.
 4. Verify the actual stacked optimizer's state survives adding a projection, including malformed-state rejection. This is crisp optimizer schema validation; the mixed objective and training policy are unchanged.
+
+## Explicit same-data legacy window-coverage upgrade
+
+The shared continuation planner can already reconstruct a legacy document-level schedule and replay its unknown window coverage conservatively. A same-input resume never entered that path. Add one declared `upgrade_window_coverage` option through the existing recipe windowing handoff and CLI. It selects that existing continuation path only for schema/1 records; subsequent schema/2 resumes remain ordinary resumes. Record the requested upgrade and conservative coverage counts, retain exact checkpoint update/optimizer/RNG, and build the plan on CPU before a useful data handoff. No separate trainer or automatic restart is introduced.
