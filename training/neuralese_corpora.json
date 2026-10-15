@@ -85030,6 +85030,45 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "luna-held-shapes-s52079-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52079-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "89 exact accepted candidate roots; 88 admitted after one no-iterate research parent hold; 640 approved native decisions, all failed or unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Exact accepted roots, source-review and protected checks, source-bound independent dataset-workbench audit, one research no-iterate parent hold, native per-decision approval; only approved-turns.jsonl is training input",
+      "review_status": "Six of six dataset-workbench roots semantically approved; one HotpotQA research root held for omitting required iterateOn and inline NL. Remaining seven accepted HotpotQA research roots used required iteration and inline NL.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Exact accepted 89 roots/672 materialized decisions; 640 approved after 29 unapproved decisions and 3 from held parent. Global union makes final cross-corpus decision."
+    },
+    {
+      "id": "luna-dataset-workbench-s79-audit-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-dataset-workbench-s79-audit-20261015-v1",
+      "include": [
+        "review.json",
+        "REPORT.md"
+      ],
+      "source_class": "Independent exact-source-bound item-level semantic audit of six Luna dataset-workbench roots",
+      "license": "Project-generated curriculum with specific source license facts in parent campaign",
+      "split": "train-only source parents; audit itself is review evidence only",
+      "admission": "Six roots reviewed; six semantically approved; no direct training admission",
+      "training_admission": false,
+      "training_admission_reason": "Review and hold evidence, not training rows",
+      "review_status": "Review verifies exact item text, metadata, expected and observed values; independently spot-checked against parent program IR and outcome",
+      "required_conversion": "None for audit; approved rows curated separately",
+      "notes": "This is review evidence only; source curation handles training admission."
     }
   ],
   "coverage_backlog": [
