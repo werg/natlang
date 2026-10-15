@@ -11,8 +11,9 @@ sometimes (0 < success rate <= `--rft-max-success-rate`) become whole-trajectory
 is rendered with the shared serving renderer (`data.text_corpus.native_gold_packet`, the checkpoint's prompt
 rendering) with its reply as the supervised suffix. Tasks the policy always solves add nothing; tasks it never solves
 need teacher successes (passed as further rollout files). A deterministic fraction of tasks (by task id) is held out
-for the trainer's held CE. Advantage-weighted GRPO on the full checkpoint needs signed per-document weights in the
-direct trainer and is not in this mode.
+for the trainer's held CE. Mode `grpo` uses exact captured sampling coordinates and token-level clipped
+policy gradients through the same direct trainer. A registered production held
+corpus may supply ordinary CE checks without withholding fresh RL train tasks.
 
 usage: python -m natlang_neuralese.rl.stage --rollouts R.jsonl [--rollouts T.jsonl] --rl-tokenizer SNAPSHOT
        --out OUT [--rl-mode rft] [--rft-max-success-rate 0.75] [--rft-held-fraction 0.125]
@@ -103,7 +104,13 @@ def parse(argv=None) -> tuple[argparse.Namespace, list[str]]:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--rollouts", type=Path, action="append", required=True)
     p.add_argument("--rl-tokenizer", type=Path, required=True, help="the base snapshot whose tokenizer the trainer uses")
-    p.add_argument("--rl-mode", choices=("rft",), default="rft")
+    p.add_argument("--rl-mode", choices=("rft", "grpo"), default="rft")
+    p.add_argument("--rl-held-text-data", type=Path, help="registered production corpus; read test rows only")
+    p.add_argument("--rl-held-documents", type=int, default=64)
+    p.add_argument("--rl-block-bundle", type=Path, help="exact value-channel block bundle manifest")
+    p.add_argument("--rl-policy-id", help="SHA-256 of the full checkpoint that sampled the rollouts")
+    p.add_argument("--rl-clip-low", type=float, default=0.2)
+    p.add_argument("--rl-clip-high", type=float, default=0.28)
     p.add_argument("--rft-max-success-rate", type=float, default=0.75)
     p.add_argument("--rft-held-fraction", type=float, default=0.125)
     p.add_argument("--rl-prompt-rendering", choices=("full", "program-header"), default="program-header")
@@ -115,13 +122,83 @@ def main(argv=None) -> None:
     a, rest = parse(argv)
     a.out.mkdir(parents=True, exist_ok=True)
     rollouts = [row for path in a.rollouts for row in read_jsonl(path)]
-    documents, receipt = select_rft_documents(rollouts, max_success_rate=a.rft_max_success_rate,
-                                              held_fraction=a.rft_held_fraction)
-    if not any(d["split"] == "train" for d in documents) or not any(d["split"] == "test" for d in documents):
+    if a.rl_mode == "grpo":
+        from .full_policy import build_documents
+        from ..common.hashing import sha256_file_hex
+        # Only the actually sampled checkpoint may provide missing behavior
+        # scores. Full state continuation preserves the existing optimizer.
+        if "--continue-from" not in rest:
+            raise ValueError("GRPO requires --continue-from sampled full checkpoint")
+        checkpoint = Path(rest[rest.index("--continue-from") + 1])
+        if sha256_file_hex(checkpoint) != a.rl_policy_id:
+            raise ValueError("GRPO collection policy differs from continuation checkpoint")
+        documents = build_documents(rollouts, policy_id=a.rl_policy_id, block_bundle=a.rl_block_bundle)
+        for d in documents:
+            d['split'] = ('test' if not a.rl_held_text_data and held_task(d['task_id'], a.rft_held_fraction) else 'train')
+        receipt = {'schema': SCHEMA, 'mode': 'grpo', 'documents': len(documents),
+                   'tasks_selected': sorted({d['task_id'] for d in documents}), 'skipped': {},
+                   'policy_id': a.rl_policy_id}
+    else:
+        documents, receipt = select_rft_documents(rollouts, max_success_rate=a.rft_max_success_rate,
+                                                 held_fraction=0. if a.rl_held_text_data else a.rft_held_fraction)
+    if not any(d["split"] == "train" for d in documents) or (not a.rl_held_text_data and not any(d["split"] == "test" for d in documents)):
         raise SystemExit("RL stage needs train and held documents: " + json.dumps(receipt["skipped"]))
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained(str(a.rl_tokenizer))
-    rows = render_rows(documents, tokenizer, a.rl_prompt_rendering)
+    if a.rl_mode == 'grpo':
+        from .sampling import capture_items
+        from ..data.text_corpus import tokenizer_fingerprint
+        fingerprint = tokenizer_fingerprint(tokenizer)
+        bundle = json.loads(a.rl_block_bundle.read_text()) if a.rl_block_bundle else {'blocks': {}}
+        rows = []
+        for index, document in enumerate(documents):
+            prompt, target, _ = capture_items(document['sampling'])
+            def coordinates(items):
+                ids = []
+                for kind, value in items:
+                    if kind == 'tok':
+                        ids.append(value)
+                    else:
+                        # Shape-only placeholders: neither updates nor held CE
+                        # consume them. Both use exact token/block replay.
+                        ids.extend([0] * bundle['blocks'][value]['length'])
+                return ids
+            prompt_ids, target_ids = coordinates(prompt), coordinates(target)
+            payload = json.dumps({'sample': index, 'capture': document['sampling']}, sort_keys=True)
+            key = hashlib.sha256(payload.encode()).hexdigest()
+            document['document_sha256'] = key
+            document['multiplicity'] = 1
+            rows.append({'id': key, 'document_sha256': key, 'text': 'RL replay planning ' + payload,
+                'token_ids': prompt_ids + target_ids, 'tokenizer_sha256': fingerprint,
+                'supervised_suffix_start': len(prompt_ids), 'split': document['split'],
+                'source_groups': ['s7-task:' + document['task_id']], 'sampling_group': key,
+                'text_cohort': 's7-grpo', 'prompt_rendering': a.rl_prompt_rendering,
+                'rl_planning_only': True})
+        spec = a.out / 'rl-objective.json'
+        spec.write_text(json.dumps({'schema': 'natlang.full-policy-grpo/1', 'policy_id': a.rl_policy_id,
+            'clip_low': a.rl_clip_low, 'clip_high': a.rl_clip_high,
+            'block_bundle': str(a.rl_block_bundle.resolve()) if a.rl_block_bundle else None,
+            'documents': documents}, ensure_ascii=False) + '\n')
+        rest += ['--rl-objective', str(spec)]
+    else:
+        rows = render_rows(documents, tokenizer, a.rl_prompt_rendering)
+    if a.rl_held_text_data:
+        from ..common.jsonio import iter_jsonl_rows
+        from ..common.hashing import sha256_file_hex
+        if a.rl_held_documents < 1:
+            raise ValueError('production RL needs positive held-document coverage')
+        held = []
+        for _, row in iter_jsonl_rows(a.rl_held_text_data, split='test'):
+            held.append(row)
+            if len(held) == a.rl_held_documents:
+                break
+        if not held:
+            raise ValueError('registered RL held corpus has no test rows')
+        # The shared loader independently enforces source-group/text separation.
+        rows.extend(held)
+        receipt['held'] = {'kind': 'ordinary-production-token-CE',
+            'path': str(a.rl_held_text_data), 'sha256': sha256_file_hex(a.rl_held_text_data),
+            'documents': len(held), 'selected_split': 'test'}
     data = a.out / "rl-text-data.jsonl"
     data.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
     from ..common.hashing import sha256_file_hex

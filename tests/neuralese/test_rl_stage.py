@@ -97,3 +97,68 @@ def test_rft_objective_weights_successes_of_selected_tasks(monkeypatch):
     result = grpo.run_round(server, rollouts, "a0", {}, lr=1e-3, beta=0.0, clip=0.2, steps=1, objective="rft")
     assert result["report"]["rft_tasks"] == 1 and result["adapter"] == "a1"
     assert len(server.terms) == 1 and server.terms[0]["weight"] == 1.0  # only the mixed task's success
+
+
+def test_grpo_stage_binds_policy_replays_and_shared_direct_trainer(tmp_path, monkeypatch):
+    import hashlib
+    import transformers
+    from natlang_neuralese.train import direct_sft
+    checkpoint = tmp_path / 'parent.pt'
+    checkpoint.write_bytes(b'full checkpoint')
+    policy = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    rows = []
+    for i in range(50):
+        for q in (1., 0.):
+            r = _rollout(f't{i}', q)
+            r.update(split='train', group=i, sample=int(q),
+                     policy={'checkpoint_sha256': policy, 'temperature': 1.})
+            r['turns'][0]['replay'] = {'raw_calls_retained': True}
+            r['turns'][0]['sampling'] = {'schema': 'natlang.rl-sampling/1', 'guided': False,
+                'temperature': 1., 'prompt': [['tokens', [1]]], 'items': [['tok', 2]],
+                'samples': [{'item': 0, 'token': 2, 'logp': -1.}]}
+            rows.append(r)
+    source = tmp_path / 'rollouts.jsonl'
+    source.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    monkeypatch.setattr(transformers.AutoTokenizer, 'from_pretrained', lambda path: object())
+    from natlang_neuralese.data import text_corpus
+    monkeypatch.setattr(text_corpus, 'tokenizer_fingerprint', lambda _: 'fp')
+    monkeypatch.setattr(rl_stage, 'render_rows', lambda docs, *_: [
+        {'text': d['task_id'] + d['target']['content'], 'split': d['split'],
+         'source_groups': [d['task_id']]} for d in docs])
+    calls = []
+    monkeypatch.setattr(direct_sft, 'main', lambda argv: calls.append(argv))
+    out = tmp_path / 'out'
+    rl_stage.main(['--rollouts', str(source), '--rl-tokenizer', str(tmp_path), '--out', str(out),
+                   '--rl-mode', 'grpo', '--rl-policy-id', policy,
+                   '--continue-from', str(checkpoint)])
+    assert '--rl-objective' in calls[0]
+    spec = json.loads((out / 'rl-objective.json').read_text())
+    assert spec['policy_id'] == policy
+    # Identical sampled actions on successful/failed trajectories cancel rather
+    # than silently teaching one randomly retained advantage.
+    assert spec['documents'] and sum(d['advantage'] for d in spec['documents']) == pytest.approx(0.)
+    assert all(d['multiplicity'] == 1 for d in spec['documents'])
+    assert len({d['document_sha256'] for d in spec['documents']}) == len(spec['documents'])
+
+
+def test_registered_production_held_rows_are_evaluation_only(tmp_path, monkeypatch):
+    import transformers
+    from natlang_neuralese.train import direct_sft
+    source = tmp_path / 'rollouts.jsonl'
+    source.write_text(''.join(json.dumps(_rollout('task', q)) + '\n' for q in [1., 0.]))
+    held = tmp_path / 'held.jsonl'
+    held.write_text(json.dumps({'split': 'train', 'text': 'must not copy'}) + '\n' +
+                    json.dumps({'split': 'test', 'text': 'protected', 'source_groups': ['held']}) + '\n')
+    monkeypatch.setattr(transformers.AutoTokenizer, 'from_pretrained', lambda path: object())
+    monkeypatch.setattr(rl_stage, 'render_rows', lambda documents, *_: [
+        {'split': d['split'], 'text': d['task_id'], 'source_groups': [d['task_id']]} for d in documents])
+    monkeypatch.setattr(direct_sft, 'main', lambda _: None)
+    out = tmp_path / 'out'
+    rl_stage.main(['--rollouts', str(source), '--rl-tokenizer', str(tmp_path), '--out', str(out),
+                  '--rl-held-text-data', str(held)])
+    data = [json.loads(line) for line in (out / 'rl-text-data.jsonl').read_text().splitlines()]
+    assert [r['text'] for r in data if r['split'] == 'test'] == ['protected']
+    assert [r['split'] for r in data if r['text'] == 'task'] == ['train']
+    receipt = json.loads((out / 'rl-data-receipt.json').read_text())
+    assert receipt['held']['kind'] == 'ordinary-production-token-CE'
+    assert 'rl_held_text_data' in recipe.HANDLERS['neuralese_rl']['optional_inputs']

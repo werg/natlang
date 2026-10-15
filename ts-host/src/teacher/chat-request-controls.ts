@@ -3,8 +3,12 @@ export function chatRequestControls(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('chat request controls must be an object');
   const controls = value as Record<string, unknown>;
   const allowed = ['max_tokens', 'top_p', 'top_k', 'min_p', 'chat_template_kwargs', 'repetition_penalty', 'reasoning_effort',
-    'x_natlang_adapters'];
+    'x_natlang_adapters', 'x_natlang_rl_capture', 'guidance'];
   if (Object.keys(controls).some(key => !allowed.includes(key))) throw new Error('unsupported chat request control');
+  if (controls.x_natlang_rl_capture !== undefined && typeof controls.x_natlang_rl_capture !== 'boolean')
+    throw new Error('x_natlang_rl_capture must be boolean');
+  if (controls.guidance !== undefined && controls.guidance !== false)
+    throw new Error('collection guidance control may only disable guidance');
   if (controls.max_tokens !== undefined && (!Number.isSafeInteger(controls.max_tokens) || Number(controls.max_tokens) < 1))
     throw new Error('max_tokens must be a positive integer');
   if (controls.reasoning_effort !== undefined && (typeof controls.reasoning_effort !== 'string' ||

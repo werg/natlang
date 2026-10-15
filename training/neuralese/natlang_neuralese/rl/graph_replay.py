@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
+from ..common.jsonio import write_bytes_durable, write_json_durable
 
 
 def block_ids(value):
-    if isinstance(value, str) and value.startswith('nz1_'):
+    if isinstance(value, str) and re.fullmatch(r'nz1_[a-z2-7]{52}', value):
         yield value
     elif isinstance(value, dict):
         for item in value.values():
@@ -41,17 +43,13 @@ def save_bundle(rollouts, out, *, policy_id, fetch):
         if block.id != block_id:
             raise ValueError('RL block fetch returned a different content ID')
         destination = out / (block_id + '.nzb')
-        temporary = destination.with_suffix('.pending')
-        temporary.write_bytes(raw)
-        temporary.replace(destination)
+        write_bytes_durable(destination, raw)
         entries[block_id] = {'path': destination.name, 'sha256': hashlib.sha256(raw).hexdigest(),
                              'bytes': len(raw), 'length': block.length, 'width': block.width}
         pending.update(set(block_ids(block.producer)) - entries.keys())
     manifest = {'schema': 'natlang.rl-block-bundle/1', 'policy_id': policy_id, 'blocks': entries}
     destination = out / 'manifest.json'
-    temporary = destination.with_suffix('.pending')
-    temporary.write_text(json.dumps(manifest, indent=2) + '\n')
-    temporary.replace(destination)
+    write_json_durable(destination, manifest)
     return manifest
 
 

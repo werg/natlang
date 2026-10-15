@@ -64,7 +64,7 @@ LATER_DEFAULTS = {'latent_skip_idle': True, 'latent_cautious': False, 'latent_be
                   'gradient_audit_steps': 0, 'saved_tensor_audit_steps': 0,
                   'gradient_digest_steps': 0, 'state_hash_steps': 0, 'sdpa_backend': 'default', 'family': None,
                   'train_target_tokens': None, 'merge_prefix_rows': False, 'cohort_repeats': None,
-                  'recovery_selection': None,
+                  'recovery_selection': None, 'rl_objective': None,
                   'train_min_context_tokens': 0, 'fresh_monitor_reference': False,
                   'token_choice_lr': None, 'token_choice_optimizer': 'muon', 'neuralese_projection_lr': None,
                   'neuralese_projection_optimizer': 'muon', 'e2e_mix': None, 'stop_after_training_seconds': 0.0}
@@ -247,6 +247,7 @@ def parse(argv=None):
                    help='Transformer Engine scaling recipe when --fp8-training=te-fp8')
     p.add_argument('--fp8-amax-history-len', type=int, default=16,
                    help='FP8 DelayedScaling history length; ignored by CurrentScaling')
+    p.add_argument('--rl-objective', type=Path, help='internal exact rollout objective supplied by rl.stage')
     p.add_argument('--gradient-audit-steps', type=int, default=0,
                    help='diagnostic: write per-parameter gradient summaries for this many initial updates; requires '
                         'window_execution=sequential and at least two windows per update')
@@ -1213,7 +1214,7 @@ def identity_inputs(a):
     from ..common.hashing import sha256_file_hex_cached
     return {str(path): sha256_file_hex_cached(path)
             for path in (a.heads, a.records, a.pieces, a.text_data, a.continue_from, a.continue_identity,
-                         a.continue_monitor_reference) if path}
+                         a.continue_monitor_reference, getattr(a, 'rl_objective', None)) if path}
 
 
 def plan_only(a):
@@ -1489,6 +1490,9 @@ def main(argv=None):
 
     # Windows: the whole preceding document (system prompt included) up to --tokens, --target-tokens supervised.
     train_windows, targets, held, held_selection, mask_receipt, rows = stage_data(engine, a, a.text_data)
+    if getattr(a, 'rl_objective', None):
+        from ..rl.full_policy import exact_replay_windows
+        train_windows, targets, held = exact_replay_windows(engine, a.rl_objective, train_windows, held)
     if not train_windows or not held:
         raise ValueError('neuralese_direct needs train and held windows')
     # The mixed run: the e2e producer->consumer objective of train/trajectories.py on this run's engine, projections
@@ -1664,9 +1668,23 @@ def main(argv=None):
             ids, _, index, *_ = tensors(rows_)
             return span_states(ids, index)
 
+    rl_objective = None
+    if getattr(a, 'rl_objective', None):
+        from ..rl.full_policy import FullPolicyObjective
+        engine.token_choice_projection = token_choice
+        engine.neuralese_projection = neuralese
+        rl_objective = FullPolicyObjective(engine, a.rl_objective, targets, a.out)
+
     def forward(rows_, *, gradients, accumulation=None, teacher=None):
         """(weighted CE, metrics, predictions, token losses) of one padded batch at the active precision. With
         ``teacher`` (a member update): plus the family's KL(full ‖ member) on the supervised positions."""
+        if rl_objective is not None:
+            known = [row['document'] in rl_objective.by_hash for row in rows_]
+            if all(known):
+                return rl_objective.forward(rows_, accumulation, gradients=gradients)
+            if gradients or any(known):
+                raise ValueError('RL update/evaluation mixes unknown replay documents')
+            # Separate ordinary production held CE; its rows never enter RL updates.
         with profile_region('update/data'):
             ids, span, index, valid, weights, segments, suffix = tensors(rows_)
         usable = float(weights.sum()) > 0  # a window made only of failed assistant turns teaches nothing
@@ -1858,7 +1876,7 @@ def main(argv=None):
         # in-place resume. Everything else must match.
         # The base-heads artifact may be staged at a new path for this phase. Its content identity was checked above.
         phase_keys = {'heads', 'text_data', 'records', 'pieces', 'epochs', 'quantization', 'family', 'batch', 'batch_tokens',
-                      'target_tokens', 'fp8_training', 'fp8_recipe', 'fp8_amax_history_len'}
+                      'target_tokens', 'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'rl_objective'}
         # The mixed run (NEURALESE_DIRECT_V1.md "The mixed run") continues a direct lineage: it adds the e2e updates,
         # the TokenChoiceProjection (identity-initialised, its optimizer state fresh) and the projections' own rates.
         mixed_keys = mixed_additions(state, a.e2e_mix, projections)
@@ -2461,6 +2479,8 @@ def main(argv=None):
                 effective_weights = weights_all if has_weight else valid_all.float()
                 normalizers = {'valid_positions': valid_positions,
                                'weight_mass': effective_weights.sum(), 'has_weight': has_weight}
+                if rl_objective is not None:
+                    normalizers['rl_tokens'] = rl_objective.normalizer(batch)
                 del valid_all, weights_all, effective_weights
                 metrics_rows, loss_value = [], 0.0
                 # The gated latent hooks are deliberately unarmed here: their gradients accumulate like the
@@ -2478,7 +2498,8 @@ def main(argv=None):
                         loss_value += float(part.detach())
                         metrics_rows.append((part_metrics, part_stats))
                         del part
-                span_total = int(valid_positions)
+                span_total = (sum(stats['valid_positions'] for _, stats in metrics_rows)
+                              if rl_objective is not None else int(valid_positions))
                 metrics = {
                     'ce': sum(m['ce'] * s['valid_positions'] for m, s in metrics_rows) / span_total,
                     'gold_accuracy': sum(m['gold_accuracy'] * s['valid_positions'] for m, s in metrics_rows) / span_total,

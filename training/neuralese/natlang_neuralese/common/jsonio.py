@@ -41,15 +41,30 @@ def write_canonical_jsonl(path, rows) -> int:
     return count
 
 
+def write_bytes_durable(path, data: bytes) -> None:
+    """Durably replace bytes: fsync file, atomic rename, fsync containing directory."""
+    path = Path(path)
+    pending = path.with_suffix(path.suffix + '.pending')
+    try:
+        with pending.open('wb') as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        pending.replace(path)
+        directory = os.open(path.parent, os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except BaseException:
+        pending.unlink(missing_ok=True)
+        raise
+
+
 def write_json_durable(path, value) -> None:
-    """Replace `path` with indented, key-sorted JSON (a state file, not a canonical form): write a `.pending`
-    sibling, fsync it and rename it over `path`, so a crash leaves the old or the new file, never a torn one."""
-    pending = path.with_suffix(path.suffix + ".pending")
-    with pending.open("w") as stream:
-        json.dump(value, stream, indent=2, sort_keys=True)
-        stream.flush()
-        os.fsync(stream.fileno())
-    pending.replace(path)
+    """Durably replace JSON state, preserving the existing indented sorted encoding."""
+    # Match json.dump's previous platform-text encoding on these UTF-8 hosts.
+    write_bytes_durable(path, json.dumps(value, indent=2, sort_keys=True).encode('utf-8'))
 
 
 @contextmanager

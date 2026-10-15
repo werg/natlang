@@ -78,3 +78,16 @@ def test_consumer_reward_gradient_reaches_recorded_value_writer(family, tmp_path
     assert projection.linear.weight.grad.abs().sum() > 0
     assert torch.isfinite(projection.linear.weight.grad).all()
     assert torch.equal(store.get(block.id).payload, block.payload)
+
+
+def test_durable_write_failure_keeps_old_state_and_cleans_pending(tmp_path, monkeypatch):
+    from natlang_neuralese.common.jsonio import write_json_durable
+    path = tmp_path / 'state.json'
+    write_json_durable(path, {'old': True})
+    before = path.read_bytes()
+    monkeypatch.setattr('natlang_neuralese.common.jsonio.os.fsync', lambda _: (_ for _ in ()).throw(OSError('disk')))
+    with pytest.raises(OSError, match='disk'):
+        write_json_durable(path, {'new': True})
+    assert path.read_bytes() == before
+    assert not (tmp_path / 'state.json.pending').exists()
+

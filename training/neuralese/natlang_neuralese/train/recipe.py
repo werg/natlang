@@ -48,7 +48,7 @@ HANDLERS = {
     # its stage_parameter_defaults inherit the recipe's neuralese_direct defaults (RL_DEFAULTS_FROM).
     'neuralese_rl': {'module': 'natlang_neuralese.rl.stage',
                      'required_inputs': {'rollouts', 'continue_from', 'continue_identity', 'continue_monitor_reference'},
-                     'optional_inputs': {'heads'},
+                     'optional_inputs': {'heads', 'rl_held_text_data'},
                      'parameters': set(),  # filled below: neuralese_direct's parameters plus the RL ones
                      'result': 'report.json'},
     'core_text_warmup': {'module':'natlang_neuralese.train.text_warmup', 'required_inputs':{'records','pieces'}, 'optional_inputs':{'text_data','continue_from','heads','student_checkpoint'},
@@ -124,7 +124,8 @@ HANDLERS = {
 }
 
 # The RL stage takes every direct-trainer parameter plus its data decision (rl/stage.py).
-RL_PARAMETERS = {'rl_mode', 'rl_tokenizer', 'rl_prompt_rendering', 'rft_max_success_rate', 'rft_held_fraction'}
+RL_PARAMETERS = {'rl_mode', 'rl_tokenizer', 'rl_prompt_rendering', 'rft_max_success_rate', 'rft_held_fraction',
+                 'rl_policy_id', 'rl_clip_low', 'rl_clip_high', 'rl_block_bundle', 'rl_held_documents'}
 HANDLERS['neuralese_rl']['parameters'] = set(HANDLERS['neuralese_direct']['parameters']) | RL_PARAMETERS
 # A stage kind whose parameter defaults start from another kind's declared defaults.
 RL_DEFAULTS_FROM = {'neuralese_rl': 'neuralese_direct'}

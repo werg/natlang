@@ -119,9 +119,21 @@ optimizer, checkpoints, held CE, in-run task-success evaluation, drift monitor).
   from the continued (pre-RL) weights at update 0 instead of copying the predecessor's base reference.
 - **Gate and report:** the direct gate (`qualified`: held CE and task-success cadence on the held packet);
   epochs budget, objective arguments and `--plan-only` as for direct phases.
-- **Not yet:** signed advantage weights (GRPO on the full checkpoint) need per-document weights in the direct
-  trainer; until then GRPO runs on adapters (`grpo.py round`, which also has `--objective rft` with the same task
-  rule). Tests: `tests/neuralese/test_rl_stage.py`.
+- **Full-checkpoint GRPO (2026-10-15):** `rl_mode=grpo` uses `rl/full_policy.py` through a narrow
+  objective hook in the shared direct trainer. Exact server sampling captures supply prompt token/block coordinates,
+  sampled token IDs, actual terminal tokens and behavior probabilities. Token-level asymmetric clipped updates
+  preserve per-sample signed advantages, including identical actions on differently rewarded trajectories.
+  Ordinary text-window splitting does not truncate RL context or duplicate its updates. The same optimizer,
+  recoverable checkpoints, numerical checks and task cadence serve both backbones.
+- **Production held CE:** optional registered input role `rl_held_text_data` selects only its test rows, records
+  their source hash and ordinary-CE meaning, and leaves fresh RL tasks available for training. The shared loader
+  checks held/train source and text separation. Without this input the previous task-level RL held split remains.
+- **Neuralese value replay:** `rl_block_bundle` contains exact content-addressed block bytes plus producer metadata.
+  Consumers keep recorded observations while gradients replay their writers. Forced-only writers remain in the
+  graph but are not invented stochastic actions. Guided/masked captures require their exact sampling law and are
+  refused by the initial unconstrained-temperature-1 contract; legacy uncaptured trajectories remain RFT inputs.
+- Tests: `test_rl_full_policy.py`, `test_rl_sampling.py`, `test_rl_graph_replay.py`, `test_rl_stage.py`.
+  Local diagnostics and tiny-port checks are not production completion or measured model lift.
 
 ## 7. End-to-end / Neuralese path
 

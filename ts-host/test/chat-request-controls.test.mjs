@@ -10,3 +10,11 @@ test('chat request controls carry validated adapter references for S7 rollouts',
   assert.throws(() => chatRequestControls({ x_natlang_adapters: [{ id: 'a', scale: 1, extra: 2 }] }), /adapter references/);
   assert.throws(() => chatRequestControls({ temperature: 1 }), /unsupported chat request control/);
 });
+
+
+test('RL collection explicitly captures behavior and disables guided sampling', () => {
+  assert.deepEqual(chatRequestControls({x_natlang_rl_capture:true, guidance:false}),
+    {x_natlang_rl_capture:true, guidance:false});
+  assert.throws(() => chatRequestControls({x_natlang_rl_capture:'yes'}), /must be boolean/);
+  assert.throws(() => chatRequestControls({guidance:true}), /only disable/);
+});

@@ -40,9 +40,12 @@ def capture_items(capture, *, require_samples=True):
     return prompt, target, events
 
 
-def captured_logps(session, capture, *, leaves=None):
+def captured_logps(session, capture, *, leaves=None, return_predictions=False):
     prompt, target, events = capture_items(capture)
-    if len(prompt) + len(target) > session.engine.context:
+    def positions(items):
+        return sum(1 if kind == 'tok' else session.engine.lookup(value).length +
+                   (2 if session.heads.read_markers else 0) for kind, value in items)
+    if positions(prompt) + positions(target) > session.engine.context:
         raise ValueError('RL captured trajectory exceeds model context')
     scored = session._score(prompt, target, leaves or {}, write_terms=False)
     # _score includes a block opener only for marker ports; raw direct ports
@@ -53,15 +56,21 @@ def captured_logps(session, capture, *, leaves=None):
         if kind == 'tok' or session.heads.read_markers:
             offsets[index] = cursor
             cursor += 1
-    logps = []
+    logps, predictions = [], []
     for event in events:
         index = event['item']
         if index in offsets:
             logps.append(scored['token_logp'][offsets[index]])
+            if return_predictions:
+                predictions.append(scored['token_logits'][offsets[index]].argmax())
         else:
             # A raw-port block opening was sampled before replacing it by its
             # payload. Score that discrete opener under its exact prefix.
             prefix = target[:index] + [('tok', event['token'])]
-            logps.append(session._score(prompt, prefix, leaves or {}, write_terms=False)['token_logp'][-1])
-    return torch.stack(logps), torch.tensor([e['logp'] for e in events], dtype=torch.float32,
-                                          device=logps[0].device)
+            opening = session._score(prompt, prefix, leaves or {}, write_terms=False)
+            logps.append(opening['token_logp'][-1])
+            if return_predictions:
+                predictions.append(opening['token_logits'][-1].argmax())
+    result = (torch.stack(logps), torch.tensor([e['logp'] for e in events], dtype=torch.float32,
+                                          device=logps[0].device))
+    return (*result, torch.stack(predictions)) if return_predictions else result
