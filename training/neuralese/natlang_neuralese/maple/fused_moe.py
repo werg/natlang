@@ -391,7 +391,7 @@ INVARIANT_BLOCK = 64  # rows per expert block, fixed: the tile, and so each row'
 @triton.jit
 def _grouped_dense_mm(a_ptr, rows_ptr, w_ptr, out_ptr, block_expert_ptr,
                       P, N, K, stride_am, stride_ak, stride_we, stride_inner, stride_outer, stride_om, stride_on,
-                      HAS_ROWS: tl.constexpr, INNER_CONTIGUOUS: tl.constexpr, IEEE: tl.constexpr,
+                      HAS_ROWS: tl.constexpr, INNER_CONTIGUOUS: tl.constexpr, DOT_PRECISION: tl.constexpr,
                       BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
     """out[m, n] = sum_k A[row(m), k] * W_e[inner=k, outer=n] for the block's expert e, the k loop in one fixed
     order. ``INNER_CONTIGUOUS``: load weight tiles [BN, BK] along k (the forward of a [N, K] weight)."""
@@ -420,29 +420,44 @@ def _grouped_dense_mm(a_ptr, rows_ptr, w_ptr, out_ptr, block_expert_ptr,
         else:
             w = tl.load(w_ptr + expert * stride_we + k_idx[:, None] * stride_inner + offs_n[None, :] * stride_outer,
                         mask=(k_idx[:, None] < K) & n_mask[None, :], other=0.0)
-        if IEEE:
-            acc += tl.dot(a, w, input_precision="ieee")
+        if DOT_PRECISION == "bf16x6":
+            ah = a.to(tl.bfloat16)
+            bh = w.to(tl.bfloat16)
+            am = (a - ah.to(tl.float32)).to(tl.bfloat16)
+            bm = (w - bh.to(tl.float32)).to(tl.bfloat16)
+            al = (a - ah.to(tl.float32) - am.to(tl.float32)).to(tl.bfloat16)
+            bl = (w - bh.to(tl.float32) - bm.to(tl.float32)).to(tl.bfloat16)
+            acc += tl.dot(al, bh) + tl.dot(am, bm) + tl.dot(ah, bl)
+            acc += tl.dot(am, bh) + tl.dot(ah, bm)
+            acc += tl.dot(ah, bh)
+        elif DOT_PRECISION == "bf16":
+            acc += tl.dot(a.to(tl.bfloat16), w.to(tl.bfloat16))
+        elif DOT_PRECISION != "native":
+            acc += tl.dot(a, w, input_precision=DOT_PRECISION)
         else:
             acc += tl.dot(a, w)
     tl.store(out_ptr + offs_m[:, None] * stride_om + offs_n[None, :] * stride_on, acc.to(out_ptr.dtype.element_ty),
              mask=(offs_m[:, None] < P) & n_mask[None, :])
 
 
-def _dense_mm(a, rows, weight, plan: Plan, transpose: bool) -> torch.Tensor:
+def _dense_mm(a, rows, weight, plan: Plan, transpose: bool, *, precision="ieee") -> torch.Tensor:
     """Grouped A @ W_eᵀ (W_e = weight[e], [N, K]) or, transposed, A @ W_e (the input gradient), with one fixed tile."""
     E, R, C = weight.shape
     N, K = (R, C) if not transpose else (C, R)
     out = torch.zeros(plan.size, N, device=a.device, dtype=a.dtype)
     inner, outer = (weight.stride(2), weight.stride(1)) if not transpose else (weight.stride(1), weight.stride(2))
-    ieee = a.dtype == torch.float32
+    ieee = a.dtype == torch.float32 and precision == "ieee"
+    dot_precision = precision if a.dtype == torch.float32 else "native"
     # Fixed per dtype, never per call size. Measured on the GB10 (Mellum's projections, 16k tokens, top-8 of 64):
     # 256-column tiles 1.4-1.6x the 128-column ones; 64- and 128-row blocks equal.
     BN, BK, tuning = (64, 32, dict(num_warps=4, num_stages=2)) if ieee else (256, 64, dict(num_warps=8, num_stages=2))
+    if a.dtype == torch.float32 and precision in {"tf32", "tf32x3", "bf16x6"}:
+        BN, BK, tuning = 128, 32, dict(num_warps=4, num_stages=3)
     grid = (plan.blocks, triton.cdiv(N, BN))
     _grouped_dense_mm[grid](
         a, rows if rows is not None else a, weight, out, plan.block_expert,
         plan.size, N, K, a.stride(0), a.stride(1), weight.stride(0), inner, outer, out.stride(0), out.stride(1),
-        HAS_ROWS=rows is not None, INNER_CONTIGUOUS=not transpose, IEEE=ieee, BM=plan.block, BN=BN, BK=BK, **tuning)
+        HAS_ROWS=rows is not None, INNER_CONTIGUOUS=not transpose, DOT_PRECISION=dot_precision, BM=plan.block, BN=BN, BK=BK, **tuning)
     return out
 
 
@@ -505,13 +520,14 @@ class _InvariantLinear(torch.autograd.Function):
     """x @ wᵀ for every row with the same fixed tile (FP32 inputs in exact FP32): the router's logits."""
 
     @staticmethod
-    def forward(ctx, x, w):
+    def forward(ctx, x, w, precision):
         ctx.save_for_backward(x, w)
+        ctx.precision = precision
         rows = x.shape[0]
         plan = SimpleNamespace(size=rows, blocks=triton.cdiv(rows, INVARIANT_BLOCK), block=INVARIANT_BLOCK,
                                block_expert=torch.zeros(triton.cdiv(rows, INVARIANT_BLOCK), dtype=torch.int32,
                                                         device=x.device))
-        return _dense_mm(x.contiguous(), None, w[None], plan, transpose=False)
+        return _dense_mm(x.contiguous(), None, w[None], plan, transpose=False, precision=precision)
 
     @staticmethod
     def backward(ctx, grad):
@@ -524,10 +540,24 @@ class _InvariantLinear(torch.autograd.Function):
         plan = SimpleNamespace(size=rows, blocks=triton.cdiv(rows, INVARIANT_BLOCK), block=INVARIANT_BLOCK,
                                block_expert=torch.zeros(triton.cdiv(rows, INVARIANT_BLOCK), dtype=torch.int32,
                                                         device=grad.device))
-        dx = _dense_mm(grad.contiguous(), None, w[None], plan, transpose=True) if ctx.needs_input_grad[0] else None
-        dw = grad.T @ x if ctx.needs_input_grad[1] else None
-        return dx, dw
+        # BF16-forward uses a FP32 straight-through adjoint through rounded
+        # operands. Rounding incoming state adjoints again made an identical
+        # flat/cached forward acquire branch-dependent backward discontinuities.
+        backward_w = w.to(torch.bfloat16).float() if w.dtype == torch.float32 and ctx.precision == 'bf16' else w
+        backward_precision = 'ieee' if ctx.precision == 'bf16' else ctx.precision
+        dx = _dense_mm(grad.contiguous(), None, backward_w[None], plan, transpose=True,
+            precision=backward_precision) if ctx.needs_input_grad[0] else None
+        dw = None
+        if ctx.needs_input_grad[1]:
+            if x.dtype == torch.float32 and ctx.precision == 'bf16':
+                # Cast-forward straight-through derivative, without adjoint rounding.
+                dw = grad.T @ x.to(torch.bfloat16).float()
+            else:
+                dw = grad.T @ x
+        return dx, dw, None
 
 
-def invariant_linear(x: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
-    return _InvariantLinear.apply(x, w)
+def invariant_linear(x: torch.Tensor, w: torch.Tensor, *, precision="ieee") -> torch.Tensor:
+    if precision not in {"ieee", "tf32x3", "tf32", "bf16", "bf16x6"}:
+        raise ValueError("native fixed linear requires explicit ieee, tf32x3, tf32, bf16 or bf16x6 arithmetic")
+    return _InvariantLinear.apply(x, w, precision)

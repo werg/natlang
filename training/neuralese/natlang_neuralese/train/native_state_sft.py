@@ -497,6 +497,45 @@ def pack_native_graphs(examples):
     return packed, tuple(weights), tuple(ownership), tuple(external_name_maps)
 
 
+def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_layers=True,
+                           chunk_tokens=128, objective=None):
+    """One shared complete production update, also used by throughput diagnostics."""
+    if backend is not None:
+        backend.reset_row_counts()
+    optimizer.zero_grad(set_to_none=True)
+    if optimizer.latent is not None:
+        context = optimizer.latent.in_backward()
+    else:
+        from contextlib import nullcontext
+        context = nullcontext()
+    try:
+        with context:
+            if backend is not None:
+                with backend.autocast():
+                    loss, details = packed_graph_loss(model, batch,
+                        checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
+                        objective=objective)
+            else:
+                loss, details = packed_graph_loss(model, batch,
+                    checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
+                    objective=objective)
+            loss.backward()
+        if optimizer.latent is not None:
+            optimizer.latent._armed = None
+        params = [p for p in model.parameters() if p.requires_grad and p.grad is not None]
+        if params:
+            norm = torch.nn.utils.clip_grad_norm_(params, float('inf'))
+            if not torch.isfinite(norm):
+                raise FloatingPointError('nonfinite native gradient norm')
+        optimizer.step()
+    except Exception:
+        if optimizer.latent is not None:
+            optimizer.latent._armed = None
+        optimizer.zero_grad(set_to_none=True)
+        raise
+    return loss, details
+
+
 def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=128, objective=None):
     """One backbone graph forward for a minibatch; mean the original per-graph losses."""
     import torch.nn.functional as F
@@ -698,6 +737,9 @@ def build_parser():
         help='pack whole sequential graphs to this token volume instead of graph-count batching')
     parser.add_argument('--dtype', choices=('float32', 'bfloat16', 'float16'), default=None,
         help='fresh backbone precision; required for a new lineage, resumes retain exact checkpoint dtype')
+    from ..model.native_precision import PRODUCTION_NATIVE_LINEAR_PRECISIONS
+    parser.add_argument('--native-linear-precision', choices=PRODUCTION_NATIVE_LINEAR_PRECISIONS, default=None,
+        help='explicit native GEMM arithmetic transition; preserves source dtype, optimizer, RNG and row exposure')
     parser.add_argument('--learning-rate', type=float, default=3e-6)
     parser.add_argument('--weight-decay', type=float, default=.1)
     parser.add_argument('--latent-ns', choices=('quintic', 'cubic5'), default='quintic')
@@ -773,6 +815,21 @@ def main(argv=None):
             raise ValueError('fresh native SFT requires explicit --dtype (QAD LFM float32; Mellum bfloat16)')
         model, tokenizer, roles, config = load_native_model(args.base, rank=args.rank,
             device=args.device, dtype=getattr(torch, args.dtype))
+    from ..model.native_precision import set_native_linear_precision
+    previous_precision = config.get('native_linear_precision', 'ieee')
+    requested_precision = args.native_linear_precision or previous_precision
+    set_native_linear_precision(model, requested_precision)
+    config['native_linear_precision'] = requested_precision
+    saved_training = resume or shared_resume or {}
+    precision_history = list((saved_training.get('options') or {}).get('native_precision_history') or [])
+    transition = {'from': previous_precision, 'to': requested_precision,
+        'source_dtype': config['dtype'],
+        'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
+        'weights_optimizer_rng_exposure': 'preserved' if saved_training else 'fresh'}
+    checkpoint_options['native_precision_transition'] = transition
+    if requested_precision != previous_precision:
+        precision_history.append(transition)
+    checkpoint_options['native_precision_history'] = precision_history
     if args.dtype is not None and config['dtype'] != str(getattr(torch, args.dtype)):
         raise ValueError('declared dtype differs from the exact restored native checkpoint')
     if resume is None and (args.continued_native_graphs or args.continued_held_native_graphs):
@@ -844,7 +901,10 @@ def main(argv=None):
                 predecessors[role] = digest
         checkpoint_options['source_predecessors'] = predecessors
         previous = resume.get('identity') or {}
-        stable = ('schema', 'config', 'optimizer', 'seed', 'rank', 'fp8', 'objective')
+        stable = ('schema', 'optimizer', 'seed', 'rank', 'fp8', 'objective')
+        from ..model.native_precision import same_source_precision_identity
+        if not same_source_precision_identity(previous.get('config') or {}, config):
+            raise ValueError('native SFT continuation changes model identity beyond declared GEMM arithmetic')
         if previous.get('schedule') not in {'source-order-stream/1', 'row-visit-deficit/2'}:
             raise ValueError('native SFT checkpoint has an unsupported row-credit schedule')
         if parent_continuation and args.objective_continuation:
@@ -988,39 +1048,8 @@ def main(argv=None):
             raise ValueError('native graph stream differs from scheduled optimizer-credit order')
         batch_tokens = sum(train.entries[index]['forward_tokens'] for index in indices)
         cursor = indices[-1] + 1
-        if backend is not None:
-            backend.reset_row_counts()
-        optimizer.zero_grad(set_to_none=True)
-        if optimizer.latent is not None:
-            context = optimizer.latent.in_backward()
-        else:
-            from contextlib import nullcontext
-            context = nullcontext()
-        try:
-            with context:
-                if backend is not None:
-                    with backend.autocast():
-                        loss, details = packed_graph_loss(model, batch,
-                            checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens,
-                            objective=objective)
-                else:
-                    loss, details = packed_graph_loss(model, batch,
-                        checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens,
-                        objective=objective)
-                loss.backward()
-            if optimizer.latent is not None:
-                optimizer.latent._armed = None
-            params = [p for p in model.parameters() if p.requires_grad and p.grad is not None]
-            if params:
-                norm = torch.nn.utils.clip_grad_norm_(params, float('inf'))
-                if not torch.isfinite(norm):
-                    raise FloatingPointError(f'nonfinite native gradient norm at update {step + 1}')
-            optimizer.step()
-        except Exception:
-            if optimizer.latent is not None:
-                optimizer.latent._armed = None
-            optimizer.zero_grad(set_to_none=True)
-            raise
+        loss, details = native_training_update(model, optimizer, batch, backend=backend,
+            checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
         step += 1
         global_step += 1
         for example in batch:

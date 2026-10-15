@@ -17,11 +17,12 @@ COMPOSITE_CHECKPOINT_SCHEMA = 'natlang.neuralese-native-composite-checkpoint/1'
 
 
 def configure_native_precision():
-    """Keep FP32 operations IEEE on training and serving destination GPUs.
+    """Shared process policy: stock FP32 torch operations remain IEEE.
 
     NGC enables TF32 by default, which changed real LFM graph/reference CE and
-    gradients on H100. This contract affects FP32 operations; native BF16
-    tensor-core computation retains its declared dtype.
+    gradients on H100. Faster native GEMM modes are selected per model via
+    native_linear_precision, never by letting the last model loader change a
+    different participant's math. BF16 source tensor cores retain their dtype.
     """
     torch.set_float32_matmul_precision('highest')
     torch.backends.cuda.matmul.allow_tf32 = False
@@ -33,6 +34,11 @@ def native_identity(model, config, *, checkpoint_sha256):
     """Fingerprint the actual restored embedding path once per served checkpoint."""
     from ..common.jsonio import canonical_json_bytes
     digest = hashlib.sha256(b'natlang.native-embedding-path/1\0')
+    mode = config.get('native_linear_precision', 'ieee')
+    if mode != getattr(model, 'native_linear_precision', 'ieee'):
+        raise ValueError('native identity arithmetic differs from the actual model')
+    if mode != 'ieee':
+        digest.update(canonical_json_bytes({'native_linear_precision': mode}))
     tensors = [('base_embedding', model.port.embedding_weight), ('role_input_rows', model.input_rows),
                *[('adapter.' + name, value) for name, value in model.adapter.state_dict().items()]]
     for name, value in tensors:
@@ -60,7 +66,7 @@ def base_inventory(base):
     return files
 
 
-def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None):
+def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee"):
     """Return (SharedStateModel, tokenizer, RoleTokens, model_config).
 
     No PortHeads or projected communication module is created. Provision the
@@ -95,11 +101,14 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
     from .lfm2_port import ControlTokens
     port = port_type(hf, ControlTokens(roles.produce_open, roles.produce_close), markers=False)
     model = SharedStateModel(port, marker_ids=roles.ids, rank=rank)
+    from .native_precision import set_native_linear_precision
+    set_native_linear_precision(model, native_linear_precision)
     from ..data.text_corpus import tokenizer_fingerprint
     config = {'base': str(base), 'base_inventory': actual,
               'base_inventory_sha256': canonical_json_sha256_hex(actual),
               'architecture': str(port.config.model_type), 'source_architecture': architecture,
               'rank': rank, 'marker_ids': list(roles.ids), 'precision': precision,
+              'native_linear_precision': native_linear_precision,
               'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer), 'dtype': str(dtype)}
     return model, tokenizer, roles, config
 
@@ -156,7 +165,8 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
     requested_dtype = dtype or {'torch.bfloat16': torch.bfloat16, 'torch.float32': torch.float32,
                                 'torch.float16': torch.float16}[saved['dtype']]
     model, tokenizer, roles, config = load_native_model(base or saved['base'], rank=saved['rank'],
-        device=device, dtype=requested_dtype, inventory=saved['base_inventory'])
+        device=device, dtype=requested_dtype, inventory=saved['base_inventory'],
+        native_linear_precision=saved.get('native_linear_precision', 'ieee'))
     for key in ('architecture', 'rank', 'marker_ids', 'tokenizer_fingerprint', 'base_inventory_sha256', 'precision'):
         if config[key] != saved.get(key):
             raise ValueError(f'native checkpoint {key} changed during restoration')

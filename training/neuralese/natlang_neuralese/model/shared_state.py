@@ -239,7 +239,14 @@ def _convolve(layer, gated, c, plan, rows):
     index = torch.tensor(predecessor, device=gated.device)
     padded = torch.cat([gated, gated.new_zeros(1, 1, gated.shape[-1])], dim=1)
     gathered = padded[:, index]  # B,Q,W,C; -1 selects the explicit zero row
-    out = (gathered.float() * kernel.weight[:, 0].T.float()[None, None]).sum(2)
+    return _finite_convolution(kernel, gathered, c)
+
+
+def _finite_convolution(kernel, histories, c):
+    # Histories [B,Q,W,C]. One explicit FP32 reduction per channel avoids
+    # graph/cached cuDNN summation differences crossing tensor-core rounding
+    # boundaries in the following linear layers.
+    out = (histories.contiguous().float() * kernel.weight[:, 0].T.float()[None, None]).sum(2)
     if kernel.bias is not None:
         out = out + kernel.bias.float()
     return c * out.to(c.dtype)
@@ -359,8 +366,11 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                     history = remap(plan.history(offset+local, width))
                     data = source[:, plan.tensor(history, device)].transpose(1, 2)
                     data = F.pad(data, (width-data.shape[-1], 0))
-                    conv = F.conv1d(data.to(c.dtype), kernel.weight, kernel.bias, groups=data.shape[1])
-                    parts.append(conv.transpose(1, 2) * c[:, local:local+1])
+                    if getattr(port, 'native_linear_precision', 'ieee') != 'ieee':
+                        parts.append(_finite_convolution(kernel, data.transpose(1, 2)[:, None], c[:, local:local+1]))
+                    else:
+                        conv = F.conv1d(data.to(c.dtype), kernel.weight, kernel.bias, groups=data.shape[1])
+                        parts.append(conv.transpose(1, 2) * c[:, local:local+1])
                 out = torch.cat(parts, dim=1)
             h = _finish(port, layer, h, out, attention)
         outputs.append(h)
@@ -486,10 +496,10 @@ class SharedStateModel(nn.Module):
     def logits(self, h):
         from .readout_storage import readout_weight
         normalized = self.port.final_norm(h)
-        logits = _linear_weight(normalized, readout_weight(self.port, self.port.output_weight, normalized.dtype))
+        logits = _linear_weight(normalized, readout_weight(self.port, self.port.output_weight, normalized.dtype), precision=getattr(self, "native_linear_precision", "ieee"))
         rows = self.input_rows if self.tied else self.output_rows
         logits = logits.clone()
-        logits[..., list(self.marker_ids)] = _linear_weight(normalized, rows.to(normalized.dtype))
+        logits[..., list(self.marker_ids)] = _linear_weight(normalized, rows.to(normalized.dtype), precision=getattr(self, "native_linear_precision", "ieee"))
         return logits
 
     def forward(self, plan, *, embeddings=None, reference=False, external_blocks=None, external_identity=None, retain_states=True):
@@ -676,8 +686,12 @@ def native_step(model, ids, cache=None, *, producing=False):
             prefix = (gated_channels.new_zeros(1, gated_channels.shape[1], port.conv_window)
                       if previous is None else previous.window)
             full = torch.cat([prefix, gated_channels], dim=2)
-            out = F.conv1d(full.to(c.dtype), layer.conv.conv.weight, layer.conv.conv.bias,
-                           groups=gated_channels.shape[1]).transpose(1, 2) * c
+            if getattr(port, 'native_linear_precision', 'ieee') != 'ieee':
+                histories = full.unfold(2, layer.conv.conv.weight.shape[-1], 1).permute(0, 2, 3, 1)
+                out = _finite_convolution(layer.conv.conv, histories, c)
+            else:
+                out = F.conv1d(full.to(c.dtype), layer.conv.conv.weight, layer.conv.conv.bias,
+                               groups=gated_channels.shape[1]).transpose(1, 2) * c
             state = ConvState(full[:, :, -port.conv_window:])
         states.append(state)
         h = _finish(port, layer, h, out, attention)
@@ -799,6 +813,7 @@ def channel_checkpoint(model):
     return {'format': 'neuralese.native-channel/2', 'marker_names': ROLE_MARKERS,
             'marker_ids': model.marker_ids, 'width': model.input_rows.shape[1],
             'rank': model.adapter.down.out_features,
+            'native_linear_precision': getattr(model, 'native_linear_precision', 'ieee'),
             'adapter_dtype': str(model.adapter.down.weight.dtype),
             'shared_state_dtype': 'torch.float32',
             'kernel_contract': 'shared-state-fixed-native/2',
@@ -820,6 +835,8 @@ def restore_channel_checkpoint(model, state):
         actual = tuple(state[key]) if key in ('marker_names', 'marker_ids') else state[key]
         if actual != expected[key]:
             raise ValueError(f'native channel checkpoint {key} differs from this model')
+    if state.get('native_linear_precision', 'ieee') != expected['native_linear_precision']:
+        raise ValueError('native channel checkpoint native_linear_precision differs from this model')
     if (state['output_rows'] is None) != model.tied:
         raise ValueError('native channel checkpoint tied-head contract differs')
     with torch.no_grad():
@@ -830,11 +847,13 @@ def restore_channel_checkpoint(model, state):
     return model
 
 
-def _linear_weight(x, weight):
+def _linear_weight(x, weight, *, precision="ieee"):
     if x.is_cuda and x.dtype in (torch.float32, torch.bfloat16):
         from ..maple.fused_moe import invariant_linear
         shape = x.shape
-        return invariant_linear(x.reshape(-1, shape[-1]), weight).reshape(*shape[:-1], weight.shape[0])
+        return invariant_linear(x.reshape(-1, shape[-1]), weight, precision=precision).reshape(*shape[:-1], weight.shape[0])
+    if precision != "ieee" and x.dtype == torch.float32:
+        raise ValueError("selected native linear arithmetic requires CUDA")
     return F.linear(x, weight)
 
 
@@ -842,7 +861,7 @@ def _linear(module, x):
     # Preserve custom adapter/quantization forwards rather than bypassing them.
     if type(module) is not nn.Linear:
         return module(x)
-    out = _linear_weight(x, module.weight)
+    out = _linear_weight(x, module.weight, precision=getattr(module, "native_linear_precision", "ieee"))
     return out if module.bias is None else out + module.bias
 
 
