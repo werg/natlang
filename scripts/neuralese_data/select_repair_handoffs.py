@@ -11,7 +11,9 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training/neuralese'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from natlang_neuralese.common.hashing import sha256_file_hex
+from source_review import pending_family_hold_reason, pending_unpinned_source_groups
 
 
 def rows(path):
@@ -25,6 +27,7 @@ def select(source, held, output, *, per_family=3, limit=24):
     if output.exists():
         raise FileExistsError(output)
     held_groups = {group for row in rows(held) for group in row.get('source_groups', [])}
+    review_groups = pending_unpinned_source_groups()
     candidates = list(rows(source))
     if not candidates:
         raise ValueError('no replay-checked handoffs')
@@ -46,6 +49,12 @@ def select(source, held, output, *, per_family=3, limit=24):
             continue
         if held_groups.intersection(row['source_groups']):
             reasons['held_source_group'] += 1
+            continue
+        if review_groups.intersection(row['source_groups']):
+            reasons['source_review_group'] += 1
+            continue
+        if pending_family_hold_reason(row):
+            reasons['source_review_family'] += 1
             continue
         by_family[row['family']].append(row)
     for family in by_family:
@@ -79,6 +88,8 @@ def select(source, held, output, *, per_family=3, limit=24):
     manifest = {'schema': 'natlang.repair-handoff-selection/1',
                 'source': str(source.resolve()), 'source_sha256': sha256_file_hex(source),
                 'held': str(held.resolve()), 'held_sha256': sha256_file_hex(held),
+                'source_review_holds_sha256': sha256_file_hex(Path(__file__).resolve().parents[2] / 'training/source-reviews/holds.jsonl'),
+                'source_review_family_holds_sha256': sha256_file_hex(Path(__file__).resolve().parents[2] / 'training/source-reviews/family-holds.json'),
                 'output_sha256': sha256_file_hex(output), 'candidates': len(candidates),
                 'selected': len(selected), 'selected_by_family': dict(counts),
                 'skipped': dict(reasons), 'per_family': per_family, 'limit': limit,

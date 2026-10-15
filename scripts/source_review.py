@@ -112,6 +112,32 @@ def pending_unpinned_source_groups(registry: Path = REGISTRY) -> set[str]:
     return groups
 
 
+def pending_family_hold_reason(record: dict[str, Any], registry: Path = REGISTRY) -> str | None:
+    """Apply the source registry's exact family hold to a program IR.
+
+    Keep the same dataset/family/primary-source match as the TypeScript
+    executor's sourceReviewReason; selection and collection must not revive a
+    family that the executor already quarantines.
+    """
+    curriculum = record.get("curriculum")
+    family = curriculum.get("family") if isinstance(curriculum, dict) else None
+    datasets = json.loads((registry / "datasets.json").read_text(encoding="utf-8"))
+    declared_dataset = record.get("dataset") or datasets.get("familyDataset", {}).get(family) or record.get("source")
+    dataset = datasets.get("displayNames", {}).get(declared_dataset, declared_dataset)
+    records = record.get("dataset_records")
+    primary = records[0] if isinstance(records, list) and records else None
+    if not isinstance(family, str) or not isinstance(dataset, str):
+        return None
+    source = json.loads((registry / "family-holds.json").read_text(encoding="utf-8"))
+    if source.get("schema") != "natlang.source-review-family-holds/1" or not isinstance(source.get("holds"), list):
+        raise ReviewError("family-holds.json: invalid family hold registry")
+    for hold in source["holds"]:
+        if (hold["dataset"] == dataset and hold["family"] == family and
+                (hold["primarySourceId"] is None or hold["primarySourceId"] == primary)):
+            return hold["reason"]
+    return None
+
+
 # ---------------------------------------------------------------------------------------------------------- manifests
 
 def registry_sha256(registry: Path = REGISTRY) -> str:

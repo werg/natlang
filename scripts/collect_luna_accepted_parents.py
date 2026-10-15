@@ -16,7 +16,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'training/neuralese'))
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256
-from source_review import pending_unpinned_source_groups
+from source_review import pending_family_hold_reason, pending_unpinned_source_groups
 
 
 def rows(path):
@@ -178,6 +178,9 @@ def collect(args, stream, held_groups, pending_source_groups, previous_ids, seen
                 source_group.update(original.get('source_groups', []))
                 if pending_source_groups.intersection(source_group):
                     outcomes['source_review_hold'] += 1
+                    continue
+                if pending_family_hold_reason(original):
+                    outcomes['source_review_family_hold'] += 1
                     continue
                 key = world(original)
                 if original['id'] in previous_ids or key in seen_worlds or key in selected_worlds:
