@@ -95090,6 +95090,30 @@
       "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
       "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
       "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "luna-held-shapes-s52102-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52102-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with oracle-accepted outcomes and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "86 independently reviewed oracle-accepted roots; 479 approved native decisions out of 604 materialized from 90 candidate parents; four whole-parent process holds and 21 unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v29 source review, protected-source check, one structural folder child bypass, three prolonged wrong-path/malformed process holds, and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Four oracle-accepted roots held whole; no broad source-group collateral. Nine rejected roots reviewed; one exact source conflict held by v29, absent from earlier accepted Pop parents. Verbose Hotpot answers are not DPO negatives.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins v29. Exact trajectory holds govern. Global union requires ticket-bypass v3 and seven-ID non-success hold list."
     }
   ],
   "coverage_backlog": [
