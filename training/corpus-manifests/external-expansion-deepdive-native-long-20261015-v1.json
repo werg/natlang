@@ -1,0 +1,80 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-deepdive-native-long-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-deepdive-native-long-20261015-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 839,
+      "sha256": "2e5fb0a0e2c853a425f458745bfa5b50d6393951552e68742d96b0fbc3678c98"
+    },
+    {
+      "path": "ir/trajectory_continuation_research/build.json",
+      "bytes": 837,
+      "sha256": "719039927f9fe1a40a7755f49e4d85453fd03ebc5469ab4c59cbfec051a10512"
+    },
+    {
+      "path": "ir/trajectory_continuation_research/omissions.jsonl",
+      "bytes": 5232,
+      "sha256": "fc38ef41e5d0f8143113c160277765548e272ec53214672df2a03175573dc971",
+      "lines": 48
+    },
+    {
+      "path": "runtime-page.json",
+      "bytes": 113,
+      "sha256": "814dad314ede1e73b05f8b3a34a0e1f206c242bfccfa0177193fb2f6404e6300"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00000.summary.json",
+      "bytes": 256,
+      "sha256": "2b808468e37b20a8495eff8fde177ffb62f956ca8901784dfab3e1272e085d49"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00000.turns.jsonl.zst",
+      "bytes": 4793387,
+      "sha256": "2b7fd69f748ec984939346b78969bcf62b85e0e62401474c1dcba4b389839243"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00001.summary.json",
+      "bytes": 256,
+      "sha256": "e38f8915ed177bf7615b11f3b11f775a45e9bdaed99ca8492912571a15934553"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00001.turns.jsonl.zst",
+      "bytes": 4835839,
+      "sha256": "521fe2d29f88fcc25bd462a6273e6a373cc417117de5f3b3fcad0f758b88e104"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00002.summary.json",
+      "bytes": 256,
+      "sha256": "0f985ed2454ccd1274653f2986e5d7392b185cb3e3550ba9984000bcfc65eb2c"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00002.turns.jsonl.zst",
+      "bytes": 5059856,
+      "sha256": "5676770291ff38f9572a891275916070c1e305ff65f45cc2bb91b8156412cfe8"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00003.summary.json",
+      "bytes": 256,
+      "sha256": "8af93b015a5794f78266214e8c9acfb4ad19b824c1c66788305c1481f59852eb"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00003.turns.jsonl.zst",
+      "bytes": 4952983,
+      "sha256": "4016d12a369673a84db9415f397abb1a996024e6b4d42f17d1582b307a86d7f9"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00004.summary.json",
+      "bytes": 254,
+      "sha256": "d0291719979c821aee03b639b76e6cd5ceb9f28b3016d47411879a1af8f5441e"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00004.turns.jsonl.zst",
+      "bytes": 2877381,
+      "sha256": "7368201a45d4838c8691ab831ed5aa0e18c4b42072f3a01d7b7bcce54829949c"
+    }
+  ],
+  "bytes": 22527745
+}

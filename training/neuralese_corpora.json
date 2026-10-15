@@ -98053,6 +98053,41 @@
       "review_status": "Static graph, source and split admission passed; no model success certificate",
       "required_conversion": "Bind exact records/pieces in shared E2E recipes on both lines; merge additional authenticated sources incrementally",
       "notes": "First4 of33 independently durable mined source archives. Parent receipt retains original v31 review binding; separate admission proof records current review.10 upstream authentication omissions remain explicit. Transfer alone did not admit data. No claim of model exposure."
+    },
+    {
+      "id": "external-expansion-deepdive-native-long-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-deepdive-native-long-20261015-v1",
+      "include": [
+        "turns/**/*.turns.jsonl.zst",
+        "turns/**/*.summary.json",
+        "ir/**/build.json",
+        "ir/**/omissions.jsonl",
+        "runtime-page.json",
+        "admission-review.json"
+      ],
+      "source_class": "statically-lowered-external-native-long-evidence-teacher-turns",
+      "training_admission": true,
+      "training_admission_reason": "Owner adaptive production: integrate completed long-evidence recovery now",
+      "admission": {
+        "schema": "natlang.external-static-admission/1",
+        "approved": true,
+        "policy": "Owner adaptive production: integrate completed long-evidence recovery now",
+        "source": "Pinned D31 trajectories_sft; closed records admitted in external-expansion-deepdive-handoffs-20261015-v1; same exact source reasoning/calls/observations/question groups",
+        "native_cases": 1150,
+        "native_decisions": 7374,
+        "native_items": 1150,
+        "native_omissions": {
+          "evidence-over-cap-needs-paged-program": 48
+        },
+        "coverage": "Recovers 1150 of1198 evidence-over-cap items omitted by base pass; base1818 items unchanged and disjoint by evidence range",
+        "assigned_recovery": "48 above120000 evidence remain explicit paging conversion work; original source retained",
+        "certificate_limit": "Static plumbing replay only, not verified research answer or model lift"
+      },
+      "derived_from": [
+        "external-expansion-deepdive-handoffs-20261015-v1"
+      ],
+      "license": "Apache-2.0 from pinned D31 acquisition card"
     }
   ],
   "coverage_backlog": [
