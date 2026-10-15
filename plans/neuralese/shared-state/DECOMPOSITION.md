@@ -79,6 +79,16 @@ draw scheduling or identical rounded momentum across different graph layouts.
 
 ## Exact mechanisms and interfaces
 
+The existing selected expert-backend policy owns both precision and dispatch:
+an FP8 training scope selects grouped expert execution, and replay restores that
+same selection after the outer scope exits. Native evaluation disables FP8.
+Only successful FP8 projection calls count as executed work; configured module
+counts and entering a precision scope do not attest execution. These scoped
+settings, restoration and counters are crisp backend plumbing, shared by SFT,
+semantic adaptation and RL rather than implemented separately in each trainer.
+Dense CUDA expert routing retains its fixed-row FP32 router independently of
+expert dispatch, so selecting grouped FP8 does not also change top-k arithmetic.
+
 - `model/shared_state.py`: immutable invocation/import specifications compile
   into unique physical token rows, logical KV alias slots, causal visibility,
   query positions and finite convolution predecessor gathers. Crisp because

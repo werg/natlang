@@ -23,6 +23,14 @@ existing masked sampler/replay; `NativePolicyObjective` and `packed_graph_loss`.
 No alternative trainer, projection channel, synthetic readiness receipt or
 50GB checkpoint export was used.
 
+Subsequent dispatch review found that selecting the triton-experts backend did
+not itself select the grouped expert dispatcher. This run did not record actual
+FP8 projection calls, so it does **not** establish FP8 kernel execution or FP8
+numerical qualification. Its measured joint, optimizer, replay and memory results
+remain evidence for the executed path. A corrected backend now scopes dispatch
+alongside precision and records actual calls; that path requires separate CUDA
+qualification before deployment.
+
 | Actual update | Loss | Finite gradient norm | Model role rows changed |
 |---|---:|---:|---|
 | VAE | 2.12946 | 1.38563 | Neither, as required |

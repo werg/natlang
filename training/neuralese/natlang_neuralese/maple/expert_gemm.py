@@ -179,7 +179,15 @@ class Fp8ExpertProjection(torch.autograd.Function):
         # The input gradient reuses these FP8 weights (half the bytes of the BF16 latent, kept for one layer).
         ctx.save_for_backward(a, rows, slot_of, weight, offsets, wq, sw)
         ctx.table, ctx.top_k = table, top_k
-        return grouped_fp8(aq, sa, rows, wq, sw, table, out_rows)
+        result = grouped_fp8(aq, sa, rows, wq, sw, table, out_rows)
+        # Count executed projections, not configured modules or entered scopes.
+        # The captured mutable dictionary also follows checkpoint recomputation.
+        from .model import DENSE_MOE
+        stats = DENSE_MOE.get('fp8_stats')
+        if stats is not None:
+            stats['calls'] += 1
+            stats['rows'] += out_rows
+        return result
 
     @staticmethod
     def backward(ctx, grad):

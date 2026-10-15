@@ -264,45 +264,51 @@ class FP8ExpertAdapter:
     @contextlib.contextmanager
     def autocast(self):
         from ..maple.model import DENSE_MOE
-        previous = DENSE_MOE.get('fp8')
-        DENSE_MOE['fp8'] = 'grouped'
+        previous = {key: DENSE_MOE.get(key) for key in ('kernel', 'fp8', 'fp8_stats')}
+        if not hasattr(self, 'row_counts'):
+            self.reset_row_counts()
+        # Selecting an FP8 operand format alone leaves the default invariant
+        # expert dispatcher active. Bind both dispatch and precision, including
+        # activation replay, rather than relying on an unrelated CLI setting.
+        DENSE_MOE.update(kernel='grouped', fp8='grouped', fp8_stats=self.row_counts)
         try:
             yield
         finally:
-            DENSE_MOE['fp8'] = previous
-        self.has_executed = True
+            DENSE_MOE.update(previous)
+            self.has_executed = getattr(self, 'has_executed', False) or self.row_counts['calls'] > 0
 
     def checkpoint(self, function, *args, **kwargs):
         from torch.utils.checkpoint import checkpoint
         from ..maple.model import DENSE_MOE
         if kwargs.pop('use_reentrant', False):
             raise ValueError('expert precision replay requires nonreentrant checkpointing')
-        mode = DENSE_MOE.get('fp8')
+        mode = {key: DENSE_MOE.get(key) for key in ('kernel', 'fp8', 'fp8_stats')}
         @contextlib.contextmanager
         def precision():
-            previous = DENSE_MOE.get('fp8')
-            DENSE_MOE['fp8'] = mode
+            previous = {key: DENSE_MOE.get(key) for key in mode}
+            DENSE_MOE.update(mode)
             try:
                 yield
             finally:
-                DENSE_MOE['fp8'] = previous
+                DENSE_MOE.update(previous)
         return checkpoint(function, *args, use_reentrant=False,
                           context_fn=lambda: (precision(), precision()), **kwargs)
 
     @contextlib.contextmanager
     def native_modules(self):
         from ..maple.model import DENSE_MOE
-        previous = DENSE_MOE.get('fp8')
-        DENSE_MOE['fp8'] = None
+        previous = {key: DENSE_MOE.get(key) for key in ('fp8', 'fp8_stats')}
+        DENSE_MOE.update(fp8=None, fp8_stats=None)
         try:
             yield
         finally:
-            DENSE_MOE['fp8'] = previous
+            DENSE_MOE.update(previous)
 
     def reset_row_counts(self):
-        pass
+        self.row_counts = {'calls': 0, 'rows': 0, 'padded_rows': 0}
 
     def collect_row_counts(self) -> dict[str, int]:
+        self.has_executed = getattr(self, 'has_executed', False) or self.row_counts['calls'] > 0
         return dict(self.row_counts)
 
     def extra_state(self) -> dict[str, Any]:
@@ -315,7 +321,8 @@ class FP8ExpertAdapter:
 
     def inventory(self) -> dict[str, Any]:
         return {'schema': EXPERT_SCHEMA, 'runtime': self.runtime, 'recipe': 'current-rowwise',
-                'expert_modules': len(self.experts)}
+                'expert_modules': len(self.experts), 'row_counts': self.collect_row_counts(),
+                'has_executed': self.has_executed}
 
     def cached_weight_bytes_estimate(self) -> int:
         return 0  # FP8 weights live only within one layer's projection (saved for its backward)

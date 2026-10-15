@@ -412,7 +412,7 @@ class DenseExperts(nn.Module):
 DENSE_MOE_KERNELS = ("invariant", "loop", "grouped")
 DENSE_MOE = {"kernel": os.environ.get("NATLANG_MAPLE_DENSE_MOE", "invariant"),
              # "grouped": FP8 grouped expert GEMMs (maple/expert_gemm.py), set by train/fp8_backend.FP8ExpertAdapter
-             "fp8": None}
+             "fp8": None, "fp8_stats": None}
 
 
 def set_dense_moe_kernel(kernel: str) -> None:
@@ -452,9 +452,11 @@ class SparseMoE(nn.Module):
         if self.active_experts is not None and STATE["enabled"] and key in self.private_gate:
             logits = F.linear(x.float(), self.private_gate[key])  # the member's own rows, in its expert order
         else:
-            if self._invariant(x):
+            if x.is_cuda and isinstance(self.experts, DenseExperts):
                 # Exact FP32 with one fixed tile per row: top-k routing flips near ties on any shape-dependent
                 # rounding (and the NGC containers' TF32 override would otherwise run this FP32 product in TF32).
+                # Expert precision/dispatch must not change the router's
+                # arithmetic contract when grouped FP8 execution is selected.
                 from .fused_moe import invariant_linear
                 logits = invariant_linear(x.float(), self.gate.weight.float())
             else:
