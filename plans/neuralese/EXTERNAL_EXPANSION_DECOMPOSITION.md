@@ -190,3 +190,17 @@ explicit omissions. A parent's score is not an independently verified child
 score. These are static typed history handoffs until genuine recorded edges
 are separately reauthenticated for E2E use. License restrictions are recorded
 as facts and accepted under the owner's standing source instruction.
+
+Integration frontier on 2026-10-15: D07's 12 closed handoffs passed three
+native cases and its twin render is registered. D11's 874 closed handoffs
+passed 219 native cases/2,186 decisions and its twin render is registered;
+mock generation remains explicit. D06's corrected primary conversion has
+14,564 accepted records, one exact duplicate, zero invalid IDs or closure
+violations, and 14,563 closed records. The existing long-evidence path
+recovers 5,219 items beyond the base path's 6,630; their source-ID sets are
+disjoint and all replay cases pass, producing 50,375 decisions in total.
+Both native snapshots are registered and renders are in flight. Another
+2,714 records still require paging, and five oversized consumers and 2,669
+failed/unresolved source exclusions have explicit conversion assignments.
+None of these changes mutate the running frozen R8 cloud inputs: inclusion
+uses the next independently protected union and a declared continuation.
