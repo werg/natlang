@@ -1,5 +1,62 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+Owner correction, 2026-10-15: the lodestar is comprehensive training of BOTH
+models through the ENTIRE production recipe and all usable available data.
+Stages are steps to progress through, not endpoints. Half measures, short
+probes and partial stages do not count as production completion. Track whole
+recipe progress and actual data exposure; integrate newly prepared sources
+through explicit continuations. KL distance from the base is telemetry only:
+improvement requires changing the model. Do not stop or deny qualification
+solely for base-relative KL or agreement drift. Keep actual task-performance,
+held-loss, numerical and runtime checks; diagnose and repair real regressions.
+Runs may be stopped and tweaked at any time when an improvement warrants it
+(owner clarification, 2026-10-15). The supervising agent decides whether the
+problem requires a redo or continued training, preserving exact state and
+recording the evidence. Comprehensive training is the objective, not a ban on
+interruptions or sensible course corrections.
+
+## Adaptive production training (standing owner instructions, 2026-10-15)
+
+- **Best possible models as soon as possible is the objective. We are not
+  doing science.** Do not optimize operations for clean, frozen, reproducible
+  runs or controlled comparisons at the expense of useful training. Existing
+  runs are work in progress, not experiments that must remain untouched.
+- **Constantly improve the recipe and keep going.** Monitor both models and
+  their processes, investigate concrete impediments, and greedily exploit useful
+  data, fixes and insights as soon as they are available. Do not let repeated
+  probes, qualification windows, packaging or handoffs become substitutes for
+  production training. Use focused checks that resolve a real correctness or
+  operational concern, then return the GPUs to useful training promptly.
+- **Comprehensive means the entire production recipe on both models and all
+  usable available data.** Stages may differ, but progress through them; a short
+  warmup, partial epoch, isolated stage or smoke run is not the goal. Track
+  actual stage progress and data exposure, and resolve what prevents remaining
+  stages or data from being used. Do not claim that downloaded or registered
+  data has been trained on.
+- **Adapt live.** Add newly usable data promptly rather than waiting for a
+  distant clean run or an unrelated conversion batch. Stop/reload/resume at a
+  safe update boundary when needed; retain optimizer/RNG state when continuing
+  is appropriate. The supervisor may stop and tweak any run at any time for a
+  potential improvement and judges whether to continue or redo it. Preserve
+  useful checkpoints and record the practical reason; do not require a new
+  lineage or a clean experimental restart for routine changes.
+- **Checks serve production.** Keep checks that protect actual task quality,
+  valid gradients/numerics, held-data separation, data quality, recoverable
+  progress and functioning runtime/transport. Similarity to the untrained base
+  is not the objective: base-relative KL/agreement are telemetry, never a stop
+  or qualification barrier. Exact state and artifact identities support safe
+  continuation and debugging; they are not a scientific-purity requirement.
+- **Share code as much as possible and distribute all generalizable insights
+  across all models.** A useful fix, optimization, data improvement or recipe
+  insight on one line must promptly be considered and propagated to the other
+  lines and machines. Extend the shared trainers, loaders, objectives,
+  evaluators and recipe inheritance instead of creating per-model forks.
+  Keep only necessary architecture-specific behavior/settings separate, state
+  why they differ, and communicate shared decisions through coordination.
+
+These instructions supersede earlier requirements for frozen experimental
+runs, base-drift hard stops or clean-run comparisons where they conflict.
+
 The main goal in everything is to keep moving the work forward: move training
 along and keep the machines doing useful work. Don't be overly cautious, and
 don't wait for the owner to approve decisions. If something is sensible, do it,
@@ -207,7 +264,7 @@ afterwards. The rules below are consequences of this one.
   absent or the identity, logits equal the base) is the identity qualification,
   declared as the recipe's `identity_qualification` and recorded in
   `direct-certificate.json`. Older lineages keep the rule above. Direct-stage
-  qualification is the identity check, held CE below base, no drift stop and
+  qualification is the identity check, held CE below base and
   natlang task success (owner decision 2026-10-12): the in-run task-success
   evaluation (16 tasks, one per shape, of the registered held packet
   `natlang-held-task-packet-v3-20261012`, which is v2 with content-preserving
@@ -217,7 +274,8 @@ afterwards. The rules below are consequences of this one.
   measured by repeat runs. The 48-probe
   behaviour gate is report-only: it runs at a drift warn and at the end and is
   recorded, never a stop or a requirement. Response KL warns at 0.5 (which runs
-  the gate) and stops a run only at 1.5: SFT is meant to change the
-  distribution, and forgetting general ability is reported, not gated. The Neuralese value is report-only there: its
+  the gate); it never stops a run or denies qualification merely for changing
+  the base distribution (owner correction 2026-10-15). Actual task performance
+  remains measured. The Neuralese value is report-only there: its
   requirement is the end-to-end stage's, consumers reading values against
   consumers reading tokens (owner decision 2026-10-11).
