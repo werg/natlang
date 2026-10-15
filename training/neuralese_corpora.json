@@ -105263,6 +105263,30 @@
       "review_status": "Static graph, source and split admission passed; no model success certificate",
       "required_conversion": "Bind exact records/pieces in shared E2E recipes on both lines; merge additional authenticated sources incrementally",
       "notes": "27 independently durable mined sources in this cohort. Parent receipt retains original source-review binding; separate admission proof records current review. All upstream/whole-chain authentication omissions remain explicit in the pinned receipt and omission ledger. Transfer alone did not admit data. No claim of model exposure."
+    },
+    {
+      "id": "luna-held-shapes-s52114-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52114-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with oracle-accepted outcomes and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "76 independently reviewed oracle-accepted roots; 362 approved native decisions out of 521 materialized; eleven exact whole-parent process/structural holds and fourteen unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v36 source-review and protected-source check; exact structural action-shape and manual noisy-process parent holds; native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Four Hotpot answer-equivalence/format rejections are held from model-negative/DPO use. Remaining exact misses need independent review.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins prior source-review; collection used current v36. Exact trajectory holds govern. Global union requires current source-review and non-success hold checks."
     }
   ],
   "coverage_backlog": [
