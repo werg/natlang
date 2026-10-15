@@ -609,6 +609,7 @@ class Engine:
             raise RequestError("neuralese-unknown-native-state", f"{block_id} is not in this server's store; PUT it first")
         block = record.block
         exact = self._native_exact(block)
+        adaptation = None
         open_out = self._native_forward([self.role_tokens.consume_open], seq.cache)
         seq.cache = open_out["cache"]
         if seq.request.rl_capture:
@@ -624,6 +625,23 @@ class Engine:
             if seq.request.rl_capture:
                 seq.native_rl_prompt.append({"kind": "native_state", "id": block_id,
                     "native_identity": self._native_block_identity(block)})
+        elif (getattr(self, 'semantic_channel', None) is not None and
+              self._native_block_identity(block) in self.semantic_channel.bindings.values()):
+            try:
+                adapted, adaptation = self.semantic_channel.adapt(block, target_name=self.semantic_participant,
+                    target_model=self.shared_model, target_tokenizer=self.tokenizer, target_identity=self.native_identity)
+            except ValueError as error:
+                raise RequestError('neuralese-semantic-adapter-mismatch',
+                    f'{error}; restore the matching model/adapter export or write the text with the target native writer') from error
+            seq.cache = splice_block(self.shared_model, seq.cache, adapted,
+                                     checkpoint_sha256=self.checkpoint_sha256,
+                                     tokenizer_fingerprint=self.model_config['tokenizer_fingerprint'],
+                                     embedding_weight_sha256=self.embedding_weight_sha256)
+            mode = 'learned-semantic-state-deltas'
+            if seq.request.rl_capture:
+                adapted_record = self.store.put_native_state(adapted)
+                seq.native_rl_prompt.append({'kind': 'native_state', 'id': adapted_record.id,
+                    'native_identity': self._native_block_identity(adapted)})
         else:
             # Until joint semantic adaptation is trained, foreign state is
             # best-effort only: discard its tensors and rebuild target KV from text.
@@ -645,7 +663,8 @@ class Engine:
                                          "producing": [False]})
         seq.native_own_position += 1
         seq.logits = self._native_logits(close_out["h_final"])
-        seq.native_imports.append({"id": block_id, "mode": mode})
+        seq.native_imports.append({"id": block_id, "mode": mode,
+                                   **({'semantic_adaptation': adaptation} if adaptation is not None else {})})
 
     @staticmethod
     def _native_block_identity(block):

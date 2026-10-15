@@ -12,6 +12,12 @@ capacity without unnecessarily starving training. Preserve exact actor,
 checkpoint, runtime and split provenance; base-model generations are not
 on-policy samples from a trained checkpoint. This supersedes older machine
 ownership and provider-generation restart instructions below and in plans.
+The owner expressly authorized one extra sandbox for continuous own-model data
+generation on 2026-10-15. Our current resource plan is two training sandboxes
+plus that one generation sandbox; no further allocation is planned. Keep the
+generation sandbox supplied with useful tasks and admit verified results into
+the evolving training recipe. Measure actual CPU/RAM need on the allocated
+machine rather than delaying useful generation to test smaller allocations.
 
 ## Neuralese architecture replacement (owner, 2026-10-15)
 

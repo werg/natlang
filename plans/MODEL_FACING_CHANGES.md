@@ -1,5 +1,15 @@
 # Model-facing changes and their measurement
 
+### 2026-10-15 — shared semantic adapter recovery
+
+Native foreign-state consumption can use an explicitly configured, trained,
+checkpoint-bound semantic decoder. The new
+`neuralese-semantic-adapter-mismatch` error directs recovery through the matching
+export or target-native writer. Both authoring/integration skills are updated.
+Measurement debt: sample this recovery message and learned-state behavior in
+the next own-model sandbox teacher window before production semantic cutover.
+Tiny two-model correctness tests establish state/gradient plumbing, not task lift.
+
 ### 2026-10-15 — RL text training matches the serving prompt
 
 The managed RL actor serves `full` prompts, but the RFT stage's implicit default

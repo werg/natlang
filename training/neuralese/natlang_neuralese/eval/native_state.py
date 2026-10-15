@@ -3,9 +3,26 @@ from __future__ import annotations
 
 import copy
 import time
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
+
+
+def task_execution_receipt(summary, identity, *, checkpoint_sha256):
+    """One actual-harness receipt contract for native SFT and joint training."""
+    from ..common.hashing import sha256_file_hex_cached
+    score = Path(summary['run'])/'task-score.json' if summary.get('run') else None
+    receipt = {'schema': 'natlang.native-task-execution-receipt/1',
+        'checkpoint_sha256': identity['checkpoint_sha256'], 'native_identity': identity,
+        'packet_sha256': summary.get('packet_sha256'), 'case_indices': summary.get('case_indices'),
+        'cases': summary.get('cases'), 'complete': summary.get('complete'), 'eligible': summary.get('eligible'),
+        'task_successes': summary.get('task_successes'), 'task_successes_are_qualification_barrier': False,
+        'score_path': str(score.resolve()) if score and score.is_file() else None,
+        'score_sha256': sha256_file_hex_cached(score) if score and score.is_file() else None}
+    receipt['passed'] = bool(identity['checkpoint_sha256'] == checkpoint_sha256 and
+                             receipt['complete'] and receipt['eligible'] and receipt['score_sha256'])
+    return receipt
 
 
 def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forward_atol, gradient_atol,

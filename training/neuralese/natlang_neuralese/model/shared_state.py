@@ -296,6 +296,7 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
 
         if checkpointed:
             from torch.utils.checkpoint import checkpoint
+            checkpoint = getattr(port, 'activation_checkpoint', checkpoint)
             updated = checkpoint(run_layer, h, *external_i, use_reentrant=False,
                                  preserve_rng_state=getattr(port, 'checkpoint_preserve_rng', True))
         else:

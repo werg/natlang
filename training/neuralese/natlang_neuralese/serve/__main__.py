@@ -24,6 +24,8 @@ def main(argv=None):
     parser.add_argument("--heads", default=None, help="S3 trainer checkpoint with port heads and control rows")
     parser.add_argument("--native-checkpoint", default=None,
                         help="complete native shared-state model checkpoint; restores without projected PortHeads")
+    parser.add_argument('--native-participant', help='model identity selected from a complete shared semantic checkpoint')
+    parser.add_argument('--semantic-adapter', help='identity-bound shared semantic adapter export receipt')
     parser.add_argument("--recurrence-checkpoint", default=None,
                         help="complete learned recurrent checkpoint; requires its exact runtime qualification")
     parser.add_argument("--runtime-qualification", default=None,
@@ -80,7 +82,8 @@ def main(argv=None):
     cap_cuda_memory(args.device, args.memory_gb)
     if args.native_checkpoint:
         engine = load_native_engine(args.native_checkpoint, base=args.base, device=args.device, dtype=model_dtype,
-                                    prompt_rendering=args.prompt_rendering or "full")
+                                    prompt_rendering=args.prompt_rendering or "full", participant=args.native_participant,
+                                    semantic_adapter=args.semantic_adapter)
     elif args.recurrence_checkpoint:
         if model_dtype is not None:
             parser.error('--dtype cannot override a recurrence checkpoint runtime qualification')

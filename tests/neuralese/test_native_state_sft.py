@@ -86,7 +86,7 @@ def test_packed_graph_batch_matches_mean_independent_graph_losses_and_gradients(
 
         def forward(self, plan, retain_states=False):
             ids = [token for node in plan.invocations for token in node.token_ids]
-            return {'h_final': self.embedding(torch.tensor(ids))[None]}
+            return {'h_final': self.embedding(torch.tensor(ids))[None], 'plan': plan}
 
         def logits(self, states):
             return self.readout(states)

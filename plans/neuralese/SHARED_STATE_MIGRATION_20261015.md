@@ -48,9 +48,38 @@ through the projected-value implementation.
 
 ## Current status
 
-Implementation started; replacement not qualified or deployed. Both cloud
-lineages remain diagnostic. The local Mellum base teacher continues producing
-native text trajectories reusable by both models and the replacement.
+Replacement not yet deployed; both cloud lineages remain diagnostic. Full
+Mellum fixed-delta sparse attention now matches forward, consumer CE, all 28
+layer backward adjoints, source-adapter gradients and incremental inference
+bitwise. Actual QAD LFM and the isolated H100 destination pass the unchanged
+forward/gradient tolerances. Native SFT and typed/durable child handoffs,
+contextual writes, empty values and hierarchical views are integrated. The
+standing full check of 606f1ec3c5 is green.
+
+The shared semantic stage now implements VAE, joint producer/write-out/consumer
+adaptation, behavioral distillation, deferred full-model optimizers, complete
+per-row/per-model-pair exposure, checkpoint/RNG continuation, data append and
+loss/LR/epoch changes. Two-model tiny tests prove exact interrupted continuation
+and real joint gradients. The readiness controller checks actual production
+stage evidence and starts with any two supported ready models; later model or
+curriculum/data changes trigger continued work. Semantic adapter exports bind
+the exact joint checkpoint, participant and small source tokenizers. Learned
+decoding feeds the actual native cache/serving path, with explicit alignment.
+
+Cutover remains OPEN: admit the real source-witnessed paired graph conversion,
+bind both complete production recipes, verify an actual full-model joint update
+and placement, measure post-joint natlang behavior, finish advanced native
+learner/gradient/optimizer/adapter/guidance consumers, and complete persistent
+semantic-code transport. A functioning raw-state-to-semantic-to-target adapter
+is not yet a compressed shared-code wire dialect. Independent review reported
+these gaps; none is waived by capability denial or tiny-model tests.
+
+Pop is closed; DGX supervises all remaining work. Generation continues ONLY
+through our own sandbox models. The dedicated generation sandbox is
+`dadd0462-0175-470d-b1ee-4d52edfe110e`; exact Mellum3600 assets and the harness
+are being prepared there. The stopped local Mellum teacher's four verified
+successes remain assigned for admission. Only Pop generation was to finish;
+the prior DGX generation-closeout interpretation was corrected by the owner.
 
 Owner clarification: no prototyping shortcuts or half-solutions at blockers.
 Assign a separate agent to independently review the completed integrated

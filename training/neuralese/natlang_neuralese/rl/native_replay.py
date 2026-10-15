@@ -143,8 +143,8 @@ def compile_replay(turns, *, identity, roles, fetch_block):
                 opened = index
                 expected_role = 'ordinary'
             elif token == roles.produce_close:
-                if opened is None or index <= opened+1:
-                    raise ValueError('native RL close marker lacks a nonempty producer payload')
+                if opened is None:
+                    raise ValueError('native RL close marker lacks its producer opening marker')
                 actual_writes.append((opened, index+1, opened+1, index))
                 opened = None
                 expected_role = 'ordinary'
@@ -178,7 +178,7 @@ def compile_replay(turns, *, identity, roles, fetch_block):
             begin, end = write.get('begin_sample'), write.get('end_sample')
             lo, hi = write.get('payload_begin'), write.get('payload_end')
             if (any(type(value) is not int for value in (begin, end, lo, hi))
-                    or not 0 <= begin < lo < hi < end <= len(samples)
+                    or not 0 <= begin < lo <= hi < end <= len(samples)
                     or lo != begin+1 or hi != end-1
                     or samples[begin]['token_id'] != roles.produce_open
                     or samples[end-1]['token_id'] != roles.produce_close

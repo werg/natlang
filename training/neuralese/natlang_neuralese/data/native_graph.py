@@ -59,9 +59,9 @@ def parse_graph(row, *, tokenizer_fingerprint):
     if (not isinstance(external, dict) or any(not isinstance(name, str) or not name
             or not isinstance(binding, dict)
             or not isinstance(binding.get('id'), str) or not re.fullmatch(r'nzs1_[a-z2-7]{52}', binding['id'])
-            or type(binding.get('token_count')) is not int or binding['token_count'] < 1
+            or type(binding.get('token_count')) is not int or binding['token_count'] < 0
             for name, binding in external.items())):
-        raise ValueError('native graph external states need exact content IDs and positive token counts')
+        raise ValueError('native graph external states need exact content IDs and nonnegative token counts')
     plan = compile_graph(nodes, external_sizes={name: binding['token_count'] for name, binding in external.items()})
     return NativeGraphExample(row['id'], row['split'], tuple(groups), tokenizer_fingerprint,
                               plan, tuple(weights), external)
@@ -109,6 +109,15 @@ def graph_loss(model, example, *, checkpoint_layers=True, chunk_tokens=128):
         raise ValueError('loss chunk size must be positive')
     model.port.checkpoint_layers = checkpoint_layers
     result = model(example.plan, retain_states=False)
+    return graph_loss_from_result(model, example, result, chunk_tokens=chunk_tokens)
+
+
+def graph_loss_from_result(model, example, result, *, chunk_tokens=128):
+    """Reuse a producer graph forward for supervision and state adaptation."""
+    if chunk_tokens < 1:
+        raise ValueError('loss chunk size must be positive')
+    if result['plan'] is not example.plan:
+        raise ValueError('native supervision must use its own graph result')
     hidden = result['h_final'][0]
     queries, targets, selected_weights = [], [], []
     for node, offset in zip(example.plan.invocations, example.plan.offsets):

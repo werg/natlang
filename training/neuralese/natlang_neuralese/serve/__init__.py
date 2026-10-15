@@ -148,7 +148,8 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
 
 
 def load_native_engine(checkpoint: str, *, base: str | None = None, device: str = "cpu", dtype=None,
-                       prompt_rendering: str = "full"):
+                       prompt_rendering: str = "full", participant: str | None = None,
+                       semantic_adapter: str | None = None):
     """Restore a native-state checkpoint through the shared model loader and serving engine."""
     import torch
 
@@ -158,7 +159,7 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
     from .store import TensorStore
 
     model, tokenizer, roles, config, _state = load_native_checkpoint(
-        checkpoint, base=base, device=device, dtype=dtype)
+        checkpoint, base=base, device=device, dtype=dtype, participant=participant)
     model.eval()
     for parameter in model.parameters():
         parameter.requires_grad_(False)
@@ -171,6 +172,13 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
                     embedding_weight_sha256=identity['embedding_weight_sha256'])
     engine.native_identity = identity
     engine.native_checkpoint = str(checkpoint)
+    if semantic_adapter:
+        from ..model.semantic_channel import SemanticChannel
+        engine.semantic_channel = SemanticChannel.load(semantic_adapter, device=device)
+        if participant is None:
+            raise ValueError('semantic serving requires its explicit shared checkpoint participant')
+        engine.semantic_channel.require_target(participant, identity)
+        engine.semantic_participant = participant
     engine.rl_policy_binding = {'schema': 'natlang.rl-policy-binding/2',
         'checkpoint_sha256': checkpoint_sha256, 'communication': 'native-state',
         'native_identity': dict(identity)}

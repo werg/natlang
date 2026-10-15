@@ -242,3 +242,9 @@ model-bound zero-token state. For `neuralese-native-empty-unavailable`, rebuild
 or load that library with its archived empty state. Contextual native body
 initialization preserves its actual source capture and does not claim equality
 with an ordinary-text prompt.
+
+A configured learned semantic adapter may consume another trained model's
+native value by decoding shared per-token codes into target-state deltas.
+Keep the value reference and its actual consumption receipt. On
+`neuralese-semantic-adapter-mismatch`, rewrite the payload with the target
+model's native writer or restore the matching checkpoint and adapter export.

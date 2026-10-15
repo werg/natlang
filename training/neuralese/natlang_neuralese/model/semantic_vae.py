@@ -36,8 +36,9 @@ class StateLayout:
     def state(self, block):
         if StateLayout.from_block(block) != self:
             raise ValueError('semantic VAE state layout differs from its trained model layout')
-        return torch.cat([block.layers[int(name.split('.')[0])][name.split('.')[1]].reshape(len(block.token_ids), -1)
-                          for name, _ in self.fields], dim=-1).float()
+        return torch.cat([block.layers[int(name.split('.')[0])][name.split('.')[1]].reshape(
+                          len(block.token_ids), math.prod(shape))
+                          for name, shape in self.fields], dim=-1).float()
 
     def features(self, block):
         return torch.cat([block.embeddings.float(), self.state(block)], dim=-1)
@@ -51,7 +52,7 @@ class StateLayout:
             index, key = name.split('.')
             count = math.prod(shape)
             reference = baseline.layers[int(index)][key]
-            layers[int(index)][key] = values[:, start:start+count].reshape(-1, *shape).to(reference)
+            layers[int(index)][key] = values[:, start:start+count].reshape(values.shape[0], *shape).to(reference)
             start += count
         return NativeStateBlock(text=baseline.text, token_ids=baseline.token_ids,
             tokenizer_fingerprint=baseline.tokenizer_fingerprint, checkpoint_sha256=baseline.checkpoint_sha256,
@@ -65,6 +66,11 @@ def alignment_weights(source_offsets, target_offsets, *, device='cpu', allow_nea
     Exact overlaps are normalized per target token. A nearest-token fallback is
     opt-in, recorded, and never represented as exact tokenizer equivalence.
     """
+    if not source_offsets and not target_offsets:
+        return torch.sparse_coo_tensor(torch.empty((2, 0), dtype=torch.int64, device=device),
+            torch.empty(0, device=device), (0, 0)).coalesce(), {
+                'source_tokens': 0, 'target_tokens': 0,
+                'nearest_fallback_target_tokens': [], 'best_effort': False}
     if not source_offsets or not target_offsets:
         raise ValueError('semantic alignment requires source and target token spans')
     for offsets in (source_offsets, target_offsets):
@@ -169,6 +175,8 @@ class SemanticStateVAE(nn.Module):
 
     @staticmethod
     def kl(mu, std):
+        if not mu.numel():
+            return (mu.sum() + std.sum()) * 0.
         return (mu.square() + std.square() - 1 - 2 * std.log()).mean() * 0.5
 
     def decode(self, model_name, code, baseline, *, alignment=None):
@@ -180,11 +188,15 @@ class SemanticStateVAE(nn.Module):
         layout = self.layouts[model_name]
         return layout.replace_state(baseline, layout.state(baseline) + delta)
 
-    def reconstruction(self, model_name, predicted, target):
+    def reconstruction(self, model_name, predicted, target, *, detach_target=False):
         layout = self.layouts[model_name]
         actual, expected = layout.state(predicted), layout.state(target)
+        if detach_target:
+            expected = expected.detach()
         if actual.shape != expected.shape:
             raise ValueError('semantic reconstruction tokenization differs from its paired target')
+        if not actual.numel():
+            return actual.sum() * 0.
         terms, start = [], 0
         for _, shape in layout.fields:
             end = start + math.prod(shape)
@@ -196,7 +208,7 @@ class SemanticStateVAE(nn.Module):
 
     def pair_loss(self, source_name, source, source_baseline, target_name, target, target_baseline,
                   *, source_to_target, target_to_source, kl_weight=0.001, alignment_weight=0.1,
-                  cross_weight=1., generator=None):
+                  cross_weight=1., generator=None, detach_targets=True):
         if source_name == target_name:
             raise ValueError('cross-model VAE pair requires distinct model identities')
         for reference, baseline in ((source, source_baseline), (target, target_baseline)):
@@ -216,13 +228,13 @@ class SemanticStateVAE(nn.Module):
         target_self = self.decode(target_name, target_code, target_baseline)
         target_cross = self.decode(target_name, source_code, target_baseline, alignment=source_to_target)
         source_cross = self.decode(source_name, target_code, source_baseline, alignment=target_to_source)
-        self_loss = (self.reconstruction(source_name, source_self, source) +
-                     self.reconstruction(target_name, target_self, target)) * 0.5
-        cross_loss = (self.reconstruction(source_name, source_cross, source) +
-                      self.reconstruction(target_name, target_cross, target)) * 0.5
+        self_loss = (self.reconstruction(source_name, source_self, source, detach_target=detach_targets) +
+                     self.reconstruction(target_name, target_self, target, detach_target=detach_targets)) * 0.5
+        cross_loss = (self.reconstruction(source_name, source_cross, source, detach_target=detach_targets) +
+                      self.reconstruction(target_name, target_cross, target, detach_target=detach_targets)) * 0.5
         kl = (self.kl(source_mu, source_std) + self.kl(target_mu, target_std)) * 0.5
         aligned_mu = torch.sparse.mm(source_to_target.to(source_mu), source_mu)
-        alignment = F.mse_loss(aligned_mu, target_mu)
+        alignment = F.mse_loss(aligned_mu, target_mu) if target_mu.numel() else aligned_mu.sum() * 0.
         loss = self_loss + cross_weight * cross_loss + kl_weight * kl + alignment_weight * alignment
         return loss, {'self_reconstruction': self_loss, 'cross_reconstruction': cross_loss,
                       'kl': kl, 'semantic_alignment': alignment,

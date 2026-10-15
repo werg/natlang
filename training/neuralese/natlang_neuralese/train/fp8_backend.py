@@ -274,7 +274,20 @@ class FP8ExpertAdapter:
 
     def checkpoint(self, function, *args, **kwargs):
         from torch.utils.checkpoint import checkpoint
-        return checkpoint(function, *args, use_reentrant=False, **kwargs)
+        from ..maple.model import DENSE_MOE
+        if kwargs.pop('use_reentrant', False):
+            raise ValueError('expert precision replay requires nonreentrant checkpointing')
+        mode = DENSE_MOE.get('fp8')
+        @contextlib.contextmanager
+        def precision():
+            previous = DENSE_MOE.get('fp8')
+            DENSE_MOE['fp8'] = mode
+            try:
+                yield
+            finally:
+                DENSE_MOE['fp8'] = previous
+        return checkpoint(function, *args, use_reentrant=False,
+                          context_fn=lambda: (precision(), precision()), **kwargs)
 
     @contextlib.contextmanager
     def native_modules(self):

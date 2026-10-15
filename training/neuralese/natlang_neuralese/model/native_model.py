@@ -12,6 +12,7 @@ from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
 from .shared_state import SharedStateModel, provision_role_tokens
 
 CHECKPOINT_SCHEMA = 'natlang.neuralese-native-checkpoint/1'
+SHARED_CHECKPOINT_SCHEMA = 'natlang.neuralese-native-shared-checkpoint/1'
 
 
 def configure_native_precision():
@@ -114,10 +115,19 @@ def restore_model_state(model, state):
     restore_channel_checkpoint(model, state['interface_state'])
 
 
-def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None):
+def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, participant=None):
     """Return (model, tokenizer, roles, model_config, full_checkpoint_state)."""
     from ..train.checkpoint_policy import CheckpointPolicy
     state = CheckpointPolicy.load(path)
+    if state.get('schema') == SHARED_CHECKPOINT_SCHEMA:
+        if participant not in state['participants']:
+            raise ValueError('shared native checkpoint requires an explicit existing participant')
+        entry = state['participants'][participant]
+        state = {'schema': CHECKPOINT_SCHEMA, 'model_config': entry['model_config'],
+                 **entry['model_state'], 'shared_participant': participant,
+                 'shared_step': state['training']['step']}
+    elif participant is not None:
+        raise ValueError('participant selection requires a shared native checkpoint')
     if state.get('schema') != CHECKPOINT_SCHEMA:
         raise ValueError('checkpoint is not a native-state model; legacy projection resumes are unsupported')
     saved = state['model_config']

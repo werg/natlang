@@ -233,3 +233,10 @@ When a body placeholder shares its content ID with another imported value,
 `neuralese-native-state-placeholder` means pass `placeholderOccurrence` with the
 zero-based matching native-part occurrence of the intended body; other matching
 parts retain their actual imported state. Never replace all equal content IDs.
+
+Shared semantic serving loads the complete joint checkpoint with an explicit
+participant and its identity-bound semantic adapter receipt. Retain the small
+exported source tokenizers; do not load an unrelated shape-compatible adapter.
+The `learned-semantic-state-deltas` receipt records the exact adapter and token
+alignment. `neuralese-semantic-adapter-mismatch` requires the matching native
+model/adapter export or a fresh write through the target's native text writer.
