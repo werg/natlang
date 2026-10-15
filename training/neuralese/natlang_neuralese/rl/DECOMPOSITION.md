@@ -45,3 +45,19 @@ LFM and Mellum; only backbone loading, chat templates and resource sizes differ.
 
 No new prompt or runtime error is introduced by replay fixes. Research and
 sampling interventions are not production qualification or measured model lift.
+
+## Exact sampling and value graph replay
+
+- Optional server `x_natlang_rl_capture` records the already sampled prompt plan,
+  emitted items, stopping token and token probabilities. It changes no sampling
+  choice. Collector metadata retains it without adding model-facing text.
+- `sampling` verifies the captured token coordinates and scores those tokens,
+  including the actual stopping token. Guided rollback requires its full mask
+  law; the initial production contract uses unconstrained temperature-1 samples
+  and rejects guided/masked captures rather than guessing their probabilities.
+- `graph_replay` persists exact safetensors block bytes and transitive producer
+  metadata. Content IDs, SHA-256 and policy identity are exact host verifiers.
+  Writer replay uses recorded values in the forward and a differentiable writer
+  in the backward. Deterministic payloads have no invented sampling density.
+- Full-policy replay opts into model-weight dependencies in `GradSession`;
+  argument-only replay keeps its existing semantics by default.

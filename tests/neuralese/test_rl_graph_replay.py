@@ -1,0 +1,80 @@
+"""Durable value-channel replay and writer gradients on both canonical ports."""
+import json
+from types import SimpleNamespace
+
+import pytest
+import torch
+
+from natlang_neuralese.rl.graph_replay import restore_bundle, save_bundle, replay_scores
+from natlang_neuralese.serve.store import TensorStore, make_block, encode_block
+
+
+def test_bundle_roundtrip_recurses_producer_dependencies_and_detects_corruption(tmp_path):
+    first = make_block(torch.randn(2, 8), 'dialect')
+    second = make_block(torch.randn(3, 8), 'dialect', producer={'context': first.id})
+    blocks = {b.id: b for b in [first, second]}
+    rollouts = [{'turns': [{'target': {'content': [{'type': 'neuralese', 'id': second.id}]}}]}]
+    manifest = save_bundle(rollouts, tmp_path, policy_id='p', fetch=lambda bid: encode_block(blocks[bid]))
+    assert set(manifest['blocks']) == set(blocks)
+    engine = SimpleNamespace(store=TensorStore(), width=8)
+    restore_bundle(engine, tmp_path / 'manifest.json', policy_id='p')
+    assert torch.equal(engine.store.get(second.id).payload, second.payload)
+    with pytest.raises(ValueError, match='different policy'):
+        restore_bundle(engine, tmp_path / 'manifest.json', policy_id='other')
+    path = tmp_path / manifest['blocks'][first.id]['path']
+    path.write_bytes(path.read_bytes() + b'x')
+    with pytest.raises(ValueError, match='bytes changed'):
+        restore_bundle(engine, tmp_path / 'manifest.json', policy_id='p')
+
+
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_consumer_reward_gradient_reaches_recorded_value_writer(family, tmp_path):
+    from natlang_neuralese.model.heads import PortHeads
+    from natlang_neuralese.model.lfm2_port import ControlTokens, PortBackbone
+    from natlang_neuralese.model.neuralese_projection import NeuraleseProjection
+    from natlang_neuralese.serve.grad import GradSession
+    from natlang_neuralese.train.backbone_policy import configure_backbone_training
+    if family == 'lfm':
+        from test_backbone_policy import tiny_lfm
+        backbone = tiny_lfm()
+    else:
+        from test_mellum_port import tiny_mellum
+        from natlang_neuralese.maple.model import load_maple
+        from natlang_neuralese.maple.maple_port import MaplePortBackbone
+        tiny_mellum(tmp_path)
+        model = load_maple(tmp_path, device='cpu', dtype=torch.float32, ternary_attention=False)
+        model.natlang_precision = 'bf16'
+        backbone = MaplePortBackbone(model, ControlTokens(126, 127), fast=False)
+    configure_backbone_training(backbone, 'latent')
+    heads = PortHeads(backbone, cutoff=backbone.num_layers, max_length=8, profile='raw-token-v1').eval()
+    projection = NeuraleseProjection(backbone.config.hidden_size, hidden=16)
+    with torch.no_grad():
+        projection.linear.weight.normal_(0, .02)
+    store = TensorStore()
+    block = store.put(make_block(torch.randn(2, backbone.config.hidden_size), 'dialect'))
+    engine = SimpleNamespace(backbone=backbone, heads=heads, device='cpu', store=store,
+        width=backbone.config.hidden_size, lookup=store.get, neuralese_projection=projection,
+        token_choice_projection=None, stop_ids={2}, resolve_adapters=lambda *_: [])
+    engine.advance_token_readout = lambda history, hidden, last_only=False: (backbone.logits(hidden), None)
+    session = GradSession(engine)
+    # Isolate graph transport/gradient from tokenizer testing: token coordinates
+    # are explicit, the backbone and writer/reader implementations are real.
+    def target_items(messages, tools, target):
+        if messages[0]['content'] == 'producer':
+            return [('tok', i) for i in [1, 4, 9]], [('block', block.id)]
+        return [('block', block.id), ('tok', 5)], [('tok', 7), ('tok', 8)]
+    session._target_items = target_items
+    session._term_blocks = lambda term: [block.id]
+    producer = {'messages': [{'role': 'user', 'content': 'producer'}],
+                'reply': {'role': 'assistant', 'content': [{'type': 'neuralese', 'id': block.id}]}}
+    reader = {'messages': [{'role': 'user', 'content': 'consumer'}],
+              'target': {'role': 'assistant', 'content': 'answer'}}
+    prompt, target = target_items(reader['messages'], None, reader['target'])
+    detached = session._score(prompt, target, {}, write_terms=False)['token_logp']
+    chained = replay_scores(session, reader, [producer])
+    assert torch.equal(chained.detach(), detached.detach())  # same recorded observations
+    (-chained.mean()).backward()
+    assert projection.linear.weight.grad is not None
+    assert projection.linear.weight.grad.abs().sum() > 0
+    assert torch.isfinite(projection.linear.weight.grad).all()
+    assert torch.equal(store.get(block.id).payload, block.payload)

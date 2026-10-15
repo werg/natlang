@@ -764,7 +764,8 @@ class GradSession:
                 if value is not None:
                     local[inner] = value
         adapters = producer.get("adapters") or []
-        depends = bool(local) or any(b in leaves for b in self._block_ids(context)) or \
+        # Full-policy RL also differentiates the model/projection weights.
+        depends = getattr(self, 'model_gradients', False) or bool(local) or any(b in leaves for b in self._block_ids(context)) or \
             any(a.get("id") in leaves for a in adapters if isinstance(a, dict))
         if not depends:
             memo[block_id] = None

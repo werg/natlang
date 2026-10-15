@@ -376,6 +376,7 @@ def make_handler(engine: Engine):
                 neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"),
                 neuralese_length=body.get("neuralese_length"), neuralese_passes=body.get("neuralese_passes"),
                 template=body.get("neuralese_template"), adapters=body.get("x_natlang_adapters"),
+                rl_capture=bool(body.get('x_natlang_rl_capture', False)),
                 guidance=Settings.of(body.get("guidance", getattr(engine, "default_guidance", None)), body.get("tools"),
                                      body.get("tool_choice")))
             if body.get("stream"):
@@ -484,6 +485,8 @@ def make_handler(engine: Engine):
                 self._event(chunk({}, choice["finish_reason"], {"x_natlang_message": message,
                                                                 "usage": response["usage"],
                                                                 "neuralese": response["neuralese"],
+                                                                **({'x_natlang_rl_capture': response['x_natlang_rl_capture']}
+                                                                   if 'x_natlang_rl_capture' in response else {}),
                                                                 **({"x_natlang_guidance": response["x_natlang_guidance"]}
                                                                    if "x_natlang_guidance" in response else {})}))
             except RequestError as error:
