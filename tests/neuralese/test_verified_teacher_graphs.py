@@ -18,6 +18,70 @@ def _row():
         'trajectory': [{'phase': 'action', 'assistant': {'content': 'correct'}}]}
 
 
+def test_successful_parent_does_not_approve_rejected_or_seeded_turns():
+    row = _row()
+    turn = {'invocation_id': 'child-a', 'raw_response_sha256': 'a' * 64,
+            'assistant': {'content': ''}, 'model_response': {'raw_calls': []}}
+    evidence = {'approved': False, 'reason': 'decision contains a failed proposal',
+                'invocation_id': 'child-a', 'raw_response_sha256': 'a' * 64}
+    assert converter.admitted_teacher_turn(row, 0, turn, {(row['id'], 0): evidence}) == (False, evidence)
+    # Even a broken external approval cannot turn absent provider output into EOS supervision.
+    good = {**evidence, 'approved': True}
+    allowed, rejected = converter.admitted_teacher_turn(row, 0, turn, {(row['id'], 0): good})
+    assert not allowed and 'no original provider action' in rejected['reason']
+    turn['model_response']['raw_calls'] = [{'id': 'actual-call'}]
+    assert converter.admitted_teacher_turn(row, 0, turn, {(row['id'], 0): good}) == (True, good)
+    turn['raw_response_sha256'] = 'b' * 64
+    with pytest.raises(ValueError, match='original invocation/response'):
+        converter.admitted_teacher_turn(row, 0, turn, {(row['id'], 0): good})
+    assert converter.admitted_teacher_turn(row, 1, turn, {})[0] is False
+
+
+def test_shared_materializer_cache_is_bound_to_input_runtime_and_output(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    repo = tmp_path / 'repo'
+    script = repo / 'scripts/neuralese_data/converter.py'
+    script.parent.mkdir(parents=True)
+    script.write_text('fixture')
+    monkeypatch.setattr(converter, '__file__', str(script))
+    for relative in ('ts-host/scripts/materialize-native-teacher.mjs',
+                     'ts-host/scripts/jsonl-stream.mjs', 'ts-host/dist/teacher/native-materializer.js'):
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('fixture materializer asset')
+    source = tmp_path / 'source.jsonl'
+    source.write_text('{}\n')
+    calls = []
+    materialized = {'id': 'execution-a:decision:0000',
+        'source_ref': {'trajectory_id': 'execution-a', 'invocation_id': 'child-a'},
+        'decision': {'index': 0, 'training_approved': True, 'failed_action': False,
+                     'source_raw_response_sha256': 'a' * 64},
+        'training_admission': {'approved': True}}
+    def execute(argv, **kwargs):
+        calls.append(argv)
+        Path(argv[3]).write_text(json.dumps(materialized) + '\n')
+        return SimpleNamespace(returncode=0, stdout=json.dumps({'output': argv[3], 'eligible_decisions': 1}), stderr='')
+    monkeypatch.setattr(converter.subprocess, 'run', execute)
+    digest = converter.sha256_file(source)
+    first, proof = converter.teacher_decision_admissions(source, digest)
+    assert first[('execution-a', 0)]['approved'] is True
+    assert converter.teacher_decision_admissions(source, digest) == (first, proof)
+    assert len(calls) == 1
+    source.write_text('{"changed":true}\n')
+    with pytest.raises(ValueError, match='immutable SHA-256'):
+        converter.teacher_decision_admissions(source, digest)
+    source.write_text('{}\n')
+    output = Path(proof['path']).parent / 'decisions.jsonl'
+    original = output.read_text()
+    output.write_text(original + '{}\n')
+    with pytest.raises(ValueError, match='exact source/runtime binding'):
+        converter.teacher_decision_admissions(source, digest)
+    output.write_text(original)
+    (repo / 'ts-host/dist/teacher/native-materializer.js').write_text('new actual policy')
+    _, updated = converter.teacher_decision_admissions(source, digest)
+    assert len(calls) == 2 and updated['path'] != proof['path']
+
+
 @pytest.mark.parametrize('scope', ['held', 'quality', 'pending'])
 def test_current_protection_excludes_even_previously_selected_success(monkeypatch, scope):
     monkeypatch.setattr(converter.source_review, 'pending_family_hold_reason', lambda _: None)

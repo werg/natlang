@@ -9,12 +9,14 @@ the separate source-authenticated semantic-pair converter.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 from transformers import AutoTokenizer
 
@@ -25,6 +27,7 @@ from scripts import source_review
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
 from natlang_neuralese.common.jsonio import open_jsonl_text
+from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.data.native_graph import parse_graph
 from natlang_neuralese.data.native_graph_conversion import text_row_graph
 from natlang_neuralese.data.text_corpus import native_gold_packet, tokenizer_fingerprint
@@ -268,6 +271,82 @@ def verify_original_row(row, original):
     return path
 
 
+def teacher_decision_admissions(source, source_sha256):
+    """Reuse the native materializer, once per exact source/runtime for both ports."""
+    if sha256_file(source) != source_sha256:
+        raise ValueError('teacher decision source differs from its immutable SHA-256')
+    repo = Path(__file__).resolve().parents[2]
+    cli = repo / 'ts-host/scripts/materialize-native-teacher.mjs'
+    assets = [cli, repo / 'ts-host/scripts/jsonl-stream.mjs',
+              *sorted((repo / 'ts-host/dist').rglob('*.js'))]
+    if not any(path.name == 'native-materializer.js' for path in assets):
+        raise ValueError('build the native teacher materializer before converting teacher graphs')
+    runtime = {str(path.relative_to(repo)): sha256_file(path) for path in assets}
+    identity = {'source_sha256': source_sha256, 'runtime': runtime, 'direct_answers': True}
+    key = canonical_json_sha256_hex(identity)
+    cache = Path(source).parent / 'decision-admission-cache'
+    cache.mkdir(exist_ok=True)
+    destination = cache / key
+    with (cache / (key + '.lock')).open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not destination.exists():
+            with tempfile.TemporaryDirectory(prefix='.materializing-', dir=cache) as temporary:
+                staged = Path(temporary)
+                output = staged / 'decisions.jsonl'
+                completed = subprocess.run(['node', str(cli), str(Path(source).resolve()), str(output),
+                                            '--direct-answers'], capture_output=True, text=True)
+                if completed.returncode:
+                    raise RuntimeError('native teacher materializer failed: ' + completed.stderr[-4000:])
+                if sha256_file(source) != source_sha256 or any(
+                        sha256_file(repo / path) != digest for path, digest in runtime.items()):
+                    raise ValueError('teacher source or materializer runtime changed during admission')
+                receipt = {'schema': 'natlang.verified-teacher-decision-materialization/1',
+                    'identity': identity, 'output_sha256': sha256_file(output),
+                    'summary': json.loads(completed.stdout.strip().splitlines()[-1])}
+                receipt['summary']['output'] = 'decisions.jsonl'
+                write_json_durable(staged / 'receipt.json', receipt)
+                staged.rename(destination)
+        receipt_path = destination / 'receipt.json'
+        receipt = json.loads(receipt_path.read_text())
+        output = destination / 'decisions.jsonl'
+        if (receipt.get('schema') != 'natlang.verified-teacher-decision-materialization/1'
+                or receipt.get('identity') != identity
+                or sha256_file(output) != receipt.get('output_sha256')):
+            raise ValueError('teacher decision materialization differs from its exact source/runtime binding')
+    decisions = {}
+    for line in output.open():
+        record = json.loads(line)
+        reference, decision = record.get('source_ref') or {}, record.get('decision') or {}
+        item = (reference.get('trajectory_id'), decision.get('index'))
+        if not isinstance(item[0], str) or type(item[1]) is not int or item in decisions:
+            raise ValueError('materialized teacher decisions lack unique original turn identities')
+        decisions[item] = {'approved': (record.get('training_admission') or {}).get('approved') is True
+                and decision.get('training_approved') is True and decision.get('failed_action') is False,
+            'reason': (record.get('training_admission') or {}).get('reason'),
+            'invocation_id': reference.get('invocation_id'),
+            'raw_response_sha256': decision.get('source_raw_response_sha256'),
+            'materialized_decision_id': record['id'],
+            'materialized_decision_sha256': canonical_json_sha256_hex(record)}
+    return decisions, {'path': str(receipt_path), 'sha256': sha256_file(receipt_path),
+                       'output_sha256': receipt['output_sha256'], 'summary': receipt['summary']}
+
+
+def admitted_teacher_turn(row, index, turn, decisions):
+    """Join existing admission to the unchanged captured original action."""
+    decision = decisions.get((row['id'], index))
+    if decision is None:
+        return False, {'reason': 'shared native materializer did not qualify this original decision'}
+    if (decision['invocation_id'] != turn.get('invocation_id')
+            or decision['raw_response_sha256'] != turn.get('raw_response_sha256')):
+        raise ValueError('teacher decision admission disagrees with the original invocation/response')
+    if not decision['approved']:
+        return False, decision
+    assistant = turn.get('assistant') or {}
+    if not (turn.get('model_response') or {}).get('raw_calls') and not str(assistant.get('content') or '').strip():
+        return False, {**decision, 'reason': 'no original provider action or nonempty assistant reply'}
+    return True, decision
+
+
 def graph_content_sha256(graph):
     return canonical_json_sha256_hex({'tokenizer_fingerprint': graph['tokenizer_fingerprint'],
                                      'nodes': graph['nodes']})
@@ -306,6 +385,7 @@ def main():
     if args.output.exists() and any(args.output.iterdir()):
         raise ValueError(f"refusing to overwrite nonempty output: {args.output}")
     binding = source_binding(args)
+    decisions, decision_proof = teacher_decision_admissions(args.source, binding['source_sha256'])
     tokenizer = AutoTokenizer.from_pretrained(str(args.base_tokenizer), trust_remote_code=False,
                                                local_files_only=True)
     source_fingerprint = tokenizer_fingerprint(tokenizer)
@@ -321,6 +401,7 @@ def main():
     seen_ids = set()
     row_hashes = []
     teacher_turns = 0
+    action_omissions = []
     try:
         for raw, row in file_rows(args.source):
             program, original = validate_teacher_row(row, binding)
@@ -333,6 +414,11 @@ def main():
             for index, turn in enumerate(row["trajectory"]):
                 if turn.get("phase") != "action":
                     raise ValueError(f"unknown captured teacher turn phase on {row['id']}[{index}]")
+                admitted, decision = admitted_teacher_turn(row, index, turn, decisions)
+                if not admitted:
+                    action_omissions.append({'source_row_id': row['id'], 'teacher_turn_index': index,
+                        'reason': decision.get('reason'), 'decision': decision})
+                    continue
                 context = turn.get("context")
                 assistant = turn.get("assistant")
                 raw_calls = (turn.get("model_response") or {}).get("raw_calls")
@@ -376,6 +462,8 @@ def main():
                     "teacher_revision": (binding["teacher"].get("source") or {}).get("model_revision"),
                     "teacher_run_id": row.get("execution_identity", {}).get("execution_run_id"),
                     "teacher_turn_index": index, "teacher_invocation_id": turn.get("invocation_id"),
+                    'decision_admission': decision,
+                    'decision_materialization_receipt_sha256': decision_proof['sha256'],
                     "request_sha256": turn.get("request_sha256"),
                     "raw_response_sha256": turn.get("raw_response_sha256"),
                     "source_transport": (row.get("provenance") or {}).get("text_neuralese_transport"),
@@ -406,6 +494,7 @@ def main():
                       "expanded_fingerprint": expanded_fingerprint, "role_token_ids": list(role_ids)},
         "current_protection": binding["current"]["proof"],
         "turns": teacher_turns, "context_weight": .05,
+        'decision_admission': decision_proof, 'action_omissions': action_omissions,
         'deduplication': {'inputs': dedup_inputs, 'omissions': duplicate_omissions,
             'omitted_rows': len(duplicate_omissions), 'emitted_rows': train['rows']},
         "outputs": {"train": train, "test": test},
