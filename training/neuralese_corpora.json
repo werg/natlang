@@ -107889,6 +107889,55 @@
         "train_sha256": "e33989dff24f38b618ff79894f79c1064e05658f725c5e4b2d2c80779c5fa668",
         "held_sha256": "52bc090977197b1a5edadbffab1417191c1beb3efe515099824861dcb89980ff"
       }
+    },
+    {
+      "id": "native-state-big2-first100-native-graphs-20261015-v1",
+      "owner": "dgx",
+      "path": "runs/native-big2-first100-corrected-20261015-v1/native-big2-first100-20261015-v1",
+      "include": [
+        "chunks/graphs-lfm25-train-000000.jsonl.zst",
+        "chunks/graphs-lfm25-test-000000.jsonl.zst",
+        "chunks/graphs-mellum21-train-000000.jsonl.zst",
+        "chunks/graphs-mellum21-test-000000.jsonl.zst",
+        "chunks/pairs-train-corrected-000000.jsonl.zst",
+        "chunks/pairs-test-corrected-000000.jsonl.zst",
+        "incremental-receipt.json",
+        "transfer-manifest.json",
+        "source-receipts/receipt.json",
+        "source-receipts/private-export-proof.json",
+        "source-receipts/first-shard-pack-proof.json",
+        "corrected-admission-proof.json",
+        "source-rebind-closure-proof.json",
+        "protection/protection-manifest.json",
+        "protection/quality-groups.jsonl",
+        "protection/decision-holds/native-non-success-20261015-v1.jsonl",
+        "protection/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+        "protection/held-union/full/source-groups/text-data.jsonl",
+        "protection/held-union/program-header/source-groups/text-data.jsonl",
+        "protection/held-union/whole-trajectory/source-groups/text-data.jsonl",
+        "protection/source-reviews/datasets.json",
+        "protection/source-reviews/family-holds.json",
+        "protection/source-reviews/holds.jsonl"
+      ],
+      "source_class": "verified-incremental-Big2-source-native-trajectories-and-semantic-pairs",
+      "split": "Source-selected train/test splits with trajectory-level group separation verified; exact current held, quality, source-review and native decision holds were checked.",
+      "admission": "Partial first100-chain tranche only: 2,115 ordinary train trajectories and 2,153 source-bound communication pairs; held split contains 154 ordinary graphs and 150 pairs. Remaining Big2 chunks are still being converted and are not represented as complete.",
+      "training_admission": true,
+      "training_admission_reason": "Private archive and all member SHAs verified; both tokenizer-specific ordinary graph views parse with exact expanded tokenizer fingerprints; all 2,303 pair edges match the immutable selected edge-ID set and pass parse_pair plus actual producer/consumer geometry for both model IDs. Current held/quality/source-review group intersections and explicit decision-hold identity intersections are zero. Train/test groups are disjoint and no pair edge duplicates the already-admitted REST27 source pair cohorts. The known REST27 corpus-ID metadata defect was corrected by the shared rebind helper and dependent hashes were rechecked without changing tokens, weights, graph geometry, payloads or graph IDs.",
+      "derived_from": [
+        "neuralese-e2e-cloud-big2-protected-20261015-v1"
+      ],
+      "license": "Inherited from the admitted source cohort; owner accepts all licenses.",
+      "source_bindings": {
+        "source_archive_sha256": "f37ec195b626e75c7c935261ad26d017cbbd90a086f56848b7e22bd15eb32cab",
+        "source_records_sha256": "9944fbab8cfc4da7621ba1c37d75666463f22ca322d5b7b3ec8b71053bf4aa1d",
+        "source_edges_sha256": "04f2b140562d3f321cb1f43de15fb121e56b869fec63d13ea856b1e0506525c5",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "corrected_admission_proof_sha256": "64737ea3303c7a9a855b35e7f771ecaea62b7ca0eadf8a88b2b5d4124faba125",
+        "source_rebind_closure_proof_sha256": "6fe061d235acfe4c83856e41f26b2258d28286f752e24bff91d0b3853ef6892a",
+        "pair_train_sha256": "6a9b8b5398709be503502ce5256c9c78eef69e0b0e54d6fc9d281d1a1ccddc3a",
+        "pair_held_sha256": "5c7a693d1ea8cb12a36bdb6f8dbc767ab866d9345a787902c6201967f443f706"
+      }
     }
   ],
   "coverage_backlog": [
