@@ -39,6 +39,8 @@ class GraphPlan:
     node_ids: tuple[int, ...]
     slot_offsets: tuple[int, ...]
     producing: tuple[bool, ...]
+    external_names: tuple[str, ...] = ()
+    external_sizes: tuple[int, ...] = ()
 
     @property
     def token_count(self):
@@ -72,13 +74,21 @@ class GraphPlan:
         return ((keys[None] >= starts[:, None]) & (keys[None] <= ends[:, None]))[None, None]
 
 
-def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation]) -> GraphPlan:
+def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, external_sizes=None) -> GraphPlan:
     invocations = tuple(invocations)
+    external_sizes = external_sizes or {}
+    if any(not isinstance(size, int) or size < 1 for size in external_sizes.values()):
+        raise ValueError('external state sizes must be positive integers')
+    external_offsets = {}
+    next_external = sum(len(node.token_ids) for node in invocations)
+    for name, size in external_sizes.items():
+        external_offsets[name] = next_external
+        next_external += size
     known, offsets, sequences = {}, [], []
     own_positions, sources, positions, node_ids, slot_offsets, producing = [], [], [], [], [], []
     physical_count = 0
     for node in invocations:
-        if node.name in known or not node.token_ids:
+        if node.name in known or node.name in external_sizes or not node.token_ids:
             raise ValueError('invocations need unique names and at least one token')
         offset = physical_count
         offsets.append(offset)
@@ -90,17 +100,26 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation]) -> Gra
             producer[start:stop] = [True] * (stop-start)
         edges = {}
         for edge in node.imports:
-            if not 0 <= edge.at <= count or edge.source not in known:
-                raise ValueError('imports require an earlier source and a valid insertion boundary')
-            source_node, source_offset = known[edge.source]
-            if not 0 <= edge.start < edge.stop <= len(source_node.token_ids):
-                raise ValueError('import span is outside source tokens')
-            if not any(a <= edge.start and edge.stop <= b for a, b in source_node.producing):
-                raise ValueError('imports must reference an explicitly producing span')
-            source_index = offsets.index(source_offset)
-            lo = own_positions[source_offset+edge.start]
-            hi = own_positions[source_offset+edge.stop-1]+1
-            edges.setdefault(edge.at, []).append(sequences[source_index][lo:hi])
+            if not 0 <= edge.at <= count:
+                raise ValueError('imports require a valid insertion boundary')
+            if edge.source in external_sizes:
+                if not 0 <= edge.start < edge.stop <= external_sizes[edge.source]:
+                    raise ValueError('import span is outside external state tokens')
+                ext_offset = external_offsets[edge.source]
+                imported = tuple(range(ext_offset+edge.start, ext_offset+edge.stop))
+            else:
+                if edge.source not in known:
+                    raise ValueError('imports require an earlier source or declared external state')
+                source_node, source_offset = known[edge.source]
+                if not 0 <= edge.start < edge.stop <= len(source_node.token_ids):
+                    raise ValueError('import span is outside source tokens')
+                if not any(a <= edge.start and edge.stop <= b for a, b in source_node.producing):
+                    raise ValueError('imports must reference an explicitly producing span')
+                source_index = offsets.index(source_offset)
+                lo = own_positions[source_offset+edge.start]
+                hi = own_positions[source_offset+edge.stop-1]+1
+                imported = sequences[source_index][lo:hi]
+            edges.setdefault(edge.at, []).append(imported)
         logical = []
         own = []
         for local in range(count+1):
@@ -123,7 +142,8 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation]) -> Gra
     if not invocations:
         raise ValueError('graph cannot be empty')
     return GraphPlan(invocations, tuple(offsets), tuple(sequences), tuple(own_positions),
-                     tuple(sources), tuple(positions), tuple(node_ids), tuple(slot_offsets), tuple(producing))
+                     tuple(sources), tuple(positions), tuple(node_ids), tuple(slot_offsets), tuple(producing),
+                     tuple(external_sizes), tuple(external_sizes.values()))
 
 
 class LowRankTokenEmbedding(nn.Module):
@@ -192,7 +212,7 @@ def _convolve(layer, gated, c, plan, rows):
     return c * out
 
 
-def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None = None, *, embeddings=None):
+def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None = None, *, embeddings=None, external_blocks=None, retain_states=True):
     """Single layer-major DAG pass. No source trajectory is rerun per import."""
     device = port.embedding_weight.device
     ids = plan.tensor([t for n in plan.invocations for t in n.token_ids], device)
@@ -204,24 +224,52 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
     slots = plan.tensor(plan.slot_sources, device)
     key_positions = plan.tensor(plan.slot_positions, device)
     query_positions = plan.tensor(plan.own_positions, device)
+    external = _external_layers(port, plan, external_blocks)
     state = []
+    masks = {}
+    checkpointed = bool(getattr(port, 'checkpoint_layers', False)) and torch.is_grad_enabled()
     for i, layer in enumerate(port.layers):
         attention = port.is_attention(i)
-        values = _layer_inputs(port, layer, h, attention)
-        state.append(values[1:] if attention else (values[0],))
-        if attention:
-            q, k, v = values
-            q = _rotate(port, q, query_positions, i)
-            k = _rotate(port, k[:, :, slots], key_positions, i)
-            window = port.window(i) if hasattr(port, 'window') else None
-            out = graph_attention(q, k, v[:, :, slots], plan, window, layer.self_attn.scaling)
+        window = port.window(i) if attention and hasattr(port, 'window') else None
+        if attention and window not in masks:
+            masks[window] = graph_block_mask(plan, device, window) if h.is_cuda else plan.attention_mask(device, window)
+        external_i = tuple(value for item in external for value in item[i])
+
+        def run_layer(value, *imported, index=i, attention=attention, window=window):
+            layer = port.layers[index]
+            values = _layer_inputs(port, layer, value, attention)
+            if attention:
+                q, k, v = values
+                if imported:
+                    k = torch.cat([k, *imported[0::2]], dim=2)
+                    v = torch.cat([v, *imported[1::2]], dim=2)
+                captured = (k, v)
+                q = _rotate(port, q, query_positions, index)
+                kr = _rotate(port, k[:, :, slots], key_positions, index)
+                out = graph_attention(q, kr, v[:, :, slots], plan, window,
+                                      layer.self_attn.scaling, prepared_mask=masks[window])
+            else:
+                gated, c = values
+                if imported:
+                    gated = torch.cat([gated, *imported], dim=1)
+                captured = (gated,)
+                out = _convolve(layer, gated, c, plan, range(plan.token_count))
+            updated = _finish(port, layer, value, out, attention)
+            return (updated, *captured) if retain_states else (updated,)
+
+        if checkpointed:
+            from torch.utils.checkpoint import checkpoint
+            updated = checkpoint(run_layer, h, *external_i, use_reentrant=False,
+                                 preserve_rng_state=getattr(port, 'checkpoint_preserve_rng', True))
         else:
-            out = _convolve(layer, *values, plan, range(plan.token_count))
-        h = _finish(port, layer, h, out, attention)
+            updated = run_layer(h, *external_i)
+        h = updated[0]
+        if retain_states:
+            state.append(updated[1:])
     return {'h_final': h, 'states': tuple(state), 'plan': plan}
 
 
-def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None):
+def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, external_blocks=None):
     """Slow invocation-major native-cache oracle, for correctness checks only.
 
     Each completed source retains raw layer states. Each consumer rotates only
@@ -229,10 +277,13 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None):
     conv1d are deliberately independent of the flattened mask/gather kernels.
     """
     device = port.embedding_weight.device
+    external = _external_layers(port, plan, external_blocks)
     layer_cache = [[] for _ in port.layers]
     outputs = []
     for node, offset, logical in zip(plan.invocations, plan.offsets, plan.sequences):
         count = len(node.token_ids)
+        def remap(rows):
+            return tuple(row if row < plan.token_count else row-plan.token_count+offset+count for row in rows)
         h = (port.embed(plan.tensor(node.token_ids, device)[None]) if embeddings is None
              else embeddings[:, offset:offset+count])
         if adapter is not None:
@@ -243,15 +294,15 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None):
             cache = layer_cache[i]
             if attention:
                 q, k, v = values
-                source_k = torch.cat([entry[0] for entry in cache] + [k], dim=2)
-                source_v = torch.cat([entry[1] for entry in cache] + [v], dim=2)
+                source_k = torch.cat([entry[0] for entry in cache] + [k] + [item[i][0] for item in external], dim=2)
+                source_v = torch.cat([entry[1] for entry in cache] + [v] + [item[i][1] for item in external], dim=2)
                 cache.append((k, v))
                 parts = []
                 window = port.window(i) if hasattr(port, 'window') else None
                 for local in range(count):
                     position = plan.own_positions[offset+local]
                     start = 0 if window is None else max(0, position-window+1)
-                    indices = plan.tensor(logical[start:position+1], device)
+                    indices = plan.tensor(remap(logical[start:position+1]), device)
                     kr = _rotate(port, source_k[:, :, indices], torch.arange(start, position+1, device=device), i)
                     qr = _rotate(port, q[:, :, local:local+1], plan.tensor([position], device), i)
                     parts.append(F.scaled_dot_product_attention(qr, kr, source_v[:, :, indices],
@@ -259,13 +310,13 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None):
                 out = torch.cat(parts, dim=2)
             else:
                 gated, c = values
-                source = torch.cat([entry[0] for entry in cache] + [gated], dim=1)
+                source = torch.cat([entry[0] for entry in cache] + [gated] + [item[i][0] for item in external], dim=1)
                 cache.append((gated,))
                 kernel = layer.conv.conv
                 width = kernel.weight.shape[-1]
                 parts = []
                 for local in range(count):
-                    history = plan.history(offset+local, width)
+                    history = remap(plan.history(offset+local, width))
                     data = source[:, plan.tensor(history, device)].transpose(1, 2)
                     data = F.pad(data, (width-data.shape[-1], 0))
                     conv = F.conv1d(data, kernel.weight, kernel.bias, groups=data.shape[1])
@@ -275,6 +326,9 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None):
         outputs.append(h)
     states = tuple(tuple(torch.cat([entry[field] for entry in cache], dim=2 if len(cache[0]) == 2 else 1)
                          for field in range(len(cache[0]))) for cache in layer_cache)
+    if external:
+        states = tuple(tuple(torch.cat([field, *[item[i][j] for item in external]], dim=2 if len(values) == 2 else 1)
+                             for j, field in enumerate(values)) for i, values in enumerate(states))
     return {'h_final': torch.cat(outputs, dim=1), 'states': states, 'plan': plan}
 
 
@@ -342,7 +396,7 @@ def graph_block_mask(plan, device, window=None):
         seq_lengths=(plan.token_count, len(plan.slot_sources)))
 
 
-def graph_attention(q, k, v, plan, window, scale, *, flex=None):
+def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=None):
     global _flex
     if flex is None:
         flex = q.is_cuda
@@ -351,10 +405,10 @@ def graph_attention(q, k, v, plan, window, scale, *, flex=None):
         from ..common.attention_backend import flex_kernel_options
         if _flex is None:
             _flex = torch.compile(flex_attention, dynamic=True)
-        return _flex(q, k, v, block_mask=graph_block_mask(plan, q.device, window),
+        return _flex(q, k, v, block_mask=prepared_mask if prepared_mask is not None else graph_block_mask(plan, q.device, window),
                      scale=scale, enable_gqa=True,
                      kernel_options=flex_kernel_options(float32=q.dtype == torch.float32))
-    return F.scaled_dot_product_attention(q, k, v, attn_mask=plan.attention_mask(q.device, window),
+    return F.scaled_dot_product_attention(q, k, v, attn_mask=prepared_mask if prepared_mask is not None else plan.attention_mask(q.device, window),
                                          scale=scale, enable_gqa=True)
 
 
@@ -395,13 +449,17 @@ class SharedStateModel(nn.Module):
         logits[..., list(self.marker_ids)] = normalized @ rows.to(normalized.dtype).T
         return logits
 
-    def forward(self, plan, *, embeddings=None, reference=False):
+    def forward(self, plan, *, embeddings=None, reference=False, external_blocks=None, retain_states=True):
         ids = plan.tensor([t for node in plan.invocations for t in node.token_ids], self.input_rows.device)
         raw = self.embed(ids[None]) if embeddings is None else embeddings
         fn = forward_reference if reference else forward_graph
-        result = fn(self.port, plan, self.adapter, embeddings=raw)
+        kwargs = {} if reference else {'retain_states': retain_states}
+        result = fn(self.port, plan, self.adapter, embeddings=raw, external_blocks=external_blocks, **kwargs)
         result['embeddings'] = raw
         result['token_ids'] = ids
+        if plan.external_names:
+            result['embeddings'] = torch.cat([raw, *[external_blocks[name].embeddings[None].to(raw) for name in plan.external_names]], dim=1)
+            result['token_ids'] = torch.cat([ids, *[external_blocks[name].token_ids.to(ids.device) for name in plan.external_names]])
         return result
 
 
@@ -615,3 +673,55 @@ def concatenate_captures(chunks):
         layers.append({'kind': first['kind'], **{key: torch.cat([chunk['layers'][i][key] for chunk in chunks]) for key in keys}})
     result['layers'] = tuple(layers)
     return result
+
+
+def _external_layers(port, plan, external_blocks):
+    blocks = external_blocks or {}
+    if set(blocks) != set(plan.external_names):
+        raise ValueError('external state names must exactly match the compiled graph contract')
+    result = []
+    for name, count in zip(plan.external_names, plan.external_sizes):
+        block = blocks[name]
+        block.validate()
+        if len(block.token_ids) != count or len(block.layers) != port.num_layers:
+            raise ValueError('external state token count or decoder depth disagrees with its graph declaration')
+        layers = []
+        for i, payload in enumerate(block.layers):
+            if port.is_attention(i):
+                if payload['kind'] != 'attention':
+                    raise ValueError('external state layer kind disagrees with the decoder')
+                layers.append(tuple(payload[key].to(port.embedding_weight).transpose(0, 1)[None] for key in ('raw_k', 'v')))
+            else:
+                if payload['kind'] != 'finite_convolution':
+                    raise ValueError('external state layer kind disagrees with the decoder')
+                layers.append((payload['gated_inputs'].to(port.embedding_weight)[None],))
+        result.append(tuple(layers))
+    return tuple(result)
+
+
+def channel_checkpoint(model):
+    """Native channel state alongside the shared trainer's full backbone state."""
+    return {'format': 'neuralese.native-channel/1', 'marker_names': ROLE_MARKERS,
+            'marker_ids': model.marker_ids, 'width': model.input_rows.shape[1],
+            'rank': model.adapter.down.out_features,
+            'architecture': str(getattr(model.port.config, 'model_type', type(model.port).__name__)),
+            'input_rows': model.input_rows.detach().clone(),
+            'output_rows': None if model.tied else model.output_rows.detach().clone(),
+            'adapter': {name: value.detach().clone() for name, value in model.adapter.state_dict().items()}}
+
+
+def restore_channel_checkpoint(model, state):
+    """Restore an exact native channel; legacy projections are never substituted."""
+    expected = channel_checkpoint(model)
+    for key in ('format', 'marker_names', 'marker_ids', 'width', 'rank', 'architecture'):
+        actual = tuple(state[key]) if key in ('marker_names', 'marker_ids') else state[key]
+        if actual != expected[key]:
+            raise ValueError(f'native channel checkpoint {key} differs from this model')
+    if (state['output_rows'] is None) != model.tied:
+        raise ValueError('native channel checkpoint tied-head contract differs')
+    with torch.no_grad():
+        model.input_rows.copy_(state['input_rows'])
+        if not model.tied:
+            model.output_rows.copy_(state['output_rows'])
+        model.adapter.load_state_dict(state['adapter'], strict=True)
+    return model

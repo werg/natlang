@@ -220,3 +220,100 @@ def test_nested_export_keeps_intervening_import_aliases(family):
     a = torch.autograd.grad((suffix['h_final']*weight).sum(), model.adapter.up.weight, retain_graph=True)[0]
     b = torch.autograd.grad((flat['h_final'][:, -2:]*weight).sum(), model.adapter.up.weight)[0]
     torch.testing.assert_close(a, b, atol=3e-5, rtol=4e-4)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA unavailable')
+def test_sparse_cuda_attention_matches_dense_forward_and_gradients():
+    from natlang_neuralese.model.shared_state import graph_attention
+    plan = compile_graph([
+        Invocation('a', tuple(range(270)), producing=((120, 270),)),
+        Invocation('b', tuple(range(140)), imports=(ImportSpan(2, 'a', 130, 270),), producing=((1, 139),)),
+        Invocation('c', tuple(range(155)), imports=(ImportSpan(1, 'b', 1, 139), ImportSpan(130, 'a', 120, 270))),
+    ])
+    torch.manual_seed(5)
+    q = torch.randn(1, 4, plan.token_count, 32, device='cuda', requires_grad=True)
+    k = torch.randn(1, 2, len(plan.slot_sources), 32, device='cuda', requires_grad=True)
+    v = torch.randn_like(k, requires_grad=True)
+    for window in (None, 61):
+        actual = graph_attention(q, k, v, plan, window, 32**-0.5, flex=True)
+        expected = graph_attention(q, k, v, plan, window, 32**-0.5, flex=False)
+        torch.testing.assert_close(actual, expected, atol=5e-5, rtol=2e-4)
+        weight = torch.randn_like(actual)
+        a = torch.autograd.grad((actual*weight).sum(), (q, k, v))
+        b = torch.autograd.grad((expected*weight).sum(), (q, k, v))
+        for ga, gb in zip(a, b):
+            torch.testing.assert_close(ga, gb, atol=8e-5, rtol=3e-4)
+
+
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_external_native_state_has_exact_forward_and_joint_gradients(family):
+    from types import SimpleNamespace
+    from natlang_neuralese.model.shared_state import SharedStateModel, capture_invocation_span
+    port = tiny(family)
+    vocab = port.embedding_weight.shape[0]
+    model = SharedStateModel(port, tuple(range(vocab-4, vocab)), rank=4)
+    torch.nn.init.normal_(model.adapter.up.weight, std=0.03)
+    source = Invocation('source', (2, 3, 4, 5), producing=((2, 4),))
+    target = Invocation('target', (6, 7, 8), imports=(ImportSpan(1, 'source', 2, 4),))
+    complete = model(compile_graph([source, target]))
+    produced = model(compile_graph([source]))
+    fields = capture_invocation_span(produced, 'source', 2, 4)
+    # NativeStateBlock validation in production; test preserves actual tensors
+    # and autograd through a differentiable external state transport.
+    block = SimpleNamespace(**fields, validate=lambda: None)
+    plan = compile_graph([Invocation('target', target.token_ids,
+                         imports=(ImportSpan(1, 'wire', 0, 2),))], external_sizes={'wire': 2})
+    external = model(plan, external_blocks={'wire': block})
+    reference = model(plan, external_blocks={'wire': block}, reference=True)
+    torch.testing.assert_close(external['h_final'], complete['h_final'][:, -3:], atol=4e-6, rtol=3e-5)
+    torch.testing.assert_close(external['h_final'], reference['h_final'], atol=4e-6, rtol=3e-5)
+    weight = torch.randn_like(external['h_final'])
+    a = torch.autograd.grad((external['h_final']*weight).sum(), model.adapter.up.weight, retain_graph=True)[0]
+    b = torch.autograd.grad((complete['h_final'][:, -3:]*weight).sum(), model.adapter.up.weight)[0]
+    torch.testing.assert_close(a, b, atol=3e-5, rtol=3e-4)
+    # Simulate a trainable semantic decoder. Its native state tensors retain
+    # gradient paths into both decoder parameters and source-produced state.
+    delta = torch.nn.Parameter(torch.tensor(0.01))
+    decoded_layers = tuple({key: value + delta if key != 'kind' else value
+                            for key, value in layer.items()} for layer in fields['layers'])
+    decoded = SimpleNamespace(**{**fields, 'layers': decoded_layers}, validate=lambda: None)
+    adapted = model(plan, external_blocks={'wire': decoded})
+    grad_delta, grad_source = torch.autograd.grad(adapted['h_final'].square().sum(),
+                                                (delta, model.adapter.up.weight))
+    assert grad_delta.abs() > 0
+    assert grad_source.abs().sum() > 0
+
+
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_checkpointed_graph_preserves_outputs_and_gradients(family):
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    port = tiny(family)
+    vocab = port.embedding_weight.shape[0]
+    model = SharedStateModel(port, tuple(range(vocab-4, vocab)), rank=4)
+    plan = graph()
+    torch.nn.init.normal_(model.adapter.up.weight, std=0.03)
+    plain = model(plan, retain_states=False)['h_final']
+    expected = torch.autograd.grad(plain.square().sum(), model.adapter.up.weight)[0]
+    port.checkpoint_layers = True
+    checkpointed = model(plan, retain_states=False)
+    assert checkpointed['states'] == ()
+    torch.testing.assert_close(checkpointed['h_final'], plain)
+    actual = torch.autograd.grad(checkpointed['h_final'].square().sum(), model.adapter.up.weight)[0]
+    torch.testing.assert_close(actual, expected)
+
+
+def test_channel_checkpoint_is_complete_and_rejects_legacy_or_wrong_contract():
+    from natlang_neuralese.model.shared_state import SharedStateModel, channel_checkpoint, restore_channel_checkpoint
+    model = SharedStateModel(tiny('qwen'), (60, 61, 62, 63), rank=4)
+    torch.nn.init.normal_(model.adapter.up.weight, std=0.03)
+    state = channel_checkpoint(model)
+    other = SharedStateModel(tiny('qwen'), (60, 61, 62, 63), rank=4)
+    restore_channel_checkpoint(other, state)
+    for a, b in zip(model.adapter.parameters(), other.adapter.parameters()):
+        assert torch.equal(a, b)
+    assert torch.equal(model.input_rows, other.input_rows)
+    assert torch.equal(model.output_rows, other.output_rows)
+    with pytest.raises(ValueError, match='format'):
+        restore_channel_checkpoint(other, {**state, 'format': 'neuralese_direct/1'})
+    with pytest.raises(ValueError, match='marker_ids'):
+        restore_channel_checkpoint(other, {**state, 'marker_ids': (59, 60, 61, 62)})
