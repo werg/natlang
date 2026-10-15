@@ -34,6 +34,18 @@ def _bound(binding):
 
 
 def validate_ready(path, requirement):
+    if requirement.get('trainer_exit'):
+        terminal = Path(requirement['trainer_exit'])
+        if not terminal.is_file():
+            return None  # The previous optimizer owner has not drained yet.
+        exited = json.loads(terminal.read_text())
+        if exited.get('returncode') != 0:
+            raise ValueError('native participant trainer did not drain successfully')
+        if requirement.get('trainer_launch'):
+            launch = json.loads(_bound(requirement['trainer_launch']).read_text())
+            if (type(exited.get('at')) not in (int, float) or exited['at'] < launch['at']
+                    or requirement.get('trainer_recipe') not in launch.get('argv', [])):
+                raise ValueError('native participant terminal exit belongs to a different trainer launch')
     path = Path(path).resolve(strict=True)
     receipt = json.loads(path.read_text())
     if receipt.get('schema') != 'natlang.native-training-readiness/1':

@@ -185,3 +185,58 @@ same store only for that round and immutable policy; later rounds have distinct
 output directories. Existing custom actor argv must include this option before
 using interrupted collection recovery. Do not remove the store while collection
 or a pending archive still references it.
+
+## Foundation-to-production deployment binding
+
+`train.native_deployment` prepares the actual two-sandbox controller from the
+current cloud release record. Run it on Mellum after the cloud owner mirrors
+both portable recipes, launch receipts, declared input closures and pinned bases.
+It verifies the release recipe SHA and foundation source identity; it does not
+need or invent the future shared checkpoint or adapter. Use the **current**
+release record after every source withdrawal/continuation, not a stale recipe.
+
+```
+python -m natlang_neuralese.train.native_deployment \
+  --release /work/native-production/shared/deployment/live-release.json \
+  --curriculum /work/native-production/runtime/training/neuralese/recipes/native-state-semantic-curriculum-rest27-foundation-20261015-v1.json \
+  --out /work/native-production/shared/deployment \
+  --cases /work/native-production/data/decision-rich-train-20261005-v2/cases.jsonl \
+  --runtime /work/native-runtime/e4dd6aabd3b0 \
+  --participant lfm=lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6 \
+  --participant mellum=mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f
+python -m natlang_neuralese.train.native_readiness --config /work/native-production/shared/deployment/controller.json
+```
+
+The cloud owner publishes the current release at this agreed path and stages
+the curriculum before invocation; the builder rejects missing assets. The
+`--runtime` argument names the repository root containing `ts-host`, whereas
+the generated task runtime points at its `ts-host` directory. It writes `controller.json`,
+`curriculum.json`, and `rl-bootstrap.json`, all using existing shared interfaces.
+The generated controller waits for both complete **finite communication
+foundations**, not all ordinary CE. Before transferring optimizer ownership it
+also requires each original trainer's successful `control/exit.json` after the
+exact hash-bound launch receipt. Mirror LFM's terminal receipt and all its bound
+training/readiness/checkpoint artifacts into the same absolute namespace on
+Mellum. A readiness JSON alone is insufficient. The old recipe supervisors
+must remain terminal; restarting one would create a divergent optimizer branch.
+
+Initial shared VAE/control/distillation and later shared refresh run on Mellum's
+96GB GPU. The actual all-phase adaptive schedule publishes qualified progress
+while retaining the entire cohort's remaining semantic obligations. CE frames,
+row credits, optimizer, FP8 state and RNG survive the transition. Between RL
+rounds `native_supervised.interleave` advances mandatory CE using the existing
+recipe sources and checkpoint quantum, then merges both current participant
+updates and refreshes the adapter before either actor uses changed weights.
+New communication is raw-trained in both participants before joining semantic
+adaptation; it is retained as mandatory pending work until then.
+
+Participant CE and sealed actor/learner jobs run concurrently on their own
+H100 LFM and RTX PRO 96GB Mellum sandboxes through the existing provider bridge.
+The joint semantic trainer itself is single-device: the LFM GPU is not used by
+that kernel during Mellum refresh. There is no distributed semantic-training
+claim. Concurrent independent CE against the old parent would fork the model
+and optimizer and is therefore not scheduled. Keep the adaptive refresh quantum
+useful and bounded by its actual declared schedule; do not claim an unmeasured
+full-size memory fit from CPU fixtures. The provider's actual round, stop/drain,
+artifact ferry and full-size joint memory qualification remain deployment
+requirements, independently of local file-binding tests.

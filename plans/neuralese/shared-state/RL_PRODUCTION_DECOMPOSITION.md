@@ -67,3 +67,9 @@ its root disappeared, surviving owned descendants receive checkpoint requests
 and are drained before retry. An unobserved exit is resumable failure, never an
 inferred success. Historical live PID-only records need explicit draining because
 they lack the evidence needed to attach safely.
+
+Deployment binding is crisp: it translates the owner's current two-sandbox
+release metadata and admitted curriculum into the existing readiness/bootstrap
+interfaces. It makes no task selection or training policy. A terminal trainer
+exit is required before transferring optimizer ownership to the shared stage;
+unfinished CE is carried through the existing native continuation mechanism.
