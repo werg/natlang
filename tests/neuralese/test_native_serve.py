@@ -139,6 +139,7 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert {'native.text-write', 'native.init-body'} <= set(info['capabilities'])
         assert {'decide', 'score'} <= set(info['capabilities'])
         assert 'store.native-tensor-artifact' in info['capabilities']
+        assert info['grad'] is True and info['grad_order'] == 1
         placeholder = post_path('/v1/neuralese/native-states/write-text',
                                 {'text': 'placeholder body', 'type': 'Neuralese<string>'})
         assert placeholder['id'].startswith('nzs1_')
@@ -184,6 +185,20 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         fetched_artifact, fetched_id = decode_native_tensor_artifact(
             request(f'/v1/neuralese/native-tensor-artifacts/{artifact_id}', 'GET', b''))
         assert fetched_id == artifact_id and fetched_artifact.native_identity == engine.native_identity
+        train_graph = {'schema': 'natlang.neuralese-native-graph/1', 'id': 'http-gradient-train-row',
+            'split': 'train', 'source_groups': ['http-gradient-fixture'],
+            'tokenizer_fingerprint': config['tokenizer_fingerprint'],
+            'nodes': [{'name': 'turn', 'token_ids': [5, 6, 7], 'producing': [[1, 3]],
+                       'target_weights': [0, 1, 1]}]}
+        gradient_reply = post_path('/v1/neuralese/grad', {'schema': 'natlang.native-gradient-request/1',
+            'objective': 'graph-ce', 'graph': train_graph,
+            'target': {'kind': 'model-parameters', 'names': ['adapter.up.weight']}})
+        assert gradient_reply['objective'] == 'native-graph-token-ce/1'
+        gradient_artifact, gradient_id = decode_native_tensor_artifact(request(
+            f"/v1/neuralese/native-tensor-artifacts/{gradient_reply['gradient']['id']}", 'GET', b''))
+        assert gradient_id == gradient_reply['gradient']['id']
+        assert gradient_artifact.kind == 'parameter-gradient'
+        assert gradient_artifact.tensors['adapter.up.weight'].norm() > 0
         initialized = post_path('/v1/neuralese/native-states/init-body', {
             'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': 'before '},
                 {'type': 'native_state', 'id': placeholder['id']}, {'type': 'text', 'text': ' after'}]}],
