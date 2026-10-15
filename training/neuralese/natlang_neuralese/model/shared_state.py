@@ -49,6 +49,11 @@ class GraphPlan:
     def token_count(self):
         return len(self.own_positions)
 
+    @property
+    def attention_workspace_rows(self):
+        """Q-only allocation size; never counted as real data exposure."""
+        return sum((len(node.token_ids)+127)//128*128 for node in self.invocations)
+
     def tensor(self, values, device, dtype=torch.long):
         return torch.tensor(values, device=device, dtype=dtype)
 
@@ -379,6 +384,8 @@ _flex = {}
 def graph_block_mask(plan, device, window=None):
     """Sparse 128-token geometry without allocating a token-by-token matrix."""
     from torch.nn.attention.flex_attention import BlockMask
+    if isinstance(plan, GraphPlan):
+        plan, _ = query_workspace(plan)
     starts, ends = plan.bounds(device, window)
     block = 128
     padding = (-plan.token_count) % block
@@ -418,12 +425,28 @@ def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=No
         flex = q.is_cuda
     if flex:
         from ..common.attention_backend import flex_kernel_options
+        physical_rows = None
+        if isinstance(plan, GraphPlan):
+            workspace, physical_rows = query_workspace(plan)
+            physical_rows = torch.tensor(physical_rows, device=q.device)
+            # Pad only attention Q/output workspace. Embeddings, residuals,
+            # layer norms and feed-forward never execute padding token rows.
+            pieces = []
+            for offset, node in zip(plan.offsets, plan.invocations):
+                count = len(node.token_ids)
+                if count:
+                    pieces.append(F.pad(q[:, :, offset:offset+count], (0, 0, 0, (-count) % 128)))
+            q = torch.cat(pieces, dim=2)
+            plan = workspace
         compiled = _compiled_flex(q, k, v, scale)
-        return compiled(q, k, v, block_mask=prepared_mask if prepared_mask is not None else graph_block_mask(plan, q.device, window),
+        (result, _raw_lse) = compiled(q, k, v, block_mask=prepared_mask if prepared_mask is not None else graph_block_mask(plan, q.device, window),
                      scale=scale,
                      kernel_options={**flex_kernel_options(float32=q.dtype == torch.float32),
                                      **({'FLOAT32_PRECISION': "'ieee'"} if q.dtype == torch.float32 else {}),
-                                     'BACKEND': 'TRITON'})[..., :head_width]
+                                     'BACKEND': 'TRITON', 'NATLANG_FIXED_DELTA': True})
+        result = result[..., :head_width]
+        return result if physical_rows is None else result.index_select(2, physical_rows)
+
     return F.scaled_dot_product_attention(q, k, v, attn_mask=prepared_mask if prepared_mask is not None else plan.attention_mask(q.device, window),
                                          scale=scale, enable_gqa=True)[..., :head_width]
 
@@ -762,7 +785,10 @@ def channel_checkpoint(model):
             'rank': model.adapter.down.out_features,
             'adapter_dtype': str(model.adapter.down.weight.dtype),
             'shared_state_dtype': 'torch.float32',
-            'kernel_contract': 'shared-state-fixed-native/1',
+            'kernel_contract': 'shared-state-fixed-native/2',
+            'attention_query_alignment': 128,
+            'attention_delta': 'fixed-fp32-row/1',
+            'attention_auxiliary': 'raw-log2-lse',
             'architecture': str(getattr(model.port.config, 'model_type', type(model.port).__name__)),
             'input_rows': model.input_rows.detach().clone(),
             'output_rows': None if model.tied else model.output_rows.detach().clone(),
@@ -773,7 +799,8 @@ def restore_channel_checkpoint(model, state):
     """Restore an exact native channel; legacy projections are never substituted."""
     expected = channel_checkpoint(model)
     for key in ('format', 'marker_names', 'marker_ids', 'width', 'rank', 'adapter_dtype',
-                'shared_state_dtype', 'kernel_contract', 'architecture'):
+                'shared_state_dtype', 'kernel_contract', 'attention_query_alignment',
+                'attention_delta', 'attention_auxiliary', 'architecture'):
         actual = tuple(state[key]) if key in ('marker_names', 'marker_ids') else state[key]
         if actual != expected[key]:
             raise ValueError(f'native channel checkpoint {key} differs from this model')
@@ -830,9 +857,19 @@ class AttentionLayout:
 
 
 def _flex_entry(q, k, v, *, block_mask, scale, kernel_options):
-    from torch.nn.attention.flex_attention import flex_attention
-    return flex_attention(q, k, v, block_mask=block_mask, scale=scale,
-                          enable_gqa=True, kernel_options=kernel_options)
+    # Preserve the backend raw log2 LSE without an extra scaled public-wrapper
+    # graph. The fixed per-row delta lowering below supplies the actual
+    # arithmetic invariant; auxiliary-output routing alone is insufficient.
+    from torch.nn.attention.flex_attention import flex_attention_hop, _identity
+    for tensor in (q, k, v):
+        torch._dynamo.mark_static(tensor, -3)
+        torch._dynamo.mark_static(tensor, -1)
+    options = dict(kernel_options)
+    options.update(PRESCALE_QK=False, ROWS_GUARANTEED_SAFE=False,
+                   BLOCKS_ARE_CONTIGUOUS=False, WRITE_DQ=True,
+                   OUTPUT_LOGSUMEXP=True, OUTPUT_MAX=False)
+    out, lse, _ = flex_attention_hop(q, k, v, _identity, block_mask.as_tuple(), scale, options)
+    return out, lse
 
 
 def _compiled_flex(q, k, v, scale):
@@ -844,6 +881,8 @@ def _compiled_flex(q, k, v, scale):
     """
     import hashlib
     import types
+    from ..common.native_attention_delta import install_native_delta_lowering
+    install_native_delta_lowering()
     def layout(tensor):
         strides = tensor.stride()
         order = tuple(sorted(range(tensor.ndim), key=lambda i: strides[i]))
@@ -862,3 +901,50 @@ def _compiled_flex(q, k, v, scale):
         entry = types.FunctionType(code, globals(), name)
         _flex[key] = torch.compile(entry, dynamic=True, fullgraph=True)
     return _flex[key]
+
+
+@dataclass(frozen=True)
+class QueryWorkspace:
+    """Attention-only rows with invocation-local 128-row tile origins."""
+    starts: tuple[int, ...]
+    ends: tuple[int, ...]
+    key_count: int
+
+    @property
+    def token_count(self):
+        return len(self.starts)
+
+    @property
+    def slot_sources(self):
+        return range(self.key_count)
+
+    def bounds(self, device, window=None):
+        starts = torch.tensor(self.starts, device=device)
+        ends = torch.tensor(self.ends, device=device)
+        if window is not None:
+            starts = torch.maximum(starts, ends-window+1)
+        return starts, ends
+
+
+def query_workspace(plan):
+    """Match native cached query reduction origins without padding the model.
+
+    Padding rows use zero Q, attend one finite key in their own invocation and
+    have zero output adjoints after the physical-row gather. This avoids empty
+    softmax rows and does not expand sparse geometry across unrelated calls.
+    """
+    starts, ends, physical_rows = [], [], []
+    for node, offset, key_start in zip(plan.invocations, plan.offsets, plan.slot_offsets):
+        count = len(node.token_ids)
+        if not count:
+            continue
+        physical_rows.extend(range(len(starts), len(starts)+count))
+        starts.extend([key_start]*count)
+        node_ends = [key_start+position for position in plan.own_positions[offset:offset+count]]
+        ends.extend(node_ends)
+        padding = (-count) % 128
+        # Use the last query's current key for dummy rows. A shared global
+        # dummy key would make conservative block geometry span the whole DAG.
+        starts.extend([node_ends[-1]]*padding)
+        ends.extend([node_ends[-1]]*padding)
+    return QueryWorkspace(tuple(starts), tuple(ends), len(plan.slot_sources)), tuple(physical_rows)

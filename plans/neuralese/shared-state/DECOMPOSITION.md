@@ -121,3 +121,52 @@ Tiny LFM and Mellum BF16 graph/cached forward checks are bitwise equal and their
 actual consumer CE/embedding-adapter gradients pass the same tight checks in one
 process after mixed attention contracts. Full-size destination qualification is
 still recorded separately from unit correctness and task quality.
+
+## Attention backward correction, 2026-10-15
+
+The kernel contract is `shared-state-fixed-native/2`. Query origins, as well as
+KV origins, align each invocation to 128 rows. Only attention Q/output workspace
+is padded: residuals, embeddings and FFNs still execute exactly
+`GraphPlan.token_count` rows. `GraphPlan.attention_workspace_rows` separately
+reports this allocation; padded workspace is never data exposure. Dummy Q rows
+attend a finite key within their own invocation and receive zero adjoints after
+the physical-row gather.
+
+A second, independent defect was the compiler-generated Flash backward delta
+`sum_D(out * grad_out)`: its reduction layout changes with query/head counts.
+That can change source-key adjoints while outputs, LSE and incoming adjoints
+are bitwise equal. Raw auxiliary LSE routing initially fixed full Mellum but
+failed a reduced-head counterexample; that routing alone is not the repair.
+
+`common/native_attention_delta.py` supplies one fixed FP32 per-row Triton
+reduction. A native-only, fail-closed compiler lowering substitutes that delta;
+attention itself keeps its existing sparse, tensor-core Flex forward/backward.
+There is no graph replay or dense mask fallback. Lowering-local dispatch avoids
+temporary mutation of compiler arithmetic while another model compiles.
+The checkpoint records query alignment, fixed-delta version and raw-log2-LSE
+auxiliary contract, and rejects the earlier diagnostic kernel contract.
+
+Final fixed-delta receipts (DGX, 2026-10-15): actual full 28-layer BF16 Mellum
+has bitwise forward/logits/consumer CE, source-adapter gradients, incremental
+splice outputs, and all layer backward adjoints against cached invocation
+execution. Report: `dgxops/native-mellum-fixed-delta-proof-20261015.json`
+(141.78 s including model load; 28.55 GB peak CUDA allocation). Actual full QAD
+LFM through the published qualification CLI passes unchanged 1e-4 forward and
+1e-5 gradient bounds: forward 2.086e-6, source-adapter gradient 1.732e-6,
+incremental 7.153e-7; optimizer update and exact channel restore pass.
+`dgxops/native-lfm-fixed-delta-proof-20261015.json` records that receipt.
+These are numerical/runtime proofs, not task-performance or training-lift claims.
+
+The focused shared-state suite passes 41 checks. The seeded 8/32-query-head
+regression checks every Q/K/V adjoint bitwise; disabling the fixed delta causes
+the 32-head counterexample to fail. Reduced actual Mellum head fixtures also
+pass on both auxiliary-output routes. Delta-only timing at 32 heads, D=128:
+0.0185 ms (128 queries), 0.0573 ms (1024 queries), versus the compiler reduction's
+0.0166/0.0255 ms. The additional per-layer preprocessing cost preserves sparse
+attention scaling and does not add hidden-state or FFN padding.
+
+The lowering explicitly checks its expected PyTorch delta expression and fails
+closed on incompatible compiler changes; qualification on each destination
+PyTorch/CUDA build remains required. Standing full-suite checks and independent
+integration review remain separate, as do the model-facing marker debt and
+actual full-recipe cloud restart.

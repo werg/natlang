@@ -495,3 +495,49 @@ def test_mixed_logical_producer_adapts_own_queries_once_and_matches_incremental(
     suffix = native_step(model, torch.tensor([[7]]), cache, producing=True)
     mixed = torch.cat([prefix['h_final'], suffix['h_final']], dim=1)
     torch.testing.assert_close(mixed, actual['h_final'][:, 3:6], atol=3e-6, rtol=2e-5)
+
+
+def test_attention_query_workspace_aligns_invocations_without_padding_hidden_rows():
+    from natlang_neuralese.model.shared_state import query_workspace
+    plan = compile_graph([
+        Invocation('source', tuple(range(17)), producing=((2, 5),)),
+        Invocation('forward', (), imports=(ImportSpan(0, 'source', 2, 5),), logical_producing=((0, 3),)),
+        Invocation('consumer', tuple(range(18)), imports=(ImportSpan(3, 'forward', 0, 3, logical=True),)),
+    ])
+    workspace, physical = query_workspace(plan)
+    assert plan.token_count == 35
+    assert plan.attention_workspace_rows == workspace.token_count == 256
+    assert physical == tuple(range(17)) + tuple(range(128, 146))
+    starts, ends = plan.bounds('cpu')
+    for row, slot in enumerate(physical):
+        assert workspace.starts[slot] == starts[row]
+        assert workspace.ends[slot] == ends[row]
+    for row in set(range(workspace.token_count))-set(physical):
+        assert workspace.starts[row] == workspace.ends[row]
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA unavailable')
+@pytest.mark.parametrize('heads', [(8, 1), (32, 4)])
+def test_native_attention_cached_adjoint_uses_fixed_delta(heads):
+    from natlang_neuralese.model.shared_state import AttentionLayout, graph_attention
+    torch.manual_seed(701)
+    counts = (17, 18)
+    total = sum(counts)
+    plan = compile_graph([Invocation('a', tuple(range(counts[0]))),
+                          Invocation('b', tuple(range(counts[1])))])
+    q = (torch.randn(1, heads[0], total, 128, device='cuda', dtype=torch.bfloat16)*3).requires_grad_()
+    k = torch.randn(1, heads[1], total, 128, device='cuda', dtype=torch.bfloat16).float().requires_grad_()
+    v = (torch.randn(1, heads[1], total, 128, device='cuda', dtype=torch.bfloat16)*4).requires_grad_()
+    upstream = torch.randn_like(q)*1e-4
+    slots = plan.tensor(plan.slot_sources, 'cuda')
+    actual = graph_attention(q, k[:, :, slots].to(q.dtype), v[:, :, slots], plan, None, 128**-.5)
+    expected = torch.cat([
+        graph_attention(q[:, :, offset:offset+count], k[:, :, offset:offset+count].to(q.dtype),
+                        v[:, :, offset:offset+count], AttentionLayout(tuple(range(count)), count), None, 128**-.5)
+        for offset, count in ((0, counts[0]), (counts[0], counts[1]))
+    ], dim=2)
+    assert torch.equal(actual, expected)
+    actual_grad = torch.autograd.grad((actual*upstream).sum(), (q, k, v))
+    expected_grad = torch.autograd.grad((expected*upstream).sum(), (q, k, v))
+    for a, b in zip(actual_grad, expected_grad):
+        assert torch.equal(a, b)
