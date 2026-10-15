@@ -77,6 +77,25 @@ def test_policy_binding_rejects_changed_inputs(tmp_path):
         render_parts.validate_binding(path, {**first, 'controls': ['base']}, legacy_description='test output')
 
 
+def test_compact_held_index_proof_is_part_of_render_binding(tmp_path, monkeypatch):
+    monkeypatch.setattr(render_parts, 'HELD_TEXT', [])
+    protected = tmp_path / 'protected.json'
+    reserved = tmp_path / 'reserved.json'
+    held = tmp_path / 'held.jsonl'
+    proof = held.with_suffix('.proof.json')
+    for path, contents in ((protected, '{}'), (reserved, '{}'), (held, '{}\n'), (proof, '{"source":"a"}')):
+        path.write_text(contents)
+    kwargs = dict(sources=[], corpus_id='fixture', cpus=1, budget_gb=1, docker_gb=1,
+                  part_decisions=10, compress_all=False, protected=protected, reserved=reserved,
+                  held_text=[held], decision_exclude_ids=[], exclude_programs=[])
+    first = render_parts.render_binding(**kwargs)
+    assert any(row['kind'] == 'control-provenance-proof' and row['path'] == str(proof)
+               for row in first['controls'])
+    proof.write_text('{"source":"b"}')
+    second = render_parts.render_binding(**kwargs)
+    assert first != second
+
+
 @pytest.mark.parametrize('compress_all', [False, True])
 def test_cross_part_held_group_duplicate_and_twin_alignment(tmp_path, compress_all):
     for tok in ('lfm25', 'mellum21'):

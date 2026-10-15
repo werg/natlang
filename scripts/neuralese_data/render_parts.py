@@ -80,6 +80,11 @@ def render_binding(sources: list[Path], corpus_id: str, cpus: int, budget_gb: in
         ('protected', [effective_protected]), ('reserved', [effective_reserved]),
         ('held-text', effective_held), ('decision-exclude-ids', decision_exclude_ids or []),
         ('exclude-programs', exclude_programs or [])) for path in paths]
+    policy_paths = ([effective_protected, effective_reserved] + effective_held +
+                    (decision_exclude_ids or []) + (exclude_programs or []))
+    controls.extend({'kind': 'control-provenance-proof', **file_identity(proof)}
+                    for source in policy_paths
+                    if (proof := source.with_suffix('.proof.json')).is_file())
     code = [REPO / 'scripts/neuralese_data/render_parts.py',
             REPO / 'scripts/neuralese_data/render_native_turn_corpus.py',
             REPO / 'scripts/neuralese_data/render_native_turn_corpus.sh']
