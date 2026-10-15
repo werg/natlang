@@ -1481,6 +1481,10 @@ def _without_activated_stage_policy(old_recipe, new_recipe, activated):
         progress = (value.get('quantization') or {}).get('stage_progress', {})
         for sid in activated:
             progress.pop(sid, None)
+        # No remaining stage consumes this curriculum. Its points have no
+        # effect on existing work (stage_component returns None).
+        if not progress:
+            value.pop('quantization', None)
     return values
 
 
@@ -1536,6 +1540,8 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
             progress = (value.get('quantization') or {}).get('stage_progress', {})
             for sid in appended:
                 progress.pop(sid, None)
+            if not progress:
+                value.pop('quantization', None)
             compared.append(value)
         old_handoff_recipe, new_handoff_recipe = compared
         old_kinds = {stage['kind'] for stage in old_handoff_recipe.get('stages', [])}

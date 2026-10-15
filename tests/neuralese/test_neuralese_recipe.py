@@ -1072,7 +1072,8 @@ def test_lineage_handoff_lets_only_an_unstarted_stage_take_new_inputs(tmp_path):
         runner.lineage_handoff(updated, objective, frozen, package, plan_path, out)
 
 
-def test_running_recipe_can_append_future_training_stages_without_restarting(tmp_path):
+@pytest.mark.parametrize('previous_quantization', [None, {'stage_progress': {}, 'points': ['unchanged']}])
+def test_running_recipe_can_append_future_training_stages_without_restarting(tmp_path, previous_quantization):
     import copy
     from natlang_neuralese.train import recipe as runner
 
@@ -1101,7 +1102,8 @@ def test_running_recipe_can_append_future_training_stages_without_restarting(tmp
     plan['stage_inputs'].update(sft={'text_data': {'binding': 'header', 'path': '/d/h', 'sha256': 'h'}},
                                 trajectory={})
     plan['inputs']['/d/h'] = 'h'
-    old['recipe']['quantization'] = {'stage_progress': {}, 'points': ['unchanged']}
+    if previous_quantization is not None:
+        old['recipe']['quantization'] = previous_quantization
     plan['recipe']['quantization'] = {'stage_progress': {'sft': [0, 0.75], 'trajectory': [0.75, 1]},
                                       'points': ['unchanged']}
     plan['recipe']['family'] = {'stages': ['sft', 'trajectory'], 'members': {'small': 0.1}}
@@ -1122,6 +1124,10 @@ def test_running_recipe_can_append_future_training_stages_without_restarting(tmp
     active_family['recipe']['family']['stages'].append('warmup')
     with pytest.raises(ValueError, match='objective_continuation'):
         runner.lineage_handoff(copy.deepcopy(old), active_family, frozen, package, path, out, dry_run=True)
+    active_quantization = copy.deepcopy(plan)
+    active_quantization['recipe']['quantization']['stage_progress']['warmup'] = [0, 0.5]
+    with pytest.raises(ValueError, match='objective_continuation'):
+        runner.lineage_handoff(copy.deepcopy(old), active_quantization, frozen, package, path, out, dry_run=True)
     for stages in [plan['recipe']['stages'][1:], list(reversed(plan['recipe']['stages']))]:
         invalid = copy.deepcopy(plan)
         invalid['recipe']['stages'] = stages
@@ -1166,6 +1172,7 @@ def test_lineage_handoff_can_activate_only_an_unstarted_declared_stage(tmp_path)
         stage_inputs = {'sft': {}, 'trajectory': {}}
         inputs = {'/heads': 'H'}
         if admitted:
+            recipe['quantization'] = {'stage_progress': {'trajectory': [0, 1]}, 'points': ['new']}
             stage_inputs['trajectory'] = {
                 'text_data': {'binding': 'trajectory', 'path': '/data/trajectory-' + trajectory_sha,
                               'sha256': trajectory_sha}}
