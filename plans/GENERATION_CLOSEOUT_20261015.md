@@ -1,4 +1,39 @@
-# Pop teacher-generation closeout (2026-10-15)
+# Teacher-generation closeout (2026-10-15)
+
+## DGX closeout
+
+The DGX supervisor closed the current Mellum-base collection at the completed
+case boundary on 2026-10-15 at 12:00 UTC. The ledger preempted
+`dgx-native-mellum-teacher32-20261015.service` while its queue was in cooldown,
+with no in-flight case; its requeue was explicitly cancelled. No DGX generation
+timer is enabled. Cloud source conversion and training continue separately.
+
+The 32-task, two-sample queue has four exact successful episodes, four
+budget-exhausted episodes, and 56 unattempted entries. Those 56 are not model
+failures. The four budget outcomes are unscored, not negative/DPO examples.
+The actor was the pinned Mellum base with raw-token heads, not the trained
+cloud checkpoint and not an on-policy student. Successful material remains
+pending normal source/protection/semantic admission; availability is not admission.
+
+The resumable queue, journal, exact results, rollout score, selection proof and
+actor/source bindings are under
+`/home/werg/data/dgxops/native-mellum-train-teacher-20261015/` (queue and results
+in `harness/`). The stopped launcher is
+`/home/werg/data/dgxops/run_native_mellum_teacher32.sh`; it owns and cleans its
+explicit server PID. Review `collection-binding.json`, `selection-proof.json`,
+`harness/score.json` and terminal journal events before selecting reusable rows.
+Keep completed successes and partial-budget diagnostics separate.
+
+For a future authorized restart, first verify the pinned base/head inventories,
+train-only task selection and global held/quality protections. Reuse the
+existing queue/journal only with its exact runtime/binding; if adopting useful
+runtime changes, declare a new bound attempt and retain the linkage to this
+queue instead of mislabelling old bytes as the new actor. Launch through
+`memory_ledger.py run` with the original 45 GiB low-priority collection claim
+and an explicit unit name. The script serves port 8097, waits for real health,
+runs the collector, scores exact outcomes, and stops its own server. Check
+that the port is free first and that no other generation owner has resumed it.
+Generation remains stopped until a future owner requests it.
 
 ## Owner decision and boundary
 

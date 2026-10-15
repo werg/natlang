@@ -49,8 +49,12 @@ function runFile(file) {
       const failures = [...output.matchAll(/^not ok \d+ - (.+)$/gm)].map(match => match[1]).filter(name => !name.endsWith('.mjs'));
       const ended = timedOut ? 'timeout' : signal === 'SIGKILL' ? 'killed (out of memory?)' : signal ? `signal ${signal}` : code === 0 ? 'ok' : 'failed';
       const firstFailure = output.search(/^not ok \d+ - /m);
-      const diagnostic = firstFailure < 0 ? output.split('\n').slice(-15).join('\n')
-        : output.slice(firstFailure).split('\n').slice(0, 60).join('\n');
+      // Import errors and child-process exceptions precede TAP's file-level
+      // "not ok". Keep their bounded context instead of reporting only the
+      // wrapper's ERR_TEST_FAILURE and discarding the actual cause.
+      const diagnostic = firstFailure < 0 ? output.split('\n').slice(-50).join('\n')
+        : [...output.slice(0, firstFailure).split('\n').slice(-35),
+          ...output.slice(firstFailure).split('\n').slice(0, 60)].join('\n');
       done({ file, ended, pass: count('pass'), fail: count('fail'), cancelled: count('cancelled'), failures, seconds: Math.round((Date.now() - started) / 1000),
         ...(ended !== 'ok' ? { tail: diagnostic } : {}) });
     });

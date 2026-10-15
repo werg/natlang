@@ -325,7 +325,7 @@ class NativePolicyObjective:
                 block.require_native(**self.identity)
                 if block_id != binding['id'] or len(block.token_ids) != binding['token_count']:
                     raise ValueError('native RL archived state differs from graph input binding')
-                packed_name = context['row_offsets'][example.id]['external_names'][name]
+                packed_name = context['external_names'][example.id][name]
                 blocks[packed_name] = block
         return {'external_blocks': blocks, 'external_identity': self.identity} if blocks else {}
 
