@@ -112,6 +112,11 @@ def main():
     writers = {split: GraphWriter(args.output / split / 'native-graphs.jsonl.zst')
                for split in ('train', 'test')}
     train_groups, held_groups = set(), set()
+    whole_policy = {split: {'rows': 0, 'failed_assistant_tokens_masked': 0,
+                            'runtime_opening_assistant_turns': 0,
+                            'runtime_opening_assistant_tokens': 0,
+                            'assistant_target_tokens': 0}
+                    for split in ('train', 'test')}
     total = 0
     try:
         for row in rows:
@@ -122,11 +127,19 @@ def main():
                        if row.get('supervision') == 'whole-trajectory' else text_row_graph)
             graph = convert(row, source_tokenizer_fingerprint=source_fingerprint,
                 tokenizer=tokenizer, expanded_tokenizer_fingerprint=expanded_fingerprint,
-                **({'feedback_weight': 0.25} if convert is whole_trajectory_text_row_graph
+                **({'context_weight': args.context_weight, 'feedback_weight': 0.25}
+                   if convert is whole_trajectory_text_row_graph
                    else {'context_weight': args.context_weight}))
             writer = writers[split]
             groups = train_groups if split == 'train' else held_groups
             groups.update(graph['source_groups'])
+            if convert is whole_trajectory_text_row_graph:
+                policy = graph['conversion']['supervision_policy']
+                tally = whole_policy[split]
+                tally['rows'] += 1
+                for key in ('failed_assistant_tokens_masked', 'runtime_opening_assistant_turns',
+                            'runtime_opening_assistant_tokens', 'assistant_target_tokens'):
+                    tally[key] += policy[key]
             writer.write(graph)
             total += 1
         overlap = train_groups & held_groups
@@ -143,7 +156,10 @@ def main():
         'expanded_tokenizer_fingerprint': expanded_fingerprint,
         'role_token_ids': list(role_ids), 'context_weight': args.context_weight,
         'outputs': summaries,
-        'conversion': 'static one-node graphs; declared whole-trajectory rows reuse role-weighted all-position supervision; no inferred native edges'}
+        'conversion': ('static one-node graphs; whole-trajectory rows preserve all roles, weight assistant targets, '
+                       'downweight prompt/runtime-opening/tool context, and exclude failed assistant actions; '
+                       'no inferred native edges'),
+        'whole_trajectory_supervision': whole_policy if any(row['rows'] for row in whole_policy.values()) else None}
     args.output.mkdir(parents=True, exist_ok=True)
     temp_receipt = args.output / '.receipt.json.tmp'
     temp_receipt.write_text(json.dumps(receipt, indent=2) + '\n')

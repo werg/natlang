@@ -165,7 +165,7 @@ class ChatRoleAsciiTokenizer(AsciiTokenizer):
 def test_whole_trajectory_conversion_reuses_exact_role_weight_policy():
     import pytest
     from natlang_neuralese.data.native_graph import parse_graph
-    from natlang_neuralese.train.text_supervision import ROLE_CODES, balanced_position_weights, chat_roles
+    from natlang_neuralese.train.text_supervision import ROLE_CODES, chat_roles, segmented_position_weights
     import torch
 
     tokenizer = ChatRoleAsciiTokenizer()
@@ -183,21 +183,88 @@ def test_whole_trajectory_conversion_reuses_exact_role_weight_policy():
     labels = chat_roles(ids, start_id=tokenizer.convert_tokens_to_ids('<|im_start|>'), role_ids=role_ids,
         think_open=tokenizer.convert_tokens_to_ids('<think>'), think_close=tokenizer.convert_tokens_to_ids('</think>'),
         tool_response_prefixes=prefixes)
-    expected = balanced_position_weights(torch.ones((1, len(ids))), [None],
-        roles=torch.tensor([list(labels)]), context_weight=1., feedback_weight=.25)[0].tolist()
+    assistant = {ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply')}
+    spans = []
+    pos = 0
+    while pos < len(labels):
+        if labels[pos] not in assistant:
+            pos += 1
+            continue
+        begin = pos
+        while pos < len(labels) and labels[pos] in assistant:
+            pos += 1
+        spans.append((begin, pos))
+    expected = segmented_position_weights(torch.ones((1, len(ids))), spans,
+        roles=torch.tensor([list(labels)]), context_weight=.05, feedback_weight=.25)[0].tolist()
     expected[0] = 0.
     assert list(example.plan.invocations[0].token_ids) == ids
     assert list(example.target_weights) == pytest.approx(expected)
-    assert graph['conversion']['supervision_policy']['name'] == 'role-weighted-all-positions'
+    assert graph['conversion']['supervision_policy']['name'] == 'whole-trajectory-context-feedback-failed-turns-v2'
     tool_positions = [i for i, role in enumerate(labels) if role == ROLE_CODES.index('tool')]
     assistant_positions = [i for i, role in enumerate(labels) if role == ROLE_CODES.index('assistant_reply')]
     assert tool_positions and assistant_positions
-    assert all(expected[i] == pytest.approx(expected[assistant_positions[0]] * .25) for i in tool_positions)
+    assert all(expected[i] < expected[assistant_positions[-1]] for i in tool_positions)
     assert expected[0] == 0.
     source.pop('supervision')
     with pytest.raises(ValueError, match='declared supervision'):
         whole_trajectory_text_row_graph(source, source_tokenizer_fingerprint='a' * 64,
             tokenizer=tokenizer, expanded_tokenizer_fingerprint='b' * 64)
+
+
+def test_whole_trajectory_masks_failed_assistant_action_and_downweights_runtime_opening():
+    import pytest
+    from natlang_neuralese.data.native_graph import parse_graph
+    from natlang_neuralese.train.text_supervision import ROLE_CODES, chat_roles, segmented_position_weights
+    import torch
+
+    tokenizer = ChatRoleAsciiTokenizer()
+    text = ('<|im_start|>assistant<|im_sep|>runtime input<|im_end|>'
+            '<|im_start|>assistant<|im_sep|>rejected call<|im_end|>'
+            '<|im_start|>user\n<tool_response>rejected action: bad argument</tool_response><|im_end|>'
+            '<|im_start|>assistant<|im_sep|>corrected answer<|im_end|>')
+    ids = tokenizer(text)['input_ids']
+    source = {'id': 'whole-trajectory:failure', 'text': text, 'token_ids': ids,
+        'tokenizer_sha256': 'a' * 64, 'split': 'train', 'source_groups': ['group:failure'],
+        'supervision': 'whole-trajectory', 'source_record_ids': ['record:failure'],
+        'runtime_opening_assistant_turns': 1}
+    graph = whole_trajectory_text_row_graph(source, source_tokenizer_fingerprint='a' * 64,
+        tokenizer=tokenizer, expanded_tokenizer_fingerprint='b' * 64)
+    example = parse_graph(graph, tokenizer_fingerprint='b' * 64)
+    weights = list(example.target_weights)
+    labels = chat_roles(ids, start_id=tokenizer.convert_tokens_to_ids('<|im_start|>'),
+        role_ids={tokenizer.convert_tokens_to_ids(name): name for name in ('system', 'user', 'assistant', 'tool')},
+        think_open=tokenizer.convert_tokens_to_ids('<think>'),
+        think_close=tokenizer.convert_tokens_to_ids('</think>'),
+        tool_response_prefixes=tuple(tuple(tokenizer(prefix)['input_ids'])
+                                     for prefix in ('\n<tool_response>', '\n\n<tool_response>')))
+    assistant = {ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply')}
+    assistant_runs = []
+    pos = 0
+    while pos < len(labels):
+        if labels[pos] not in assistant:
+            pos += 1
+            continue
+        begin = pos
+        while pos < len(labels) and labels[pos] in assistant:
+            pos += 1
+        assistant_runs.append((begin, pos))
+    assert len(assistant_runs) == 3
+    opening, failed, successful = assistant_runs
+    context_labels = list(labels)
+    context_labels[opening[0]:opening[1]] = [ROLE_CODES.index('other')] * (opening[1] - opening[0])
+    expected = segmented_position_weights(torch.ones((1, len(ids))), [successful],
+        roles=torch.tensor([context_labels]), context_weight=.05, feedback_weight=.25,
+        exclude=torch.tensor([[0 if not (failed[0] <= i < failed[1]) else 1 for i in range(len(ids))]],
+                             dtype=torch.bool))[0].tolist()
+    expected[0] = 0.
+    assert weights == pytest.approx(expected)
+    assert all(weights[i] < weights[successful[0]] for i in range(*opening))
+    assert all(weights[i] == 0 for i in range(*failed))
+    context_positions = [i for i, role in enumerate(labels)
+                         if role == ROLE_CODES.index('other') and i != 0]
+    assert context_positions and all(weights[successful[0]] > weights[i] for i in context_positions)
+    tool_positions = [i for i, role in enumerate(labels) if role == ROLE_CODES.index('tool')]
+    assert tool_positions and all(weights[i] < weights[successful[0]] for i in tool_positions)
 
 
 def test_marker_looking_text_stays_complete_ordinary_text_without_attested_role():

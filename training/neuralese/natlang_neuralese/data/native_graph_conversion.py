@@ -88,16 +88,18 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
 
 def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
                                    tokenizer, expanded_tokenizer_fingerprint: str,
+                                   context_weight: float = 0.05,
                                    feedback_weight: float = 0.25) -> dict:
-    """Convert an admitted whole-chat trajectory using the shared role policy.
+    """Convert a whole chat while keeping context, tool feedback and failed actions distinct.
 
-    Whole-trajectory renderings intentionally have no assistant-suffix boundary:
-    their existing trainer policy supervises all positions, with tool feedback
-    downweighted. Reuse the trainer's exact role parser and weight helper rather
-    than inventing a suffix or treating tool output as assistant output.
+    This view has no single assistant suffix: it retains the entire trajectory.
+    Assistant reasoning and replies are targets; system/user messages, other
+    framing and runtime-opening assistant input are lower-weight context; tool
+    output receives its declared lower feedback weight. Assistant turns that
+    the runtime explicitly rejected remain in the causal context with zero loss.
     """
     import torch
-    from ..train.text_supervision import ROLE_CODES, balanced_position_weights, chat_roles
+    from ..train.text_supervision import ROLE_CODES, chat_roles, failed_assistant_mask, segmented_position_weights
 
     if row.get('supervision') != 'whole-trajectory':
         raise ValueError('role-weighted whole-trajectory conversion requires its declared supervision policy')
@@ -116,6 +118,8 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
     identifier = row.get('id')
     if not isinstance(identifier, str) or not identifier:
         raise ValueError('whole-trajectory row needs its source identity')
+    if not math.isfinite(context_weight) or not 0 <= context_weight <= 1:
+        raise ValueError('context weight must be finite and between zero and one')
     if not math.isfinite(feedback_weight) or not 0 <= feedback_weight <= 1:
         raise ValueError('tool feedback weight must be finite and between zero and one')
     if not isinstance(expanded_tokenizer_fingerprint, str) or len(expanded_tokenizer_fingerprint) != 64:
@@ -142,10 +146,40 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
     labels = chat_roles(ids, start_id=start_id, role_ids=role_ids,
                         think_open=think_open, think_close=think_close,
                         tool_response_prefixes=prefixes)
-    roles = torch.tensor([list(labels)], dtype=torch.long)
-    span = torch.ones((1, len(ids)), dtype=torch.float32)
-    weights = balanced_position_weights(span, [None], roles=roles,
-                                        context_weight=1.0, feedback_weight=feedback_weight)[0].tolist()
+    assistant_roles = {ROLE_CODES.index('assistant_reasoning'), ROLE_CODES.index('assistant_reply')}
+    other_role = ROLE_CODES.index('other')
+    # The runtime may execute leading assistant turns as part of the input
+    # setup. They stay in the complete transcript but are not positive targets.
+    opening_turns = row.get('runtime_opening_assistant_turns', 0)
+    if type(opening_turns) is not int or opening_turns < 0:
+        raise ValueError('runtime-opening assistant turn count must be a nonnegative integer')
+    assistant_runs = []
+    index = 0
+    while index < len(labels):
+        if labels[index] not in assistant_roles:
+            index += 1
+            continue
+        begin = index
+        while index < len(labels) and labels[index] in assistant_roles:
+            index += 1
+        assistant_runs.append((begin, index))
+    if opening_turns > len(assistant_runs):
+        raise ValueError('runtime-opening assistant turn count exceeds the source trajectory')
+    opening_spans = assistant_runs[:opening_turns]
+    context_labels = list(labels)
+    for begin, end in opening_spans:
+        context_labels[begin:end] = [other_role] * (end - begin)
+    failed = failed_assistant_mask(ids, labels, tokenizer.decode)
+    target_spans = [(begin, end) for begin, end in assistant_runs[opening_turns:]
+                    if not any(failed[begin:end])]
+    # Apply the existing segment policy per assistant turn. Each complete turn
+    # gets target mass while intervening prompts and tool feedback remain
+    # lower-weight context; rejected assistant turns are excluded everywhere.
+    weights_tensor = segmented_position_weights(
+        torch.ones((1, len(ids)), dtype=torch.float32), target_spans,
+        roles=torch.tensor([context_labels], dtype=torch.long), context_weight=context_weight,
+        feedback_weight=feedback_weight, exclude=torch.tensor([list(failed)], dtype=torch.bool))[0]
+    weights = weights_tensor.tolist()
     # Native graph CE predicts from token 0 onward; the schema also requires
     # the first own token to be explicitly non-target.
     weights[0] = 0.0
@@ -154,9 +188,17 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
         raise ValueError('whole-trajectory provenance needs source record identities')
     twin = row.get('source_twin_id') or source_records
     twin_id = canonical_json_sha256_hex(sorted(str(value) for value in twin))
-    role_policy = {'name': 'role-weighted-all-positions', 'feedback_weight': feedback_weight,
-                   'reasoning_weight': 1.0, 'other_role_weight': 1.0,
-                   'source_trainer_policy': 'natlang_neuralese.train.text_supervision.balanced_position_weights'}
+    role_policy = {'name': 'whole-trajectory-context-feedback-failed-turns-v2',
+                   'context_weight': context_weight, 'feedback_weight': feedback_weight,
+                   'reasoning_weight': 1.0, 'reply_weight': 1.0, 'failed_assistant_weight': 0.0,
+                   'runtime_opening_assistant_weight': context_weight,
+                   'runtime_opening_assistant_turns': opening_turns,
+                   'runtime_opening_assistant_tokens': sum(end - begin for begin, end in opening_spans),
+                   'failed_assistant_tokens_masked': sum(bool(value) for value in failed),
+                   'assistant_target_tokens': sum(end - begin for begin, end in target_spans),
+                   'failure_detector': 'natlang_neuralese.train.text_supervision.failed_assistant_mask',
+                   'role_parser': 'natlang_neuralese.train.text_supervision.chat_roles',
+                   'weighting': 'natlang_neuralese.train.text_supervision.segmented_position_weights'}
     return {
         'schema': SCHEMA,
         'id': 'text:' + identifier,
