@@ -1352,6 +1352,25 @@ def appended_training_stages(old_recipe, new_recipe, out):
     return added
 
 
+def activated_existing_training_stages(old_recipe, new_recipe, out):
+    """Existing declared stages may be admitted only before they have produced any output."""
+    old = {stage['id']: stage for stage in old_recipe.get('stages', [])}
+    activated = {}
+    for stage in new_recipe.get('stages', []):
+        sid = stage['id']
+        previous = old.get(sid)
+        if previous is None or previous.get('admitted') is not False or stage.get('admitted') is False:
+            continue
+        if stage.get('admitted') is not True:
+            raise ValueError('handoff refused: admission activation must explicitly set admitted:true for ' + sid)
+        if stage_started(out, sid):
+            raise ValueError('handoff refused: cannot activate already-started stage ' + sid)
+        if not stage.get('inputs'):
+            raise ValueError('handoff refused: activated stage has no declared inputs: ' + sid)
+        activated[sid] = {'kind': 'admitted_stage'}
+    return activated
+
+
 def unstarted_stage_input_changes(existing, plan, out):
     """The stages whose resolved inputs a handoff changes. A later stage that has not started may take new content for
     its declared input roles (e.g. a newer data rendering for a not-yet-reached phase). The active (started,
@@ -1360,7 +1379,8 @@ def unstarted_stage_input_changes(existing, plan, out):
     documents counted as seen). A finished stage's inputs stay fixed. Returns {stage id: {'kind', 'old', 'new'}}."""
     old_inputs, new_inputs = existing.get('stage_inputs'), plan.get('stage_inputs')
     appended = appended_training_stages(existing['recipe'], plan['recipe'], out)
-    if old_inputs == new_inputs and not appended:
+    activated = activated_existing_training_stages(existing['recipe'], plan['recipe'], out)
+    if old_inputs == new_inputs and not appended and not activated:
         return {}
     if (not isinstance(old_inputs, dict) or not isinstance(new_inputs, dict)
             or not set(old_inputs) <= set(new_inputs)
@@ -1371,6 +1391,32 @@ def unstarted_stage_input_changes(existing, plan, out):
         old, new = old_inputs.get(stage_id, {}), new_inputs[stage_id]
         if stage_id in appended:
             changes[stage_id] = {'kind': 'appended_stage', 'old': {}, 'new': new}
+            continue
+        if stage_id in activated:
+            declared = next(s for s in plan['recipe']['stages'] if s['id'] == stage_id)
+            if not new or set(new) != set(declared['inputs']):
+                raise ValueError('handoff refused: activated stage ' + stage_id +
+                                 ' must resolve every declared input binding')
+            for role, binding in declared['inputs'].items():
+                value = new[role]
+                if value.get('binding') != binding:
+                    raise ValueError('handoff refused: activated stage ' + stage_id +
+                                     ' input binding does not match its recipe')
+                spec = plan['recipe'].get('input_bindings', {}).get(binding)
+                if not isinstance(spec, dict):
+                    raise ValueError('handoff refused: activated stage ' + stage_id +
+                                     ' input is not backed by its declared binding')
+                if spec.get('artifact'):
+                    if value.get('artifact') != spec['artifact']:
+                        raise ValueError('handoff refused: activated stage ' + stage_id +
+                                         ' artifact does not match its declared binding')
+                elif value.get('sha256') != spec.get('sha256'):
+                    raise ValueError('handoff refused: activated stage ' + stage_id +
+                                     ' input hash does not match its declared binding')
+                if plan.get('inputs', {}).get(value.get('path')) != value.get('sha256'):
+                    raise ValueError('handoff refused: activated stage ' + stage_id +
+                                     ' input is absent from the plan input identity map')
+            changes[stage_id] = {'kind': 'admitted_stage', 'old': old, 'new': new}
             continue
         if old == new:
             continue
@@ -1417,6 +1463,27 @@ def _without_unstarted_bindings(old_recipe, new_recipe, changes):
     return old_value, new_value
 
 
+def _without_activated_stage_policy(old_recipe, new_recipe, activated):
+    """Ignore only admission and future objective membership for newly admitted unstarted stages."""
+    if not activated:
+        return old_recipe, new_recipe
+    values = [json.loads(json.dumps(value)) for value in (old_recipe, new_recipe)]
+    for value in values:
+        for stage in value.get('stages', []):
+            if stage['id'] in activated:
+                stage['admitted'] = False
+        for name in ('family', 'e2e_mix'):
+            component = value.get(name)
+            if isinstance(component, dict) and isinstance(component.get('stages'), list):
+                component['stages'] = [sid for sid in component['stages'] if sid not in activated]
+                if not component['stages']:
+                    value.pop(name)
+        progress = (value.get('quantization') or {}).get('stage_progress', {})
+        for sid in activated:
+            progress.pop(sid, None)
+    return values
+
+
 def _inputs_without(inputs, stage_inputs, changes, side):
     """The plan's input identity map minus files read only by the changed (unstarted) stages."""
     kept = {value['path'] for stage_id, roles in stage_inputs.items() if stage_id not in changes
@@ -1441,6 +1508,7 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
     if existing.get('device') != plan.get('device'):
         raise ValueError('handoff refused: device changed; use a new stage lineage')
     appended = appended_training_stages(existing['recipe'], plan['recipe'], out)
+    activated = activated_existing_training_stages(existing['recipe'], plan['recipe'], out)
     input_changes = unstarted_stage_input_changes(existing, plan, out)
     if (_inputs_without(existing.get('inputs'), existing.get('stage_inputs') or {}, input_changes, 'old') !=
             _inputs_without(plan.get('inputs'), plan.get('stage_inputs') or {}, input_changes, 'new')):
@@ -1450,6 +1518,8 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
     new_handoff_recipe = _without_extensions(plan['recipe'], extended)
     old_handoff_recipe, new_handoff_recipe = _without_unstarted_bindings(
         old_handoff_recipe, new_handoff_recipe, input_changes)
+    old_handoff_recipe, new_handoff_recipe = _without_activated_stage_policy(
+        old_handoff_recipe, new_handoff_recipe, activated)
     if appended:
         compared = []
         for value in (old_handoff_recipe, new_handoff_recipe):
@@ -1472,6 +1542,10 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
         added_kinds = {stage['kind'] for stage in appended.values()} - old_kinds
         for kind in added_kinds:
             new_handoff_recipe.get('stage_parameter_defaults', {}).pop(kind, None)
+    if activated:
+        record_activated = sorted(activated)
+    else:
+        record_activated = []
     objective_change, old_handoff_recipe, new_handoff_recipe = objective_handoff(
         old_handoff_recipe, new_handoff_recipe, out)
     windowing_changes, old_handoff_recipe, new_handoff_recipe = direct_windowing_handoffs(
@@ -1513,6 +1587,8 @@ def lineage_handoff(existing, plan, frozen, package, plan_path, out=None, dry_ru
               'code_removed': sorted(old_code.keys() - new_code.keys())}
     if appended:
         record['appended_stages'] = appended
+    if record_activated:
+        record['activated_stages'] = record_activated
     if extended:
         record['extended'] = extended
     if epoch_budget_changes:

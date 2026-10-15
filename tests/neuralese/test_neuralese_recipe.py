@@ -1134,3 +1134,70 @@ def test_running_recipe_can_append_future_training_stages_without_restarting(tmp
     (out / 'sft').mkdir()
     with pytest.raises(ValueError, match='already has output'):
         runner.lineage_handoff(copy.deepcopy(old), plan, frozen, package, path, out, dry_run=True)
+
+
+def test_lineage_handoff_can_activate_only_an_unstarted_declared_stage(tmp_path):
+    import copy
+    import json
+
+    from natlang_neuralese.train import recipe as runner
+
+    out = tmp_path / 'run'
+    frozen = out / 'runtime' / 'natlang_neuralese'
+    frozen.mkdir(parents=True)
+    (frozen / 'a.py').write_text('x = 1\n')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / 'a.py').write_text('x = 2\n')
+    (out / 'sft').mkdir()
+
+    def make_plan(admitted, trajectory_sha='new'):
+        recipe = {
+            'id': 'r',
+            'input_bindings': {'trajectory': {'path': '/data/trajectory.jsonl', 'sha256': trajectory_sha}},
+            'stages': [
+                {'id': 'sft', 'kind': 'neuralese_direct', 'inputs': {'text_data': 'sft_data'},
+                 'parameters': {'epochs': 1}},
+                {'id': 'trajectory', 'kind': 'neuralese_direct', 'admitted': admitted,
+                 'inputs': {'text_data': 'trajectory'}, 'parameters': {'epochs': 1}},
+            ],
+            'stage_parameter_defaults': {'neuralese_direct': {'lr': 1e-5}},
+        }
+        stage_inputs = {'sft': {}, 'trajectory': {}}
+        inputs = {'/heads': 'H'}
+        if admitted:
+            stage_inputs['trajectory'] = {
+                'text_data': {'binding': 'trajectory', 'path': '/data/trajectory-' + trajectory_sha,
+                              'sha256': trajectory_sha}}
+            inputs[stage_inputs['trajectory']['text_data']['path']] = trajectory_sha
+        return {'recipe': recipe, 'recipe_sha256': 'new', 'device': 'cuda', 'inputs': inputs,
+                'stage_inputs': stage_inputs}
+
+    old = make_plan(False, 'old')
+    old['recipe']['input_bindings']['trajectory']['sha256'] = 'old'
+    old.update(recipe_sha256='lineage', code={'a.py': runner.sha(frozen / 'a.py')})
+    plan = make_plan(True, 'new')
+    path = out / 'recipe-plan.json'
+    path.write_text(json.dumps(old))
+
+    result = runner.lineage_handoff(copy.deepcopy(old), plan, frozen, package, path, out, dry_run=True)
+    record = result['handoffs'][-1]
+    assert result['recipe_sha256'] == 'lineage'
+    assert record['activated_stages'] == ['trajectory']
+    assert record['stage_input_changes']['trajectory']['kind'] == 'admitted_stage'
+    assert record['stage_input_changes']['trajectory']['new']['text_data']['sha256'] == 'new'
+    assert record['previous_inputs'] == old['inputs']
+    assert json.loads(path.read_text()) == old
+    assert not (out / 'trajectory').exists()
+
+    # An existing run directory means the stage has crossed its safe activation boundary.
+    (out / 'trajectory').mkdir()
+    with pytest.raises(ValueError, match='cannot activate already-started stage trajectory'):
+        runner.lineage_handoff(copy.deepcopy(old), copy.deepcopy(plan), frozen, package, path, out, dry_run=True)
+    (out / 'trajectory').rmdir()
+
+    # Activation cannot smuggle unrelated edits to an existing stage's recipe.
+    changed = copy.deepcopy(plan)
+    changed['recipe']['stages'][1]['parameters']['lr'] = 2e-5
+    with pytest.raises(ValueError, match='more than operational'):
+        runner.lineage_handoff(copy.deepcopy(old), changed, frozen, package, path, out, dry_run=True)
