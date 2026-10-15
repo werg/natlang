@@ -12,7 +12,7 @@ import threading
 import pytest
 import torch
 from tokenizers import Tokenizer
-from tokenizers.models import WordLevel
+from tokenizers.models import WordLevel, BPE
 from tokenizers.pre_tokenizers import WhitespaceSplit
 from transformers import PreTrainedTokenizerFast
 
@@ -47,7 +47,15 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
         vocabulary[marker] = token
     raw_tokenizer = Tokenizer(WordLevel(vocabulary, unk_token='t0'))
     if mode == 'forced':
+        # A real BPE merge crosses an ordinary-text body boundary, while actual
+        # producer role tokens delimit independent prefix/body/suffix runs.
+        for token, index in [('t', 10), ('5', 11), ('6', 12), ('7', 13), ('8', 14), ('t5t6', 15)]:
+            del vocabulary[f't{index}']
+            vocabulary[token] = index
+        raw_tokenizer = Tokenizer(BPE(vocabulary, [('t', '5'), ('t', '6'), ('t', '7'), ('t', '8'), ('t5', 't6')], unk_token='t0'))
         raw_tokenizer.pre_tokenizer = WhitespaceSplit()
+        assert raw_tokenizer.encode('t5t6').ids == [15]
+        assert raw_tokenizer.encode('t5').ids + raw_tokenizer.encode('t6').ids == [5, 6]
     tokenizer = PreTrainedTokenizerFast(tokenizer_object=raw_tokenizer,
         unk_token='t0', bos_token='t1', eos_token='t2', pad_token='t3', additional_special_tokens=list(ROLE_MARKERS))
     last_only = ' and loop.last' if family == 'lfm' else ''

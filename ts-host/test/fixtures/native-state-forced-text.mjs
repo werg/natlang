@@ -28,8 +28,8 @@ for (const text of ['t5', '']) {
 
 const initialized = await initBodyInContext({ endpoint, store: reopened, text: 't6', type: 'Neuralese<string>',
   render: async (placeholder, capture) => capture({ messages: [{ role: 'user', content: [
-    { type: 'native_state', id: forced.id }, { type: 'text', text: ' t7 ' },
-    { type: 'native_state', id: placeholder }, { type: 'text', text: ' t8 ' }] }], tools: [] }) });
+    { type: 'native_state', id: forced.id }, { type: 'text', text: ' t5' },
+    { type: 'native_state', id: placeholder }, { type: 'text', text: 't8 ' }] }], tools: [] }) });
 assert.equal(initialized.init.contextual, true);
 assert.equal(initialized.init.source_capture.segments.filter(s => s.kind === 'native_state').length, 1);
 const bytes = await saveNz({ body: { type: 'Neuralese<string>', value: { $neuralese: { type: 'Neuralese<string>', id: initialized.id } } } },

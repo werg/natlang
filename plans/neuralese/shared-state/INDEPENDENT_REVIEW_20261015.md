@@ -84,3 +84,10 @@ coverage and real model training/task checks are independently reviewed.
 Validation for native client/zero/view follow-up: ledger `native-review-complete-final-e2e-20261015` ran 59 passing CPU tests and 8 GPU skips; `native-review-complete-final-node-20261015` ran 49 passing Node tests. Final quick ratchets/typecheck passed. Actual full production-backbone GPU qualification remains separate.
 
 Final narrow follow-up: `native-review-publish-e2e-20261015` passed6 actual two-architecture tests after contextual length checks; `native-review-empty-dtypes-20261015` passed4 FP32/BF16 LFM/Mellum zero-state tests. Empty attention/convolution payloads retain the normal capture FP32 dtype even when embeddings are BF16.
+
+Native body BPE correction: marker-free ordinary-text concat equality was an
+obsolete identity requirement. Actual producer markers delimit prefix, payload
+and suffix token runs, so valid contextual native bodies no longer fail when an
+ordinary string would merge across those boundaries. Actual payload/source
+captures remain verified. Ledger `native-review-native-bpe-body-20261015` passed
+four real LFM/Mellum handoff and BPE forced/body/view cases.

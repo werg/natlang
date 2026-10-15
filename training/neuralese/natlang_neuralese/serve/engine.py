@@ -874,13 +874,9 @@ class Engine:
         before, after = source.split(marker)
         from .chat import escape_specials
         escaped_body = escape_specials(text, self.specials, rendered.escape_nonce)
-        whole = self._template_tokens(before + escaped_body + after, rendered.escape_nonce)
         left = self._template_tokens(before, rendered.escape_nonce)
         body = self._template_tokens(escaped_body, rendered.escape_nonce)
         right = self._template_tokens(after, rendered.escape_nonce)
-        if whole != left + body + right:
-            raise RequestError("neuralese-native-state-token-boundary",
-                               "rendered tokenizer merges body text with adjacent call text; use a boundary-separated body")
         if self.prompt_positions(messages, tools) >= self.context:
             raise RequestError("context-length", "contextual native body source exceeds this model context")
         from ..model.shared_state import native_step
