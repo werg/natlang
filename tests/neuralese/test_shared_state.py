@@ -149,7 +149,7 @@ def test_incremental_capture_splice_matches_one_pass_and_gradients(family):
                                for key, value in layer.items()} for layer in producer['layers'])
     captured['embeddings'] = producer['embeddings'][2:4]
     identity = dict(checkpoint_sha256='a'*64, tokenizer_fingerprint='b'*64, embedding_weight_sha256='c'*64)
-    block = SimpleNamespace(**captured, **identity, validate=lambda: None)
+    block = SimpleNamespace(**captured, **identity, architecture=port.config.model_type, validate=lambda: None)
     prefix = native_step(model, torch.tensor([[7, 8]]))
     cache = splice_block(model, prefix['cache'], block, **identity)
     suffix = native_step(model, torch.tensor([[9, 10]]), cache)
@@ -211,7 +211,7 @@ def test_nested_export_keeps_intervening_import_aliases(family):
     fields = capture_invocation_span(flat, 'b', 1, 3)
     assert fields['token_ids'].tolist() == [7, 4, 5, 8]
     identity = dict(checkpoint_sha256='a'*64, tokenizer_fingerprint='b'*64, embedding_weight_sha256='c'*64)
-    block = SimpleNamespace(**fields, **identity, validate=lambda: None)
+    block = SimpleNamespace(**fields, **identity, architecture=port.config.model_type, validate=lambda: None)
     prefix = native_step(model, torch.tensor([[10]]))
     cache = splice_block(model, prefix['cache'], block, **identity)
     suffix = native_step(model, torch.tensor([[11, 12]]), cache)
@@ -258,13 +258,14 @@ def test_external_native_state_has_exact_forward_and_joint_gradients(family):
     complete = model(compile_graph([source, target]))
     produced = model(compile_graph([source]))
     fields = capture_invocation_span(produced, 'source', 2, 4)
-    # NativeStateBlock validation in production; test preserves actual tensors
-    # and autograd through a differentiable external state transport.
-    block = SimpleNamespace(**fields, validate=lambda: None)
+    from natlang_neuralese.model.state_block import NativeStateBlock
+    identity = dict(checkpoint_sha256='a'*64, tokenizer_fingerprint='b'*64,
+                    embedding_weight_sha256='c'*64, architecture=port.config.model_type)
+    block = NativeStateBlock(text='shared', **fields, **identity)
     plan = compile_graph([Invocation('target', target.token_ids,
                          imports=(ImportSpan(1, 'wire', 0, 2),))], external_sizes={'wire': 2})
-    external = model(plan, external_blocks={'wire': block})
-    reference = model(plan, external_blocks={'wire': block}, reference=True)
+    external = model(plan, external_blocks={'wire': block}, external_identity=identity)
+    reference = model(plan, external_blocks={'wire': block}, external_identity=identity, reference=True)
     torch.testing.assert_close(external['h_final'], complete['h_final'][:, -3:], atol=4e-6, rtol=3e-5)
     torch.testing.assert_close(external['h_final'], reference['h_final'], atol=4e-6, rtol=3e-5)
     weight = torch.randn_like(external['h_final'])
@@ -276,8 +277,8 @@ def test_external_native_state_has_exact_forward_and_joint_gradients(family):
     delta = torch.nn.Parameter(torch.tensor(0.01))
     decoded_layers = tuple({key: value + delta if key != 'kind' else value
                             for key, value in layer.items()} for layer in fields['layers'])
-    decoded = SimpleNamespace(**{**fields, 'layers': decoded_layers}, validate=lambda: None)
-    adapted = model(plan, external_blocks={'wire': decoded})
+    decoded = NativeStateBlock(text='shared', **{**fields, 'layers': decoded_layers}, **identity)
+    adapted = model(plan, external_blocks={'wire': decoded}, external_identity=identity)
     grad_delta, grad_source = torch.autograd.grad(adapted['h_final'].square().sum(),
                                                 (delta, model.adapter.up.weight))
     assert grad_delta.abs() > 0
@@ -317,3 +318,33 @@ def test_channel_checkpoint_is_complete_and_rejects_legacy_or_wrong_contract():
         restore_channel_checkpoint(other, {**state, 'format': 'neuralese_direct/1'})
     with pytest.raises(ValueError, match='marker_ids'):
         restore_channel_checkpoint(other, {**state, 'marker_ids': (59, 60, 61, 62)})
+
+
+def test_external_states_require_explicit_target_identity():
+    from natlang_neuralese.model.shared_state import SharedStateModel, capture_block
+    port = tiny('lfm')
+    model = SharedStateModel(port, (60, 61, 62, 63), rank=4)
+    source = model(compile_graph([Invocation('source', (2, 3), producing=((0, 2),))]))
+    identity = dict(checkpoint_sha256='a'*64, tokenizer_fingerprint='b'*64,
+                    embedding_weight_sha256='c'*64, architecture=port.config.model_type)
+    block = capture_block(source, 'source', 0, 2, text='source', **identity)
+    plan = compile_graph([Invocation('target', (4, 5), imports=(ImportSpan(1, 'external', 0, 2),))],
+                         external_sizes={'external': 2})
+    with pytest.raises(ValueError, match='explicit target'):
+        model(plan, external_blocks={'external': block})
+    with pytest.raises(ValueError, match='checkpoint_sha256'):
+        model(plan, external_blocks={'external': block}, external_identity={**identity, 'checkpoint_sha256': 'd'*64})
+
+
+def test_marker_provisioning_with_installed_transformers_tokenizer_api():
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
+    from transformers import PreTrainedTokenizerFast
+    from natlang_neuralese.model.shared_state import provision_role_tokens, ROLE_MARKERS
+    tokenizer = PreTrainedTokenizerFast(tokenizer_object=Tokenizer(WordLevel(
+        vocab={f'word{i}': i for i in range(64)}, unk_token='word0')), unk_token='word0')
+    port = tiny('lfm')
+    controls = provision_role_tokens(port, tokenizer)
+    assert controls.ids == (64, 65, 66, 67)
+    assert tokenizer(list(ROLE_MARKERS), add_special_tokens=False).input_ids == [[i] for i in controls.ids]
+    assert all(token in tokenizer.all_special_tokens for token in ROLE_MARKERS)

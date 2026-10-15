@@ -212,7 +212,7 @@ def _convolve(layer, gated, c, plan, rows):
     return c * out
 
 
-def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None = None, *, embeddings=None, external_blocks=None, retain_states=True):
+def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None = None, *, embeddings=None, external_blocks=None, external_identity=None, retain_states=True):
     """Single layer-major DAG pass. No source trajectory is rerun per import."""
     device = port.embedding_weight.device
     ids = plan.tensor([t for n in plan.invocations for t in n.token_ids], device)
@@ -224,7 +224,7 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
     slots = plan.tensor(plan.slot_sources, device)
     key_positions = plan.tensor(plan.slot_positions, device)
     query_positions = plan.tensor(plan.own_positions, device)
-    external = _external_layers(port, plan, external_blocks)
+    external = _external_layers(port, plan, external_blocks, external_identity)
     state = []
     masks = {}
     checkpointed = bool(getattr(port, 'checkpoint_layers', False)) and torch.is_grad_enabled()
@@ -269,7 +269,7 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
     return {'h_final': h, 'states': tuple(state), 'plan': plan}
 
 
-def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, external_blocks=None):
+def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, external_blocks=None, external_identity=None):
     """Slow invocation-major native-cache oracle, for correctness checks only.
 
     Each completed source retains raw layer states. Each consumer rotates only
@@ -277,7 +277,7 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
     conv1d are deliberately independent of the flattened mask/gather kernels.
     """
     device = port.embedding_weight.device
-    external = _external_layers(port, plan, external_blocks)
+    external = _external_layers(port, plan, external_blocks, external_identity)
     layer_cache = [[] for _ in port.layers]
     outputs = []
     for node, offset, logical in zip(plan.invocations, plan.offsets, plan.sequences):
@@ -449,12 +449,12 @@ class SharedStateModel(nn.Module):
         logits[..., list(self.marker_ids)] = normalized @ rows.to(normalized.dtype).T
         return logits
 
-    def forward(self, plan, *, embeddings=None, reference=False, external_blocks=None, retain_states=True):
+    def forward(self, plan, *, embeddings=None, reference=False, external_blocks=None, external_identity=None, retain_states=True):
         ids = plan.tensor([t for node in plan.invocations for t in node.token_ids], self.input_rows.device)
         raw = self.embed(ids[None]) if embeddings is None else embeddings
         fn = forward_reference if reference else forward_graph
         kwargs = {} if reference else {'retain_states': retain_states}
-        result = fn(self.port, plan, self.adapter, embeddings=raw, external_blocks=external_blocks, **kwargs)
+        result = fn(self.port, plan, self.adapter, embeddings=raw, external_blocks=external_blocks, external_identity=external_identity, **kwargs)
         result['embeddings'] = raw
         result['token_ids'] = ids
         if plan.external_names:
@@ -496,7 +496,9 @@ def capture_invocation_span(result, invocation, start, stop):
 
 def capture_block(result, invocation, start, stop, **metadata):
     from .state_block import NativeStateBlock
-    return NativeStateBlock(**metadata, **capture_invocation_span(result, invocation, start, stop)).validate()
+    block = NativeStateBlock(**metadata, **capture_invocation_span(result, invocation, start, stop))
+    block.validate()
+    return block
 
 
 @dataclass(frozen=True)
@@ -518,8 +520,11 @@ def provision_role_tokens(port, tokenizer):
     expanded tokenizer and this model's marker contract with its new lineage.
     Both HF backbones and the native Mellum/Maple wrapper are supported.
     """
-    tokenizer.add_special_tokens({'additional_special_tokens': list(ROLE_MARKERS)},
-                                 replace_additional_special_tokens=False)
+    import inspect
+    modern = 'replace_extra_special_tokens' in inspect.signature(tokenizer.add_special_tokens).parameters
+    key = 'extra_special_tokens' if modern else 'additional_special_tokens'
+    option = 'replace_extra_special_tokens' if modern else 'replace_additional_special_tokens'
+    tokenizer.add_special_tokens({key: list(ROLE_MARKERS)}, **{option: False})
     ids = tuple(tokenizer.convert_tokens_to_ids(marker) for marker in ROLE_MARKERS)
     if len(set(ids)) != 4 or any(i is None or i == tokenizer.unk_token_id for i in ids):
         raise ValueError('tokenizer failed to provision four distinct Neuralese role markers')
@@ -618,6 +623,8 @@ def splice_block(model, cache, block, *, checkpoint_sha256, tokenizer_fingerprin
         if getattr(block, field) != expected:
             raise ValueError(f'native Neuralese {field} differs; re-encode text with this model before consuming it')
     port = model.port
+    if block.architecture != str(getattr(port.config, 'model_type', type(port).__name__)):
+        raise ValueError('native state architecture differs from the consumer')
     cache = cache or PortCache.empty(port.num_layers)
     if cache.pad is not None or len(set(cache.lengths)) != 1 or len(block.layers) != port.num_layers:
         raise ValueError('native state layer layout or cache positions disagree')
@@ -675,25 +682,40 @@ def concatenate_captures(chunks):
     return result
 
 
-def _external_layers(port, plan, external_blocks):
+def _external_layers(port, plan, external_blocks, external_identity):
     blocks = external_blocks or {}
     if set(blocks) != set(plan.external_names):
         raise ValueError('external state names must exactly match the compiled graph contract')
+    if blocks and external_identity is None:
+        raise ValueError('external native state requires the explicit target model identity')
     result = []
+    kinds = tuple('attention' if port.is_attention(i) else 'finite_convolution' for i in range(port.num_layers))
     for name, count in zip(plan.external_names, plan.external_sizes):
         block = blocks[name]
-        block.validate()
+        block.require_native(**external_identity, layer_kinds=kinds)
+        if block.architecture != str(getattr(port.config, 'model_type', type(port).__name__)):
+            raise ValueError('external native state architecture disagrees with the target decoder')
         if len(block.token_ids) != count or len(block.layers) != port.num_layers:
             raise ValueError('external state token count or decoder depth disagrees with its graph declaration')
+        if block.embeddings.shape[1] != port.embedding_weight.shape[1]:
+            raise ValueError('external state embedding width disagrees with the target decoder')
+        if bool((block.token_ids >= port.embedding_weight.shape[0]).any()):
+            raise ValueError('external state token IDs are outside the target vocabulary')
         layers = []
         for i, payload in enumerate(block.layers):
             if port.is_attention(i):
                 if payload['kind'] != 'attention':
                     raise ValueError('external state layer kind disagrees with the decoder')
+                attn = port.layers[i].self_attn
+                heads = attn.k_proj.out_features // attn.head_dim
+                if payload['raw_k'].shape[1:] != (heads, attn.head_dim):
+                    raise ValueError('external state attention head layout disagrees with the target decoder')
                 layers.append(tuple(payload[key].to(port.embedding_weight).transpose(0, 1)[None] for key in ('raw_k', 'v')))
             else:
                 if payload['kind'] != 'finite_convolution':
                     raise ValueError('external state layer kind disagrees with the decoder')
+                if payload['gated_inputs'].shape[1] != port.layers[i].conv.conv.weight.shape[0]:
+                    raise ValueError('external state convolution channels disagree with the target decoder')
                 layers.append((payload['gated_inputs'].to(port.embedding_weight)[None],))
         result.append(tuple(layers))
     return tuple(result)
