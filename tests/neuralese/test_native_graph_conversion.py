@@ -325,3 +325,15 @@ def test_pair_resume_expansion_processes_uncovered_edges_in_a_completed_chain():
     train_ids = module._selected_edge_ids({'chain-a': mixed[:2], 'chain-b': mixed[2:]}, 'train')
     assert all_ids == {identity(edge) for edge in mixed}
     assert train_ids == {identity(mixed[0]), identity(mixed[2])}
+    previous = {'inputs': {'edges': {'sha256': 'b' * 64}, 'rebuild_all_pairs': {
+        'mode': 'all-admitted-edges', 'edges_sha256': 'b' * 64}},
+        'requested_edge_ids': [identity(mixed[0])]}
+    expanded = {'edges': {'sha256': 'b' * 64}, 'rebuild_all_pairs': {
+        'mode': 'all-admitted-edges', 'edges_sha256': 'b' * 64,
+        'selected_edge_ids': {'sha256': 'c' * 64}}}
+    assert module._pair_resume_base(previous['inputs']) == module._pair_resume_base(expanded)
+    assert module._previous_requested_edges(previous, {identity(edge): edge for edge in mixed}) == {
+        identity(mixed[0])}
+    assert set(previous['requested_edge_ids']) < all_ids
+    assert module._remaining_edges_by_chain({'chain-a': mixed[:2], 'chain-b': mixed[2:]},
+        set(previous['requested_edge_ids'])) == {'chain-a': [mixed[1]], 'chain-b': [mixed[2]]}
