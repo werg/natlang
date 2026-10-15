@@ -24,6 +24,16 @@ from ..common.hashing import sha256_file_hex_cached as sha  # cached by (realpat
 
 
 HANDLERS = {
+    # Native positional-KV/hybrid-state training (shared-state migration,
+    # plans/neuralese/NATIVE_STATE_SFT_DECOMPOSITION_20261015.md). The input
+    # graph files are already admitted and carry explicit split provenance.
+    'native_state_sft': {'module': 'natlang_neuralese.train.native_state_sft',
+                         'required_inputs': {'native_graphs', 'held_native_graphs'},
+                         'optional_inputs': {'continue_from'},
+                         'parameters': {'base', 'rank', 'epochs', 'batch_graphs', 'learning_rate', 'weight_decay',
+                             'latent_ns', 'eval_every', 'checkpoint_every', 'checkpoint_layers', 'chunk_tokens',
+                             'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'seed', 'task_eval',
+                             'task_eval_every', 'forward_atol', 'gradient_atol'}, 'result': 'checkpoint.pt'},
     # Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md): plain target SFT from a base model with the
     # NeuraleseProjection; the TokenChoiceProjection is declared per stage (off in v1).
     # Its data is either prepared text (text_data, the shared declared input of neuralese-direct-v2) or records and
@@ -262,6 +272,7 @@ DIRECT_PHASE_CONTINUATION = {'continue_from': 'checkpoint.pt', 'continue_identit
 
 # Stage kinds that train the direct checkpoint with the direct trainer and so continue phase to phase (S7 RL included).
 DIRECT_TRAINING_KINDS = frozenset({'neuralese_direct', 'neuralese_rl'})
+NATIVE_TRAINING_KINDS = frozenset({'native_state_sft'})
 
 
 def direct_phase_predecessor(recipe, stage):
@@ -376,7 +387,8 @@ def stage_input_args(resolved, kind):
     args = []
     supported = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
     resolved = _staged_inputs(resolved)
-    for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'continue_from', 'continue_identity',
+    for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'native_graphs',
+                 'held_native_graphs', 'continue_from', 'continue_identity',
                  'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',
                  'direct_parent_proof', 'aligned_projection'):
@@ -1090,6 +1102,11 @@ def require_gate(report, kind, *, training_progress=False):
                 return
             raise ValueError('Neuralese direct stage not qualified (held CE below base, final task '
                              'successes >= min_successes; base drift and behaviour gate report-only, owner 2026-10-15)')
+    elif kind in NATIVE_TRAINING_KINDS:
+        if report.get('schema') != 'natlang.neuralese-native-sft-report/1' or report.get('completed') is not True:
+            raise ValueError('native-state SFT has not completed its declared graph exposure')
+        if report.get('numerics_ok') is not True:
+            raise ValueError('native-state SFT reported a numerical failure')
     elif kind=='text_warmup_runtime':
         if report.get('runtime_qualified') is not True or report.get('output_reference_qualified') is not True:
             raise ValueError('adapted warm-up runtime/output reference gate failed')
@@ -2123,7 +2140,7 @@ def main(argv=None):
                 for dependency in stage['requires']:
                     predecessor = next(report for report in reports if report['id'] == dependency)
                     require_gate(predecessor['gate'], predecessor['kind'],
-                                 training_progress=kind in DIRECT_TRAINING_KINDS)
+                                 training_progress=kind in DIRECT_TRAINING_KINDS | NATIVE_TRAINING_KINDS)
                 output = directory / HANDLERS[kind]['result']
                 stage_heads = args.heads
                 continuation_checkpoint = None
@@ -2151,7 +2168,7 @@ def main(argv=None):
                         predecessor=next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']==predecessor_kind)
                         stage_heads=predecessor['artifact']
                 command = [sys.executable, '-m', HANDLERS[kind]['module']]
-                if not direct_artifact_stage:
+                if not direct_artifact_stage and kind not in NATIVE_TRAINING_KINDS:
                     command += ['--heads', hdd_guard.input_path('heads', stage_heads)]
                 command += stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
                            str(output if kind == 'token_identity' else directory), '--device', args.device]
@@ -2166,6 +2183,17 @@ def main(argv=None):
                         raise ValueError('continued direct phase ' + stage['id'] + ' lacks predecessor output(s): ' +
                                          ', '.join(absent))
                     command += stage_input_args(continuation, kind)
+                native_predecessors = [name for name in stage['requires']
+                                       if next((item['kind'] for item in recipe['stages']
+                                                if item['id'] == name), None) in NATIVE_TRAINING_KINDS]
+                if kind in NATIVE_TRAINING_KINDS and native_predecessors:
+                    if len(native_predecessors) != 1:
+                        raise ValueError('native SFT continuation requires one native-state predecessor')
+                    if 'continue_from' in stage_inputs[stage['id']]:
+                        raise ValueError('native SFT continuation cannot declare both a native predecessor and an '
+                                         'independent continue_from input')
+                    predecessor = next(report for report in reports if report['id'] == native_predecessors[0])
+                    command += ['--continue-from', predecessor['artifact']]
                 if continuation_checkpoint:
                     command += ['--continue-from', continuation_checkpoint]
                 if kind == 'raw_runtime_qualification':
@@ -2187,6 +2215,25 @@ def main(argv=None):
                     print(json.dumps({'event': 'hardware_profile', 'stage': stage['id'], **profile_record}), flush=True)
                 command += stage_parameter_args({key: value for key, value in profiled.items()
                                                  if key not in RUNNER_STAGE_PARAMETERS})
+                if kind in NATIVE_TRAINING_KINDS:
+                    prerequisites = []
+                    for dependency in stage['requires']:
+                        prior = next((item for item in reports if item['id'] == dependency), None)
+                        if prior is None or prior['kind'] not in NATIVE_TRAINING_KINDS:
+                            continue
+                        receipt_path = Path(prior['artifact']).parent / 'native-training-receipt.json'
+                        if not receipt_path.is_file():
+                            raise ValueError('native predecessor lacks its exposure/readiness receipt: ' +
+                                             prior['id'])
+                        receipt = json.loads(receipt_path.read_text())
+                        prerequisites.append({'id': prior['id'], 'completed': receipt.get('completed') is True,
+                            'exposure_receipt': {'path': str(receipt_path.resolve()),
+                                                 'sha256': sha(receipt_path)}})
+                    recipe_binding = {'path': str(args.recipe.resolve()), 'sha256': plan['recipe_sha256']}
+                    command += ['--recipe-binding', json.dumps(recipe_binding, sort_keys=True,
+                                                               separators=(',', ':')),
+                                '--stage-id', stage['id'], '--prerequisite-stages',
+                                json.dumps(prerequisites, sort_keys=True, separators=(',', ':'))]
                 component = stage_quantization(recipe, stage, stage_parameters, reports, init_mix)
                 if component is not None:
                     command += ['--quantization', json.dumps(component, sort_keys=True, separators=(',', ':'))]
@@ -2224,7 +2271,7 @@ def main(argv=None):
                     gate = json.loads((directory / ('runtime-report.json' if kind=='raw_runtime_qualification' else 'report.json')).read_text())
                 elif kind=='verified_heads_handoff':
                     gate=json.loads((directory/'report.json').read_text())
-                elif kind in ('core_text_warmup','neuralese_direct'):
+                elif kind in ('core_text_warmup','neuralese_direct','native_state_sft'):
                     gate=json.loads((directory/'report.json').read_text())
                 elif kind == 'direct_runtime_qualification':
                     gate = json.loads((directory / 'report.json').read_text())

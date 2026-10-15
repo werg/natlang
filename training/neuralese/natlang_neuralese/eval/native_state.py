@@ -1,0 +1,87 @@
+"""Exact native-state forward/capture/splice verification on an existing model."""
+from __future__ import annotations
+
+import copy
+import time
+
+import torch
+import torch.nn.functional as F
+
+
+def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forward_atol, gradient_atol,
+                     task_execution_receipt=None, backbone_optimizer_updates=0):
+    """Verify the live trained instance without reloading a second backbone or changing training state.
+
+    The check compares graph execution with the explicit cached reference, compares
+    target CE and adapter gradients, then captures a producer span and consumes it
+    by exact native splice. The trainer's optimizer/weights/RNG remain untouched.
+    """
+    from ..model.native_model import native_identity
+    from ..model.shared_state import (Invocation, ImportSpan, capture_block, channel_checkpoint,
+                                      compile_graph, native_step, restore_channel_checkpoint, splice_block)
+
+    start = time.monotonic()
+    identity = native_identity(model, config, checkpoint_sha256=checkpoint_sha256)
+    source = tuple(tokenizer('Write a useful state: the account balance is 42 after adding seven units.',
+                             add_special_tokens=False).input_ids)
+    target = tuple(tokenizer('Read the state and return the account balance as an integer.',
+                             add_special_tokens=False).input_ids)
+    source = source[:-4] + (roles.produce_open,) + source[-4:] + (roles.produce_close,)
+    target = target[:2] + (roles.consume_open, roles.consume_close) + target[2:]
+    lo, hi = len(source) - 5, len(source) - 1
+    plan = compile_graph([Invocation('source', source, producing=((lo, hi),)),
+                          Invocation('target', target, imports=(ImportSpan(3, 'source', lo, hi),))])
+    positions = torch.arange(len(source) + 3, plan.token_count - 1, device=model.input_rows.device)
+    labels = torch.tensor(target[4:], device=model.input_rows.device)
+    previous_mode, previous_checkpointing = model.training, model.port.checkpoint_layers
+    adapter = model.adapter.up.weight
+    try:
+        model.eval()
+        model.port.checkpoint_layers = True
+        flat = model(plan)
+        reference = model(plan, reference=True)
+
+        def objective(result):
+            logits = model.logits(result['h_final'][:, positions]).float()
+            return F.cross_entropy(logits.flatten(0, 1), labels)
+
+        flat_loss, reference_loss = objective(flat), objective(reference)
+        flat_gradient = torch.autograd.grad(flat_loss, adapter, retain_graph=False)[0]
+        reference_gradient = torch.autograd.grad(reference_loss, adapter, retain_graph=False)[0]
+        forward_error = float((flat['h_final'] - reference['h_final']).detach().abs().max())
+        gradient_error = float((flat_gradient - reference_gradient).abs().max())
+        ce_error = abs(float(flat_loss.detach()) - float(reference_loss.detach()))
+        del flat, reference, flat_loss, reference_loss
+
+        with torch.no_grad():
+            result = model(plan)
+            block = capture_block(result, 'source', lo, hi,
+                text=tokenizer.decode(source[lo:hi], skip_special_tokens=False), **identity)
+            prefix = native_step(model, torch.tensor([target[:3]], device=model.input_rows.device))
+            cache = splice_block(model, prefix['cache'], block,
+                **{key: value for key, value in identity.items() if key != 'architecture'})
+            suffix = native_step(model, torch.tensor([target[3:]], device=model.input_rows.device), cache)
+            incremental_error = float((suffix['h_final'] - result['h_final'][:, len(source)+3:]).abs().max())
+            saved_channel = copy.deepcopy(channel_checkpoint(model))
+            before = {key: value.detach().clone() for key, value in saved_channel['adapter'].items()}
+            restore_channel_checkpoint(model, saved_channel)
+            restore_exact = all(torch.equal(model.adapter.state_dict()[key], value)
+                                for key, value in before.items())
+        del result, prefix, suffix, cache, block
+    finally:
+        model.port.checkpoint_layers = previous_checkpointing
+        model.train(previous_mode)
+    passed = (forward_error <= forward_atol and incremental_error <= forward_atol and
+              ce_error <= forward_atol and gradient_error <= gradient_atol and
+              bool(torch.isfinite(flat_gradient).all()) and bool(flat_gradient.abs().sum() > 0) and restore_exact)
+    return {'schema': 'natlang.native-runtime-certificate/1', 'passed': passed,
+            'checkpoint_sha256': checkpoint_sha256, 'native_identity': identity,
+            'forward_max_abs': forward_error, 'consumer_ce_abs': ce_error,
+            'consumer_gradient_max_abs': gradient_error, 'incremental_max_abs': incremental_error,
+            'channel_restore_exact': restore_exact, 'forward_atol': forward_atol,
+            'gradient_atol': gradient_atol, 'task_execution_receipt': task_execution_receipt,
+            'task_successes_are_qualification_barrier': False,
+            'backbone_optimizer_tested': backbone_optimizer_updates > 0,
+            'backbone_optimizer_updates': int(backbone_optimizer_updates),
+            'task_reward_evaluated': bool(task_execution_receipt),
+            'elapsed_seconds': time.monotonic() - start}
