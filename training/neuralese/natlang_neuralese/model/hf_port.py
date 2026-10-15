@@ -273,7 +273,7 @@ _FLEX = {}
 def _flex_window(attn, q, k, v, window: int) -> torch.Tensor:
     """Sliding-window causal attention of a fresh sequence (keys = queries) as one FlexAttention call: a block-sparse
     Triton kernel forward and backward with native GQA and the window as a block mask (keys at distance < window, the
-    query itself included: `_window_mask`). 7.6x faster forward+backward than the banded SDPA blocks on the GB10
+    query itself included: `_window_mask`), including a cached prefix. 7.6x faster forward+backward than the banded SDPA blocks on the GB10
     (their masked memory-efficient backward; plans/neuralese/TRAINING_SPEED_20261012.md). Compiled once with dynamic
     shapes; block masks are cached per (length, window)."""
     from torch.nn.attention.flex_attention import create_block_mask, flex_attention
@@ -281,20 +281,22 @@ def _flex_window(attn, q, k, v, window: int) -> torch.Tensor:
     if "kernel" not in _FLEX:
         _FLEX["kernel"] = torch.compile(flex_attention, dynamic=True)
     steps = q.shape[2]
-    key = (steps, window, q.device)
+    total, start = k.shape[2], k.shape[2] - steps
+    key = (steps, total, window, q.device)
     masks = _FLEX.setdefault("masks", {})
     if key not in masks:
         def in_window(b, h, query, key_index):
-            return (query >= key_index) & (query - key_index < window)
+            distance = query + start - key_index
+            return (distance >= 0) & (distance < window)
         if len(masks) >= 64:
             masks.pop(next(iter(masks)))
-        masks[key] = create_block_mask(in_window, None, None, steps, steps, device=q.device)
+        masks[key] = create_block_mask(in_window, None, None, steps, total, device=q.device)
     return _FLEX["kernel"](q, k, v, block_mask=masks[key], scale=attn.scaling, enable_gqa=True)
 
 
 def _flex_enabled(q, k) -> bool:
     import os
-    return (q.is_cuda and q.shape[2] == k.shape[2] and q.dtype in (torch.bfloat16, torch.float16)
+    return (q.is_cuda and q.dtype in (torch.bfloat16, torch.float16)
             and os.environ.get("NATLANG_FLEX_WINDOW", "1") != "0")
 
 
