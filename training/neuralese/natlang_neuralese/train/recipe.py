@@ -638,6 +638,13 @@ def recipe_identity_sha256(path):
     return sha(path)
 
 
+def native_recipe_binding(path, lineage_sha256):
+    """Bind current training policy separately from the preserved run lineage."""
+    path = Path(path).resolve()
+    return {'path': str(path), 'sha256': recipe_identity_sha256(path),
+            'file_sha256': sha(path), 'lineage_sha256': lineage_sha256}
+
+
 DIRECT_IDENTITY_QUALIFICATION = 'neuralese_direct_step0_identity'
 # The end-to-end lineage (owner decision 2026-10-12, plans/neuralese/NEURALESE_DIRECT_V1.md "End-to-end stage"):
 # it starts from a direct export, which the lineage's first stage runtime-qualifies on those exact weights; the
@@ -2348,8 +2355,7 @@ def main(argv=None):
                         prerequisites.append({'id': prior['id'], 'completed': receipt.get('completed') is True,
                             'exposure_receipt': {'path': str(receipt_path.resolve()),
                                                  'sha256': sha(receipt_path)}})
-                    recipe_binding = {'path': str(args.recipe.resolve()), 'sha256': plan['recipe_sha256'],
-                                      'file_sha256': sha(args.recipe)}
+                    recipe_binding = native_recipe_binding(args.recipe, plan['recipe_sha256'])
                     command += ['--recipe-binding', json.dumps(recipe_binding, sort_keys=True,
                                                                separators=(',', ':')),
                                 '--stage-id', stage['id'], '--prerequisite-stages',

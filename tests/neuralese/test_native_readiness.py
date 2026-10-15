@@ -194,3 +194,31 @@ def test_optional_rl_launch_waits_for_shared_validation_and_uses_same_child_supe
         assert 'natlang_neuralese.rl.native_rounds' in launched[1]
         assert '--bootstrap' in launched[1] and str(plan) in launched[1]
         assert result['status'] == 'stopped-after-checkpoint-request'
+
+
+def test_handed_off_recipe_readiness_binds_current_policy_and_preserves_lineage(tmp_path):
+    from natlang_neuralese.train.recipe import native_recipe_binding, recipe_identity_sha256
+    path, receipt, requirement = ready(tmp_path, 'lfm')
+    parent = path.parent / 'parent-recipe.json'
+    parent.write_text(json.dumps({'schema': 'natlang.neuralese-training-recipe/1', 'id': 'old',
+        'stages': [{'id': 'graph', 'kind': 'native_state_sft', 'parameters': {'epochs': 1}}]}))
+    derivative = path.parent / 'current-recipe.json'
+    derivative.write_text(json.dumps({'schema': 'natlang.neuralese-training-recipe/1',
+        'id': 'current', 'extends': 'old',
+        'overrides': {'stages': {'graph': {'parameters': {'epochs': 2}}}}}))
+    lineage = recipe_identity_sha256(parent)
+    binding = native_recipe_binding(derivative, lineage)
+    assert binding['sha256'] != lineage
+    assert binding['lineage_sha256'] == lineage
+    assert binding['file_sha256'] == sha256_file_hex(derivative)
+    receipt['recipe'] = binding
+    requirement['recipe_sha256'] = binding['sha256']
+    path.write_text(json.dumps(receipt))
+    assert validate_ready(path, requirement)['recipe']['sha256'] == binding['sha256']
+    # Changing inherited policy remains detectable even when the derivative's
+    # own file bytes and the original lineage label are unchanged.
+    parent_data = json.loads(parent.read_text())
+    parent_data['stage_parameter_defaults'] = {'native_state_sft': {'weight_decay': .2}}
+    parent.write_text(json.dumps(parent_data))
+    with pytest.raises(ValueError, match='inheritance changed'):
+        validate_ready(path, requirement)
