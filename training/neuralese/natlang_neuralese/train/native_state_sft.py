@@ -668,6 +668,7 @@ def main(argv=None):
     eval_at = max(1, args.eval_every)
     started = time.time()
     while step < total_end and not policy.signaled:
+        update_started = time.monotonic()
         batch = []
         limit = fractional_rows if epoch == whole_epochs and fractional_rows else len(train)
         batch_tokens = 0
@@ -725,11 +726,29 @@ def main(argv=None):
         global_step += 1
         for example in batch:
             exposure_counts[example.id] += 1
+        # Telemetry is appended after the actual optimizer update. The rolling
+        # checkpoint remains the authority for committed resume/exposure; logs
+        # can include work subsequently replayed after an uncheckpointed crash.
+        train_loss = float(loss.detach())
+        seconds = time.monotonic() - update_started
+        supervised_tokens = sum(sum(weight > 0 for weight in item.target_weights) for item in batch)
+        progress = {'schema': 'natlang.native-training-progress/1', 'kind': 'native',
+                    'step': step, 'global_step': global_step, 'epoch': epoch, 'cursor': cursor,
+                    'loss': train_loss, 'graphs': len(batch), 'forward_tokens': batch_tokens,
+                    'supervised_tokens': supervised_tokens, 'target_tokens': supervised_tokens,
+                    'seconds': seconds, 'forward_tokens_per_second': batch_tokens / max(seconds, 1e-9),
+                    'supervised_tokens_per_second': supervised_tokens / max(seconds, 1e-9),
+                    'elapsed_seconds': time.time() - started, 'timestamp': time.time(),
+                    'checkpoint_step': last_saved_step}
+        with (args.out / 'train.jsonl').open('a') as log:
+            log.write(json.dumps(progress, sort_keys=True) + '\n')
+        write_json(args.out / 'progress.json', progress)
+        print(json.dumps(progress, sort_keys=True), flush=True)
         due_task = task_eval is not None and (step == total_end or
                     bool(args.task_eval_every and step % args.task_eval_every == 0))
         due_eval = step % eval_at == 0 or step == total_end or due_task
         if due_eval:
-            metrics = {'train_loss': float(loss.detach()),
+            metrics = {'train_loss': train_loss,
                        'held': _evaluate(model, held, checkpoint_layers=args.checkpoint_layers,
                                          chunk_tokens=args.chunk_tokens, backend=backend),
                        'step': step, 'epoch': epoch, 'cursor': cursor,
@@ -776,7 +795,7 @@ def main(argv=None):
                   fp8_state=backend.extra_state() if backend is not None else None)
             last_saved_step = step
     if (step != resumed_step or policy.signaled) and last_saved_step != step:
-        if not metrics.get('held'):
+        if not policy.signaled and not metrics.get('held'):
             metrics['held'] = _evaluate(model, held, checkpoint_layers=args.checkpoint_layers,
                                         chunk_tokens=args.chunk_tokens, backend=backend)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,

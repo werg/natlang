@@ -139,6 +139,47 @@ def test_native_policy_objective_receives_one_forward_and_external_bindings():
     assert all(parameter.grad is not None for parameter in model.parameters())
 
 
+def test_real_stop_checkpoints_before_held_eval_and_resume_logs_actual_updates(tmp_path, monkeypatch):
+    import json
+    import math
+    import torch
+    from test_native_model import tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+
+    base = tmp_path / 'base'
+    tiny_source(base)
+    _, _, _, config = load_native_model(base, dtype=torch.float32, rank=4)
+    paths = {}
+    for split in ('train', 'test'):
+        row = graph(split)
+        row.update(split=split, source_groups=[split], tokenizer_fingerprint=config['tokenizer_fingerprint'])
+        paths[split] = tmp_path / (split + '.jsonl')
+        paths[split].write_text(json.dumps(row) + '\n')
+    argv = ['--base', str(base), '--dtype', 'float32', '--rank', '4', '--device', 'cpu',
+            '--native-graphs', str(paths['train']), '--held-native-graphs', str(paths['test']),
+            '--epochs', '3', '--eval-every', '100', '--out', str(tmp_path / 'run')]
+    def stop_after_update(policy, step, **kwargs):
+        assert step == 1
+        policy.stop.requested = True
+        return False
+    with monkeypatch.context() as patch:
+        patch.setattr(trainer.CheckpointPolicy, 'due', stop_after_update)
+        def no_held_before_save(*args, **kwargs):
+            raise AssertionError('operational stop must save without starting held evaluation')
+        patch.setattr(trainer, '_evaluate', no_held_before_save)
+        assert trainer.main(argv) == 0
+    checkpoint = torch.load(tmp_path / 'run/checkpoint.pt', weights_only=False)
+    assert checkpoint['training']['step'] == 1
+    assert checkpoint['training']['exposure_counts'] == {'train': 1}
+    assert trainer.main(argv) == 0
+    rows = [json.loads(line) for line in (tmp_path / 'run/train.jsonl').read_text().splitlines()]
+    assert [row['step'] for row in rows] == [1, 2, 3]
+    assert all(math.isfinite(row['loss']) and row['seconds'] > 0 for row in rows)
+    assert all(row['forward_tokens'] == 3 and row['supervised_tokens'] == 2 for row in rows)
+    assert json.loads((tmp_path / 'run/progress.json').read_text()) == rows[-1]
+
+
 def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
     import json
     import torch
