@@ -1,0 +1,52 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-held-shapes-s52103-curated-20261015-v1",
+  "owner": "pop",
+  "path": "runs/luna-s52103-parent-review-20261015-v1",
+  "files": [
+    {
+      "path": "SEMANTIC_REVIEW.md",
+      "bytes": 1602,
+      "sha256": "5095a49279e15ae4fb83af1d7a4c921b5d106e475a21381011af1fe3f93a3a92"
+    },
+    {
+      "path": "accepted-parents.jsonl",
+      "bytes": 33417871,
+      "sha256": "b59967a3b92febe219822cff0c77663c99391367264afbfc2646706a0921a513",
+      "lines": 87
+    },
+    {
+      "path": "accepted-parents.review.json",
+      "bytes": 8418,
+      "sha256": "5acae38bce8604f2248d4290b66727c829f2b02f1b58494068783e856ba7edbe"
+    },
+    {
+      "path": "action-shape-quarantine.jsonl",
+      "bytes": 3859,
+      "sha256": "e474a1909c80ead926793195899d00485aad24afb2d2c4f6ec722cc2744da191",
+      "lines": 14
+    },
+    {
+      "path": "action-shape-review.json",
+      "bytes": 1906,
+      "sha256": "279eaeff6586a07d05aa2665a08c96a50050e82b5f1ba3fa7e1bdf1a97a08347"
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 30925873,
+      "sha256": "407a3f866b93ee4c066f961cf11dd8408ee40b2321d4506f958fe895f158525f",
+      "lines": 401
+    },
+    {
+      "path": "curation-review.json",
+      "bytes": 2391,
+      "sha256": "2e1d17d9e26742f41f1f1b4c4a556436547b7858c796256145ed04658aae9c40"
+    },
+    {
+      "path": "semantic-holds.json",
+      "bytes": 2060,
+      "sha256": "204238f63d6b4aaf65050e95a603786b4daaeb7043bdb9bdc3e5672c5b272bb1"
+    }
+  ],
+  "bytes": 64363980
+}

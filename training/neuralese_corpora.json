@@ -95291,6 +95291,30 @@
         "held_text": {}
       },
       "notes": "Seed 52102: 86 reviewed roots, 479 native decisions; source review v29, four exact parent process holds."
+    },
+    {
+      "id": "luna-held-shapes-s52103-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52103-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with oracle-accepted outcomes and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "81 independently reviewed oracle-accepted roots; 401 approved native decisions out of 500 materialized from 87 candidate parents; six whole-parent process holds and 17 unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v30 source review, protected-source check, four structural action-shape holds, two prolonged malformed or crisp-substitution process holds, and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Six oracle-accepted roots held whole; no broad source-group collateral. Ten rejected roots plus two otherwise accepted source-held roots reviewed. Rejected roots are not DPO negatives without separate semantic review.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins v30. Exact trajectory holds govern. Global union requires current source-review, ticket-bypass and non-success hold checks."
     }
   ],
   "coverage_backlog": [
