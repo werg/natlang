@@ -142,11 +142,17 @@ def _edge_ids_from_part(part, *, pair_rows):
                 identity = row.get('id', '')
                 if not identity.startswith('e2e-edge:'):
                     raise ValueError('pair chunk contains an unrecognized edge identity')
-                values.add(identity.removeprefix('e2e-edge:'))
+                identity = identity.removeprefix('e2e-edge:')
+                if identity in values:
+                    raise ValueError('pair chunk repeats a source-edge identity')
+                values.add(identity)
             else:
                 edge = row.get('edge')
                 if isinstance(edge, dict):
-                    values.add(hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest())
+                    identity = hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                    if identity in values:
+                        raise ValueError('omission chunk repeats a source-edge identity')
+                    values.add(identity)
     finally:
         if process is not None:
             stream.close()
@@ -174,6 +180,55 @@ def _selected_edge_ids(edges_by_chain, split='all'):
     return {hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
             for edges in edges_by_chain.values() for edge in edges
             if split == 'all' or edge.get('split') == split}
+
+
+def _pair_resume_base(inputs):
+    """Normalize pair-replay inputs while leaving its exact edge target monotonic."""
+    normalized = copy.deepcopy(inputs)
+    rebuild = normalized.pop('rebuild_all_pairs', None)
+    if rebuild is not None:
+        normalized['rebuild_all_pairs'] = {
+            'mode': 'source-edge-replay',
+            'edges_sha256': rebuild.get('edges_sha256'),
+            'max_trajectories': rebuild.get('max_trajectories'),
+        }
+    return normalized
+
+
+def _previous_requested_edges(previous, all_edge_by_id):
+    selection_record = previous.get('requested_edge_selection')
+    if isinstance(selection_record, dict):
+        if selection_record.get('kind') == 'source-split':
+            split = selection_record.get('split')
+            return {identity for identity, edge in all_edge_by_id.items()
+                    if split == 'all' or edge.get('split') == split}
+        if selection_record.get('kind') == 'file':
+            path = Path(selection_record['path'])
+            if not path.is_file() or sha256_file(path) != selection_record.get('sha256'):
+                raise ValueError('previous selected-edge target file no longer matches its bound SHA')
+            values = {line.strip() for line in path.read_text().splitlines() if line.strip()}
+            if len(values) != selection_record.get('count'):
+                raise ValueError('previous selected-edge target count differs from its binding')
+            return values
+        raise ValueError('previous semantic edge target has an unsupported selection kind')
+    # Read a short-lived development manifest written before selection targets
+    # were changed from a full ID list to compact immutable file/split bindings.
+    requested = previous.get('requested_edge_ids')
+    if requested is not None:
+        return set(requested)
+    rebuild = (previous.get('inputs') or {}).get('rebuild_all_pairs') or {}
+    selection = rebuild.get('selected_edge_ids')
+    if selection:
+        path = Path(selection['path'])
+        if not path.is_file() or sha256_file(path) != selection.get('sha256'):
+            raise ValueError('previous selected-edge target file no longer matches its bound SHA')
+        return {line.strip() for line in path.read_text().splitlines() if line.strip()}
+    if rebuild.get('mode') == 'all-admitted-edges':
+        return set(all_edge_by_id)
+    if rebuild.get('mode') == 'admitted-edge-split':
+        split = rebuild.get('split')
+        return {identity for identity, edge in all_edge_by_id.items() if edge.get('split') == split}
+    return set()
 
 
 def jsonl_with_offsets(path, start=0, digest=None):
@@ -505,7 +560,7 @@ _RENDER_CONTEXT = {}
 
 
 def _render_trajectory(task):
-    chain, records_start, records_stop = task
+    chain, records_start, records_stop, scheduled_edge_ids = task
     context = _RENDER_CONTEXT
     args = context['args']
     # Send immutable source byte ranges through the worker queue, not hundreds
@@ -557,6 +612,8 @@ def _render_trajectory(task):
     record_map = {row['id']: row for row in records}
     for edge in edges_by_chain.get(chain, []):
         edge_id = hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        if scheduled_edge_ids is not None and edge_id not in scheduled_edge_ids:
+            continue
         edge_identity = edge_id
         local['source_edges'] += 1
         processed_edge_ids.append(edge_id)
@@ -739,11 +796,13 @@ def main():
               if isinstance(row.get('name'), str) and isinstance(row.get('text'), str)}
     edges_by_chain = defaultdict(list)
     edge_ids = set()
+    edge_by_id = {}
     for edge in jsonl(args.edges, edges_digest):
         edge_id = hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
         if edge_id in edge_ids:
             raise ValueError('duplicate admitted E2E edge identity')
         edge_ids.add(edge_id)
+        edge_by_id[edge_id] = edge
         edges_by_chain[edge['trajectory']].append(edge)
     if edges_digest.hexdigest() != args.edges_sha256:
         raise ValueError('source edges SHA differs from the admitted immutable source binding')
@@ -770,6 +829,11 @@ def main():
                     in repair_edge_ids]
                 if selected_rows: edges_by_chain[chain] = selected_rows
                 else: del edges_by_chain[chain]
+            requested_edge_selection = {'kind': 'file', 'path': str(args.selected_edge_ids.resolve()),
+                'sha256': sha256_file(args.selected_edge_ids), 'count': len(repair_edge_ids)}
+        else:
+            requested_edge_selection = {'kind': 'source-split', 'split': args.pair_split,
+                'edges_sha256': args.edges_sha256}
         if not repair_edge_ids:
             raise ValueError('selected source split contains no admitted semantic edges')
         if args.pair_split != 'all':
@@ -809,6 +873,11 @@ def main():
                 edges_by_chain[chain] = selected
             else:
                 del edges_by_chain[chain]
+        requested_edge_selection = {'kind': 'file',
+            'path': str(args.repair_pair_omissions.resolve()), 'sha256': repair_sha,
+            'count': len(repair_edge_ids)}
+    else:
+        requested_edge_selection = None
     state_path = args.out / 'resume-manifest.json'
     records_stat = source_stat_identity(args.records)
     resume_mode = args.resume or (args.resume_if_present and state_path.is_file())
@@ -842,43 +911,88 @@ def main():
     # multiplying several GiB of tokenizer memory across the process pool.
     del tokenizers, tok
     chunks, totals, completed_chains, completed_edge_ids, resume_offset = [], defaultdict(int), [], set(), 0
+    expanded_edge_target = False
     if resume_mode:
         if not state_path.is_file():
             raise ValueError('--resume requires a durable resume-manifest.json')
         previous = json.loads(state_path.read_text())
+        compatible_inputs = previous.get('inputs') == input_identity
+        if pair_only:
+            compatible_inputs = _pair_resume_base(previous.get('inputs') or {}) == _pair_resume_base(input_identity)
+            previous_target = _previous_requested_edges(previous, edge_by_id)
+            if not previous_target or not previous_target <= repair_edge_ids:
+                compatible_inputs = False
+            expanded_edge_target = previous_target != repair_edge_ids
         if (previous.get('schema') != RESUME_SCHEMA
                 or previous.get('build_policy') != BUILD_POLICY
-                or previous.get('inputs') != input_identity
+                or not compatible_inputs
                 or previous.get('tokenizers') != tokenizer_identity
-                or previous.get('complete') is True):
+                or (previous.get('complete') is True and (not pair_only or not expanded_edge_target))):
             raise ValueError('resume manifest does not bind this incomplete exact source/tokenizer/policy build')
         # Trust the pinned file identity after the initial source SHA binding;
         # rehash only if an in-place update or replacement changed its stat key.
         if previous.get('records_stat') != records_stat and sha256_file(args.records) != args.records_sha256:
             raise ValueError('records source changed since the last durable conversion frontier')
         chunks = previous['chunks']
+        if pair_only and previous.get('complete') is True:
+            # Completed selected-edge subsets may be expanded later. Their
+            # merged outputs are a single exact prefix; reconstruct one part
+            # entry and verify every bound artifact before appending.
+            receipt_path = args.out / 'receipt.json'
+            if not receipt_path.is_file():
+                raise ValueError('completed edge subset lacks its immutable merge receipt')
+            old_receipt = json.loads(receipt_path.read_text())
+            merged_pairs = previous.get('outputs', {}).get('pairs') or {}
+            omission = old_receipt.get('pair_omissions') or {}
+            prefix = {'graphs': {}, 'pairs': merged_pairs, 'omissions': omission,
+                      'render_omissions': old_receipt.get('render_omissions')}
+            for part in _chunk_parts(prefix):
+                path = Path(part['path']).resolve(strict=True)
+                if sha256_file(path) != part['sha256']:
+                    raise ValueError('completed pair subset output changed: ' + str(path))
+            chunks = [prefix]
         completed_chains = previous['completed_chain_ids']
         for chunk in chunks:
+            chunk_edge_ids = set()
             for split in ('train', 'test'):
                 part = chunk.get('pairs', {}).get(split)
                 if part:
-                    completed_edge_ids.update(_edge_ids_from_part(part, pair_rows=True))
+                    chunk_edge_ids.update(_edge_ids_from_part(part, pair_rows=True))
             omission_part = chunk.get('omissions')
             if omission_part:
-                completed_edge_ids.update(_edge_ids_from_part(omission_part, pair_rows=False))
-            completed_edge_ids.update(chunk.get('source_edge_ids', []))
+                omitted_edge_ids = _edge_ids_from_part(omission_part, pair_rows=False)
+                if chunk_edge_ids & omitted_edge_ids:
+                    raise ValueError('source edge is both paired and omitted in one chunk')
+                chunk_edge_ids.update(omitted_edge_ids)
+            recorded_chunk_ids = chunk.get('source_edge_ids')
+            if recorded_chunk_ids is not None and set(recorded_chunk_ids) != chunk_edge_ids:
+                raise ValueError('chunk edge-coverage receipt differs from its emitted rows and omissions')
+            if completed_edge_ids & chunk_edge_ids:
+                raise ValueError('source edge is duplicated across completed chunks')
+            completed_edge_ids.update(chunk_edge_ids)
+        declared_covered = previous.get('completed_edge_ids')
+        if declared_covered is not None and set(declared_covered) != completed_edge_ids:
+            raise ValueError('resume completed-edge identity set differs from its exact output chunks')
         if (len(completed_chains) != previous['completed_trajectories']
                 or len(set(completed_chains)) != len(completed_chains)):
             raise ValueError('resume manifest trajectory frontier is inconsistent')
-        for chunk in chunks:
-            for part in _chunk_parts(chunk):
-                path = Path(part['path']).resolve(strict=True)
-                if path.parent != (args.out / 'chunks').resolve() and (args.out / 'chunks').resolve() not in path.parents:
-                    raise ValueError('resume part escaped its owned output directory')
-                if sha256_file(path) != part['sha256']:
-                    raise ValueError('resume output chunk changed: ' + str(path))
+        if previous.get('complete') is not True:
+            for chunk in chunks:
+                for part in _chunk_parts(chunk):
+                    path = Path(part['path']).resolve(strict=True)
+                    if path.parent != (args.out / 'chunks').resolve() and (args.out / 'chunks').resolve() not in path.parents:
+                        raise ValueError('resume part escaped its owned output directory')
+                    if sha256_file(path) != part['sha256']:
+                        raise ValueError('resume output chunk changed: ' + str(path))
         totals.update(previous['totals'])
-        resume_offset = previous['resume_offset']
+        # An expanded target or any uncovered edge attached to a previously
+        # completed trajectory requires replaying source offsets from the
+        # beginning. Per-edge filtering avoids rendering already covered rows.
+        completed_chain_set = set(completed_chains)
+        earlier_incomplete = pair_only and any(chain in completed_chain_set
+            and hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+            not in completed_edge_ids for chain, rows in edges_by_chain.items() for edge in rows)
+        resume_offset = 0 if expanded_edge_target or earlier_incomplete else previous['resume_offset']
         for orphan in (args.out / 'chunks').glob('.*.tmp'):
             orphan.unlink(missing_ok=True)
     elif state_path.exists():
@@ -896,6 +1010,7 @@ def main():
     chunk_start_count = len(completed_chains)
     writers, pair_writers, omissions, render_omissions_writer = {}, {}, None, None
     current_chunk_edge_ids = set()
+    completed_since_checkpoint = 0
 
     def open_chunk(index):
         nonlocal writers, pair_writers, omissions, render_omissions_writer
@@ -909,7 +1024,7 @@ def main():
         render_omissions_writer = JsonlRows(root / f'render-omissions-{index:06d}.jsonl')
 
     def close_chunk(next_offset):
-        nonlocal chunk_start_count, current_chunk_edge_ids
+        nonlocal chunk_start_count, current_chunk_edge_ids, completed_since_checkpoint
         index = len(chunks)
         current = {'graphs': ({} if pair_only else {model: {} for model in tokenizer_models}), 'pairs': {},
                    'omissions': None, 'render_omissions': None,
@@ -935,10 +1050,12 @@ def main():
             'inputs': input_identity, 'tokenizers': tokenizer_identity, 'records_stat': records_stat,
             'completed_trajectories': len(completed_chains), 'completed_chain_ids': completed_chains,
             'completed_edge_ids': sorted(completed_edge_ids), 'resume_offset': next_offset,
+            'requested_edge_selection': requested_edge_selection,
             'totals': dict(totals), 'chunks': chunks, 'complete': False}
         atomic_json(state_path, manifest)
         chunk_start_count = len(completed_chains)
         current_chunk_edge_ids = set()
+        completed_since_checkpoint = 0
         open_chunk(len(chunks))
 
     def abort_chunk():
@@ -953,8 +1070,10 @@ def main():
 
 
     def commit_result(chain, result, next_offset):
+        nonlocal completed_since_checkpoint
         if chain in seen_chains and not pair_only:
             raise ValueError('trajectory rows are not contiguous in their admitted source')
+        first_chain_result = chain not in seen_chains
         seen_chains.add(chain)
         if not pair_only:
             edges_by_chain.pop(chain, None)
@@ -970,8 +1089,10 @@ def main():
             for row in rows: pair_writers[split].write(row)
         for row in result['omissions']: omissions.write(row)
         for row in result.get('render_omissions', []): render_omissions_writer.write(row)
-        completed_chains.append(chain)
-        if len(completed_chains) - chunk_start_count >= args.checkpoint_trajectories:
+        if first_chain_result:
+            completed_chains.append(chain)
+        completed_since_checkpoint += 1
+        if completed_since_checkpoint >= args.checkpoint_trajectories:
             close_chunk(next_offset)
 
     worker_config = {'tokenizer_paths': {'lfm25': str(args.lfm_tokenizer),
@@ -1000,7 +1121,13 @@ def main():
             if not pending:
                 return
             batch, pending[:] = list(pending), []
-            results = list(executor.map(_render_trajectory, [(item[0], item[1], item[2]) for item in batch]))
+            tasks = []
+            for item in batch:
+                chain_id, start, stop, _ = item
+                scheduled = {hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                             for edge in edges_by_chain.get(chain_id, [])}
+                tasks.append((chain_id, start, stop, scheduled))
+            results = list(executor.map(_render_trajectory, tasks))
             for (chain_id, _, _, safe_offset), result in zip(batch, results):
                 commit_result(chain_id, result, safe_offset)
                 if args.max_trajectories and len(completed_chains) >= args.max_trajectories:
@@ -1022,7 +1149,7 @@ def main():
                     current, chain_start = chain, line_start
                     remaining = (args.max_trajectories - len(completed_chains) - len(pending)
                                  if args.max_trajectories else args.workers)
-                    until_checkpoint = args.checkpoint_trajectories - (len(completed_chains) - chunk_start_count)
+                    until_checkpoint = args.checkpoint_trajectories - completed_since_checkpoint
                     batch_size = max(1, min(args.workers, remaining, until_checkpoint))
                     if len(pending) >= batch_size:
                         flush_pending(executor)
@@ -1037,7 +1164,7 @@ def main():
                 flush_pending(executor)
                 if not args.max_trajectories and not resume_mode and records_digest.hexdigest() != args.records_sha256:
                     raise ValueError('source records SHA differs from the admitted immutable source binding')
-        if len(completed_chains) > chunk_start_count or not chunks:
+        if completed_since_checkpoint or not chunks:
             close_chunk(last_offset)
         if not args.max_trajectories:
             if edges_by_chain:
