@@ -27,6 +27,56 @@ def test_completed_part_compression_preserves_exact_bytes_and_resumes(tmp_path):
     assert b''.join(line for line, _ in render_parts.read_rows(paths[0])) == before
 
 
+def test_render_part_forwards_additive_protection_and_source_hold_inputs(tmp_path, monkeypatch):
+    part = tmp_path / 'parts' / 'p00'
+    part.mkdir(parents=True)
+    (tmp_path / '.p00.turns.jsonl').write_text('{}\n')
+    commands = []
+    monkeypatch.setattr(render_parts, 'wait_for_disk', lambda _: None)
+    monkeypatch.setattr(render_parts, 'pending_units', lambda _: [])
+    monkeypatch.setattr(render_parts.time, 'sleep', lambda _: None)
+
+    def run(command):
+        commands.append(command)
+        (part / 'receipt.json').write_text('{}')
+        return type('Result', (), {'returncode': 0})()
+
+    monkeypatch.setattr(render_parts.subprocess, 'run', run)
+    render_parts.render_part([], tmp_path, 0, 0, 1, 'fixture', 'fixture', 1, 1, 1,
+                             protected=Path('/custom/protected.json'),
+                             reserved=Path('/custom/reserved.json'),
+                             held_text=[Path('/compact/global-held-groups.jsonl')],
+                             decision_exclude_ids=[Path('/holds/decision-ids.jsonl')],
+                             exclude_programs=[Path('/holds/program-ids.jsonl')])
+    assert len(commands) == 1
+    command = commands[0]
+    held = command[command.index('--held-text') + 1:command.index('--decision-exclude-ids')]
+    assert held == [str(render_parts.REPO / path) for path in render_parts.HELD_TEXT] + [
+        '/compact/global-held-groups.jsonl']
+    assert command[command.index('--protected') + 1] == '/custom/protected.json'
+    assert command[command.index('--reserved') + 1] == '/custom/reserved.json'
+    assert command[command.index('--decision-exclude-ids') + 1] == '/holds/decision-ids.jsonl'
+    assert command[command.index('--exclude-programs') + 1] == '/holds/program-ids.jsonl'
+
+
+def test_legacy_default_resume_is_labeled_and_cannot_claim_new_policy(tmp_path):
+    (tmp_path / 'receipt.json').write_text(json.dumps({'parts': 1}))
+    receipt = render_parts.render([], tmp_path, 'fixture', 'fixture')
+    assert receipt['legacy_policy_unbound'] is True
+    assert 'rechecked at union' in receipt['legacy_policy_note']
+    with pytest.raises(RuntimeError, match='fresh output'):
+        render_parts.render([], tmp_path, 'fixture', 'fixture', held_text=[Path('/new/held.jsonl')])
+
+
+def test_policy_binding_rejects_changed_inputs(tmp_path):
+    path = tmp_path / 'render-policy-binding.json'
+    first = {'source_sha256': 'a' * 64, 'controls': ['base', 'new']}
+    assert render_parts.validate_binding(path, first, legacy_description='test output')
+    assert render_parts.validate_binding(path, first, legacy_description='test output')
+    with pytest.raises(RuntimeError, match='different render policy/input identity'):
+        render_parts.validate_binding(path, {**first, 'controls': ['base']}, legacy_description='test output')
+
+
 @pytest.mark.parametrize('compress_all', [False, True])
 def test_cross_part_held_group_duplicate_and_twin_alignment(tmp_path, compress_all):
     for tok in ('lfm25', 'mellum21'):
