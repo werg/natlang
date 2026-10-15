@@ -71,3 +71,31 @@ This did not test current cloud-trained parents, full protected task quality,
 production foundation exposure, participant-sharded shared save/reload or the
 complete distributed provider cycle on cloud GPUs. Those retain their existing
 separate readiness/transport and exact checkpoint qualification requirements.
+
+The corrected dispatch was then exercised on both full-size models at frozen
+commit `b5cff288d`, including the chronological sparse-attention fix. The runner
+now rejects a selected FP8 phase that executes no projections. The actual run
+completed all VAE, joint control/adapted-consumer, distillation and controlled
+GRPO updates in 385.93 seconds, including model loading. Actual Mellum FP8
+projection counts were respectively 112, 336, 224 and 1,008. Finite gradient norms
+for the first three phases were 1.38657, 312.27649 and 126.52392. Both model
+interfaces changed in the joint, distillation and policy updates; the VAE-only
+phase correctly left both models unchanged.
+
+Native sampling/replay maximum log-probability gaps were 4.29e-6 for LFM and zero
+for Mellum. Both initial clipping fractions were zero; adapter gradient norms
+were .78090 and .66153. Peak CUDA allocation was 77,752,946,176 bytes (72.41 GiB),
+reserved 79,559,655,424 bytes, under an 84 GiB ledger claim. The historical task
+collector was preserved. This timing is not a controlled throughput comparison
+with the earlier run.
+
+Corrected evidence is under
+`/home/werg/data/dgxops/native-joint-fp8-20261016/run/`: `proof.json`,
+`progress.json` and `source-bindings.json`; ledger unit
+`native-joint-executed-fp8-cuda-20261016` ended successfully. The bindings establish
+clean frozen tracked code and exact diagnostic script bytes. The actual runtime
+was DGX SM121, Torch 2.11.0+cu130. CoreWeave's NGC Torch 2.14/cu134 and SM120
+remain a separate target-container/restored-parent qualification. This run
+proves executed FP8 through the full shared objectives on its declared runtime;
+it does not establish task quality, production readiness, prefix-reuse gradient
+equivalence or trained-parent sharded recovery.

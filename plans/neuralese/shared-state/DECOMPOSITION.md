@@ -32,6 +32,13 @@ The shared `pending_exposure_batches` function implements step 7 as exact batch
 packing and credit accounting. The source manifest's existing `training_priority`
 is the policy input; this adds no model-facing text or independent scheduler.
 
+On an operational stop, finish the current optimizer update, retain its exact
+exposure credit and save the full resumable state. Do not start a held/task
+evaluation or runtime qualification after that request, including a request
+received during a held check or checkpoint write. Completed exposure remains
+recorded, while qualification waits for a resumed run. Stop checks and atomic
+checkpoint durability are crisp mechanisms for this owner policy.
+
 ## Reuse identical ordinary causal prefixes
 
 Read-only sampling of 1,000 admitted Qwen V5 graphs found that 72.4% of physical

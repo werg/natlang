@@ -224,6 +224,59 @@ def test_real_stop_checkpoints_before_held_eval_and_resume_logs_actual_updates(t
     assert json.loads((tmp_path / 'run/report.json').read_text())['completed'] is True
 
 
+@pytest.mark.parametrize('stop_at', ['update', 'held', 'checkpoint'])
+def test_stop_during_final_update_or_evaluation_saves_without_starting_collector(tmp_path, monkeypatch, stop_at):
+    import json
+    import torch
+    from test_native_serve import _tiny_source as tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.eval import task_cadence
+
+    base = tmp_path/'base'
+    tiny_source(base)
+    _, _, _, config = load_native_model(base, dtype=torch.float32, rank=4)
+    paths = {}
+    for split in ('train', 'test'):
+        row = dict(graph(split), split=split, source_groups=[split],
+                   tokenizer_fingerprint=config['tokenizer_fingerprint'])
+        paths[split] = tmp_path/(split+'.jsonl')
+        paths[split].write_text(json.dumps(row)+'\n')
+    policies = []
+    original_due, original_evaluate, original_save = trainer.CheckpointPolicy.due, trainer._evaluate_cadence, trainer._save
+    def due(policy, step, **kwargs):
+        policies.append(policy)
+        if stop_at == 'update':policy.stop.requested = True
+        return original_due(policy, step, **kwargs)
+    def evaluate(*args, **kwargs):
+        if stop_at == 'update':raise AssertionError('stop must precede held evaluation')
+        result = original_evaluate(*args, **kwargs)
+        if stop_at == 'held':policies[-1].stop.requested = True
+        return result
+    def save(policy, *args, **kwargs):
+        result = original_save(policy, *args, **kwargs)
+        if stop_at == 'checkpoint':policy.stop.requested = True
+        return result
+    def forbidden_collector(*args, **kwargs):
+        raise AssertionError('stop must not launch a task collector')
+    monkeypatch.setattr(trainer.CheckpointPolicy, 'due', due)
+    monkeypatch.setattr(trainer, '_evaluate_cadence', evaluate)
+    monkeypatch.setattr(trainer, '_save', save)
+    monkeypatch.setattr(task_cadence, 'TaskEval', lambda spec, out, engine, **kwargs:
+                        SimpleNamespace(engine=engine, cadence=forbidden_collector))
+    out = tmp_path/'run'
+    assert trainer.main(['--base', str(base), '--dtype', 'float32', '--rank', '4', '--device', 'cpu',
+        '--native-graphs', str(paths['train']), '--held-native-graphs', str(paths['test']),
+        '--epochs', '1', '--eval-every', '1', '--task-eval-every', '1', '--out', str(out),
+        '--task-eval', json.dumps({'packet': {'path': 'unused', 'sha256': 's'}, 'cases': [0]})]) == 0
+    checkpoint = torch.load(out/'checkpoint.pt', weights_only=False)
+    assert checkpoint['training']['step'] == 1
+    assert checkpoint['training']['exposure_counts'] == {'train': 1}
+    assert checkpoint['training']['optimizer']
+    assert json.loads((out/'native-runtime-certificate.json').read_text())['deferred'] is True
+    assert json.loads((out/'native-training-receipt.json').read_text())['completed'] is False
+
+
 def test_remaining_exposure_covers_partial_and_fractional_append_without_replay():
     from natlang_neuralese.train.native_state_sft import pending_exposure_batches
     entries = [{'id': str(index), 'forward_tokens': 3} for index in range(4)]

@@ -966,6 +966,8 @@ def main(argv=None):
         write_json(args.out / 'progress.json', progress)
         print(json.dumps(progress, sort_keys=True), flush=True)
         due_checkpoint = policy.due(step, end=step == total_end)
+        if policy.signaled:
+            break
         due_task = task_eval is not None and (step == total_end or
                     bool(args.task_eval_every and step % args.task_eval_every == 0))
         due_eval = step % eval_at == 0 or step == total_end or due_task
@@ -977,6 +979,8 @@ def main(argv=None):
                        'elapsed_seconds': time.time() - started,
                        'fp8': backend.inventory() if backend is not None else {'enabled': False}}
             write_json(args.out / 'metrics.json', metrics)
+        if policy.signaled:
+            break
         if due_task:
             # Bind the task proof to the checkpoint from these exact weights.
             _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
@@ -987,6 +991,8 @@ def main(argv=None):
                   architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
                   fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
             last_saved_step = step
+            if policy.signaled:
+                break
             checkpoint_sha = sha256_file_hex_cached(policy.slot)
             serving_identity = native_identity(model, config, checkpoint_sha256=checkpoint_sha)
             engine = task_eval.engine
@@ -1054,7 +1060,7 @@ def main(argv=None):
     # summaries were checkpointed. At the same final weights, make one real
     # cadence call; do not reuse an unbound log row or enter final_at's retry
     # loop merely to force an eligible score.
-    if task_eval is not None and (completed or foundation_boundary or refresh_boundary) and (
+    if not policy.signaled and task_eval is not None and (completed or foundation_boundary or refresh_boundary) and (
             not metrics.get('task_checkpoint_sha256') or
             metrics['task_checkpoint_sha256'] != sha256_file_hex_cached(policy.slot)):
         current_sha = sha256_file_hex_cached(policy.slot)
@@ -1100,13 +1106,14 @@ def main(argv=None):
                                       task_receipt['score_sha256'])
         write_json(task_receipt_path, task_receipt)
     runtime_path = args.out / 'native-runtime-certificate.json'
-    if not completed and not foundation_boundary and not refresh_boundary:
+    if policy.signaled or (not completed and not foundation_boundary and not refresh_boundary):
         # Operational stops preserve the exact resumable checkpoint. Defer a
         # full capture/splice qualification until the declared data exposure is
         # finished; do not make interruptions pay for a second model pass.
         runtime_report = {'schema': 'natlang.native-runtime-certificate/1', 'passed': False,
                           'checkpoint_sha256': checkpoint_sha, 'native_identity': model_identity,
-                          'deferred': True, 'reason': 'declared native graph exposure is incomplete'}
+                          'deferred': True, 'reason': ('operational stop; qualification deferred until resume'
+                            if policy.signaled else 'declared native graph exposure is incomplete')}
     else:
         try:
             if args.forward_atol is None or args.gradient_atol is None:
