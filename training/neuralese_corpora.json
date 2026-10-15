@@ -108499,6 +108499,70 @@
         "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
         "current_source_review_registry_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593"
       }
+    },
+    {
+      "id": "qwen-verified-positive-native-graphs-20261015-v6",
+      "owner": "dgx",
+      "path": "runs/qwen-verified-positive-native-graphs-20261015-v6",
+      "include": [
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "mellum21/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "validation-proof.json"
+      ],
+      "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
+      "split": "Train-only. 8,639 unique graphs per model; empty test files; no held evaluation rows are claimed.",
+      "admission": "498 verified Qwen teacher trajectories yielded 8,651 eligible accepted assistant actions. Twelve exact token/weight duplicates were omitted, leaving 8,639 unique train graphs per model. Three null-type actions recovered through authenticated provider-visible text expansions. 1,183 other actions per model remain explicit omissions. Full prompts/context are retained with declared role-aware supervision; these are ordinary one-node text graphs, not authentic Neuralese edge captures.",
+      "training_admission": true,
+      "training_admission_reason": "Independent terminal validation passed against the exact source SHA and current protection bundle. Both expanded model tokenizers parse every graph; the model graph-ID sets, row counts, token counts, split, and source-group closure match. Zero current held, quality, pending-review, or decision-hold intersections are recorded in the proof.",
+      "derived_from": [
+        "qwen-verified-positive-native-graphs-20261015-v1-v2",
+        "qwen-verified-positive-native-graphs-20261015-v3",
+        "qwen-verified-positive-native-graphs-20261015-v4",
+        "qwen-verified-positive-native-graphs-20261015-v5"
+      ],
+      "license_provenance": "Project-collected trajectories from pinned RadixArk/Qwen3.8-Flash-Next-NVFP4 teacher revision 7b719225242aacd3dbd3f9407468c2ee9a9d2594. License provenance is retained as source fact; no license exclusion.",
+      "note": "Incremental train-only continuation data for both students. Registration makes data available; actual exposure must be recorded by the training continuation.",
+      "source_binding": {
+        "raw_source": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v6/native-trajectories.jsonl",
+          "sha256": "ab3a57a0fb8e8a0c3c20e6ccc7762b013576da65b24324ed1827ea46ea623494",
+          "bytes": 950544301,
+          "rows": 498
+        },
+        "batch_source_bindings": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v6/batch-source-bindings.json",
+          "sha256": "dc80c994d6500b0cee3449ea70a3485f08e3c695e22538a174d2813ddc9341fc"
+        },
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "current_source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+        "validation_proof_sha256": "f9ce9e3bfcd9f7048ef60fe9666d952d4dc5a179cc0a9f53606f388bb630ceeb",
+        "eligible_turns": 8651,
+        "duplicate_omissions_per_model": 12,
+        "action_omissions_per_model": 1183,
+        "restored_null_type_actions": 3,
+        "models": {
+          "lfm25": {
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "build_receipt_sha256": "cfbb8c52cc96ec16248284faea5a3dc3f4c4640c1582a25fdc84106de6a51da7",
+            "train_sha256": "0af100fc7c34e439561dcce05f5085bf324e883df648c6651bac872be73f3b35",
+            "test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+            "rows": 8639,
+            "tokens": 90200893
+          },
+          "mellum21": {
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "build_receipt_sha256": "a8c3cdb2c1a631cb92aef61b511aece198fe706b00883f68e5901f669030cecf",
+            "train_sha256": "2c88b9fd65b30a8756d7aa023176a7a3a46ad23fbb13da7afed7c4e7336f3097",
+            "test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+            "rows": 8639,
+            "tokens": 90832775
+          }
+        }
+      }
     }
   ],
   "coverage_backlog": [
