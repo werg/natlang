@@ -126,6 +126,20 @@ def active_luna_workers():
     return sum(unit.startswith('natlang-pop-luna-') and '-w' in unit for unit in units)
 
 
+def next_source_can_prebuild(campaign):
+    """Prepare the next seed before a draining campaign releases teacher slots."""
+    manifest = json.loads((campaign / 'campaign-manifest.json').read_text())
+    selected = manifest['selected_count']
+    finished = set()
+    for worker in campaign.glob('worker-[0-9][0-9]'):
+        for journal in [worker / 'journal.jsonl', *(path / 'journal.jsonl' for path in worker.glob('retry-*'))]:
+            if journal.exists():
+                finished.update(event['key'] for event in rows(journal) if event.get('event') == 'finish')
+    available_kib = next(int(line.split()[1]) for line in Path('/proc/meminfo').read_text().splitlines()
+                         if line.startswith('MemAvailable:'))
+    return len(finished) >= max(0, selected - 30) and available_kib >= 4 * 1024 * 1024
+
+
 def luna_unit_prefix(campaign, seed, *, repair=False):
     if repair:
         return f'natlang-pop-luna-repair-s{seed}'
@@ -733,7 +747,10 @@ def main():
         # A full teacher pool must not postpone CPU-only finalization of a
         # closed repair window. The repair cycle itself applies the worker cap
         # before launching any new provider attempt.
-        if (len(pending_campaigns) >= 3 or active_luna_workers() >= WORKERS or
+        full_pool = active_luna_workers() >= WORKERS
+        prebuild = (full_pool and len(pending_campaigns) == 1 and
+                    next_source_can_prebuild(pending_campaigns[0]))
+        if (len(pending_campaigns) >= 3 or (full_pool and not prebuild) or
                 any(has_launchable_waiting_worker(campaign) for campaign in pending_campaigns)):
             return
         seed = START_SEED if not campaigns else max(int(p.name.split('-s')[-1].split('-')[0]) for p in campaigns) + 1
