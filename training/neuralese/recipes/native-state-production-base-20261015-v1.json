@@ -66,7 +66,8 @@
           "min_successes": 0,
           "noise_successes": 1,
           "reference_successes": null,
-          "prompt_rendering": "full"
+          "prompt_rendering": "full",
+          "runtime_failure_policy": "report"
         },
         "task_eval_every": 5000,
         "forward_atol": 0.0001,
