@@ -1,0 +1,52 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "sol-repair-pilot-s52106-s52113-curated-20261015-v1",
+  "owner": "pop",
+  "path": "runs/sol-repair-pilot-s52106-s52113-review-20261015-v1",
+  "files": [
+    {
+      "path": "SEMANTIC_REVIEW.md",
+      "bytes": 1649,
+      "sha256": "b559e08b6b7fc8a47853aa580950ed2422a5b04ff0543962e18c5be91be1ac40"
+    },
+    {
+      "path": "accepted-parents.jsonl",
+      "bytes": 2386193,
+      "sha256": "f75a946bebfbcc2e63c9c292afc0ca539c34aa4482b59cade5c67ed53fa63926",
+      "lines": 3
+    },
+    {
+      "path": "accepted-parents.review.json",
+      "bytes": 770,
+      "sha256": "321ad567ec993cdce3729fb706d91cdfbd3e3a04b873f5d63bee65d0fe682bcd"
+    },
+    {
+      "path": "action-shape-quarantine.jsonl",
+      "bytes": 541,
+      "sha256": "9fdb04a4f1fd4c26bf0bb4c1df3f1587c1bab05a4a5d0a1a91cec64ed77a9a26",
+      "lines": 2
+    },
+    {
+      "path": "action-shape-review.json",
+      "bytes": 1149,
+      "sha256": "2a7e81a8440ccc69c340c8f5d71fa03f5ed09976e1f3e0b2f80d3febd1016e6a"
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 2431700,
+      "sha256": "11d6eaf9a1482b914aeec6d847cff9095eab5ef2837b2d90e283a35b7d87a4a5",
+      "lines": 18
+    },
+    {
+      "path": "curation-review.json",
+      "bytes": 1936,
+      "sha256": "8af6109708718ed708ba45f96de111721a92f5e06b8f5fb04f782136961ecba2"
+    },
+    {
+      "path": "semantic-holds.json",
+      "bytes": 823,
+      "sha256": "035d1c161f3c384338853362802930634b126351010ab549731f488fa7c3fd0b"
+    }
+  ],
+  "bytes": 4824761
+}

@@ -105665,6 +105665,30 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "sol-repair-pilot-s52106-s52113-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/sol-repair-pilot-s52106-s52113-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Sol train-only teacher repair continuations from exact replay-checked Luna failure handoffs with independent semantic review",
+      "license": "Project-generated curriculum and teacher trajectories; specific dataset licenses in source campaigns",
+      "split": "train only; protected held packet checked; global union held/source-quality filters required",
+      "admission": "two independently reviewed oracle-accepted repair roots; 18 approved native decisions out of 38 materialized; one exact whole-parent process hold and ten unapproved/replayed/failed decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Exact oracle success and protected-source check; one type-mismatch root held whole; native per-decision approval. Only approved-turns.jsonl is SFT input. No DPO pair admitted.",
+      "review_status": "Four-case Sol pilot: three exact successes; one failed dataset answer; one successful ticket root held for failed root action, leaving two high-quality continuations.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Original source handoffs are in the s52106–s52113 repair cycle; the nested-504 source was excluded from this pilot. Global union checks source identity and source-review holds."
     }
   ],
   "coverage_backlog": [
