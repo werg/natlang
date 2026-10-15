@@ -181,3 +181,33 @@ closed on incompatible compiler changes; qualification on each destination
 PyTorch/CUDA build remains required. Standing full-suite checks and independent
 integration review remain separate, as do the model-facing marker debt and
 actual full-recipe cloud restart.
+
+### Learned-row rates and named optimizer continuation
+
+The supervisor may give the learned reasoning/Neuralese vocabulary rows a
+separate declared learning rate when actual gradient/update and held-task
+measurements justify it. The backbone and embedding adapter keep their declared
+rates. Defaults remain unchanged; a line-specific measured choice is not a
+claim of lift on the other student.
+
+1. Identify learned vocabulary rows by their existing exact interface parameter
+   names, including added reasoning rows. Apply rates with the shared
+   `optim_restore.set_learning_rates`; never create a second optimizer.
+2. Bind every serialized optimizer slot to its actual parameter name in child
+   group order. Constructor schema order is a contract inventory, not slot order.
+3. On stop, repack, group split, reorder, sparse-row addition or FP32 promotion,
+   restore each existing moment and per-parameter group configuration by that
+   name. Recover old one-group/explicitly named latent layouts only from their
+   exact existing bindings; reject ambiguous historical split layouts.
+4. Apply explicitly requested new rates after state restore, preserving moments,
+   RNG, exposure and update counters. If no row-rate override is declared, retain
+   an inherited distinct learned-row rate through SFT, semantic phase changes,
+   behavioral distillation, RL and sharded checkpoint loading.
+5. Record effective per-name rates and exact declared changes in checkpoints and
+   progress. Expose the same optional setting through shared recipes and all
+   native training stages, with architecture differences limited to measured
+   chosen values.
+
+Rate selection is the supervisor's measured adaptive policy. Slot identities,
+state migration, group splitting, validation and recipe plumbing are crisp
+mechanisms; they do not select a new training policy or discard old history.

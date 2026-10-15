@@ -93,6 +93,12 @@ def validate_config(config):
         raise ValueError('semantic curriculum must learn VAE before joint adaptation before distillation')
     if any(kind not in kinds for kind in ('vae', 'joint', 'distill')):
         raise ValueError('complete semantic curriculum requires VAE, joint and behavioral distillation phases')
+    from .native_learning_rates import validate_learned_row_rate
+    declarations=[config,config.get('options') or {},*config.get('models',{}).values(),
+                  *[phase.get('options') or {} for phase in phases]]
+    for declaration in declarations:
+        if 'learned_row_learning_rate' in declaration:
+            validate_learned_row_rate(declaration['learned_row_learning_rate'])
     for key in ('backbone_lr', 'vae_lr'):
         value = config.get(key)
         if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
@@ -130,7 +136,10 @@ def first_work(phases, entries, participants, exposure, cursors=None):
     return None
 
 
-def _adjust_lr(optimizer, lr):
+def _adjust_lr(optimizer, lr, learned_row_lr=None):
+    if hasattr(optimizer,'_native_named_parameters'):
+        from .native_learning_rates import apply_native_learning_rates
+        return apply_native_learning_rates(optimizer,backbone_lr=lr,learned_row_lr=learned_row_lr)
     for group in optimizer.param_groups:
         group['lr'] = lr
         if 'qat_latent_lr' in group:
@@ -161,7 +170,7 @@ def load_participant(name, binding, config, device):
         optimizer.load_state_dict(inherited['optimizer'])
     if backend is not None and inherited.get('fp8') is not None:
         backend.restore_extra_state(inherited['fp8'])
-    _adjust_lr(optimizer, config['backbone_lr'])
+    _adjust_lr(optimizer, config['backbone_lr'], declaration.get('learned_row_learning_rate',config.get('learned_row_learning_rate')))
     model.port.checkpoint_layers = True
     model.train()
     result = SemanticParticipant(model, tokenizer, model_config, identity, optimizer, backend)
@@ -579,7 +588,9 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         options = {**config.get('options', {}), **phase.get('options', {})}
         for name, participant in participants.items():
             participant.optimizer.zero_grad(set_to_none=True)
-            _adjust_lr(participant.optimizer, options.get('backbone_lr', config['backbone_lr']))
+            _adjust_lr(participant.optimizer, options.get('backbone_lr', config['backbone_lr']),
+                       options.get('learned_row_learning_rate',config.get('models',{}).get(name,{}).get(
+                           'learned_row_learning_rate',config.get('learned_row_learning_rate'))))
             for key, value in participant.model.named_parameters():
                 value.requires_grad_(phase['kind'] != 'vae' and name in active and key in trainable[name])
         optimizer.zero_grad(set_to_none=True)
@@ -624,7 +635,9 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         obligations['complete']=obligations['remaining_pair_visits']==0
         metrics = {'step': training['step'], 'phase': phase['id'], 'source_row': row_id,
                    'loss': float(loss.detach()), 'gradient_norm': float(norm), 'details': details,
-                   'seconds': time.time() - started}
+                   'seconds': time.time() - started,
+                   'learning_rates':{name:participant.optimizer.native_learning_rates
+                                     for name,participant in participants.items()}}
         training['source_bindings'] = {'train': train.bindings, 'held': held.bindings}
         training['participants_signature'] = manifest['signature']
         if training['step'] % config['eval_every'] == 0:

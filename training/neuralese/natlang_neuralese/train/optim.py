@@ -51,10 +51,12 @@ class PortMuonAdamW(torch.optim.Optimizer):
             raise RuntimeError("the muon policy needs a PyTorch build with torch.optim.Muon")
         embedding_ids = set(embedding_ids)
         self.schema, muon, auxiliary, seen = [], [], [], set()
+        self._parameter_names = {}
         for name, parameter in named_parameters:
             if id(parameter) in seen:
                 raise ValueError(f"duplicate trainable parameter {name}")
             seen.add(id(parameter))
+            self._parameter_names[id(parameter)] = name
             use_muon = muon_eligible(name, parameter, vocab_size, embedding_ids)
             (muon if use_muon else auxiliary).append(parameter)
             self.schema.append({"name": name, "shape": list(parameter.shape), "dtype": str(parameter.dtype),
@@ -64,6 +66,7 @@ class PortMuonAdamW(torch.optim.Optimizer):
             if id(parameter) in seen:
                 raise ValueError(f"duplicate trainable parameter {name}")
             seen.add(id(parameter))
+            self._parameter_names[id(parameter)] = name
             self.schema.append({"name": name, "shape": list(parameter.shape), "dtype": str(parameter.dtype),
                                 "optimizer": LATENT_KEYS.get(latent_optimizer, latent_optimizer)})
         if latent_optimizer not in LATENT_KEYS:
@@ -107,8 +110,12 @@ class PortMuonAdamW(torch.optim.Optimizer):
         if not self._constructed:  # the base constructor registering the initial groups
             return super().add_param_group(group)
         params = list(group["params"])
-        for parameter in params:
-            self.schema.append({"name": None, "shape": list(parameter.shape), "dtype": str(parameter.dtype),
+        names = group.get('param_names', [None]*len(params))
+        if len(names) != len(params):
+            raise ValueError('added optimizer group parameter names differ from its slots')
+        for parameter, name in zip(params, names):
+            self._parameter_names[id(parameter)] = name
+            self.schema.append({"name": name, "shape": list(parameter.shape), "dtype": str(parameter.dtype),
                                 "optimizer": "adamw"})
         if self.auxiliary is None:
             self.auxiliary = torch.optim.AdamW(params, lr=group.get("lr", 1e-3), weight_decay=group.get("weight_decay", 0.0))
@@ -136,9 +143,21 @@ class PortMuonAdamW(torch.optim.Optimizer):
                  "adamw": self.auxiliary.state_dict() if self.auxiliary else None}
         if self.latent is not None:
             state[self.latent_key] = self.latent.state_dict()
+        state['param_names'] = {kind: [self._parameter_names.get(id(parameter))
+            for group in child.param_groups for parameter in group['params']]
+            for kind,child in (('muon',self.muon),('adamw',self.auxiliary),(self.latent_key,self.latent))
+            if child is not None}
         return state
 
     def load_state_dict(self, state_dict, *, allow_added_names=(), allow_promoted_names=()):
+        if all(isinstance(item.get('name'),str) for item in self.schema):
+            from .optim_restore import load_named_port_state
+            return load_named_port_state(self,state_dict,allow_added_names=allow_added_names,
+                                         allow_promoted_names=allow_promoted_names)
+        return self._load_unnamed_state_dict(state_dict,allow_added_names=allow_added_names,
+                                             allow_promoted_names=allow_promoted_names)
+
+    def _load_unnamed_state_dict(self, state_dict, *, allow_added_names=(), allow_promoted_names=()):
         if state_dict.get("format") == FORMAT and state_dict.get("schema") != self.schema and (allow_added_names or allow_promoted_names):
             previous = {item['name']: item for item in state_dict['schema']}
             current = {item['name']: item for item in self.schema}
@@ -320,13 +339,15 @@ class LionSR(torch.optim.Optimizer):
         self.spike = spike
         for index, group in enumerate(self.param_groups):
             for p in group["params"]:
-                def hook(param, index=index):
+                def hook(param):
                     armed = self._armed
                     if self._gated and armed is None:
                         return
+                    current_group = (armed.groups[id(param)] if armed is not None else
+                        next(group for group in self.param_groups if any(value is param for value in group['params'])))
                     if armed is not None:
                         if id(param) in armed.stepped:
-                            name = self.param_groups[index].get("name", "?")
+                            name = current_group.get("name", "?")
                             raise RuntimeError(f"latent {name} received a second gradient in one in-backward update: "
                                                "a forward ran its layer outside the layer staging "
                                                "(model/layer_staging.py tape_for_grad)")
@@ -341,7 +362,7 @@ class LionSR(torch.optim.Optimizer):
                             param.grad.mul_(factor.to(param.grad.dtype))
                             squared = squared * factor.square()
                         armed.applied_squared = armed.applied_squared.to(param.device) + squared
-                    self._update(param, self.param_groups[index])
+                    self._update(param, current_group)
                     param.grad = None
                 self._hooks.append(p.register_post_accumulate_grad_hook(hook))
 
@@ -667,6 +688,9 @@ class _InBackward:
     def __enter__(self):
         if self.optimizer._armed is not None:
             raise RuntimeError("in_backward contexts do not nest")
+        self.groups = {id(parameter):group for group in self.optimizer.param_groups for parameter in group['params']}
+        if sum(len(group['params']) for group in self.optimizer.param_groups) != len(self.groups):
+            raise RuntimeError('in-backward optimizer repeats a parameter across groups')
         self.optimizer._armed = self
         return self
 
