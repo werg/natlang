@@ -92408,8 +92408,8 @@
       "source_class": "shared-natlang-target-training-set",
       "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
       "admission": "renders of admitted source corpora: natlang-target-union-20261014-r9-teacher-refresh, external-expansion-gatc-native-20261014-v1-render, greenhouse-iterated-measured-render-20261015-v1, luna-held-shapes-s52067-curated-render-20261015-v1, luna-held-shapes-s52068-curated-render-20261015-v1, external-expansion-codeagent-native-20261014-v1-render, luna-held-shapes-s52069-curated-render-20261015-v1, luna-held-shapes-s52070-curated-render-20261015-v1, gemini-clinc-static-reviewed-render-20261015-v1, luna-held-shapes-s52071-curated-render-20261015-v1, gemini-clinc-static-b45-b46-reviewed-render-20261015-v1, luna-held-shapes-s52072-curated-render-20261015-v1, luna-held-shapes-s52073-curated-render-20261015-v1, luna-held-shapes-s52074-curated-render-20261015-v1, gemini-semantic-mixed-static-reviewed-render-20261015-v1, luna-dataset-workbench-salvaged-render-20261015-v1; variants: full/lfm25, full/mellum21, program-header/lfm25, program-header/mellum21, whole-trajectory/lfm25, whole-trajectory/mellum21; no new example admission",
-      "training_admission": true,
-      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "training_admission": false,
+      "training_admission_reason": "Held 2026-10-15: union build receipt predates current source-review registry and exact decision holds; outside audit did not check both exact decision-hold files. Replacement immutable R11 required before training.",
       "derived_from": [
         "natlang-target-union-20261014-r9-teacher-refresh",
         "external-expansion-gatc-native-20261014-v1-render",
