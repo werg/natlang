@@ -143,6 +143,8 @@ def _chunk_parts(chunk):
         yield from by_split.values()
     yield from chunk['pairs'].values()
     yield chunk['omissions']
+    if chunk.get('render_omissions'):
+        yield chunk['render_omissions']
 
 
 def _walk(value):
@@ -207,10 +209,11 @@ def source_occurrences(writer_record, reader_record, write_name, body, expected_
         if (isinstance(value, dict) and value.get('type') == 'read'
                 and value.get('name') == write_name and value.get('source') == body):
             readers.append(pointer)
-    if len(writers) != 1 or len(readers) != 1 or sha256_bytes(body.encode()) != expected_sha:
+    if len(writers) != 1 or not readers or sha256_bytes(body.encode()) != expected_sha:
         raise ValueError(f'communication occurrence is ambiguous or disagrees with payload SHA: writes={len(writers)} reads={len(readers)}')
-    return {'writer_json_pointer': writers[0], 'reader_json_pointer': readers[0],
-            'payload_sha256': expected_sha}
+    return {'writer_json_pointer': writers[0], 'reader_json_pointers': readers,
+            'payload_sha256': expected_sha,
+            'transform': 'static-shared-producer-multi-read' if len(readers) > 1 else 'static-exact-read'}
 
 
 def reader_has_payload(record, write_name, body, expected_sha):
@@ -275,6 +278,46 @@ def exact_marked_span(row, tokenizer, body, *, open_marker, close_marker, expect
             'tokenize_payload_alone': True}
 
 
+def exact_marked_spans(row, tokenizer, body, *, open_marker, close_marker, expected_sha256,
+                       expected_count):
+    """Bind every statically rewritten typed read to its exact structural marker span."""
+    text, ids = row['text'], row['token_ids']
+    wrapper = open_marker + body + close_marker
+    starts, cursor = [], 0
+    while True:
+        start = text.find(wrapper, cursor)
+        if start < 0: break
+        starts.append(start); cursor = start + len(wrapper)
+    if len(starts) != expected_count or sha256_bytes(body.encode()) != expected_sha256:
+        raise ValueError('normalized typed payload wrappers differ from the authenticated read occurrences')
+    encoded = tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)
+    token_ids, offsets = encoded['input_ids'], encoded['offset_mapping']
+    if token_ids and isinstance(token_ids[0], list): token_ids = token_ids[0]
+    if offsets and isinstance(offsets[0][0], (list, tuple)): offsets = offsets[0]
+    if list(token_ids) != ids or len(offsets) != len(ids):
+        raise ValueError('whole-row tokenization differs from the statically normalized consumer')
+    open_id, close_id = tokenizer.convert_tokens_to_ids(open_marker), tokenizer.convert_tokens_to_ids(close_marker)
+    payload = tokenizer(body, add_special_tokens=False)['input_ids']
+    if payload and isinstance(payload[0], list): payload = payload[0]
+    if not payload or tokenizer.decode(payload, skip_special_tokens=False) != body:
+        raise ValueError('standalone payload tokenization does not reproduce the exact authenticated text')
+    spans = []
+    for start in starts:
+        stop = start + len(wrapper)
+        opening = [i for i, (left, right) in enumerate(offsets)
+                   if left == start and right == start + len(open_marker)]
+        closing = [i for i, (left, right) in enumerate(offsets)
+                   if left == stop - len(close_marker) and right == stop]
+        if (len(opening) != 1 or len(closing) != 1 or ids[opening[0]] != open_id
+                or ids[closing[0]] != close_id or opening[0] >= closing[0]):
+            raise ValueError('consumer role markers do not bind each exact typed read occurrence')
+        spans.append({'container_start': opening[0], 'container_stop': closing[0] + 1,
+            'body_text': body, 'payload_token_ids': list(payload), 'tokenize_payload_alone': True})
+    if any(left['container_stop'] > right['container_start'] for left, right in zip(spans, spans[1:])):
+        raise ValueError('typed read marker spans overlap')
+    return spans
+
+
 def materialize_role_markers(row, *, role_markers, role_ids, payload, side):
     """Replace only the inserted typed-value boundary spellings with role IDs."""
     text, ids = row['text'], row['token_ids']
@@ -285,21 +328,28 @@ def materialize_role_markers(row, *, role_markers, role_ids, payload, side):
     offset_rows = [tuple(pair) for pair in row['token_offsets']]
     replacements = []
     wrapper, which = wrappers[side]
-    if text.count(wrapper) != 1:
-        # A payload containing the full wrapper spelling is ambiguous; only
-        # the exact occurrence inserted by this transformation is rewritten.
-        raise ValueError('normalized role-marker wrapper is ambiguous in the source turn')
-    wrapper_start = text.index(wrapper)
-    for marker_index in which:
-        marker = role_markers[marker_index]
-        start = wrapper_start if marker_index in (0, 2) else wrapper_start + len(role_markers[marker_index - 1]) + len(payload)
-        stop = start + len(marker)
-        token_span = [i for i, (left, right) in enumerate(offset_rows)
-                      if right > left and left >= start and right <= stop]
-        if (not token_span or token_span != list(range(token_span[0], token_span[-1] + 1))
-                or offset_rows[token_span[0]][0] != start or offset_rows[token_span[-1]][1] != stop):
-            raise ValueError('role-marker spelling is not bounded by exact rendered token offsets')
-        replacements.append((token_span[0], token_span[-1] + 1, role_ids[marker_index], (start, stop)))
+    starts, cursor = [], 0
+    while True:
+        start = text.find(wrapper, cursor)
+        if start < 0: break
+        starts.append(start); cursor = start + len(wrapper)
+    if len(starts) != 1:
+        # Writer values remain unique; reader fan-out is handled by the shared
+        # occurrence-aware path below.
+        if side != 'reader' or not starts:
+            raise ValueError('normalized role-marker wrapper is ambiguous in the source turn')
+    for wrapper_start in starts:
+        for marker_index in which:
+            marker = role_markers[marker_index]
+            start = (wrapper_start if marker_index in (0, 2) else
+                     wrapper_start + len(role_markers[marker_index - 1]) + len(payload))
+            stop = start + len(marker)
+            token_span = [i for i, (left, right) in enumerate(offset_rows)
+                          if right > left and left >= start and right <= stop]
+            if (not token_span or token_span != list(range(token_span[0], token_span[-1] + 1))
+                    or offset_rows[token_span[0]][0] != start or offset_rows[token_span[-1]][1] != stop):
+                raise ValueError('role-marker spelling is not bounded by exact rendered token offsets')
+            replacements.append((token_span[0], token_span[-1] + 1, role_ids[marker_index], (start, stop)))
     new_ids, new_offsets = [], []
     by_start = {start: (stop, token, offset) for start, stop, token, offset in replacements}
     index = 0
@@ -340,8 +390,9 @@ def normalized_pair_rows(writer_record, reader_record, pieces, *, tokenizer, pay
     # its authenticated reader object by a marker-bounded context span.
     writer['target'] = {'role': 'assistant',
                         'content': role_markers[0] + payload + role_markers[1]}
-    _replace_pointer(reader, occurrence['reader_json_pointer'],
-        {'type': 'text', 'text': role_markers[2] + payload + role_markers[3]})
+    for pointer in occurrence['reader_json_pointers']:
+        _replace_pointer(reader, pointer, {'type': 'text',
+            'text': role_markers[2] + payload + role_markers[3]})
     writer_rows, _, writer_omitted, _ = gold_text_rows([writer], pieces, tokenizer=tokenizer,
         require_independent_splits=False, target_reasoning=False, include_token_offsets=True,
         tokenizer_sha256=tokenizer_sha256)
@@ -410,39 +461,32 @@ def _render_trajectory(task):
     role_ids = context['role_ids']
     model_ids = context['model_ids']
     edges_by_chain = context['edges_by_chain']
+    pair_only = context.get('pair_only', False)
     local = defaultdict(int)
     graphs = {split: {model: [] for model in tokenizers} for split in ('train', 'test')}
     pairs = {split: [] for split in ('train', 'test')}
     omitted_pairs = []
+    render_omissions = []
     local['trajectories'] += 1
-    rendered = {}
-    for model, tok in tokenizers.items():
-        rows, receipt, omitted, _ = gold_text_rows(records, pieces, tokenizer=tok,
-            require_independent_splits=False, target_reasoning=True,
-            tokenizer_sha256=expanded_fps[model])
-        rendered[model] = rows
-        local['rendered_' + model] += len(rows)
-        local['render_omitted_' + model] += len(omitted)
-    row_maps = {}
-    for model, rows in rendered.items():
-        mapping = {}
-        for row in rows:
-            for record_id in row.get('source_record_ids') or [row['id']]:
-                if record_id in mapping and mapping[record_id] is not row:
-                    raise ValueError(f'{model} rendered record maps to conflicting text rows: {record_id}')
-                mapping[record_id] = row
-            # Every rendered whole turn also enters native SFT as ordinary one-node supervision.
-            # gold_text_rows tokenizes with this already-expanded
-            # tokenizer, so its row fingerprint is the expanded one.
-            graph = text_row_graph(row, source_tokenizer_fingerprint=expanded_fps[model], tokenizer=tokenizers[model],
-                expanded_tokenizer_fingerprint=expanded_fps[model], context_weight=.05)
-            graphs[row['split']][model].append(graph)
+    if not pair_only:
+        rendered = {}
+        for model, tok in tokenizers.items():
+            rows, receipt, omitted, _ = gold_text_rows(records, pieces, tokenizer=tok,
+                require_independent_splits=False, target_reasoning=True,
+                tokenizer_sha256=expanded_fps[model])
+            rendered[model] = rows
+            local['rendered_' + model] += len(rows)
+            local['render_omitted_' + model] += len(omitted)
+            render_omissions.extend({'kind': 'ordinary-native-graph-omission', 'model': model,
+                'trajectory': chain, 'omission': row} for row in omitted)
+        for model, rows in rendered.items():
+            for row in rows:
+                # Every rendered whole turn also enters native SFT as ordinary one-node supervision.
+                # gold_text_rows tokenizes with this already-expanded tokenizer.
+                graph = text_row_graph(row, source_tokenizer_fingerprint=expanded_fps[model], tokenizer=tokenizers[model],
+                    expanded_tokenizer_fingerprint=expanded_fps[model], context_weight=.05)
+                graphs[row['split']][model].append(graph)
     record_map = {row['id']: row for row in records}
-    for model, rows in rendered.items():
-        row_maps[model] = {}
-        for row in rows:
-            for record_id in row.get('source_record_ids') or [row['id']]:
-                row_maps[model][record_id] = row
     for edge in edges_by_chain.get(chain, []):
         edge_id = hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
         edge_identity = edge_id
@@ -478,9 +522,10 @@ def _render_trajectory(task):
                 writer_span = exact_marked_span(writer_row, tokenizers[model], body,
                     open_marker=ROLE_MARKERS[0], close_marker=ROLE_MARKERS[1],
                     expected_sha256=edge['body_sha256'])
-                reader_span = exact_marked_span(reader_row, tokenizers[model], body,
+                reader_span = exact_marked_spans(reader_row, tokenizers[model], body,
                     open_marker=ROLE_MARKERS[2], close_marker=ROLE_MARKERS[3],
-                    expected_sha256=edge['body_sha256'])
+                    expected_sha256=edge['body_sha256'],
+                    expected_count=len(occurrence['reader_json_pointers']))
                 views[model_ids[model]] = model_view(edge, writer_row, reader_row, writer_record, reader_record,
                     tokenizer=tokenizers[model], source_fingerprint=expanded_fps[model],
                     expanded_fingerprint=expanded_fps[model], role_ids=role_ids[model],
@@ -495,8 +540,8 @@ def _render_trajectory(task):
                 'split': edge['split'], 'source_groups': groups,
                 'payload_sha256': edge['body_sha256'], 'models': views,
                 'communication': communication, 'communication_sha256': communication_sha,
-                'conversion': {'kind': 'static-transformation', 'native_capture': False,
-                    'normalized_typed_occurrence': True,
+                    'conversion': {'kind': 'static-transformation', 'native_capture': False,
+                        'normalized_typed_occurrence': True, 'transformation': occurrence['transform'],
                     'source_corpus': 'neuralese-e2e-cloud-rest27-protected-20261015-v2',
                     'trajectory': chain, 'edge_id': edge_id,
                     'source_writer_id': edge['writer_record_id'],
@@ -507,7 +552,8 @@ def _render_trajectory(task):
         except (KeyError, TypeError, ValueError) as exc:
             local['pair_omissions'] += 1
             omitted_pairs.append({'edge': edge, 'reason': str(exc)})
-    return {'graphs': graphs, 'pairs': pairs, 'omissions': omitted_pairs, 'totals': dict(local)}
+    return {'graphs': graphs, 'pairs': pairs, 'omissions': omitted_pairs,
+            'render_omissions': render_omissions, 'totals': dict(local)}
 
 
 def _initialize_render_worker(config):
@@ -529,18 +575,21 @@ def _initialize_render_worker(config):
               if isinstance(row.get('name'), str) and isinstance(row.get('text'), str)}
     edges_by_chain = defaultdict(list)
     edge_ids = set()
+    selected_edges = set(config.get('selected_edge_ids') or [])
     for edge in jsonl(config['edges_path']):
         edge_id = hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
         if edge_id in edge_ids:
             raise ValueError('duplicate admitted E2E edge identity in render worker')
         edge_ids.add(edge_id)
-        edges_by_chain[edge['trajectory']].append(edge)
+        if not config.get('pair_only') or edge_id in selected_edges:
+            edges_by_chain[edge['trajectory']].append(edge)
     _RENDER_CONTEXT.clear()
     _RENDER_CONTEXT.update({'args': SimpleNamespace(records=Path(config['records_path']),
         records_sha256=config['records_sha256'], edges=Path(config['edges_path']),
         edges_sha256=config['edges_sha256']), 'tokenizers': tokenizers, 'pieces': pieces,
         'expanded_fps': expanded_fps, 'role_ids': role_ids,
-        'model_ids': config['model_ids'], 'edges_by_chain': edges_by_chain})
+        'model_ids': config['model_ids'], 'edges_by_chain': edges_by_chain,
+        'pair_only': config.get('pair_only', False)})
 
 
 def main():
@@ -563,6 +612,8 @@ def main():
                         help='trajectory count between durable output frontiers')
     parser.add_argument('--workers', type=int, default=8,
                         help='independent complete-trajectory render workers')
+    parser.add_argument('--repair-pair-omissions', type=Path, default=None,
+                        help='convert exactly the omitted edges listed by a prior complete build into a pair-only supplement')
     args = parser.parse_args()
     if args.max_trajectories is not None and args.max_trajectories < 1:
         parser.error('--max-trajectories must be positive')
@@ -570,6 +621,8 @@ def main():
         parser.error('--checkpoint-trajectories must be positive')
     if args.workers < 1:
         parser.error('--workers must be positive')
+    if args.repair_pair_omissions and args.max_trajectories is not None:
+        parser.error('--repair-pair-omissions cannot be combined with a bounded test run')
     tokenizers, source_fps, expanded_fps, role_ids = {}, {}, {}, {}
     model_ids, base_inventory_shas = {}, {}
     from natlang_neuralese.model.native_model import base_inventory
@@ -597,12 +650,45 @@ def main():
         edges_by_chain[edge['trajectory']].append(edge)
     if edges_digest.hexdigest() != args.edges_sha256:
         raise ValueError('source edges SHA differs from the admitted immutable source binding')
+    pair_only = args.repair_pair_omissions is not None
+    repair_edge_ids = None
+    repair_sha = None
+    if pair_only:
+        repair_sha = sha256_file(args.repair_pair_omissions)
+        previous_receipt_path = args.repair_pair_omissions.parent / 'receipt.json'
+        if not previous_receipt_path.is_file():
+            raise ValueError('pair-repair omissions require the prior build receipt beside the omission ledger')
+        previous_receipt = json.loads(previous_receipt_path.read_text())
+        previous_binding = previous_receipt.get('source') or {}
+        if (previous_binding.get('records', {}).get('sha256') != args.records_sha256
+                or previous_binding.get('edges', {}).get('sha256') != args.edges_sha256
+                or previous_binding.get('pieces', {}).get('sha256') != pieces_digest.hexdigest()
+                or (previous_receipt.get('pair_omissions') or {}).get('sha256') != repair_sha):
+            raise ValueError('pair-repair omissions do not bind the exact prior receipt and current immutable source')
+        repair_edge_ids = set()
+        for row in jsonl(args.repair_pair_omissions):
+            edge = row.get('edge')
+            if not isinstance(edge, dict):
+                raise ValueError('pair-repair source contains a row without its exact omitted edge')
+            repair_edge_ids.add(hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest())
+        if not repair_edge_ids or not repair_edge_ids <= edge_ids:
+            raise ValueError('pair-repair source does not exactly bind a nonempty subset of admitted source edges')
+        for chain in list(edges_by_chain):
+            selected = [edge for edge in edges_by_chain[chain]
+                        if hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                        in repair_edge_ids]
+            if selected:
+                edges_by_chain[chain] = selected
+            else:
+                del edges_by_chain[chain]
     state_path = args.out / 'resume-manifest.json'
     records_stat = source_stat_identity(args.records)
     resume_mode = args.resume or (args.resume_if_present and state_path.is_file())
     input_identity = {'records': {'path': str(args.records.resolve()), 'sha256': args.records_sha256},
         'pieces': {'path': str(args.pieces.resolve()), 'sha256': pieces_digest.hexdigest()},
-        'edges': {'path': str(args.edges.resolve()), 'sha256': args.edges_sha256}}
+        'edges': {'path': str(args.edges.resolve()), 'sha256': args.edges_sha256},
+        'repair_pair_omissions': ({'path': str(args.repair_pair_omissions.resolve()), 'sha256': repair_sha}
+                                  if pair_only else None)}
     tokenizer_identity = {model: {'source': source_fps[model], 'expanded': expanded_fps[model],
         'role_ids': list(role_ids[model]), 'model_id': model_ids[model],
         'base_inventory_sha256': base_inventory_shas[model]} for model in tokenizers}
@@ -650,33 +736,39 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     seen_chains = set(completed_chains)
     chunk_start_count = len(completed_chains)
-    writers, pair_writers, omissions = {}, {}, None
+    writers, pair_writers, omissions, render_omissions_writer = {}, {}, None, None
 
     def open_chunk(index):
-        nonlocal writers, pair_writers, omissions
+        nonlocal writers, pair_writers, omissions, render_omissions_writer
         root = args.out / 'chunks'
-        writers = {split: {model: CompressedRows(root / f'graphs-{model}-{split}-{index:06d}.jsonl.zst')
-                           for model in tokenizers} for split in ('train', 'test')}
+        writers = ({} if pair_only else
+            {split: {model: CompressedRows(root / f'graphs-{model}-{split}-{index:06d}.jsonl.zst')
+                     for model in tokenizers} for split in ('train', 'test')})
         pair_writers = {split: CompressedRows(root / f'pairs-{split}-{index:06d}.jsonl.zst')
                         for split in ('train', 'test')}
         omissions = JsonlRows(root / f'omissions-{index:06d}.jsonl')
+        render_omissions_writer = JsonlRows(root / f'render-omissions-{index:06d}.jsonl')
 
     def close_chunk(next_offset):
         nonlocal chunk_start_count
         index = len(chunks)
-        current = {'graphs': {model: {} for model in tokenizers}, 'pairs': {}, 'omissions': None}
+        current = {'graphs': ({} if pair_only else {model: {} for model in tokenizers}), 'pairs': {},
+                   'omissions': None, 'render_omissions': None}
         try:
-            for model in tokenizers:
-                for split in ('train', 'test'):
-                    current['graphs'][model][split] = writers[split][model].finish()
+            if not pair_only:
+                for model in tokenizers:
+                    for split in ('train', 'test'):
+                        current['graphs'][model][split] = writers[split][model].finish()
             for split in ('train', 'test'):
                 current['pairs'][split] = pair_writers[split].finish()
             current['omissions'] = omissions.finish()
+            current['render_omissions'] = render_omissions_writer.finish()
         except BaseException:
             for mapping in writers.values():
                 for writer in mapping.values(): writer.abort()
             for writer in pair_writers.values(): writer.abort()
             omissions.abort()
+            render_omissions_writer.abort()
             raise
         chunks.append(current)
         manifest = {'schema': RESUME_SCHEMA, 'build_policy': BUILD_POLICY,
@@ -692,6 +784,7 @@ def main():
             for writer in mapping.values(): writer.abort()
         for writer in pair_writers.values(): writer.abort()
         if omissions is not None: omissions.abort()
+        if render_omissions_writer is not None: render_omissions_writer.abort()
 
     open_chunk(len(chunks))
     chain_rows, current = [], None
@@ -711,6 +804,7 @@ def main():
         for split, rows in result['pairs'].items():
             for row in rows: pair_writers[split].write(row)
         for row in result['omissions']: omissions.write(row)
+        for row in result.get('render_omissions', []): render_omissions_writer.write(row)
         completed_chains.append(chain)
         if len(completed_chains) - chunk_start_count >= args.checkpoint_trajectories:
             close_chunk(next_offset)
@@ -718,7 +812,9 @@ def main():
     worker_config = {'tokenizer_paths': {'lfm25': str(args.lfm_tokenizer),
                                          'mellum21': str(args.mellum_tokenizer)},
         'expanded_fps': expanded_fps, 'role_ids': {model: list(ids) for model, ids in role_ids.items()},
-        'model_ids': model_ids, 'records_path': str(args.records),
+        'model_ids': model_ids, 'pair_only': pair_only,
+        'selected_edge_ids': sorted(repair_edge_ids) if repair_edge_ids is not None else [],
+        'records_path': str(args.records),
         'records_sha256': args.records_sha256, 'pieces_path': str(args.pieces),
         'pieces_sha256': pieces_digest.hexdigest(), 'edges_path': str(args.edges),
         'edges_sha256': args.edges_sha256}
@@ -751,7 +847,8 @@ def main():
                     raise ValueError('admitted E2E record lacks its complete trajectory identity')
                 if current is None: current = chain
                 if chain != current:
-                    pending.append((current, chain_rows, line_start))
+                    if current in edges_by_chain:
+                        pending.append((current, chain_rows, line_start))
                     current, chain_rows = chain, []
                     remaining = (args.max_trajectories - len(completed_chains) - len(pending)
                                  if args.max_trajectories else args.workers)
@@ -762,10 +859,11 @@ def main():
                     if stopped_at_limit:
                         last_offset = line_start
                         break
-                chain_rows.append(record)
+                if not pair_only or chain in edges_by_chain:
+                    chain_rows.append(record)
                 last_offset = line_stop
             else:
-                if chain_rows:
+                if chain_rows and (not pair_only or current in edges_by_chain):
                     pending.append((current, chain_rows, Path(args.records).stat().st_size))
                 flush_pending(executor)
                 if not args.max_trajectories and not resume_mode and records_digest.hexdigest() != args.records_sha256:
@@ -780,6 +878,8 @@ def main():
                 raise ValueError('resumed source records SHA differs from the admitted immutable source binding')
             if not resume_mode and records_digest.hexdigest() != args.records_sha256:
                 raise ValueError('source records SHA differs from the admitted immutable source binding')
+            if pair_only and totals['source_edges'] != len(repair_edge_ids):
+                raise ValueError('pair-repair did not revisit every exact edge in the prior omission ledger')
         abort_chunk()
     except BaseException:
         abort_chunk()
@@ -797,7 +897,7 @@ def main():
         return {'path': str(destination), 'rows': sum(part['rows'] for part in parts),
                 'bytes': destination.stat().st_size, 'sha256': sha256_file(destination)}
 
-    graph_outputs = {model: {split: merge_parts(
+    graph_outputs = {} if pair_only else {model: {split: merge_parts(
         [chunk['graphs'][model][split] for chunk in chunks],
         args.out / 'graphs' / model / split / 'native-graphs.jsonl.zst')
         for split in ('train', 'test')} for model in tokenizers}
@@ -805,6 +905,9 @@ def main():
         args.out / 'pairs' / split / 'semantic-pairs.jsonl.zst') for split in ('train', 'test')}
     omissions_path = args.out / 'pair-omissions.jsonl'
     merge_parts([chunk['omissions'] for chunk in chunks], omissions_path)
+    render_omissions_path = args.out / 'render-omissions.jsonl'
+    render_omission_parts = [chunk['render_omissions'] for chunk in chunks if chunk.get('render_omissions')]
+    render_omission_output = merge_parts(render_omission_parts, render_omissions_path)
     final_manifest = json.loads(state_path.read_text())
     final_manifest['complete'] = args.max_trajectories is None
     final_manifest['outputs'] = {'graphs': graph_outputs, 'pairs': pair_outputs}
@@ -820,8 +923,14 @@ def main():
         'outputs': {'graphs': graph_outputs, 'pairs': pair_outputs},
         'pair_omissions': {'path': str(omissions_path), 'rows': totals['pair_omissions'],
                            'sha256': sha256_file(omissions_path)},
+        'render_omissions': render_omission_output,
+        'pair_repair': ({'source_omissions': str(args.repair_pair_omissions),
+                         'source_omissions_sha256': repair_sha,
+                         'source_edge_count': len(repair_edge_ids),
+                         'mode': 'pairs-only-static-multiread'} if pair_only else None),
         'resume_manifest': {'path': str(state_path), 'sha256': sha256_file(state_path)},
-        'conversion': 'all rendered trajectories become ordinary native one-node SFT graphs; cross-model pairs only for exact admitted writer/reader edges'}
+        'conversion': ('static multi-read repair supplement for exact edges omitted by a prior build'
+            if pair_only else 'all rendered trajectories become ordinary native one-node SFT graphs; cross-model pairs use exact admitted writer/reader occurrences')}
     receipt_path = args.out / 'receipt.json'
     atomic_json(receipt_path, receipt)
     # The concatenated zstd frames are the single consumer representation;
