@@ -10,6 +10,7 @@ import { SOURCES } from './acquire.mjs';
 import { sourceRecordId } from './folder-data.mjs';
 import { DATASETS, rowsOf } from './labeled.mjs';
 import { Random, curriculumCase, evalCall, literal, nlFile, returnCall } from './lib.mjs';
+import { pendingSourceReview } from '../../dist/teacher/source-review.js';
 
 /** Buckets per dataset: name, the gold labels they cover, the lambda's question (with its noun) and the request's
  * wording. Buckets of one dataset may overlap. */
@@ -60,11 +61,21 @@ const TEAMS = ['cards', 'payments', 'trust', 'community', 'editorial', 'triage']
 
 function membership(bucket, label) { return bucket.labels.includes(label); }
 
+const eligiblePools = new Map();
+function eligibleRows(name, split) {
+  const key = `${name}:${split}`;
+  if (!eligiblePools.has(key)) eligiblePools.set(key, rowsOf(name, split).filter(row =>
+    !pendingSourceReview(name, sourceRecordId(name, row.text, ''))));
+  const rows = eligiblePools.get(key);
+  if (!rows.length) throw new Error(`No source-review-clear dataset-workbench rows for ${key}`);
+  return rows;
+}
+
 function drawItems(rng, sources, count, split) {
   const items = [];
   for (let i = 0; i < count; i++) {
     const name = rng.pick(sources);
-    const row = rng.pick(rowsOf(name, split));
+    const row = rng.pick(eligibleRows(name, split));
     items.push({ source: name, text: row.text, label: row.label, sourceId: sourceRecordId(name, row.text, '') });
   }
   return items;
@@ -155,7 +166,7 @@ export function datasetWorkbench(seed, index, split = 'train') {
     const swap = new Set(rng.sample(base.map(x => x.id), rng.int(2, 3)));
     const other = base.map(x => {
       if (!swap.has(x.id)) return x;
-      const pool = rowsOf(x.source, split).filter(row => decidesRow(row) !== decides(x));
+      const pool = eligibleRows(x.source, split).filter(row => decidesRow(row) !== decides(x));
       function decidesRow(row) { return route ? rules.some(r => r.source === x.source && membership(r.bucket, row.label)) : membership(bucket, row.label); }
       if (!pool.length) return x;
       const row = rng.pick(pool);
