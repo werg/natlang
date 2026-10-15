@@ -53,3 +53,39 @@ def test_pack_refuses_symlinks_and_spools_inside_source(tmp_path):
         archive.pack(source, tmp_path / 'spool', 'native', reserve_bytes=0)
     with pytest.raises(ValueError, match='outside'):
         archive.pack(source, source / 'spool', 'native', reserve_bytes=0)
+
+
+def test_explicit_file_symlink_mode_seals_regular_bytes_and_target_provenance(tmp_path):
+    source, spool = tmp_path / 'source', tmp_path / 'spool'
+    source.mkdir()
+    target = tmp_path / 'repaired-shard'
+    target.write_bytes(b'immutable repaired records\r\n\x00')
+    (source / 'shard.records.jsonl').symlink_to(target)
+    receipt = archive.pack(source, spool, 'native', reserve_bytes=0, dereference_file_symlinks=True)
+    binding = receipt['manifest']['files'][0]
+    assert binding['resolved_source'] == str(target)
+    assert binding['source_symlink'] == str(target)
+    assert archive.verify(spool, 'native')['source_bytes'] == target.stat().st_size
+    (source / 'directory').symlink_to(tmp_path, target_is_directory=True)
+    with pytest.raises(ValueError, match='symlinks'):
+        archive.pack(source, spool, 'directory-link', reserve_bytes=0, dereference_file_symlinks=True)
+
+
+def test_retargeted_file_symlink_aborts_without_sealing_archive(tmp_path, monkeypatch):
+    source, spool = tmp_path / 'source', tmp_path / 'spool'
+    source.mkdir()
+    first, second = tmp_path / 'first', tmp_path / 'second'
+    first.write_bytes(b'same bytes'); second.write_bytes(b'same bytes')
+    link = source / 'shard'
+    link.symlink_to(first)
+    original = archive.tarfile.TarFile.addfile
+    def swap_after_read(self, info, fileobj=None):
+        result = original(self, info, fileobj)
+        if info.name.endswith('/shard'):
+            link.unlink(); link.symlink_to(second)
+        return result
+    monkeypatch.setattr(archive.tarfile.TarFile, 'addfile', swap_after_read)
+    with pytest.raises(ValueError, match='changed during archive'):
+        archive.pack(source, spool, 'native', reserve_bytes=0, dereference_file_symlinks=True)
+    assert not (spool / 'native.tar.zst').exists()
+    assert not (spool / 'native.tar.pending').exists()

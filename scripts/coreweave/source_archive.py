@@ -26,10 +26,11 @@ def digest_file(path):
     return digest.hexdigest()
 
 
-def _files(source):
+def _files(source, *, dereference_file_symlinks=False):
     paths = sorted(source.rglob('*'))
-    if any(path.is_symlink() for path in paths):
-        raise ValueError('source archive refuses symlinks')
+    for path in paths:
+        if path.is_symlink() and (not dereference_file_symlinks or not path.is_file()):
+            raise ValueError('source archive refuses symlinks unless explicit file dereference is enabled')
     return [path for path in paths if path.is_file()]
 
 
@@ -43,7 +44,7 @@ def _write_json(path, value):
     pending.replace(path)
 
 
-def pack(source, spool, name, *, reserve_bytes=20 * 2**30):
+def pack(source, spool, name, *, reserve_bytes=20 * 2**30, dereference_file_symlinks=False):
     source, spool = Path(source), Path(spool)
     if not name or Path(name).name != name or name in ('.', '..'):
         raise ValueError('archive name must be one ordinary path component')
@@ -56,7 +57,7 @@ def pack(source, spool, name, *, reserve_bytes=20 * 2**30):
     pending = target.with_suffix('.pending')
     if target.exists() or pending.exists():
         raise FileExistsError(target if target.exists() else pending)
-    files = _files(source)
+    files = _files(source, dereference_file_symlinks=dereference_file_symlinks)
     if not files:
         raise ValueError('source contains no files')
     if source.joinpath('transfer-manifest.json').exists():
@@ -82,6 +83,7 @@ def pack(source, spool, name, *, reserve_bytes=20 * 2**30):
             with tarfile.open(fileobj=process.stdin, mode='w|', copybufsize=8 << 20,
                               dereference=True) as archive:
                 for path in files:
+                    link = (os.readlink(path), path.lstat().st_ino, str(path.resolve(strict=True))) if path.is_symlink() else None
                     before = path.stat()
                     info = archive.gettarinfo(str(path), arcname=name + '/' + str(path.relative_to(source)))
                     if not info.isfile():
@@ -90,12 +92,15 @@ def pack(source, spool, name, *, reserve_bytes=20 * 2**30):
                         reader = VerifiedReader(stream)
                         archive.addfile(info, reader)
                     after = path.stat()
+                    after_link = (os.readlink(path), path.lstat().st_ino, str(path.resolve(strict=True))) if path.is_symlink() else None
                     if ((before.st_size, before.st_mtime_ns, before.st_ino) !=
-                            (after.st_size, after.st_mtime_ns, after.st_ino) or reader.size != before.st_size):
+                            (after.st_size, after.st_mtime_ns, after.st_ino) or reader.size != before.st_size
+                            or link != after_link):
                         raise ValueError('source changed during archive: ' + str(path))
                     bindings.append({'path': str(path.relative_to(source)), 'bytes': reader.size,
-                                     'sha256': reader.digest.hexdigest()})
-                if _files(source) != files:
+                                     'sha256': reader.digest.hexdigest(),
+                                     **({'source_symlink': link[0], 'resolved_source': link[2]} if link else {})})
+                if _files(source, dereference_file_symlinks=dereference_file_symlinks) != files:
                     raise ValueError('source file set changed during archive')
                 manifest = {'schema': 'natlang.mined-source-transfer/1', 'source': str(source),
                             'name': name, 'training_admission': False, 'files': bindings,
@@ -183,11 +188,14 @@ def main(argv=None):
     parser.add_argument('--spool', type=Path, required=True)
     parser.add_argument('--name', required=True)
     parser.add_argument('--reserve-gb', type=float, default=20)
+    parser.add_argument('--dereference-file-symlinks', action='store_true',
+                        help='archive immutable linked file bytes as regular members, recording target provenance')
     args = parser.parse_args(argv)
     if args.operation == 'pack':
         if args.source is None or args.reserve_gb < 0:
             parser.error('pack requires --source and a nonnegative reserve')
-        result = pack(args.source, args.spool, args.name, reserve_bytes=int(args.reserve_gb * 2**30))
+        result = pack(args.source, args.spool, args.name, reserve_bytes=int(args.reserve_gb * 2**30),
+                      dereference_file_symlinks=args.dereference_file_symlinks)
     else:
         result = verify(args.spool, args.name)
     print(json.dumps({key: value for key, value in result.items() if key != 'manifest'}), flush=True)

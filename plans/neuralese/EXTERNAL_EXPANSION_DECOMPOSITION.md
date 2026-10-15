@@ -259,3 +259,11 @@ On the actual R8 full/Mellum file, the selected 2,758 held rows have identical
 literal-byte SHA with both readers. The measured scan fell from 14.84 to 5.07
 seconds after localizing and removing an overbroad fallback in the first
 attempt. This measures that scan, not an entire union build.
+
+Some immutable mined shards are stored through file symlinks after storage
+repair. Exact source transport may explicitly dereference these file links,
+record their resolved targets, and verify link identity plus target stat before
+and after reading. Keep ordinary symlink rejection as the default and reject
+directory links even in this mode. The independent decoded member verifier
+still checks every byte; restored archives contain regular files. This changes
+storage plumbing only and grants no source or training admission.
