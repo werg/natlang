@@ -132,3 +132,17 @@ to the existing export/ferry owner after verified consumption. Failure before
 the global commit cleans only newly written, uncommitted objects; failure after
 the atomic commit preserves its complete recoverable closure. A manifest-only
 inode export is insufficient and must not be used for this storage form.
+
+Shared periodic-export preparation uses `shared_export.py`: pin the COMPLETE
+committed global closure through `pin_shared_checkpoint`, seal that pin with the
+existing source archive/roundtrip verifier, and pass the archive binding to the
+existing scoped private PUT/full-GET exporter. Release only that assigned pin
+after the private receipt matches archive SHA and size in both upload identity
+and independent GET. This exact durability plumbing grants no task qualification,
+selects no data and schedules no training. Current monolithic student exporters
+remain separate; a future shared schedule must invoke this preparation rather
+than upload its small global manifest inode.
+Each independent durability/ferry consumer uses its own named closure pin scope,
+so releasing a completed private export cannot remove a simultaneous full-state
+ferry's pin. The scope changes storage ownership only; the global checkpoint SHA
+and participant/VAE/optimizer/RNG payload identities are unchanged.

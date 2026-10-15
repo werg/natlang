@@ -178,3 +178,42 @@ def test_full_and_selected_pins_survive_object_retention(tmp_path):
         restored = CheckpointPolicy.load(checkpoint, shared_participant=verified.get('participant'))
         assert restored['training']['step'] == 2
     assert CheckpointPolicy.load(policy.slot)['training']['step'] == 3
+
+
+def test_complete_shared_export_survives_original_removal_and_rejects_partial_private_receipt(tmp_path):
+    from scripts.coreweave.shared_export import prepare, release
+    from scripts.coreweave.source_archive import restore
+    policy, participants, channel, optimizer, export = actual_shared(tmp_path)
+    expected = CheckpointPolicy.load(policy.slot)
+    from natlang_neuralese.model.native_shared_checkpoint import pin_shared_checkpoint
+    from natlang_neuralese.model.native_bundle import verify_bundle
+    peer_consumer_pin = pin_shared_checkpoint(policy.slot, consumer='independent-full-ferry')
+    prepared = prepare(policy.slot, tmp_path/'exports', reserve_bytes=0)
+    assert len(prepared['closure_files']) == 6  # Global, four payloads, bundle inventory.
+    assert prepared['checkpoint']['sha256'] == export['checkpoint']['sha256']
+    pin = Path(prepared['pin'])
+    private = {'private': True, 'source': prepared['archive']['path'],
+               'identity': {key: prepared['archive'][key] for key in ('sha256','bytes')},
+               'independent_verification': {'sha256': '0'*64, 'bytes': prepared['archive']['bytes']}}
+    with pytest.raises(ValueError, match='independently verified'):
+        release(prepared, private)
+    assert pin.exists()
+    private['independent_verification'] = dict(private['identity'])
+    result = release(prepared, private)
+    assert result['pin_released'] and not pin.exists()
+    verify_bundle(Path(peer_consumer_pin['checkpoint']['resolved']).parent)
+    shutil.rmtree(policy.out)
+    target = tmp_path/'restored'
+    restore(prepared['spool'], prepared['name'], target)
+    restored = CheckpointPolicy.load(target/'checkpoint.pt')
+    equal_tree(expected, restored)
+
+
+def test_shared_export_refuses_to_seal_a_missing_peer(tmp_path):
+    from scripts.coreweave.shared_export import prepare
+    policy, participants, channel, optimizer, export = actual_shared(tmp_path)
+    manifest = shared_manifest(policy.slot)
+    Path(manifest['participants']['mellum']['path']).unlink()
+    with pytest.raises((FileNotFoundError, ValueError)):
+        prepare(policy.slot, tmp_path/'exports', reserve_bytes=0)
+    assert not list((tmp_path/'exports').glob('*.tar.zst'))

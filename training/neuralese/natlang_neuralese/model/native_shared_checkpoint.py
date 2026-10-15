@@ -147,7 +147,7 @@ def shared_checkpoint_lock(out):
         finally: fcntl.flock(stream, fcntl.LOCK_UN)
 
 
-def pin_shared_checkpoint(checkpoint, *, participant=None):
+def pin_shared_checkpoint(checkpoint, *, participant=None, consumer=None):
     """Pin the committed global inode AND every consumed immutable payload."""
     from .native_bundle import verify_bundle
     from ..common.jsonio import write_json_durable
@@ -157,7 +157,12 @@ def pin_shared_checkpoint(checkpoint, *, participant=None):
         if manifest is None:
             raise ValueError('a shared closure pin requires a sharded global checkpoint')
         digest = sha256_file_hex_cached(checkpoint)
-        target = checkpoint.parent/'pins'/digest/('full' if participant is None else canonical_json_sha256_hex(participant))
+        scope = 'full' if participant is None else canonical_json_sha256_hex(participant)
+        if consumer is not None:
+            if not isinstance(consumer, str) or not consumer:
+                raise ValueError('shared closure pin consumer must be a nonempty name')
+            scope += '-' + canonical_json_sha256_hex(consumer)
+        target = checkpoint.parent/'pins'/digest/scope
         target.mkdir(parents=True, exist_ok=True)
         dependencies = shared_dependencies(manifest, checkpoint, participant=participant)
         files = []
