@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "native-state-rest27-semantic-pairs-repair-tail-20261015-v1",
+  "owner": "dgx",
+  "path": "runs/native-state-rest27-pair-repair-tails-20261015-v1",
+  "files": [
+    {
+      "path": "assembly-manifest.json",
+      "bytes": 2481,
+      "sha256": "c0793225355839ee6c1cf5334f9e8d8cd2b67528413594439708033d6fd2db9c"
+    },
+    {
+      "path": "test-new-pairs.jsonl.zst",
+      "bytes": 711705,
+      "sha256": "52bc090977197b1a5edadbffab1417191c1beb3efe515099824861dcb89980ff"
+    },
+    {
+      "path": "train-new-pairs.jsonl.zst",
+      "bytes": 33267260,
+      "sha256": "e33989dff24f38b618ff79894f79c1064e05658f725c5e4b2d2c80779c5fa668"
+    },
+    {
+      "path": "validation-proof.json",
+      "bytes": 7422081,
+      "sha256": "480c8170ee1dded923f6a1ad968ce1c850045cb5401b7b8df5cc960c0c3b01a4"
+    }
+  ],
+  "bytes": 41403527
+}

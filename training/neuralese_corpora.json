@@ -107861,6 +107861,34 @@
         "train_sha256": "6ec7db27f849afdaf43f45fed23871eac8be87b9873c76e42a640b711d0f20e4",
         "held_sha256": "ddec24c6036b18db393ccd76f4dd772a3208a587449597eefd3f29c07f1afeea"
       }
+    },
+    {
+      "id": "native-state-rest27-semantic-pairs-repair-tail-20261015-v1",
+      "owner": "dgx",
+      "path": "runs/native-state-rest27-pair-repair-tails-20261015-v1",
+      "include": [
+        "train-new-pairs.jsonl.zst",
+        "test-new-pairs.jsonl.zst",
+        "assembly-manifest.json",
+        "validation-proof.json"
+      ],
+      "source_class": "source-bound-static-native-semantic-pair-repair-tail-from-admitted-REST27-trajectories",
+      "split": "Inherited train/test source split with group-level separation rechecked against the current held, quality, decision and source-review protections.",
+      "admission": "Incremental repair supplement: 18,294 train and 321 held pairs from 18,615 repaired edges. The prior admitted cohort remains an immutable prefix; this supplement is appended after it. 661 selected edges remain explicitly unpaired/guarded and are not represented as admitted.",
+      "training_admission": true,
+      "training_admission_reason": "Both exact LFM and Mellum graph views pass parse_pair and native consume/import geometry; rebased graph identities preserve source payload and communication provenance; selected-edge coverage, prior-prefix disjointness, cross-split identity/group separation and current protection closure are bound by validation-proof.json.",
+      "derived_from": [
+        "neuralese-e2e-cloud-rest27-protected-20261015-v2",
+        "native-state-rest27-semantic-pairs-partial-20261015-v3"
+      ],
+      "license": "Inherited unchanged from the admitted REST27 source corpus; owner accepts all licenses.",
+      "source_bindings": {
+        "assembly_manifest_sha256": "c0793225355839ee6c1cf5334f9e8d8cd2b67528413594439708033d6fd2db9c",
+        "validation_proof_sha256": "480c8170ee1dded923f6a1ad968ce1c850045cb5401b7b8df5cc960c0c3b01a4",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "train_sha256": "e33989dff24f38b618ff79894f79c1064e05658f725c5e4b2d2c80779c5fa668",
+        "held_sha256": "52bc090977197b1a5edadbffab1417191c1beb3efe515099824861dcb89980ff"
+      }
     }
   ],
   "coverage_backlog": [
