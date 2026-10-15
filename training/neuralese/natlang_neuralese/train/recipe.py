@@ -731,6 +731,15 @@ def load_recipe(path):
 _TRUSTED_RUNTIME_ENVIRONMENT = {'NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE': '1'}
 
 
+def python_package_environment(environment, package_parent):
+    """Bind module execution to its declared package rather than the caller's cwd."""
+    result = dict(environment)
+    paths = [str(package_parent)] + [path for path in result.get('PYTHONPATH', '').split(os.pathsep) if path]
+    result['PYTHONPATH'] = os.pathsep.join(dict.fromkeys(paths))
+    result['PYTHONSAFEPATH'] = '1'
+    return result
+
+
 def declared_runtime_environment(recipe):
     """Validate the small allowlist of recipe-declared runtime environment switches."""
     runtime = recipe.get('runtime')
@@ -1862,7 +1871,7 @@ def run_declared_direct_stage(recipe, recipe_path, output, launch_metadata, devi
         environment.pop('NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE', None)
     environment.update(profile_environment)
     environment.update(declared_environment)
-    environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
+    environment = python_package_environment(environment, frozen.parent)
     print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
     with _ChildSignalForwarder() as signal_forwarder:
         result = signal_forwarder.run(command, env=environment)
@@ -2189,14 +2198,14 @@ def main(argv=None):
                     environment.pop('NVTE_ALLOW_UNSAFE_PICKLE_EXTRA_STATE', None)
                 environment.update(profile_environment)
                 environment.update(declared_environment)
-                environment['PYTHONPATH'] = str(frozen.parent) + os.pathsep + environment.get('PYTHONPATH', '')
+                environment = python_package_environment(environment, frozen.parent)
                 if args.plan_only:
                     # The next stage's own data plan on the current code (budget, data continuation, QAT range, held
                     # set), from its exact child arguments; a trainer without a plan-only mode is listed only.
                     print(json.dumps({'stage': stage['id'], 'plan_only_command': command}), flush=True)
                     if kind not in DIRECT_TRAINING_KINDS:
                         return 0
-                    environment['PYTHONPATH'] = str(package.parent) + os.pathsep + os.environ.get('PYTHONPATH', '')
+                    environment = python_package_environment(environment, package.parent)
                     return subprocess.run(command + ['--plan-only'], env=environment).returncode
                 if hdd_guard.RECORDS:
                     write_json(args.out / 'hdd-staged-inputs.json', hdd_guard.RECORDS)

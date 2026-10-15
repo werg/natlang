@@ -372,3 +372,29 @@ def test_declared_trusted_te_restore_environment_is_pinned_and_forwarded():
 def test_trusted_te_restore_environment_is_narrowly_scoped(recipe):
     with pytest.raises(ValueError, match="runtime.environment|te-fp8"):
         recipe_module.declared_runtime_environment(recipe)
+
+
+def test_module_child_uses_declared_package_despite_conflicting_working_directory(tmp_path):
+    import os
+    import subprocess
+    import sys
+    declared, working = tmp_path / 'frozen', tmp_path / 'canonical'
+    for directory, marker in [(declared, 'frozen'), (working, 'canonical')]:
+        package = directory / 'package_origin_fixture'
+        package.mkdir(parents=True)
+        (package / '__init__.py').write_text('')
+        (package / '__main__.py').write_text('print(' + repr(marker) + ')')
+    inherited = {**os.environ, 'PYTHONSAFEPATH': '', 'PYTHONPATH': os.pathsep + str(working) + os.pathsep}
+    environment = recipe_module.python_package_environment(inherited, declared)
+    result = subprocess.run([sys.executable, '-m', 'package_origin_fixture'], cwd=working,
+                            env=environment, text=True, capture_output=True, check=True)
+    assert result.stdout.strip() == 'frozen'
+    assert environment['PYTHONPATH'].split(os.pathsep) == [str(declared), str(working)]
+    assert environment['PYTHONSAFEPATH'] == '1'
+    assert inherited['PYTHONSAFEPATH'] == ''
+    unsafe = {**environment, 'PYTHONSAFEPATH': ''}
+    shadowed = subprocess.run([sys.executable, '-m', 'package_origin_fixture'], cwd=working,
+                             env=unsafe, text=True, capture_output=True, check=True)
+    assert shadowed.stdout.strip() == 'canonical'
+    empty = recipe_module.python_package_environment({}, declared)
+    assert empty['PYTHONPATH'] == str(declared)

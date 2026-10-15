@@ -337,3 +337,7 @@ The folder-reducer task specifies its policy in natlang: a callable child instru
 ## FlexAttention decode tile compatibility — 2026-10-15
 
 The mixed Mellum cached readback reached Torch 2.14's decode compiler with 128-token sparse blocks and an incompatible automatically chosen 1024-query tile. Keep the existing window/branch masks and shared attention implementations. Exact CUDA kernel options are crisp ABI plumbing: declare decode-only 32-query/64-key tiles that divide those sparse blocks, leaving ordinary training tiles and all model-facing policy unchanged. Preserve the existing fp32 precision option. Verify actual GQA32/4 forward/backward on the allocated production GPU before restarting the unchanged checkpoint.
+
+## Recipe child package import precedence — 2026-10-15
+
+A child launched with `python -m` from the canonical package directory imported that directory before the frozen runtime despite its first PYTHONPATH entry. This is exact code-binding plumbing. One shared environment helper prepends the declared package root, removes empty PYTHONPATH entries (which also mean the working directory), and sets Python safe-path mode. Both recipe execution paths and the CPU plan child use it. A real subprocess fixture places a conflicting package in the working directory and verifies the declared package executes without changing the working directory or dropping other explicit search paths.
