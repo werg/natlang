@@ -1,5 +1,35 @@
 # Preserve interrupted model-request evidence in task accounting
 
+Readiness execution accounting (2026-10-16): a cadence evaluation already
+distinguishes fully accounted model failures from missing infrastructure
+observations. Its `complete` field separately measures result exports. Native
+readiness incorrectly required both, preventing known model incompletion or
+token-ceiling failures from progressing even though task success is telemetry.
+
+1. Produce a version 2 native execution receipt from the exact saved score
+   bytes. Verify summary equality, selected-case count and unique identities,
+   detailed outcome counts and total success count. Unknown/infrastructure
+   outcomes, missing cases, historical scores and mismatched current identities
+   remain disqualifying.
+2. Define execution completion as all selected outcomes accounted. Preserve
+   `result_export_complete` separately, unchanged from the source score, and
+   retain all model failures and successes exactly. Never fabricate exports or
+   silently reinterpret a version 1 receipt.
+3. Reuse one receipt builder in native SFT and semantic training. Both raw
+   readiness and shared-stage completion verify the bound score and version 2
+   receipt. Existing version 1 receipts retain their original stricter contract.
+4. Keep actual task performance visible and diagnose failures while training
+   progresses. Neither this fix nor a successful execution receipt claims
+   model quality, completed data exposure or numerical qualification.
+
+Ledger validation: `native-accounted-execution-receipt-20261016` passed all
+67 receipt/readiness/native SFT/shared-stage tests in 266.43 seconds;
+`native-accounted-execution-final-20261016` passed 18 focused tests after
+malformed-input guards; quick checks passed. Independent review accepted
+both validator call sites and current-checkpoint binding. The receipt is
+trusted evaluator evidence; score JSON alone does not cryptographically prove
+which weights executed. Historical reports remain unchanged.
+
 The existing task verifier must distinguish model failures from infrastructure interruptions. A real saved case finished its first8192-token reply, then its second HTTP request terminated after120.541seconds with TypeError: terminated; no result row was produced.
 
 1. Existing queue accounting reads the exact index/program-bound error file; retain its error, path and SHA in the accounting row.

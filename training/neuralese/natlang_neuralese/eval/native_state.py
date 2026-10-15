@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import copy
+from collections import Counter
+import hashlib
+import json
+import re
 import time
 from pathlib import Path
 
@@ -9,20 +13,96 @@ import torch
 import torch.nn.functional as F
 
 
-def task_execution_receipt(summary, identity, *, checkpoint_sha256):
-    """One actual-harness receipt contract for native SFT and joint training."""
-    from ..common.hashing import sha256_file_hex_cached
-    score = Path(summary['run'])/'task-score.json' if summary.get('run') else None
-    receipt = {'schema': 'natlang.native-task-execution-receipt/1',
-        'checkpoint_sha256': identity['checkpoint_sha256'], 'native_identity': identity,
+def _execution_receipt(summary, identity, *, checkpoint_sha256, score, path, digest):
+    """Separate exact observed execution from successful result-file export."""
+    from .task_packet import TASK_OUTCOMES, accounted
+    errors = []
+    details = (score or {}).get('cases_detail')
+    cases, indices = summary.get('cases'), summary.get('case_indices')
+    outcome_counts = summary.get('outcome_counts')
+    outcome_counts = outcome_counts if isinstance(outcome_counts, dict) else {}
+    if score is None or {key: value for key, value in score.items() if key != 'cases_detail'} != summary:
+        errors.append('saved score differs from the evaluated summary')
+    if (type(cases) is not int or cases <= 0 or not isinstance(indices, list)
+            or len(indices) != cases or any(type(index) is not int or index < 0 for index in indices)
+            or len(set(indices)) != len(indices)):
+        errors.append('selected cases are missing or inconsistent')
+    if not isinstance(summary.get('packet_sha256'), str) or re.fullmatch(r'[0-9a-f]{64}', summary['packet_sha256']) is None:
+        errors.append('evaluation packet lacks its exact digest')
+    if (not isinstance(details, list) or len(details) != cases
+            or any(not isinstance(item, dict) or not isinstance(item.get('id'), str)
+                   or not item['id'] or item.get('outcome') not in TASK_OUTCOMES for item in details)):
+        errors.append('saved score lacks all selected case outcomes')
+    else:
+        counts = Counter(item['outcome'] for item in details)
+        if (len({item['id'] for item in details}) != cases
+                or any(outcome_counts.get(name) != counts[name] for name in TASK_OUTCOMES)):
+            errors.append('case identities or detailed outcome counts differ')
+    if not accounted(summary):
+        errors.append('evaluation has unresolved or infrastructure outcomes')
+    successes = summary.get('task_successes')
+    if type(successes) is not int or successes != outcome_counts.get('task_success'):
+        errors.append('task successes differ from observed outcomes')
+    if summary.get('historical') is True or summary.get('qualifies_current_weights') is False:
+        errors.append('historical evaluation cannot qualify current weights')
+    if (not isinstance(checkpoint_sha256, str) or re.fullmatch(r'[0-9a-f]{64}', checkpoint_sha256) is None
+            or not isinstance(identity, dict) or identity.get('checkpoint_sha256') != checkpoint_sha256):
+        errors.append('evaluation is not bound to the current checkpoint')
+    receipt = {'schema': 'natlang.native-task-execution-receipt/2',
+        'checkpoint_sha256': (identity if isinstance(identity, dict) else {}).get('checkpoint_sha256'), 'native_identity': identity,
         'packet_sha256': summary.get('packet_sha256'), 'case_indices': summary.get('case_indices'),
-        'cases': summary.get('cases'), 'complete': summary.get('complete'), 'eligible': summary.get('eligible'),
+        'cases': cases, 'complete': not errors, 'eligible': summary.get('eligible'),
+        'result_export_complete': summary.get('complete'), 'outcome_counts': summary.get('outcome_counts'),
         'task_successes': summary.get('task_successes'), 'task_successes_are_qualification_barrier': False,
-        'score_path': str(score.resolve()) if score and score.is_file() else None,
-        'score_sha256': sha256_file_hex_cached(score) if score and score.is_file() else None}
-    receipt['passed'] = bool(identity['checkpoint_sha256'] == checkpoint_sha256 and
-                             receipt['complete'] and receipt['eligible'] and receipt['score_sha256'])
+        'score_path': str(path.resolve()) if path is not None else None,
+        'score_sha256': digest, 'execution_errors': errors}
+    receipt['passed'] = bool(identity and receipt['checkpoint_sha256'] == checkpoint_sha256 and
+                             receipt['complete'] and receipt['eligible'] is True and digest)
     return receipt
+
+
+def _read_task_score(path):
+    try:
+        payload = path.read_bytes()
+        score = json.loads(payload)
+        if not isinstance(score, dict):
+            return None, None
+        return score, hashlib.sha256(payload).hexdigest()
+    except (OSError, ValueError):
+        return None, None
+
+
+def task_execution_receipt(summary, identity, *, checkpoint_sha256):
+    """One exact-harness receipt contract for native SFT and joint training."""
+    path = Path(summary['run'])/'task-score.json' if isinstance(summary.get('run'), str) and summary['run'] else None
+    score, digest = _read_task_score(path) if path is not None else (None, None)
+    return _execution_receipt(summary, identity, checkpoint_sha256=checkpoint_sha256,
+                              score=score, path=path, digest=digest)
+
+
+def validate_task_execution_receipt(receipt, identity):
+    """Recheck v2 evidence; retain the original v1 completion contract."""
+    if not isinstance(receipt, dict) or not isinstance(identity, dict):
+        return False
+    if (receipt.get('passed') is not True or receipt.get('native_identity') != identity
+            or receipt.get('complete') is not True or receipt.get('eligible') is not True):
+        return False
+    if receipt.get('schema') == 'natlang.native-task-execution-receipt/1':
+        return True
+    if (receipt.get('schema') != 'natlang.native-task-execution-receipt/2'
+            or not isinstance(receipt.get('score_path'), str) or not receipt['score_path']):
+        return False
+    path = Path(receipt['score_path'])
+    score, digest = _read_task_score(path)
+    if (score is None or digest != receipt.get('score_sha256')
+            or not isinstance(score.get('run'), str) or not score['run']):
+        return False
+    if (Path(score['run'])/'task-score.json').resolve() != path.resolve():
+        return False
+    summary = {key: value for key, value in score.items() if key != 'cases_detail'}
+    expected = _execution_receipt(summary, identity, checkpoint_sha256=identity['checkpoint_sha256'],
+                                   score=score, path=path, digest=digest)
+    return expected['passed'] and all(receipt.get(key) == value for key, value in expected.items())
 
 
 def qualify_existing(model, tokenizer, roles, config, *, checkpoint_sha256, forward_atol, gradient_atol,
