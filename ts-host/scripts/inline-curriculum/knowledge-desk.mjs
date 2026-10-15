@@ -81,6 +81,8 @@ return await nl<string>\`Answer question from notes alone, as a short phrase.\`(
   record.source_support = { titles: question.supports, sentences: question.supportSentences, notes };
   record.dataset = 'hotpotqa';
   record.dataset_records = [question.id, ...others.map(row => row.id)];
+  record.source_groups = [...new Set([...record.source_groups,
+    ...record.dataset_records.map(id => `hotpotqa:${id}`)])];
   record.generation.layout = { id: 'id', path: 'library/{id}.md', body: 'body', format: 'frontmatter' };
   return [record];
 }
@@ -166,5 +168,7 @@ return final.answer ?? '';`;
   record.source_support = { titles: question.supports, sentences: question.supportSentences, order: ordered };
   record.dataset = 'hotpotqa';
   record.dataset_records = [question.id, ...others.map(row => row.id)];
+  record.source_groups = [...new Set([...record.source_groups,
+    ...record.dataset_records.map(id => `hotpotqa:${id}`)])];
   return [record];
 }

@@ -166,7 +166,9 @@ export function buildRecords({ seed, shapes, start = 0, families, split = 'train
       if (!family.source) {
         record.split = split;
         record.curriculum.split_group = `s${seed}:${record.curriculum.split_group}`;
-        record.source_groups = record.dataset_records?.map(id => `${record.dataset}:${id}`) ?? [record.curriculum.split_group];
+        record.source_groups = record.dataset_record_groups ??
+          record.dataset_records?.map(id => `${record.dataset}:${id}`) ?? [record.curriculum.split_group];
+        delete record.dataset_record_groups;
         if (record.curriculum.pair_group) record.curriculum.pair_group = `s${seed}:${record.curriculum.pair_group}`;
       }
       // A source adapter samples a large dataset, so two indexes can land on the same problem: keep the first.

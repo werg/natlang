@@ -180,9 +180,11 @@ export function sourceReviewReason(record: Record<string, unknown>):
       return 'source_review_pending';
   }
   const sourceGroups = Array.isArray(record.source_groups) ? record.source_groups : [];
-  if (SOURCE_REVIEWS.some(review => review.dataset === dataset && review.status === 'pending' &&
+  if (SOURCE_REVIEWS.some(review => review.status === 'pending' &&
       !review.sourceRevision && !review.sourceSnapshotSha256 &&
-      sourceGroups.some(group => typeof group === 'string' && review.sourceGroups?.includes(group))))
+      sourceGroups.some(group => typeof group === 'string' &&
+        (review.sourceGroups?.includes(group) ||
+         [review.id, ...review.aliases].some(id => group === `${review.dataset}:${id}`)))))
     return 'source_review_pending';
   const ids = [record.dataset_records, record.source_ids, DATASETS.identityFromSourceGroups.includes(dataset) ? record.source_groups : []]
     .flatMap(value => Array.isArray(value) ? value : []);

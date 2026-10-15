@@ -197,6 +197,10 @@ export function datasetWorkbench(seed, index, split = 'train') {
       record.gold_sources = sources.map(s => `${s}-labels`);
       record.dataset = sources.join('+');
       record.dataset_records = items.map(x => x.sourceId);
+      // A mixed inbox keeps each item's original dataset identity for source
+      // review and cross-corpus split checks. The builder consumes this exact
+      // per-record binding when it assigns source_groups.
+      record.dataset_record_groups = items.map(x => `${x.source}:${x.sourceId}`);
       return record;
     });
   }
