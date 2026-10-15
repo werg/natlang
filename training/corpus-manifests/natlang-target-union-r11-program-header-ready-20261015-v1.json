@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-target-union-r11-program-header-ready-20261015-v1",
+  "owner": "dgx",
+  "path": "runs/natlang-target-union-r11-program-header-ready-20261015-v1",
+  "files": [
+    {
+      "path": "independent-protection-audit.json",
+      "bytes": 109106,
+      "sha256": "6890318348bf630d79cdb668989e490203f4cc9312f3cd5112b90e1a1032409c"
+    },
+    {
+      "path": "program-header/lfm25/text-data.jsonl.zst",
+      "bytes": 1828642500,
+      "sha256": "516da5827e0a8511baec9725bd5aa316b754243689f381edcb356515c1f5f189"
+    },
+    {
+      "path": "program-header/mellum21/text-data.jsonl.zst",
+      "bytes": 1810132656,
+      "sha256": "c21fdcaafbd63f19cee6d432d96be9389be5c7d9afb71e5f476ac01cc4f857e7"
+    },
+    {
+      "path": "program-header/omissions.jsonl",
+      "bytes": 2075689,
+      "sha256": "5b4bcf0583d5844266f606ddabea028f4e30b7ec771baa92754f474d79957142",
+      "lines": 7394
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 224119,
+      "sha256": "2527d1cfce9930eaab44120f43584a20270e62332a0f96336b792bf8d2b49e88"
+    }
+  ],
+  "bytes": 3641184070
+}
