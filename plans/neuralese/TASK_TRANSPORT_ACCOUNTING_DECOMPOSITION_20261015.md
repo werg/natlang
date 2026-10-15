@@ -20,3 +20,28 @@ exact error artifact SHA and valid complete-output manifest accounting. An
 unbound legacy error remains unresolved; matching only index and program ID
 does not identify a record version. Generated model text never supplies this
 trusted verifier flag. Existing historical transport precedence is unchanged.
+
+The collector CLI reads the source bytes once, hashes that snapshot, parses the
+same snapshot and uses its hash for the final manifest. All terminal error
+paths bind `program_ir_sha256` and `source_sha256`. Custom collector callers
+without a source snapshot cannot attest source-bound terminal errors.
+
+The queue reads and hashes each error artifact's same bytes, compares its record
+digest with the current resolved job and its source digest with the current
+source, then sets `record_binding_verified` only after manifest verification.
+Missing or mismatched bindings are `unverified_terminal_error`, never a model
+failure inferred from the old index/name match. Existing exact successful
+results still take precedence and retain their full export/completeness checks;
+unknown bound errors remain unresolved and genuine transport errors retain
+infrastructure precedence. Historical journals and reports are not rewritten.
+
+Focused independent validation: 23 scorer tests, seven queue/accounting tests
+including an actual same-ID/index changed-source digest reproduction, and four
+actual Node collector/request-budget tests passed through the DGX ledger. The
+isolated TypeScript node build passed. This is an exact protocol repair; it
+changes no model prompt or generated-text interpretation.
+
+The adversarial Node fixture serves model-generated eval code that throws the
+exact native provider-error text. The runtime reports that action as tool
+feedback, accepts the subsequent real return, and writes no terminal error
+artifact; generated text therefore cannot forge this attribution route.

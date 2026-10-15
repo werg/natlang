@@ -507,12 +507,79 @@ def test_exact_terminated_transport_error_is_sha_bound_in_output_accounting(tmp_
     monkeypatch.setattr(queue_module, 'resolve_entry_jobs', lambda *args: [job])
     monkeypatch.setattr(queue_module, 'frozen_record_digests', lambda *args: [])
     error = jobs / '000000.error.json'
-    error.write_text(json.dumps({'index': 0, 'program_id': 'case-0', 'error': 'TypeError: terminated'}))
+    error.write_text(json.dumps({'index': 0, 'program_id': 'case-0', 'program_ir_sha256':job['digest'],
+                                 'source_sha256':hashlib.sha256(Path(entry['source']).read_bytes()).hexdigest(),
+                                 'error': 'TypeError: terminated'}))
     accounting = queue_module.output_accounting(entry)
     state = accounting['job_states'][0]
     assert state['state'] == 'transport_failed'
     assert state['terminal_error'] == {'error': 'TypeError: terminated', 'path': str(error),
-                                       'sha256': hashlib.sha256(error.read_bytes()).hexdigest()}
+                                       'sha256': hashlib.sha256(error.read_bytes()).hexdigest(),
+        'program_ir_sha256':job['digest'],'source_sha256':hashlib.sha256(Path(entry['source']).read_bytes()).hexdigest(),
+        'record_binding_verified':False}
     # An unrelated model/runtime failure is not declared infrastructure by this exact transport case.
-    error.write_text(json.dumps({'index': 0, 'program_id': 'case-0', 'error': 'unknown action terminated_work'}))
+    error.write_text(json.dumps({'index': 0, 'program_id': 'case-0', 'program_ir_sha256':job['digest'],
+                                 'source_sha256':hashlib.sha256(Path(entry['source']).read_bytes()).hexdigest(),
+                                 'error': 'unknown action terminated_work'}))
     assert queue_module.output_accounting(entry)['job_states'][0]['state'] == 'failed'
+
+
+@pytest.mark.parametrize('binding',['correct','wrong_record','wrong_source','legacy'])
+def test_native_terminal_accounting_requires_exact_record_source_before_scoring(tmp_path,monkeypatch,binding):
+    from natlang_neuralese.eval.task_packet import classify_case
+    entry=queue_entry(tmp_path);jobs=Path(entry['jobs']);jobs.mkdir()
+    job={'key':'000000-fixture','index':0,'program_id':'case-0','digest':'a'*64}
+    monkeypatch.setattr(queue_module,'resolve_entry_jobs',lambda *args:[job])
+    monkeypatch.setattr(queue_module,'frozen_record_digests',lambda *args:[])
+    source_sha=hashlib.sha256(Path(entry['source']).read_bytes()).hexdigest()
+    output=Path(entry['output']);output.write_text('')
+    Path(str(output)+'.manifest.json').write_text(json.dumps({
+        'version':'natlang.teacher_batch.native/1','range':{'start':entry['index'],'count':1},
+        'completed':0,'missing':[0],'output_sha256':hashlib.sha256(b'').hexdigest(),
+        'source':entry['source'],'source_sha256':source_sha}))
+    error={'index':0,'program_id':'case-0','program_ir_sha256':job['digest'],'source_sha256':source_sha,
+        'error':'Error: model stream error: '+json.dumps({'code':'neuralese-native-state-open',
+            'message':'neuralese-native-state-open: generation stopped inside a produce span'})}
+    if binding=='wrong_record':error['program_ir_sha256']='b'*64
+    elif binding=='wrong_source':error['source_sha256']='b'*64
+    elif binding=='legacy':error.pop('program_ir_sha256');error.pop('source_sha256')
+    path=jobs/'000000.error.json';path.write_text(json.dumps(error))
+    accounting=queue_module.output_accounting(entry)
+    assert accounting['manifest_valid'] and not accounting['complete']
+    state=accounting['job_states'][0]
+    finish={'status':'incomplete','output_accounting':accounting}
+    if binding=='correct':
+        assert state['terminal_error']['record_binding_verified']
+        assert classify_case(None,finish)=='model_incomplete'
+        # Real terminal transport errors retain their existing precedence.
+        error['error']='TypeError: terminated';path.write_text(json.dumps(error))
+        assert classify_case(None,{'status':'incomplete','output_accounting':queue_module.output_accounting(entry)})=='infrastructure_error'
+        error['error']='unknown runtime failure';path.write_text(json.dumps(error))
+        assert classify_case(None,{'status':'incomplete','output_accounting':queue_module.output_accounting(entry)})=='unresolved'
+    else:
+        assert state['state']=='unverified_terminal_error' and 'terminal_error' not in state
+        assert classify_case(None,finish)=='unresolved'
+
+
+def test_same_id_index_changed_source_cannot_reuse_old_native_terminal_error(tmp_path):
+    from natlang_neuralese.eval.task_packet import classify_case
+    entry=queue_entry(tmp_path);original=queue_module.resolve_entry_jobs(entry,TS_HOST)[0]
+    source=Path(entry['source']);old_source_sha=hashlib.sha256(source.read_bytes()).hexdigest()
+    value=json.loads(source.read_text());value['semantics']['files']['case-0.nl']='export default (42)'
+    source.write_text(json.dumps(value)+'\n');entry.pop('_resolved_jobs')
+    current=queue_module.resolve_entry_jobs(entry,TS_HOST)[0]
+    assert current['program_id']==original['program_id'] and current['index']==original['index']
+    assert current['digest']!=original['digest']
+    jobs=Path(entry['jobs']);jobs.mkdir()
+    (jobs/'000000.error.json').write_text(json.dumps({'index':0,'program_id':original['program_id'],
+        'program_ir_sha256':original['digest'],'source_sha256':old_source_sha,
+        'error':'Error: model stream error: '+json.dumps({'code':'neuralese-native-state-open',
+            'message':'neuralese-native-state-open: generation stopped inside a produce span'})}))
+    output=Path(entry['output']);output.write_text('')
+    Path(str(output)+'.manifest.json').write_text(json.dumps({
+        'version':'natlang.teacher_batch.native/1','range':{'start':0,'count':1},
+        'completed':0,'missing':[0],'output_sha256':hashlib.sha256(b'').hexdigest(),
+        'source':str(source),'source_sha256':hashlib.sha256(source.read_bytes()).hexdigest()}))
+    accounting=queue_module.output_accounting(entry,TS_HOST)
+    assert accounting['manifest_valid'] and accounting['job_states'][0]['state']=='unverified_terminal_error'
+    assert classify_case(None,{'status':'incomplete','output_accounting':accounting})=='unresolved'
