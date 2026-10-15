@@ -108405,6 +108405,68 @@
       "split": "Exact source render split; 338989 training documents and 299 held/test documents for both model views, verified against the admitted render receipts.",
       "training_admission": true,
       "training_admission_reason": "Derived from the registered, training-admitted external-expansion render. Current protection closure includes held, quality, and pending-unpinned source groups; model/tokenizer identities, split counts and final file hashes are bound per view. Independent LFM deep verification passed; Mellum deep-scan status is explicitly recorded as not run."
+    },
+    {
+      "admission": "Complete source render retained as one-node ordinary text graphs. Shared builder enforced exact per-row token decode/suffix/tokenizer checks for both models; independent deep verification additionally completed for LFM. Both views were checked against the current SHA-verified held, quality, and pending-unpinned source-group union (zero intersections). Exact source twins, split counts, model/tokenizer fingerprints, and final output hashes are bound in the included proof. No native producer/consumer edges are inferred. The initially registered v1 proof file was mutated after registration by a post-registration protection verifier; v2 preserves the current fully bound proof as a separate immutable artifact and reuses the six unchanged graph/receipt files.",
+      "derived_from": [
+        "external-expansion-evidence-terminal-native-20261015-v2-render"
+      ],
+      "id": "external-expansion-evidence-terminal-program-header-native-graphs-20261015-v2",
+      "include": [
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "lfm25/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "mellum21/receipt.json",
+        "validation-proof.json"
+      ],
+      "license": "Inherited from the admitted rendered source corpus; owner accepts all licenses.",
+      "owner": "dgx",
+      "path": "runs/external-expansion-evidence-terminal-native-graphs-20261015-v2/program-header",
+      "renders": {
+        "program-header": {
+          "lfm25": {
+            "expanded_tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "source_sha256": "161c5c6ebf8826e31dd7a43cbac372fd25b4f35ef48c537c283704aa5c415406",
+            "test": {
+              "rows": 299,
+              "sha256": "346acede5354e2673835f50980a327cee5337661871c17193ca5e43deedc7e6a"
+            },
+            "train": {
+              "rows": 338989,
+              "sha256": "636d248061a6d02943df9f980bb244cc41540b841dcf1e059a26817c92a0cd99"
+            }
+          },
+          "mellum21": {
+            "expanded_tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f",
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "source_sha256": "a18d326524e82ec2d107fa0fcb1c9883c05a079ea31bcdae06bc0c451ae4837d",
+            "test": {
+              "rows": 299,
+              "sha256": "a2a2ecc964f743db9a994997d71c7720ca1722c3bfe0107c0876f162d2dd7f42"
+            },
+            "train": {
+              "rows": 338989,
+              "sha256": "af74651c157121130493c5bbc4f7834aed4ba35d39d19ce75d6ffc85f62798cd"
+            }
+          }
+        }
+      },
+      "source_bindings": {
+        "conversion_receipt_sha256": {
+          "lfm25": "f8b15a7af7bd5ef7dd5b1fc9c09ca7b9f1166a9e7b54d93bc4c32146a423fbcf",
+          "mellum21": "fccd18b6a942441248459d07deaf08c1bb5422b2653b66f7c26bdcb9e7e88023"
+        },
+        "render_corpus_id": "external-expansion-evidence-terminal-native-20261015-v2-render",
+        "render_manifest_sha256": "4a4bfb24066ceb4411a6e23afe0705674e069e473446d1e407027e6a69262822",
+        "render_receipt_sha256": "8f96c481bebc5b878052e2294fb868bc36e077999759fd931eba362ee1a2673d"
+      },
+      "source_class": "static-role-aware-native-state-program-header-text-graphs",
+      "split": "Exact source render split; 338989 training documents and 299 held/test documents for both model views, verified against the admitted render receipts.",
+      "training_admission": true,
+      "training_admission_reason": "Derived from the registered, training-admitted external-expansion render. Current protection closure includes held, quality, and pending-unpinned source groups; model/tokenizer identities, split counts and final file hashes are bound per view. Independent LFM deep verification passed; Mellum deep-scan status is explicitly recorded as not run. This v2 snapshot corrects the proof-file identity mismatch without changing graph or receipt bytes."
     }
   ],
   "coverage_backlog": [
