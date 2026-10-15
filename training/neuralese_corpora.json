@@ -94084,6 +94084,30 @@
       "admission": "Exact 1501-file/31898584865-byte mined-source archive with independent decoded member hash verification. Source mapping, whole-chain current source/decision/held/quality filtering, graph reauthentication and model transport qualification remain separate.",
       "license": "Original source lineage facts retained in archived records; all accepted by owner.",
       "notes": "Assigned complete bulk cloud protected assembly; originals retained pending private object durability and verified relocation. Future pack/verify calls share scripts/coreweave/source_archive.py."
+    },
+    {
+      "id": "luna-held-shapes-s52100-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52100-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "84 independently reviewed exact accepted roots; 429 approved native decisions out of 560 materialized from 89 exact parents; five whole-parent process holds and eight unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v27 source review, protected-source check, four structural process holds, one prolonged child-detour hold, and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Five exact-success roots held whole; no broad source-group collateral. Eight rejected roots reviewed; no new source-label/task conflict found. Verbose Hotpot answers and one repeated Sports-as-Business error are not DPO negatives.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins v27. Exact trajectory holds govern. Global union requires ticket-bypass v3 and seven-ID non-success hold list."
     }
   ],
   "coverage_backlog": [
