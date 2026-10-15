@@ -108244,6 +108244,105 @@
         "selected_edge_ids_sha256": "1d94201b6944b0904e4b463ff9b65b23d97b6fd763219eec5a90a2ade2029a49",
         "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563"
       }
+    },
+    {
+      "id": "native-state-rest27-typed-read-seven-20261015-v1",
+      "owner": "dgx",
+      "path": "runs/native-state-rest27-typed-read-seven-20261015-v1/build",
+      "include": [
+        "pairs/train/semantic-pairs.jsonl.zst",
+        "pairs/test/semantic-pairs.jsonl.zst",
+        "pair-omissions.jsonl",
+        "render-omissions.jsonl",
+        "receipt.json",
+        "resume-manifest.json",
+        "validation-proof.json"
+      ],
+      "source_class": "source-bound-static-native-semantic-pairs-from-authenticated-REST27-typed-reads",
+      "split": "Source-inherited split with 5 train and 2 held/test pairs; complete 7-edge selection checked and train/test groups remain disjoint.",
+      "admission": "All seven authenticated typed-read communication occurrences are represented; five train pairs and two separately held pairs. Zero conversion omissions. This is an incremental supplement and does not replace or reset the current 26,312-pair foundation.",
+      "training_admission": true,
+      "training_admission_reason": "Both exact LFM and Mellum graph views pass parse_pair, tokenizer fingerprints and native consume/import geometry. Every pair matches one selected original REST27 source edge and authenticated typed read occurrence; train/test groups are disjoint, current train held/quality/source-review protections and decision holds do not intersect, and pair identities do not duplicate the previously admitted REST27 pair corpus.",
+      "derived_from": [
+        "neuralese-e2e-cloud-rest27-protected-20261015-v2"
+      ],
+      "license": "Inherited unchanged from the admitted REST27 source corpus; owner accepts all licenses.",
+      "source_bindings": {
+        "source_records_sha256": "e23ea20b684bce525a297ba5767ed82f84fc5097045bbcf68e13784decf9a17e",
+        "source_edges_sha256": "26053ffead5b96d640fce4dcbd50a1cdaee781bf8702dbee0b3d35bffe6c7226",
+        "selected_edge_ids_path": "/home/werg/data/dgxops/rest27-typed-read-seven-edge-ids-20261015.txt",
+        "selected_edge_ids_sha256": "e637e1b27c429c18d14bd81137893cf35d377a3c8086303436ef9ae9547598ba",
+        "validation_proof_sha256": "530b9c08099dab6b57e23ba7e6f1e1800863e7875ca9ecd9a8f408dd7882773a",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "train_sha256": "024878bf8433708002f69c34c39f29f203e3766a0a069f24a623758c68ebe6be",
+        "held_sha256": "a7ba2fc0fcc5d3cedc5d76e3d1481f0b0de0720b0ea9ad10d87ba0ecf5e0c8d3"
+      }
+    },
+    {
+      "id": "qwen-verified-positive-native-graphs-20261015-v5",
+      "owner": "dgx",
+      "path": "runs/qwen-verified-positive-native-graphs-20261015-v5",
+      "include": [
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "lfm25/validation-proof.json",
+        "mellum21/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "mellum21/validation-proof.json"
+      ],
+      "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
+      "split": "Train-only; all 9,535 graphs per model are from eligible accepted assistant actions with exact prompt/context retained at 0.05 weight. Test files are empty and no held evaluation rows are claimed.",
+      "admission": "2,749 source trajectories yielded 9,572 eligible accepted actions; 37 exact token/weight duplicates were omitted against prior admitted rows or earlier retained rows, leaving 9,535 unique train graphs per model. Failed, unexecuted and unapproved actions remain explicit context/omission evidence in each receipt. These are ordinary one-node text graphs, not authentic Neuralese edge captures.",
+      "training_admission": true,
+      "training_admission_reason": "All graphs from both actual expanded student tokenizers passed the shared native graph parser and exact tokenizer fingerprint checks. The full source file, transfer receipt, batch-source bindings and decision-admission cache are hash-bound in the model receipts. All 1,162 emitted source groups per model have zero current held, quality, source-review or decision-hold intersections. Cross-model graph ID sets match exactly; every declared duplicate points to its exact represented row; current protection closure is recorded in the validation proof.",
+      "derived_from": [
+        "qwen-verified-positive-native-graphs-20261015-v1-v2",
+        "qwen-verified-positive-native-graphs-20261015-v3",
+        "qwen-verified-positive-native-graphs-20261015-v4"
+      ],
+      "license_provenance": "Project-collected trajectories from the pinned RadixArk/Qwen3.8-Flash-Next-NVFP4 teacher revision 7b719225242aacd3dbd3f9407468c2ee9a9d2594. Transfer, batch, teacher-source, selection, protection and decision-admission receipts remain at the exact SHA-bound source paths in source_binding and the per-model build receipts. No license exclusion.",
+      "note": "New unique Qwen positive trajectories are appended without resetting prior graph row credits. Full raw source remains available at the SHA-bound source path; output conversions preserve per-row original source and decision evidence.",
+      "source_binding": {
+        "raw_source": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v5/native-trajectories.jsonl",
+          "sha256": "5759f85506435dfe46ae344d02b1f124f4ceeca24536533c5bfd31c9e1866b66",
+          "bytes": 889460337,
+          "rows": 2749
+        },
+        "transfer_receipt": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v5/transfer-receipt.json",
+          "sha256": "7667872a9806de5946b00e2b20b1d95051a1174fcd95e6b3b1a16d9fd8fbf04c"
+        },
+        "batch_source_bindings": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v5/batch-source-bindings.json",
+          "sha256": "7f89e05ad14eb1729b2fa4e3ac963fd72281aaa050ea7f4c4632efd34c554e6e"
+        },
+        "decision_admission": {
+          "receipt_path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v5/decision-admission-cache/cd79f7518d0f36e5bf93087584d1a1f9aa2d5251421f47e4f6f7e83fc17da836/receipt.json",
+          "receipt_sha256": "1112fed02ba326fd2438776b82e962761e985b3217d0751e850d5e2adfcbd80e",
+          "output_path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v5/decision-admission-cache/cd79f7518d0f36e5bf93087584d1a1f9aa2d5251421f47e4f6f7e83fc17da836/decisions.jsonl",
+          "output_sha256": "d6eb30105dbc2c7821c3092b0d464505b2e4a2f4ec297b50484bf2023c01389a"
+        },
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "models": {
+          "lfm25": {
+            "build_receipt_sha256": "ab85ce1663ad6f280534db344ec2a36d247e59c0ae63d44cf4a6d947514d9c48",
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "train_sha256": "d056056f9940b095d5a684cbe76c77e3176d31283769efdf490a907d58c542ad",
+            "held_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+            "validation_proof_sha256": "4000b467bafe26c67e607ed7c6aeb35799feeadd9cfe5a8e84ec749c2be49a44"
+          },
+          "mellum21": {
+            "build_receipt_sha256": "3066a7680f30b44d62a6f8ed9d0ad656c9f151503a8a31d5740bae641f5bba6d",
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "train_sha256": "ba0bffd51f463322ef142683c7fc437d4c76c5d5aa00e2dd31bf62b399597180",
+            "held_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+            "validation_proof_sha256": "4000b467bafe26c67e607ed7c6aeb35799feeadd9cfe5a8e84ec749c2be49a44"
+          }
+        }
+      }
     }
   ],
   "coverage_backlog": [
