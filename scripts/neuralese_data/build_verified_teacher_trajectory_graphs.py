@@ -96,48 +96,67 @@ def packet_binding(root, references):
         paths[name] = path
     selection = json.loads(paths['selection'].read_text())
     protection = json.loads(paths['global_protection_join'].read_text())
-    if (selection.get('schema') != 'natlang.native-teacher-task-selection/1'
-            or selection.get('status') != 'passed'
-            or sha256_file(paths['selected_cases']) != selection.get('output_sha256')):
+    code_selection = selection.get('schema') == 'natlang.strong-teacher-code-source-selection/1'
+    packet_sha = selection.get('cases_sha256') if code_selection else selection.get('output_sha256')
+    if (sha256_file(paths['selected_cases']) != packet_sha or
+            (code_selection and (selection.get('held_and_pending_intersections') != 0
+                                 or selection.get('training_admission') is not False)) or
+            (not code_selection and (selection.get('schema') != 'natlang.native-teacher-task-selection/1'
+                                    or selection.get('status') != 'passed'))):
         raise ValueError('selected task packet differs from its passed immutable selection proof')
     if (protection.get('schema') != 'natlang.native-teacher-global-protection-join/1'
             or protection.get('status') != 'passed'
-            or protection.get('selected_packet_sha256') != selection.get('output_sha256')
+            or protection.get('selected_packet_sha256') != packet_sha
             or protection.get('held_group_intersections') or protection.get('quality_group_intersections')):
         raise ValueError('teacher selection intersects protected evaluation or quality-held groups')
-    programs = {}
+    programs, packet_groups = {}, set()
     for _, row in file_rows(paths['selected_cases']):
         program = row.get('program_ir', row)
         if not isinstance(program.get('id'), str) or program['id'] in programs:
             raise ValueError('selected task packet needs distinct program identities')
+        if code_selection and (program.get('version') != 'natlang.program/2' or program.get('split') != 'train'
+                or not isinstance(program.get('source_groups'), list) or not program['source_groups']
+                or any(not isinstance(group, str) or not group for group in program['source_groups'])):
+            raise ValueError('selected code packet needs actual train program source groups')
+        packet_groups.update(program.get('source_groups', []))
         programs[program['id']] = canonical_json_sha256_hex(program)
-    if set(programs) != set(selection.get('selected_ids', [])):
+    if code_selection and selection.get('cases') != len(programs):
+        raise ValueError('selected code packet count differs from selection proof')
+    if not code_selection and set(programs) != set(selection.get('selected_ids', [])):
         raise ValueError('selected packet program IDs differ from selection proof')
-    train_groups, held_groups = set(selection.get('train_groups', [])), set(selection.get('held_groups', []))
+    train_groups = packet_groups if code_selection else set(selection.get('train_groups', []))
+    held_groups = set(selection.get('held_groups', []))
+    if code_selection and 'selected_source_groups' in selection:
+        declared_groups = selection['selected_source_groups']
+        valid = ((type(declared_groups) is int and declared_groups == len(train_groups)) or
+                 (isinstance(declared_groups, list) and set(declared_groups) == train_groups))
+        if not valid:
+            raise ValueError('selected code packet groups differ from selection proof')
     if train_groups & held_groups:
         raise ValueError('selection proof train/held source groups overlap')
-    return {'selection': selection, 'protection': protection, 'selected_ids': set(programs),
+    return {'selection': selection, 'packet_sha256': packet_sha, 'protection': protection, 'selected_ids': set(programs),
             'program_sha256': programs, 'train_groups': train_groups, 'held_groups': held_groups,
             'proofs': {name: {'path': str(path), 'sha256': sha256_file(path)} for name, path in paths.items()}}
 
 
 def source_binding(args):
     root = args.source.parent
+    batch_map = root / 'batch-source-bindings.json'
     proof_paths = {name: root / filename for name, filename in {
         'transfer': 'transfer-receipt.json', 'evidence_source': 'evidence-source-v2.json',
-        'teacher_runtime': 'penny-server-binding.json'}.items()}
+        'teacher_runtime': 'penny-server-binding.json'}.items()
+        if name == 'transfer' or not batch_map.exists() or (root / filename).exists()}
     proofs = {name: json.loads(path.read_text()) for name, path in proof_paths.items()}
     actual_source_sha = sha256_file(args.source)
-    transfer, teacher = proofs['transfer'], proofs['teacher_runtime']
+    transfer, teacher = proofs['transfer'], proofs.get('teacher_runtime')
     if (transfer.get('schema') != 'natlang.verified-teacher-trajectory-transfer/1'
             or transfer.get('combined', {}).get('path') != str(args.source)
             or transfer.get('combined', {}).get('sha256') != actual_source_sha
             or transfer.get('combined', {}).get('bytes') != args.source.stat().st_size
             or transfer.get('training_admission') is not False):
         raise ValueError('transfer receipt does not bind the exact raw teacher trajectory source')
-    if teacher.get('teacher_role') != 'independent stronger open teacher; not either student/onpolicy':
+    if teacher is not None and teacher.get('teacher_role') != 'independent stronger open teacher; not either student/onpolicy':
         raise ValueError('teacher provenance does not identify an independent teacher')
-    batch_map = root / 'batch-source-bindings.json'
     packets = {}
     if batch_map.exists():
         proof_paths['batch_source_bindings'] = batch_map
@@ -173,8 +192,13 @@ def source_binding(args):
         if previous is not None and previous['sha256'] != item['sha256']:
             raise ValueError('teacher collection has conflicting duplicate receipt bindings')
         collection = json.loads(local.read_text())
+        if teacher is None:
+            teacher = collection.get('teacher')
+        if (not isinstance(teacher, dict) or teacher.get('teacher_role') !=
+                'independent stronger open teacher; not either student/onpolicy'):
+            raise ValueError('collection does not identify an independent stronger teacher')
         if (collection.get('schema') != 'natlang.sandbox-strong-teacher-collection/1'
-                or collection.get('source_cases_sha256') != packet['selection']['output_sha256']
+                or collection.get('source_cases_sha256') != packet['packet_sha256']
                 or canonical_json_sha256_hex(collection.get('protected_selection')) != canonical_json_sha256_hex(packet['selection'])
                 or canonical_json_sha256_hex(collection.get('teacher')) != canonical_json_sha256_hex(teacher)):
             raise ValueError('collection receipt differs from selected tasks or actual stronger teacher')
@@ -185,7 +209,7 @@ def source_binding(args):
         raise ValueError('teacher trajectories need complete immutable per-batch collection receipts')
     proof_sha = {name: sha256_file(path) for name, path in proof_paths.items()}
     return {'source_sha256': actual_source_sha, 'transfer': transfer, 'teacher': teacher,
-            'evidence': proofs['evidence_source'], 'source_files': source_files,
+            'evidence': proofs.get('evidence_source', {}), 'source_files': source_files,
             'selected_ids': set().union(*(value['selected_ids'] for value in packets.values())),
             'train_groups': set().union(*(value['train_groups'] for value in packets.values())),
             'held_groups': set().union(*(value['held_groups'] for value in packets.values())),

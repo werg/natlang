@@ -16,3 +16,11 @@ verifier checks legacy single-packet snapshots and multi-packet snapshots. Every
 trajectory's full program must equal its own batch's selected program, not merely
 share an ID or belong to another admitted packet. Receipts and graph provenance
 carry the actual batch proof SHAs; current global protections remain additional.
+
+Code/recovery packet selection uses its existing
+`natlang.strong-teacher-code-source-selection/1` receipt: verify exact packet
+SHA, program count, declared group count or inventory, zero held/pending
+intersections, and the independent current protection join. Do not rewrite its
+receipt into the older selection schema. Multi-packet exports obtain the exact
+uniform stronger-teacher identity from their immutable collection receipts;
+legacy mutable future-queue metadata is optional and never an admission witness.

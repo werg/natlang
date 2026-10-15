@@ -138,7 +138,8 @@ def test_content_dedup_uses_actual_tokens_and_weights_not_execution_identity(tmp
         converter.seed_content_fingerprints([file], 'tokenizer-a')
 
 
-def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypatch):
+@pytest.mark.parametrize('code_selection', [False, 'list', 'count'])
+def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypatch, code_selection):
     from types import SimpleNamespace
     monkeypatch.setattr(converter, 'current_protection', lambda _: {
         'held': set(), 'quality': set(), 'pending': set(), 'proof': {}})
@@ -163,15 +164,21 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
         selection = {'schema': 'natlang.native-teacher-task-selection/1', 'status': 'passed',
             'output_sha256': converter.sha256_file(cases), 'selected_ids': [program['id']],
             'train_groups': program['source_groups'], 'held_groups': []}
+        packet_sha = converter.sha256_file(cases)
+        if code_selection:
+            selection = {'schema': 'natlang.strong-teacher-code-source-selection/1',
+                'cases_sha256': packet_sha, 'cases': 1, 'held_and_pending_intersections': 0,
+                'training_admission': False, 'selected_source_groups': (1 if code_selection == 'count'
+                                                                    else program['source_groups'])}
         selected = put(base+'/selection-proof.json', selection)
         protection = put(base+'/global-protection-join.json', {
             'schema': 'natlang.native-teacher-global-protection-join/1', 'status': 'passed',
-            'selected_packet_sha256': selection['output_sha256'],
+            'selected_packet_sha256': packet_sha,
             'held_group_intersections': [], 'quality_group_intersections': []})
         collection_source = f'/work/generation/batch-{index:04d}/teacher-source.json'
         collection = put(base+'/teacher-source.json', {
             'schema': 'natlang.sandbox-strong-teacher-collection/1',
-            'source_cases_sha256': selection['output_sha256'], 'protected_selection': selection,
+            'source_cases_sha256': packet_sha, 'protected_selection': selection,
             'teacher': teacher})
         files.append({'path': str(collection), 'source': collection_source,
             'bytes': collection.stat().st_size, 'sha256': converter.sha256_file(collection)})
@@ -192,7 +199,11 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
     mapping = {'schema': 'natlang.teacher-batch-source-bindings/1', 'batches': batches}
     put('batch-source-bindings.json', mapping)
     args = SimpleNamespace(source=source, protection_manifest=tmp_path/'current.json')
+    # New batch snapshots need no irrelevant mutable future-queue boilerplate.
+    (tmp_path/'evidence-source-v2.json').unlink()
+    (tmp_path/'penny-server-binding.json').unlink()
     binding = converter.source_binding(args)
+    assert binding['teacher'] == teacher
     for row in rows:
         assert converter.validate_teacher_row(row, binding)[0] == row['task']['program_ir']
     # Global membership in another admitted packet cannot retarget a response.
