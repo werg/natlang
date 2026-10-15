@@ -97888,6 +97888,30 @@
         "held_text": {}
       },
       "notes": "Seed 52106 v31 source review; 90 semantic-reviewed parents, 497 decisions; no reserved or decontamination omissions"
+    },
+    {
+      "id": "luna-held-shapes-s52107-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52107-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with oracle-accepted outcomes and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "80 independently reviewed oracle-accepted roots; 389 approved native decisions out of 568 materialized from 89 accepted parents; nine exact whole-parent process holds and 12 unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v32 source review and protected-source check; four exact structural action-shape and five manual noisy-process parent holds; native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Ten rejected roots reviewed, including four paired dataset27 topical misses and one EC acquisition article source-label conflict held by v32. Rejected roots are not DPO negatives without separate semantic review.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins v32 after rerun, accepted source SHA unchanged. Exact trajectory holds govern. Global union requires current source-review and non-success hold checks."
     }
   ],
   "coverage_backlog": [
