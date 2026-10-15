@@ -115,7 +115,7 @@ def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in
     # native interface. The frozen vocabulary/readout and final norm follow the
     # existing shared full-layer backbone policy.
     interface_named = [('interface.' + name, parameter) for name, parameter in model.named_parameters()
-                       if name.startswith(('input_rows', 'output_rows', 'adapter.')) and parameter.requires_grad]
+                       if name.startswith(('input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows', 'adapter.')) and parameter.requires_grad]
     named = backbone_named + interface_named
     latent, ordinary = latent_split(named, 'muonsr')
     if not latent:
@@ -436,6 +436,8 @@ def build_parser():
     parser.add_argument('--foundation-native-graphs', type=Path)
     parser.add_argument('--refresh-at-checkpoint', action='store_true',
         help='return an explicit incomplete continuation for semantic refresh at the next declared checkpoint boundary')
+    parser.add_argument('--learn-reasoning-boundaries', action=argparse.BooleanOptionalAction, default=False,
+                        help='explicitly add learned existing reasoning token rows to an old parent')
     parser.add_argument('--communication-foundation', action='store_true',
         help='pause at the complete admitted communication cohort with mandatory ordinary credits retained')
     parser.add_argument('--held-native-graphs', type=Path, required=True)
@@ -534,6 +536,12 @@ def main(argv=None):
             raise ValueError('fresh native SFT requires explicit --dtype (QAD LFM float32; Mellum bfloat16)')
         model, tokenizer, roles, config = load_native_model(args.base, rank=args.rank,
             device=args.device, dtype=getattr(torch, args.dtype))
+    token_upgrade = None
+    if args.learn_reasoning_boundaries:
+        from ..model.native_model import upgrade_reasoning_tokens
+        token_upgrade = upgrade_reasoning_tokens(model, tokenizer, config)
+        if token_upgrade['added']:
+            checkpoint_options['token_row_upgrade'] = token_upgrade
     from ..model.native_precision import set_native_linear_precision, resolve_native_training_precision
     previous_precision = config.get('native_linear_precision', 'ieee')
     requested_precision = resolve_native_training_precision(previous_precision, args.native_linear_precision)
@@ -541,6 +549,11 @@ def main(argv=None):
     config['native_linear_precision'] = requested_precision
     saved_training = resume or shared_resume or {}
     checkpoint_options['withdrawal_history']=list((saved_training.get('options') or {}).get('withdrawal_history') or [])
+    token_history = list((saved_training.get('options') or {}).get('token_row_upgrade_history') or [])
+    if token_upgrade and token_upgrade['added']:
+        token_history.append({**token_upgrade, 'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
+                              'weights_optimizer_rng_exposure': 'preserved'})
+    checkpoint_options['token_row_upgrade_history'] = token_history
     carried_progress = collect_sft_progress(saved_training)
     restored_progress = False
     precision_history = list((saved_training.get('options') or {}).get('native_precision_history') or [])
@@ -658,7 +671,10 @@ def main(argv=None):
         previous = resume.get('identity') or {}
         stable = ('schema', 'optimizer', 'seed', 'rank', 'fp8', 'objective')
         from ..model.native_precision import same_source_precision_identity
-        if not same_source_precision_identity(previous.get('config') or {}, config):
+        previous_config = previous.get('config') or {}
+        if token_upgrade and token_upgrade['token_ids']:
+            previous_config = {**previous_config, 'token_override_ids': config['token_override_ids']}
+        if not same_source_precision_identity(previous_config, config):
             raise ValueError('native SFT continuation changes model identity beyond declared GEMM arithmetic')
         if previous.get('schedule') not in {'source-order-stream/1', 'row-visit-deficit/2'}:
             raise ValueError('native SFT checkpoint has an unsupported row-credit schedule')
@@ -731,7 +747,11 @@ def main(argv=None):
     metrics = {}
     exposure_counts = {key: 0 for key in source_row_bindings}
     if resume is not None:
-        optimizer.load_state_dict(resume['optimizer'])
+        if token_upgrade and token_upgrade['added']:
+            optimizer.load_state_dict(resume['optimizer'], allow_added_names=(
+                'interface.extra_input_rows', 'interface.extra_output_rows'))
+        else:
+            optimizer.load_state_dict(resume['optimizer'])
         # Adaptive production may tune the step size without discarding moments.
         # The new value is recorded in optimizer_options while moments/RNG stay exact.
         for group in optimizer.param_groups:

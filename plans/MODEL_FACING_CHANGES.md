@@ -702,3 +702,13 @@ typed content and tool-argument references; ordinary CE targets and admission
 remain unchanged. Both skills document strict source/receipt recovery. Actual
 two-tokenizer/source tests prove conversion mechanisms; live48-sample measurement
 remains debt for the next own-model CoreWeave teacher window, not a lift claim.
+
+
+2026-10-15 existing reasoning-boundary learnability repair: tokenizer IDs,
+spellings, prompts and renderers remain unchanged. Sparse learned input/readout
+rows remove the confirmed frozen QAD boundary-row obstruction. Exact parent
+logits/optimizer migration and both-port training checks qualify the mechanism;
+actual task outcomes and the live48-sample behavioral measurement remain debt
+for the next useful own-model CoreWeave training/teacher window. No task lift
+is inferred from tiny deterministic optimizer tests. Both integration skills
+record exact checkpoint/token/optimizer recovery.

@@ -16,6 +16,26 @@ SHARED_CHECKPOINT_SCHEMA = 'natlang.neuralese-native-shared-checkpoint/1'
 COMPOSITE_CHECKPOINT_SCHEMA = 'natlang.neuralese-native-composite-checkpoint/1'
 
 
+def reasoning_token_ids(tokenizer):
+    """Use only existing exact vocabulary entries; never add or resize tokens."""
+    vocab = tokenizer.get_vocab()
+    found = tuple(vocab[token] for token in ('<think>', '</think>') if token in vocab)
+    if found and (len(found) != 2 or len(set(found)) != 2):
+        raise ValueError('reasoning boundaries require two distinct existing vocabulary IDs')
+    return found
+
+
+def upgrade_reasoning_tokens(model, tokenizer, config):
+    """Explicit output-preserving sparse-row addition to an existing native parent."""
+    ids = reasoning_token_ids(tokenizer)
+    changed = model.add_token_overrides(ids)
+    if changed:config['token_override_ids'] = list(ids)
+    event = {'schema':'natlang.native-token-row-upgrade/1','added':changed,'token_ids':list(ids),
+             'initialization':'exact-pinned-base-rows','existing_parameters':'unchanged'}
+    if changed:model._native_token_row_upgrade = event
+    return event
+
+
 def configure_native_precision():
     """Shared process policy: stock FP32 torch operations remain IEEE.
 
@@ -41,6 +61,10 @@ def native_identity(model, config, *, checkpoint_sha256):
         digest.update(canonical_json_bytes({'native_linear_precision': mode}))
     tensors = [('base_embedding', model.port.embedding_weight), ('role_input_rows', model.input_rows),
                *[('adapter.' + name, value) for name, value in model.adapter.state_dict().items()]]
+    if model.token_override_ids:
+        digest.update(canonical_json_bytes({'token_override_ids': model.token_override_ids}))
+        tensors.append(('extra_input_rows', model.extra_input_rows))
+        if not model.tied:tensors.append(('extra_output_rows', model.extra_output_rows))
     for name, value in tensors:
         tensor = value.detach().contiguous().cpu()
         digest.update(canonical_json_bytes({'name': name, 'dtype': str(tensor.dtype), 'shape': list(tensor.shape)}))
@@ -66,7 +90,7 @@ def base_inventory(base):
     return files
 
 
-def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee"):
+def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", token_override_ids=None):
     """Return (SharedStateModel, tokenizer, RoleTokens, model_config).
 
     No PortHeads or projected communication module is created. Provision the
@@ -100,7 +124,9 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
                                   embedding_weight=hf.get_input_embeddings().weight), tokenizer)
     from .lfm2_port import ControlTokens
     port = port_type(hf, ControlTokens(roles.produce_open, roles.produce_close), markers=False)
-    model = SharedStateModel(port, marker_ids=roles.ids, rank=rank)
+    if token_override_ids is None:
+        token_override_ids = reasoning_token_ids(tokenizer)
+    model = SharedStateModel(port, marker_ids=roles.ids, rank=rank, token_override_ids=token_override_ids)
     from .native_precision import set_native_linear_precision
     set_native_linear_precision(model, native_linear_precision)
     from ..data.text_corpus import tokenizer_fingerprint
@@ -110,6 +136,7 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
               'rank': rank, 'marker_ids': list(roles.ids), 'precision': precision,
               'native_linear_precision': native_linear_precision,
               'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer), 'dtype': str(dtype)}
+    if model.token_override_ids:config['token_override_ids'] = list(model.token_override_ids)
     return model, tokenizer, roles, config
 
 
@@ -130,7 +157,7 @@ def _bind_backbone_revision(model, checkpoint_sha256):
     model._native_parameter_binding = {'checkpoint_sha256': checkpoint_sha256,
         'parameters': tuple((name,id(parameter),parameter._version) for name,parameter in model.named_parameters())}
     model._native_backbone_binding = {
-        'checkpoint_sha256': checkpoint_sha256,
+        'checkpoint_sha256': checkpoint_sha256, 'token_override_ids': model.token_override_ids,
         'parameters': tuple((name, id(parameter), parameter._version)
                             for name, parameter in model.port.hf.named_parameters()),
     }
@@ -169,10 +196,13 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
                                 'torch.float16': torch.float16}[saved['dtype']]
     model, tokenizer, roles, config = load_native_model(base or saved['base'], rank=saved['rank'],
         device=device, dtype=requested_dtype, inventory=saved['base_inventory'],
-        native_linear_precision=saved.get('native_linear_precision', 'ieee'))
+        native_linear_precision=saved.get('native_linear_precision', 'ieee'),
+        token_override_ids=saved.get('token_override_ids', ()))
     for key in ('architecture', 'rank', 'marker_ids', 'tokenizer_fingerprint', 'base_inventory_sha256', 'precision'):
         if config[key] != saved.get(key):
             raise ValueError(f'native checkpoint {key} changed during restoration')
+    if config.get('token_override_ids', []) != saved.get('token_override_ids', []):
+        raise ValueError('native checkpoint sparse token overrides changed during restoration')
     restore_model_state(model, state)
     _bind_backbone_revision(model, sha256_file_hex_cached(path))
     return model, tokenizer, roles, config, state

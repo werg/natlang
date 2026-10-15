@@ -325,3 +325,15 @@ requires the exact approved original record, typed block/name and payload hash.
 Never edit old runtime receipts to match normalized markers, promote an
 unapproved endpoint, or use a preview renderer to bypass those checks. Derived
 receipts distinguish original source evidence from changed rendered bytes.
+
+
+Existing reasoning boundaries keep their tokenizer IDs and spelling. Native
+models may learn sparse input/readout overrides for `<think>` and `</think>`;
+these are separate from the four Neuralese role markers. Old parents retain
+exact behavior until the declared `--learn-reasoning-boundaries` upgrade. A
+sparse-token checkpoint mismatch requires the exact checkpoint's token-ID
+contract; do not rename markers or replace its tokenizer. An optimizer schema
+mismatch requires the explicit new-row-only migration, preserving all existing
+moments/RNG/exposure; never reset the optimizer to bypass it. Reload actors from
+the new actual checkpoint and rebind/requalify semantic communication after
+updates. No new instruction text or reasoning-format workaround is needed.

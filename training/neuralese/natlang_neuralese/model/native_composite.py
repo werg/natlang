@@ -54,6 +54,10 @@ def _channel_tensors(model):
     output = channel.pop('output_rows')
     if output is not None:
         tensors['output_rows'] = output
+    if channel.get('token_override_ids'):
+        tensors['extra_input_rows'] = channel.pop('extra_input_rows')
+        extra_output = channel.pop('extra_output_rows')
+        if extra_output is not None:tensors['extra_output_rows'] = extra_output
     tensors.update({'adapter.' + name: value for name, value in channel.pop('adapter').items()})
     return channel, tensors, output is not None
 
@@ -85,6 +89,9 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
         expected_names = {'input_rows', 'adapter.down.weight', 'adapter.up.weight'}
         if has_output_rows:
             expected_names.add('output_rows')
+        if model.token_override_ids:
+            expected_names.add('extra_input_rows')
+            if not model.tied:expected_names.add('extra_output_rows')
         if set(tensors) != expected_names:
             raise ValueError('native composite parameter inventory differs from the model channel contract')
         scope = 'native-interface'
@@ -98,9 +105,17 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
             raise ValueError('native parameter update parent changed since exact checkpoint restoration')
         parameters = dict(model.named_parameters())
         names = set(updated_parameter_names)
-        if not names or len(names) != len(updated_parameter_names) or not names <= parameters.keys() or parameters.keys() != parent_parameters.keys():
+        added_names = parameters.keys() - parent_parameters.keys()
+        explicit_upgrade = getattr(model, '_native_token_row_upgrade', None)
+        allowed_added = {'extra_input_rows'} | ({'extra_output_rows'} if not model.tied else set())
+        added_ok = (added_names == allowed_added and not parent_model.token_override_ids
+                    and explicit_upgrade and explicit_upgrade.get('token_ids') == list(model.token_override_ids)
+                    and added_names <= names)
+        if (not names or len(names) != len(updated_parameter_names) or not names <= parameters.keys()
+                or not parent_parameters.keys() <= parameters.keys() or added_names and not added_ok):
             raise ValueError('native parameter patch must declare its exact model parameter inventory')
         for name,value in parameters.items():
+            if name in added_names:continue  # exact declared sparse-row addition, verified again at restore
             parent = parent_parameters[name]
             if name in names:
                 if value is parent or value.shape != parent.shape or value.dtype != parent.dtype:
@@ -155,6 +170,14 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
         'output_embedding_weight_sha256': output_embed_sha,
         'optimizer': optimizer or {}, 'update_provenance': update_provenance or {}}
     manifest['model_config']['native_linear_precision'] = model_config.get('native_linear_precision','ieee')
+    if model.token_override_ids:
+        manifest['model_config']['token_override_ids'] = list(model.token_override_ids)
+    bound_tokens = tuple((getattr(model, '_native_backbone_binding', None) or {}).get('token_override_ids', ()))
+    if bound_tokens != model.token_override_ids:
+        upgrade = getattr(model, '_native_token_row_upgrade', None)
+        if bound_tokens or not upgrade or upgrade.get('token_ids') != list(model.token_override_ids):
+            raise ValueError('native composite sparse-row addition requires its explicit parent upgrade')
+        manifest['token_row_upgrade'] = upgrade
     payload = canonical_json_bytes(manifest) + b'\n'
     import hashlib
     manifest_sha = hashlib.sha256(payload).hexdigest()
@@ -261,6 +284,15 @@ def _apply_native_composite_checkpoint(path, restored):
         raise ValueError('native composite patch artifact binding or kind is invalid')
     if artifact.native_identity != parent_identity:
         raise ValueError('native composite patch belongs to another exact parent model')
+    if manifest.get('token_row_upgrade'):
+        from .native_model import upgrade_reasoning_tokens
+        declared = manifest['token_row_upgrade']
+        if (model.token_override_ids or declared.get('schema') != 'natlang.native-token-row-upgrade/1'
+                or declared.get('added') is not True):
+            raise ValueError('native composite cannot replace an existing sparse-row contract')
+        actual = upgrade_reasoning_tokens(model, tokenizer, config)
+        if actual != declared or config.get('token_override_ids') != manifest['model_config'].get('token_override_ids'):
+            raise ValueError('native composite reasoning-row upgrade differs from actual pinned tokenizer')
     scope = manifest.get('parameter_scope','native-interface')
     if scope == 'model-parameters':
         parameters = dict(model.named_parameters())
@@ -279,10 +311,16 @@ def _apply_native_composite_checkpoint(path, restored):
         required = {'input_rows', 'adapter.down.weight', 'adapter.up.weight'}
         if channel['output_rows'] is not None:
             required.add('output_rows')
+        if model.token_override_ids:
+            required.add('extra_input_rows')
+            if not model.tied:required.add('extra_output_rows')
         if set(artifact.tensors) != required:
             raise ValueError('native composite patch tensor names differ from the native interface')
         channel['input_rows'] = artifact.tensors['input_rows']
         channel['output_rows'] = artifact.tensors.get('output_rows')
+        if model.token_override_ids:
+            channel['extra_input_rows'] = artifact.tensors['extra_input_rows']
+            channel['extra_output_rows'] = artifact.tensors.get('extra_output_rows')
         channel['adapter'] = {name.removeprefix('adapter.'): value for name, value in artifact.tensors.items()
                               if name.startswith('adapter.')}
         restore_channel_checkpoint(model, channel)

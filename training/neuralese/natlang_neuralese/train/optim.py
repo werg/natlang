@@ -138,7 +138,46 @@ class PortMuonAdamW(torch.optim.Optimizer):
             state[self.latent_key] = self.latent.state_dict()
         return state
 
-    def load_state_dict(self, state_dict):
+    def load_state_dict(self, state_dict, *, allow_added_names=()):
+        if state_dict.get("format") == FORMAT and state_dict.get("schema") != self.schema and allow_added_names:
+            previous = {item['name']: item for item in state_dict['schema']}
+            current = {item['name']: item for item in self.schema}
+            added = current.keys() - previous.keys()
+            if (not added or not added <= set(allow_added_names) or not previous.keys() <= current.keys()
+                    or any(current[name] != item for name, item in previous.items())):
+                raise ValueError('explicit native optimizer addition changes existing parameter contracts')
+            expanded = {**state_dict, 'schema': self.schema}
+            # Match by declared names, never by shifted serialized parameter
+            # indices. Existing tensors remain views until normal load copies
+            # them; do not deep-copy a production optimizer checkpoint.
+            fresh = self.state_dict()
+            for key in ('muon', 'adamw', self.latent_key):
+                target, saved = fresh.get(key), state_dict.get(key)
+                if target is None:
+                    if saved is not None:raise ValueError('native added-row migration removed an optimizer child')
+                    continue
+                old_names = [item['name'] for item in state_dict['schema'] if item['optimizer'] == key]
+                new_names = [item['name'] for item in self.schema if item['optimizer'] == key]
+                new_ids = [index for group in target['param_groups'] for index in group['params']]
+                if len(new_names) != len(new_ids):raise ValueError('native optimizer current parameter inventory is ambiguous')
+                if saved is None:
+                    if old_names:raise ValueError('native added-row migration lost existing moments')
+                    expanded[key] = target
+                    continue
+                old_ids = [index for group in saved['param_groups'] for index in group['params']]
+                if len(old_names) != len(old_ids):raise ValueError('native optimizer saved parameter inventory is ambiguous')
+                histories = {new_ids[new_names.index(name)]: saved['state'][index]
+                             for name,index in zip(old_names,old_ids) if index in saved['state']}
+                if key == self.latent_key:
+                    groups = {group['name']: group for group in saved['param_groups']}
+                    remapped = [{**groups[group['name']], 'params':group['params']}
+                                if group['name'] in groups else group for group in target['param_groups']]
+                else:
+                    if len(saved['param_groups']) != 1 or len(target['param_groups']) != 1:
+                        raise ValueError('native added-row migration requires the declared ordinary optimizer group')
+                    remapped = [{**saved['param_groups'][0], 'params':new_ids}]
+                expanded[key] = {**saved,'param_groups':remapped,'state':histories}
+            state_dict = expanded
         if state_dict.get("format") != FORMAT or state_dict.get("schema") != self.schema:
             raise ValueError("port optimiser checkpoint parameter names/shapes/dtypes/partition differ")
         if (state_dict.get("adamw") is None) != (self.auxiliary is None):

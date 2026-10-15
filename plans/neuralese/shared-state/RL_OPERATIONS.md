@@ -251,3 +251,25 @@ cloud owner has verified aliases `/work/native-production/models/lfm25-qad`
 and `/work/native-production/models/mellum21` on both sandboxes and will include
 them explicitly in the live release. A historical `/work/production/public-base`
 path is not assumed to identify the same model on another sandbox.
+
+
+## Existing reasoning-boundary row upgrade
+
+Fresh native models learn sparse overrides for existing tokenizer `<think>` and
+`</think>` IDs. No vocabulary, spelling, role-marker or prompt change occurs.
+Old checkpoints retain their exact old sparse-row contract on ordinary load.
+For an explicit adaptive upgrade, declare `learn_reasoning_boundaries: true`
+(or use `--learn-reasoning-boundaries`) in the shared native trainer. This adds
+separate reasoning input/readout rows initialized from the loaded pinned rows.
+The readout adds a zero-initialized correction against the frozen original row,
+so the upgrade initially preserves logits exactly even across GEMM shapes.
+
+All existing optimizer tensors are mapped by parameter name and preserved;
+only the added groups have fresh history. Weights, RNG, row credits and pending
+mandatory stages continue. The checkpoint records the sparse IDs, learned row
+content and upgrade history. Native identity and portable composites cover the
+new rows, including an explicit old-parent composite upgrade. Shared SFT,
+semantic training, RL and serving use the same model/restore path. New actor and
+semantic adapter bindings must reference the actual updated checkpoint; never
+relabel an old adapter after changing weights. Both-port exact migration and
+learning tests are mechanism evidence, not full-size task-quality claims.
