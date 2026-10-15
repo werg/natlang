@@ -43,6 +43,14 @@ def _native_terminal_outcome(accounting: dict[str, Any]) -> str | None:
     if (not isinstance(error, dict)
             or not re.fullmatch(r"[0-9a-f]{64}", str(error.get("sha256", "")))):
         return None
+    source_digest = accounting.get('source_sha256')
+    record_digest = state.get('digest')
+    if (error.get('record_binding_verified') is not True
+            or not isinstance(source_digest,str) or re.fullmatch(r'[0-9a-f]{64}',source_digest) is None
+            or not isinstance(record_digest,str) or re.fullmatch(r'[0-9a-f]{64}',record_digest) is None
+            or error.get('program_ir_sha256') != record_digest
+            or error.get('source_sha256') != source_digest):
+        return None
     message = error.get("error")
     prefix = "Error: model stream error: "
     if not isinstance(message, str) or not message.startswith(prefix):
