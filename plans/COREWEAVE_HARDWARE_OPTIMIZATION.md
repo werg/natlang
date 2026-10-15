@@ -523,3 +523,9 @@ These figures are estimates from rates and the GB10 profile. The bench replaces 
 | Cold compile/autotune cost → publish caches as a bundle | arm wall vs median time | bootstrap/bundle (sandbox agent) |
 | Teacher engine, quantization, MTP on/off, concurrency | `teacher-bench.json` ranking + output spot-check | teacher job config; placement of collection shards |
 | Achieved BF16/FP8/NVFP4 rates on the Server Edition (clock unknown) | probe | this plan's §1 table |
+
+## H100 convolution build selection, 2026-10-15
+
+The next LFM handoff can opt into the existing native convolution interface on SM90. The existing source-build selector remains the mechanism: match the exact Torch/CUDA ABI, device architecture and installed wheel version; otherwise retain its Torch fallback. Owner-selected activation remains `NATLANG_NEURALESE_KERNELS=1`, rather than changing a live trainer.
+
+Decomposition: the operator chooses the qualified deployment artifact and activates it at a useful checkpoint handoff; the crisp loader verifies that artifact's exact ABI/architecture identity and reports its provenance. Extend the existing architecture inventory rather than add a second convolution implementation. Preserve the Pop SM89 entry. Attach the separately measured SM90 operator qualification to the unchanged build manifest, whose original `qualified:false` remains a build-time fact. Confirm a finite useful full-model update at the next deployment before broader activation; no new benchmark campaign or fresh lineage is required.

@@ -30,7 +30,7 @@ uv pip install --python .venv-neuralese/bin/python \
   tree-sitter==0.26.0 tree-sitter-typescript==0.23.2  # guided generation (serve/guidance.py)
 ```
 
-On the GB10 (sm_121, aarch64) torch's flash and cuDNN SDPA backends work with `enable_gqa` and lower-right causal masks; the memory-efficient backend does not take GQA. The former Hub causal-convolution revision is invalid, so GB10 currently uses the reference `torch.nn.functional.conv1d` path. A Pop-only Dao-AILab source build for Torch 2.14/CUDA 13.4/SM 8.9 is tracked by artifact ID `causal-conv1d-pop-torch214-cu134-sm89-v1`; it remains opt-in until same-input CUDA fidelity and throughput are qualified. A separate flash-attention build is not needed.
+On the GB10 (sm_121, aarch64) torch's flash and cuDNN SDPA backends work with `enable_gqa` and lower-right causal masks; the memory-efficient backend does not take GQA. The former Hub causal-convolution revision is invalid, so GB10 currently uses the reference `torch.nn.functional.conv1d` path. A Pop-only Dao-AILab source build for Torch 2.14/CUDA 13.4/SM 8.9 is tracked by artifact ID `causal-conv1d-pop-torch214-cu134-sm89-v1`; it remains opt-in until same-input CUDA fidelity and throughput are qualified. The H100 has a separate SM90 wheel for the same Torch/CUDA build (`causal-conv1d-coreweave-torch214-cu134-sm90-v1`), with exact measured operator output/input-gradient/weight-gradient parity and long-context speedups; activation stays explicit at a useful full-model handoff. Build-time provenance and later operator qualification are separate records. A separate flash-attention build is not needed.
 
 ## Commands
 

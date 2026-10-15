@@ -280,7 +280,7 @@ def backbone_identity(lora: str | None, base: str | None = None) -> dict:
     return identity
 
 
-# This Pop-only source build is derived from the official Dao-AILab v1.7.0
+# These architecture-specific source builds derive from the official Dao-AILab v1.7.0
 # release. Its immutable wheel and build provenance live outside the source
 # tree; see the artifact ID and hashes below. Do not select an unqualified
 # Hub build: Torch, CUDA and GPU architecture are part of the ABI.
@@ -294,6 +294,22 @@ CONV_KERNEL_BUILD_MANIFEST_SHA256 = "353881270486e684143ee90aa27607f0f6af4e3cd3a
 CONV_KERNEL_TORCH_VERSION = "2.14.0a0+b2c75dd062.nv26.09"
 CONV_KERNEL_CUDA_VERSION = "13.4"
 CONV_KERNEL_DEVICE_CAPABILITY = (8, 9)
+
+CONV_KERNEL_BUILDS = {
+    (8, 9): {
+        "package_version": CONV_KERNEL_PACKAGE_VERSION,
+        "artifact_id": CONV_KERNEL_ARTIFACT_ID,
+        "wheel_sha256": CONV_KERNEL_WHEEL_SHA256,
+        "build_manifest_sha256": CONV_KERNEL_BUILD_MANIFEST_SHA256,
+    },
+    (9, 0): {
+        "package_version": "1.7.0+cw.torch214.cu134.sm90",
+        "artifact_id": "causal-conv1d-coreweave-torch214-cu134-sm90-v1",
+        "wheel_sha256": "e08d291fe0cfa72d6356632725edb9beeae8fb6fd959d70415c0a523dc7b3301",
+        "build_manifest_sha256": "4e454e473225e693018167bd356eb3cca90cabf606b3807cff0423e302b53853",
+        "operator_qualification_sha256": "f99f1544d9b54ed18e2bd9300f2c4ff3a2b3bc0b9fa6e2bfea17bbd054d96c39",
+    },
+}
 
 
 def conv_kernel_provenance(kernel) -> dict:
@@ -313,21 +329,19 @@ def conv_kernel_provenance(kernel) -> dict:
         "package": CONV_KERNEL_PACKAGE,
         "package_version": version,
     }
-    if version == CONV_KERNEL_PACKAGE_VERSION:
-        result.update({
-            "artifact_id": CONV_KERNEL_ARTIFACT_ID,
-            "source_repository": CONV_KERNEL_SOURCE_REPOSITORY,
-            "source_commit": CONV_KERNEL_SOURCE_COMMIT,
-            "wheel_sha256": CONV_KERNEL_WHEEL_SHA256,
-            "build_manifest_sha256": CONV_KERNEL_BUILD_MANIFEST_SHA256,
-        })
+    for capability, build in CONV_KERNEL_BUILDS.items():
+        if version == build['package_version']:
+            result.update({**build, "device_capability": list(capability),
+                           "source_repository": CONV_KERNEL_SOURCE_REPOSITORY,
+                           "source_commit": CONV_KERNEL_SOURCE_COMMIT})
+            break
     return result
 
 
 def load_conv_kernel():
-    """Load the exact Pop source-built package, or use the Torch fallback.
+    """Load the exact architecture-matched source build, or use the Torch fallback.
 
-    The approved wheel matches the Pop executor's pinned Torch/CUDA and SM 8.9.
+    The installed wheel must match the pinned Torch/CUDA and SM-specific artifact.
     A different wheel, host, or build is deliberately not selected. Enable it
     with NATLANG_NEURALESE_KERNELS=1 after runtime qualification; it stays off
     by default until same-input fidelity and throughput are qualified.
@@ -358,7 +372,8 @@ def load_conv_kernel():
         _logger.info("LFM2 convolution uses Torch fallback: device capability query failed (%s: %s)",
                      type(exc).__name__, exc)
         return None
-    if capability != CONV_KERNEL_DEVICE_CAPABILITY:
+    build = CONV_KERNEL_BUILDS.get(capability)
+    if build is None:
         _logger.info(
             "LFM2 convolution uses Torch fallback: unsupported device capability %s",
             capability,
@@ -373,10 +388,10 @@ def load_conv_kernel():
         _logger.info("LFM2 convolution uses Torch fallback: package metadata could not be read (%s: %s)",
                      type(exc).__name__, exc)
         return None
-    if installed_version != CONV_KERNEL_PACKAGE_VERSION:
+    if installed_version != build['package_version']:
         _logger.info(
             "LFM2 convolution uses Torch fallback: %s version %s does not match pinned %s",
-            CONV_KERNEL_PACKAGE, installed_version, CONV_KERNEL_PACKAGE_VERSION,
+            CONV_KERNEL_PACKAGE, installed_version, build['package_version'],
         )
         return None
     try:
@@ -386,7 +401,7 @@ def load_conv_kernel():
             getattr(causal_conv1d, "causal_conv1d_fn", None)
         ):
             raise RuntimeError("installed package does not expose the pinned 1.7.0 causal_conv1d_fn API")
-        _logger.info("LFM2 convolution uses pinned source build %s", CONV_KERNEL_ARTIFACT_ID)
+        _logger.info("LFM2 convolution uses pinned source build %s", build['artifact_id'])
         return causal_conv1d
     except Exception as exc:
         _logger.info("LFM2 convolution uses Torch fallback: causal_conv1d import failed (%s: %s)",
