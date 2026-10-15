@@ -33,6 +33,7 @@ import json
 import errno
 import os
 import shutil
+import math
 import signal
 import time
 from pathlib import Path
@@ -63,12 +64,16 @@ def publish_best(slot: Path, best: Path, receipt: dict | None = None, *, prune=F
 
 
 class CheckpointPolicy:
-    def __init__(self, out_dir, *, every_steps: int = 0, name: str = "checkpoint.pt",
+    def __init__(self, out_dir, *, every_steps: int = 0, every_seconds: float = 0, name: str = "checkpoint.pt",
                  best_name: str = "best-checkpoint.pt", final_name: str = "final-weights.pt",
                  free_factor: float = 1.2, prune_best: bool = True):
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
         self.cadence = Cadence(every_steps)
+        if not math.isfinite(every_seconds) or every_seconds < 0:
+            raise ValueError('checkpoint wall-clock cadence must be finite and nonnegative')
+        self.every_seconds = every_seconds
+        self.last_saved_monotonic = time.monotonic()
         self.stop = StopSignal()
         self.slot, self.best_path, self.final_path = self.out / name, self.out / best_name, self.out / final_name
         if len({name, best_name, final_name}) != 3:
@@ -105,7 +110,8 @@ class CheckpointPolicy:
 
     def due(self, step: int, *, end: bool = False) -> bool:
         """A declared checkpoint point, the stage end, or a stop request."""
-        return self.stop.requested or self.cadence.due(step, force=end)
+        timed = bool(self.every_seconds and time.monotonic() - self.last_saved_monotonic >= self.every_seconds)
+        return self.stop.requested or timed or self.cadence.due(step, force=end)
 
     # Writes -----------------------------------------------------------------------------------------------------
     def _write(self, state: dict, target: Path) -> dict:
@@ -125,6 +131,7 @@ class CheckpointPolicy:
         ``metric`` (the evaluation of this write's step point) better than every earlier write's, the same file is
         also published as the best (``publish_best``); a stop write passes no metric."""
         event = self._write(state, self.slot)
+        self.last_saved_monotonic = time.monotonic()
         better = metric is not None and (self.best_metric is None or (
             metric > self.best_metric if higher_is_better else metric < self.best_metric))
         if better:

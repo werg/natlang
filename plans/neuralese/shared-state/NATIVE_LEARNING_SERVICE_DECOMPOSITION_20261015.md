@@ -49,8 +49,10 @@ composite writer requires the backbone to have been restored from the exact
 manifest parent and rejects parameter-version changes before publishing an
 interface-only patch. Native `/optim` applies SGD or Adam to explicitly named
 interface parameters, stores named optimizer state, and publishes a new
-immutable effective checkpoint. It restores live serving weights before
-replying; the caller reloads the returned checkpoint before continuing, so one
+immutable effective checkpoint. It updates a detached copy of only the native
+interface, sharing the unchanged backbone, so even concurrent generation and
+failed requests never observe transient updated weights. The caller reloads
+the returned checkpoint before continuing, so one
 identity never names two weight states. Composite manifests may chain over
 earlier composites. An HF base-directory override changes only where the
 shared loader finds base model files; the manifest parent remains the immutable

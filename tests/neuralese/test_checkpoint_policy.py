@@ -10,6 +10,24 @@ import torch
 from natlang_neuralese.train import checkpoint_policy as cp
 
 
+def test_wall_clock_durability_is_independent_of_update_speed_and_failed_writes(tmp_path, monkeypatch):
+    elapsed = [0.]
+    monkeypatch.setattr(cp.time, 'monotonic', lambda: elapsed[0])
+    policy = cp.CheckpointPolicy(tmp_path, every_steps=5000, every_seconds=3600)
+    assert not policy.due(2)
+    elapsed[0] = 3600
+    assert policy.due(2) and not policy.signaled
+    policy.save({'step': 2, 'weights': torch.ones(3)})
+    assert not policy.due(3)
+    elapsed[0] = 7200
+    def failed_write(*args, **kwargs):
+        raise OSError('write failed')
+    monkeypatch.setattr(cp, 'atomic_checkpoint', failed_write)
+    with pytest.raises(OSError):
+        policy.save({'step': 3})
+    assert policy.due(3) and not policy.signaled
+
+
 def test_checkpoints_are_due_at_declared_step_points_the_end_and_a_signal(tmp_path):
     policy = cp.CheckpointPolicy(tmp_path, every_steps=2048).install_signal_handlers((signal.SIGUSR1,))
     assert [s for s in range(0, 8193) if policy.due(s, end=s == 6000)] == [2048, 4096, 6000, 6144, 8192]

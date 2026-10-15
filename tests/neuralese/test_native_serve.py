@@ -1,5 +1,6 @@
 """The ordinary chat server loads and transports the trained native state end to end."""
 import torch
+import pytest
 import json
 import threading
 import urllib.request
@@ -202,6 +203,25 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert gradient_artifact.kind == 'parameter-gradient'
         assert gradient_artifact.tensors['adapter.up.weight'].norm() > 0
         live_before = engine.shared_model.adapter.up.weight.detach().clone()
+        from natlang_neuralese.serve import native_optim
+        original_writer = native_optim.write_native_composite_checkpoint
+        def observe_immutable_publication(parent, output, updated, config, **kwargs):
+            assert updated is not engine.shared_model
+            torch.testing.assert_close(engine.shared_model.adapter.up.weight, live_before, rtol=0, atol=0)
+            return original_writer(parent, output, updated, config, **kwargs)
+        monkeypatch.setattr(native_optim, 'write_native_composite_checkpoint', observe_immutable_publication)
+        # A later malformed tensor must not leave an earlier parameter changed.
+        down_before = engine.shared_model.adapter.down.weight.detach().clone()
+        malformed = NativeTensorArtifact('parameter-gradient', engine.native_identity,
+            {'adapter.down.weight': torch.ones_like(down_before), 'adapter.up.weight': torch.ones(1)},
+            source_artifact_id=record.id, provenance={'objective': 'rollback-regression'})
+        malformed_record = engine.store.put_native_tensor_artifact(malformed)
+        from natlang_neuralese.serve.chat import RequestError
+        with pytest.raises(RequestError, match='gradient shape'):
+            native_optim.native_optimizer_step(engine, {'schema': 'natlang.native-optimizer-request/1',
+                'native_identity': engine.native_identity, 'gradient_id': malformed_record.id,
+                'optimizer': {'name': 'sgd', 'learning_rate': .1}}, None)
+        torch.testing.assert_close(engine.shared_model.adapter.down.weight, down_before, rtol=0, atol=0)
         optimized = post_path('/v1/neuralese/optim', {'schema': 'natlang.native-optimizer-request/1',
             'native_identity': engine.native_identity, 'gradient_id': gradient_id,
             'optimizer': {'name': 'adam', 'learning_rate': 0.01}})
