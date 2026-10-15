@@ -29,7 +29,7 @@ class NativeStateBlock:
     layers: tuple[dict[str, Any], ...]
     architecture: str
 
-    def validate(self) -> None:
+    def validate(self) -> NativeStateBlock:
         if not isinstance(self.text, str) or not isinstance(self.architecture, str) or not self.architecture:
             raise ValueError('native state needs text and an architecture identity')
         for name in ('tokenizer_fingerprint', 'checkpoint_sha256', 'embedding_weight_sha256'):
@@ -67,6 +67,7 @@ class NativeStateBlock:
                 self._float_tensor(f'layer {index} gated_inputs', layer['gated_inputs'], count, 2)
             else:
                 raise ValueError(f'unsupported native shared layer state: {kind!r}')
+        return self
 
     @staticmethod
     def _float_tensor(name, value, count, dimensions):

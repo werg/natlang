@@ -29,6 +29,15 @@ supersede older projection/recursive graph-replay foundation rules for new work.
   block storage/transport, natlang harness, evaluators and recipes. Retain all
   usable source data and protected evaluation splits through conversion, and
   share mechanisms between LFM and Mellum.
+- No prototyping shortcuts or half-solutions at architectural blockers. Work
+  out both training and inference. After implementation, a separate agent must
+  independently check the integrated work for gaps before cutover.
+- Encode cross-model readiness and work directly in the training recipe and
+  executable scheduling: begin shared-space VAE work as soon as at least two
+  models are ready. Provide resumable, adjustable VAE, control write-out and
+  additional joint training, so useful feedback changes the training rather
+  than waiting for a clean run. A placeholder stage or manual note is not an
+  implemented cross-model training provision.
 - Current old-paradigm cloud runs continue as DIAGNOSTICS during implementation
   and local validation. Then restart BOTH models on the entire production
   recipe using the replacement. Continued legacy training is not replacement

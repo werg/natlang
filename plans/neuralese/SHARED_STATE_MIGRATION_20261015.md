@@ -52,6 +52,16 @@ Implementation started; replacement not qualified or deployed. Both cloud
 lineages remain diagnostic. The local Mellum base teacher continues producing
 native text trajectories reusable by both models and the replacement.
 
+Owner clarification: no prototyping shortcuts or half-solutions at blockers.
+Assign a separate agent to independently review the completed integrated
+training and inference paths before cutover, and fix every material gap.
+Cross-model readiness must be executable recipe logic: when at least two
+models finish the required native training, start shared-space VAE adaptation
+without waiting for every other model. Include configurable, resumable joint
+training of the semantic space, write-out controls and downstream behavior.
+Changes to losses, curricula and useful data must support adaptive continuation.
+Do not count stage names or a readiness note as working training code.
+
 After qualification, restart LFM and Mellum on their complete updated production
 recipes, including all admitted usable sources and every remaining stage.
 Record actual exposure and stage progress. Remove discarded legacy mechanisms
