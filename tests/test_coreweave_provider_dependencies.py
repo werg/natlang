@@ -27,6 +27,9 @@ def test_mandatory_sft_seed_closure_contains_nested_ordinary_and_raw_pairs(tmp_p
 def test_asset_preflight_verifies_content_not_directory_existence(tmp_path):
     task=tmp_path/'ts-host';write(task/'dist/teacher/cli.js','actual compiled runtime')
     write(task/'package.json',{'name':'task-runtime'});write(tmp_path/'package.json',{'name':'root'});write(tmp_path/'package-lock.json',{'lockfileVersion':3})
+    (task/'prelude.js').write_text('// exact runtime prelude\n')
+    for name in ['holds.jsonl','family-holds.json','datasets.json']:
+        write(tmp_path/'training/source-reviews'/name,{})
     config=write(tmp_path/'config.json',{'runtime':str(task)})
     closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
     deps.verify_assets(closure['assets'])
@@ -127,3 +130,23 @@ def test_actual_task_packet_and_foundation_manifest_are_consumed_inputs(tmp_path
     config=write(tmp_path/'config.json',{'foundation_native_graphs':graph,'trainer_parameters':{'task_eval':json.dumps({'packet':packet})}})
     closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
     assert {row['path'] for row in closure['files']}=={row['path'] for row in [packet,graph,config]}
+
+
+def test_compiled_task_runtime_requires_and_binds_external_prelude(tmp_path):
+    root=tmp_path/'runtime';host=root/'ts-host';(host/'dist/teacher').mkdir(parents=True)
+    (host/'dist/teacher/cli.js').write_text('// compiled actual CLI import graph\n')
+    for path in [host/'package.json',root/'package.json',root/'package-lock.json']:
+        path.write_text('{}')
+    reviews=root/'training/source-reviews';reviews.mkdir(parents=True)
+    for name in ['holds.jsonl','family-holds.json','datasets.json']:
+        (reviews/name).write_text('{}')
+    with pytest.raises(ValueError,match='built CLI and pinned npm manifests'):
+        deps.task_runtime_inventory(host)
+    (host/'prelude.js').write_text('// first exact prelude\n')
+    inventory=deps.task_runtime_inventory(host)
+    asset={'path':str(host),'kind':'task-runtime','inventory':inventory,
+           'sha256':deps.canonical_json_sha256_hex(inventory)}
+    deps.verify_assets([asset])
+    (host/'prelude.js').write_text('// different runtime semantics\n')
+    with pytest.raises(ValueError,match='pre-staged asset content differs'):
+        deps.verify_assets([asset])

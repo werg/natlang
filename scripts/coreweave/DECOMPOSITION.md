@@ -58,6 +58,9 @@ and every bound external native-state block survive a pending new cohort.
 Built task runtimes bind their dist plus npm manifests and run the actual CLI
 import preflight. A provider never replaces a published runtime file through
 its alias: matching code must already be deployed through the Git archive path.
+The same inventory binds the external `prelude.js` and frozen three-file source
+review registry consumed during module import. These dependencies were exposed
+by the real two-sandbox fixture; an existing dist directory alone is insufficient.
 
 Large metadata programs use an owned temporary file with an exact SHA check
 before execution, then remove it. This is SDK argument-size plumbing: a full
