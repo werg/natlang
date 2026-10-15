@@ -64,13 +64,14 @@ def branch_attention(qb, kh, vh, kb, vb, start, window_size, pad, scale, *, flex
         if _flex is None:
             _flex = torch.compile(flex_attention, dynamic=True)
 
+        from ..common.attention_backend import flex_kernel_options
         block_mask = branch_block_mask(steps, length, start, window_size, pad, qb.device)
         return _flex(qb, torch.cat((kh, kb), 2), torch.cat((vh, vb), 2), block_mask=block_mask, scale=scale,
                      enable_gqa=True,
                      # NGC defaults fp32 matmul to single TF32: on Ada this
                      # loses ~1e-3 against the fp32 SDPA reference. Three TF32
                      # products preserve fp32 accuracy while using tensor cores.
-                     kernel_options={'FLOAT32_PRECISION': "'tf32x3'"} if qb.dtype == torch.float32 else None)
+                     kernel_options=flex_kernel_options(float32=qb.dtype == torch.float32))
     outputs = []
     for begin in range(0, steps, 512):
         end = min(begin + 512, steps)

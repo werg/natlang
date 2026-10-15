@@ -291,7 +291,9 @@ def _flex_window(attn, q, k, v, window: int) -> torch.Tensor:
         if len(masks) >= 64:
             masks.pop(next(iter(masks)))
         masks[key] = create_block_mask(in_window, None, None, steps, total, device=q.device)
-    return _FLEX["kernel"](q, k, v, block_mask=masks[key], scale=attn.scaling, enable_gqa=True)
+    from ..common.attention_backend import flex_kernel_options
+    return _FLEX["kernel"](q, k, v, block_mask=masks[key], scale=attn.scaling, enable_gqa=True,
+                           kernel_options=flex_kernel_options(float32=q.dtype == torch.float32))
 
 
 def _flex_enabled(q, k) -> bool:

@@ -14,3 +14,11 @@ def configure_sdpa_backend(backend='default'):
         cuda.enable_cudnn_sdp(False)
     os.environ['NATLANG_NEURALESE_SDPA_BACKEND'] = backend
     return backend
+
+
+def flex_kernel_options(*, float32=False):
+    """Decode tiles must divide the shared 128-token sparse mask blocks."""
+    options = {'fwd_BLOCK_M': 32, 'fwd_BLOCK_N': 64}
+    if float32:
+        options['FLOAT32_PRECISION'] = "'tf32x3'"
+    return options
