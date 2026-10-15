@@ -90,8 +90,14 @@ def validate_result(request, request_binding, result):
             raise ValueError('duplicate provider artifact')
         seen[bound['path']] = bound
     for name in ('state', 'checkpoint', 'deployment'):
-        if result.get(name) and checked_binding(result[name]) != seen.get(result[name]['path']):
-            raise ValueError('declared provider result is absent from artifact inventory')
+        if result.get(name):
+            reference = result[name]
+            artifact = seen.get(safe_path(reference['path']))
+            # Native refresh's deployment uses the shared path/SHA binding;
+            # the mandatory inventory supplies the exact transfer byte count.
+            if (artifact is None or reference.get('sha256') != artifact['sha256']
+                    or ('bytes' in reference and reference['bytes'] != artifact['bytes'])):
+                raise ValueError('declared provider result is absent from artifact inventory')
     return list(seen.values())
 
 

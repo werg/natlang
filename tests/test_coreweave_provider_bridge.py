@@ -82,6 +82,21 @@ def fixture():
     return io, request, envelope
 
 
+def test_refresh_checkpoint_reference_uses_exact_sized_inventory_without_invented_bytes():
+    io, request, envelope = fixture()
+    artifact=bound(request['out']+'/checkpoint.pt',b'actual-closed-state')
+    result={'schema':bridge.RESULT_SCHEMA,'request_id':request['request_id'],
+            'request_sha256':envelope['request']['sha256'],'kind':request['kind'],
+            'status':'completed','artifacts':[artifact],
+            'checkpoint':{k:v for k,v in artifact.items() if k!='bytes'}}
+    assert bridge.validate_result(request,envelope['request'],result)==[artifact]
+    for wrong in [{'sha256':'0'*64},{'bytes':artifact['bytes']+1},
+                  {'path':request['out']+'/missing.pt'}]:
+        changed={**result,'checkpoint':{**result['checkpoint'],**wrong}}
+        with pytest.raises(ValueError,match='absent from artifact inventory'):
+            bridge.validate_result(request,envelope['request'],changed)
+
+
 def test_results_are_exposed_only_after_verified_artifacts_and_restart_reuses_worker():
     io, request, envelope = fixture()
     service = bridge.ProviderBridge(io, 'mellum', {'lfm', 'mellum'})
