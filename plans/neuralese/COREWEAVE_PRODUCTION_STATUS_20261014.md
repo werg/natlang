@@ -1,4 +1,22 @@
-# Current supervision update, 2026-10-15 12:12 UTC
+# Current supervision update, 2026-10-15 13:47 UTC
+
+Owner correction: Pop generation is closed; DGX-owned generation continues using our own models through CoreWeave. No Luna or local GPU actor generation. Both existing trainers remain diagnostic pending the native shared-state cutover. The owner explicitly authorized one additional dedicated generation sandbox; no further allocation is planned.
+
+- LFM H100 `7ee701ae-8e56-49d8-b97a-594f7eb33fe9`, trainer203166: actual30156, finite loss0.58362,0.972seconds,31161supervised tokens/second, GPU92%, no new errors. Correct window staging completed and exact28000 optimizer/RNG continuation is advancing. Latest independently private-verified full state29040:1149843163bytes, SHA `ae17f5e462cbeb6c3bf04234b73070975e2241d95a729b8e2428ba0e5092bd60`.
+- Mellum Blackwell `5ffa592c-5f88-4b4f-b3cc-1507ab94a5dc`, trainer65896: actual4279, finite loss8.5756e-5,5.10seconds, GPU96%, no new errors. Last task3600 remains8/16 versus inherited13, zero infrastructure/unresolved, unqualified. Latest independently private-verified full state4000:47078036327bytes, SHA `b3e6701b6e3ef6ae7ade24c347cb66a065cd6288deb4fa52dd3bbaa406051352`.
+- Dedicated own-Mellum teacher `dadd0462-0175-470d-b1ee-4d52edfe110e`: running RTX PRO6000 Blackwell96GB,8CPU64GiB host,7.35TB free ephemeral root, independent bash PID1. Request minimum48GB selected actual96GB. API returned no price quote. Two initial capacity-error IDs are terminal failed; no duplicate live allocation. Pinned NGC26.09 image digest `f71fd67f6d71f685e0bd08ce6c8df48807624cc5d48886370d3471bc4f89d81d`.
+
+The dedicated sandbox restored the exact private Mellum3600 full checkpoint47078033383bytes/SHA `e97eb68e611a1e4acd03e937306c7f293b198134f094d0b0abb72f3b132bf00c`, pinned public base revision `92ddae9fc7665e9f801d141d2e5a6b2caf2460c4`, and raw heads SHA `199febae771d1c072d134bf669c65979db4822d1522c141b7926b532806b2fd3`. Existing shared bundle downloads ran concurrently: measured approximately225MB/s private and69MB/s public; all71386396388bytes passed complete hashes. Python dependencies, verified Node24.0.1 and ts-host build passed. An initial extraction race was repaired before download; neither trainer was interrupted.
+
+Automatic release started teacher job3738/actor3871/collector3980, coordinator2991, at `/work/generation/own-mellum3600-20261015`; actual GPU100%/29295MiB during the first case. The shared task-rollout/collector uses32 protected train tasks with2samples, FULL rendering, temperature0.6,32768context, concurrency1. It automatically continues successive seed-distinct batches without reloading the actor. This is an exact legacy trained teacher, not an on-policy claim against future native students. No completed case or positive is claimed at this update. Early generation host anon2.34GiB/CPU~1–1.4cores suggests4CPU32GiB could suffice, but that shape is unvalidated; current allocation stays unchanged. File-cache peaks do not establish required anonymous RAM.
+
+The preceding own LFM28000 teacher completed43 scored cases with zero successes:32repetition,10model-request-budget,1semantic; pending cases remain unscored. Its boundary-safe retirement is armed to return H100 resources to training. Representative failures have an assigned error-recovery consumer; they are not positive examples. The four earlier genuine DGX own-Mellum successes remain untouched.
+
+Published native source `62d4bd7a7813b563bfd8f7ed389fac6deb99a7d1` is SHA-verified in isolated `/work/native-runtime/62d4bd7a7813` on both trainer allocations, without touching running source. The actual H100982ab3ad native FP32 CLI passed unchanged tolerances, channel update/restore and destination compiler guard (64.22seconds/1.599GB): forward1.907e-6, CE4.768e-6, adapter gradient9.015e-7, incremental6.557e-7. This is interface proof, not full production training/task qualification.
+
+Dolci/Cognitive is advancing135/644 native shards; both large E2E sources remain restored and assembling. Current health receipts and exact private object identities remain outside Git under `/home/werg/data/dgxops`.
+
+# Historical supervision update, 2026-10-15 12:12 UTC
 
 Both existing allocations continue as diagnostics while the new native shared-state trainer is integrated. No new allocation or lineage was created.
 
