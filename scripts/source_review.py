@@ -104,6 +104,10 @@ def pending_unpinned_source_groups(registry: Path = REGISTRY) -> set[str]:
         if not isinstance(dataset, str) or not dataset or not isinstance(item, str) or not item:
             raise ReviewError(f"holds.jsonl:{number}: missing dataset or id")
         groups.add(f"{dataset}:{item}")
+        aliases = review.get('aliases', [])
+        if not isinstance(aliases, list) or any(not isinstance(alias, str) or not alias for alias in aliases):
+            raise ReviewError(f"holds.jsonl:{number}: aliases must be nonempty strings")
+        groups.update(f"{dataset}:{alias}" for alias in aliases)
         rendered_groups = review.get('sourceGroups', [])
         if (not isinstance(rendered_groups, list) or
                 any(not isinstance(group, str) or not group for group in rendered_groups)):
