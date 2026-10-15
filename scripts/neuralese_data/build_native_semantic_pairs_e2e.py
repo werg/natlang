@@ -637,6 +637,8 @@ def main():
                         help='independent complete-trajectory render workers')
     parser.add_argument('--repair-pair-omissions', type=Path, default=None,
                         help='convert exactly the omitted edges listed by a prior complete build into a pair-only supplement')
+    parser.add_argument('--rebuild-all-pairs', action='store_true',
+                        help='re-render every admitted edge into a pair-only output (for a corrected pair policy)')
     args = parser.parse_args()
     if args.max_trajectories is not None and args.max_trajectories < 1:
         parser.error('--max-trajectories must be positive')
@@ -646,6 +648,8 @@ def main():
         parser.error('--workers must be positive')
     if args.repair_pair_omissions and args.max_trajectories is not None:
         parser.error('--repair-pair-omissions cannot be combined with a bounded test run')
+    if args.rebuild_all_pairs and (args.repair_pair_omissions or args.max_trajectories is not None):
+        parser.error('--rebuild-all-pairs cannot be combined with omission repair or a bounded test run')
     tokenizers, source_fps, expanded_fps, role_ids = {}, {}, {}, {}
     model_ids, base_inventory_shas = {}, {}
     from natlang_neuralese.model.native_model import base_inventory
@@ -673,10 +677,15 @@ def main():
         edges_by_chain[edge['trajectory']].append(edge)
     if edges_digest.hexdigest() != args.edges_sha256:
         raise ValueError('source edges SHA differs from the admitted immutable source binding')
-    pair_only = args.repair_pair_omissions is not None
+    pair_only = args.repair_pair_omissions is not None or args.rebuild_all_pairs
     repair_edge_ids = None
     repair_sha = None
-    if pair_only:
+    if args.rebuild_all_pairs:
+        # A corrected pair transformation changes every row, not just prior
+        # omissions. Bind a complete source-edge replay without rewriting the
+        # already useful ordinary graph outputs from the previous build.
+        repair_edge_ids = set(edge_ids)
+    elif pair_only:
         repair_sha = sha256_file(args.repair_pair_omissions)
         previous_receipt_path = args.repair_pair_omissions.parent / 'receipt.json'
         if not previous_receipt_path.is_file():
@@ -713,7 +722,9 @@ def main():
     # Keep the original normal-build input identity byte-for-byte compatible
     # with resume manifests written before pair-repair support was added. A
     # pair-only supplement still binds its exact omission receipt and source.
-    if pair_only:
+    if args.rebuild_all_pairs:
+        input_identity['rebuild_all_pairs'] = {'mode': 'all-admitted-edges', 'edges_sha256': args.edges_sha256}
+    elif pair_only:
         input_identity['repair_pair_omissions'] = {
             'path': str(args.repair_pair_omissions.resolve()), 'sha256': repair_sha}
     tokenizer_models = tuple(tokenizers)
@@ -911,7 +922,7 @@ def main():
             if not resume_mode and records_digest.hexdigest() != args.records_sha256:
                 raise ValueError('source records SHA differs from the admitted immutable source binding')
             if pair_only and totals['source_edges'] != len(repair_edge_ids):
-                raise ValueError('pair-repair did not revisit every exact edge in the prior omission ledger')
+                raise ValueError('pair-only build did not revisit every exact selected source edge')
         abort_chunk()
     except BaseException:
         abort_chunk()
@@ -956,13 +967,16 @@ def main():
         'pair_omissions': {'path': str(omissions_path), 'rows': totals['pair_omissions'],
                            'sha256': sha256_file(omissions_path)},
         'render_omissions': render_omission_output,
-        'pair_repair': ({'source_omissions': str(args.repair_pair_omissions),
-                         'source_omissions_sha256': repair_sha,
-                         'source_edge_count': len(repair_edge_ids),
-                         'mode': 'pairs-only-static-multiread'} if pair_only else None),
+        'pair_repair': ({'source_edge_count': len(repair_edge_ids),
+                         'mode': ('pairs-only-complete-rebuild' if args.rebuild_all_pairs
+                                  else 'pairs-only-static-multiread'),
+                         **({'source_omissions': str(args.repair_pair_omissions),
+                             'source_omissions_sha256': repair_sha} if not args.rebuild_all_pairs else {})}
+                        if pair_only else None),
         'resume_manifest': {'path': str(state_path), 'sha256': sha256_file(state_path)},
-        'conversion': ('static multi-read repair supplement for exact edges omitted by a prior build'
-            if pair_only else 'all rendered trajectories become ordinary native one-node SFT graphs; cross-model pairs use exact admitted writer/reader occurrences')}
+        'conversion': ('complete corrected re-render of all admitted edge pairs; ordinary graph outputs remain in their source build'
+            if args.rebuild_all_pairs else ('static multi-read repair supplement for exact edges omitted by a prior build'
+            if pair_only else 'all rendered trajectories become ordinary native one-node SFT graphs; cross-model pairs use exact admitted writer/reader occurrences'))}
     receipt_path = args.out / 'receipt.json'
     atomic_json(receipt_path, receipt)
     # The concatenated zstd frames are the single consumer representation;
