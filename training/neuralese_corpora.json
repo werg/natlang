@@ -89124,6 +89124,201 @@
       "review_status": "Corrected v2: source-review v12 withdrew two source-contaminated parents (six decisions) from v1; original two process holds remain; 676 decisions selected.",
       "required_conversion": "Render approved-turns-v2.jsonl in LFM/Mellum full, program-header and whole-trajectory before protected union",
       "notes": "Supersedes withdrawn v1 and incomplete v2 registrations. Manifest pins both original approved-turns.jsonl, the v12 filter receipt, and approved-turns-v2.jsonl SFT output."
+    },
+    {
+      "id": "luna-held-shapes-s52085-curated-render-20261015-v3",
+      "owner": "pop",
+      "path": "runs/luna-s52085-parent-review-20261015-v1/render-v3",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: luna-held-shapes-s52085-curated-20261015-v3; variants: full/lfm25, full/mellum21, program-header/lfm25, program-header/mellum21, whole-trajectory/lfm25, whole-trajectory/mellum21; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "luna-held-shapes-s52085-curated-20261015-v3"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl.zst",
+            "sha256": "ee452a4c809a1b0f0f847e8dfe305d808144a98efea8faf018f87a577c14c3f2",
+            "compression": "zstd",
+            "decoded_sha256": "81ffe314621795411a221bb1940c4cf6d765f6fe121639ba72b34e255059f086",
+            "decoded_bytes": 1520055,
+            "documents": 24,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 24,
+                "supervised_tokens": 3046,
+                "tokens": 158955,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 9583,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl.zst",
+            "sha256": "f9f2d78d4b99c67a4e3979f4d21b060764b6d89fe3bea3e250e6d4bf6a3d2348",
+            "compression": "zstd",
+            "decoded_sha256": "5b3166e0de44977b6490df32fc8f80958dbfb674ae311ccafce857a9da07d84f",
+            "decoded_bytes": 1478623,
+            "documents": 24,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 24,
+                "supervised_tokens": 3406,
+                "tokens": 159881,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 9796,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl.zst",
+            "sha256": "bda123a4fe3122fd4a8f0edd7862f57d8ce4a21f1f3ea1132e41034e1f8148da",
+            "compression": "zstd",
+            "decoded_sha256": "4deebd5c173d4caf106415273aa021547e78c714c098e46eab86a789a3c6eb34",
+            "decoded_bytes": 13357680,
+            "documents": 676,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 676,
+                "supervised_tokens": 73741,
+                "tokens": 1379240,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 5333,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl.zst",
+            "sha256": "13a255722ddd3f9c1cce165ef77c9ecb4091e371b32b7b716b6526a350678180",
+            "compression": "zstd",
+            "decoded_sha256": "e2d1b0acef6b2cba60541ebd8eb556bec10938f7514684daaa2e0ee9f4c2b539",
+            "decoded_bytes": 13258645,
+            "documents": 676,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 676,
+                "supervised_tokens": 82824,
+                "tokens": 1403412,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 5875,
+            "merge_omissions": {}
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl.zst",
+            "sha256": "bbfb02a476aab9d8b93971562b71307e677a48e96b68f625676e213900bb69cc",
+            "compression": "zstd",
+            "decoded_sha256": "fd6a39c40684968896f503dc852470547d323f653fc6f076fdbe329a3ff8170a",
+            "decoded_bytes": 8731006,
+            "documents": 463,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 240669,
+                "documents": 463,
+                "opening_tokens": 176366,
+                "supervised_tokens": 64303,
+                "tokens": 890378,
+                "tool_tokens": 77372
+              }
+            },
+            "max_document_tokens": 5278,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl.zst",
+            "sha256": "37d1aaaa5df32a8350b8bfff66598d24fc95b00c7f156df67a613232eeade549",
+            "compression": "zstd",
+            "decoded_sha256": "d00a1efb5207c5610be9457bb1b83bd9143e16626bbb71d0ca601e2c81312d9b",
+            "decoded_bytes": 8689034,
+            "documents": 463,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 266212,
+                "documents": 463,
+                "opening_tokens": 177995,
+                "supervised_tokens": 88217,
+                "tokens": 907993,
+                "tool_tokens": 80092
+              }
+            },
+            "max_document_tokens": 5875,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 676,
+        "selected:train": 676,
+        "source_rows": 676
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 652,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 652
+      },
+      "program_header_parity": {
+        "equal_text_serving_token_boundaries": 1352,
+        "retokenization_checked": 0
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "cd22423d7181576175120a299ae1de2511cf3be9048353621840506f98da592f",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/luna-s52085-parent-review-20261015-v1/render-v3/receipt.json",
+        "sources": {
+          "runs/luna-s52085-parent-review-20261015-v1/approved-turns-v2.jsonl": {
+            "bytes": 52784950,
+            "sha256": "b58ccc8d803ae16d361093043fbed5b902ffda702970d3253f7b05906ea06921"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {}
+      },
+      "notes": ""
     }
   ],
   "coverage_backlog": [
