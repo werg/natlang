@@ -1,0 +1,44 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-deepdive-native-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-deepdive-native-20261015-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 910,
+      "sha256": "20f131523458b6d8a068dc531db7335e90cc1541b2a6cd30cb83f55842dc4feb"
+    },
+    {
+      "path": "ir/trajectory_continuation_research/build.json",
+      "bytes": 796,
+      "sha256": "a99bfdea96589f37e856bc84d4b29920c9524dee7d7e9d0e0bc5b1d937779706"
+    },
+    {
+      "path": "runtime-page.json",
+      "bytes": 113,
+      "sha256": "814dad314ede1e73b05f8b3a34a0e1f206c242bfccfa0177193fb2f6404e6300"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00000.summary.json",
+      "bytes": 256,
+      "sha256": "7deacd2e48c85562a421ad3e258d9f98b4b18ac2fa279b1dd374e91d8cb75e03"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00000.turns.jsonl.zst",
+      "bytes": 11452036,
+      "sha256": "74f6bc53f2edd6e2d01559a02296aba103617ee99f3267f951be00798d7c9b0f"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00001.summary.json",
+      "bytes": 256,
+      "sha256": "063e692abc93cfc51a70d25374bf7ee26c74561190346b32eb77ae20809325ba"
+    },
+    {
+      "path": "turns/trajectory_continuation_research/00001.turns.jsonl.zst",
+      "bytes": 9111622,
+      "sha256": "2ff74412937723e3661b8921f442c591c06ba726e59206cff18a013e7c827f39"
+    }
+  ],
+  "bytes": 20565989
+}

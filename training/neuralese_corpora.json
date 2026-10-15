@@ -95693,6 +95693,74 @@
         "held_text": {}
       },
       "notes": "Seed 52104 v30 source review; 89 semantic-reviewed parents, 591 decisions; no reserved or decontamination omissions"
+    },
+    {
+      "id": "external-expansion-deepdive-handoffs-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-deepdive-handoffs-20261015-v1",
+      "include": [
+        "*.port-records.jsonl",
+        "manifest.json",
+        "admission-review.json"
+      ],
+      "source_class": "external-static-typed-handoff",
+      "training_admission": true,
+      "training_admission_reason": "Owner adaptive production training: use available statically lowered native research histories promptly",
+      "admission": {
+        "schema": "natlang.external-static-admission/1",
+        "approved": true,
+        "policy": "Owner adaptive production training: use available statically lowered native research histories promptly",
+        "source": "Pinned D31 trajectories_sft only; source reasoning, calls and observations retained; shared question groups",
+        "closure": "3016 valid train records, zero protected hits/closure violations",
+        "native_items": 1818,
+        "native_cases": 455,
+        "native_decisions": 4826,
+        "native_omissions": {
+          "evidence-over-cap-needs-paged-program": 1198
+        },
+        "assigned_recovery": "1198 evidence-over-cap records assigned existing 32000..120000 long-evidence pipeline; larger cases remain explicit paging work",
+        "pending_source_forms": "QA/RL files await target/reward schema review, not silently included",
+        "certificate_limit": "Static plumbing replay only, not independently verified research answer or model Neuralese lift"
+      },
+      "derived_from": [
+        "external-expansion-d31-source-20261014-v1"
+      ],
+      "license": "Apache-2.0 from pinned D31 acquisition card"
+    },
+    {
+      "id": "external-expansion-deepdive-native-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/external-expansion-deepdive-native-20261015-v1",
+      "include": [
+        "turns/**/*.turns.jsonl.zst",
+        "turns/**/*.summary.json",
+        "ir/**/build.json",
+        "runtime-page.json",
+        "admission-review.json"
+      ],
+      "source_class": "statically-lowered-external-native-teacher-turns",
+      "training_admission": true,
+      "training_admission_reason": "Owner adaptive production training: use available statically lowered native research histories promptly",
+      "admission": {
+        "schema": "natlang.external-static-admission/1",
+        "approved": true,
+        "policy": "Owner adaptive production training: use available statically lowered native research histories promptly",
+        "source": "Pinned D31 trajectories_sft only; source reasoning, calls and observations retained; shared question groups",
+        "closure": "3016 valid train records, zero protected hits/closure violations",
+        "native_items": 1818,
+        "native_cases": 455,
+        "native_decisions": 4826,
+        "native_omissions": {
+          "evidence-over-cap-needs-paged-program": 1198
+        },
+        "assigned_recovery": "1198 evidence-over-cap records assigned existing 32000..120000 long-evidence pipeline; larger cases remain explicit paging work",
+        "pending_source_forms": "QA/RL files await target/reward schema review, not silently included",
+        "certificate_limit": "Static plumbing replay only, not independently verified research answer or model Neuralese lift"
+      },
+      "derived_from": [
+        "external-expansion-deepdive-handoffs-20261015-v1"
+      ],
+      "license": "Apache-2.0 from pinned D31 acquisition card"
     }
   ],
   "coverage_backlog": [

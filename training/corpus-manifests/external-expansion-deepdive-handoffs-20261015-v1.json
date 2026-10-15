@@ -1,0 +1,25 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-deepdive-handoffs-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/external-expansion-deepdive-handoffs-20261015-v1",
+  "files": [
+    {
+      "path": "admission-review.json",
+      "bytes": 910,
+      "sha256": "20f131523458b6d8a068dc531db7335e90cc1541b2a6cd30cb83f55842dc4feb"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 2473,
+      "sha256": "a92f79a73f463ba10ff41b88ac3ec4a00a136437164b4f12049061d0890eb908"
+    },
+    {
+      "path": "trajectory_continuation_research.port-records.jsonl",
+      "bytes": 189809991,
+      "sha256": "b862521a50231faa9eda09cec8bb8f4eedcfa796e3433044fb0511b79bda91f7",
+      "lines": 3016
+    }
+  ],
+  "bytes": 189813374
+}
