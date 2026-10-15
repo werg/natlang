@@ -197,9 +197,6 @@ world.certificate()`;
     const children = playable ?
       plan.map((command, k) => ({ match: `step: ${k},`, calls: [['eval', { code: `world.act(${JSON.stringify(command)})` }]], value: { step: k + 1, last: command } })) :
       Array.from({ length: 12 }, (_, k) => ({ match: `step: ${k},`, calls: [['eval', { code: 'world.look()' }]], value: { step: k + 1, last: 'looked around; the needed object is not here' } }));
-    children.push({ match: 'An iterative process', value: playable ?
-      { verdict: 'continue', reason: 'Each step makes progress toward the task.' } :
-      { verdict: 'divergent', reason: 'The steps keep looking around without finding the object the task needs; nothing changes.' } });
     return {
       ...record,
       id: record.id.replace(':textworld_quest:', ':textworld_iterate:'),
@@ -208,14 +205,14 @@ world.certificate()`;
         sketch: 'the state is { step: number, last: string }; the step is an nl function that looks around and carries out the ' +
           'single most useful command with world.act, returning step + 1 and what happened; stop when world.certificate() is not null.',
         pair_group: record.curriculum.pair_group && `${record.curriculum.pair_group}:iterate`,
-        minimum_sequence: ['define an nl step that acts once in the world', 'run it with iterateOn until the certificate appears', playable ? 'return the certificate' : 'report the blocker when the loop is stopped'],
+        minimum_sequence: ['define an nl step that acts once in the world', 'run it with iterateOn until the certificate appears', playable ? 'return the certificate' : 'report the blocker after finite exploration without a certificate'],
         reference: { root: playable ?
           [['eval', { code: `const task = ${JSON.stringify(task)};\n${loop}`, finish: true }]] :
           [evalCall(`const task = ${JSON.stringify(task)};\n${loop}`),
             blockedCall('The loop made no progress: the object the task needs is nowhere in the world.')], children,
-          // The progress review's divergent verdict stops the loop by failing that eval (iteration diverged): the one
-          // expected failed action before the blocked report, as in actor.mjs's impossible variant.
-          failures: playable ? 0 : 1 } },
+          // The structurally bounded missing-object loop finishes cleanly at its
+          // exploration horizon; the next action reports the blocker.
+          failures: 0 } },
       semantics: { ...record.semantics, files: { ...record.semantics.files,
         'play_quest.nl': record.semantics.files['play_quest.nl'].replace('When the task is accomplished', TEXTWORLD_ITERATE) } },
     };

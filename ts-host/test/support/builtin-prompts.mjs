@@ -4,7 +4,7 @@
  * recording driver. Their prompt requests remain pinned to the base commit. The prompt-piece registry at the end
  * tracks its current scope metadata and registered variants for soft substitution and program-header rendering.
  */
-import { createNatlangRuntime, iterateOn } from '../../dist/runtime/node.js';
+import { createNatlangRuntime, defaultProgressJudge, iterateOn } from '../../dist/runtime/node.js';
 import { defineNatlang } from '../../dist/runtime/callable.js';
 import { promptPieces } from '../../dist/native/system-prompts.js';
 import { judge } from '../../dist/calls/judge.js';
@@ -35,7 +35,8 @@ export async function renderBuiltinPrompts() {
   {
     const { requests, driver } = recorder(() => ok({ verdict: 'continue', reason: 'still improving' }));
     const runtime = createNatlangRuntime({ model: driver });
-    await runtime.run(() => iterateOn(n => n + 1, 0).withLimit({ maxSteps: 11 }).until(n => n >= 11));
+    await runtime.run(() => iterateOn(n => n + 1, 0).checkProgress(defaultProgressJudge)
+      .withLimit({ maxSteps: 11 }).until(n => n >= 11));
     out.progressJudge = requests;
   }
   // The stopping condition's note: the initial state, then a state unchanged over steps.

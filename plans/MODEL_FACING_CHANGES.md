@@ -595,3 +595,7 @@ The semantic-world trial subsequently closed 48/48: 46 exact, 11 exact with
 process pass, and 35 exact with child literal or regex bypass. Two cases failed
 the file and answer oracle. It is not adopted or admitted to training. See the
 per-case `quality-comparison.json` and the decision in the decomposition plan.
+
+### 2026-10-15 — Structurally bounded iteration progress
+
+Seed52106 exposed a false default progress-judge `divergent` verdict after ten finite scan steps: the cursor advanced, while a hit accumulator stayed flat. The runtime now treats a caller-supplied finite `maxSteps` or decreasing `withMeasure` as sufficient structural termination and skips only the default semantic progress judge; explicit custom judges still run. This removes a misleading model-facing error and one extra model call in that situation. **Measurement debt:** 0/48 matched live executor samples for the bounded-iteration behavior; compare in the next teacher window before claiming a model success-rate lift. The exact regression test covers a 15-step scan with a flat accumulator under both structural forms.
