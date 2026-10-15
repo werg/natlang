@@ -131,6 +131,7 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert info['native_state']['consumption_modes'] == [
             'exact-native-state', 'best-effort-text-retokenization']
         assert {'native.text-write', 'native.init-body'} <= set(info['capabilities'])
+        assert {'decide', 'score'} <= set(info['capabilities'])
         placeholder = post_path('/v1/neuralese/native-states/write-text',
                                 {'text': 'placeholder body', 'type': 'Neuralese<string>'})
         assert placeholder['id'].startswith('nzs1_')
@@ -148,6 +149,21 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         literal_record = engine.store.get_native_state(literal['id'])
         assert roles.produce_open not in literal_record.block.token_ids.tolist()
         assert literal_record.block.text == 'keep <|neuralese_produce|> literal'
+
+        from natlang_neuralese.serve.grad import GradSession
+        monkeypatch.setattr(GradSession, '_target_items', lambda _self, _messages, _tools, target:
+            ([('tok', 4)], [('tok', int(target['content'][1:]))]))
+        decision_body = {'messages': [{'role': 'user', 'content': 'choose'}],
+                         'options': ['t5', 't6']}
+        single = post_path('/v1/neuralese/decide', decision_body)
+        batch = post_path('/v1/natlang/score', {'items': [
+            {'messages': decision_body['messages'], 'continuations': decision_body['options']},
+            {'messages': decision_body['messages'], 'options': []}]})
+        assert single['tokens'] == [1, 1]
+        assert len(single['log_probs']) == 2 and all(torch.isfinite(torch.tensor(v)) for v in single['log_probs'])
+        assert batch['results'][0]['tokens'] == single['tokens']
+        assert max(abs(a - b) for a, b in zip(batch['results'][0]['log_probs'], single['log_probs'])) < 1e-6
+        assert 'error' in batch['results'][1]
         initialized = post_path('/v1/neuralese/native-states/init-body', {
             'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': 'before '},
                 {'type': 'native_state', 'id': placeholder['id']}, {'type': 'text', 'text': ' after'}]}],

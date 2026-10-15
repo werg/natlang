@@ -85,7 +85,7 @@ CAPABILITIES = sorted([
     "decide", "embed", "encode", "grad", "grad.order2", "guidance", "guidance.check", "init-body", "optim", "parts.value-type",
     "native.text-write", "native.init-body", "render", "score", "store", "store.owners", "store.native-state", "template", "template.argument-path", "template.value-type", "view", "write"])
 NATIVE_CAPABILITIES = sorted([
-    "chat", "chat.stream", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state",
+    "chat", "chat.stream", "decide", "score", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state",
     "store.owners", "template", "template.argument-path", "template.value-type", "view"])
 NATIVE_CAPABILITY_GAPS = sorted(set(CAPABILITIES) - set(NATIVE_CAPABILITIES))
 
@@ -295,7 +295,6 @@ def make_handler(engine: Engine):
                         "/v1/neuralese/adapters": "adapters.create", "/v1/neuralese/embed": "embed",
                         "/v1/neuralese/write": "write",
                         "/v1/neuralese/init_body": "init-body", "/v1/neuralese/encode": "encode",
-                        "/v1/natlang/score": "score", "/v1/neuralese/decide_many": "decide",
                     }.get(self.path)
                     if unavailable:
                         return self._unavailable(unavailable)
@@ -323,10 +322,16 @@ def make_handler(engine: Engine):
                         return self._json(200, GradSession(engine).run(body))
                 if self.path == "/v1/neuralese/decide":
                     body = self._object()
+                    if getattr(engine, "native_state_enabled", False):
+                        from .native_learning import decide_native
+                        return self._json(200, decide_native(engine, body))
                     with grad_lock:
                         return self._json(200, decide(engine, body))
                 if self.path in ("/v1/natlang/score", "/v1/neuralese/decide_many"):
                     body = self._object()
+                    if getattr(engine, "native_state_enabled", False):
+                        from .native_learning import decide_many_native
+                        return self._json(200, decide_many_native(engine, body))
                     with grad_lock:
                         return self._json(200, decide_many(engine, body))
                 if self.path == "/v1/neuralese/optim":
