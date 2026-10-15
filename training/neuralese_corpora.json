@@ -108151,6 +108151,65 @@
       "trace_admission": false,
       "training_admission": true,
       "training_admission_reason": "5908 unchanged good graphs/model retained;571 exact source-bound unqualified targets withdrawn using the existing native materializer: failed/unexecuted proposals, failed child results, unauthenticated success return or absent original response. Complete original captured contexts remain in retained graphs. All retained graphs parsed and bad ID sets are disjoint. This does not erase consumed exposure or reset optimizer/RNG."
+    },
+    {
+      "id": "external-expansion-evidence-terminal-full-native-graphs-20261015-v1",
+      "owner": "dgx",
+      "path": "runs/external-expansion-evidence-terminal-native-graphs-20261015-v1/full",
+      "include": [
+        "lfm25/receipt.json",
+        "mellum21/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst"
+      ],
+      "source_class": "static-role-aware-native-state-graph-conversion-of-admitted-evidence-terminal-full-turn-render",
+      "split": "Exact source full-view split; all 17,048 documents are train, and the held program-header/whole-trajectory views remain separate.",
+      "admission": "17,048 source rows converted for each actual model tokenizer into complete ordinary-text one-node graphs. Assistant suffix boundaries and lower-weight context are preserved; this bounded full-view sample contains no held rows and infers no producer/consumer edges.",
+      "training_admission": true,
+      "training_admission_reason": "Derived from the training-admitted external-expansion-evidence-terminal-native-20261015-v2-render. Source compressed SHAs, output SHAs, row counts, source/expanded tokenizer fingerprints, source identity and split are recorded in the per-model conversion receipts; independent native graph parser and exact source-row comparison are required before registration.",
+      "derived_from": [
+        "external-expansion-evidence-terminal-native-20261015-v2-render"
+      ],
+      "license": "Inherited from the admitted rendered source corpus; owner accepts all licenses.",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "source_sha256": "7f75991fdfa0dccb6650f92e1665891e1bc5d5fe4dd967c2ceb3ee51b446890e",
+            "expanded_tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+            "train": {
+              "rows": 17048,
+              "sha256": "9de1a1965884fe273427c4b862c2039e798382640e0f8fc8c8a956496016e453"
+            },
+            "test": {
+              "rows": 0,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          },
+          "mellum21": {
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "source_sha256": "fd50c0c896231991121643e726d105d7b8c4567ad7dfcc4f620db015b085b80f",
+            "expanded_tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f",
+            "train": {
+              "rows": 17048,
+              "sha256": "e7655bbafc5d8dc2dd7a07094738c68fb47ab80b4b0cc32498d26283bb328d30"
+            },
+            "test": {
+              "rows": 0,
+              "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+            }
+          }
+        }
+      },
+      "manifest": "training/corpus-manifests/external-expansion-evidence-terminal-full-native-graphs-20261015-v1.json",
+      "source_bindings": {
+        "render_corpus_id": "external-expansion-evidence-terminal-native-20261015-v2-render",
+        "render_manifest_sha256": "4a4bfb24066ceb4411a6e23afe0705674e069e473446d1e407027e6a69262822",
+        "lfm_receipt_sha256": "60f0de245a549a0a774cf67f96ba29fcded048ebcf064d55ae7da88376e6bf27",
+        "mellum_receipt_sha256": "00718eb2358a93464ad25dd015ba675c5cc5ef4432f8c1270be21fa9664350d9"
+      }
     }
   ],
   "coverage_backlog": [
