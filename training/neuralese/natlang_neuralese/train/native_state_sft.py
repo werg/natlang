@@ -66,10 +66,34 @@ class NativeGraphSource:
     """
     def __init__(self, path, tokenizer_fingerprint, *, required_split):
         from ..data.native_graph import parse_graph
+        from ..common import row_index
+        from ..common.hashing import canonical_json_sha256_hex
         self.path = Path(path)
         before = self.path.stat()
         self.tokenizer_fingerprint = tokenizer_fingerprint
         self.required_split = required_split
+        self.file_sha256 = sha256_file_hex_cached(self.path)
+        package = Path(__file__).resolve().parents[1]
+        policy = canonical_json_sha256_hex({name: sha256_file_hex_cached(package / name) for name in (
+            'data/native_graph.py', 'model/shared_state.py', 'train/native_state_sft.py',
+            'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')})
+        key = {'source_sha256': self.file_sha256, 'tokenizer': tokenizer_fingerprint,
+               'split': required_split, 'policy_sha256': policy}
+        index_path = row_index.entry_path('native-graphs', canonical_json_sha256_hex(key))
+        cached = row_index.load(index_path)
+        if (cached and cached.get('key') == key and isinstance(cached.get('entries'), list)
+                and cached['entries']
+                and cached.get('metadata_sha256') == canonical_json_sha256_hex(cached['entries'])):
+            self.entries = cached['entries']
+            self.bindings = {entry['id']: entry['binding'] for entry in self.entries}
+            self.groups = {group for entry in self.entries for group in entry['groups']}
+            after = self.path.stat()
+            if (before.st_size, before.st_mtime_ns, before.st_ino) != (after.st_size, after.st_mtime_ns, after.st_ino):
+                raise ValueError(f'{self.path}: source changed while loading graph index')
+            self.file_binding = (after.st_size, after.st_mtime_ns, after.st_ino)
+            print(json.dumps({'kind': 'native_graph_index_cache', 'hit': True,
+                              'path': str(self.path), 'rows': len(self.entries)}), flush=True)
+            return
         self.entries = []
         self.bindings = {}
         self.groups = set()
@@ -93,7 +117,8 @@ class NativeGraphSource:
         if (before.st_size, before.st_mtime_ns, before.st_ino) != (after.st_size, after.st_mtime_ns, after.st_ino):
             raise ValueError(f'{self.path}: source changed during streaming graph validation')
         self.file_binding = (after.st_size, after.st_mtime_ns, after.st_ino)
-        self.file_sha256 = sha256_file_hex_cached(self.path)
+        row_index.save(index_path, {'key': key, 'entries': self.entries,
+            'metadata_sha256': canonical_json_sha256_hex(self.entries)})
 
     def __len__(self):
         return len(self.entries)
@@ -575,9 +600,8 @@ def main(argv=None):
             stable = tuple(key for key in stable if key not in {'objective', 'batch_graphs', 'batch_tokens'})
         if any(previous.get(key, 0 if key == 'batch_tokens' else None) != training_identity.get(key) for key in stable):
             raise ValueError('native SFT continuation changes model/held/optimizer/schedule identity')
-        old_optimizer_options = previous.get('optimizer_options') or {}
-        if old_optimizer_options.get('latent_ns') != args.latent_ns:
-            raise ValueError('native SFT continuation changes Muon update algebra; declare an optimizer migration')
+        # MuonSR retains its constructor's NS variant on state restoration;
+        # switching the update approximation preserves compatible moment state.
         if not (parent_continuation and args.objective_continuation):
             prior_bindings = resume.get('source_row_bindings') or {}
             appended_ids = append_only_rows(prior_bindings, source_row_bindings, label='training-source')

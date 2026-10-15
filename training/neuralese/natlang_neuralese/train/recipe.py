@@ -1265,8 +1265,8 @@ DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'coho
 def direct_windowing_handoffs(old_recipe, new_recipe, out):
     """Declared trainer-supported tuning, preserving each trainer's resume checks."""
     tuning = {'neuralese_direct': DIRECT_WINDOWING_PARAMETERS,
-              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay'),
-              'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay')}
+              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay', 'latent_ns'),
+              'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay', 'latent_ns')}
     def parameters(recipe, stage):
         merged = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
         merged.update(stage.get('parameters', {}))

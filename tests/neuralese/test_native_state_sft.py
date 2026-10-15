@@ -71,6 +71,34 @@ def test_native_graph_source_validates_then_streams_without_retaining_plans(tmp_
     assert all('plan' not in entry for entry in source.entries)
 
 
+def test_native_graph_index_reuses_validation_and_rebuilds_on_corruption_or_new_source(tmp_path, monkeypatch):
+    import json
+    import pickle
+    from natlang_neuralese.data import native_graph
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
+    path = tmp_path / 'graphs.jsonl'
+    path.write_text(json.dumps(graph('a')) + '\n')
+    expected = NativeGraphSource(path, 'tokenizer-sha', required_split='train')
+    parser = native_graph.parse_graph
+    def no_revalidation(*args, **kwargs):
+        raise AssertionError('unchanged validated graph index should be reused')
+    with monkeypatch.context() as patch:
+        patch.setattr(native_graph, 'parse_graph', no_revalidation)
+        cached = NativeGraphSource(path, 'tokenizer-sha', required_split='train')
+        assert cached.entries == expected.entries and cached.receipt() == expected.receipt()
+    cache_file, = (tmp_path / 'cache').glob('native-graphs-*.pkl')
+    with cache_file.open('rb') as stream:
+        broken = pickle.load(stream)
+    broken['entries'][0]['supervised_tokens'] = 1000000
+    cache_file.write_bytes(pickle.dumps(broken))
+    rebuilt = NativeGraphSource(path, 'tokenizer-sha', required_split='train')
+    assert rebuilt.entries == expected.entries
+    path.write_text(path.read_text() + json.dumps(graph('b')) + '\n')
+    expanded = NativeGraphSource(path, 'tokenizer-sha', required_split='train')
+    assert len(expanded) == 2 and list(expanded.iter_from(1))[0].id == 'b'
+    assert native_graph.parse_graph is parser
+
+
 def test_packed_graph_batch_matches_mean_independent_graph_losses_and_gradients():
     import torch
     from torch import nn
@@ -240,12 +268,12 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
     train_path.write_text(json.dumps(row_train) + '\n')
     held_path.write_text(json.dumps(row_held) + '\n')
 
-    def run(out, epochs, continue_from=None, batch_tokens=0, weight_decay=0):
+    def run(out, epochs, continue_from=None, batch_tokens=0, weight_decay=0, latent_ns='quintic'):
         argv = ['--native-graphs', str(train_path), '--held-native-graphs', str(held_path),
             '--out', str(out), '--base', str(base), '--device', 'cpu', '--rank', '2',
             '--epochs', str(epochs), '--eval-every', '1', '--batch-graphs', '1',
             '--dtype', 'float32', '--learning-rate', '1e-3', '--weight-decay', str(weight_decay), '--batch-tokens', str(batch_tokens), '--forward-atol', '1e-4',
-            '--gradient-atol', '1e-5', '--seed', '23']
+            '--gradient-atol', '1e-5', '--seed', '23', '--latent-ns', latent_ns]
         if continue_from is not None:
             argv += ['--continue-from', str(continue_from)]
         assert main(argv) == 0
@@ -278,10 +306,11 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
         equal_state(resumed[section], continuous[section])
     equal_state(resumed['training']['optimizer'], continuous['training']['optimizer'])
     equal_state(resumed['training']['rng'], continuous['training']['rng'])
-    run(split_out, 3, slot, batch_tokens=8, weight_decay=.001)
+    run(split_out, 3, slot, batch_tokens=8, weight_decay=.001, latent_ns='cubic5')
     adapted = torch.load(slot, map_location='cpu', weights_only=False)
     assert adapted['training']['global_step'] == 3
     assert adapted['training']['identity']['batch_tokens'] == 8
+    assert adapted['training']['identity']['optimizer_options']['latent_ns'] == 'cubic5'
     assert any(group.get('weight_decay') == .001 for section in adapted['training']['optimizer'].values()
                if isinstance(section, dict) for group in section.get('param_groups', []))
 
