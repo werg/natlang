@@ -81812,6 +81812,66 @@
         "held_text": {}
       },
       "notes": "Thirty independently item-reviewed exact dataset-workbench parents; 769 native decisions; 5 percent full warm-up sample, all program-header and whole-trajectory views"
+    },
+    {
+      "id": "luna-held-shapes-s52073-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52073-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and semantic/source review",
+      "license": "CC-BY-SA-4.0 (HotpotQA source); source-specific licenses in pinned curriculum",
+      "split": "train only; protected held packet and previous seed source IDs/groups checked; global union held/source-quality filters required",
+      "admission": "CC-BY-SA-4.0 (HotpotQA source); source-specific licenses in pinned curriculum exact accepted roots admitted; 676 native decisions approved; rejected and held decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Exact accepted roots; source review hold and protected source checks; explicit semantic parent holds; native per-decision approval; only approved-turns.jsonl is training input",
+      "review_status": "Seed52073 holds contradictory HotpotQA at source collection, one dataset label boundary and one stalled route trajectory; seed52074 has no additional exact-parent semantic hold",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory, then add to protected union",
+      "notes": "Selection and curation reviews bind immutable source bytes. Independent dataset-workbench review separately registered."
+    },
+    {
+      "id": "luna-held-shapes-s52074-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52074-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and semantic/source review",
+      "license": "CC-BY-SA-4.0 (HotpotQA source); source-specific licenses in pinned curriculum",
+      "split": "train only; protected held packet and previous seed source IDs/groups checked; global union held/source-quality filters required",
+      "admission": "CC-BY-SA-4.0 (HotpotQA source); source-specific licenses in pinned curriculum exact accepted roots admitted; 782 native decisions approved; rejected and held decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Exact accepted roots; source review hold and protected source checks; explicit semantic parent holds; native per-decision approval; only approved-turns.jsonl is training input",
+      "review_status": "Seed52073 holds contradictory HotpotQA at source collection, one dataset label boundary and one stalled route trajectory; seed52074 has no additional exact-parent semantic hold",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory, then add to protected union",
+      "notes": "Selection and curation reviews bind immutable source bytes. Independent dataset-workbench review separately registered."
+    },
+    {
+      "id": "luna-dataset-workbench-s73-s74-audit-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-dataset-workbench-s73-s74-audit-20261015-v1",
+      "include": [
+        "review.json",
+        "REPORT.md"
+      ],
+      "source_class": "Independent source-bound semantic audit of twelve Luna dataset-workbench exact roots",
+      "license": "Project-generated curriculum with source license facts in seed parent corpora",
+      "split": "train-only source parents but audit is review evidence, not training rows",
+      "admission": "Twelve exact roots item-by-item reviewed; 11 semantically approved for separate curation and one held",
+      "training_admission": false,
+      "training_admission_reason": "Review and hold evidence only",
+      "review_status": "Complete independent audit with source hashes and item rationales",
+      "required_conversion": "None for review evidence; approved data curated in seed source corpora",
+      "notes": "No label rewriting; mixed praise/criticism sentiment case held."
     }
   ],
   "coverage_backlog": [
