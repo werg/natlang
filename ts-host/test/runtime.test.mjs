@@ -255,6 +255,16 @@ test('iterateOn reviews progress on fresh sites and stops only on a divergent ve
   assert.ok(reviews.length >= 1 && reviews.every(verdict => verdict === 'continue'), 'a slow but improving run may continue');
 });
 
+test('iterateOn trusts a structural bound without invoking the default semantic progress judge', async () => {
+  const runtime = createNatlangRuntime();
+  const bounded = await runtime.run(() => iterateOn(state => ({ index: state.index + 1, hits: 1 }),
+    { index: 0, hits: 1 }).withLimit({ maxSteps: 15 }).until(state => state.index === 15));
+  assert.deepEqual(bounded, { index: 15, hits: 1 });
+  const measured = await runtime.run(() => iterateOn(state => ({ index: state.index + 1, hits: 1 }),
+    { index: 0, hits: 1 }).withMeasure(state => 15 - state.index).until(state => state.index === 15));
+  assert.deepEqual(measured, { index: 15, hits: 1 });
+});
+
 test('iterateOn keeps per-site statistics when the site has an identity', async () => {
   const statistics = new MemoryIterationStatistics();
   const runtime = createNatlangRuntime({ statistics });

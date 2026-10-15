@@ -137,7 +137,7 @@ def test_held_union_cache_tracks_compressed_relocated_views_and_exact_bytes(tmp_
         directory = union / mode / 'lfm25'; directory.mkdir(parents=True)
         physical = tmp_path / (mode + '.zst')
         payload = json.dumps({'split': 'test', 'source_groups': [mode]}).encode() + b'\n'
-        physical.write_bytes(subprocess.run(['/usr/bin/zstd', '-q', '-c'], input=payload,
+        physical.write_bytes(subprocess.run(['zstd', '-q', '-c'], input=payload,
                                            capture_output=True, check=True).stdout)
         logical = directory / 'text-data.jsonl.zst'; logical.symlink_to(physical); paths.append(physical)
     expected = {'full', 'program-header', 'whole-trajectory'}
@@ -145,7 +145,7 @@ def test_held_union_cache_tracks_compressed_relocated_views_and_exact_bytes(tmp_
     assert groups == expected and len(bindings) == 3
     assert module.held_union_groups(work, union) == (groups, bindings)
     payload = json.dumps({'split': 'test', 'source_groups': ['replacement']}).encode() + b'\n'
-    paths[0].write_bytes(subprocess.run(['/usr/bin/zstd', '-q', '-c'], input=payload,
+    paths[0].write_bytes(subprocess.run(['zstd', '-q', '-c'], input=payload,
                                      capture_output=True, check=True).stdout)
     refreshed, new_bindings = module.held_union_groups(work, union)
     assert refreshed == {'replacement', 'program-header', 'whole-trajectory'}

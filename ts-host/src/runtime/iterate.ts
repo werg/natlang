@@ -3,8 +3,9 @@
  *
  * The step is called sequentially with the current state and fixed arguments; its result is the
  * next state. The stopping predicate is checked on the initial state and after every step. Progress
- * reviews are scheduled from per-site statistics and never stop a run by themselves: only a
- * `divergent` verdict does.
+ * reviews are scheduled from per-site statistics for open-ended loops; a caller's finite step bound
+ * or decreasing measure supplies structural termination instead. A review never stops a run by
+ * itself: only a `divergent` verdict does.
  */
 import { FolderSnapshot } from '../native/scoped-fs.js';
 import { hexDigest } from '../native/hash.js';
@@ -247,6 +248,12 @@ export class Iteration<T> {
     const statsKey = `${siteId}|${stepId}|${doneMeta?.definition.id ?? 'predicate'}`;
     const stats = persistent ? await store.read(statsKey) : undefined;
     const judge = this.judge ?? task.runtime.options.progressJudge ?? defaultProgressJudge;
+    // A caller-supplied finite step bound or decreasing measure already makes
+    // termination structural. The default semantic judge may mistake a
+    // plateaued accumulator for a stuck scan while its cursor advances.
+    // Preserve explicitly configured judges for callers that want review.
+    const semanticReview = this.judge !== undefined || task.runtime.options.progressJudge !== undefined ||
+      (this.limit.maxSteps === undefined && this.measure === undefined);
     const states: T[] = [this.initial];
     const steps: StepRecord[] = [];
     const hashes = new Map<string, number>([[stableHash(this.initial), 0]]);
@@ -359,7 +366,7 @@ export class Iteration<T> {
             'let each continuing step lower it', state, trajectory as never);
         }
         remaining = nextRemaining;
-        if (judge !== 'off' && reviewDue(stats, iteration, activeMs, lastReviewAt)) {
+        if (judge !== 'off' && semanticReview && reviewDue(stats, iteration, activeMs, lastReviewAt)) {
           lastReviewAt = iteration; reviews++;
           const verdict = await runInFrame(frame, () => judge(trajectory, { stepName: stepMeta?.definition.name ?? (this.step.name || 'step'),
             stepInstructions: stepMeta?.definition.body.trim(), predicateInstructions: doneMeta?.definition.body.trim() }));

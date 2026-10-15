@@ -13,7 +13,7 @@ def test_render_parts_stream_reads_relocated_source(tmp_path):
     spec.loader.exec_module(module)
     payload = b'{"id":"one"}\n{"id":"two"}\n'
     physical = tmp_path / 'physical.jsonl.zst'
-    physical.write_bytes(subprocess.run(['/usr/bin/zstd', '-q', '-c'], input=payload, capture_output=True, check=True).stdout)
+    physical.write_bytes(subprocess.run(['zstd', '-q', '-c'], input=payload, capture_output=True, check=True).stdout)
     logical = tmp_path / 'logical.jsonl.zst'
     logical.symlink_to(physical)
     assert b''.join(module.stream([logical])) == payload
