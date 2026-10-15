@@ -30,3 +30,30 @@ patch, and optimizer tensor state without rewriting the parent. Native `/grad`,
 `/optim`, adapter application/creation, second-order execution, and guidance
 remain open until their actual client paths and both-backbone validation land;
 capability denial is not counted as implementation.
+
+The first native `/grad` implementation now accepts
+`natlang.native-gradient-request/1` with a native graph row, explicit
+`model-parameters` or `native-state` target, and the registered `graph-ce`
+objective. It rejects held rows, checks the tokenizer and every imported state
+against the live four-field model identity, computes the shared one-pass graph
+loss, and returns named parameter or consumed KV/hybrid gradients in a stored
+`nnt1_` artifact. It exposes first-order gradients only. Imported embeddings,
+token IDs and positions remain artifact provenance; the graph splice consumes
+the named per-layer KV and finite-convolution tensors. The `/info` surface now
+reports `grad_order: 1` for native models.
+
+TypeScript memory, persistent-file and HTTP stores now preserve the same
+`nnt1_` safetensors format and Python content identity. This is a named tensor
+archive domain; `get()` never turns it into a flat Neuralese value. The
+composite writer now requires the backbone to have been restored from the
+exact manifest parent and rejects parameter-version changes before publishing
+an interface-only patch. An HF base-directory override changes only where the
+shared loader finds base model files; the manifest parent checkpoint remains
+the immutable source of restored weights.
+
+Still open: `/grad` does not yet dispatch `NativePolicyObjective`; `/optim`
+does not yet apply gradients and publish/handoff a new effective checkpoint;
+the HTTP adapter, direct-gradient, higher-order, and guidance contracts are
+not implemented. Their capabilities remain absent for native engines. The TS
+learning client has not been migrated to the new gradient schema. These are
+production gaps, not qualification successes.
