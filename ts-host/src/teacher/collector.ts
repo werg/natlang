@@ -319,7 +319,8 @@ function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<st
   // A row reused before is judged by where it was actually collected, and keeps pointing there.
   const earlier = row.provenance.reused_from as { path: string; provenance: Record<string, unknown> } | undefined;
   const provenance = earlier?.provenance ?? row.provenance, path = earlier?.path ?? found.path;
-  if (!REUSE_KEYS.every(key => canonical(provenance[key] ?? (key === 'collection_role' ? 'teacher' : undefined)) === canonical(expected[key])))
+  if (!REUSE_KEYS.every(key => canonical(provenance[key] ?? (key === 'collection_role' ? 'teacher' : key === 'neuralese_server' ? false : undefined)) ===
+      canonical(expected[key] ?? (key === 'neuralese_server' ? false : undefined))))
     return;
   // Under another turn limit a run sees the same requests as long as no call came near either limit: the model is
   // told how many turns are left from TURN_NOTICE turns before the end. All turns, child calls' too, are counted.
@@ -892,8 +893,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const textNeuralese = config.textNeuraleseEmulation ? createTextNeuraleseEmulation() : undefined;
     const textNeuraleseLibrary = await textNeuralese?.standardLibraryReady;
     const nativeStore = config.neuraleseServer ? new MemoryNeuraleseStore() : undefined;
-    const nativeInfo = config.neuraleseServer ? await (await fetch(config.endpoint!.replace(/\/$/, '') + '/v1/neuralese/info')).json() as
-      { dialects?: string[] } : undefined;
+    const nativeInfo = config.neuraleseServer ? await fetch(config.endpoint!.replace(/\/$/, '') + '/v1/neuralese/info', {
+      ...(config.apiKeyEnv ? { headers: { authorization: 'Bearer ' + process.env[config.apiKeyEnv] } } : {}),
+    }).then(async response => {
+      if (!response.ok) throw new Error('Neuralese server info: HTTP ' + response.status);
+      return await response.json() as { dialects?: string[] };
+    }) : undefined;
     if (config.neuraleseServer && !nativeInfo?.dialects?.[0])
       throw new Error('Neuralese server must declare its value dialect');
     const valueRuntime = nativeStore ? { store: nativeStore, dialect: nativeInfo!.dialects![0]! } : textNeuralese?.runtime;

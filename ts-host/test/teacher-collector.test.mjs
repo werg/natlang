@@ -202,6 +202,7 @@ test('finished rows of an earlier run stand in for the same programs at other in
   const old = [record('kept'), record('stale'), record('migrated')].map((value, index) => ({ index, record: value }));
   await collectBatch(old, config(earlier), async (item, provenance) => row(item, provenance));
   const rows = (await readFile(config(earlier).output, 'utf8')).trim().split('\n').map(JSON.parse);
+  delete rows[0].provenance.neuralese_server; // legacy default text transport remains reusable
   rows[1].provenance.model = 'other-teacher';
   rows[2].provenance.tool_surface_sha256 = 'surface-old'; rows[2].provenance.finish_surface_migration = 'return_result-status/1';
   rows.push({ ...rows[0], task: { program_ir: record('rolled') }, provenance: { ...rows[0].provenance, program_ir_sha256: undefined },

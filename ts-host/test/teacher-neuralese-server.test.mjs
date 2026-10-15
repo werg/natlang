@@ -20,7 +20,9 @@ test('collector carries real server blocks across writer and reader children wit
     'const reader: Neuralese<(prior: Neuralese<string>) => Promise<string>> = nl.with<string>({})`Read the note and answer ok.`;\n' +
     'return await reader(seed);';
   const requests = [];
+  process.env.NATLANG_RL_TEST_KEY = 'fixture-key';
   const server = createServer(async (request, response) => {
+    if (request.headers.authorization !== 'Bearer fixture-key') { response.writeHead(401); response.end(); return; }
     if (request.url === '/v1/neuralese/info') {
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ dialects: ['nd:test@1'], stream: false })); return;
@@ -51,7 +53,7 @@ test('collector carries real server blocks across writer and reader children wit
     const config = { jobs: join(directory, 'jobs'), output: join(directory, 'out.jsonl'), workers: 1,
       modelId: 'real-protocol-fixture', endpoint: `http://127.0.0.1:${server.address().port}`, rootSeed: 42,
       systemPrompt: 'Test.', contextTokens: 8192, toolSurfaceSha256: await defaultToolSurfaceHash(),
-      maxTurns: 8, collectionRole: 'student', neuraleseServer: true };
+      maxTurns: 8, collectionRole: 'student', neuraleseServer: true, apiKeyEnv: 'NATLANG_RL_TEST_KEY' };
     await mkdir(config.jobs, { recursive: true });
     const result = await nativeJobRunner(config)({ index: 0, record }, expectedProvenance(record, config));
     assert.equal(result.outcome.accepted, true, JSON.stringify(result.outcome));
@@ -65,6 +67,7 @@ test('collector carries real server blocks across writer and reader children wit
     assert.equal(result.trajectory.filter(turn => turn.invocation_id).length, 3);
   } finally {
     await new Promise(resolve => server.close(resolve));
+    delete process.env.NATLANG_RL_TEST_KEY;
     await rm(directory, { recursive: true, force: true });
   }
 });

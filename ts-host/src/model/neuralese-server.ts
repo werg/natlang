@@ -228,7 +228,9 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn>) & { neuralese: true; blocks: HttpNeuraleseStore; decide: DecisionScorer } {
   const { store, neuraleseTemperature, neuraleseMaxLength, request: extra, onExchange, onTurn, adapterLoras, owner,
     ...connection } = options;
-  const http = owner === undefined ? connection : { ...connection, headers: { ...connection.headers, [OWNER_HEADER]: owner } };
+  const http = { ...connection, headers: { ...connection.headers,
+    ...(connection.apiKey ? { authorization: 'Bearer ' + connection.apiKey } : {}),
+    ...(owner === undefined ? {} : { [OWNER_HEADER]: owner }) } };
   const remote = new HttpNeuraleseStore(http.endpoint, http.headers);
   const uploaded = new Set<string>();
   // What the server declares (`/v1/neuralese/info`), read once: whether it applies adapters as LoRAs, and whether it
