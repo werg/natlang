@@ -91787,6 +91787,30 @@
         "held_text": {}
       },
       "notes": "LFM/Mellum three-view static CLINC references; 1 ambiguous source program excluded; authored scaffold, not Gemini trajectory"
+    },
+    {
+      "id": "luna-held-shapes-s52094-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52094-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "78 independently reviewed exact accepted roots; 449 approved native decisions out of 715 materialized from 88 exact parents; ten whole-parent process/quality holds and 14 unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v22 source review, independent visible-feed semantic review, protected checks, seven exact child regex/keyword bypass holds, one missing iterateOn hold, two poor child-call detour holds, and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Ten exact-success roots held whole: seven folder reducer child semantic crisp bypasses, one missing iterateOn, and two ticket child-call detours. Eleven rejected roots reviewed; five AG News identities held in v22, two verbose evidence-equivalent Hotpot answers are not DPO negatives.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins v22. Generic action-shape quarantine has no collateral but exact trajectory holds remain authoritative. Materialized using current native status gate and semantic child bypass audit af8ab8d7."
     }
   ],
   "coverage_backlog": [
