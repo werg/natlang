@@ -141,7 +141,10 @@ test('a Neuralese server that declares streaming streams: a written block is one
 
 test('native state parts survive streamed and whole chat-completion turns as runtime markers', async () => {
   const id = 'nzs1_' + 'b'.repeat(52);
-  const message = { role: 'assistant', content: [{ type: 'text', text: 'Used ' }, { type: 'native_state', id }] };
+  const call = { id: 'call_native', type: 'function', function: { name: 'consume',
+    arguments: JSON.stringify({ state: { type: 'native_state', id } }) } };
+  const message = { role: 'assistant', content: [{ type: 'text', text: 'Used ' }, { type: 'native_state', id }],
+    tool_calls: [call] };
   const capture = { schema: 'natlang.native-rl-sampling/1', prompt: [], samples: [], writes: [],
     sampling_law: { temperature: 1, seed: 9, guidance: false, probabilities: 'post-processing-normalized' } };
   const whole = { choices: [{ finish_reason: 'stop', message }], native_state: { blocks: [{ id }] },
@@ -151,6 +154,7 @@ test('native state parts survive streamed and whole chat-completion turns as run
     { onDelta: delta => deltas.push(delta) });
   assert.equal(direct.text, `Used ${nativeStateSentinel(id)}`);
   assert.deepEqual(direct.raw_response.x_natlang_rl_capture, capture);
+  assert.deepEqual(direct.calls, [['consume', { state: { type: 'native_state', id } }]]);
   const streamed = await chatCompletionModelTurn(async (_body, _signal, meta) => (async function* () {
     yield chunk({ content: 'Used ' });
     yield chunk({ content: [{ type: 'native_state', id }] }, null, { native_state: { block: { id } } });

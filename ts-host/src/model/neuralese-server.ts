@@ -261,6 +261,11 @@ function materializeNativeStateSentinels(value: unknown, key?: string): unknown 
     catch { return value; } // preserve malformed input for the server's existing argument error path
   }
   if (typeof value === 'string') return nativeStateSentinelIds(value).length ? nativeStateTextToParts(value) : value;
+  if (Array.isArray(value) && value.length && value.every(part => part && typeof part === 'object' &&
+      (part.type === 'text' && typeof part.text === 'string' ||
+       part.type === 'neuralese' && typeof part.id === 'string' ||
+       part.type === 'native_state' && isNativeStateId(part.id))))
+    return value.flatMap(part => part.type === 'text' ? materializeNativeStateSentinels(part.text) : [part]);
   if (Array.isArray(value)) return value.map(item => materializeNativeStateSentinels(item));
   if (value && typeof value === 'object') {
     const part = value as { type?: unknown; id?: unknown };
