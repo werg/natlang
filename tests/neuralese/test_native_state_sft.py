@@ -74,7 +74,7 @@ def test_native_graph_source_validates_then_streams_without_retaining_plans(tmp_
 def test_native_graph_index_reuses_validation_and_rebuilds_on_corruption_or_new_source(tmp_path, monkeypatch):
     import json
     import pickle
-    from natlang_neuralese.data import native_graph
+    from natlang_neuralese.data import native_graph_schema as native_graph
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path / 'cache'))
     path = tmp_path / 'graphs.jsonl'
     path.write_text(json.dumps(graph('a')) + '\n')
@@ -613,13 +613,13 @@ def test_rotating_held_cadence_preserves_whole_long_graphs_and_final_coverage(tm
     assert result['scope']=='full' and seen[-1]==[0,1,2,3] and coverage['cursor']==0
 
 
-def test_exact_previous_ordinary_index_migration_never_admits_changed_source_or_pair(tmp_path, monkeypatch):
+def test_unbound_historical_index_is_revalidated_before_admission(tmp_path, monkeypatch):
     import json
     from pathlib import Path
     from natlang_neuralese.common import row_index
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
     from natlang_neuralese.train import native_state_sft as trainer
-    from natlang_neuralese.data import native_graph
+    from natlang_neuralese.data import native_graph_schema as native_graph
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
     path=tmp_path/'ordinary.jsonl';row=graph('a')
     path.write_text(json.dumps(row)+'\n')
@@ -633,11 +633,16 @@ def test_exact_previous_ordinary_index_migration_never_admits_changed_source_or_
         parse_graph(row,tokenizer_fingerprint='tokenizer-sha')])['a'],'supervised_tokens':2,'forward_tokens':3}
     row_index.save(row_index.entry_path('native-graphs',canonical_json_sha256_hex(key)),
                    {'key':key,'entries':[entry],'metadata_sha256':canonical_json_sha256_hex([entry])})
-    def forbid(*args,**kwargs):raise AssertionError('exact known admission index should be reused')
+    calls=[]
+    parser=native_graph.parse_graph
+    def record(*args,**kwargs):
+        calls.append(True)
+        return parser(*args,**kwargs)
     with monkeypatch.context() as patch:
-        patch.setattr(native_graph,'parse_graph',forbid)
+        patch.setattr(native_graph,'parse_graph',record)
         source=NativeGraphSource(path,'tokenizer-sha',required_split='train')
-    assert source.entries==[entry] and next(iter(source)).id=='a'
+    assert calls == [True]
+    assert source.entries[0]['binding']==entry['binding'] and next(iter(source)).id=='a'
     row['nodes'][0]['target_weights']=[0,.5,1]
     path.write_text(json.dumps(row)+'\n')
     changed=NativeGraphSource(path,'tokenizer-sha',required_split='train')
@@ -706,3 +711,36 @@ def test_role_bound_source_cache_hits_after_json_roundtrip(tmp_path,monkeypatch,
         second = NativeGraphSource(path,'1'*64,**kwargs)
     assert second.entries == first.entries
     assert second.bindings == first.bindings
+
+
+def test_source_index_tracks_validation_dependencies_without_training_or_kernel_churn(tmp_path, monkeypatch):
+    import json
+    from natlang_neuralese.data import native_sources, native_graph_schema
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path/'cache'))
+    path = tmp_path/'source.jsonl'
+    path.write_text(json.dumps(graph('stable'))+'\n')
+    original_hash = native_sources.sha256_file_hex_cached
+    hashed = []
+    changed = set()
+    def code_hash(file):
+        name = str(file)
+        hashed.append(name)
+        return 'a'*64 if any(name.endswith(suffix) for suffix in changed) else original_hash(file)
+    monkeypatch.setattr(native_sources, 'sha256_file_hex_cached', code_hash)
+    first = NativeGraphSource(path, 'tokenizer-sha', required_split='train')
+    calls = []
+    parser = native_graph_schema.parse_graph
+    def count(*args, **kwargs):
+        calls.append(True)
+        return parser(*args, **kwargs)
+    monkeypatch.setattr(native_graph_schema, 'parse_graph', count)
+    changed.update({'train/native_state_sft.py', 'model/shared_state.py', 'train/native_semantic.py'})
+    second = NativeGraphSource(path, 'tokenizer-sha', required_split='train')
+    assert second.entries == first.entries and not calls
+    assert not any(name.endswith(tuple(changed)) for name in hashed)
+    for dependency in ('data/native_graph_schema.py', 'model/native_graph_plan.py',
+                       'data/native_pair_schema.py', 'data/native_sources.py'):
+        calls.clear()
+        changed.add(dependency)
+        third = NativeGraphSource(path, 'tokenizer-sha', required_split='train')
+        assert calls == [True] and third.entries == first.entries
