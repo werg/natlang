@@ -1,4 +1,19 @@
-# Current supervision update, 2026-10-15 07:45 UTC
+# Current supervision update, 2026-10-15 09:18 UTC
+
+Both existing allocations remain live; no third GPU or sandbox replacement was used.
+
+- LFM: H10080GB, sandbox `7ee701ae-8e56-49d8-b97a-594f7eb33fe9`, trainer138715. Exact15300 model/optimizer/RNG resumed with shared Flash attention and adaptive report-only KL policy. Actual update19034 completed at28,121 supervised tokens/second; task16000 finished1/16 in575.44seconds, versus base0 and previous0. Current inputs remain the historical R8 PH snapshot, pending the protected R11 PH handoff. Full private checkpoint18480 is independently verified:1,149,840,539bytes, SHA `0c95ff6da3574ac7f8d1aef30611a8d8c30de3ae046ab43e6deefcdf8e522a6f`.
+- Mellum: RTX PRO6000 96GB, sandbox `5ffa592c-5f88-4b4f-b3cc-1507ab94a5dc`, trainer37550. Exact3108 model/optimizer/RNG now continues on admitted R11 FULL, one-epoch budget,22032 total planned updates. Actual resumed update3111 completed with finite loss0.0091711 and26622 forward tokens; first-update timing7.60seconds includes startup effects. Prepared-window cache HIT. Task2400 remains5/16 versus inherited base13, unqualified. Full private parent3108 is independently verified:46,821,492,055bytes, SHA `e21f1df8312037c625ebb5497478221375362fe4594e60d7ee50477cd91792f2`.
+
+Mellum's first R11 attempt exited before any update because the epoch-budget guard compared old-data batches against the declared new-data continuation's consumed-update placeholders. Shared fix141a4a8462 validates that continuation prefix and retains exact consumed-batch comparison for epoch-only changes;17 focused tests and quick gate passed. Recipe2361c947a7 reseals the shared repair; no weights, optimizer, RNG or task controls reset. A later shared fixb12301e486 lets continuation planning reuse the same validated prepared-window cache, with equal descriptor/schedule/held identities (17 tests and quick gate passed); it is not hot-applied to the running trainer. The separate newly diagnosed document-level continuation coverage issue is being repaired by the data auditor; original3108 state/data/schedule remain retained so omitted windows can be recovered at a future handoff.
+
+The optional H100 native causal-conv selector is published in a68c8d5d41 with2 focused selector tests and quick gate passed. It preserves Pop's sm89 mapping. The exact sm90 wheel has separate bitwise operator qualification, but is not installed or activated on the frozen live trainer. Broad containing checks use the standing full-check service; no uncompleted full gate is claimed passed.
+
+Data work on spare cloud CPUs: Dolci/Cognitive progressed53/644 native shards with zero OOM. Search/OWL's complete658396-decision graph/native/source archives are privately durable; registration/admission is separate. The first protected E2E cohort is admitted (`neuralese-e2e-cloud-small-protected-20261015-v2`):4221 records/340 whole chains/1180 authenticated edges. Next27-source assembly produced147473 records/11715 chains/55489 edges, but independent reauthentication caught a missing producer/provider receipt in one chain; this cohort is unadmitted while the exact source/scope issue is investigated. Its immutable source archives and explicit omissions remain preserved. All33 source archives are privately durable; both remaining large sources are now streaming restore in job `e2e-big2-restore`, PID159001, spare core5/nice19/zeroCUDA, with archive and per-member SHA verification.
+
+All checkpoint exporters remain active on the same allocations. Next useful handoffs append the shared PH/WT/E2E phases as their protected inputs become available; Mellum checkpoint cadence600 is approved for that handoff to reduce measured checkpoint overhead. No new benchmark is a prerequisite to useful training.
+
+# Historical supervision update, 2026-10-15 07:45 UTC
 
 Mellum is actively training on `5ffa592c-5f88-4b4f-b3cc-1507ab94a5dc`
 (RTX PRO 6000 96GB, sm120). Task2400 finished **5/16**, versus inherited base13
