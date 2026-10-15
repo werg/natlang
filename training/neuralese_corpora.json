@@ -108729,6 +108729,63 @@
         },
         "cross_tranche_id_overlap": 0
       }
+    },
+    {
+      "id": "native-state-semantic-active-cohort-20261016-v2",
+      "owner": "dgx",
+      "path": "runs/native-state-semantic-active-cohort-20261016-v2",
+      "include": [
+        "train-pairs.jsonl.zst",
+        "test-pairs.jsonl.zst",
+        "composition-receipt.json",
+        "append-proof.json",
+        "integrity-proof.json"
+      ],
+      "source_class": "verified-source-bound-native-semantic-active-cohort-append",
+      "split": "57,144 train semantic pairs and 11,278 held/test pairs. Existing 46,899/10,369 active cohort remains the exact byte prefix; appended Big2 source tranche adds 10,245/909 rows.",
+      "admission": "This new finite semantic-refresh view appends the independently admitted Big2 1,000-chain tranche to the complete previous semantic active cohort. The original finite 26,312 train / 9,896 held communication foundation remains the unchanged exact initial prefix and is not expanded by this append. Pair IDs and source groups were checked across the appended boundary; current protection, protected holds, train/held split, both model views, and source edges passed the individual Big2 admission proof. Concatenated Zstandard frames pass integrity checks, and the earlier cohort streams are exact byte prefixes of the new outputs.",
+      "training_admission": true,
+      "training_admission_reason": "The prior active cohort and new Big2 tranche are independently admitted. A ledgered append check verified pair ID disjointness, source-group closure against the prior train/held groups, no overlap with the prior held closure, exact published manifest/input hashes, exact unchanged foundation prefix, byte-preserved prior outputs, and valid concatenated zstd frames. This registration does not claim that the new pairs have been trained.",
+      "derived_from": [
+        "native-state-semantic-active-cohort-20261015-v1",
+        "native-state-big2-dgx-offload-1000-native-graphs-20261016-v1"
+      ],
+      "license_provenance": "Inherited from the constituent admitted source corpora; owner accepts all licenses.",
+      "note": "This is the updated active semantic source for a later continuation/refresh, not a replacement foundation. Preserve prior row exposure credits and the exact initial 26,312/9,896 foundation. The current source recipe must bind this exact view before claiming new semantic-pair exposure.",
+      "source_bindings": {
+        "previous_cohort_manifest_sha256": "fbc5dabe1d0169aa672ffdf9a44983238d1b1d5946dbc105563eccce43c20744",
+        "previous_composition_receipt_sha256": "6e6a85b9982d2610c40626470a20e2a25080749a51017934e3c5fd36721435c6",
+        "new_big2_manifest_sha256": "4ca6a31384be615d1399d4d750f20b27e0ad58069cf317a8ca46d871dad5549c",
+        "big2_independent_validation_sha256": "1588580f26f143164c1bfa5aee622e6f3899858bfd690f1c3559ef487e9cc162",
+        "append_proof_sha256": "5c53dd3a92bc2128bbace39ce38d1a6ac91ca33aa2ebaa570fb385e2336b5c1f",
+        "integrity_proof_sha256": "565c5347b5b53c412c01892279efb2e09e6a88aa433aa2666a83fe73f05b7c55",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "foundation_boundary": {
+          "train_pairs": 26312,
+          "held_pairs": 9896,
+          "train_sha256": "6ec7db27f849afdaf43f45fed23871eac8be87b9873c76e42a640b711d0f20e4",
+          "held_sha256": "ddec24c6036b18db393ccd76f4dd772a3208a587449597eefd3f29c07f1afeea"
+        },
+        "output_bindings": {
+          "train": {
+            "sha256": "f50eaf6b7bb06b3cbd0e3d30d66dcfb2b28698427e8d3c9c0cbb93297b5d6965",
+            "bytes": 278525195,
+            "rows": 57144
+          },
+          "test": {
+            "sha256": "1c837acc68d158f3fa508cc2d20cccfcead2e9990c55f73433cb69580a43e187",
+            "bytes": 41115047,
+            "rows": 11278
+          }
+        },
+        "big2_append_counts": {
+          "train": 10245,
+          "held": 909,
+          "cross_cohort_pair_id_intersections": 0,
+          "new_train_vs_previous_held_group_intersections": 0,
+          "new_held_vs_previous_train_group_intersections": 0
+        }
+      }
     }
   ],
   "coverage_backlog": [

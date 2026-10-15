@@ -1,0 +1,34 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "native-state-semantic-active-cohort-20261016-v2",
+  "owner": "dgx",
+  "path": "runs/native-state-semantic-active-cohort-20261016-v2",
+  "files": [
+    {
+      "path": "append-proof.json",
+      "bytes": 2878,
+      "sha256": "5c53dd3a92bc2128bbace39ce38d1a6ac91ca33aa2ebaa570fb385e2336b5c1f"
+    },
+    {
+      "path": "composition-receipt.json",
+      "bytes": 2441021,
+      "sha256": "76861ed8f609bc084808cc4d47e4d5c1fe206788ec4b1ebf448e9f42f3b41d7b"
+    },
+    {
+      "path": "integrity-proof.json",
+      "bytes": 2221,
+      "sha256": "565c5347b5b53c412c01892279efb2e09e6a88aa433aa2666a83fe73f05b7c55"
+    },
+    {
+      "path": "test-pairs.jsonl.zst",
+      "bytes": 41115047,
+      "sha256": "1c837acc68d158f3fa508cc2d20cccfcead2e9990c55f73433cb69580a43e187"
+    },
+    {
+      "path": "train-pairs.jsonl.zst",
+      "bytes": 278525195,
+      "sha256": "f50eaf6b7bb06b3cbd0e3d30d66dcfb2b28698427e8d3c9c0cbb93297b5d6965"
+    }
+  ],
+  "bytes": 322086362
+}
