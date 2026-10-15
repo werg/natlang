@@ -58,3 +58,9 @@ and every bound external native-state block survive a pending new cohort.
 Built task runtimes bind their dist plus npm manifests and run the actual CLI
 import preflight. A provider never replaces a published runtime file through
 its alias: matching code must already be deployed through the Git archive path.
+
+Large metadata programs use an owned temporary file with an exact SHA check
+before execution, then remove it. This is SDK argument-size plumbing: a full
+compiled-runtime inventory can exceed Linux's single-argument limit even when
+the metadata itself is small. Remote failures retain bounded stdout/stderr in
+the private host receipt directory, never in public logs or source bundles.

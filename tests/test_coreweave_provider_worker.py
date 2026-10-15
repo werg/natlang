@@ -5,11 +5,53 @@ import pytest
 from pathlib import Path
 import subprocess
 import sys
+from types import SimpleNamespace
 
 
 spec = importlib.util.spec_from_file_location('cw_provider_worker', Path(__file__).parents[1] / 'scripts/coreweave/provider_worker.py')
 worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)
+
+
+def test_large_metadata_uses_hash_checked_file_and_removes_it(tmp_path, monkeypatch):
+    directory = tmp_path / 'remote-metadata'
+    monkeypatch.setattr(worker, 'METADATA_ROOT', str(directory))
+    calls = []
+    class Sandbox:
+        def write_file(self, path, data):
+            Path(path).write_bytes(data)
+            return SimpleNamespace(result=lambda **kwargs: None)
+        def exec(self, argv, **kwargs):
+            calls.append(argv)
+            assert len(argv[-1].encode()) < 65536
+            return SimpleNamespace(result=lambda **kw: subprocess.run(
+                [sys.executable, *argv[1:]], capture_output=True, text=True))
+    io = worker.SDKIO({'receipts': str(tmp_path / 'receipts'), 'sandboxes': {}})
+    io.sandbox = lambda sid: Sandbox()
+    code = '# actual large inventory padding\n' * 5000 + '\nprint('+repr('{"verified":true}')+')'
+    assert io.remote('fixture', code) == {'verified': True}
+    assert len(calls) == 3 and not list(directory.glob('*.py'))
+
+
+def test_large_metadata_corruption_fails_before_execution_and_keeps_private_evidence(tmp_path, monkeypatch):
+    directory = tmp_path / 'remote-metadata'
+    monkeypatch.setattr(worker, 'METADATA_ROOT', str(directory))
+    executed = tmp_path / 'should-not-exist'
+    class Sandbox:
+        def write_file(self, path, data):
+            Path(path).write_bytes(data + b'\n# truncated or changed transfer\n')
+            return SimpleNamespace(result=lambda **kwargs: None)
+        def exec(self, argv, **kwargs):
+            return SimpleNamespace(result=lambda **kw: subprocess.run(
+                [sys.executable, *argv[1:]], capture_output=True, text=True))
+    io = worker.SDKIO({'receipts': str(tmp_path / 'receipts'), 'sandboxes': {}})
+    io.sandbox = lambda sid: Sandbox()
+    code = '# inventory\n' * 7000 + '\nfrom pathlib import Path;Path('+repr(str(executed))+').touch()'
+    with pytest.raises(RuntimeError, match='private evidence='):
+        io.remote('fixture', code)
+    assert not executed.exists() and not list(directory.glob('*.py'))
+    evidence = json.loads(next(io.root.glob('metadata-error-*.json')).read_text())
+    assert 'AssertionError' in evidence['stderr']
 
 
 def test_detached_runner_lock_and_receipt_prevent_duplicate_execution(tmp_path):

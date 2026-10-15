@@ -6,6 +6,7 @@ and the existing scoped artifact ferry argv. The native controller owns policy.
 """
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,8 @@ import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cwctl
 from provider_bridge import ProviderBridge, checked_binding, safe_path
+
+METADATA_ROOT = '/work/native-production/shared/bridge-metadata'
 
 
 RUNNER = r'''import pathlib,json,fcntl,os,sys,time,signal
@@ -72,9 +75,35 @@ class SDKIO:
         return self.clients[sid]
 
     def remote(self, sid, code, *, timeout=120):
-        result = self.sandbox(sid).exec(['python', '-c', code], timeout_seconds=timeout).result(timeout=timeout+60)
+        sandbox = self.sandbox(sid)
+        temporary = None
+        if len(code.encode()) > 64 * 1024:
+            temporary = METADATA_ROOT + '/' + uuid.uuid4().hex + '.py'
+            # Large inventory literals otherwise exceed Linux MAX_ARG_STRLEN.
+            self.remote(sid, 'import pathlib;pathlib.Path('+repr(METADATA_ROOT)+').mkdir(parents=True,exist_ok=True)')
+            sandbox.write_file(temporary, code.encode()).result(timeout=120)
+            digest = hashlib.sha256(code.encode()).hexdigest()
+            command = ('import pathlib,hashlib;p=pathlib.Path('+repr(temporary)+');'
+                       'raw=p.read_bytes();assert hashlib.sha256(raw).hexdigest()=='+repr(digest)+';'
+                       'exec(compile(raw,str(p),"exec"))')
+        else:
+            command = code
+        try:
+            result = sandbox.exec(['python', '-c', command], timeout_seconds=timeout).result(timeout=timeout+60)
+        finally:
+            if temporary is not None:
+                try:
+                    self.remote(sid, 'import pathlib;pathlib.Path('+repr(temporary)+').unlink(missing_ok=True)')
+                except Exception:
+                    pass  # Preserve the original SDK failure; no worker ownership is changed.
         if result.returncode:
-            raise RuntimeError('remote provider metadata operation failed; returncode=' + str(result.returncode))
+            evidence = self.root / ('metadata-error-' + uuid.uuid4().hex + '.json')
+            evidence.write_text(json.dumps({'sandbox_id': sid,
+                'code_sha256': hashlib.sha256(code.encode()).hexdigest(),
+                'returncode': result.returncode,
+                'stdout': result.stdout[-65536:], 'stderr': result.stderr[-65536:]}))
+            raise RuntimeError('remote provider metadata operation failed; returncode=' + str(result.returncode)
+                               + '; private evidence=' + str(evidence))
         return json.loads(result.stdout) if result.stdout.strip() else None
 
     def read(self, sid, path):
