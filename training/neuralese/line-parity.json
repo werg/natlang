@@ -51,6 +51,8 @@
    "reason": "held native graph token IDs are separately bound to the Mellum tokenizer with the same protected source groups and split"},
   {"stage": "native_state_sft", "lines": ["mellum"], "key": "parameters.base", "kind": "backbone-inherent",
    "reason": "each production line loads its pinned actual backbone base (QAD LFM2.5 versus Mellum2.1)"},
+  {"stage": "native_state_sft", "lines": ["mellum"], "key": "parameters.dtype", "kind": "backbone-inherent",
+   "reason": "fresh QAD LFM2.5 production uses its pinned full-precision FP32 source; Mellum2.1's pinned source and expert path train in BF16"},
   {"stage": "native_state_sft", "lines": ["mellum"], "key": "parameters.fp8_training", "kind": "backbone-inherent",
    "reason": "Mellum's MoE experts require the shared triton-experts memory path; dense LFM has no experts"},
   {"stage": "direct", "lines": ["mellum"], "key": "inputs.text_data", "kind": "backbone-inherent", "check": "tokenizer_twin",
