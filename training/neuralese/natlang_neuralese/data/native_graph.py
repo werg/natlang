@@ -1,8 +1,9 @@
 """Typed, token-aligned native graph inputs shared by all backbone trainers."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
+import re
 
 import torch
 import torch.nn.functional as F
@@ -20,6 +21,7 @@ class NativeGraphExample:
     tokenizer_fingerprint: str
     plan: object
     target_weights: tuple[float, ...]
+    external_states: dict = field(default_factory=dict)
 
 
 def parse_graph(row, *, tokenizer_fingerprint):
@@ -53,9 +55,16 @@ def parse_graph(row, *, tokenizer_fingerprint):
             producing=tuple(tuple(span) for span in node.get('producing', [])),
             logical_producing=tuple(tuple(span) for span in node.get('logical_producing', []))))
         weights.extend(float(weight) for weight in supervision)
-    plan = compile_graph(nodes)
+    external = row.get('external_states') or {}
+    if (not isinstance(external, dict) or any(not isinstance(name, str) or not name
+            or not isinstance(binding, dict)
+            or not isinstance(binding.get('id'), str) or not re.fullmatch(r'nzs1_[a-z2-7]{52}', binding['id'])
+            or type(binding.get('token_count')) is not int or binding['token_count'] < 1
+            for name, binding in external.items())):
+        raise ValueError('native graph external states need exact content IDs and positive token counts')
+    plan = compile_graph(nodes, external_sizes={name: binding['token_count'] for name, binding in external.items()})
     return NativeGraphExample(row['id'], row['split'], tuple(groups), tokenizer_fingerprint,
-                              plan, tuple(weights))
+                              plan, tuple(weights), external)
 
 
 def text_graph(row, tokenizer, *, tokenizer_fingerprint, source_id, context_weight=0.05):

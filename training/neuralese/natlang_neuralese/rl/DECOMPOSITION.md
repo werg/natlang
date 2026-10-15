@@ -31,6 +31,23 @@ LFM and Mellum; only backbone loading, chat templates and resource sizes differ.
 
 ## Crisp mechanisms and reuse
 
+- Native replacement: `native_replay` verifies actual sampled and forced input
+  coordinates, resolves exact writer occurrences, and compiles the complete
+  episode into one flattened invocation graph. State is the deterministic
+  output of sampled producer tokens, with no separate stochastic latent action.
+  Consumer gradients flow through the aliased producer states in that graph.
+- The native objective uses the shared native trainer's supplied forward output,
+  shared clipped-token arithmetic and shared optimizer/checkpoint lifecycle.
+  It never starts a second backbone forward, recursively replays writers, or
+  instantiates the old projection/GradSession path. Sampling capture /2 records
+  actual forced template inputs separately from policy actions, including
+  forced-only producers. Only actual sampled tokens receive behavior logps.
+- Native actor attestation binds checkpoint, expanded tokenizer, embedding path
+  and architecture. Native and legacy interfaces are explicit alternatives;
+  availability of archived native bytes alone does not qualify an RL learner.
+- The remaining mechanisms below describe the legacy diagnostic path while
+  native stage/recipe/collector integration is completed and independently
+  reviewed; they are not a fallback implementation of native state.
 - `task_rollouts`: exact train-split enforcement, collector queues and the shared
   `classify_case` reward. These are host boundaries and exact verifiers.
 - `grpo`: group statistics, clipped importance weights and existing HTTP gradient

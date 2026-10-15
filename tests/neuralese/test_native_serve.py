@@ -50,6 +50,13 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
             return json.loads(response.read())
 
     try:
+        with urllib.request.urlopen(endpoint + '/v1/neuralese/info', timeout=30) as response:
+            info = json.loads(response.read())
+        binding = info['rl_policy_binding']
+        assert binding['communication'] == 'native-state'
+        assert binding['native_identity'] == engine.native_identity
+        from natlang_neuralese.rl.production import validate_actor_receipts
+        validate_actor_receipts({endpoint: binding}, policy_id=engine.checkpoint_sha256, neuralese_server=True)
         produced = iter([(roles.produce_open, -.1), (5, -.2), (roles.produce_close, -.3), (2, -.4)])
         monkeypatch.setattr(engine, '_native_token', lambda _seq: next(produced))
         reply = post({'messages': [{'role': 'user', 'content': 'write'}],

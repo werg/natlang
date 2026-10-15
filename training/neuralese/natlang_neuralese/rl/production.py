@@ -20,6 +20,35 @@ from ..common.paths import root
 from .task_rollouts import prepare, score
 
 
+def validate_actor_receipts(receipts, *, policy_id, neuralese_server):
+    """Attest native and legacy actors explicitly, without projected-head aliases."""
+    import re
+    if not receipts or any(not receipt or receipt.get('checkpoint_sha256') != policy_id
+                           for receipt in receipts.values()):
+        raise ValueError('RL actor did not attest the requested immutable checkpoint')
+    modes = set()
+    for receipt in receipts.values():
+        mode = receipt.get('communication', 'legacy-projected' if receipt.get('neuralese') else 'text')
+        modes.add(mode)
+        if mode == 'native-state':
+            identity = receipt.get('native_identity') or {}
+            if (receipt.get('schema') != 'natlang.rl-policy-binding/2'
+                    or identity.get('checkpoint_sha256') != policy_id
+                    or any(not isinstance(identity.get(key), str) or not re.fullmatch(r'[0-9a-f]{64}', identity[key])
+                           for key in ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256'))
+                    or not isinstance(identity.get('architecture'), str) or not identity['architecture']):
+                raise ValueError('native RL actor lacks exact checkpoint/tokenizer/embedding provenance')
+        elif neuralese_server and mode != 'legacy-projected':
+            raise ValueError('RL actor did not restore the requested Neuralese communication interface')
+    if len(modes) != 1:
+        raise ValueError('RL replicas disagree on their communication interface')
+    if 'native-state' in modes:
+        identities = [receipt['native_identity'] for receipt in receipts.values()]
+        if any(identity != identities[0] for identity in identities[1:]):
+            raise ValueError('native RL replicas disagree on their exact policy identity')
+    return receipts
+
+
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
             case_seconds=600, max_model_requests=128, max_turns=160):
@@ -55,11 +84,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     def actor_receipts():
         receipts = {url: json.loads(Server(url).get_bytes('/v1/neuralese/info'))
                     .get('rl_policy_binding') for url in endpoints}
-        if any(not receipt or receipt.get('checkpoint_sha256') != policy_id for receipt in receipts.values()):
-            raise ValueError('RL actor did not attest the requested immutable checkpoint')
-        if neuralese_server and any(not receipt.get('neuralese') for receipt in receipts.values()):
-            raise ValueError('RL actor did not restore the requested Neuralese projections')
-        return receipts
+        return validate_actor_receipts(receipts, policy_id=policy_id, neuralese_server=neuralese_server)
     actors = actor_receipts()
     preparation = prepare(SimpleNamespace(cases=Path(cases), out=out, rows=rows, offset=offset,
         group=group, temperature=1., case_seconds=case_seconds,

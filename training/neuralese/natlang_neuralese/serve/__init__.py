@@ -171,4 +171,7 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
                     embedding_weight_sha256=identity['embedding_weight_sha256'])
     engine.native_identity = identity
     engine.native_checkpoint = str(checkpoint)
+    engine.rl_policy_binding = {'schema': 'natlang.rl-policy-binding/2',
+        'checkpoint_sha256': checkpoint_sha256, 'communication': 'native-state',
+        'native_identity': dict(identity)}
     return engine

@@ -8,6 +8,24 @@ from natlang_neuralese.rl import production
 from natlang_neuralese.common.jsonio import write_bytes_durable, write_json_durable
 
 
+def test_native_actor_replica_attestation_binds_actual_embedding_path():
+    from copy import deepcopy
+    identity = {'checkpoint_sha256': '1' * 64, 'tokenizer_fingerprint': '2' * 64,
+                'embedding_weight_sha256': '3' * 64, 'architecture': 'lfm2'}
+    binding = {'schema': 'natlang.rl-policy-binding/2', 'checkpoint_sha256': '1' * 64,
+               'communication': 'native-state', 'native_identity': identity}
+    production.validate_actor_receipts({'a': binding, 'b': deepcopy(binding)},
+                                      policy_id='1' * 64, neuralese_server=True)
+    different = deepcopy(binding)
+    different['native_identity']['embedding_weight_sha256'] = '4' * 64
+    with pytest.raises(ValueError, match='exact policy identity'):
+        production.validate_actor_receipts({'a': binding, 'b': different},
+                                          policy_id='1' * 64, neuralese_server=True)
+    del different['native_identity']['tokenizer_fingerprint']
+    with pytest.raises(ValueError, match='provenance'):
+        production.validate_actor_receipts({'b': different}, policy_id='1' * 64, neuralese_server=True)
+
+
 def test_collect_never_reuses_unbound_completed_results(tmp_path, monkeypatch):
     source = tmp_path / 'cases.jsonl'
     source.write_text(json.dumps({'id': 'train', 'split': 'train'}) + '\n')
