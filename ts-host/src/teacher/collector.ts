@@ -6,6 +6,8 @@ import { mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises
 import { basename, dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { neuraleseServerModelTurn } from '../model/neuralese-server.js';
+import { MemoryNeuraleseStore } from '../native/neuralese-store.js';
 import { openAICompatibleModelTurn } from '../model/openai-compatible.js';
 import { createManagedModelSession } from '../model/local-server.js';
 import { resolveModelChoice } from '../model/config.js';
@@ -89,6 +91,8 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   provider?: string; piOptions?: Record<string, unknown>;
   providerRequestControls?: ProviderRequestControls;
   chatRequestControls?: Record<string, unknown>;
+  /** Native value-channel transport to an explicitly configured Neuralese server. */
+  neuraleseServer?: boolean;
   /** Optional collection-specific maximum wall time for one Pi provider request. */
   providerRequestTimeoutMs?: number;
   /** Optional collection-specific maximum wall time for preparation plus provider turns in one action cycle. */
@@ -205,6 +209,7 @@ export function expectedProvenance(record: ProgramRecord, options: ProvenanceOpt
       vector_semantics: 'deterministic hash stand-in; non-learned', qualification_certificate: false,
       training_admission: false } } : {}),
     transport: options.provider ? 'pi-provider' : 'openai-compatible',
+    neuralese_server: options.neuraleseServer ?? false,
     ...(options.chatRequestControls ? { chat_request_controls: options.chatRequestControls } : {}),
     ...(options.provider ? { provider: options.provider, pi_options: options.piOptions ?? {},
       ...(options.providerRequestControls ? { provider_request_controls: options.providerRequestControls } : {}),
@@ -305,7 +310,7 @@ async function reusableRows(paths: string[]): Promise<Map<string, Array<{ row: T
 }
 /** Truncation notes from before cutoff.ts: read_page page markers, CUT OFF previews, comment cut-offs, char counts. */
 const RETIRED_CUT_OFFS = /shown; read_page\(|CUT OFF: only the beginning|\/\* cut off:|more \(read to see\)|\(\d+ chars\)|more fields \(read to see\)/;
-const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'seeded_handoff_version', 'execution_policy_version', 'data_quality_version', 'file_content_comparison_version', 'answer_comparison_version', 'counter_loop_policy_version', 'runtime_contract_version', 'trajectory_link_version', 'judge', 'text_neuralese_transport'];
+const REUSE_KEYS = ['program_ir_sha256', 'model', 'collection_role', 'seeded_handoff_version', 'execution_policy_version', 'data_quality_version', 'file_content_comparison_version', 'answer_comparison_version', 'counter_loop_policy_version', 'runtime_contract_version', 'trajectory_link_version', 'judge', 'text_neuralese_transport', 'neuralese_server'];
 /** Turns before the limit at which the model is first told how many are left (native/agent.ts). */
 const TURN_NOTICE = 4;
 function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<string, unknown>,
@@ -848,6 +853,8 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     if (config.apiKeyEnv && !process.env[config.apiKeyEnv])
       throw new Error(`teacher API key environment variable ${config.apiKeyEnv} is unset`);
   }
+  if (config.neuraleseServer && (!config.endpoint || config.provider || config.textNeuraleseEmulation))
+    throw new Error('real Neuralese collection requires an endpoint and excludes text emulation/Pi');
   if (config.textNeuraleseEmulation && (config.collectionRole ?? 'teacher') !== 'teacher')
     throw new Error('text Neuralese emulation is available only for explicit teacher collection');
   if (config.judgeModel && (!config.judgeModel.modelId ||
@@ -884,6 +891,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     const placeOf = callMatcher(handoff?.openings ?? []);
     const textNeuralese = config.textNeuraleseEmulation ? createTextNeuraleseEmulation() : undefined;
     const textNeuraleseLibrary = await textNeuralese?.standardLibraryReady;
+    const nativeStore = config.neuraleseServer ? new MemoryNeuraleseStore() : undefined;
+    const nativeInfo = config.neuraleseServer ? await (await fetch(config.endpoint!.replace(/\/$/, '') + '/v1/neuralese/info')).json() as
+      { dialects?: string[] } : undefined;
+    if (config.neuraleseServer && !nativeInfo?.dialects?.[0])
+      throw new Error('Neuralese server must declare its value dialect');
+    const valueRuntime = nativeStore ? { store: nativeStore, dialect: nativeInfo!.dialects![0]! } : textNeuralese?.runtime;
     const session = config.provider ? createManagedModelSession(controlledProviderProfile(config.provider,
       config.modelId, config.piOptions, config.providerRequestControls)) : undefined;
     const judgeConfig = config.judgeModel;
@@ -967,7 +980,10 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
             { onProgress: progress => logProviderStreamProgress('teacher', config.provider!, config.modelId, requestOrdinal,
               sha256(canonical(Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'invocation_id')))), progress) });
         } });
-    } : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
+    } : config.neuraleseServer ? neuraleseServerModelTurn({ endpoint: config.endpoint!, model: config.modelId,
+      store: nativeStore, owner: randomUUID(),
+      ...(config.apiKeyEnv ? { apiKey: process.env[config.apiKeyEnv] } : {}),
+      request: config.request }) : openAICompatibleModelTurn({ endpoint: config.endpoint!, model: config.modelId,
       chatCompletionsUrl: config.chatCompletionsUrl,
       ...(config.apiKeyEnv ? { apiKey: process.env[config.apiKeyEnv] } : {}),
       request: config.request, onRequestStart: recordHttpTransportStart });
@@ -1263,13 +1279,13 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       }
       trajectory.push(trajectoryTurn(request, response));
       return response;
-    }, textNeuralese ? { neuralese: true } : {});
+    }, valueRuntime ? { neuralese: true } : {});
     let run: ProgramRun;
     try { run = await (config.execution?.run ?? executeProgram)(item.record, driver,
       { ...config, systemPrompt: effectiveSystemPrompt(config), runId: executionRunId, signal: providerParentSignal(),
         onPartialExecution: async snapshot => appendEvidence(partialExecutionRecords({ ...snapshot,
           logical_run_id: runId, execution_attempt_id: partial.execution_attempt_id }), 'execution_interrupted'),
-        ...(textNeuralese ? { neuralese: textNeuralese.runtime } : {}),
+        ...(valueRuntime ? { neuralese: valueRuntime } : {}),
         ...(textNeuraleseLibrary ? { neuraleseService: textNeuraleseLibrary } : {}), ...(judge ? { judge } : {}) }); }
     catch (error) { throw fatalCollectionError ?? fatalProviderDeadline ?? error; }
     throwIfCollectionFatal();

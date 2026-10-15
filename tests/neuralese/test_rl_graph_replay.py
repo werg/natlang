@@ -91,3 +91,28 @@ def test_durable_write_failure_keeps_old_state_and_cleans_pending(tmp_path, monk
     assert path.read_bytes() == before
     assert not (tmp_path / 'state.json.pending').exists()
 
+
+
+def test_equal_block_payloads_use_exact_writer_occurrence_and_reject_ambiguity():
+    from natlang_neuralese.rl.graph_replay import captured_producer_leaves, producer_turns
+    block = 'nz1_' + 'a' * 52
+    def capture(token, *, write=False):
+        return {'schema': 'natlang.rl-sampling/1', 'temperature': 1., 'guided': False,
+            'prompt': [['tokens', [token]]], 'items': [['block', block]] if write else [['tok', 9]],
+            'samples': [] if write else [{'item': 0, 'token': 9, 'logp': -2.}]}
+    turns = [{'invocation_id': call, 'messages': [], 'target': {}, 'sampling': capture(token, write=True)}
+             for call, token in [('first', 1), ('second', 2)]]
+    graph = [{'node': f'{call}#write', 'kind': 'block_write', 'turn': f'{call}#turn1', 'block': block}
+             for call in ['first', 'second']]
+    producers = producer_turns({'turns': turns, 'execution_graph': graph})
+    reader = capture(3)
+    reader['prompt'] = [['block', block]]
+    selected = []
+    class Session:
+        def _rewritten(self, bid, leaves, indexed, memo):
+            selected.append(indexed[bid][1][0])
+            return torch.ones(2, 3)
+    captured_producer_leaves(Session(), reader, producers, read_bindings={block: 'second#write'})
+    assert selected == [('tok', 2)]
+    with pytest.raises(ValueError, match='ambiguous'):
+        captured_producer_leaves(Session(), reader, producers)

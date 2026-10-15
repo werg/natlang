@@ -100,6 +100,7 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
                 target["tool_calls"] = calls
         turns.append({"messages": copy.deepcopy(step["context"]),
                       "tools": copy.deepcopy(step.get("tools_offered") or None), "target": target,
+                      "invocation_id": step.get("invocation_id"),
                       **({'sampling': copy.deepcopy(response['rl_sampling'])} if response.get('rl_sampling') else {}),
                       "replay": {"raw_calls_retained": "raw_calls" in response,
                                  "request_sha256": step.get("request_sha256"),
@@ -208,7 +209,9 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
                             "policy": {"temperature": entry.get("temperature"),
                                 "checkpoint_sha256": preparation.get("policy_checkpoint_sha256"),
                                 "endpoint": entry.get("rl_endpoint")},
-                            "turns": rollout_turns(result), "outcome": outcome,
+                            "turns": rollout_turns(result),
+                            "execution_graph": copy.deepcopy(((result or {}).get("outcome") or {}).get("execution_graph") or []),
+                            "outcome": outcome,
                             "reward": None if reward is None else {"quality": reward},
                             "unscored": outcome if reward is None else None})
         rollouts.append({"task_id": task["id"], "family": task.get("family"), "group": entry["group"],

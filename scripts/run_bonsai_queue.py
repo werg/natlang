@@ -485,11 +485,13 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
               provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low', min_free_mib=0,
               no_observation_seconds=0, max_batch_cases=5, provider_request_config=None,
               server=None, chat_completions_url=None, api_key_env=None, chat_request_config=None,
-              identical_turn_limit=0):
+              identical_turn_limit=0, neuralese_server=False):
     if provider and (server or chat_completions_url or api_key_env):
         raise ValueError('Pi provider and external HTTP controls are mutually exclusive')
     if (chat_completions_url or api_key_env) and not server:
         raise ValueError('external HTTP controls require an explicit server')
+    if neuralese_server and (not server or provider):
+        raise ValueError('Neuralese server collection requires an explicit external server')
     external = bool(server)
     remote = bool(provider or external)
     if chat_request_config is not None:
@@ -617,6 +619,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
         command += ['--provider', provider, '--context-tokens', str(entry.get('context_tokens', 16384)), '--reasoning-effort', reasoning_effort] if provider else [
             '--server', server or 'http://127.0.0.1:8081']
         if external:
+            if neuralese_server:
+                command += ['--neuralese-server']
             command += ['--context-tokens', str(entry.get('context_tokens', 16384)), '--kv-tokens', '0']
             if chat_completions_url:
                 command += ['--chat-completions-url', chat_completions_url]
@@ -807,6 +811,7 @@ if __name__ == '__main__':
     parser.add_argument('--server', help='explicit external HTTP server; skips local Bonsai health polling')
     parser.add_argument('--chat-completions-url', help='exact external completion URL, including its API path')
     parser.add_argument('--api-key-env', help='environment variable name only; never pass a key value')
+    parser.add_argument('--neuralese-server', action='store_true', help='use native value-channel server transport')
     parser.add_argument('--chat-request-config', type=Path, help='external HTTP sampling controls passed unchanged to the collector')
     parser.add_argument('--provider-request-config', type=Path, help='explicit provider request controls passed unchanged to the collector')
     parser.add_argument('--model-concurrency', type=int, help='global request cap, including children (local: 4; provider: 1)')
@@ -838,4 +843,4 @@ if __name__ == '__main__':
               args.model_concurrency, args.execution_plans, args.reasoning_effort, args.min_free_mib,
               args.no_observation_seconds, args.max_batch_cases, args.provider_request_config,
               args.server, args.chat_completions_url, args.api_key_env, args.chat_request_config,
-              args.identical_turn_limit))
+              args.identical_turn_limit, args.neuralese_server))

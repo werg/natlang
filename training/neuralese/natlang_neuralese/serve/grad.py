@@ -751,16 +751,24 @@ class GradSession:
     def _rewritten(self, block_id: str, leaves: dict, produced: dict, memo: dict, visiting: tuple = ()):
         """The block re-written from its producing turn with gradient, or None when that turn's context does not
         depend on an argument (the stored block is then exact and constant)."""
-        if block_id in memo:
-            return memo[block_id]
+        producer, prompt, reply, at = produced[block_id]
+        memo_key = (block_id, producer.get('graph_turn')) if producer.get('graph_turn') else block_id
+        if memo_key in memo:
+            return memo[memo_key]
         from ..train.execution import unroll_write
 
-        producer, prompt, reply, at = produced[block_id]
+        dependencies = producer.get('_producer_dependencies', produced)
         context = prompt + reply[:at]
         local = {}
         for inner in dict.fromkeys(self._block_ids(context)):
-            if inner in produced and inner not in leaves and inner not in visiting:
-                value = self._rewritten(inner, leaves, produced, memo, visiting + (block_id,))
+            if inner in dependencies and inner not in leaves:
+                if dependencies[inner] is None:
+                    raise ValueError('ambiguous RL producer dependency requires graph binding')
+                other = dependencies[inner][0]
+                inner_key = (inner, other.get('graph_turn')) if other.get('graph_turn') else inner
+                if inner_key in visiting + (memo_key,):
+                    raise ValueError('cyclic producer replay dependency')
+                value = self._rewritten(inner, leaves, dependencies, memo, visiting + (memo_key,))
                 if value is not None:
                     local[inner] = value
         adapters = producer.get("adapters") or []
@@ -768,7 +776,7 @@ class GradSession:
         depends = getattr(self, 'model_gradients', False) or bool(local) or any(b in leaves for b in self._block_ids(context)) or \
             any(a.get("id") in leaves for a in adapters if isinstance(a, dict))
         if not depends:
-            memo[block_id] = None
+            memo[memo_key] = None
             return None
         backbone, heads = self.backbone, self.heads
         stored = self.engine.lookup(block_id)
@@ -789,8 +797,8 @@ class GradSession:
                 written = unroll_write(backbone, heads, pre, length=max(1, stored.length))
                 rewritten = written.payload[0, :stored.length].float()
         recorded = stored.payload.clone().to(rewritten.device, rewritten.dtype)
-        memo[block_id] = recorded + (rewritten - rewritten.detach())
-        return memo[block_id]
+        memo[memo_key] = recorded + (rewritten - rewritten.detach())
+        return memo[memo_key]
 
     def _term_blocks(self, term: dict) -> list[str]:
         """Blocks a term reads: in its messages (and teacher messages), and in its target before the last."""

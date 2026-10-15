@@ -67,7 +67,8 @@ def validate_rollouts(rollouts, policy_id, *, block_bundle=None):
             capture_items(turn.get('sampling') or {}, require_samples=False)
             if not (turn.get('replay') or {}).get('raw_calls_retained'):
                 raise ValueError('GRPO needs raw sampled calls, not legacy normalized replay')
-            if contains_blocks(turn) and not block_bundle:
+            from .graph_replay import block_ids
+            if (contains_blocks(turn) or any(block_ids(turn))) and not block_bundle:
                 raise ValueError('Neuralese blocks require a durable graph/block replay bundle')
         key = (r['task_id'], r.get('group'))
         groups.setdefault(key, []).append(r)
@@ -86,6 +87,7 @@ def build_documents(rollouts, *, policy_id, block_bundle=None):
         if not stats['spread']:
             continue
         for rollout, advantage in zip(members, advantages):
+            producers = producer_turns(rollout)
             for index, turn in enumerate(rollout['turns']):
                 if not turn['sampling'].get('samples'):
                     continue  # forced-only writer still participates through producer graph
@@ -93,7 +95,7 @@ def build_documents(rollouts, *, policy_id, block_bundle=None):
                                   'messages': turn['messages'], 'tools': turn.get('tools'),
                                   'target': turn['target'], 'advantage': advantage,
                                   'sample': rollout.get('sample'), 'turn': index, 'sampling': turn['sampling'],
-                                  'producers': producer_turns(rollout)})
+                                  'producers': producers, 'read_bindings': producers[index]['read_bindings']})
     return documents
 
 
@@ -134,7 +136,7 @@ class FullPolicyObjective:
         if row.get('sampling'):
             from .sampling import captured_logps
             from .graph_replay import captured_producer_leaves
-            leaves = (captured_producer_leaves(self.session, row['sampling'], row.get('producers') or [])
+            leaves = (captured_producer_leaves(self.session, row['sampling'], row.get('producers') or [], read_bindings=row.get('read_bindings'))
                       if self.spec.get('block_bundle') else {})
             now, _, prediction = captured_logps(self.session, row['sampling'], leaves=leaves, return_predictions=True)
             self.last_predictions = prediction.detach()

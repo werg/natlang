@@ -74,10 +74,28 @@ def restore_bundle(engine, manifest_path, *, policy_id):
 
 
 def producer_turns(rollout):
-    """All recorded policy turns can produce values read by later turns."""
-    return [{'messages': t['messages'], 'tools': t.get('tools'), 'reply': t['target'],
-             **({'sampling': t['sampling']} if t.get('sampling') else {})}
-            for t in rollout.get('turns') or []]
+    """Bind sampled invocation turns to existing execution-graph occurrences."""
+    graph = rollout.get('execution_graph') or []
+    nodes = {node['node']: node for node in graph if node.get('node')}
+    counters, result = {}, []
+    for turn in rollout.get('turns') or []:
+        call = turn.get('invocation_id')
+        counters[call] = counters.get(call, 0) + 1
+        turn_id = f'{call}#turn{counters[call]}'
+        reads, writes = {}, {}
+        for node in graph:
+            if node.get('turn') != turn_id:
+                continue
+            if node.get('kind') == 'block_write':
+                writes[node['block']] = node['node']
+            elif node.get('kind') == 'block_read':
+                sources = [edge['node'] for edge in node.get('inputs', []) if edge.get('block') == node['block']]
+                if sources and sources[0] != 'external':
+                    reads[node['block']] = sources[0]
+        result.append({'messages': turn['messages'], 'tools': turn.get('tools'), 'reply': turn['target'],
+            'graph_turn': turn_id, 'written_nodes': writes, 'read_bindings': reads,
+            **({'sampling': turn['sampling']} if turn.get('sampling') else {})})
+    return result
 
 
 def replay_scores(session, turn, producers=()):
@@ -95,23 +113,52 @@ def replay_scores(session, turn, producers=()):
     return session._score(prompt, target, leaves, write_terms=False)['token_logp']
 
 
-def captured_producer_leaves(session, capture, producers):
+def captured_producer_leaves(session, capture, producers, *, read_bindings=None):
     """Bind writer contexts and read edges to their exact captured coordinates."""
     from .sampling import capture_items
     session.model_gradients = True
-    indexed = {}
-    for producer in producers:
+    candidates, occurrences = {}, {}
+    copies = [dict(producer) for producer in producers]
+    for producer in copies:
         if not producer.get('sampling'):
             raise ValueError('value-channel RL needs exact producer token captures')
         prompt, reply, _ = capture_items(producer['sampling'], require_samples=False)
         for at, (kind, value) in enumerate(reply):
             if kind == 'block':
-                indexed.setdefault(value, (producer, prompt, reply, at))
+                entry = (producer, prompt, reply, at)
+                candidates.setdefault(value, []).append(entry)
+                node = producer.get('written_nodes', {}).get(value)
+                if node:
+                    occurrences[node] = entry
+    def bind(bindings):
+        result = {}
+        for block_id, choices in candidates.items():
+            if block_id in bindings:
+                node = bindings[block_id]
+                if node not in occurrences:
+                    raise ValueError('RL graph references an uncaptured writer occurrence: ' + node)
+                entry = occurrences[node]
+                if entry[2][entry[3]] != ('block', block_id):
+                    raise ValueError('RL graph writer occurrence has a different block')
+                result[block_id] = entry
+            elif len(choices) == 1:
+                result[block_id] = choices[0]
+            elif len({json.dumps(choice[0]['sampling'], sort_keys=True) for choice in choices}) == 1:
+                result[block_id] = choices[0]
+            else:
+                # No silent first-writer wins on content-addressed identical values.
+                result[block_id] = None
+        return result
+    for producer in copies:
+        producer['_producer_dependencies'] = bind(producer.get('read_bindings', {}))
+    indexed = bind(read_bindings or {})
     prompt, target, _ = capture_items(capture)
     memo = {}
     leaves = {}
     for kind, block_id in prompt + target:
         if kind == 'block' and block_id in indexed:
+            if indexed[block_id] is None:
+                raise ValueError('ambiguous RL writer occurrence requires execution graph binding')
             value = session._rewritten(block_id, {}, indexed, memo)
             if value is not None:
                 leaves[block_id] = value

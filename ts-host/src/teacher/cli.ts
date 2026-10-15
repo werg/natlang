@@ -80,6 +80,8 @@ async function main(): Promise<void> {
   if (flags.has('--text-neuralese-emulation') && collectionRole !== 'teacher')
     throw new Error('--text-neuralese-emulation is available only for teacher collection');
   const provider = flags.get('--provider');
+  if (flags.has('--neuralese-server') && (!flags.has('--server') || provider || flags.has('--text-neuralese-emulation')))
+    throw new Error('--neuralese-server requires --server and excludes Pi/text emulation');
   if (provider && flags.has('--server')) throw new Error('--provider and --server cannot be used together');
   if (provider && (flags.has('--chat-completions-url') || flags.has('--api-key-env')))
     throw new Error('external HTTP controls cannot be used with --provider');
@@ -135,6 +137,7 @@ async function main(): Promise<void> {
     ...(!provider && integer(flags, '--kv-tokens', 53_248) > 0 ? { kvTokens: integer(flags, '--kv-tokens', 53_248) } : {}),
     ...(flags.has('--reuse-surfaces') ? { reuseSurfaces: flags.get('--reuse-surfaces')!.split(',').filter(Boolean) } : {}),
     collectionRole: collectionRole as 'student' | 'teacher',
+    ...(flags.has('--neuralese-server') ? { neuraleseServer: true } : {}),
     ...(flags.has('--text-neuralese-emulation') ? { textNeuraleseEmulation: true } : {}),
     ...(judgeModelId ? { judgeModel: { modelId: judgeModelId,
       ...(flags.has('--judge-provider') ? { provider: flags.get('--judge-provider'),
@@ -191,6 +194,7 @@ async function main(): Promise<void> {
     version: 'natlang.teacher_batch.native/1', source: ir, source_sha256: sha256(source),
     range: { start: records[0]?.index ?? 0, count: records.length }, model: config.modelId,
     root_seed: config.rootSeed, tool_schema: NATIVE_TOOL_SCHEMA, context_tokens: config.contextTokens,
+    neuralese_server: config.neuraleseServer ?? false,
     text_neuralese_transport: config.textNeuraleseEmulation ? TEXT_NEURALESE_EMULATION_VERSION : null,
     text_neuralese_prompt_revision: config.textNeuraleseEmulation ? TEXT_NEURALESE_PROMPT_REVISION : null,
     workers: config.workers, completed: result.completed,

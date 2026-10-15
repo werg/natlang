@@ -520,14 +520,15 @@ export class NativeToolAgent {
     const carries = (value: unknown): boolean => typeof value === 'string' ? value.includes('<|neuralese|>') :
       Array.isArray(value) ? value.some(carries) : !!value && typeof value === 'object' &&
         ((value as { type?: unknown }).type === 'neuralese' || Object.values(value).some(carries));
-    if (!carries(response.text) && !carries(response.calls)) return response;
+    const serverBlocks = (response.raw_response?.neuralese as { blocks?: NeuraleseBlockMeta[] } | undefined)?.blocks ?? [];
+    if (!carries(response.text) && !carries(response.calls) && !serverBlocks.length) return response;
     const returnType = session.lam.type.kind === 'lambda' ? formatType(session.lam.type.returns) : undefined;
     const producer = { call_id: session.runtime.currentCallId ?? null, turn,
       ...(returnType ? { result_type: returnType } : {}) };
     const port = this.options.neuralese?.port;
     const expectedReturn = session.lam.type.kind === 'lambda' ? session.env.resolve(session.lam.type.returns) : undefined;
     const returnsString = expectedReturn?.kind === 'prim' && expectedReturn.name === 'string';
-    const written: NeuraleseBlockMeta[] = [];
+    const written: NeuraleseBlockMeta[] = [...serverBlocks];
     const decodeCall = async ([name, args]: [string, Record<string, unknown>]): Promise<[string, Record<string, unknown>]> => {
       const decodedArgs: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(args)) {
@@ -548,7 +549,7 @@ export class NativeToolAgent {
       ...(response.calls === undefined ? {} : { calls: await Promise.all(response.calls.map(decodeCall)) as ModelTurn['calls'] }) };
     // Each block the turn wrote is a node. Stop decisions and distribution parameters come from a writer that reports
     // them (a Neuralese server); the stand-in writer has none.
-    for (const block of written) {
+    for (const block of new Map(written.map(block => [block.id, block])).values()) {
       const reported = (block.producer ?? {}) as Record<string, unknown>;
       graphNode(session.runtime.trace, 'block_write', { call_id: producer.call_id, turn: turnNode ?? '', block: block.id,
         length: block.length, truncated: !!block.truncated, stops: Array.isArray(reported.stops) ? reported.stops : [],
