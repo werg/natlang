@@ -16,9 +16,13 @@ def configure_sdpa_backend(backend='default'):
     return backend
 
 
-def flex_kernel_options(*, float32=False):
+def flex_kernel_options(*, float32=False, query_tokens=None):
     """Decode tiles must divide the shared 128-token sparse mask blocks."""
     options = {'fwd_BLOCK_M': 32, 'fwd_BLOCK_N': 64}
+    # Some Torch decode tuners prune candidates before applying fwd_ overrides.
+    # Pin their initial tiles too for short queries; keep long training autotuned.
+    if query_tokens is not None and query_tokens < 128:
+        options.update(BLOCK_M=32, BLOCK_N=64)
     if float32:
         options['FLOAT32_PRECISION'] = "'tf32x3'"
     return options

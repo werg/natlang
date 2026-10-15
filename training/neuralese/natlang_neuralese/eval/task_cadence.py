@@ -97,6 +97,8 @@ def parse_task_eval(value):
     if spec.get('prompt_rendering') not in (None, 'full', 'program-header'):
         raise ValueError('task_eval.prompt_rendering must be full or program-header')
     spec.setdefault('prompt_rendering', 'full')
+    if spec.setdefault('runtime_failure_policy', 'stop') not in ('stop', 'diagnostic-partial'):
+        raise ValueError('task_eval.runtime_failure_policy must be stop or diagnostic-partial')
     temperature = spec.setdefault('temperature', 0)
     if isinstance(temperature, bool) or not isinstance(temperature, (int, float)) or not 0 <= temperature <= 2:
         raise ValueError('task_eval.temperature must be a number in [0, 2]')
@@ -366,12 +368,12 @@ class TaskEval:
                         row.get('packet_sha256') == self.spec['packet']['sha256'] and
                         row.get('case_indices') == self.spec['cases']):
                     return row
-        summary = self.cadence(step)
+        summary = self.cadence(step, final=True)
         while not summary['eligible']:
-            summary = self.cadence(step)
+            summary = self.cadence(step, final=True)
         return summary
 
-    def cadence(self, step: int) -> dict:
+    def cadence(self, step: int, *, final=False) -> dict:
         """One in-run evaluation for the training loop: the summary of ``run``. An ineligible evaluation or an
         exception from the collector or serving stack is recorded and returned as an ineligible summary, so the next
         cadence evaluates again; ``max_consecutive_failures`` of them in a row raise and stop the run."""
@@ -393,6 +395,12 @@ class TaskEval:
                           'max_consecutive_failures': self.spec['max_consecutive_failures'],
                           'outcome_counts': summary.get('outcome_counts'), 'error': summary.get('error'),
                           'run': summary.get('run')}), flush=True)
+        if not final and partial_runtime_diagnostic(summary, self.spec):
+            print(json.dumps({'event': 'task_eval_runtime_degraded', 'step': step,
+                              'consecutive_failures': failures, 'eligible': False,
+                              'policy': 'diagnostic-partial', 'qualification': 'unchanged; incomplete evaluation'}),
+                  flush=True)
+            return summary
         if failures >= self.spec['max_consecutive_failures']:
             raise RuntimeError(f'task_eval failed {failures} times in a row (last at step {step}: '
                                f'{summary.get("error") or summary.get("outcome_counts")}); see {summary.get("run")}')
@@ -681,6 +689,41 @@ def run_request(request_dir: Path, *, engine_factory=restore_engine) -> dict:
     return summary
 
 
+def task_quality_reasons(summary, spec):
+    """Existing capability comparisons, separate from runtime score eligibility."""
+    successes, reference = summary.get('task_successes'), spec.get('reference_successes')
+    reasons = []
+    if reference is None:
+        reasons.append('base reference_successes unmeasured for this line')
+    elif successes < reference:
+        reasons.append('below the base model')
+    if successes < spec['min_successes']:
+        reasons.append('below min_successes')
+    if summary.get('regressed'):
+        reasons.append('below the previous evaluation minus noise')
+    return reasons
+
+
+def partial_runtime_diagnostic(summary, spec):
+    """Explicit diagnostic continuation; never changes the score or qualification."""
+    if (spec.get('runtime_failure_policy') != 'diagnostic-partial' or summary.get('error')
+            or summary.get('eligible')):
+        return False
+    counts, expected = summary.get('outcome_counts'), summary.get('cases')
+    if (not isinstance(counts, dict) or type(expected) is not int or expected < 1
+            or any(type(n) is not int or n < 0 for n in counts.values())
+            or sum(counts.values()) != expected):
+        return False
+    unscored = counts.get('infrastructure_error', 0) + counts.get('unresolved', 0)
+    known = expected - unscored
+    if not unscored or known <= expected / 2:
+        return False
+    known_counts = {**counts, 'infrastructure_error': 0, 'unresolved': 0}
+    if not accounted({'cases_expected': known, 'outcome_counts': known_counts}):
+        return False
+    return not task_quality_reasons(summary, spec)
+
+
 def task_gate(summary: dict | None, spec: dict | None) -> dict | None:
     """The qualification criterion on the final in-run task evaluation (None when no task eval is declared):
     eligible, at least the base (``reference_successes``) and ``min_successes``, and not below the previous eligible
@@ -693,14 +736,7 @@ def task_gate(summary: dict | None, spec: dict | None) -> dict | None:
     reasons = []
     if not summary.get('eligible'):
         reasons.append('final task evaluation incomplete or with infrastructure errors')
-    if reference is None:
-        reasons.append('base reference_successes unmeasured for this line')
-    elif successes < reference:
-        reasons.append('below the base model')
-    if successes < spec['min_successes']:
-        reasons.append('below min_successes')
-    if summary.get('regressed'):
-        reasons.append('below the previous evaluation minus noise')
+    reasons.extend(task_quality_reasons(summary, spec))
     return {'passed': not reasons, 'reasons': reasons, 'task_successes': successes, 'cases': summary['cases'],
             'reference_successes': reference, 'min_successes': spec['min_successes'],
             'noise_successes': summary.get('noise_successes', spec['noise_successes']),

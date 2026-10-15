@@ -39,3 +39,7 @@ packet remains test-only and is not a training source. Incomplete or invalid
 evaluation runs cannot replace the current best. The task score does not claim
 native-latent writer qualification; it measures only the ordinary text/tool
 serving path of a `direct-writer-pending` artifact.
+
+## Partial runtime failures during legacy diagnostic training — 2026-10-15
+
+Owner-approved diagnostic policy keeps a partial held evaluation unscored and unqualified, preserves its runtime-failure counter, and lets useful optimizer updates continue while its transport repair is assigned. This applies only when more than half the cases have known model outcomes and the observed successes already meet the existing base/minimum/noise comparisons. A collector exception, all/mostly broken requests, or observed quality below those comparisons retains the failure stop. Final evaluation retains its bounded failure behavior and never issues a partial certificate. Policy is these natural-language steps; the shared evaluator verifies exact outcome counts and enforces the selected `runtime_failure_policy` setting. Default behavior remains `stop`; cloud diagnostic recipes declare `diagnostic-partial` explicitly.

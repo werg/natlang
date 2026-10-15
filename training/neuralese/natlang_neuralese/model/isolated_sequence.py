@@ -71,7 +71,7 @@ def branch_attention(qb, kh, vh, kb, vb, start, window_size, pad, scale, *, flex
                      # NGC defaults fp32 matmul to single TF32: on Ada this
                      # loses ~1e-3 against the fp32 SDPA reference. Three TF32
                      # products preserve fp32 accuracy while using tensor cores.
-                     kernel_options=flex_kernel_options(float32=qb.dtype == torch.float32))
+                     kernel_options=flex_kernel_options(float32=qb.dtype == torch.float32, query_tokens=qb.shape[2]))
     outputs = []
     for begin in range(0, steps, 512):
         end = min(begin + 512, steps)
