@@ -17,7 +17,9 @@ from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_f
 from natlang_neuralese.common.jsonio import iter_jsonl_rows, write_json_durable
 
 
-CONTRACT = 'natlang.recorded-continuation-extraction/1'
+CONTRACT = 'natlang.recorded-continuation-extraction/2'
+OUTPUT_CONTRACT = ('Write one JSON object with exactly one key per listed item filename stem '
+                   'and a string answer for each. Preserve all other files.')
 
 
 def ground(row):
@@ -29,6 +31,11 @@ def ground(row):
     semantics = result['semantics']
     expected = semantics['expected']
     task = json.loads(semantics['folder_files']['task.json'])
+    if task.get('output_contract') != OUTPUT_CONTRACT:
+        raise ValueError('recorded extraction requires the declared JSON string-map output contract')
+    if semantics.get('files_oracle', {}).get('compare', 'exact') not in {'exact', 'json-string-record'}:
+        raise ValueError('recorded extraction cannot replace an unrelated file oracle')
+    semantics['files_oracle'] = {'compare': 'json-string-record', 'threshold': 1}
     changed = set()
     for path in task['items']:
         key = Path(path).stem
@@ -59,8 +66,8 @@ def ground(row):
             raise ValueError('recorded child target differs from its exact oracle')
     if len(changed) != len(expected):
         raise ValueError('recorded continuation item/oracle coverage differs')
-    result['id'] += ':recorded-extraction-v1'
-    result['curriculum']['variant'] += '/recorded-extraction-v1'
+    result['id'] += ':recorded-extraction-v2'
+    result['curriculum']['variant'] += '/recorded-extraction-v2'
     result['teacher_derivation'] = {'schema': CONTRACT, 'source_program_id': row['id'],
         'source_program_sha256': canonical_json_sha256_hex(row), 'items': len(changed),
         'claim': 'exact recorded-output extraction; no independent environment-success claim',

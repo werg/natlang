@@ -16,7 +16,7 @@ def source():
     return {'id': 'program:1', 'family': 'curriculum_port_record_calls', 'split': 'train',
         'source_groups': ['session:1'], 'source_ids': ['source:1'],
         'semantics': {'expected': {'item-01': 'Action: go to shelf 4'},
-            'folder_files': {'task.json': json.dumps({'items': ['items/item-01.json']}), 'items/item-01.json': item},
+            'folder_files': {'task.json': json.dumps({'items': ['items/item-01.json'], 'output_contract': module.OUTPUT_CONTRACT}), 'items/item-01.json': item},
             'expected_files': {'items/item-01.json': item}},
         'curriculum': {'variant': 'iterate-records/1', 'reference': {'children': [
             {'source_binding': {'path': 'items/item-01.json', 'sha256': 'old'},
@@ -33,6 +33,7 @@ def test_arbitrary_future_search_becomes_explicit_grounded_extraction_without_re
     assert 'recorded_continuation.assistant_message' in item['request']
     assert json.loads(item['evidence'].split('\n\n')[-1])['recorded_continuation']['assistant_message'] == 'Action: go to shelf 4'
     assert derived['semantics']['expected'] == original['semantics']['expected']
+    assert derived['semantics']['files_oracle'] == {'compare': 'json-string-record', 'threshold': 1}
     assert derived['semantics']['expected_files']['items/item-01.json'] == item_text
     assert derived['curriculum']['reference']['children'][0]['source_binding']['sha256'] == module.sha256_hex(item_text.encode())
     assert derived['source_ids'] == original['source_ids'] and derived['source_groups'] == original['source_groups']
@@ -67,7 +68,22 @@ def test_streamed_campaign_writes_exact_derivative_and_refuses_overwrite(tmp_pat
     out = tmp_path / 'derived'
     receipt = module.prepare(path, out)
     row = json.loads((out / 'cases.jsonl').read_text())
-    assert receipt['rewritten'] == 1 and row['id'].endswith(':recorded-extraction-v1')
+    assert receipt['rewritten'] == 1 and row['id'].endswith(':recorded-extraction-v2')
     assert receipt['cases']['sha256'] == module.sha256_file_hex(out / 'cases.jsonl')
     with pytest.raises(ValueError, match='overwrite'):
         module.prepare(path, out)
+
+
+def test_unrelated_byte_contract_is_not_silently_relaxed():
+    row = source()
+    task = json.loads(row['semantics']['folder_files']['task.json'])
+    task['output_contract'] = 'Write these exact bytes.'
+    row['semantics']['folder_files']['task.json'] = json.dumps(task)
+    with pytest.raises(ValueError, match='declared JSON string-map'):
+        module.ground(row)
+
+
+def test_unrelated_file_verifier_is_not_replaced():
+    row = source(); row['semantics']['files_oracle'] = {'compare': 'csv'}
+    with pytest.raises(ValueError, match='unrelated file oracle'):
+        module.ground(row)

@@ -63,3 +63,11 @@ and mark the derivative's contract and zero independent-world credit. Exact
 reference replay, live teacher collection and downstream admission remain the
 existing mechanisms. No source is silently discarded, no failed earlier sample
 is relabeled, and supplying source targets grants no training admission.
+
+The v2 derivative uses the existing `json-string-record` file verifier for the
+explicit answer-map contract. Its keys and every string character stay exact;
+JSON whitespace/key ordering is not a task requirement, while other source
+files remain byte-checked. This is a corrected exact verifier of the declared
+output, not a new prompt or a relaxation of expected answers. The transformer
+requires that known output contract before changing an inherited byte oracle.
+Historical v1 programs/results remain bound to their original verifier.
