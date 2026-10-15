@@ -38,7 +38,8 @@ def validate_ready(path, requirement):
     receipt = json.loads(path.read_text())
     if receipt.get('schema') != 'natlang.native-training-readiness/1':
         raise ValueError('unsupported native training readiness receipt')
-    if receipt.get('completed') is not True:
+    foundation_boundary = requirement.get('readiness_boundary') == 'communication-foundation'
+    if receipt.get('completed') is not True and not (foundation_boundary and receipt.get('foundation_ready') is True):
         return None
     if receipt.get('model_id') != requirement['model_id']:
         raise ValueError('native readiness model differs from its declared participant')
@@ -72,7 +73,8 @@ def validate_ready(path, requirement):
         raise ValueError('native readiness is missing required production stages')
     report = json.loads(_bound(receipt['training_receipt']).read_text())
     exposure = receipt.get('exposure') or {}
-    if (report.get('completed') is not True or report.get('checkpoint_sha256') != checkpoint['sha256']
+    if ((report.get('completed') is not True and not (foundation_boundary and report.get('foundation_ready') is True))
+            or report.get('checkpoint_sha256') != checkpoint['sha256']
             or exposure.get('consumed_updates', 0) <= 0 or exposure.get('supervised_token_visits', 0) <= 0):
         raise ValueError('native readiness has no bound completed optimizer/data exposure')
     communication = receipt.get('communication_exposure') or {}
@@ -83,6 +85,26 @@ def validate_ready(path, requirement):
             or communication['required_graph_visits'] < communication['graphs']
             or communication['graph_visits'] < communication['required_graph_visits']):
         raise ValueError('native readiness requires complete genuine producer/consumer communication training before VAE')
+    if foundation_boundary:
+        from ..data.native_sources import NativeGraphSource
+        from .native_continuation import communication_foundation
+        declared = NativeGraphSource(_bound(requirement['foundation_sources']), identity['tokenizer_fingerprint'],
+            required_split='train', role_ids=report['model_config']['marker_ids'])
+        foundation = receipt.get('communication_foundation') or {}
+        if foundation != report.get('communication_foundation') or foundation.get('complete') is not True:
+            raise ValueError('native foundation has no exact complete admitted-cohort receipt')
+        rows = foundation.get('rows') or {}
+        expected = communication_foundation(declared,
+            {key: value['graph_visits'] for key,value in rows.items()},
+            epochs=requirement.get('foundation_epochs',1.),
+            trained_bindings={key:value['binding'] for key,value in rows.items() if value.get('admitted_to_training')})
+        if (expected['complete'] is not True or expected['cohort_sha256'] != foundation.get('cohort_sha256')
+                or expected['rows'] != rows):
+            raise ValueError('native foundation did not consume the entire declared admitted communication cohort')
+        obligations = receipt.get('mandatory_sft')
+        if (not isinstance(obligations,dict) or obligations != report.get('mandatory_sft')
+                or obligations.get('schema') != 'natlang.native-sft-progress/1' or not obligations.get('stages')):
+            raise ValueError('native foundation must retain all unfinished mandatory supervised exposure')
     runtime = json.loads(_bound(receipt['runtime_certificate']).read_text())
     if (runtime.get('schema') != 'natlang.native-runtime-certificate/1' or runtime.get('passed') is not True
             or runtime.get('native_identity') != identity or runtime.get('backbone_optimizer_tested') is not True
@@ -105,7 +127,10 @@ def validate_ready(path, requirement):
     # adaptive improvements and complete exposure, not a base-relative barrier.
     return {'model_id': receipt['model_id'], 'readiness': {'path': str(path),
             'sha256': sha256_file_hex_cached(path)}, 'checkpoint': checkpoint,
-            'native_identity': identity, 'stage_id': receipt['stage_id'], 'recipe': receipt['recipe']}
+            'native_identity': identity, 'stage_id': receipt['stage_id'], 'recipe': receipt['recipe'],
+            'readiness_boundary': 'stage-complete' if receipt.get('completed') else 'communication-foundation',
+            'mandatory_sft': receipt.get('mandatory_sft'),
+            'communication_foundation': receipt.get('communication_foundation')}
 
 
 def ready_participants(config):

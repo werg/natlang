@@ -6,7 +6,7 @@ Optimizers are deliberately deferred until the entire joint backward ends.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import itertools
 import math
 
@@ -30,6 +30,8 @@ class SemanticParticipant:
     identity: dict
     optimizer: object = None
     backend: object = None
+    sft_progress: dict = field(default_factory=dict)
+    global_step: int = 0
 
 
 def producer(participant, example, view, *, external_blocks=None, chunk_tokens=128, supervise=True):

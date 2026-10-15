@@ -38,11 +38,11 @@ HANDLERS = {
     # graph files are already admitted and carry explicit split provenance.
     'native_state_sft': {'module': 'natlang_neuralese.train.native_state_sft',
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
-                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs'},
+                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'seed', 'task_eval',
-                             'task_eval_every', 'forward_atol', 'gradient_atol'}, 'result': 'checkpoint.pt'},
+                             'task_eval_every', 'forward_atol', 'gradient_atol', 'communication_foundation', 'refresh_at_checkpoint'}, 'result': 'checkpoint.pt'},
     # Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md): plain target SFT from a base model with the
     # NeuraleseProjection; the TokenChoiceProjection is declared per stage (off in v1).
     # Its data is either prepared text (text_data, the shared declared input of neuralese-direct-v2) or records and
@@ -418,7 +418,7 @@ def native_source_dependencies(path, *, parents=()):
 
 
 def _bind_native_source_dependencies(inputs):
-    for role in ('native_graphs', 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs'):
+    for role in ('native_graphs', 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs'):
         if role in inputs:
             dependencies = native_source_dependencies(inputs[role]['path'])
             if dependencies:
@@ -458,7 +458,7 @@ def stage_input_args(resolved, kind):
         if role in resolved and role in supported:
             args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'native_graphs',
-                 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs',
+                 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs',
                  'rl_block_bundle', 'continue_from', 'continue_identity',
                  'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',

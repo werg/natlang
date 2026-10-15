@@ -113,11 +113,11 @@ def test_actual_backbone_update_reload_and_sparse_target_resume(tmp_path,family,
     # after an intervening draw and reconstructed actor, with identical RNG state.
     req = SimpleNamespace(temperature=.8)
     logits = engine._native_logits(engine._native_forward([4,5],None)['h_final'])
-    first = SimpleNamespace(request=req,logits=logits,rng=torch.Generator().manual_seed(73))
+    first = SimpleNamespace(request=req,logits=logits,rng=torch.Generator().manual_seed(73),bans={},native_own_position=2)
     engine._native_token(first)
     saved_request_rng = first.rng.get_state().clone()
     second = SimpleNamespace(request=req,logits=relocated._native_logits(relocated._native_forward([4,5],None)['h_final']),
-                             rng=torch.Generator().set_state(saved_request_rng))
+                             rng=torch.Generator().set_state(saved_request_rng),bans={},native_own_position=2)
     assert engine._native_token(first)==relocated._native_token(second)
     assert torch.equal(first.rng.get_state(),second.rng.get_state())
     manifest_path = Path(bundle['checkpoint']['resolved'])

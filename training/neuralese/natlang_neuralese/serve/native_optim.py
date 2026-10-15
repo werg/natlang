@@ -135,7 +135,10 @@ def native_optimizer_step(engine, body, owner):
         device = next(updated_model.parameters()).device
         prior_training = getattr(engine,'native_training_state',{})
         rng = prior_training.get('rng') or capture_training_rng_state(device)
+        from ..train.native_continuation import collect_sft_progress
         training = {**{key:value for key,value in prior_training.items() if key.startswith('service_')},
+                    'sft_progress':collect_sft_progress(prior_training),
+                    'global_step':int(prior_training.get('global_step',prior_training.get('step',0)))+1,
                     'rng':rng, 'service_rng_policy':'training-stream-unchanged; chat-stream-per-request',
                     'service_optimizer_step':step,
                     'service_parent_checkpoint_sha256':identity['checkpoint_sha256']}

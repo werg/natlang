@@ -157,6 +157,17 @@ def load_participant(name, binding, config, device):
     model.port.checkpoint_layers = True
     model.train()
     result = SemanticParticipant(model, tokenizer, model_config, identity, optimizer, backend)
+    from .native_continuation import collect_sft_progress
+    result.sft_progress = collect_sft_progress(inherited)
+    result.global_step = int(inherited.get('global_step', inherited.get('step', 0)))
+    if binding.get('readiness'):
+        proof=json.loads(_bound(binding['readiness']).read_text())
+        foundation=proof.get('communication_foundation') or {}
+        if proof.get('foundation_ready') and foundation.get('complete'):
+            frame=result.sft_progress.get(proof['stage_id'])
+            if frame is None:
+                raise ValueError('foundation checkpoint lost its mandatory supervised progress: '+name)
+            frame['completed_foundations']=sorted(set(frame.get('completed_foundations') or [])|{foundation['cohort_sha256']})
     result.continuation_proof = (inherited.get('options') or {}).get('continuation') or {}
     return result
 
@@ -263,6 +274,7 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
         state = {'schema': SHARED_CHECKPOINT_SCHEMA,
             'participants': {name: {'model_config': entry.config, 'model_state': model_state(entry.model),
                 'source_identity': entry.identity, 'optimizer': entry.optimizer.state_dict(),
+                'sft_progress': entry.sft_progress, 'global_step': entry.global_step,
                 'fp8': entry.backend.extra_state() if entry.backend is not None else None}
                 for name, entry in participants.items()},
             'vae_specification': vae.specification(), 'vae_state': vae.state_dict(),
@@ -283,14 +295,22 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
         tokenizers[name] = {'path': str(directory.relative_to(policy.out)),
             'files': {str(path.relative_to(directory)): sha256_file_hex_cached(path)
                       for path in directory.rglob('*') if path.is_file()}}
+    from .native_continuation import progress_obligations, raw_communication_rows
     export = {'schema': 'natlang.native-semantic-adapter/1',
         'checkpoint': {'path': str(policy.slot.resolve()), 'sha256': checkpoint_sha},
         'specification_sha256': canonical_json_sha256_hex(vae.specification()),
         'models': {name: {'native_identity': identity,
+                        'mandatory_sft':progress_obligations(participants[name].sft_progress),
+                        'raw_communication_rows':raw_communication_rows(participants[name].sft_progress),
+                        'marker_ids':list(participants[name].model.marker_ids),
                         'checkpoint': {'path': str(policy.slot.resolve()), 'sha256': checkpoint_sha,
                                        'participant': name}} for name, identity in identities.items()},
         'step': training['step'], 'communication': 'shared-semantic-state-deltas'}
     export['tokenizers'] = tokenizers
+    history=training.get('config_history') or []
+    if history:
+        qualified=history[-1]['config']
+        export['qualified_curriculum']={'config':qualified,'sha256':canonical_json_sha256_hex(qualified)}
     write_json_durable(policy.out/'semantic-adapter.json', export)
     return export
 
@@ -367,6 +387,12 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     train, held = _sources(config, training.get('source_bindings'))
     resolver = ExternalArtifacts(config)
     participants = {name: load_participant(name, binding, config, device) for name, binding in bindings.items()}
+    if all(binding.get('readiness') for binding in bindings.values()):
+        from .native_continuation import qualified_refresh_config,raw_communication_rows
+        qualified_refresh_config({},config_path,{name:{'native_identity':participant.identity,
+            'marker_ids':list(participant.model.marker_ids),
+            'raw_communication_rows':raw_communication_rows(participant.sft_progress)}
+            for name,participant in participants.items()})
     changed_models = set()
     if prior:
         prior_sha = sha256_file_hex_cached(resume)
@@ -393,6 +419,8 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                 with _native_modules({name: participant}):
                     restore_model_state(participant.model, saved['model_state'])
                 participant.optimizer.load_state_dict(saved['optimizer'])
+                participant.sft_progress = saved.get('sft_progress', participant.sft_progress)
+                participant.global_step = saved.get('global_step', participant.global_step)
                 if participant.backend is not None:
                     participant.backend.restore_extra_state(saved['fp8'])
         if changed_models:
@@ -510,6 +538,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         if phase['kind'] != 'vae':
             for name, participant in selected.items():
                 participant.optimizer.step()
+                participant.global_step += 1
                 updates = training.setdefault('model_updates', {})
                 updates[name] = updates.get(name, 0) + 1
         if phase['kind'] != 'distill':

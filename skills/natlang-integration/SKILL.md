@@ -281,3 +281,14 @@ write coordinates and each action's sparse `banned_token_ids` unchanged for
 normalized-mask replay. Never substitute the unmasked model log-probability.
 `neuralese-guidance-template-conflict` requires a compatible forced call template
 or removal of the conflicting forced constraint, rather than retrying unchanged.
+
+For adaptive native training, bind `foundation_sources` to the complete admitted
+source manifest when selecting `readiness_boundary:'communication-foundation'`.
+A missing cohort row requires training that row through the shared native
+trainer; an old tiny shard cannot qualify the larger cohort. Preserve all
+`sft_progress` frames and the current optimizer/RNG across objective boundaries.
+`refresh_at_checkpoint` uses the declared checkpoint cadence for an incomplete,
+qualified continuation; retain remaining quotas and refresh the semantic adapter
+before serving changed weights. If a new communication cohort is still pending,
+keep the previous qualified semantic source membership and its required files
+until the new cohort has actual raw exposure in every participating model.

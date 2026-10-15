@@ -174,11 +174,10 @@ def apply_deployment(config, deployment):
     """Idempotent publication bookkeeping, even after a crash between actors."""
     out = Path(config['out']); out.mkdir(parents=True, exist_ok=True)
     path = out/'state.json'
-    if not path.exists():
-        return
     with (out/'controller.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        state = json.loads(path.read_text())
+        from .production import initial_controller_state
+        state = json.loads(path.read_text()) if path.exists() else initial_controller_state(config)
         name = config['native_participant']
         pending = state.get('pending_native_checkpoint')
         if pending:
@@ -230,6 +229,18 @@ def _run_rounds(config_paths, out, *, rounds=None, device='cuda', stop):
                 if len(adapters) != 1 or len(parents) != 1:
                     raise ValueError('parallel native learners must start from the same immutable joint parent')
                 adapter = next(iter(adapters))
+            # Real production configs declare the full recipe. Minimal direct
+            # round fixtures may omit it; they exercise only the sealed RL job.
+            if any(config.get('production_recipe') for config in configs):
+                if not all(config.get('production_recipe') for config in configs):
+                    raise ValueError('all native learners must declare their mandatory production recipe')
+                pending_rl=any((Path(config['out'])/'state.json').exists() and
+                    json.loads((Path(config['out'])/'state.json').read_text()).get('pending_native_checkpoint')
+                    for config in configs)
+                if not pending_rl:
+                    from .native_supervised import interleave
+                    adapter=interleave(config_paths,configs,adapter,out/f'round-{cycle:06d}'/'mandatory-sft',
+                        cycle=cycle,latest=latest,device=device,stop=stop)
             semantic_configs = {str(Path(config['semantic_refresh_config']).resolve()) for config in configs}
             if len(semantic_configs) != 1:
                 raise ValueError('both learners must share one actual semantic refresh curriculum')

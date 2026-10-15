@@ -675,3 +675,9 @@ native `/2` sampling receipts retain sparse per-action banned masks. New
 `neuralese-guidance-template-conflict` recovery advice is in both skills. Live
 48-sample measurement is debt for the next own-model CoreWeave teacher window;
 actual two-port cache/sampling/gradient tests are mechanism evidence only.
+
+2026-10-15 communication-foundation and adaptive continuation receipts: explicit
+foundation-ready/full-completion distinction, carried per-stage CE credits,
+checkpoint-cadence refresh boundaries and prior-qualified semantic cohort
+recovery advice added to both skills. Live 48-sample validation is debt for the
+next own-model teacher window; state/cursor/optimizer tests prove mechanisms.

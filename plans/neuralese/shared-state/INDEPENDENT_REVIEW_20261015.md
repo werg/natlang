@@ -294,3 +294,27 @@ Actual guidance-policy/forced-conflict regression is additionally tested. These
 are mechanism checks, not learned task-quality or production-cutover completion.
 Second-order and direct adapter-value operations remain open; native full-model
 updates and portable bundles are independently checked mechanisms.
+
+Communication foundation and continuation repair (2026-10-15): foundation
+readiness is distinct from full all-source completion. It binds every genuine
+row/quota in the complete declared admitted communication cohort, actual current
+checks, and all remaining mandatory CE deficits. Per-stage row bindings/order/
+credits survive semantic and RL objectives with the current optimizer/FP8/RNG;
+no old RNG or duplicate optimizer history is embedded in progress frames.
+Production interleaves CE through existing seed/round bridge machinery at the
+declared checkpoint cadence, keeps partial continuation explicit, and refreshes
+adapters before actor publication. A durable stage cursor prevents repeating a
+completed quantum on restart. New raw communication admission uses the previous
+qualified semantic membership until both models finish the complete new cohort;
+requested new curriculum deficits remain in the deployment receipt.
+
+Evidence: memory-ledger native-foundation-final-20261015 passed32 focused tests
+(actual CE foundation stop/shared resume/two checkpoint quanta with exact row
+credits, actual two-port VAE/joint/distill progress preservation, cohort guards,
+parallel scheduler/publication/restart, bridge, and full SGD/Adam portable actors).
+Earlier foundation/readiness/semantic tests passed20; expanded legacy SFT checks
+passed35 with four subsequently repaired sampler-fixture failures. Quick passed.
+These checks do not qualify production cutover. Controller deployment remains
+blocked on adaptive semantic phase refresh: preserving overall exposure across
+changed weights and replacing repeated full held scans with rotating cadence.
+The existing whole-cohort refresh reset is explicitly open and assigned next.

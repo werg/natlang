@@ -26,6 +26,8 @@ from ..model.native_model import (CHECKPOINT_SCHEMA, load_native_checkpoint, loa
                                   native_identity)
 from .checkpoint_policy import CheckpointPolicy
 from .loop import capture_training_rng_state, restore_training_rng_state
+from .native_continuation import (collect_sft_progress, restore_sft_progress, progress_obligations,
+    communication_foundation, raw_communication_rows)
 
 from ..data.native_sources import NativeGraphSource, _jsonl, _row_bindings, _require_communication_graph
 
@@ -387,7 +389,7 @@ def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backen
 
 def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, source_receipts,
           source_hash, source_row_bindings, held_row_bindings, exposure_counts, global_step, rng, metrics,
-          architecture, options, fp8_state=None):
+          architecture, options, fp8_state=None, sft_progress=None):
     state = {'schema': CHECKPOINT_SCHEMA, 'model_config': config, **model_state(model), 'step': global_step,
              'training': {'schema': TRAINING_SCHEMA, 'identity': identity, 'step': step,
                           'global_step': global_step, 'epoch': epoch,
@@ -397,7 +399,11 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
                           'exposure_counts': exposure_counts,
                           'cursor': cursor, 'source_hash': source_hash, 'source_receipts': source_receipts,
                           'optimizer': optimizer.state_dict(), 'rng': rng, 'metrics': metrics,
-                          'options': options, 'fp8': fp8_state}}
+                          'options': options, 'fp8': fp8_state, 'sft_progress': sft_progress or {}}}
+    state['training']['sft_progress'] = collect_sft_progress(state['training'])
+    if sft_progress is not None:
+        sft_progress.clear()
+        sft_progress.update(state['training']['sft_progress'])
     policy.save(state, metric=metrics.get('held', {}).get('loss'))
 
 
@@ -427,6 +433,11 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--native-graphs', type=Path, required=True)
+    parser.add_argument('--foundation-native-graphs', type=Path)
+    parser.add_argument('--refresh-at-checkpoint', action='store_true',
+        help='return an explicit incomplete continuation for semantic refresh at the next declared checkpoint boundary')
+    parser.add_argument('--communication-foundation', action='store_true',
+        help='pause at the complete admitted communication cohort with mandatory ordinary credits retained')
     parser.add_argument('--held-native-graphs', type=Path, required=True)
     parser.add_argument('--continued-native-graphs', type=Path)
     parser.add_argument('--continued-held-native-graphs', type=Path)
@@ -528,6 +539,8 @@ def main(argv=None):
     set_native_linear_precision(model, requested_precision)
     config['native_linear_precision'] = requested_precision
     saved_training = resume or shared_resume or {}
+    carried_progress = collect_sft_progress(saved_training)
+    restored_progress = False
     precision_history = list((saved_training.get('options') or {}).get('native_precision_history') or [])
     transition = {'from': previous_precision, 'to': requested_precision,
         'source_dtype': config['dtype'],
@@ -560,6 +573,11 @@ def main(argv=None):
          sorted(source_row_bindings.items()), sorted(held_row_bindings.items())],
         ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
     source_order = train.ordered_ids()
+    checkpoint_options['_communication_ids']=[entry['id'] for entry in train.entries if entry.get('communication')]
+    foundation_source = (NativeGraphSource(args.foundation_native_graphs, fingerprint, required_split='train', role_ids=roles.ids)
+                         if args.foundation_native_graphs else train)
+    if args.communication_foundation and args.foundation_native_graphs is None:
+        raise ValueError('communication foundation requires its complete declared admitted source manifest')
     objective = None
     objective_binding = None
     if args.objective_spec is not None:
@@ -584,7 +602,12 @@ def main(argv=None):
                         'amax_history_len': args.fp8_amax_history_len},
                 'objective': objective_binding}
     appended_ids = set()
-    if shared_resume is not None:
+    restored_frame = (restore_sft_progress(shared_resume or resume or {}, args.stage_id)
+                      if parent_continuation and objective is None else None)
+    if restored_frame is not None:
+        resume = restored_frame
+        restored_progress = True
+    if shared_resume is not None and not restored_progress:
         old_options = shared_resume['options']
         old_optimizer = {'weight_decay': old_options.get('weight_decay', .1),
                          'latent_ns': old_options.get('latent_ns', 'quintic')}
@@ -620,7 +643,7 @@ def main(argv=None):
             raise ValueError('native SFT continuation changes model/held/optimizer/schedule identity')
         # MuonSR retains its constructor's NS variant on state restoration;
         # switching the update approximation preserves compatible moment state.
-        if not (parent_continuation and args.objective_continuation):
+        if restored_progress or not (parent_continuation and args.objective_continuation):
             prior_bindings = resume.get('source_row_bindings') or {}
             appended_ids = append_only_rows(prior_bindings, source_row_bindings, label='training-source')
             prior_order = resume.get('source_row_order') or []
@@ -697,7 +720,7 @@ def main(argv=None):
             if resume.get('fp8') is None:
                 raise ValueError('native SFT checkpoint lacks the declared FP8 state')
             backend.restore_extra_state(resume['fp8'])
-        if parent_continuation:
+        if parent_continuation and not restored_progress:
             # A new declared phase consumes its current full source set while
             # keeping exact weights/optimizer/RNG; its stage-local cursor begins
             # at zero and the global update counter remains monotonic. The
@@ -711,6 +734,10 @@ def main(argv=None):
             exposure_counts.update({key: int(value) for key, value in (resume.get('exposure_counts') or {}).items()
                                     if key in exposure_counts})
             metrics = dict(resume.get('metrics') or {})
+            if restored_progress and shared_resume is not None:
+                # Credits survive other objectives; evaluations belong to the new weights.
+                for key in ('held', 'held_coverage', 'task_checkpoint_sha256', 'task_native_identity'):
+                    metrics.pop(key, None)
         restore_training_rng_state(resume['rng'], args.device)
         resume['optimizer'] = None
         if 'state' in locals():
@@ -733,7 +760,7 @@ def main(argv=None):
     target_rows = whole_epochs * len(train) + fractional_rows
     # Cursor/exposure is the durable schedule, not the old batch partition.
     # Adapt packing after a safe stop without replaying or skipping any row.
-    if parent_continuation:
+    if parent_continuation and not restored_progress:
         step = 0
     required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
         epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens)
@@ -743,6 +770,9 @@ def main(argv=None):
         raise ValueError('native checkpoint update is beyond the declared epoch exposure')
     resumed_step = step
     last_saved_step = step if policy.slot.is_file() and not parent_continuation else -1
+    refresh_boundary = False
+    if args.refresh_at_checkpoint and not (args.checkpoint_every or args.checkpoint_seconds):
+        raise ValueError('semantic refresh needs a declared checkpoint step/time cadence')
     source_iters = {}
     pass_indices = {}
     for visit, indices, _ in pending_batches:
@@ -750,7 +780,18 @@ def main(argv=None):
     schedule = iter(pending_batches)
     eval_at = max(1, args.eval_every)
     started = time.time()
-    while step < total_end and not policy.signaled:
+    def foundation_exposure():
+        return communication_foundation(foundation_source, exposure_counts, epochs=args.epochs,
+                                        trained_bindings=source_row_bindings)
+    prior_foundations = set((resume or {}).get('completed_foundations') or
+        (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('completed_foundations') or [])
+    foundation_template = foundation_exposure() if args.communication_foundation else None
+    foundation_missing = {key for key,row in (foundation_template or {}).get('rows',{}).items()
+        if not row['admitted_to_training'] or row['required_visits']<=0 or row['graph_visits']<row['required_visits']}
+    def foundation_pending():
+        return bool(foundation_template and foundation_template['graphs'] and not foundation_missing and
+                    foundation_template['cohort_sha256'] not in prior_foundations)
+    while step < total_end and not policy.signaled and not foundation_pending():
         update_started = time.monotonic()
         visit, indices, pass_end = next(schedule)
         if visit not in source_iters:
@@ -770,6 +811,10 @@ def main(argv=None):
         global_step += 1
         for example in batch:
             exposure_counts[example.id] += 1
+            if example.id in foundation_missing:
+                row=foundation_template['rows'][example.id]
+                if row['admitted_to_training'] and row['required_visits']>0 and exposure_counts[example.id]>=row['required_visits']:
+                    foundation_missing.remove(example.id)
         epoch = min(exposure_counts[key] for key, required in required_visits.items() if required > 0)
         if pass_end and all(exposure_counts[key] >= required for key, required in required_visits.items()):
             cursor = 0
@@ -796,6 +841,7 @@ def main(argv=None):
             log.write(json.dumps(progress, sort_keys=True) + '\n')
         write_json(args.out / 'progress.json', progress)
         print(json.dumps(progress, sort_keys=True), flush=True)
+        due_checkpoint = policy.due(step, end=step == total_end)
         due_task = task_eval is not None and (step == total_end or
                     bool(args.task_eval_every and step % args.task_eval_every == 0))
         due_eval = step % eval_at == 0 or step == total_end or due_task
@@ -815,7 +861,7 @@ def main(argv=None):
                   held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
                   rng=capture_training_rng_state(args.device), metrics=metrics,
                   architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
-                  fp8_state=backend.extra_state() if backend is not None else None)
+                  fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
             last_saved_step = step
             checkpoint_sha = sha256_file_hex_cached(policy.slot)
             serving_identity = native_identity(model, config, checkpoint_sha256=checkpoint_sha)
@@ -837,15 +883,18 @@ def main(argv=None):
             metrics['task_checkpoint_sha256'] = checkpoint_sha
             metrics['task_native_identity'] = serving_identity
             write_json(args.out / 'metrics.json', metrics)
-        if policy.due(step, end=step == total_end) and not due_task:
+        if due_checkpoint and not due_task:
             _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
                   global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
                   source_hash=source_hash, source_row_bindings=source_row_bindings,
                   held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
                   rng=capture_training_rng_state(args.device), metrics=metrics,
                   architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
-                  fp8_state=backend.extra_state() if backend is not None else None)
+                  fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
             last_saved_step = step
+        if args.refresh_at_checkpoint and due_checkpoint:
+            refresh_boundary = True
+            break
     if (step != resumed_step or policy.signaled) and last_saved_step != step:
         if not policy.signaled and not metrics.get('held'):
             metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
@@ -856,7 +905,7 @@ def main(argv=None):
               held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
               rng=capture_training_rng_state(args.device), metrics=metrics,
               architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
-              fp8_state=backend.extra_state() if backend is not None else None)
+              fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
         last_saved_step = step
     completed = all(exposure_counts[key] >= visits for key, visits in required_visits.items())
     if completed and not policy.signaled and (metrics.get('held', {}).get('scope') != 'full'
@@ -871,14 +920,19 @@ def main(argv=None):
             held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
             rng=capture_training_rng_state(args.device), metrics=metrics,
             architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
-            fp8_state=backend.extra_state() if backend is not None else None)
+            fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
     completed = (completed and metrics.get('held', {}).get('scope') == 'full'
                  and metrics.get('held', {}).get('source_sha256') == held.file_sha256)
+    foundation = foundation_exposure() if args.communication_foundation else None
+    foundation_boundary = bool(foundation and foundation['complete'] and
+                              foundation['cohort_sha256'] not in prior_foundations and not policy.signaled)
     # A continuation may inherit a completed checkpoint made before task
     # summaries were checkpointed. At the same final weights, make one real
     # cadence call; do not reuse an unbound log row or enter final_at's retry
     # loop merely to force an eligible score.
-    if task_eval is not None and completed and not metrics.get('task_checkpoint_sha256'):
+    if task_eval is not None and (completed or foundation_boundary or refresh_boundary) and (
+            not metrics.get('task_checkpoint_sha256') or
+            metrics['task_checkpoint_sha256'] != sha256_file_hex_cached(policy.slot)):
         current_sha = sha256_file_hex_cached(policy.slot)
         serving_identity = native_identity(model, config, checkpoint_sha256=current_sha)
         engine = task_eval.engine
@@ -922,7 +976,7 @@ def main(argv=None):
                                       task_receipt['score_sha256'])
         write_json(task_receipt_path, task_receipt)
     runtime_path = args.out / 'native-runtime-certificate.json'
-    if not completed:
+    if not completed and not foundation_boundary and not refresh_boundary:
         # Operational stops preserve the exact resumable checkpoint. Defer a
         # full capture/splice qualification until the declared data exposure is
         # finished; do not make interruptions pay for a second model pass.
@@ -967,8 +1021,15 @@ def main(argv=None):
     exposure_counts_sha256 = hashlib.sha256(json.dumps(sorted(exposure_counts.items()),
         ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
     communication = communication_exposure(train.entries, exposure_counts, required_visits)
+    mandatory_sft = progress_obligations(carried_progress)
+    continuation_boundary = {'kind': 'semantic-refresh', 'reached': bool(refresh_boundary and step>resumed_step),
+        'new_optimizer_updates':step-resumed_step, 'checkpoint_sha256':checkpoint_sha}
+    foundation_ready = bool(foundation_boundary and runtime_report.get('passed') is True and task_receipt_ok)
     report = {'schema': 'natlang.neuralese-native-sft-report/1',
               'communication_exposure': communication, 'completed': completed,
+              'foundation_ready': foundation_ready, 'communication_foundation': foundation, 'mandatory_sft': mandatory_sft,
+              'continuation_boundary': continuation_boundary,
+              'raw_communication_rows':raw_communication_rows(carried_progress),
               'numerics_ok': runtime_report.get('passed') is True, 'qualified': False,
               'quality_status': 'measured-for-supervisor',
               'train_exposure': {key: sum(exposure_counts[entry['id']] * entry['supervised_tokens']
@@ -984,7 +1045,10 @@ def main(argv=None):
     write_json(args.out / 'report.json', report)
     write_json(args.out / 'native-training-receipt.json', {
         'schema': 'natlang.native-training-readiness/1',
-        'communication_exposure': communication, 'model_id': config['architecture'] + ':' +
+        'communication_exposure': communication, 'foundation_ready': foundation_ready,
+        'communication_foundation': foundation, 'mandatory_sft': mandatory_sft,
+        'continuation_boundary':continuation_boundary,
+        'raw_communication_rows':raw_communication_rows(carried_progress), 'model_id': config['architecture'] + ':' +
         config['base_inventory_sha256'], 'lineage': str(args.out.resolve()),
         'stage_id': args.stage_id or args.out.name,
         'checkpoint': {'path': str(policy.slot.resolve()), 'sha256': report['checkpoint_sha256'],

@@ -327,6 +327,13 @@ def expected_native_actor(adapter_path, participant, policy_id):
             'semantic_adapter_sha256': sha256_file_hex_cached(adapter_path)}
 
 
+def initial_controller_state(config):
+    return {'schema':'natlang.rl-production-state/1','round':0,'offset':0,
+        'checkpoint':config['checkpoint'],'trained_rounds':0,'collected_task_ids':[],
+        'attempted_task_ids':[],'trained_task_ids':[],'trained_supervised_tokens':0,
+        'trained_target_tokens':0,'production_complete':False}
+
+
 def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
     """Hot-reload configuration at round boundaries; preserve actual state/exposure."""
     from ..common.hashing import sha256_file_hex
@@ -340,12 +347,13 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
     with (out / 'controller.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         state_path = out / 'state.json'
-        state = (json.loads(state_path.read_text()) if state_path.exists() else
-                 {'schema': 'natlang.rl-production-state/1', 'round': 0, 'offset': 0,
-                  'checkpoint': initial['checkpoint'], 'trained_rounds': 0, 'collected_task_ids': [], 'attempted_task_ids': [],
-                  'trained_task_ids': [], 'trained_supervised_tokens': 0, 'trained_target_tokens': 0,
-                  'production_complete': False})
+        state = json.loads(state_path.read_text()) if state_path.exists() else initial_controller_state(initial)
         write_json_durable(state_path, state)
+        if initial.get('mandatory_sft_only'):
+            if not initial.get('native_state'):
+                raise ValueError('mandatory supervised continuation requires native shared training')
+            from .native_supervised import execute
+            return execute(initial,state,state_path,control)
         completed = 0
         while rounds is None or completed < rounds:
             if control is not None and control.stop.requested:

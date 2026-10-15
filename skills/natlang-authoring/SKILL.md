@@ -283,3 +283,10 @@ prefix cannot be retracted from a client. A
 violates guidance; choose a compatible call template or remove that forced
 constraint. Keep the actual sparse `banned_token_ids` in each accepted sampled
 action when retaining native RL receipts; forced template inputs are not actions.
+
+A native training `foundation_ready` receipt qualifies the complete declared
+communication cohort for cross-model work. `completed` still means all declared
+supervised rows and full final held evaluation finished. Preserve `sft_progress`
+credits when continuing through semantic/RL stages, and consume its remaining
+obligations rather than starting row counts again. A semantic-refresh boundary
+is an incomplete continuation with actual optimizer updates and current checks.
