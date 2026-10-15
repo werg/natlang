@@ -32,7 +32,7 @@ HANDLERS = {
                          'optional_inputs':{'records','pieces','text_data','heads','continue_from',
                                             'continue_identity','continue_monitor_reference',
                                             'continued_text_data'},
-                         'parameters':{'steps','epochs','batch_tokens','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
+                         'parameters':{'base','steps','epochs','batch_tokens','tokens','target_tokens','prefix_tokens','batch','eval_batch','eval_every',
                            'train_target_tokens','train_min_context_tokens','merge_prefix_rows','cohort_repeats','recovery_selection','checkpoint_every','held_documents','context_weight','feedback_weight','backbone_lr',
                            'latent_optimizer','latent_lr','head_lr','projection_blocks',
                            'projection_hidden','projection_kernel','token_choice_projection','moe_kernel','checkpoint_layers','drift_rows','drift_every','drift_gate_every','drift_gate_rise','drift_ce_windows','gate_response_kl',
@@ -124,7 +124,7 @@ HANDLERS = {
 }
 
 # The RL stage takes every direct-trainer parameter plus its data decision (rl/stage.py).
-RL_PARAMETERS = {'rl_mode', 'rl_tokenizer', 'rl_prompt_rendering', 'rft_max_success_rate', 'rft_held_fraction',
+RL_PARAMETERS = {'rft_document_kind', 'rl_mode', 'rl_tokenizer', 'rl_prompt_rendering', 'rft_max_success_rate', 'rft_held_fraction',
                  'rl_policy_id', 'rl_clip_low', 'rl_clip_high', 'rl_block_bundle', 'rl_held_documents'}
 HANDLERS['neuralese_rl']['parameters'] = set(HANDLERS['neuralese_direct']['parameters']) | RL_PARAMETERS
 # A stage kind whose parameter defaults start from another kind's declared defaults.

@@ -89,6 +89,12 @@ def select_rft_documents(rollouts: Iterable[dict[str, Any]], *, max_success_rate
     return documents, receipt
 
 
+def document_has_values(document):
+    """Only this turn's visible coordinates; sibling producers do not change its tokenizer."""
+    from .graph_replay import block_ids
+    return any(block_ids({key: document.get(key) for key in ('messages', 'target', 'sampling')}))
+
+
 def render_rows(documents: list[dict[str, Any]], tokenizer, prompt_rendering: str) -> list[dict[str, Any]]:
     """Direct-trainer text rows (stream_text_rows contract) through the shared serving renderer."""
     from ..data.text_corpus import native_gold_packet, tokenizer_fingerprint
@@ -109,6 +115,7 @@ def parse(argv=None) -> tuple[argparse.Namespace, list[str]]:
     p.add_argument("--rollouts", type=Path, action="append", required=True)
     p.add_argument("--rl-tokenizer", type=Path, required=True, help="the base snapshot whose tokenizer the trainer uses")
     p.add_argument("--rl-mode", choices=("rft", "grpo"), default="rft")
+    p.add_argument("--rft-document-kind", choices=("all", "text", "value"), default="all")
     p.add_argument("--rl-held-text-data", type=Path, help="registered production corpus; read test rows only")
     p.add_argument("--rl-held-documents", type=int, default=64)
     p.add_argument("--rl-block-bundle", type=Path, help="exact value-channel block bundle manifest")
@@ -147,8 +154,16 @@ def main(argv=None) -> None:
                                                  held_fraction=0. if a.rl_held_text_data else a.rft_held_fraction)
     if not any(d["split"] == "train" for d in documents) or (not a.rl_held_text_data and not any(d["split"] == "test" for d in documents)):
         raise SystemExit("RL stage needs train and held documents: " + json.dumps(receipt["skipped"]))
-    from .graph_replay import block_ids
-    value_rft = a.rl_mode == 'rft' and any(block_ids(documents))
+    if a.rl_mode == 'rft':
+        if a.rft_document_kind != 'all':
+            documents = [doc for doc in documents if document_has_values(doc) == (a.rft_document_kind == 'value')]
+        kinds = {document_has_values(doc) for doc in documents}
+        if len(kinds) > 1:
+            raise ValueError('mixed text/value RFT requires separate full text/value shared stages; production controller partitions automatically')
+        active_tasks = {doc['task_id'] for doc in documents}
+        receipt['tasks_selected'] = [task for task in receipt['tasks_selected'] if task['task_id'] in active_tasks]
+        receipt.update(documents=len(documents), document_kind=a.rft_document_kind)
+    value_rft = a.rl_mode == 'rft' and any(document_has_values(doc) for doc in documents)
     if value_rft:
         if not a.rl_block_bundle or not a.rl_policy_id:
             raise ValueError('captured value RFT requires durable block bundle and its policy identity')

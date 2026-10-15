@@ -221,3 +221,11 @@ def test_value_rft_routes_to_shared_graph_ce_instead_of_text_flattening(tmp_path
     assert spec['mode'] == 'rft' and spec['block_bundle'] == str(bundle)
     assert spec['documents'][0]['sampling']['prompt'][1] == ['block', block]
     assert '--rl-objective' in calls[0]
+
+
+def test_value_document_detection_does_not_cross_tokenize_plain_teacher_turns():
+    block = 'nz1_' + 'a' * 52
+    ordinary = {'messages': [], 'target': {'content': 'ordinary teacher text'},
+                'producers': [{'sampling': {'prompt': [['block', block]]}}]}
+    assert not rl_stage.document_has_values(ordinary)
+    assert rl_stage.document_has_values({**ordinary, 'sampling': {'prompt': [['block', block]]}})
