@@ -151,8 +151,20 @@ directory before any optimizer updates. All were corrected before this result.
 Sparse-only .0003 and .003 follow-ups use the same training sequence and held
 controls. They additionally measure thinking-token targets on eight untouched
 V5 training-source rows; these are explicitly diagnostic controls, not newly
-protected held data or a reason to omit those rows from production. Their
-results are pending. Exact scripts, source hashes, IDs, actual optimizer rates,
+protected held data or a reason to omit those rows from production. All three
+comparisons completed 16 updates with exactly equal initial held measurements.
+At .0003, final held ordinary/communication loss was .424869/.438445; at .003,
+it was .387543/.386023, compared with .434922/.450897 at the baseline rate.
+On the eight untouched Qwen controls, mean thinking-open probability rose from
+.00042188 to .98960 and thinking-close from .00054391 to .43199 at .003. The
+closing probabilities ranged from .23930 to .71684; this is still not reliable
+task completion. The .0003 run reached only .001357/.005266 for those means.
+
+The supervisor selects .003 as LFM's next production sparse-row rate once the
+complete named optimizer-state/rate continuation support is ready. This evidence
+does not establish the same quality delta on Mellum; deploy the shared mechanism
+there with its actual parent and held measurements. Production rates have not
+yet changed. Exact scripts, source hashes, IDs, actual optimizer rates,
 per-update movement and held measurements are under
 `/home/werg/data/dgxops/native-sparse-diverse-20261016/`. The completed baseline
 saved measurements only; no diagnostic model checkpoint was retained.
