@@ -336,6 +336,15 @@ def admitted_teacher_turn(row, index, turn, decisions):
     decision = decisions.get((row['id'], index))
     if decision is None:
         return False, {'reason': 'shared native materializer did not qualify this original decision'}
+    # Missing capture identity is an explicit omission, never a legacy equality
+    # join in which two absent identifiers qualify a positive target.
+    invocation = turn.get('invocation_id')
+    hashes = [turn.get(name) for name in ('request_sha256', 'raw_response_sha256')]
+    if (not isinstance(invocation, str) or not invocation.strip() or any(
+            not isinstance(value, str) or len(value) != 64
+            or any(character not in '0123456789abcdef' for character in value)
+            for value in hashes)):
+        return False, {**decision, 'reason': 'original provider turn lacks a nonempty invocation and lowercase SHA-256 request/response capture'}
     if (decision['invocation_id'] != turn.get('invocation_id')
             or decision['raw_response_sha256'] != turn.get('raw_response_sha256')):
         raise ValueError('teacher decision admission disagrees with the original invocation/response')

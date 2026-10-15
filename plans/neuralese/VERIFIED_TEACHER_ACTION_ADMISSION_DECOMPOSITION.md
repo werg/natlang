@@ -25,3 +25,8 @@ decides which individual actions are useful positive imitation targets.
 The policy above is natural language. Crisp code supplies the existing CLI,
 exact hashes, durable cache/lock, source joins and graph rendering. The original
 teacher materializer remains the single decision implementation.
+
+Exact capture joins require a nonempty original invocation and lowercase 64-digit
+SHA-256 request/response hashes. Missing or malformed capture identity omits only
+that turn, while a conflicting bound invocation/response still rejects the input.
+This converter has no legacy missing-capture fallback.

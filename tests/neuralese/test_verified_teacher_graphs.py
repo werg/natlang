@@ -20,7 +20,7 @@ def _row():
 
 def test_successful_parent_does_not_approve_rejected_or_seeded_turns():
     row = _row()
-    turn = {'invocation_id': 'child-a', 'raw_response_sha256': 'a' * 64,
+    turn = {'invocation_id': 'child-a', 'request_sha256': 'c' * 64, 'raw_response_sha256': 'a' * 64,
             'assistant': {'content': ''}, 'model_response': {'raw_calls': []}}
     evidence = {'approved': False, 'reason': 'decision contains a failed proposal',
                 'invocation_id': 'child-a', 'raw_response_sha256': 'a' * 64}
@@ -283,3 +283,24 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
     put('batch-source-bindings.json', mapping)
     with pytest.raises(ValueError, match='selected task packet differs'):
         converter.source_binding(args)
+
+
+@pytest.mark.parametrize('field,value', [
+    ('invocation_id', None), ('invocation_id', ''), ('invocation_id', '  '),
+    ('request_sha256', None), ('request_sha256', 'c' * 63),
+    ('raw_response_sha256', None), ('raw_response_sha256', 'A' * 64),
+    ('raw_response_sha256', 'g' * 64)])
+def test_original_provider_capture_identity_cannot_join_missing_or_malformed_fields(field, value):
+    row = _row()
+    turn = {'invocation_id': 'child-a', 'request_sha256': 'c' * 64,
+        'raw_response_sha256': 'a' * 64, 'assistant': {'content': 'actual reply'},
+        'model_response': {'raw_calls': []}}
+    turn[field] = value
+    decision = {'approved': True, 'invocation_id': turn.get('invocation_id'),
+        'raw_response_sha256': turn.get('raw_response_sha256')}
+    allowed, omission = converter.admitted_teacher_turn(row, 0, turn, {(row['id'], 0): decision})
+    assert allowed is False and 'request/response capture' in omission['reason']
+    valid = {**turn, 'invocation_id': 'child-a', 'request_sha256': 'c' * 64,
+        'raw_response_sha256': 'a' * 64}
+    bound = {**decision, 'invocation_id': 'child-a', 'raw_response_sha256': 'a' * 64}
+    assert converter.admitted_teacher_turn(row, 0, valid, {(row['id'], 0): bound}) == (True, bound)
