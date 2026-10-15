@@ -229,8 +229,11 @@ def _restore_optimizer_state(optimizer, saved, named_params, declared_added=(), 
                     if skind != kind and not (skind == "plain" and kind == "plain"):
                         kind_changed.append(f"{name} ({skind} -> {kind})")
                     else:
+                        # MuonSR stores one running gradient norm per leading expert/matrix stack.
+                        # Its momentum remains parameter-shaped; only this declared state has reduced geometry.
                         bad = [k for k, v in (sstate or {}).items()
-                               if torch.is_tensor(v) and v.numel() > 1 and tuple(v.shape) != tuple(p.shape)]
+                               if torch.is_tensor(v) and v.numel() > 1 and tuple(v.shape) !=
+                               (tuple(p.shape[:-2]) if kind == 'muonsr' and k == 'grad_norm' else tuple(p.shape))]
                         if bad:
                             shape_bad.append(f"{name} {bad}")
                         else:

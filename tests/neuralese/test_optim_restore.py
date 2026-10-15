@@ -280,3 +280,40 @@ def test_a_removed_component_drops_its_slots_and_keeps_every_other_state_exact()
             for key, value in current[index].items():
                 expected = old[names[id(p)]][key]
                 assert torch.equal(value, expected) if torch.is_tensor(value) else value == expected
+
+
+@needs_muon
+@pytest.mark.parametrize('corrupt', [None, 'grad_norm', 'momentum'])
+@pytest.mark.parametrize('dtype', [torch.float32, torch.bfloat16])
+def test_projection_addition_preserves_stacked_muonsr_norms_and_rejects_wrong_shapes(corrupt, dtype):
+    import copy
+    torch.manual_seed(17)
+    expert = torch.nn.Parameter(torch.randn(3, 6, 6, dtype=dtype))
+    norm = torch.nn.Parameter(torch.randn(6))
+    before_named = {'backbone.norm': norm, 'backbone.expert': expert}
+    before = PortMuonAdamW([('backbone.norm', norm)], lr=1e-2, vocab_size=VOCAB,
+                           latent=[('backbone.expert', expert, 1e-2, 1)], latent_optimizer='muonsr')
+    for _ in range(2):
+        for parameter in before_named.values():
+            parameter.grad = torch.randn_like(parameter)
+        before.step()
+    saved = copy.deepcopy(before.state_dict())
+    latent_state = next(iter(saved['muonsr']['state'].values()))
+    assert latent_state['grad_norm'].shape == (3,)
+    assert latent_state['momentum'].dtype == torch.bfloat16 and latent_state['grad_norm'].dtype == torch.float32
+    if corrupt is not None:
+        latent_state[corrupt] = torch.zeros(4 if corrupt == 'grad_norm' else 3)
+    projection = torch.nn.Parameter(torch.randn(8, 6))
+    after_named = dict(before_named, **{'token_choice_projection.weight': projection})
+    after = PortMuonAdamW([('backbone.norm', norm), ('token_choice_projection.weight', projection)],
+                          lr=1e-2, vocab_size=VOCAB, latent=[('backbone.expert', expert, 1e-2, 1)],
+                          latent_optimizer='muonsr')
+    kwargs = dict(saved_names=optimizer_param_names(before, before_named),
+                  declared_added=['token_choice_projection.weight'])
+    if corrupt is not None:
+        with pytest.raises(OptimizerRestoreError, match='saved state shape differs'):
+            restore_optimizer_state(after, saved, after_named, **kwargs)
+    else:
+        report = restore_optimizer_state(after, saved, after_named, **kwargs)
+        assert report['mode'] == 'by-name' and report['initialized'] == ['token_choice_projection.weight']
+        assert equal(before.latent.state_dict(), after.latent.state_dict())

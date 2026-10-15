@@ -20,3 +20,10 @@ The existing data-continuation program reconstructs the predecessor schedule, re
 2. When both saved and requested quantization are absent and only E2E mixing changes, record the exact objective change without inventing a quantization curriculum. Backbone weights, optimizer, RNG and data coverage keep their existing restoration mechanisms.
 3. Continue refusing removal of an existing curriculum and family changes without a curriculum; existing ramp and member-weight jump checks remain.
 4. This is exact state validation in the shared trainer, not a new training policy or evaluator.
+
+## Preserve stacked MuonSR optimizer state when adding projections
+
+1. Keep the shared exact-name optimizer alignment and explicit declaration of fresh projection slots.
+2. Validate each MuonSR `grad_norm` against the parameter's leading stack dimensions: the optimizer computes norms over its last two matrix dimensions. Momentum remains full parameter shape.
+3. Keep every saved norm and momentum tensor unchanged, including its original dtype through Torch optimizer loading; reject an incorrect stack size or any other undeclared shape change.
+4. Verify the actual stacked optimizer's state survives adding a projection, including malformed-state rejection. This is crisp optimizer schema validation; the mixed objective and training policy are unchanged.

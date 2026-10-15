@@ -428,6 +428,19 @@ class MuonSR(LionSR):
                 if p.ndim < 2 or p.shape[-2] % (group.get("split_rows", 1) or 1):
                     raise ValueError("MuonSR latents are matrices (or stacks of matrices) whose rows split evenly")
 
+    def load_state_dict(self, state_dict):
+        """Keep saved momentum/norm precision: Torch's default loader casts floating state to parameter dtype."""
+        saved = {index: {key: value for key, value in entry.items()
+                         if key in ('momentum', 'grad_norm') and torch.is_tensor(value)}
+                 for index, entry in state_dict['state'].items()}
+        parameters = {index: parameter
+                      for previous, current in zip(state_dict['param_groups'], self.param_groups)
+                      for index, parameter in zip(previous['params'], current['params'])}
+        super().load_state_dict(state_dict)
+        for index, values in saved.items():
+            for key, value in values.items():
+                self.state[parameters[index]][key] = value.to(parameters[index].device, copy=True)
+
     @torch.no_grad()
     def _update(self, p, group):
         with region("optim/muonsr"):
