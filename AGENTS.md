@@ -1,5 +1,18 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Execution and generation ownership (owner, 2026-10-15)
+
+Pop is closed. The DGX supervisor now owns all remaining work and sandbox
+operations; do not defer work to a Pop agent. Only Pop's generation was to
+finish: DGX-supervised data generation must continue. Generate new training
+data only with our own models through the CoreWeave sandboxes, not Luna or
+other external teachers. Existing admitted third-party data remains usable.
+Coordinate sandbox inference with training so generation uses available
+capacity without unnecessarily starving training. Preserve exact actor,
+checkpoint, runtime and split provenance; base-model generations are not
+on-policy samples from a trained checkpoint. This supersedes older machine
+ownership and provider-generation restart instructions below and in plans.
+
 ## Neuralese architecture replacement (owner, 2026-10-15)
 
 The destination is shared positional KV and hybrid-state spans, replacing the

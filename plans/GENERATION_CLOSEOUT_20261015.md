@@ -1,5 +1,17 @@
 # Teacher-generation closeout (2026-10-15)
 
+## Corrected owner instruction — effective immediately
+
+Only Pop's generation was to finish. The DGX stop below was a supervisor
+misinterpretation, not an owner-requested generation shutdown. Pop is now
+closed and the DGX supervisor owns all remaining work. Continue new data
+generation using our own models through CoreWeave sandboxes; do not restart
+Luna, external-provider generation, or the local-GPU teacher launcher below.
+The sandbox supervisor owns restarting useful generation alongside training,
+with exact actor/checkpoint provenance and resource coordination. Retain the
+four successful DGX examples for normal admission. Historical provider
+restart procedures below are superseded and must not be executed.
+
 ## DGX closeout
 
 The DGX supervisor closed the current Mellum-base collection at the completed
@@ -33,7 +45,8 @@ queue instead of mislabelling old bytes as the new actor. Launch through
 and an explicit unit name. The script serves port 8097, waits for real health,
 runs the collector, scores exact outcomes, and stops its own server. Check
 that the port is free first and that no other generation owner has resumed it.
-Generation remains stopped until a future owner requests it.
+This local launcher remains stopped: generation now runs through our models
+in the sandboxes under the corrected instruction above.
 
 ## Owner decision and boundary
 
@@ -75,7 +88,7 @@ PY
 
 For a future seed, collect accepted parents with `scripts/collect_luna_accepted_parents.py`, passing the immediately preceding seed's accepted parents as `--previous-parents` and `runs/natlang-held-task-packet-v3-20261012/cases.jsonl` as `--held`. Materialize native turns, run `curate_native_teacher_turns.py` once with initial exact semantic holds, run `audit_teacher_action_shape.py`, inspect long and suspicious roots, then curate again with structural and manual exact whole-parent holds. Register the final source with `register_corpora.py`, ensuring only `approved-turns.jsonl` is SFT input. Render LFM/Mellum program-header and whole-trajectory twins with `render_native_turn_corpus.py`, register with `register_native_turn_render.py --via-worktree`, and `sync_training_corpora.py` both source and render IDs to DGX. Verify remote SHA receipts. Remove only unregistered native/preaudit duplicates after registration and remote verification. The seed 52116–52118 review directories contain source entries and semantic-review examples.
 
-## Restart later
+## Historical provider restart notes (superseded; do not execute)
 
 Before restarting generation, check `plans/HANDOVER.md`, this document, the current source-review manifest and `scripts/coord.py` inbox/status on both machines. Confirm the training union actually admits the newly registered corpus IDs; a registry entry or successful copy does not prove union admission. Decide whether to revise folder-reducer cases, which frequently pass the oracle through crisp semantic shortcuts, and whether to improve answer normalization for numeric-with-context and verbose Hotpot responses. Rejected rows with answer-equivalence or provider gateway errors are not DPO negatives.
 

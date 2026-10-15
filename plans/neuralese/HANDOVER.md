@@ -1,6 +1,6 @@
 # DGX current state
 
-Generated 2026-10-15 11:54 UTC by `python3 scripts/current_state.py --machine dgx`. Do not edit by hand: regenerate.
+Generated 2026-10-15 12:54 UTC by `python3 scripts/current_state.py --machine dgx`. Do not edit by hand: regenerate.
 This page holds the present only. History is in git (`git log -p -- plans/neuralese/HANDOVER.md`), in the
 decision records and in the coordination log. Live processes and the status pages are the authority.
 
@@ -19,23 +19,21 @@ decision records and in the coordination log. Live processes and the status page
 
 ## DGX status page (this machine)
 
-Updated 2026-10-15T11:54:15.139961Z by dgx-supervisor.
+Updated 2026-10-15T12:54:37.002665Z by dgx-supervisor.
 
-2026-10-15 11:55 UTC — DGX supervisor; Pop owns Pop, coreweave helper owns both cloud allocations.
-Owner requires complete native shared-state Neuralese replacement in training and inference, no prototype shortcuts or architectural half-solutions, a separate independent integration review before cutover, full production recipe for BOTH models, and automatic shared semantic VAE/joint producer-write-out/consumer adaptation as soon as TWO distinct models are ready. More models join later; losses/curricula/data/optimizer continuation remain adjustable. Old cloud projected-value jobs continue DIAGNOSTIC ONLY during implementation. AGENTS.md and plans/neuralese/SHARED_STATE_MIGRATION_20261015.md are authoritative; old direct-v1 documents describe diagnostic lineage.
-Implementation: shared graph executor uses actual four producer/consumer role tokens, identity-initialized low-rank token-embedding transform, positional raw KV and finite-convolution state, one layer-major graph forward, no recursive producer replay. Native block/provenance/checkpoint factory published. Full actual LFM FP32 graph/reference, consumer CE/source-adapter gradients and incremental capture/splice pass; published destination CLI133f2ce0 also performs real channel optimizer update/exact channel+optimizer restore (NOT backbone recipe/task qualification). Mellum BF16 numerical repair still in progress: shape-dependent linears, attention tiles, fanout adjoints and possible order/cache effects; no tolerance-widening/qualification claim. Pop CUDA parity failures forwarded to graph owner.
-Root graph objective47a5690f has whole-trajectory weighted CE and chunked readout, native schema/provenance and boundary checks. Shared semantic VAE core predicts target-state deltas, explicit token alignment, differentiable source-to-consumer joint gradients, stable add_model parameter names. Nine focused tests passed; NOT yet executable cross-model stage. Root owns role-aware full-corpus conversion/admission, cross-model stage/readiness controller and RL replay migration. Operations helper now owns real shared native SFT trainer, optimizer/FP8/checkpoint/RNG/exposure/task cadence/recipe integration for BOTH models. Independent reviewer not yet started: must review integrated complete implementation after ready.
-Serving/store/HTTP/TS native harness integration cherry-picked through5dffd64e;24 integrated Python focused tests and quick check passed. Native artifacts have disjoint nzs1_ content IDs, strict inventory/provenance validation, fsync-before-publication durability, same store lifecycle. Real HTTP producer/capture/consumer fixture passed; nested historical tool argument artifacts restored without corrupting JSON, raw native RL sampling receipt survives collector. Guided native serving and learned cross-model decoding remain explicit integration gaps, not qualified complete. Root native RL archive extension detects prompt/write/JSON-argument refs, verifies and copies native artifacts before actor shutdown;6 focused tests passed. Native full RL objective still pending; legacy GradSession not compatible.
-Cloud health11:45UTC: Mellum actual trainer65896 step3563 finite/GPU97%,91,195MiB reserved/OOM0, parent full3400 private SHA verified; task3600/checkpoint approaching. Forced layer checkpoints after earlier3418OOM. LFM trainer203166 resumed exact28000 full/RNG under explicit diagnostic-partial evaluation runtime policy; CPU cache rebuild R8 PH target256 (/2), GPU~2GB while rebuilding. Correct PH256 prewarm205061; prior1024 mismatch fixed, wrong WT1024 preparer stopped explicitly. Destination native LFM qualification requested on idle H100 using isolated Git runtime, not canonical overlay. No current task lift claim.
-Data: R11 FULL/PH/WT admitted; v36 current source review,398pending groups/zero intersections. FULL next56378docs53223train3155held/twin admitted. REST27v2 147414records137421train9993held11713chains55484edges admitted; all9files14.57GB exact staged both clouds, lazy indexes complete (LFM118.94s/Mellum97.21s). Incremental PH/WT build still running; Pop52110–17+ need final overlay. Search/OWL exact selective6.9GB restored164native turn shards658396decisions; full650GB-decoded streaming hold scan failed because ZERO source-group intersections, not missing row source_groups (schema inspection proved top-level groups present). Need diagnose whether exact zero is correct and produce authenticated full scan proof; admission/render NOT yet complete. Do not blindly demand exclusions>0 or fabricate a hold. 7002 over-cap cases require explicit paged conversion. Big2 protected assembly/Dolci cloud CPU conversions continue under helper.
-Generation closeout per owner relayed by Pop: finish existing DGX32-task x2 teacher batch, no new campaigns; document procedural restart handover. Pop replenisher timers disabled, seed52118 final queue thenclose. DGX teacher dgx-native-mellum-teacher32-20261015 remains actual base actor, train-only cohort, reusable source after exact outcome/protection review, NOT trained cloud checkpoint or student on-policy. Curated52116/17 source/render SSH SHA verified; Sol repair pilot2roots18decisions registered, old contaminated Luna repair batch held.
-Broad checks: last completed green7c45c961c7;90480ac35a failed TS LFM fixture CUDA OOM during model.to, no claim green/skip. Standing single full-check service handles newer snapshots; never launch duplicate broad suites. Local focused work ledgered; quick checks passed. Storage monitor normal cadence; reusable sources/active parents/held data retained, owner expansion plan untracked and never staged.
+2026-10-15 12:54 UTC — DGX supervisor owns all remaining work; Pop is CLOSED.
+OWNER CORRECTION: only Pop generation was to finish. DGX generation CONTINUES using OUR OWN MODELS THROUGH COREWEAVE SANDBOXES ONLY. No Luna/external teacher generation or local GPU actor generation. Existing third-party corpora remain usable. AGENTS.md records superseding ownership. Sandbox agent is actively arranging actual sandbox generation alongside training; no new generated results claimed yet. The mistakenly stopped DGX 32-task x2 Mellum-base queue yielded4successes,4budget/unscored,56unattempted; preserve successes for admission, do not relaunch its local GPU actor.
+Native replacement: BOTH training and inference, full production recipes, independent review before cutover. Old cloud runs DIAGNOSTIC during implementation. Full Mellum new fixed FP32 row-delta sparse attention now BITWISE forward/logits/CE/all28layer backward/sourceadaptergrad/incremental; actual QAD LFM unchanged tolerance qualification PASS. Core e16f4e93 integrated as982ab3ad; 41focused+quick passed in isolated worktree. H100 destination vendor-lowering qualification remains open. No task-lift claim.
+Shared native SFT trainer/optimizer/task/exposure/RNG/resume/packed graph objective integrated5bd7a976/56d1450c/690da54a; authentic forced text/init capture and sampling/2 included. Typed durable state lifecycle and real child handoff independently tested2architectures integrated79102de1. Root focused integrated tests2629 and quick2630 running. Reviewer continues complete client/view/empty-value migration and audit; no approval yet. Root native RL one-graph actor objective/replay publisheddc78e1ee+50887ec2; actual training-stage/actor CLI wiring remains. Shared semantic VAE differentiable core exists, executable joint/distill/export/serving not yet complete. Root readiness controller3testsPASS, still unpublished and not production-bound. No placeholder-completion claims.
+Data agent owns role-aware full-source native conversion, train/test protection and BOTH actual production recipe bindings. R11/REST27 admitted; final Pop52116–18 source/render224roots955decisions verifiedDGX, nextunion admission separate. Search/OWL658396decisions40818programs96087sourcegroups full scan provesZEROprotection/review intersections; compact164part indices and source admitteda8e67c1f.7002overcap pagedconversions assigned. Preserve owner untracked expansion plan. Big2/Dolci sandbox CPU work continues;300Dolciwrong_return omissions need runtime-history/index recovery,3fresh unchanged replays succeeded.
+Cloud last12:27: Mellumstep3749GPU98%, finite, task3600=8/16 vsbase13, zeroinfra, full3600privateSHAe97eb68e611a1e4acd03e937306c7f293b198134f094d0b0abb72f3b132bf00c. LFMexact28000restored CPU/window2cache prep, no28001 yet, GPUidle prep; correctPH/WTtarget256prewarm, no stale handoffcontroller. Full28000privateSHA737f37ee855c68830a003e2ac6dc9591dd0ac2319e72f085bdb61f2e60dc8fbe. Sandbox agent now owns fresh health plus generation resource integration. Periodic durable exporters active. Do not overwrite live canonical cloud Python source while imported by diagnostic trainer; isolated runtimes or safe exactPID checkpoint handoff.
+Checks: standing single full-check service only; last broadb246196a45RED27files. Earlier test runner discarded pre-TAP error context; fixed bounded diagnostics50887ec2. Representative canonical rebuilt TS29PASS, not proof whole suite resolved. Latest integrated tests pending. Every DGX test/probe/build ledgered, generationlow/traininghigh. No duplicate broad suites. Continue supervision <=50min; no sleep while actionable work remains.
 
 ## POP status page
 
-Updated 2026-10-15T11:43:12.250819Z by pop-codex-01a0e480.
+Updated 2026-10-15T12:21:32.040373Z by pop-codex-01a0e480.
 
-Pop generation closeout (owner 2026-10-15): Luna/free-Gemini replenisher timers disabled; no new campaigns. Seed52117 terminal and source/render SHA verified on DGX (74 roots/333 decisions); seed52118 paused for a Pop full gate and will resume only its exact pinned queues, then curate/register/render/sync and stop. Seed52116 source/render also synced (79 roots/348 decisions). Sol medium repair pilot admitted 2 roots/18 decisions and was synced; future repair-worker model pin code pending full-gate triage/publication. Pop full gate currently reports 2 shared neuralese attention parity failures (DGX kernel owner briefed); general Python and GPU-heavy neuralese passed. DGX cloud training and DGX generation resource control remain DGX-owned. Handover procedure plans/GENERATION_CLOSEOUT_20261015.md pending push.
+Pop generation closeout complete (2026-10-15 12:20 UTC): Luna seed52118 terminal 93/93, 89 oracle-accepted, 71 reviewed roots/274 native decisions admitted; source/render corpora registered and SSH SHA verified on DGX. Seeds52116–18 combined 224 reviewed roots/955 decisions, each with LFM/Mellum render twins; next union/recipe training admission is DGX-owned. No Pop teacher workers active; Luna and free-Gemini replenisher timers disabled; seed52119 absent. Closeout/restart procedure plans/GENERATION_CLOSEOUT_20261015.md, published initial commit bef7edf942 with final update pending. Future repair manifests pin gpt-6-sol medium; ordinary Luna low. Pop full gate found two shared attention parity failures routed DGX graph owner; Pop focused/quick/TS/conformance and most Python passed. DGX cloud training and generation resource control remain DGX-owned.
 
 ## Running on this machine
 
@@ -43,12 +41,13 @@ Pop generation closeout (owner 2026-10-15): Luna/free-Gemini replenisher timers 
 | --- | --- | --- | --- |
 | `cw-lfm-periodic-private-checkpoint-export` | medium | 1.5 / 0.1 |  |
 | `cw-mellum-periodic-private-checkpoint-export` | medium | 1.0 / 0.1 |  |
-| `dgx-native-mellum-teacher32-20261015` | low | 45.0 / 30.0 |  |
+| `natlang-full-check-50887ec266` | low | 13.5 / 7.0 |  |
 | `natlang-memory-guard` |  |  |  |
 | `natlang-task-eval-dispatch` | medium | 1.5 / 0.3 |  |
 | `render-d40-bounded-resume-2402` | low | 4.0 / 0.1 |  |
-| `render-evidence-bounded-resume-2403` | low | 4.0 / 0.1 |  |
-| `render-external-expansion-agentic-coding-native-20261014-v2-p11-62739` | low | 8.0 / 3.5 |  |
+| `render-evidence-bounded-resume-2403` | low | 4.0 / 0.0 |  |
+| `render-external-expansion-agentic-coding-native-20261014-v2-p12-66417` | low | 8.0 / 0.7 |  |
+| `render-external-expansion-evidence-terminal-native-20261015--p18-68195` | low | 8.0 / 2.2 |  |
 
 ## Declared lineages (training/neuralese/line-parity.json: next launch per line)
 
@@ -63,7 +62,7 @@ Recipes on disk (69): `diag-e2e-lfm-u10006-r4-ph-heads-3e-6`, `diag-e2e-lfm-u100
 
 ## Corpus registry
 
-1695 live entries in `training/neuralese_corpora.json` (251 dgx, 1444 pop); 339 carry training admission.
+1698 live entries in `training/neuralese_corpora.json` (252 dgx, 1446 pop); 342 carry training admission.
 
 ## Open coordination requests to dgx
 
@@ -74,9 +73,9 @@ Recipes on disk (69): `diag-e2e-lfm-u10006-r4-ph-heads-3e-6`, `diag-e2e-lfm-u100
 
 ## Latest decisions (coord)
 
-- 2026-10-15T10:55 dgx-supervisor: Future-only QAT stages can extend running recipes
-- 2026-10-15T11:01 dgx-coreweave-sandbox: Compatible Flex decode tiles for mixed cached attention
-- 2026-10-15T11:03 dgx-supervisor: Owner replaces Neuralese architecture; existing runs diagnostic
 - 2026-10-15T11:09 dgx-coreweave-sandbox: Frozen trainer imports now outrank canonical cwd
 - 2026-10-15T11:33 dgx-coreweave-sandbox: Explicit diagnostic continuation through isolated eval transport failures
 - 2026-10-15T11:47 dgx-supervisor: Native replacement review and DGX generation closeout
+- 2026-10-15T11:55 dgx-supervisor: Native graph objective, VAE core and native serving integrated
+- 2026-10-15T12:00 dgx-coreweave-sandbox: Explicit partial-runtime diagnostic continuation retains ineligibility
+- 2026-10-15T12:33 dgx-supervisor: DGX generation closed; exact restart procedure published
