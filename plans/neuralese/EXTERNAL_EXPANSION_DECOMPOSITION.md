@@ -223,3 +223,11 @@ an independent audit against current holds is required before registration.
 D06/D40/Evidence renders and cloud Search/OWL/Dolci/Cognitive work remain
 explicit subsequent additions. All 16 newly accessible raw source archives
 are independently privately durable; raw availability is not admission.
+
+Union registration verifies current review bindings before granting admission.
+A current builder receipt must bind every current exact decision-hold file.
+An older builder snapshot requires a fresh independent protection audit bound
+to every actual output file, current review and decision-hold hashes, and zero
+protected-source/decision intersections. Preserve the original build receipt;
+never rewrite its historical input bindings to appear current. This guard is
+crisp verification of the declared admission policy, not a semantic reviewer.

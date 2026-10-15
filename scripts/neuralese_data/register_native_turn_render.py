@@ -18,6 +18,61 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = ROOT / 'training' / 'neuralese_corpora.json'
+sys.path.insert(0, str(ROOT / 'scripts'))
+sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
+
+
+def verify_union_protection(render_dir, receipt):
+    """Require current build bindings or a current, byte-bound independent audit."""
+    from source_review import registry_sha256
+    from neuralese_data.decision_holds import load_decision_holds
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    review_dir = ROOT / 'training/source-reviews'
+    hold_dir = ROOT / 'training/decision-holds'
+    hold_paths = sorted(hold_dir.glob('*.jsonl'))
+    if any(not any(p.name.startswith(prefix) for p in hold_paths)
+           for prefix in ('semantic-ticket-crisp-bypass-', 'native-non-success-')):
+        raise ValueError('union admission requires current exact decision-hold files')
+    review_sha = registry_sha256(review_dir)
+    held_ids, bindings = load_decision_holds(hold_paths)
+
+    def identities(items):
+        return {(Path(b['path']).name, b['sha256']) for b in items}
+
+    expected = identities(bindings)
+    current_build = ((receipt.get('source_review') or {}).get('holds_sha256') == review_sha and
+                     expected <= identities(b for b in receipt.get('excluded_source_references', [])
+                                            if b.get('kind') == 'decision-hold') and
+                     receipt.get('held_native_decision_ids', -1) >= len(held_ids))
+    proof_binding = None
+    if not current_build:
+        path = render_dir / 'independent-protection-audit.json'
+        if not path.is_file():
+            raise ValueError('union admission requires current source-review and exact decision-hold bindings')
+        proof = json.loads(path.read_text())
+        if not (proof.get('schema') == 'natlang.protected-union-independent-audit/2' and
+                proof.get('status') == 'passed' and proof.get('current_source_review_sha256') == review_sha and
+                expected <= identities(proof.get('current_exact_hold_files', [])) and
+                proof.get('twin_identities_equal') is True and
+                all(proof.get(key) == 0 for key in ('pending_source_review_intersections',
+                    'exact_decision_hold_intersections', 'train_held_group_text_intersections',
+                    'quality_quarantine_intersections'))):
+            raise ValueError('union independent protection audit is stale or incomplete')
+        outputs = {f'{mode}:{tok}': render_dir / mode / tok / stats.get('text_data_file', 'text-data.jsonl')
+                   for mode, view in receipt['renderings'].items()
+                   for tok, stats in view['by_tokenizer'].items()}
+        if set(proof.get('files', {})) != set(outputs):
+            raise ValueError('union protection audit does not cover every output view')
+        for key, output in outputs.items():
+            if sha256_file_hex(output) != proof['files'][key].get('sha256'):
+                raise ValueError('union output changed after protection audit: ' + key)
+        proof_binding = {'path': str(path), 'sha256': sha256_file_hex(path)}
+    # Reviews can advance while large output files are being hashed.
+    _, after = load_decision_holds(sorted(hold_dir.glob('*.jsonl')))
+    if registry_sha256(review_dir) != review_sha or identities(after) != expected:
+        raise ValueError('union protection inputs changed during registration; re-audit current holds')
+    return {'source_review_sha256': review_sha, 'exact_decision_hold_bindings': bindings,
+            'independent_audit': proof_binding, 'current_build_receipt': current_build}
 
 
 def text_binding(rendering, tokenizer, stats):
@@ -88,7 +143,10 @@ def parse(argv=None):
 
 def make_entry(a) -> dict:
     receipt = json.loads((a.render_dir / 'receipt.json').read_text())
+    protection = verify_union_protection(a.render_dir, receipt) if a.kind == 'union' else None
     body = member_entry(a, receipt) if a.kind == 'member' else union_entry(a, receipt)
+    if protection is not None:
+        body['build']['admission_protection'] = protection
     sources = {corpus['id']: corpus for corpus in json.loads(REGISTRY.read_text())['corpora']}
     unadmitted = [source for source in a.source_corpus
                   if source not in sources or sources[source].get('training_admission') is not True]
