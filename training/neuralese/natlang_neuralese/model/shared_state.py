@@ -432,7 +432,7 @@ def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=No
             _flex = torch.compile(flex_attention, dynamic=True)
         return _flex(q, k, v, block_mask=prepared_mask if prepared_mask is not None else graph_block_mask(plan, q.device, window),
                      scale=scale, enable_gqa=True,
-                     kernel_options=flex_kernel_options(float32=q.dtype == torch.float32))
+                     kernel_options={**flex_kernel_options(float32=q.dtype == torch.float32), 'BACKEND': 'TRITON'})
     return F.scaled_dot_product_attention(q, k, v, attn_mask=prepared_mask if prepared_mask is not None else plan.attention_mask(q.device, window),
                                          scale=scale, enable_gqa=True)
 

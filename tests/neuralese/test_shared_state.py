@@ -396,3 +396,23 @@ def test_imported_only_forwarding_preserves_state_without_executing_tokens():
     assert pure_result['h_final'].shape == (1, 0, 32)
     assert pure.token_count == 0
     assert capture_logical_span(pure_result, 'forward', 0, 2)['token_ids'].tolist() == [2, 3]
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA unavailable')
+@pytest.mark.parametrize('tokens', [1, 28])
+def test_short_bf16_high_gqa_native_graph_uses_training_kernel(tokens):
+    from natlang_neuralese.model.shared_state import graph_attention
+    plan = compile_graph([Invocation('source', tuple(range(tokens)))])
+    torch.manual_seed(91)
+    q = torch.randn(1, 32, tokens, 128, device='cuda', dtype=torch.bfloat16, requires_grad=True)
+    k = torch.randn(1, 4, tokens, 128, device='cuda', dtype=torch.bfloat16, requires_grad=True)
+    v = torch.randn_like(k, requires_grad=True)
+    actual = graph_attention(q, k, v, plan, None, 128**-0.5, flex=True)
+    expected = graph_attention(q, k, v, plan, None, 128**-0.5, flex=False)
+    # Compare FP32 accumulations of the same BF16 q/k/v, bounding only final
+    # BF16 rounding; full-size model tests separately compare native behavior.
+    torch.testing.assert_close(actual, expected, atol=0.016, rtol=0.016)
+    a = torch.autograd.grad(actual.float().square().sum(), (q, k, v))
+    b = torch.autograd.grad(expected.float().square().sum(), (q, k, v))
+    for ga, gb in zip(a, b):
+        torch.testing.assert_close(ga, gb, atol=0.125, rtol=0.032)
