@@ -240,3 +240,14 @@ useful and bounded by its actual declared schedule; do not claim an unmeasured
 full-size memory fit from CPU fixtures. The provider's actual round, stop/drain,
 artifact ferry and full-size joint memory qualification remain deployment
 requirements, independently of local file-binding tests.
+
+Base relocation is explicit. Each release record may provide
+`base: {path, inventory_sha256}`; otherwise its resolved recipe must declare the
+actual base path. The builder compares the resident inventory with the exact
+participant's inventory hash. It never guesses a namespace path. It writes the
+verified alias into `curriculum.models[participant].base`, which the shared
+checkpoint loader verifies against the checkpoint's original inventory. The
+cloud owner has verified aliases `/work/native-production/models/lfm25-qad`
+and `/work/native-production/models/mellum21` on both sandboxes and will include
+them explicitly in the live release. A historical `/work/production/public-base`
+path is not assumed to identify the same model on another sandbox.

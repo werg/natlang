@@ -34,9 +34,14 @@ def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_fini
     curriculum=tmp_path/'semantic.json'
     curriculum.write_text(json.dumps({'schema':'natlang.native-semantic-training/1',
         'pairs':binding(train),'held_pairs':binding(held)}))
-    records=[]
+    records=[]; participants={}
     for role in ('lfm','mellum'):
         base=tmp_path/role/'base';base.mkdir(parents=True)
+        (base/'config.json').write_text(json.dumps({'architecture':role}))
+        (base/'weights.safetensors').write_bytes(b'pinned weight fixture '+role.encode())
+        from natlang_neuralese.model.native_model import base_inventory
+        from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+        participants[role]=role+':'+canonical_json_sha256_hex(base_inventory(base))
         recipe=tmp_path/role/'recipe.json'
         sources={'train':binding(train),'held':binding(held),'foundation':binding(train)}
         recipe.write_text(json.dumps({'schema':'natlang.neuralese-training-recipe/1','id':role,
@@ -51,7 +56,7 @@ def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_fini
             'foundation_manifest':binding(train),'sandbox_id':role+'-existing',
             'control':str(tmp_path/role/'owner')})
     release=tmp_path/'release.json';release.write_text(json.dumps(records))
-    controller=prepare(release,curriculum,tmp_path/'deployment',participants={'lfm':'lfm2:actual','mellum':'mellum:actual'},
+    controller=prepare(release,curriculum,tmp_path/'deployment',participants=participants,
         cases=cases,runtime=runtime,namespace=str(tmp_path))
     config=json.loads(controller.read_text())
     assert len(config['participants'])==2
@@ -64,7 +69,53 @@ def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_fini
     # Preparation may run early; actual controller waits, without launching models.
     selected,pending=ready_participants(config)
     assert not selected and len(pending)==2
+    release.write_text(json.dumps([{**row,'base':{'path':str(tmp_path/row['role']/'base'),
+        'inventory_sha256':'0'*64}} for row in records]))
+    with pytest.raises(ValueError,match='resident base inventory'):
+        prepare(release,curriculum,tmp_path/'wrong-base',participants=participants,
+            cases=cases,runtime=runtime,namespace=str(tmp_path))
+    release.write_text(json.dumps(records))
+    cases.write_text('{"split":"test"}\n')
+    with pytest.raises(ValueError,match='train-only'):
+        prepare(release,curriculum,tmp_path/'wrong-cases',participants=participants,
+            cases=cases,runtime=runtime,namespace=str(tmp_path))
+    cases.write_text('{"split":"train"}\n')
     train.write_text('changed bytes\n')
     with pytest.raises(ValueError,match='artifact changed'):
-        prepare(release,curriculum,tmp_path/'invalid',participants={'lfm':'a','mellum':'b'},
+        prepare(release,curriculum,tmp_path/'invalid',participants=participants,
             cases=cases,runtime=runtime,namespace=str(tmp_path))
+
+
+def test_semantic_loader_relocates_exact_pinned_base_without_resetting_optimizer(tmp_path):
+    import shutil
+    import torch
+    from test_native_model import tiny_source
+    from natlang_neuralese.model.native_model import load_native_model, model_state, native_identity, CHECKPOINT_SCHEMA
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer
+    from natlang_neuralese.train.native_semantic_stage import load_participant
+    base=tmp_path/'original';tiny_source(base)
+    model,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    optimizer,_=make_native_optimizer(model,lr=.001,in_backward=False)
+    loss=sum(parameter.square().mean() for parameter in model.parameters() if parameter.requires_grad)
+    loss.backward();optimizer.step()
+    checkpoint=tmp_path/'trained.pt'
+    torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':config,**model_state(model),
+        'training':{'optimizer':optimizer.state_dict(),'step':1}},checkpoint)
+    identity=native_identity(model,config,checkpoint_sha256=binding(checkpoint)['sha256'])
+    relocated=tmp_path/'resident-base';shutil.move(base,relocated)
+    loaded=load_participant('student',{'checkpoint':binding(checkpoint),'native_identity':identity},
+        {'backbone_lr':.001,'models':{'student':{'base':str(relocated)}}},'cpu')
+    assert loaded.identity==identity and loaded.config['base']==str(relocated)
+    def exact(left,right):
+        if isinstance(left,torch.Tensor):assert torch.equal(left,right)
+        elif isinstance(left,dict):
+            assert left.keys()==right.keys()
+            for key in left:exact(left[key],right[key])
+        elif isinstance(left,(tuple,list)):
+            assert len(left)==len(right)
+            for a,b in zip(left,right):exact(a,b)
+        else:assert left==right
+    exact(loaded.optimizer.state_dict(),optimizer.state_dict())
+    assert loaded.global_step==1
+    for name,value in loaded.model.state_dict().items():
+        assert torch.equal(value,model.state_dict()[name])

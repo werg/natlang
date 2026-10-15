@@ -139,13 +139,13 @@ def _adjust_lr(optimizer, lr):
 
 def load_participant(name, binding, config, device):
     path = _bound(binding['checkpoint'])
+    declaration = config.get('models', {}).get(name, {})
     model, tokenizer, _, model_config, state = load_native_checkpoint(path, device=device,
-        participant=binding['checkpoint'].get('participant'))
+        base=declaration.get('base'), participant=binding['checkpoint'].get('participant'))
     identity = native_identity(model, model_config, checkpoint_sha256=binding['checkpoint']['sha256'])
     if identity != binding['native_identity']:
         raise ValueError('semantic participant actual checkpoint/tokenizer/embedding identity differs: ' + name)
     backend = None
-    declaration = config.get('models', {}).get(name, {})
     kind = declaration.get('fp8_training', 'triton-experts' if model_config['architecture'] in {'mellum', 'maple'} else 'off')
     if kind != 'off':
         from .fp8_backend import make_backend

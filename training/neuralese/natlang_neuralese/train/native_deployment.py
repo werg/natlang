@@ -9,8 +9,8 @@ import json
 from pathlib import Path
 import sys
 
-from ..common.hashing import sha256_file_hex_cached
-from ..common.jsonio import write_json_durable
+from ..common.hashing import sha256_file_hex_cached, canonical_json_sha256_hex
+from ..common.jsonio import write_json_durable, iter_jsonl_rows
 from .native_readiness import _bound
 from .recipe import resolve_recipe_data, resolve_stage_inputs, effective_stage_parameters, recipe_identity_sha256
 
@@ -31,8 +31,10 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
     runtime = Path(runtime).resolve(strict=True)
     if not (runtime/'ts-host/dist/teacher/cli.js').is_file():
         raise ValueError('native deployment requires the actual built runtime')
-    # Verify source case bytes now; train-only admission is rechecked at bootstrap.
     cases_binding = binding(cases)
+    case_rows = [row for _, row in iter_jsonl_rows(cases)]
+    if not case_rows or any(row.get('split') != 'train' for row in case_rows):
+        raise ValueError('native deployment requires the actual admitted nonempty train-only case packet')
     semantic = json.loads(curriculum_path.read_text())
     if semantic.get('schema') != 'natlang.native-semantic-training/1':
         raise ValueError('native deployment requires the declared semantic curriculum')
@@ -62,13 +64,22 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
             raise ValueError('release foundation differs from the actual training recipe')
         if role == 'mellum':
             semantic['task_eval'] = parameters['task_eval']
-        base = parameters.get('base') or str(Path(namespace)/'models'/('lfm25-qad' if role == 'lfm' else 'mellum21'))
-        if not Path(base).is_dir():
-            raise ValueError('native deployment requires its resident pinned base')
+        declared_base = record.get('base') or parameters.get('base')
+        if not declared_base:
+            raise ValueError('native deployment requires an explicit actual base path from release or recipe')
+        base = declared_base['path'] if isinstance(declared_base, dict) else declared_base
+        from ..model.native_model import base_inventory
+        inventory = base_inventory(base)
+        inventory_sha = canonical_json_sha256_hex(inventory)
+        if (inventory_sha != participants[role].split(':', 1)[-1]
+                or isinstance(declared_base, dict) and declared_base.get('inventory_sha256') != inventory_sha):
+            raise ValueError('native deployment resident base inventory differs from its exact participant')
+        semantic.setdefault('models', {}).setdefault(participants[role], {})['base'] = str(base)
         models.append({'model': role, 'native_participant': participants[role],
             'production_recipe': binding(recipe_path), 'production_stage': stage['id'],
             'seed_native_graphs': inputs['native_graphs'], 'held_native_graphs': inputs['held_native_graphs'],
             'cases': cases_binding, 'runtime': str(runtime/'ts-host'), 'base': base,
+            'base_inventory_sha256': inventory_sha,
             'port': 8097 if role == 'lfm' else 8098, 'provider_queue': queue,
             'provider': {'sandbox_id': record['sandbox_id']}})
         requirements.append({'model_id': participants[role],
