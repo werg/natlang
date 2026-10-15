@@ -287,3 +287,34 @@ This is exact numerical mechanism, not data or promotion policy. No causal key,
 loss target, row normalization, learned role or exposure credit changes. Full
 block fast-path restoration requires an ordered kernel implementation with the
 same numerical contract; changing a tolerance is not a repair.
+
+### Explicit expert input-adjoint precision
+
+The supervisor may trade training throughput for a more accurate adjoint after
+measuring actual gradients, updates and task behavior. This is training policy,
+not a reason to silently change an existing production backend. The current
+FP8 input-gradient default remains unchanged. A declared `current-bf16-dx`
+recipe selects the same grouped FP8 forward and BF16 weight-gradient mechanism,
+with a BF16 tensor-core input adjoint through the forward's dequantized weights.
+
+1. Bind the requested input-adjoint precision to backend configuration,
+   checkpoints, inventory and activation recomputation.
+2. Reuse the expert block table and chronological reduction over incoming
+   gradient coordinates. Load the original BF16 incoming gradient; dequantize
+   the saved forward FP8 weights into BF16 tiles; accumulate dot products in
+   FP32 and return the existing BF16 adjoint shape. Do not quantize incoming
+   gradients to E4M3 for this recipe or retain a full dequantized weight copy.
+3. Keep forward routing, forward operands, weight gradients, parameters,
+   optimizer moments, RNG and source-exposure obligations unchanged.
+4. A declared stateless precision transition records its previous/requested
+   modes. SFT continuation requires actual restored-model backend qualification;
+   it cannot pass by changing checkpoint metadata alone.
+5. Compare the exact FP64 dequantized-weight adjoint, executed kernel cost,
+   checkpoint replay and actual optimizer updates before selecting a new
+   production mode. Report BF16 fan-in and output rounding separately from the
+   additional FP8 incoming-gradient surrogate.
+
+The grouped multiply, state verifier and CLI binding are crisp numerical and
+durability mechanisms. Recipe choice and adoption remain the supervisor's
+adaptive training policy. Both students use the shared backend interface;
+this option applies only to the architecture with grouped dense experts.

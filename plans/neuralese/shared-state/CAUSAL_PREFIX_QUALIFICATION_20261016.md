@@ -98,3 +98,55 @@ This does not establish CoreWeave SM120/restored-parent qualification.
 Remaining work: localize and repair Mellum adjoint differences against exact
 references; qualify full cached/import-gap gradients and actual cloud runtime;
 independent integration review before enabling either production recipe.
+
+
+## Accounted adjoint arithmetic and optional precision experiment
+
+The full layer-by-layer backward trace reproduces both original gradient gaps.
+Its first difference is the final loss-gather fan-in: the shared BF16 adjoint
+matches the FP32 sum of disjoint adjoints cast once to BF16 BITWISE, in both
+expert modes. Native relative L2 before that cast is .00177365. Subsequent
+BF16 backward operators amplify the different incoming adjoint. This is an
+identified arithmetic effect, not an unresolved causal-mask defect or a waived
+numerical qualification. Full trace:
+`/home/werg/data/dgxops/native-prefix-backward-localization-20261016.json`.
+
+A separate exact FP64 oracle uses 64 actual saved branch adjoints and the
+published layer-27/expert-0 down weight. Current FP8 dX differs from the exact
+forward-dequantized-weight derivative by relative L2 .0251091; direct FP32 dX
+is 1.17e-7. Quantized input-adjoint additivity differs by .0122337, versus
+.00165465 from BF16 fan-in alone. This nonlinear gradient quantization also
+applies to existing FP8 training. Report:
+`/home/werg/data/dgxops/native-fp8-adjoint-reference-20261016.json`.
+
+The explicit expert recipe `current-bf16-dx` retains the same FP8 forward and
+BF16 weight-gradient path. It uses BF16 incoming adjoints and dequantizes saved
+FP8 weights into BF16 tiles, with FP32 accumulation. The current production
+default stays unchanged. Configuration, checkpoint state, activation replay and
+inventory bind the selected mode. Generic backend restoration inherits the
+saved mode; an explicit stateless change records the previous/requested mode.
+SFT continuation requires actual restored-model backend qualification.
+
+- `native-fp8-dx-final-20261016`: 24 focused CUDA/backend/glue tests passed,
+  including idle/partial experts, exact FP64 multiplication/roundoff bounds,
+  bitwise unchanged forward and dW, actual native-graph Muon updates, complete
+  optimizer/backend/RNG restoration and bitwise next-update continuation.
+- On the tiny real-port native communication fixture, three current-mode
+  updates had loss 5.038557 → 5.010185 → 4.978134; BF16-dX had the same initial
+  loss then 5.008615 → 4.981847. Both changed actual expert weights. These are
+  mechanism/update checks, not full-size model-lift evidence.
+- `native-fp8-dx-cost-20261016`: all 64 actual published layer-27 down experts,
+  weight shape [64,2304,896], 98,304 routed rows. BF16-dX relative error to
+  exact FP64 dequantized-weight dX is .0016773, versus .0251091 FP8 (~15x
+  lower). Five alternating CUDA-event samples gave median 15.671 ms versus
+  12.767 ms (+22.7% for this primitive), with substantial variance under
+  concurrent GPU work. This is not full trainer throughput. Peak allocation
+  was 1,605,541,888 bytes; no complete dequantized weight copy is retained.
+  Report: `/home/werg/data/dgxops/native-fp8-dx-cost-20261016.json`.
+- `native-fp8-dx-quick-20261016`: quick check passed.
+
+Full-size restored-parent training/task behavior and practical throughput still
+select the production precision. Neither this optional recipe nor accounted
+BF16 arithmetic silently converts the failed strict Mellum prefix gate into a
+pass. LFM's separately qualified shared implementation may proceed to its own
+actual H100/restored-parent handoff independently.

@@ -412,7 +412,7 @@ class DenseExperts(nn.Module):
 DENSE_MOE_KERNELS = ("invariant", "loop", "grouped")
 DENSE_MOE = {"kernel": os.environ.get("NATLANG_MAPLE_DENSE_MOE", "invariant"),
              # "grouped": FP8 grouped expert GEMMs (maple/expert_gemm.py), set by train/fp8_backend.FP8ExpertAdapter
-             "fp8": None, "fp8_stats": None}
+             "fp8": None, "fp8_stats": None, "fp8_input_gradient_precision": "fp8"}
 
 
 def set_dense_moe_kernel(kernel: str) -> None:
