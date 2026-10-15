@@ -63,6 +63,17 @@ def test_explicit_reasoning_row_upgrade_is_a_supported_native_continuation(tmp_p
         recipe.direct_windowing_handoffs(before,after,tmp_path)
 
 
+@pytest.mark.parametrize('enabled',[False,True])
+def test_native_boolean_recipe_flags_parse_both_declared_values(tmp_path,enabled):
+    from natlang_neuralese.train.native_state_sft import build_parser
+    parameters={'refresh_at_checkpoint':enabled,'communication_foundation':enabled,
+                'learn_reasoning_boundaries':enabled}
+    argv=['--native-graphs',str(tmp_path/'train'),'--held-native-graphs',str(tmp_path/'held'),
+          '--out',str(tmp_path/'out'),*stage_parameter_args(parameters)]
+    parsed=build_parser().parse_args(argv)
+    assert all(getattr(parsed,name) is enabled for name in parameters)
+
+
 def test_native_shared_controller_is_a_headless_recipe_stage(tmp_path):
     from natlang_neuralese.train.recipe import (HANDLERS, HEADLESS_NATIVE_KINDS,
         NATIVE_IDENTITY_QUALIFICATION, SHARED_NATIVE_KINDS, stage_input_args,

@@ -434,11 +434,11 @@ def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--native-graphs', type=Path, required=True)
     parser.add_argument('--foundation-native-graphs', type=Path)
-    parser.add_argument('--refresh-at-checkpoint', action='store_true',
+    parser.add_argument('--refresh-at-checkpoint', action=argparse.BooleanOptionalAction, default=False,
         help='return an explicit incomplete continuation for semantic refresh at the next declared checkpoint boundary')
     parser.add_argument('--learn-reasoning-boundaries', action=argparse.BooleanOptionalAction, default=False,
                         help='explicitly add learned existing reasoning token rows to an old parent')
-    parser.add_argument('--communication-foundation', action='store_true',
+    parser.add_argument('--communication-foundation', action=argparse.BooleanOptionalAction, default=False,
         help='pause at the complete admitted communication cohort with mandatory ordinary credits retained')
     parser.add_argument('--held-native-graphs', type=Path, required=True)
     parser.add_argument('--continued-native-graphs', type=Path)
