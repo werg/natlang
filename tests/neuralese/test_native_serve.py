@@ -134,8 +134,8 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
             {'id': foreign.id, 'mode': 'best-effort-text-retokenization'}]
 
         info = get('/v1/neuralese/info')
-        assert 'template' in info['capabilities'] and 'guidance' not in info['capabilities']
-        assert 'guidance' in info['capability_gaps']
+        assert {'template', 'guidance'} <= set(info['capabilities'])
+        assert 'guidance' not in info['capability_gaps']
         assert info['native_state']['consumption_modes'] == [
             'exact-native-state', 'best-effort-text-retokenization']
         assert {'native.text-write', 'native.init-body'} <= set(info['capabilities'])
@@ -313,17 +313,13 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert template_capture['schema'] == 'natlang.native-rl-sampling/2'
         assert any(item['sample_index'] is None for item in template_capture['generated_inputs'])
         assert template_capture['writes'][0]['own_begin'] < template_capture['writes'][0]['payload_own_end']
-        try:
-            guided_request = urllib.request.Request(endpoint + '/v1/chat/completions', data=json.dumps({
-                'messages': [{'role': 'user', 'content': 'guided'}], 'guidance': True}).encode(),
-                headers={'content-type': 'application/json'})
-            with urllib.request.urlopen(guided_request, timeout=30) as response:
-                raise AssertionError(f'unsupported native guidance unexpectedly returned HTTP {response.status}')
-        except urllib.error.HTTPError as error:
-            # Capability negotiation exposes the missing native checker as a
-            # structured error instead of advertising legacy guidance semantics.
-            assert error.code == 501
-            assert json.loads(error.read())['error']['code'] == 'neuralese-guidance-unavailable'
+        guided_tokens = iter([(5, -.2), (2, -.3)])
+        monkeypatch.setattr(engine, '_native_token', lambda _seq: next(guided_tokens))
+        guided = post({'messages': [{'role': 'user', 'content': 'guided'}], 'guidance': True,
+            'temperature': 1.0, 'max_tokens': 4, 'x_natlang_rl_capture': True})
+        assert guided['x_natlang_guidance'] == {'rejections': []}
+        assert guided['x_natlang_rl_capture']['sampling_law']['guidance'] is True
+        assert guided['x_natlang_rl_capture']['samples'][0]['banned_token_ids'] == []
     finally:
         server.shutdown()
         server.server_close()

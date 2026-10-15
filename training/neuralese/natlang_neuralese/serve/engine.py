@@ -245,6 +245,9 @@ class Sequence:
     native_forced_tokens: list[int] = field(default_factory=list)
     native_template_suffix: list[int] = field(default_factory=list)
     native_template_value_type: str | None = None
+    native_item_positions: list[int] = field(default_factory=list)
+    native_guidance_anchor: dict | None = None
+    native_guidance_flushing: bool = False
 
 
 class Engine:
@@ -678,14 +681,12 @@ class Engine:
     @staticmethod
     def _native_record_input(seq, token, *, producing, sample_index=None):
         """Record one actual own-token input; imported KV slots never advance this coordinate."""
-        if seq.request.rl_capture:
+        if seq.request.rl_capture or seq.guide is not None:
             seq.native_rl_inputs.append({'token_id': int(token),
                 'input_role': 'produce' if producing else 'ordinary', 'sample_index': sample_index})
         seq.native_own_position += 1
 
     def _native_prefill(self, seq):
-        if seq.request.guidance is not None:
-            raise RequestError("native-guidance-unsupported", "native shared-state serving does not yet implement guided sampling")
         if seq.request.adapters:
             raise RequestError("native-adapters-unsupported", "native shared-state serving does not yet implement legacy block adapters")
         if seq.request.forced or seq.request.neuralese_length is not None or seq.request.neuralese_passes is not None:
@@ -750,6 +751,7 @@ class Engine:
                 output = self._native_forward([token], seq.cache)
                 seq.cache, seq.logits = output['cache'], self._native_logits(output['h_final'])
                 seq.items.append(token)
+                seq.native_item_positions.append(seq.native_own_position)
                 seq.generated_positions += 1
                 self._native_record_input(seq, token, producing=False)
             if seq.request.template.get('value') == 'write':
@@ -763,15 +765,25 @@ class Engine:
                 seq.native_capture_ids = []
                 seq.native_template_suffix = template_suffix
                 self._native_record_input(seq, self.role_tokens.produce_open, producing=False)
+        if seq.request.guidance is not None:
+            from .native_guidance import initialize
+            initialize(self, seq)
         seq.phase = "text"
 
     def _native_token(self, seq):
-        logits = seq.logits[0].float()
+        from ..common.sampling import masked_log_distribution
+        log_probs = masked_log_distribution(seq.logits[0], seq.request.temperature or 1.0,
+            banned=sorted(seq.bans.get(seq.native_own_position, ())))
         if seq.request.temperature and seq.request.temperature > 0:
-            log_probs = torch.log_softmax(logits / seq.request.temperature, -1)
             token = int(torch.multinomial(log_probs.exp().cpu(), 1, generator=seq.rng))
             return token, float(log_probs[token])
-        return int(logits.argmax()), None
+        return int(log_probs.argmax()), None
+
+    def _native_guide(self, seq):
+        if seq.guide is not None:
+            from .native_guidance import check
+            return check(self, seq)
+        return False
 
     def _native_finish_block(self, seq):
         if not seq.native_capture_chunks:
@@ -783,6 +795,7 @@ class Engine:
             text=self.tokenizer.decode(seq.native_capture_ids, skip_special_tokens=False))
         seq.blocks.append(record)
         seq.items.append(record)
+        seq.native_item_positions.append(seq.native_write_start_own)
         seq.native_capture_chunks.clear()
         seq.native_capture_ids.clear()
         seq.native_capture_open = False
@@ -802,11 +815,13 @@ class Engine:
                                        if seq.native_write_start_own is not None else None),
                 "payload_own_end": seq.native_own_position - 1,
                 "native_identity": self._native_block_identity(block)})
-            seq.native_write_start_sample = None
-            seq.native_write_close_sample = None
-            seq.native_write_start_own = None
-            seq.native_write_open_sample = None
-        if seq.request.on_delta is not None:
+        seq.native_write_start_sample = None
+        seq.native_write_close_sample = None
+        seq.native_write_start_own = None
+        seq.native_write_open_sample = None
+        if self._native_guide(seq):
+            return
+        if seq.request.on_delta is not None and seq.guide is None:
             seq.request.on_delta({"native_state": record.meta()})
 
     def _native_store_capture(self, token_ids, chunks, *, text):
@@ -1000,7 +1015,9 @@ class Engine:
                         producing=seq.native_capture_open and token not in (
                             self.role_tokens.produce_open, self.role_tokens.produce_close))
                     seq.items.append(token)
-                    self._emit(seq, token=token)
+                    seq.native_item_positions.append(seq.native_own_position - 1)
+                    if not self._native_guide(seq):
+                        self._emit(seq, token=token)
                     continue
                 if seq.generated_positions >= seq.request.max_tokens:
                     if seq.native_capture_open:
@@ -1015,8 +1032,10 @@ class Engine:
                 terminal = token in self.stop_ids
                 producing_input = seq.native_capture_open and token not in (
                     self.role_tokens.produce_open, self.role_tokens.produce_close)
-                if seq.request.rl_capture:
+                if seq.request.rl_capture or seq.guide is not None:
                     seq.rl_samples.append({"index": sample_index, "token_id": token, "logp": sampled_logp,
+                                           **({'banned_token_ids': sorted(seq.bans.get(seq.native_own_position, ()))}
+                                              if seq.guide is not None else {}),
                                            "input_role": "produce" if producing_input else "ordinary",
                                            "terminal": terminal,
                                            "query_own_position": query_own_position})
@@ -1032,7 +1051,7 @@ class Engine:
                     raise RequestError("neuralese-native-state-consume-marker",
                                        "consume markers are inserted only around an imported native-state part")
                 if seq.native_capture_open and token == marker.produce_close:
-                    seq.native_write_close_sample = sample_index if seq.request.rl_capture else None
+                    seq.native_write_close_sample = sample_index
                     output = self._native_forward([token], seq.cache)
                     seq.cache, seq.logits = output["cache"], self._native_logits(output["h_final"])
                     seq.generated_positions += 1
@@ -1042,7 +1061,7 @@ class Engine:
                 producing = seq.native_capture_open and token != marker.produce_open
                 if token == marker.produce_open:
                     seq.native_write_start_own = seq.native_own_position
-                    seq.native_write_open_sample = sample_index if seq.request.rl_capture else None
+                    seq.native_write_open_sample = sample_index
                 output = self._native_forward([token], seq.cache, producing=producing)
                 seq.cache, seq.logits = output["cache"], self._native_logits(output["h_final"])
                 seq.generated_positions += 1
@@ -1053,14 +1072,15 @@ class Engine:
                     seq.native_capture_chunks = []
                     seq.native_capture_ids = []
                     seq.native_capture_open = True
-                    if seq.request.rl_capture:
-                        seq.native_write_start_sample = sample_index
+                    seq.native_write_start_sample = sample_index
                 elif producing:
                     seq.native_capture_chunks.append(output)
                     seq.native_capture_ids.append(token)
                 else:
                     seq.items.append(token)
-                    self._emit(seq, token=token)
+                    seq.native_item_positions.append(seq.native_own_position - 1)
+                    if not self._native_guide(seq):
+                        self._emit(seq, token=token)
             except Exception as error:  # one malformed sequence must not stop other requests
                 self._fail(seq, error)
 
@@ -1323,6 +1343,8 @@ class Engine:
 
     def _emit(self, seq: Sequence, token: int | None = None, block: Block | None = None):
         """Streaming: hand new output to the request's listener, if any."""
+        if getattr(self, 'native_state_enabled', False) and seq.guide is not None and not seq.native_guidance_flushing:
+            return
         listener = seq.request.on_delta
         if listener is None:
             return
@@ -1360,6 +1382,9 @@ class Engine:
         return int(logits.argmax())
 
     def _finish(self, seq: Sequence, reason: str):
+        if getattr(self, 'native_state_enabled', False) and seq.guide is not None:
+            from .native_guidance import flush
+            flush(self, seq)
         if seq.request.on_delta is not None and seq.pending:
             seq.request.on_delta({"text": self.tokenizer.decode(seq.pending, skip_special_tokens=False)})
             seq.pending = []
@@ -1587,6 +1612,8 @@ class Engine:
                 "usage": {"prompt_tokens": seq.prompt_positions, "completion_tokens": seq.generated_positions,
                           "total_tokens": seq.prompt_positions + seq.generated_positions},
                 "native_state": {"blocks": [record.meta() for record in records], "imports": seq.native_imports}}
+        if seq.guide is not None:
+            response['x_natlang_guidance'] = {'rejections': seq.guide.rejections}
         if seq.request.rl_capture:
             response["x_natlang_rl_capture"] = {"schema": "natlang.native-rl-sampling/2",
                 "policy": {"checkpoint_sha256": self.checkpoint_sha256,
@@ -1598,5 +1625,5 @@ class Engine:
                 "finish_reason": seq.finish_reason,
                 "sample_range_convention": "half-open",
                 "sampling_law": {"temperature": seq.request.temperature, "seed": seq.native_sampling_seed,
-                                 "guidance": False, "probabilities": "post-processing-normalized"}}
+                                 "guidance": seq.guide is not None, "probabilities": "post-processing-normalized"}}
         return response

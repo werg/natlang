@@ -272,3 +272,12 @@ its exact shared export; verify with the same module's `verify --bundle BUNDLE`.
 Use the returned checkpoint/semantic-adapter paths and an explicit identical HF
 base location when relocated. Missing/changed/escaped dependency errors require
 restoring the complete verified bundle, never changing its identity declarations.
+
+Native services advertising `guidance` restore the full prompt KV/hybrid-state
+anchor and replay accepted own-token roles after a rejection. Guided streams
+buffer until the reply commits; consumers must not infer a stalled request from
+absent early deltas. Preserve `natlang.native-rl-sampling/2` inputs, own positions,
+write coordinates and each action's sparse `banned_token_ids` unchanged for
+normalized-mask replay. Never substitute the unmasked model log-probability.
+`neuralese-guidance-template-conflict` requires a compatible forced call template
+or removal of the conflicting forced constraint, rather than retrying unchanged.

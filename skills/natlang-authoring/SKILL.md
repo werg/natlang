@@ -275,3 +275,11 @@ Portable native checkpoints preserve manifest identities and all parameter,
 optimizer and training-state dependencies. If bundle verification reports missing,
 changed or escaped artifacts, restore the complete verified bundle and the pinned
 base model files; do not rewrite identity metadata or substitute another adapter.
+
+Native guided chat now uses the same call/line guidance checks as ordinary chat.
+Guided streaming publishes only the final committed reply, since a rejected
+prefix cannot be retracted from a client. A
+`neuralese-guidance-template-conflict` error means the requested forced template
+violates guidance; choose a compatible call template or remove that forced
+constraint. Keep the actual sparse `banned_token_ids` in each accepted sampled
+action when retaining native RL receipts; forced template inputs are not actions.

@@ -155,16 +155,23 @@ def compile_replay(turns, *, identity, roles, fetch_block):
             if sample['terminal'] and opened is not None:
                 raise ValueError('native RL terminal token occurs inside a producer payload')
             allowed = sample.get('allowed_token_ids')
-            if not sample['forced'] and law.get('guidance') and allowed is None:
+            banned = sample.get('banned_token_ids')
+            if allowed is not None and banned is not None:
+                raise ValueError('native RL mask must use one exact allowed or banned representation')
+            if not sample['forced'] and law.get('guidance') and allowed is None and banned is None:
                 raise ValueError('guided native RL requires actual normalized-mask replay')
             if allowed is not None:
                 allowed = _tokens(allowed)
                 if token not in allowed or len(set(allowed)) != len(allowed):
                     raise ValueError('native RL guide mask must contain its sampled token exactly once')
+            if banned is not None:
+                banned = _tokens(banned)
+                if token in banned or len(set(banned)) != len(banned):
+                    raise ValueError('native RL banned mask excludes its sampled token or repeats IDs')
             if not sample['forced']:
                 events.append({'local_query': prompt_length + index - 1, 'token_id': token,
                     'behavior_logp': sample['logp'], 'temperature': float(temperature),
-                    'allowed_token_ids': allowed, 'turn': name, 'sample': sample['source_sample']})
+                    'allowed_token_ids': allowed, 'banned_token_ids': banned, 'turn': name, 'sample': sample['source_sample']})
             own.append(token); mask.append(sample['input_role'] == 'produce')
         if opened is not None:
             raise ValueError('native RL capture ended inside a producer payload')
@@ -273,22 +280,20 @@ def action_logps(model, hidden, actions, *, chunk_tokens=128):
     from torch.utils.checkpoint import checkpoint
     groups = {}
     for index, action in enumerate(actions):
-        groups.setdefault((action['temperature'], action['allowed_token_ids']), []).append(index)
+        groups.setdefault((action['temperature'],tuple(action['allowed_token_ids']) if action['allowed_token_ids'] is not None else None,
+                           tuple(action['banned_token_ids']) if action.get('banned_token_ids') is not None else None), []).append(index)
     logps = [None] * len(actions)
-    def score(states, labels, temperature, allowed):
-        logits = model.logits(states).float() / temperature
-        if allowed is not None:
-            logits = logits[:, torch.tensor(allowed, device=states.device)]
-        return F.log_softmax(logits, -1).gather(1, labels[:, None]).squeeze(1)
-    for (temperature, allowed), indices in groups.items():
-        for start in range(0, len(indices), chunk_tokens):
-            selected = indices[start:start+chunk_tokens]
-            queries = torch.tensor([actions[i]['query'] for i in selected], device=hidden.device)
-            labels = torch.tensor([actions[i]['token_id'] if allowed is None else
-                                   allowed.index(actions[i]['token_id']) for i in selected], device=hidden.device)
-            values = checkpoint(score, hidden[queries], labels, temperature, allowed, use_reentrant=False)
-            for index, value in zip(selected, values.unbind()):
-                logps[index] = value
+    def score(states,labels,temperature,allowed,banned):
+        from ..common.sampling import masked_log_distribution
+        log_probs=masked_log_distribution(model.logits(states),temperature,allowed=allowed,banned=banned)
+        return log_probs.gather(1,labels[:,None]).squeeze(1)
+    for (temperature,allowed,banned),indices in groups.items():
+        for start in range(0,len(indices),chunk_tokens):
+            selected=indices[start:start+chunk_tokens]
+            queries=torch.tensor([actions[i]['query'] for i in selected],device=hidden.device)
+            labels=torch.tensor([actions[i]['token_id'] for i in selected],device=hidden.device)
+            values=checkpoint(score,hidden[queries],labels,temperature,allowed,banned,use_reentrant=False)
+            for index,value in zip(selected,values.unbind()):logps[index]=value
     return torch.stack(logps), torch.tensor([action['behavior_logp'] for action in actions],
                                            device=hidden.device, dtype=torch.float32)
 

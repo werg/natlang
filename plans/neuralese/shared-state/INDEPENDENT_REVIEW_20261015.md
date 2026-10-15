@@ -277,3 +277,20 @@ passed under native-review-portable-quick-20261015. The first probe supplied an
 incorrect test-file path and ran no tests; its corrected successor provided the
 evidence above. Portability is actual checkpoint application, not a claim that
 legacy direct adapter values, higher-order or guided native generation are done.
+
+Native guidance repair (independent review, 2026-10-15 evening): actual native
+serving reuses Guide's call/line checks. One prompt KV/hybrid anchor plus retained
+actual own inputs/roles replaces per-token full cache snapshots. Rejection prunes
+sample/write/ref effects, bans the rejected own input, and replays the retained
+prefix with exact producer boundaries; request RNG continues. Streaming buffers
+until commitment. Serving and graph policy objectives share one full-vocabulary
+masked normalization helper; `/2` receipts carry sparse banned masks and keep
+forced inputs separate. Both actual LFM conv/attention and Mellum ports pass
+bitwise cached-reference restoration with imported state and retained/rejected
+producer writes, stochastic continuation and accepted-action replay gradients.
+Final HTTP/capture integration and consumer-only producer gradients passed in
+ledger native-guidance-final-20261015 (16 tests); quick also passed.
+Actual guidance-policy/forced-conflict regression is additionally tested. These
+are mechanism checks, not learned task-quality or production-cutover completion.
+Second-order and direct adapter-value operations remain open; native full-model
+updates and portable bundles are independently checked mechanisms.

@@ -118,3 +118,23 @@ unchanged after relocation. No semantic adapter is applied to changed weights
 merely because its tensors fit. Streaming export and content addressing retain
 one large full-checkpoint copy, and verification checks the complete declared
 native plus semantic dependency inventory before deployment.
+
+## Native guided generation and exact replay
+
+1. Use the existing Guide constraints and retry policy over the actual decoded
+   reply, including native values as the same `__nz` syntax placeholder.
+2. Save one complete prompt-cache anchor (positional attention plus convolution/
+   hybrid state) and the actual generated own-token/producing-role log. On a
+   rejection, replay only the retained prefix with native_step, restoring every
+   own position, producer capture, write reference and sample coordinate; rejected
+   artifacts cannot remain in the emitted reply or sampling receipt. This is
+   inference rollback, not recursive training graph replay.
+3. Reuse one shared normalized masked log-distribution for sampling and native
+   RL scoring. Capture sparse banned-token IDs in the existing /2 sampling
+   receipt; forced prefix inputs remain forced rather than fabricated actions.
+4. Buffer guided output until its final committed reply, because the streaming
+   contract has no retraction event. Delayed guided deltas still use the existing
+   text/native-state events, and rejected text/references never escape.
+5. Verify both actual model ports, complete cached-prefix equivalence, producer
+   rollback, stochastic behavior-logp replay and gradient parity before enabling
+   the guidance capability. Adapter/direct and order2 support remain separate.

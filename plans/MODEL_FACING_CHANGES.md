@@ -668,3 +668,10 @@ complete parameter/optimizer/RNG/optional semantic-tokenizer closure and recover
 instructions added to both skills. Missing/changed/escaped dependency errors
 require restoring the exact complete bundle. Live model-facing measurement is
 pending the next own-model teacher window; artifact/numerical checks are separate.
+
+2026-10-15 native guided generation: existing Guide call/line policy now works
+through shared-state cached rollback; committed guided streams are buffered and
+native `/2` sampling receipts retain sparse per-action banned masks. New
+`neuralese-guidance-template-conflict` recovery advice is in both skills. Live
+48-sample measurement is debt for the next own-model CoreWeave teacher window;
+actual two-port cache/sampling/gradient tests are mechanism evidence only.
