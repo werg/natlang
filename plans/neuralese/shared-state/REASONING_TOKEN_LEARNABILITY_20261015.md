@@ -56,6 +56,17 @@ task quality after repair.
 
 ## Repair and acceptance
 
+Independent review also reproduced a precision defect at the production learning
+rate, 0.00001: after 16 nonzero-gradient updates on the tiny BF16 Mellum path,
+none of 128 new output-row elements moved, and only one new input-row element
+moved. The existing BF16 role rows also lost most small updates. The sparse-row
+repair therefore includes FP32 master parameters for both reasoning and
+Neuralese role rows, with native activation casts. An explicit upgrade preserves
+old values and moment values exactly by upcasting, retains counters and RNG, and
+records the dtype transition. Legacy loading must preserve the saved contract
+until that upgrade. The independent review also requires rejecting malformed
+row shapes before mutation; broadcastable tensors are not valid checkpoints.
+
 Extend the existing sparse learned input/readout override mechanism. Keep the
 four Neuralese role IDs and their existing parameter tensors unchanged. Preserve
 old checkpoint behavior exactly until an explicit upgrade; initialize new rows
@@ -68,6 +79,24 @@ Before cloud continuation, verify exact old-parent logits at migration, exact
 old optimizer preservation, actual learning of distinct delimiters, save/resume,
 and both backbone paths. Measure the resulting task behavior on held data; never
 admit this diagnostic's held contexts or outputs into training.
+
+The actual LF2000 CUDA qualification of the first sparse-row repair passed:
+149 existing optimizer parameter histories, all existing parameter values,
+RNG, input embeddings and initial full-vocabulary logits were preserved.
+Sixteen real production-optimizer updates on one admitted Qwen V5 training graph
+reduced its loss from 0.625005 to 0.268292. The learned row pair's log-odds capacity
+bound increased from 0.007926 to 0.043462; full checkpoint and updated optimizer
+reload were exact. This confirms the mechanism, not general task quality.
+The row's final first-delimiter probability was still only 0.000549, so continue
+measuring actual learning and task behavior rather than declaring the model
+capable from the small diagnostic.
+
+The initial diagnostic incorrectly required the old fixed hidden vector's
+margin to reach the theoretical maximum within four, then sixteen updates.
+That condition did not measure the fixed-capacity defect. The corrected test
+checks the actual learned row-pair capacity, nonzero parameter updates, loss,
+and exact reload; the fixed-vector margin remains telemetry. Numerical parity
+tolerances were not relaxed.
 
 Private evidence and ledger logs live under
 `/home/werg/data/dgxops/lfm-native-task2000-held-diagnosis-20261015/`:

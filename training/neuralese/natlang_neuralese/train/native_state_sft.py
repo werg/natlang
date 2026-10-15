@@ -206,6 +206,9 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
     if backend is not None:
         backend.reset_row_counts()
     optimizer.zero_grad(set_to_none=True)
+    sparse_before = {name: parameter.detach().clone() for name, parameter in model.named_parameters()
+                     if name in ('input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows')
+                     and parameter.requires_grad}
     if optimizer.latent is not None:
         context = optimizer.latent.in_backward()
     else:
@@ -231,12 +234,36 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
             if not torch.isfinite(norm):
                 raise FloatingPointError('nonfinite native gradient norm')
         optimizer.step()
+        model.native_sparse_updates = sparse_row_updates(model, sparse_before)
     except Exception:
         if optimizer.latent is not None:
             optimizer.latent._armed = None
         optimizer.zero_grad(set_to_none=True)
         raise
     return loss, details
+
+
+@torch.no_grad()
+def sparse_row_updates(model, before):
+    """Report actual gradient and committed update per learned vocabulary row.
+
+    These tiny tables are the only snapshots. No vocabulary-sized copy, RNG
+    draw, extra forward, optimizer action or training-policy decision occurs.
+    """
+    result = {}
+    for name, previous in before.items():
+        parameter = getattr(model, name)
+        old, current = previous.float(), parameter.detach().float()
+        gradient = parameter.grad
+        gradient = torch.zeros_like(current) if gradient is None else gradient.detach().float()
+        values = torch.stack((gradient.norm(dim=-1), (current-old).norm(dim=-1),
+                              current.norm(dim=-1), (current != old).sum(dim=-1).float()), dim=-1).cpu().tolist()
+        ids = model.token_override_ids if name.startswith('extra_') else model.marker_ids
+        result[name] = {'dtype': str(parameter.dtype), 'rows': [
+            {'token_id': token, 'gradient_l2': row[0], 'update_l2': row[1],
+             'weight_l2': row[2], 'changed_elements': int(row[3]), 'elements': current.shape[-1]}
+            for token, row in zip(ids, values)]}
+    return result
 
 
 def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=128, objective=None):
@@ -886,6 +913,8 @@ def main(argv=None):
                     'elapsed_seconds': time.time() - started, 'timestamp': time.time(),
                     'checkpoint_step': last_saved_step,
                     'communication_exposure': communication_exposure(train.entries, exposure_counts, required_visits)}
+        if getattr(model, 'native_sparse_updates', None):
+            progress['sparse_row_updates'] = model.native_sparse_updates
         if str(args.device).startswith('cuda'):
             progress['cuda_memory_bytes'] = {'allocated': torch.cuda.memory_allocated(args.device),
                 'reserved': torch.cuda.memory_reserved(args.device),

@@ -24,6 +24,10 @@ new token spelling, tokenizer change or separate training algorithm.
 5. Verify exact old-parent logits and unchanged old moments at upgrade, actual
    learned boundary-row updates for both ports, durable roundtrips and normal
    shared trainer resume. Record actual full-size outcome separately.
+6. Observe each sparse row's actual gradient, committed parameter change and
+   changed-coordinate count after SFT/RL updates. This is exact telemetry over
+   the tiny learned tables, with no extra model forward, RNG draw or optimizer
+   action. A nonzero gradient is not evidence that an update survived rounding.
 
 Independent review found BF16 Mellum readout reasoning rows remained completely
 unchanged through 16 nonzero-gradient updates at production LR 1e-5; existing
