@@ -25,8 +25,6 @@ from natlang_neuralese.common.hashing import sha256_hex as sha256_bytes, sha256_
 from natlang_neuralese.data.native_graph_conversion import text_row_graph, witnessed_pair_graph
 from natlang_neuralese.data.text_corpus import gold_text_rows, tokenizer_fingerprint
 from natlang_neuralese.model.shared_state import ROLE_MARKERS
-from natlang_neuralese.common.hashing import sha256_hex as sha256_bytes
-from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file
 
 PAIR_SCHEMA = 'natlang.native-semantic-pair/1'
 BUILD_SCHEMA = 'natlang.native-semantic-e2e-build/2'
