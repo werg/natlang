@@ -457,3 +457,33 @@ def test_the_prefix_merge_decisions_are_cached_under_their_key(tmp_path, monkeyp
     warm = list(warm)
     assert len(passes) == 3  # the warm call made only the yielding pass
     assert warm == cold and warm_receipt == cold_receipt and cold_receipt['contained_rows'] > 0
+
+
+def test_combined_epoch_and_data_handoff_accepts_only_verified_consumed_placeholders():
+    old = corpus(range(40))
+    new = corpus(range(100))
+    a = args(epochs=1.0)
+    record, plan = trainer.data_continuation(old, [], new, [], consumed=9, previous=None,
+                                            quantization_stage=None, a=a)
+    sampler = trainer.direct_sampler(new)
+    assert trainer.verify_epoch_budget_handoff(
+        sampler, plan, a, previous_epochs=0.5, consumed=9, data_continuation=record
+    ) == 'declared-data-continuation-prefix'
+    with pytest.raises(ValueError, match='consumed update placeholders'):
+        trainer.verify_epoch_budget_handoff(sampler, plan, a, previous_epochs=0.5, consumed=8,
+                                            data_continuation=record)
+    bad = list(plan)
+    bad[0] = ([new[0]], 0.0)
+    with pytest.raises(ValueError, match='consumed update placeholders'):
+        trainer.verify_epoch_budget_handoff(sampler, bad, a, previous_epochs=0.5, consumed=9,
+                                            data_continuation=record)
+
+
+def test_epoch_only_handoff_still_rejects_consumed_batch_changes():
+    data = corpus(range(40))
+    a = args()
+    sampler, plan = trainer.direct_schedule(data, a)
+    bad = list(plan)
+    bad[0] = ([], 0.0)
+    with pytest.raises(ValueError, match='changes or discards consumed'):
+        trainer.verify_epoch_budget_handoff(sampler, bad, a, previous_epochs=1.0, consumed=1)

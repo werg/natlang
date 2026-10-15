@@ -715,6 +715,26 @@ def held_documents(held):
     return sorted({w['document'] for w in held})
 
 
+def verify_epoch_budget_handoff(sampler, schedule, a, *, previous_epochs, consumed, quant=None,
+                                data_continuation=None):
+    """Verify consumed updates via the declared data prefix or an exact epoch-only schedule."""
+    if data_continuation is not None:
+        if (data_continuation['consumed_updates'] != consumed or consumed > len(schedule)
+                or any(batch for batch, _ in schedule[:consumed])):
+            raise ValueError('epoch budget data continuation changes consumed update placeholders')
+        return 'declared-data-continuation-prefix'
+    if previous_epochs is None or a.epochs is None or quant is not None:
+        raise ValueError('epoch budget handoff requires epoch schedules without a rebased QAT curriculum')
+    from .text_supervision import epoch_schedule
+    old_schedule = epoch_schedule(sampler, seed=a.seed, length=lambda w: len(w['ids']) - 1,
+                                  epochs=previous_epochs, max_tokens=a.batch_tokens, max_items=a.batch)
+    if consumed > min(len(old_schedule), len(schedule)) or any(
+            tuple(map(id, old_schedule[i][0])) != tuple(map(id, schedule[i][0]))
+            for i in range(consumed)):
+        raise ValueError('epoch budget handoff changes or discards consumed training batches')
+    return 'exact-consumed-batches'
+
+
 def data_continuation(previous_targets, previous_held, targets, held, *, consumed, previous, quantization_stage, a,
                       previous_a=None):
     """Continue the stage's epoch budget on new data after ``consumed`` updates (owner 2026-10-12: "continue our
@@ -1831,22 +1851,12 @@ def main(argv=None):
         elif saved_fp8 is not None and not stateless(saved_fp8):
             raise ValueError('an FP8 checkpoint cannot resume through the BF16 backend')
         if previous_epochs != current_epochs:
-            # The owner may shorten/extend the epoch budget without throwing away trained updates. Reconstruct
-            # both deterministic schedules and verify every consumed batch, not just an epoch counter. Fractional
-            # final epochs can repack their last bucket, so not every budget change preserves the prefix.
-            if previous_epochs is None or current_epochs is None or quant is not None:
-                raise ValueError('epoch budget handoff requires epoch schedules without a rebased QAT curriculum')
-            old_schedule = epoch_schedule(sampler, seed=a.seed, length=lambda w: len(w['ids']) - 1,
-                                          epochs=previous_epochs, max_tokens=a.batch_tokens, max_items=a.batch)
-            consumed = state['step']
-            if consumed > min(len(old_schedule), len(schedule)) or any(
-                    tuple(map(id, old_schedule[i][0])) != tuple(map(id, schedule[i][0]))
-                    for i in range(consumed)):
-                raise ValueError('epoch budget handoff changes or discards consumed training batches')
+            verification = verify_epoch_budget_handoff(
+                sampler, schedule, a, previous_epochs=previous_epochs, consumed=state['step'], quant=quant,
+                data_continuation=continuation if continuation_launch == 'continue' else None)
             print(json.dumps({'event': 'epoch_budget_handoff', 'previous_epochs': previous_epochs,
-                              'epochs': current_epochs, 'consumed_updates_verified': consumed,
-                              'updates': len(schedule)}), flush=True)
-            del old_schedule
+                              'epochs': current_epochs, 'consumed_updates_verified': state['step'],
+                              'updates': len(schedule), 'verification': verification}), flush=True)
         if continuation_launch == 'continue' and continuation['held']['rebased']:
             pending_restore = state  # mmap'd; restored once the base is measured on the new held set
         else:
