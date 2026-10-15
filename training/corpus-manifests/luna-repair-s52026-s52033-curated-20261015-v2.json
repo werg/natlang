@@ -1,0 +1,52 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-repair-s52026-s52033-curated-20261015-v2",
+  "owner": "pop",
+  "path": "runs/luna-repair-s52026-s52033-review-20261015-v2",
+  "files": [
+    {
+      "path": "SEMANTIC_REVIEW.md",
+      "bytes": 821,
+      "sha256": "0e8a361eb1337ba5dd44f9eb7bf343d887d66f2c11375bb7960794d90340c4c1"
+    },
+    {
+      "path": "accepted-parents.jsonl",
+      "bytes": 11945248,
+      "sha256": "74604903581dde32a446fde2c87467a7cf8f574d183468b0cb695c1d5993d531",
+      "lines": 8
+    },
+    {
+      "path": "accepted-parents.review.json",
+      "bytes": 2687,
+      "sha256": "bb48a3954434c98c15d7119f20c2dc86c7a97cabbebcbefe5b80e933f2988b83"
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 22086251,
+      "sha256": "b7fb7e299b2647bce4bb23c1709503638f529e4928b6933727b3dcc70702b10a",
+      "lines": 144
+    },
+    {
+      "path": "curation-review.json",
+      "bytes": 2126,
+      "sha256": "7d8135082e56a599952a1cd541adce56593b4d70bab61d7d8e8f5fcdf0655980"
+    },
+    {
+      "path": "selected-handoffs.ir.jsonl",
+      "bytes": 1057284,
+      "sha256": "e900c084bf787b80800e339a2825dcd60c41ed704ee47761e6a1b7d6de93c0a0",
+      "lines": 20
+    },
+    {
+      "path": "selected-handoffs.manifest.json",
+      "bytes": 1188,
+      "sha256": "67625151c46a63ef63cde47f2777abbd5e1e1b68d43545c27dd01d69583f074c"
+    },
+    {
+      "path": "semantic-holds.json",
+      "bytes": 750,
+      "sha256": "64c98f60259b526ccd4027a8cd8862f74fa27e39e33e94133fd069b19b37d26d"
+    }
+  ],
+  "bytes": 35096355
+}
