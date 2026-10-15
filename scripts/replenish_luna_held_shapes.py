@@ -471,6 +471,8 @@ def run_repair_cycle(campaigns):
         manifest = json.loads((teacher / 'campaign-manifest.json').read_text())
         for number in range(1, manifest['workers'] + 1):
             worker = teacher / f'worker-{number:02d}'
+            if not rows(worker / 'queue.jsonl'):
+                continue
             if not (worker / 'journal.jsonl').exists() and not active(f'natlang-pop-luna-repair-s{seed}-w{number:02d}.service'):
                 launch_worker(teacher, seed, number, repair=True)
         if not complete(teacher):
