@@ -80,3 +80,42 @@ This qualifies storage/transport on real tiny models, not full trained-parent
 CUDA arithmetic or task quality. Scheduled exporters must use complete closure
 pins before exporting this new form; no manifest-only durability claim is valid.
 Production shared activation still waits actual foundations and qualified runtime.
+
+## 22:21 UTC controller and admitted-data continuation
+
+Fresh22:17UTC actual progress: LF3117/loss.169125/5133supervisedTPS,
+M2961/loss.287712/4302supervisedTPS. Sparse thinking masters areFP32 and
+have actual nonzero gradients/changed coordinates. Private fullGET/SHA now
+verifies LF3000 above and M2750,47802833061B,SHA
+`56f085aefd05b9ddfb42497468e4038a5181f4247c192289ba8f54f6a0d2a00f`.
+Teacher batch12:1811finished/1655success,28semantic/123invalid/5budget,
+1819started/8active of3826queued. Big2 cloud2900chains/66748edges; the
+reserved1000-chain DGX subset is separately converting with2workers and remains
+excluded from cloud work.
+
+Deployment guardbdadc5a20 now permits routine cadence0 when a real task spec
+remains declared. Four file-bound tests and quick passed. The CPU builder
+regenerated actual LF802f recipe bindings and all nested dependencies; the
+qualified4820 waiting controller was rearmed22:20UTC, guardian234791/child234910,
+at `/work/native-production/shared/deployment/readiness-supervisor-4820-async-cadence-20261015`.
+Actual child ownership and monitoring state were verified; no joint optimizer
+child or ready participant is claimed. This uses new code only for CPU metadata
+construction, never silently enables new FP8 arithmetic in a student.
+
+The all-view source append is concretely queued on qualifiedcf7. Preparation
+`/work/native-production/control/{lfm,mellum}-evidence-all-views-prewarm-cf7-20261015-v1`
+and release guardians at matching `*-evidence-all-views-handoff-cf7-20261015-v1`
+wait for exact source-index/duplicate/group checks and plan-only before signaling
+any trainer. FULL17048 is already duplicate-clean/warm; header338989 and
+whole158565 are validating. Expected new rows514602/model preserve the full
+244407/244408 prefix and every credit. Any duplicate-ID or held-group conflict
+stops preparation before a training interruption and requires explicit view
+accounting. Mellum's prepared continuation changes routine tasks1000→5000;
+LF remains0+historical async. Held/checkpoint250 and mandatory current-weight
+foundation/refresh/final checks remain, with unchanged26312 foundation.
+No new view has training exposure until actual resumed updates prove it.
+
+Root's actual both-model executed-FP8 joint proof passed onDGX Torch2.11/cu130/
+SM121, not targetNGC2.14/cu134/SM120. New grouped-FP8/ordered-mask code remains
+outside this data-onlycf7 continuation. A separate exact-parent target-runtime
+check is authorized for the next useful numerical handoff; prefix sharing isOFF.
