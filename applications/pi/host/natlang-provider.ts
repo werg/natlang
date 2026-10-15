@@ -152,7 +152,8 @@ function wireContent(content: string | readonly Part[], separator: string): Wire
   for (const part of content) if (part.type !== 'text' && !isNeuraleseContent(part))
     throw new Error(`the natlang transport carries text and Neuralese content, not ${part.type} parts`);
   if (!content.some(isNeuraleseContent)) return content.map(part => part.text ?? '').join(separator);
-  return content.flatMap((part): ModelContentPart[] => isNeuraleseContent(part) ? [part] :
+  return content.flatMap((part): ModelContentPart[] => isNeuraleseContent(part) ?
+    [part.id.startsWith('nzs1_') ? { ...part, type: 'native_state' } : part] :
     part.text ? [{ type: 'text', text: part.text }] : []);
 }
 
@@ -200,7 +201,7 @@ function replyContent(text: string): (AssistantMessage['content'][number] | Neur
   if (!hasNeuraleseSentinel(text)) return text ? [{ type: 'text', text }] : [];
   return textToParts(text).filter(part => part.type !== 'text' || part.text)
     .map((part): AssistantMessage['content'][number] | NeuraleseContent =>
-      part.type === 'neuralese' ? { type: 'neuralese', id: part.id } : { type: 'text', text: part.text });
+      part.type !== 'text' ? { type: 'neuralese', id: part.id } : { type: 'text', text: part.text });
 }
 
 type Content = AssistantMessage['content'][number] | NeuraleseContent;
@@ -320,12 +321,13 @@ function streamedTurn(output: AssistantMessage, store?: NeuraleseStore) {
       if (delta.type === 'text') return piece('text', delta.text);
       if (delta.type === 'reasoning') return piece('thinking', delta.text);
       if (delta.type === 'reset') return clear();
-      if (delta.type === 'neuralese') {
+      if (delta.type === 'neuralese' || delta.type === 'native_state') {
         // The block's metadata, when the server sends it, is recorded at once: the part stays a pure reference, and
         // its length (context positions) is read from the store.
         const meta = delta.block as NeuraleseBlockMeta | undefined;
         if (meta?.id === delta.part.id && Number.isSafeInteger(meta.length) && !store?.peek?.(meta.id)) store?.note?.(meta);
-        return [...endCurrent(), ...whole({ ...delta.part })];
+        return [...endCurrent(), ...whole(delta.type === 'native_state' ?
+          { type: 'neuralese', id: delta.part.id } : { ...delta.part })];
       }
       const events = endCurrent();
       let index = calls.get(delta.index);

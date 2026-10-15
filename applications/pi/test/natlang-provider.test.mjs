@@ -72,6 +72,30 @@ const chats = () => seen.filter(item => item.path === '/v1/chat/completions');
 const agent = (...extra) => m.main.agentModels(['--agent-endpoint', endpoint, '--agent-model', 'fake', '--agent-transport', 'natlang', ...extra]);
 const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 
+test('native state streams as a reference and the next turn sends a native import', async () => {
+  const id = 'nzs1_' + 'a'.repeat(52);
+  const { models, ref } = await agent('--agent-reader', 'd1');
+  const model = models.getModel(ref.provider, ref.modelId);
+  let request;
+  const driver = Object.assign(async (input, _signal, options) => {
+    request = input;
+    options.onDelta({ type: 'native_state', part: { type: 'native_state', id } });
+    return { text: '\ue002' + id + '\ue003', calls: [] };
+  }, { neuralese: true });
+  const api = m.provider.natlangApi(() => driver);
+  const stream = api.streamSimple(model, { messages: [{ role: 'user',
+    content: [{ type: 'text', text: 'Use this: ' }, { type: 'neuralese', id }], timestamp: 1 }] });
+  const events = [];
+  for await (const event of stream) events.push(event);
+  const message = await stream.result();
+  assert.equal(message.stopReason, 'stop');
+  assert.deepEqual(request.messages[0].content,
+    [{ type: 'text', text: 'Use this: ' }, { type: 'native_state', id }]);
+  assert.deepEqual(message.content, [{ type: 'neuralese', id }]);
+  assert.equal(events.filter(event => event.type === 'neuralese').length, 1);
+  assert.equal(events.some(event => event.type === 'toolcall_start'), false);
+});
+
 test('a turn round-trips text, thinking and tool calls through the natlang transport', async () => {
   seen.length = 0;
   reply = () => ({ status: 200, body: { id: 'r1', choices: [{ finish_reason: 'tool_calls', message: { content: 'Reading it.',
