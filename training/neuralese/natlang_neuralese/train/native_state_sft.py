@@ -441,6 +441,7 @@ def build_parser():
     parser.add_argument('--held-native-graphs', type=Path, required=True)
     parser.add_argument('--continued-native-graphs', type=Path)
     parser.add_argument('--continued-held-native-graphs', type=Path)
+    parser.add_argument('--withdrawn-native-graphs', type=Path)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--base', type=Path)
     parser.add_argument('--continue-from', type=Path)
@@ -539,6 +540,7 @@ def main(argv=None):
     set_native_linear_precision(model, requested_precision)
     config['native_linear_precision'] = requested_precision
     saved_training = resume or shared_resume or {}
+    checkpoint_options['withdrawal_history']=list((saved_training.get('options') or {}).get('withdrawal_history') or [])
     carried_progress = collect_sft_progress(saved_training)
     restored_progress = False
     precision_history = list((saved_training.get('options') or {}).get('native_precision_history') or [])
@@ -611,6 +613,23 @@ def main(argv=None):
     if restored_frame is not None:
         resume = restored_frame
         restored_progress = True
+    if args.withdrawn_native_graphs:
+        if resume is None or args.continued_native_graphs is None:
+            raise ValueError('native withdrawal needs the actual checkpoint and exact predecessor source')
+        from .native_continuation import withdraw_ordinary_rows
+        old_source=NativeGraphSource(args.continued_native_graphs, fingerprint,
+            required_split='train',role_ids=roles.ids)
+        origins={}
+        def leaf_origins(source):
+            if source.kind=='manifest':
+                for child in source.children:leaf_origins(child)
+            else:origins.update({key:source.file_sha256 for key in source.bindings})
+        leaf_origins(old_source)
+        resume=withdraw_ordinary_rows(resume,args.withdrawn_native_graphs,
+            current_bindings=source_row_bindings,
+            model_id=config['architecture']+':'+config['base_inventory_sha256'],source_origins=origins)
+        carried_progress=collect_sft_progress(resume)
+        checkpoint_options['withdrawal_history']=resume['options']['withdrawal_history']
     if shared_resume is not None and not restored_progress:
         old_options = shared_resume['options']
         old_optimizer = {'weight_decay': old_options.get('weight_decay', .1),

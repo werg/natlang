@@ -122,6 +122,15 @@ def dependency_closure(request, *, namespace='/work/native-production'):
         for key in ('seed_native_graphs', 'held_native_graphs', 'foundation_native_graphs'):
             if value.get(key):
                 graphs(bound(value[key]) if isinstance(value[key], dict) else value[key])
+        if value.get('withdrawn_native_graphs'):
+            item=value['withdrawn_native_graphs']
+            proof=bound(item) if isinstance(item,dict) else add(item)
+            declaration=json.loads(proof.read_text())
+            if declaration.get('schema')!='natlang.native-graph-withdrawal/1':
+                raise ValueError('provider withdrawal declaration schema differs')
+            evidence=declaration['evidence'];path=Path(evidence['path'])
+            if not path.is_absolute():path=proof.parent/path
+            bound({**evidence,'path':str(path)})
         specifications = [value.get('task_eval'), (value.get('trainer_parameters') or {}).get('task_eval')]
         for specification in specifications:
             if isinstance(specification, str):

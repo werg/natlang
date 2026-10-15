@@ -1,5 +1,17 @@
 # Native graph data conversion and production recipe binding
 
+## Correcting admitted ordinary targets without resetting training
+
+The supervising natural-language stage reviews the existing decision-admission
+evidence and declares exactly which ordinary targets to withdraw. Crisp code
+verifies the declaration against the checkpoint's row bindings and physical
+source hashes, retains the order and credits of every remaining row, and records
+historical withdrawn visits separately. It never pretends to undo their earlier
+gradient updates. Communication rows and held data cannot use this exception.
+The same declaration removes those obsolete quotas from carried mandatory CE
+frames, while preserving their immutable historical source receipts for audit.
+Recipe and provider plumbing bind the declaration and its evidence as inputs.
+
 This is the data-side implementation plan for the shared-state migration. It
 preserves source trajectories and emits truthful native graph supervision for
 both backbones; it does not infer edges from legacy marker strings or assume

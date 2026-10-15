@@ -38,7 +38,7 @@ HANDLERS = {
     # graph files are already admitted and carry explicit split provenance.
     'native_state_sft': {'module': 'natlang_neuralese.train.native_state_sft',
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
-                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs'},
+                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'withdrawn_native_graphs'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'seed', 'task_eval',
@@ -418,6 +418,16 @@ def native_source_dependencies(path, *, parents=()):
 
 
 def _bind_native_source_dependencies(inputs):
+    if 'withdrawn_native_graphs' in inputs:
+        proof=Path(inputs['withdrawn_native_graphs']['path'])
+        value=json.loads(proof.read_text())
+        if value.get('schema')!='natlang.native-graph-withdrawal/1':
+            raise ValueError('native withdrawal input has an unsupported schema')
+        evidence=value['evidence'];path=Path(evidence['path'])
+        if not path.is_absolute():path=proof.parent/path
+        if sha(path)!=evidence['sha256']:
+            raise ValueError('native withdrawal evidence content hash mismatch')
+        inputs['withdrawn_native_graphs']['dependencies']=[{'path':str(path),'sha256':evidence['sha256']}]
     for role in ('native_graphs', 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs'):
         if role in inputs:
             dependencies = native_source_dependencies(inputs[role]['path'])
@@ -458,7 +468,7 @@ def stage_input_args(resolved, kind):
         if role in resolved and role in supported:
             args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'native_graphs',
-                 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs',
+                 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'withdrawn_native_graphs',
                  'rl_block_bundle', 'continue_from', 'continue_identity',
                  'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',
@@ -1465,7 +1475,12 @@ def _data_continuation(old, new):
                     return False
             elif predecessor in new and new[predecessor].get('sha256') != old[role].get('sha256'):
                 return False
-        excluded = set(roles) | {'continued_' + role for role in roles} | {foundation}
+        withdrawal='withdrawn_native_graphs'
+        if new.get(withdrawal) is not None and not all(new[withdrawal].get(key) for key in ('path','sha256','binding')):
+            return False
+        if old.get(withdrawal) is not None and new.get(withdrawal) is None:
+            return False
+        excluded = set(roles) | {'continued_' + role for role in roles} | {foundation,withdrawal}
         return changed and {k: v for k, v in old.items() if k not in excluded} == {
             k: v for k, v in new.items() if k not in excluded}
     if 'text_data' not in old or 'text_data' not in new or DATA_CONTINUATION_ROLE not in new:
