@@ -157,6 +157,13 @@ class SDKIO:
 
     def mirror(self, source, target, item):
         item = checked_binding(item)
+        if item['bytes']==0:
+            if item['sha256']!=hashlib.sha256(b'').hexdigest():
+                raise ValueError('empty provider artifact has a nonempty SHA')
+            if not self.remote(source,'import pathlib,json;p=pathlib.Path('+repr(item['path'])+');print(json.dumps(p.is_file() and p.stat().st_size==0))'):
+                raise ValueError('empty provider source differs from its binding')
+            self.write_atomic(target,item['path'],b'')
+            return
         runtime = self.config['sandboxes'][target]['runtime']
         code = ('import pathlib,json,sys;sys.path.insert(0,'+repr(runtime+'/training/neuralese')+');'
                 'from natlang_neuralese.common.hashing import sha256_file_hex_cached;'

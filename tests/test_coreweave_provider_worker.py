@@ -16,6 +16,18 @@ worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)
 
 
+def test_empty_closed_artifact_is_exact_without_zero_byte_store_upload(tmp_path):
+    class Empty(worker.SDKIO):
+        def remote(self,source,code,**kwargs):return True
+        def write_atomic(self,target,path,data):self.written=(target,path,data)
+    client=Empty({'receipts':str(tmp_path),'sandboxes':{}})
+    binding={'path':'/work/native-production/closed.lock','bytes':0,'sha256':worker.hashlib.sha256(b'').hexdigest()}
+    client.mirror('source','target',binding)
+    assert client.written==('target',binding['path'],b'')
+    with pytest.raises(ValueError,match='nonempty SHA'):
+        client.mirror('source','target',{**binding,'sha256':'f'*64})
+
+
 def test_metadata_inventory_uses_one_exact_archive_and_preserves_original_namespace(tmp_path):
     class Local(worker.SDKIO):
         def __init__(self):
