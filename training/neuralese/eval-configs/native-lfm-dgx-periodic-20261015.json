@@ -1,0 +1,13 @@
+{
+  "packet": {
+    "path": "/home/werg/natlang/runs/natlang-held-task-packet-v3-20261012/cases.jsonl",
+    "sha256": "535269866aeecc107e3cc8b165790a5b200cdb104884d4994958eee17eb6be95"
+  },
+  "runtime": "/home/werg/natlang/ts-host",
+  "cases": [0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45],
+  "prompt_rendering": "full",
+  "temperature": 0,
+  "noise_repeats": 1,
+  "workers": 8,
+  "neuralese_server": false
+}
