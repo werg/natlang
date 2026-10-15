@@ -542,6 +542,8 @@ def build_parser():
     parser.add_argument('--task-eval-every', type=int, default=0)
     parser.add_argument('--forward-atol', type=float, default=None)
     parser.add_argument('--gradient-atol', type=float, default=None)
+    parser.add_argument('--qualify-training-backend', action=argparse.BooleanOptionalAction, default=False,
+        help='qualify actual enabled backend on restored live weights before useful updates; preserve RNG/state')
     parser.add_argument('--recipe-binding', default=None)
     parser.add_argument('--stage-id', default=None)
     parser.add_argument('--prerequisite-stages', default='[]')
@@ -563,6 +565,9 @@ def main(argv=None):
     tolerances = [value for value in (args.forward_atol, args.gradient_atol) if value is not None]
     if args.task_eval_every < 0 or any(not math.isfinite(value) or value <= 0 for value in tolerances):
         raise ValueError('task cadence must be nonnegative and supplied native numerical tolerances positive')
+    if args.qualify_training_backend and (args.fp8_training == 'off' or
+            args.forward_atol is None or args.gradient_atol is None):
+        raise ValueError('training backend qualification needs an enabled backend and declared tolerances')
     args.out.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(args.seed)
     random.seed(args.seed)
@@ -869,6 +874,14 @@ def main(argv=None):
     if transition_check is not None:
         checkpoint_options['native_precision_transition']['reference_check'] = transition_check
         write_json(args.out / 'precision-transition.json', transition_check)
+    if args.qualify_training_backend:
+        from ..eval.native_backend import qualify_training_backend
+        backend_check = qualify_training_backend(model, tokenizer, roles, config, backend=backend,
+            checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
+                if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'],
+            forward_atol=args.forward_atol, gradient_atol=args.gradient_atol, device=args.device)
+        checkpoint_options['training_backend_check'] = backend_check
+        write_json(args.out / 'training-backend-check.json', backend_check)
     # Actual per-row optimizer credits drive the schedule. Source identity
     # remains append-only while communication deficits execute first.
     whole_epochs = int(args.epochs)

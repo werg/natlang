@@ -102,3 +102,13 @@ declared to the trainer. A pair-only cohort may omit ordinary rows, but may not
 silently weaken the declared communication coverage. This is an exact source
 and continuation verifier, not a second training scheduler.
 
+
+Explicit actual-backend qualification is exact verification, not a new training
+policy. The recipe may request `qualify_training_backend`; after restoring the
+same model/optimizer/RNG, `eval.native_backend` calls the existing cached-versus-
+graph forward/consumer-gradient/incremental verifier inside the actual training
+backend scope, requires nonzero executed projection counters and unchanged
+numerical tolerances, then restores RNG/backend state/counters. A passed check
+records no optimizer update and grants no task/foundation qualification. Useful
+subsequent updates provide separate finite-loss and execution telemetry. Disabled
+backend/missing-tolerance requests fail before expensive source/model loading.
