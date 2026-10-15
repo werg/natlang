@@ -1,0 +1,77 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "identity_qualification": "native_state_runtime_qualified",
+  "description": "Shared native positional-KV/hybrid-state full-corpus production SFT. This is the first complete native stage, not a terminal recipe: it consumes every row of the admitted FULL train split once, evaluates only against its disjoint held split, and records exact graph exposure/runtime/task receipts. Subsequent semantic VAE, joint adaptation and distillation run through one controller-owned cross-model stage as soon as both models are ready; new admitted data is added by exact append-only continuation.",
+  "input_bindings": {
+    "native_train_graphs": {
+      "path": "/work/native-production/data/native-state-full-graphs-20261015-v1/lfm25/train/native-graphs.jsonl.zst",
+      "sha256": "78ffd90e24a685516354f91e33a76d60f26a086818c27b0caf0c6fc313971096"
+    },
+    "native_held_graphs": {
+      "path": "/work/native-production/data/native-state-full-graphs-20261015-v1/lfm25/test/native-graphs.jsonl.zst",
+      "sha256": "07b2dba5a3ce8dc68fe955c64d135f7f342bb141b9001de2d007dcea340dfc67"
+    }
+  },
+  "stages": [
+    {
+      "id": "native_full_sft",
+      "kind": "native_state_sft",
+      "requires": [],
+      "inputs": {
+        "native_graphs": "native_train_graphs",
+        "held_native_graphs": "native_held_graphs"
+      },
+      "parameters": {
+        "rank": 8,
+        "epochs": 1.0,
+        "batch_graphs": 1,
+        "learning_rate": 3e-06,
+        "weight_decay": 0.1,
+        "latent_ns": "cubic5",
+        "eval_every": 1000,
+        "checkpoint_every": 5000,
+        "checkpoint_layers": true,
+        "chunk_tokens": 128,
+        "fp8_training": "off",
+        "seed": 20261015,
+        "task_eval": {
+          "packet": {
+            "path": "/work/native-production/data/natlang-held-task-packet-v3-20261012/cases.jsonl",
+            "sha256": "535269866aeecc107e3cc8b165790a5b200cdb104884d4994958eee17eb6be95"
+          },
+          "cases": [
+            0,
+            5,
+            10,
+            15,
+            16,
+            21,
+            26,
+            31,
+            32,
+            37,
+            42,
+            47,
+            48,
+            53,
+            58,
+            63
+          ],
+          "case_seconds": 7200,
+          "max_model_requests": 128,
+          "max_turns": 160,
+          "workers": 2,
+          "min_successes": 0,
+          "noise_successes": 1,
+          "reference_successes": null,
+          "prompt_rendering": "full"
+        },
+        "task_eval_every": 0,
+        "forward_atol": 0.0001,
+        "gradient_atol": 1e-05,
+        "base": "/work/native-production/models/lfm25-qad"
+      }
+    }
+  ],
+  "id": "native-state-production-base-20261015-v1"
+}

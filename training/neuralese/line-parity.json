@@ -2,6 +2,13 @@
  "schema": "natlang.neuralese-line-parity/1",
  "description": "Line parity of the Neuralese stages (owner 2026-10-11: the Mellum line on DGX and the LFM line on Pop use the same recipe, data and code; settings may differ only to fit, or where the backbone requires it, each declared with its reason). natlang_neuralese.train.line_parity checks it in scripts/check-main.sh --quick; plans/neuralese/LINE_PARITY.md holds the audit. stages.<stage>.lines.<line>.recipe names the recipe of the line's NEXT launch and .active the leaf recipe of the lineage running now (its handoff chain; owner 2026-10-13: a key added to only one running chain must not go unnoticed); both are resolved fully (every leaf setting, runtime and continuation members included) and compared with the base. Each difference is a lineage key (lineage_keys), an allowed difference (fit-only or backbone-inherent, with its reason) or a dated line_specific entry {stage, lines, key|keys, reason, date, expires, recipe?}; an undeclared, expired or no-longer-needed entry fails; a direct-stage recipe that declares \"parity\": {\"line\", \"stage\"} is checked the same way, and the direct-stage runner refuses a fresh neuralese_direct or direct-artifact recurrence launch without a parity declaration.",
  "stages": {
+  "native_state_sft": {
+   "base": {"recipe": "native-state-production-lfm-20261015-v1"},
+   "lines": {
+    "lfm": {"recipe": "native-state-production-lfm-20261015-v1"},
+    "mellum": {"recipe": "native-state-production-mellum-20261015-v1"}
+   }
+  },
   "direct": {
    "base": {"recipe": "neuralese-direct-v3"},
    "lines": {
@@ -38,6 +45,14 @@
           "parameters.optimizer_added"]
  },
  "allowed_differences": [
+  {"stage": "native_state_sft", "lines": ["mellum"], "key": "inputs.native_graphs", "kind": "backbone-inherent", "check": "tokenizer_twin",
+   "reason": "native graph token IDs are separately bound to the Mellum tokenizer; graph records, source groups and inherited train/held split are twins"},
+  {"stage": "native_state_sft", "lines": ["mellum"], "key": "inputs.held_native_graphs", "kind": "backbone-inherent", "check": "tokenizer_twin",
+   "reason": "held native graph token IDs are separately bound to the Mellum tokenizer with the same protected source groups and split"},
+  {"stage": "native_state_sft", "lines": ["mellum"], "key": "parameters.base", "kind": "backbone-inherent",
+   "reason": "each production line loads its pinned actual backbone base (QAD LFM2.5 versus Mellum2.1)"},
+  {"stage": "native_state_sft", "lines": ["mellum"], "key": "parameters.fp8_training", "kind": "backbone-inherent",
+   "reason": "Mellum's MoE experts require the shared triton-experts memory path; dense LFM has no experts"},
   {"stage": "direct", "lines": ["mellum"], "key": "inputs.text_data", "kind": "backbone-inherent", "check": "tokenizer_twin",
    "reason": "the same documents (union r3 renders) rendered with Mellum's tokenizer and chat template (prepared text carries token ids)"},
   {"stage": "direct", "lines": ["mellum"], "key": "parameters.moe_kernel", "kind": "backbone-inherent",

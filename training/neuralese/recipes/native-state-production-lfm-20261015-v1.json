@@ -1,0 +1,14 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "native-state-production-lfm-20261015-v1",
+  "extends": "native-state-production-base-20261015-v1",
+  "description": "Shared complete native-state production SFT on the lfm backbone. Launch to the fixed output directory named in the shared controller config so its exact readiness receipt is consumed automatically.",
+  "overrides": {
+    "input_bindings": {},
+    "stages": {
+      "native_full_sft": {
+        "parameters": {}
+      }
+    }
+  }
+}

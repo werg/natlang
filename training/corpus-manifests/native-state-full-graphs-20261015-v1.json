@@ -1,0 +1,102 @@
+{
+  "files": [
+    {
+      "bytes": 1206,
+      "path": "lfm25/receipt.json",
+      "sha256": "9a20431f9a1bf6fba2ff6674367028476e532acce5a968dfad28b27cb33636a7"
+    },
+    {
+      "bytes": 4308798,
+      "path": "lfm25/test/native-graphs.jsonl.zst",
+      "rows": 3155,
+      "sha256": "07b2dba5a3ce8dc68fe955c64d135f7f342bb141b9001de2d007dcea340dfc67"
+    },
+    {
+      "bytes": 51208745,
+      "path": "lfm25/train/native-graphs.jsonl.zst",
+      "rows": 53223,
+      "sha256": "78ffd90e24a685516354f91e33a76d60f26a086818c27b0caf0c6fc313971096"
+    },
+    {
+      "bytes": 1218,
+      "path": "mellum21/receipt.json",
+      "sha256": "7e5cb9d7a0c924e1960cbf2b3f64bde28fb2619d9f3c06fdf2d89fd46adfbc7d"
+    },
+    {
+      "bytes": 4096053,
+      "path": "mellum21/test/native-graphs.jsonl.zst",
+      "rows": 3155,
+      "sha256": "dad9caf0cea25c1f21039fad9c88478f14e100acbc9d9f199de4d5055d7a952c"
+    },
+    {
+      "bytes": 47769072,
+      "path": "mellum21/train/native-graphs.jsonl.zst",
+      "rows": 53223,
+      "sha256": "09cd0cae32c9e269c23a071b5f9504f310dbb4cf79d615a436c85b47b5f62c58"
+    },
+    {
+      "bytes": 3488,
+      "path": "receipt.json",
+      "sha256": "04b88001019474e08e1a0088b8f3cf1ee751152af2fde08d6be23863ce9310b2"
+    }
+  ],
+  "id": "native-state-full-graphs-20261015-v1",
+  "owner": "dgx",
+  "path": "runs/native-state-full-graphs-20261015",
+  "schema": "natlang.corpus-snapshot/1",
+  "source_binding": {
+    "base_models": {
+      "lfm25": {
+        "inventory_sha256": "f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+        "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+        "path": "/home/werg/data/dgxops/qad-drift-probe/base"
+      },
+      "mellum21": {
+        "inventory_sha256": "bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+        "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+        "path": "/home/werg/data/models/mellum21-12b-a2.5b-thinking"
+      }
+    },
+    "conversion": "static ordinary-text one-node graphs; all complete turns retained; held rows stay test; no role edges inferred",
+    "corpus_id": "natlang-target-union-20261015-next-incremental-v2-full-ready-v1",
+    "cross_model_source_membership": "same source ID/split/groups inherited from already admitted FULL corpus; model-specific tokenizations retained",
+    "full_ready_text_sources": {
+      "lfm25": {
+        "path": "/home/werg/data/natlang-target-union-v2-full-ready-20261015/full/lfm25/text-data.jsonl.zst",
+        "rows": 56378,
+        "sha256": "4bd26ec602c4d41be47a6bdb7ed0c0ad950dfe9ac63ee7f93577e881dae9a479"
+      },
+      "mellum21": {
+        "path": "/home/werg/data/natlang-target-union-v2-full-ready-20261015/full/mellum21/text-data.jsonl.zst",
+        "rows": 56378,
+        "sha256": "a183c760a062d60343920e14d80e7a9195e9815f499a3b1752c6778bb70c02e1"
+      }
+    },
+    "split_counts": {
+      "held": 3155,
+      "train": 53223
+    },
+    "tokenizers": {
+      "lfm25": {
+        "expanded": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+        "role_ids": [
+          64402,
+          64403,
+          64404,
+          64405
+        ],
+        "source": "e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf08"
+      },
+      "mellum21": {
+        "expanded": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f",
+        "role_ids": [
+          98304,
+          98305,
+          98306,
+          98307
+        ],
+        "source": "1abe5e6333be0157f76f5484b389e5586b0e6dbb9bc776f54ca9fd62fce6cb56"
+      }
+    }
+  }
+}

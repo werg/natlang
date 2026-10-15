@@ -1450,7 +1450,8 @@ def native_gold_document(tokenizer, messages, target, tools, *, prompt_rendering
     return _native_gold_render(tokenizer,[*messages,target],tools,prompt_rendering=prompt_rendering)
 
 
-def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="full"):
+def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="full",
+                       return_offsets=False):
     """Render the exact serving prompt followed by the target assistant reply.
 
     The target boundary is the prompt's token length, not a longest-common-
@@ -1486,20 +1487,43 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
     if reply_runs is None:
         raise ValueError("assistant target does not continue the serving generation prompt")
 
-    text, ids = [], []
+    text, ids, offsets, character_cursor = [], [], [], 0
+    special_spellings = set(tokenizer.all_special_tokens)
+    special_spellings.update(("<|neuralese|>", "<|/neuralese|>"))
+
+    def append_offsets(run, encoded):
+        if not return_offsets:
+            return
+        local = list(encoded["offset_mapping"])
+        # Fast tokenizers commonly assign (0, 0) to an added special token.
+        # For a run that is exactly one registered special token, preserve its
+        # real character span so structural role markers can be mapped without
+        # guessing from a whole-row re-tokenization.
+        if len(encoded["input_ids"]) == 1 and run in special_spellings:
+            local = [(0, len(run))]
+        offsets.extend((left + character_cursor, right + character_cursor)
+                       for left, right in local)
+
     for segment in prompt.segments:
         for run, escaped in split_escaped(segment, prompt.escape_nonce):
             text.append(run)
-            ids.extend(tokenizer(run, add_special_tokens=False,
-                                 split_special_tokens=escaped)["input_ids"])
+            encoded = tokenizer(run, add_special_tokens=False, split_special_tokens=escaped,
+                                return_offsets_mapping=return_offsets)
+            ids.extend(encoded["input_ids"])
+            append_offsets(run, encoded)
+            character_cursor += len(run)
     boundary = len(ids)
     for run, escaped in reply_runs:
         text.append(run)
-        ids.extend(tokenizer(run, add_special_tokens=False,
-                             split_special_tokens=escaped)["input_ids"])
+        encoded = tokenizer(run, add_special_tokens=False, split_special_tokens=escaped,
+                            return_offsets_mapping=return_offsets)
+        ids.extend(encoded["input_ids"])
+        append_offsets(run, encoded)
+        character_cursor += len(run)
     if boundary >= len(ids):
         raise ValueError("gold assistant target adds no native token suffix")
-    return "".join(text), ids, boundary
+    result = ("".join(text), ids, boundary)
+    return (*result, offsets) if return_offsets else result
 
 
 def native_gold_packet_context_only_messages(tokenizer, messages, target, tools, message_indices, *,
@@ -1587,7 +1611,8 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                    require_independent_splits: bool = True,
                    ordinary_text_admission_receipt: Mapping[str, Any] | None = None,
                    ordinary_text_admission_receipt_sha256: str | None = None,
-                   prompt_rendering: str = "full", target_reasoning: bool = False):
+                   prompt_rendering: str = "full", target_reasoning: bool = False,
+                   include_token_offsets: bool = False):
     """Return ``(rows, receipt, omissions, provenance)`` for renderer-qualified records.
 
     Each row has the shared ``text_warmup.load_text_rows`` schema. Text is a
@@ -1601,7 +1626,8 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                            require_independent_splits=require_independent_splits,
                            ordinary_text_admission_receipt=ordinary_text_admission_receipt,
                            ordinary_text_admission_receipt_sha256=ordinary_text_admission_receipt_sha256,
-                           prompt_rendering=prompt_rendering, target_reasoning=target_reasoning)
+                           prompt_rendering=prompt_rendering, target_reasoning=target_reasoning,
+                           include_token_offsets=include_token_offsets)
 
 
 def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer):
@@ -1698,7 +1724,7 @@ def bind_ordinary_text_admission(records, receipt, receipt_sha256):
 def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_independent_splits=True,
                     ordinary_text_admission_receipt=None,
                     ordinary_text_admission_receipt_sha256=None, prompt_rendering="full",
-                    target_reasoning=False):
+                    target_reasoning=False, include_token_offsets=False):
     from ..train.trajectories import crisp_messages, handover_notes
     from .prompt_rendering import PROMPT_RENDERINGS
     if prompt_rendering not in PROMPT_RENDERINGS:
@@ -1759,8 +1785,10 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
             omitted.append({"id": rid, "reason": "unresolved_or_malformed_crisp_reference", "detail": str(exc)[:240]})
             continue
         try:
-            text, token_ids, suffix_start = native_gold_packet(tokenizer, messages, target, record.get("tools") or [],
-                                                               prompt_rendering=prompt_rendering)
+            rendered = native_gold_packet(tokenizer, messages, target, record.get("tools") or [],
+                prompt_rendering=prompt_rendering, return_offsets=include_token_offsets)
+            text, token_ids, suffix_start = rendered[:3]
+            token_offsets = rendered[3] if include_token_offsets else None
         except (KeyError, TypeError, ValueError) as exc:
             omitted.append({"id": rid, "reason": "native_chat_render_failed", "detail": str(exc)[:240]})
             continue
@@ -1778,6 +1806,10 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                          "neuralese_context_attestations": [dict(item, reader_record_id=rid)
                                                             for item in context_attestations],
                          "capture_context_augmentation_attestations": capture_augmentation_attestations})
+        if include_token_offsets:
+            if not isinstance(token_offsets, list) or len(token_offsets) != len(token_ids):
+                raise ValueError(f"native rendering did not return one character offset per token: {rid}")
+            prepared[-1]["token_offsets"] = [list(span) for span in token_offsets]
         if sampling_group is not None:
             prepared[-1]["sampling_group"] = sampling_group
         if rid in text_admitted:

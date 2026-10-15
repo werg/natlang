@@ -1,0 +1,26 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "native-state-production-mellum-20261015-v1",
+  "extends": "native-state-production-base-20261015-v1",
+  "description": "Shared complete native-state production SFT on the mellum backbone. Launch to the fixed output directory named in the shared controller config so its exact readiness receipt is consumed automatically.",
+  "overrides": {
+    "input_bindings": {
+      "native_train_graphs": {
+        "path": "/work/native-production/data/native-state-full-graphs-20261015-v1/mellum21/train/native-graphs.jsonl.zst",
+        "sha256": "09cd0cae32c9e269c23a071b5f9504f310dbb4cf79d615a436c85b47b5f62c58"
+      },
+      "native_held_graphs": {
+        "path": "/work/native-production/data/native-state-full-graphs-20261015-v1/mellum21/test/native-graphs.jsonl.zst",
+        "sha256": "dad9caf0cea25c1f21039fad9c88478f14e100acbc9d9f199de4d5055d7a952c"
+      }
+    },
+    "stages": {
+      "native_full_sft": {
+        "parameters": {
+          "base": "/work/native-production/models/mellum21",
+          "fp8_training": "triton-experts"
+        }
+      }
+    }
+  }
+}

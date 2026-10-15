@@ -62,10 +62,9 @@ def test_cli_cannot_replace_declared_data(tmp_path, capsys):
 
 
 def test_both_lines_progress_in_lockstep():
-    """Lockstep (plans/neuralese/TRAINING_RECIPE.md): every stage of the progression (direct, then e2e) declares a
-    recipe for both lines; a pending line or a stage only one line runs fails CI."""
+    """Every declared production progression stage has recipes for both model lines."""
     parity = line_parity.load_parity()
-    assert list(parity['stages']) == ['direct', 'e2e']
+    assert list(parity['stages']) == ['native_state_sft', 'direct', 'e2e']
     for stage, declaration in parity['stages'].items():
         assert set(declaration['lines']) == set(line_parity.LINES), stage
         assert all(spec.get('recipe') for spec in declaration['lines'].values()), stage
