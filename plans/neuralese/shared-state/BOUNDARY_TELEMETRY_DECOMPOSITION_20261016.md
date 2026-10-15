@@ -21,3 +21,13 @@ learned. Overall held CE can hide these rare targets.
 5. Share the same observer between both architectures. Verify weighted sums
    against a direct readout oracle and unchanged gradients, plus evaluator
    aggregation and model-mode restoration.
+
+Validation: ledger unit `native-held-boundary-telemetry-20261016` passed all
+49 focused tests, including exact loss/gradient equality on both ports,
+weighted readout oracle, absent and excluded targets, forward/readout counts
+and mode restoration. Quick checks passed. Independent review found no
+correctness blocker or additional forward/readout.
+
+`mean_probability` is the weighted gold-token probability only at supervised
+held positions whose target is that boundary. It does not measure an
+unconditional emission rate, EOS margin or sampled producer-close success.
