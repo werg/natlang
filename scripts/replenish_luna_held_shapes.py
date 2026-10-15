@@ -69,10 +69,16 @@ PER_FAMILY.update(actor_greenhouse=10, dataset_workbench=10,
 # New allocation for those two families resumes behind exact and process review.
 # Existing campaigns still finish and remain available for review.
 PER_FAMILY.update(actor_greenhouse=10, composed_process=0,
-                  edit_stream=0, folder_criteria_reducer=10,
+                  edit_stream=0, folder_criteria_reducer=2,
                   counterexample_revision=0, iterate_schedule_repair=0)
 PER_FAMILY['inline_review_each'] = 4
-PER_FAMILY.update(recurrence_inline_graphs=12, knowledge_research=10)
+# The v2 folder task is still useful, but seed52096 admitted only one of its
+# ten attempts after exact and process review. Keep a small live sample while
+# the 48-case direct-judgment trial runs; spend the freed calls on families
+# with stronger recent exact/process yield. Restore the folder share if its
+# revised source qualifies on the live executor.
+PER_FAMILY.update(recurrence_inline_graphs=16, knowledge_research=10,
+                  actor_greenhouse=12, relational_late_argmax=10)
 SOURCE_FAMILIES = tuple(family for family in FAMILIES if PER_FAMILY[family] > 0)
 TARGET_GROUP_INDEX = BASE / 'target-r3-source-groups.jsonl'
 TARGET_GROUP_INPUT_HASHES = {
