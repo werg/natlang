@@ -159,3 +159,49 @@ review/readiness tests, including a real surviving subprocess tree. Quick checks
 passed under `native-review-rl-quick-20261015`. The supervisor's single standing
 full check remains the integrated full-suite authority; this review did not
 launch a competing full suite.
+
+Communication SFT/adaptive append review (2026-10-15):
+
+- Independently loaded the admitted corrected first REST27 pair shard using its
+  actual qualified model IDs and expanded tokenizer fingerprints. Both model
+  views have 37 genuine nonempty graphs and 41 consumed occurrences; LFM imports
+  1,229 payload tokens and Mellum 1,273. Every import has adjacent consuming
+  boundaries with no plaintext query span inside them. This is partial REST27
+  coverage, not a claim that all remaining source trajectories are converted.
+- The shared trainer's real two-port fixture verifies one flat forward, exact
+  cached consumer state/loss and consumer-to-producer adapter gradients.
+  Empty authenticated imports remain structural rows with zero communication
+  credit. Readiness requires complete positive genuine communication exposure
+  matching its bound completed report before shared-space adaptation.
+- Source manifests preserve exact physical prior prefixes and immutable row
+  bindings. Real interrupted continuation/repacking retains optimizer/RNG state,
+  per-row credits and repeated predecessor adoption. Rotating held checks preserve
+  scope/cursor while final completion requires full held coverage.
+- Fixed role-ID tuple/list cache-key mismatch: actual JSON cache save followed
+  by a fresh ordinary/paired source now hits without parsing. Legacy cache reuse
+  remains bound to the exact old trainer and unchanged parser/compiler/source.
+- Added explicit nonnegative source training_priority. Communication always
+  comes first; stronger-teacher ordinary sources can precede the older ordinary
+  backlog without changing row identity, quota, weight, epochs or prior credits.
+  The manifest SHA binds the priority policy; source index stays stable.
+
+Validation: ledger native-review-priority-20261015 passed 23 focused trainer
+checks, including real resume/priority order and both model ports. The subsequent
+native-review-priority-cache-20261015 passed all 3 new cache/priority checks.
+Native-review-admitted37c-20261015 independently validated all 37 corrected pair
+rows for each actual participant. The first probe lacked the zstd container
+binary; the second used friendly names instead of qualified model IDs; both
+were corrected explicitly before the successful third probe.
+
+A further adaptive restart gap was found while reviewing the priority change:
+changing only the source manifest priority rejected the original already-adopted
+predecessor because the new manifest SHA differed. Adoption now accepts its
+previously verified, durable original predecessor digest across later manifests;
+all old row bindings and the physical prefix are still checked before training.
+The real resume regression changes priority between stops using the same original
+predecessor and verifies exact remaining updates without replay.
+
+Final `native-review-priority-adoption-20261015` passed 4 focused checks after
+the adoption repair (real priority-tweaked resume plus both cache reloads and
+priority identity checks). `native-review-priority-publishquick-20261015` passed
+quick checks. No competing broad check or cloud process was started.

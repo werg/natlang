@@ -88,7 +88,7 @@ class NativeGraphSource:
             'train/native_semantic.py', 'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')})
         key = {'source_sha256': self.file_sha256, 'tokenizer': tokenizer_fingerprint,
                'split': required_split, 'policy_sha256': policy,
-               'kind': self.kind, 'pair_model': pair_model, 'role_ids': self.role_ids}
+               'kind': self.kind, 'pair_model': pair_model, 'role_ids': list(self.role_ids)}
         index_path = row_index.entry_path('native-graphs', canonical_json_sha256_hex(key))
         candidates = [(index_path, key)]
         if self.kind == 'native-graphs':
@@ -158,6 +158,9 @@ class NativeGraphSource:
         self.file_sha256 = sha256_file_hex_cached(self.path)
         self.children, self.entries, self.bindings, self.groups = [], [], {}, set()
         for binding in manifest['sources']:
+            priority = binding.get('training_priority', 0)
+            if type(priority) is not int or priority < 0:
+                raise ValueError('native source training_priority must be a nonnegative integer')
             kind = binding.get('kind')
             if kind not in {'native-graphs', 'semantic-pairs'}:
                 raise ValueError('native graph manifest source kind must be explicit')
@@ -176,7 +179,10 @@ class NativeGraphSource:
             if self.bindings.keys() & child.bindings.keys():
                 raise ValueError('native graph manifest repeats a graph identity across sources')
             self.children.append(child)
-            self.entries.extend(child.entries)
+            # Scheduling policy never changes physical source order or row
+            # binding. An omitted priority inherits a nested declaration.
+            self.entries.extend({**entry, 'training_priority': priority if 'training_priority' in binding
+                                 else entry.get('training_priority', 0)} for entry in child.entries)
             self.bindings.update(child.bindings)
             self.groups.update(child.groups)
         state = self.path.stat()
@@ -382,15 +388,15 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
     pending = {visit: [index for index, entry in enumerate(entries)
                        if exposure_counts.get(entry['id'], 0) <= visit < quotas[entry['id']]]
                for visit in range(math.ceil(epochs))}
-    for communication in (True, False):
+    def scheduling_rank(entry):
+        return (not bool(entry.get('communication')), -entry.get('training_priority', 0))
+    for rank in sorted({scheduling_rank(entry) for entry in entries}):
         for visit, remaining in pending.items():
-            indices = [index for index in remaining
-                       if bool(entries[index].get('communication')) == communication]
+            indices = [index for index in remaining if scheduling_rank(entries[index]) == rank]
             selected = [entries[index] for index in indices]
             boundaries = batch_boundaries(selected, batch_graphs=batch_graphs, batch_tokens=batch_tokens)
             for left, right in boundaries:
-                last = right == len(indices) and (not communication or all(
-                    entries[index].get('communication') for index in remaining))
+                last = right == len(indices) and all(scheduling_rank(entries[index]) <= rank for index in remaining)
                 batches.append((visit, indices[left:right], last))
     return quotas, batches
 
@@ -828,9 +834,10 @@ def main(argv=None):
             if predecessor is not None:
                 prior_receipts = resume.get('source_receipts') or []
                 digest = sha256_file_hex_cached(predecessor)
-                adopted = (len(prior_receipts) > position
-                    and source_receipts[position]['sha256'] == prior_receipts[position]['sha256']
-                    and predecessors.get(role) == digest)
+                # Once adopted, the original predecessor stays valid across
+                # later append/priority manifests. Exact immutable row bindings
+                # and the prior physical prefix are verified below.
+                adopted = predecessors.get(role) == digest
                 if (not adopted and (len(prior_receipts) <= position
                         or digest != prior_receipts[position]['sha256'])):
                     raise ValueError('native data continuation predecessor differs from the actual checkpoint: ' + role)

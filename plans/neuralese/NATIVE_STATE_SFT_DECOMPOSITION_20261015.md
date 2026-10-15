@@ -83,3 +83,11 @@ records zero training visits and does not claim full REST coverage. Empty
 source-authenticated payloads remain trainable structural examples and receive
 no genuine communication credit. Cadence checks preserve complete long held
 graphs and always require a full held-source pass before completion.
+
+Explicit source `training_priority` is a nonnegative integer scheduling policy
+input in `natlang.native-graph-sources/1` (default zero; omitted enclosing values
+retain a nested source declaration). The manifest SHA binds policy changes.
+Communication deficits execute first, then higher source priority, then stable
+physical row order within each visit. This changes only the pending optimizer
+schedule: row bindings, quotas, token weights, epochs and completed credits stay
+unchanged. The existing exact-index streamer supplies the requested order.

@@ -538,6 +538,15 @@ def test_real_resume_appends_pair_ahead_of_backlog_without_losing_optimizer_rng_
     initial = torch.load(out/'checkpoint.pt',weights_only=False)
     assert initial['training']['exposure_counts']=={'a':1,'b':0}
     manifest = source_manifest(tmp_path,ordinary,[authenticated_pair('new',roles=roles.ids,fingerprint=fp)])
+    # A newly admitted stronger-teacher source has its own scheduling priority;
+    # its physical append position and previous row bindings remain unchanged.
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    teacher = tmp_path/'teacher.jsonl'
+    teacher.write_text(json.dumps(dict(graph('qwen-new'),tokenizer_fingerprint=fp))+'\n')
+    declaration = json.loads(manifest.read_text())
+    declaration['sources'].append({'kind':'native-graphs','path':teacher.name,
+        'sha256':sha256_file_hex(teacher),'training_priority':1})
+    manifest.write_text(json.dumps(declaration))
     continued = argv.copy()
     continued[continued.index('--native-graphs')+1] = str(manifest)
     continued += ['--continued-native-graphs',str(old),'--batch-tokens','32']
@@ -545,7 +554,7 @@ def test_real_resume_appends_pair_ahead_of_backlog_without_losing_optimizer_rng_
         patch.setattr(trainer.CheckpointPolicy,'due',stop)
         assert trainer.main(continued)==0
     checkpoint = torch.load(out/'checkpoint.pt',weights_only=False)
-    assert checkpoint['training']['exposure_counts']=={'a':1,'b':0,'lfm:new':1}
+    assert checkpoint['training']['exposure_counts']=={'a':1,'b':0,'lfm:new':1,'qwen-new':0}
     assert checkpoint['training']['global_step']==2
     assert checkpoint['training']['identity']['schedule']=='row-visit-deficit/2'
     assert checkpoint['training']['rng'].keys()==initial['training']['rng'].keys()
@@ -553,11 +562,21 @@ def test_real_resume_appends_pair_ahead_of_backlog_without_losing_optimizer_rng_
     assert partial=={'graphs':1,'required_graph_visits':2,'graph_visits':1,'complete':False}
     # Same immutable predecessor remains declared on subsequent restarts; the
     # trainer remembers its actual adoption, rather than rejecting its own new slot.
+    declaration['sources'][-1]['training_priority'] = 2
+    manifest.write_text(json.dumps(declaration))
     continued[continued.index('--batch-tokens')+1]='0'
     continued += ['--batch-graphs','2']
-    assert trainer.main(continued)==0
+    actual_loss, observed = trainer.packed_graph_loss, []
+    def record_order(model, examples, **kwargs):
+        observed.extend(example.id for example in examples)
+        return actual_loss(model, examples, **kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(trainer,'packed_graph_loss',record_order)
+        assert trainer.main(continued)==0
+    assert observed[:3] == ['lfm:new','qwen-new','qwen-new']
+    assert observed[3:] == ['b','a','b']
     final = torch.load(out/'checkpoint.pt',weights_only=False)
-    assert final['training']['exposure_counts']=={'a':2,'b':2,'lfm:new':2}
+    assert final['training']['exposure_counts']=={'a':2,'b':2,'lfm:new':2,'qwen-new':2}
     assert final['training']['metrics']['held']['scope']=='full'
     assert json.loads((out/'report.json').read_text())['communication_exposure']['complete']
     frozen_rng = final['training']['rng']['torch_rng'].clone()
@@ -646,3 +665,44 @@ def test_empty_authenticated_payload_is_useful_structural_data_without_communica
     quotas,batches=pending_exposure_batches(source.entries,{},epochs=1)
     assert sum(len(indices) for _,indices,_ in batches)==2
     assert communication_exposure(source.entries,{'lfm:empty':1},quotas)['complete'] is False
+
+
+def test_source_priority_changes_schedule_not_rows_quotas_or_binding(tmp_path):
+    import json
+    from natlang_neuralese.train.native_state_sft import pending_exposure_batches
+    ordinary = [dict(graph(name), tokenizer_fingerprint='1'*64) for name in ('a', 'b')]
+    manifest = source_manifest(tmp_path, ordinary, [authenticated_pair()])
+    source = NativeGraphSource(manifest,'1'*64,required_split='train',role_ids=(58,59,60,61))
+    before = source.bindings.copy(), source.ordered_ids(), source.file_sha256
+    declaration = json.loads(manifest.read_text())
+    declaration['sources'][0]['training_priority'] = 2
+    manifest.write_text(json.dumps(declaration))
+    updated = NativeGraphSource(manifest,'1'*64,required_split='train',role_ids=(58,59,60,61))
+    assert (updated.bindings,updated.ordered_ids()) == before[:2]
+    assert updated.file_sha256 != before[2]
+    quotas,batches = pending_exposure_batches(updated.entries,{},epochs=2)
+    assert [updated.entries[index]['id'] for _,indices,_ in batches for index in indices] == [
+        'lfm:pair','lfm:pair','a','b','a','b']
+    assert quotas == {key:2 for key in updated.ordered_ids()}
+    for value in (-1,True,1.5,'1'):
+        declaration['sources'][0]['training_priority'] = value
+        manifest.write_text(json.dumps(declaration))
+        with pytest.raises(ValueError,match='nonnegative integer'):
+            NativeGraphSource(manifest,'1'*64,required_split='train',role_ids=(58,59,60,61))
+
+
+@pytest.mark.parametrize('paired', [False,True])
+def test_role_bound_source_cache_hits_after_json_roundtrip(tmp_path,monkeypatch,paired):
+    import json
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    path = tmp_path/'source.jsonl'
+    path.write_text(json.dumps(authenticated_pair() if paired else
+        dict(graph('ordinary'),tokenizer_fingerprint='1'*64))+'\n')
+    kwargs = {'required_split':'train','role_ids':(58,59,60,61),
+              **({'pair_model':'lfm'} if paired else {})}
+    first = NativeGraphSource(path,'1'*64,**kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(NativeGraphSource,'_parse',lambda *args: pytest.fail('cache missed after role IDs JSON roundtrip'))
+        second = NativeGraphSource(path,'1'*64,**kwargs)
+    assert second.entries == first.entries
+    assert second.bindings == first.bindings
