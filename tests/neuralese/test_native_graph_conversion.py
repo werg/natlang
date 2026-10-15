@@ -95,6 +95,11 @@ def test_witnessed_pair_encodes_roles_import_and_model_neutral_payload_alignment
     assert graph['source_pairing']['payloads'][0]['text_sha256'] == hashlib.sha256(payload.encode()).hexdigest()
     assert example.target_weights[example.plan.offsets[1] + read_start + 1] == 0.
     assert example.target_weights[-1] == 1.
+    # The consumer receives only imported state between role markers; the
+    # plaintext body remains source provenance, never an own-token bypass.
+    assert len(consumer.token_ids) == len(target['token_ids']) - len(payload) + 2
+    assert consumer.token_ids[consumer.imports[0].at] == 1004
+    assert graph['source_pairing']['consumed_occurrences'][0]['payload_sha256'] == hashlib.sha256(payload.encode()).hexdigest()
 
 
 def test_witnessed_pair_rejects_mismatched_payload_and_cross_split():
@@ -188,10 +193,15 @@ def test_witnessed_pair_imports_every_exact_static_read_occurrence():
     example = parse_graph(graph, tokenizer_fingerprint='a' * 64)
     producer, consumer = example.plan.invocations
     assert len(consumer.imports) == 2
-    assert [edge.at for edge in consumer.imports] == [reader_opens[0] + 1, reader_opens[1] + 1]
+    assert [edge.at for edge in consumer.imports] == [reader_opens[0] + 1,
+        reader_opens[1] + 1 - len(payload)]
     assert all(edge.source == 'producer' for edge in consumer.imports)
     for edge in consumer.imports:
         assert example.target_weights[example.plan.offsets[1] + edge.at] == 0.
+        assert consumer.token_ids[edge.at] == tok.marker_ids[3]
+    expected_reader = reader_text.replace(tok.markers[2] + payload + tok.markers[3],
+        tok.markers[2] + tok.markers[3])
+    assert tok.decode(consumer.token_ids) == expected_reader
 
 
 def test_prebounded_typed_pair_spans_reuse_markers_without_duplicate_wrapping():
@@ -250,7 +260,7 @@ def test_contextual_body_uses_its_actual_standalone_tokenization():
     producer, consumer = parsed.plan.invocations
     assert producer.token_ids == (20, 1001, 8, 9, 1002, 21)
     assert producer.producing == ((2, 4),)
-    assert consumer.token_ids == (20, 1003, 8, 9, 1004, 21)
+    assert consumer.token_ids == (20, 1003, 1004, 21)
     assert consumer.imports[0].at == 2
     assert parsed.target_weights[2:4] == (1., 1.)
-    assert parsed.target_weights[parsed.plan.offsets[1] + 2:parsed.plan.offsets[1] + 4] == (0., 0.)
+    assert parsed.target_weights[parsed.plan.offsets[1] + 2] == 0.
