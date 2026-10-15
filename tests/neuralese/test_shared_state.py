@@ -3,7 +3,7 @@ import torch
 
 from natlang_neuralese.model.shared_state import (
     Invocation, ImportSpan, LowRankTokenEmbedding, compile_graph,
-    forward_graph, forward_reference, capture_span,
+    forward_graph, forward_reference,
 )
 from natlang_neuralese.model.lfm2_port import ControlTokens, PortBackbone
 from natlang_neuralese.model.hf_port import QwenPortBackbone
@@ -77,9 +77,7 @@ def test_dag_forward_and_gradients_match_invocation_reference(family):
         assert (ga is None) == (gb is None)
         if ga is not None:
             torch.testing.assert_close(ga, gb, atol=2e-5, rtol=2e-4)
-    block = capture_span(flat, 2, 5)
-    assert len(block['layers']) == port.num_layers
-    assert tuple(block['positions']) == (2, 3, 4)
+
 
 
 def test_alias_masks_exclude_source_private_prefix_and_future():

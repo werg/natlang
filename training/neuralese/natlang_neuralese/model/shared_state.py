@@ -364,27 +364,6 @@ CONSUME_CLOSE = '<|/neuralese_consume|>'
 ROLE_MARKERS = (PRODUCE_OPEN, PRODUCE_CLOSE, CONSUME_OPEN, CONSUME_CLOSE)
 
 
-def capture_span(result, start: int, stop: int):
-    """Differentiable native span capture; serialization may detach explicitly.
-
-    Raw unrotated attention keys are essential: applying a constant RoPE delta
-    to already-rotated keys is not valid for every position-dependent RoPE.
-    Finite convolution stores only this span's gated inputs, never private
-    prefix state. A consumer continues its own logical history across imports.
-    """
-    plan = result['plan']
-    if not 0 <= start < stop <= plan.token_count or not all(plan.producing[start:stop]):
-        raise ValueError('capture requires a nonempty explicitly producing span')
-    layers = []
-    for values in result['states']:
-        if len(values) == 2:
-            layers.append({'kind': 'attention', 'raw_k': values[0][:, :, start:stop],
-                           'v': values[1][:, :, start:stop]})
-        else:
-            layers.append({'kind': 'finite_convolution', 'gated_inputs': values[0][:, start:stop]})
-    return {'positions': plan.own_positions[start:stop], 'layers': tuple(layers)}
-
-
 _flex = None
 
 
