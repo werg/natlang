@@ -1,0 +1,35 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "natlang-target-union-r11-full-ready-20261015-v1",
+  "owner": "dgx",
+  "path": "runs/natlang-target-union-r11-full-ready-20261015-v1",
+  "files": [
+    {
+      "path": "full/lfm25/text-data.jsonl.zst",
+      "bytes": 65746318,
+      "sha256": "9904f404e0f3e41d92645201482e9096f0d2c27c6ce8740dd9a411067a03aefd"
+    },
+    {
+      "path": "full/mellum21/text-data.jsonl.zst",
+      "bytes": 63062684,
+      "sha256": "009092e45ab17f58f3879cafcfe0d61c1606aa75553887a96f152bfa0d26cb86"
+    },
+    {
+      "path": "full/omissions.jsonl",
+      "bytes": 177561,
+      "sha256": "4bc30720c2e8a1e702cf21cf04f393ca56ae938f3c1286e093eef00ffa2a836b",
+      "lines": 775
+    },
+    {
+      "path": "independent-protection-audit.json",
+      "bytes": 108986,
+      "sha256": "75c45e5226280ee179b24547e059da07827f383af060e69e62634dd96591f765"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 207960,
+      "sha256": "e3693834cf7019d5b22a18fa72e3cf8f380e93317150e55c23cb946129eba5f6"
+    }
+  ],
+  "bytes": 129303509
+}
