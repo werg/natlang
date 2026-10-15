@@ -88038,6 +88038,31 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "luna-held-shapes-s52083-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52083-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "decision-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "83 independently reviewed exact accepted roots; 662 approved native decisions out of 777 materialized; 93 unapproved, 21 decisions from three process-violating parents and one repeated action excluded",
+      "training_admission": true,
+      "training_admission_reason": "Exact accepted roots, current v9 source-review and protected checks, independent review of three dataset-workbench roots, required research iterateOn/inline NL process inspection, exact decision hold for one repeated action and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Three accepted research parents held for missing required process; one repeated route look decision held; accepted dataset-workbench roots checked against visible messages. Empty mechanical action-shape quarantine.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Global protected union must reapply current v9 source holds across all corpora. No candidate negative is admitted."
     }
   ],
   "coverage_backlog": [
