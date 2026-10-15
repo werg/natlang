@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify and compact reviewed CLINC label-derived static references.
+"""Verify and compact reviewed label-derived static decision references.
 
 The semantic decision is supplied in --review. This script only checks exact
 source/label/replay/turn bindings, records the approved static scope, and
@@ -40,9 +40,11 @@ def compact(path):
             'compressed_bytes': compressed.stat().st_size}
 
 
-def batch_review(root, number, all_matching, all_groups):
-    source = root / f'gemini-clinc-fresh-batch{number:02d}'
-    adapted = root / f'gemini-clinc-batch{number:02d}-static-adapter-v2-full-replay'
+def batch_review(root, number, all_matching, all_groups,
+                 source_pattern='gemini-clinc-fresh-batch{batch:02d}',
+                 adapted_pattern='gemini-clinc-batch{batch:02d}-static-adapter-v2-full-replay'):
+    source = root / source_pattern.format(batch=number)
+    adapted = root / adapted_pattern.format(batch=number)
     source_cases = source / 'cases.jsonl'
     labels = source / 'labels.jsonl'
     quality = json.loads((source / 'quality-summary.json').read_text())
@@ -135,12 +137,17 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--start-batch', type=int, default=1)
     parser.add_argument('--batches', type=int, default=44, help='inclusive last batch number')
+    parser.add_argument('--source-pattern', default='gemini-clinc-fresh-batch{batch:02d}',
+                        help='relative directory template; {batch} is the batch number')
+    parser.add_argument('--adapted-pattern', default='gemini-clinc-batch{batch:02d}-static-adapter-v2-full-replay',
+                        help='relative adapter directory template; {batch} is the batch number')
     args = parser.parse_args()
     review = json.loads(args.review.read_text())
     seeds = review.get('sample_seeds')
     sizes = review.get('sample_sizes')
     scopes = review.get('sample_scopes')
-    if (review.get('schema') != 'natlang.gemini-clinc-static-semantic-review/1' or
+    if (review.get('schema') not in {'natlang.gemini-clinc-static-semantic-review/1',
+                                     'natlang.static-decision-semantic-review/1'} or
             review.get('root_approved') is not True or not review.get('rationale') or
             args.start_batch < 1 or args.batches < args.start_batch or
             not isinstance(seeds, list) or not seeds or
@@ -156,7 +163,11 @@ def main():
     if out.exists() and any(out.iterdir()):
         raise ValueError(f'refusing to overwrite review: {out}')
     all_matching, all_groups = {}, set()
-    batches = [batch_review(root, n, all_matching, all_groups)
+    for pattern in (args.source_pattern, args.adapted_pattern):
+        if Path(pattern).is_absolute() or '..' in Path(pattern).parts or pattern.count('{batch') != 1:
+            raise ValueError(f'invalid batch directory pattern: {pattern}')
+    batches = [batch_review(root, n, all_matching, all_groups,
+                            args.source_pattern, args.adapted_pattern)
                for n in range(args.start_batch, args.batches + 1)]
     items = [(key, value) for key, value in all_matching.items()]
     sampled = []
