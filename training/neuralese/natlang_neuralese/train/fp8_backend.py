@@ -307,6 +307,26 @@ class FP8ExpertAdapter:
     def cached_weight_bytes_estimate(self) -> int:
         return 0  # FP8 weights live only within one layer's projection (saved for its backward)
 
+    def saved_backward_weight_bytes_estimate(self, checkpointed: bool) -> int:
+        """Bytes of rowwise-FP8 projection copies retained by autograd through backward.
+
+        ``Fp8ExpertProjection.forward`` saves its quantized weight and row scales
+        on the autograd context. Without layer checkpointing every layer's two
+        projections stays live until backward; checkpointing recomputes one
+        layer at a time, so only that layer's copies overlap.
+        """
+        modules = dict(self.model.named_modules())
+        per_layer = []
+        for path in self.experts:
+            module = modules[path]
+            retained = 0
+            for weight in (module.gate_up, module.down):
+                # rowwise_quant emits one FP8 byte per element and one FP32
+                # scale per flattened weight row.
+                retained += weight.numel() + weight.shape[0] * weight.shape[1] * 4
+            per_layer.append(retained)
+        return max(per_layer, default=0) if checkpointed else sum(per_layer)
+
     def configuration(self) -> dict[str, Any]:
         return {'enabled': True, 'backend': EXPERT_BACKEND_VERSION, 'recipe': 'current-rowwise',
                 'runtime': self.runtime, 'expert_modules': sorted(self.experts)}

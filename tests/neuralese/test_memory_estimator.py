@@ -104,6 +104,31 @@ def test_direct_sft_adjacent_requires_minimum_evidence_and_stays_within_memory_b
     assert checkpointed
 
 
+def test_uncheckpointed_expert_fp8_saved_weights_block_the_observed_oom_geometry():
+    from natlang_neuralese.train.memory_policy import choose_layer_checkpointing
+
+    # Mellum step 3418: the live FP8 rowwise-quantized gate_up matrix requested
+    # 252 MiB. Its autograd context retains that matrix through backward for
+    # every uncheckpointed layer; down projection weights are half as large
+    # for the recorded width/FFN geometry. Even this lower-bound saved-Q term
+    # changes the prior 2x estimate from an admitted plan into checkpointing.
+    raw_geometry = 22_041_853_952
+    prior_prediction = 23_143_946_648
+    saved_q_lower_bound = 28 * (252 + 126) * 1024 ** 2
+    optimizer_floor = 2_130_716_672
+    reusable = 52_220_555_776
+    raw_with_saved_q = raw_geometry + saved_q_lower_bound
+    predicted_with_saved_q = raw_with_saved_q * prior_prediction // raw_geometry
+    assert 2 * prior_prediction + optimizer_floor <= reusable
+    assert 2 * predicted_with_saved_q + optimizer_floor > reusable
+
+    estimates = lambda checkpointed: ((raw_with_saved_q, predicted_with_saved_q, {'sample_count': 0})
+                                      if not checkpointed else (raw_geometry, 8 * 1024 ** 3,
+                                                                 {'sample_count': 0}))
+    checkpointed, *_ = choose_layer_checkpointing(estimates, optimizer_floor, reusable)
+    assert checkpointed
+
+
 def test_batch_admission_and_observation_share_current_namespace():
     from natlang_neuralese.train.memory_estimator import writer_batch_kind
     model = AdaptiveGraphMemory()

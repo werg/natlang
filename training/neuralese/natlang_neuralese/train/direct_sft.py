@@ -652,7 +652,9 @@ def direct_sft_calibration_kind(fp8_training: str, fp8_recipe: str, mode: str,
     if fp8_training == 'te-fp8':
         return f'direct-sft-fp8-{fp8_recipe}-{suffix}'
     if fp8_training == 'triton-experts':
-        return f'direct-sft-fp8-experts-{suffix}'
+        # This backend's raw calibration denominator includes quantized expert
+        # weights retained on autograd contexts through backward.
+        return f'direct-sft-fp8-experts-saved-q-v1-{suffix}'
     raise ValueError(f'unknown direct-SFT FP8 backend {fp8_training!r}')
 
 
@@ -2503,22 +2505,31 @@ def main(argv=None):
             allocator_backend = None
             inactive_split = None
 
+        saved_fp8_weights = {}
+
         def estimate(checkpointed):
             layout = backbone_memory_layout(backbone, checkpointed=checkpointed)
             one_raw = geometry_bytes(context, 0, **layout,
                                      target_tokens=min(128, target),
                                      vocab_size=int(backbone.embedding_weight.shape[0]))
             kind = direct_sft_calibration_kind(a.fp8_training, a.fp8_recipe, mode, checkpointed)
-            predicted_activation = memory_estimator.predict(kind, context, target, one_raw) * rows
+            saved_weights = (fp8_backend.saved_backward_weight_bytes_estimate(checkpointed)
+                             if fp8_backend is not None and
+                             hasattr(fp8_backend, 'saved_backward_weight_bytes_estimate') else 0)
+            saved_fp8_weights[checkpointed] = saved_weights
+            raw = one_raw * rows + saved_weights
+            predicted_activation = memory_estimator.predict(kind, context, target, raw)
             calibration = memory_estimator.calibration_info(kind, context, target)
-            return one_raw * rows, predicted_activation, calibration
+            return raw, predicted_activation, calibration
 
         if a.checkpoint_layers is not None:
             checkpointed = bool(a.checkpoint_layers)
-            raw, predicted, calibration = estimate(checkpointed)
+            raw_total, predicted, calibration = estimate(checkpointed)
         else:
-            checkpointed, raw, predicted, calibration = choose_layer_checkpointing(
+            checkpointed, raw_total, predicted, calibration = choose_layer_checkpointing(
                 estimate, planning_floor, available if cuda_active else None)
+        fp8_saved_weight_bytes = saved_fp8_weights[checkpointed]
+        raw = raw_total - fp8_saved_weight_bytes
         incremental = predicted + planning_floor
         fits = available is None or incremental <= available
         device_bound = claim_available is None or device_available < claim_available
@@ -2559,6 +2570,7 @@ def main(argv=None):
         layout = backbone_memory_layout(backbone, checkpointed=checkpointed)
         return {'mode': mode, 'checkpoint_layers': checkpointed, 'context_tokens': context,
                 'target_tokens': target, 'activation_geometry_bytes': raw,
+                'fp8_saved_backward_weight_bytes': fp8_saved_weight_bytes,
                 'predicted_activation_bytes': predicted, 'gradient_optimizer_floor_bytes': optimizer_floor,
                 'fp8_weight_cache_estimate_bytes': fp8_cache_estimate,
                 'fp8_weight_cache_reservation_bytes': fp8_cache_reservation,
@@ -2809,7 +2821,10 @@ def main(argv=None):
             memory_estimator.observe(
                 direct_sft_calibration_kind(a.fp8_training, a.fp8_recipe, plan['mode'],
                                             plan['checkpoint_layers']),
-                plan['context_tokens'], plan['target_tokens'], plan['activation_geometry_bytes'],
+                plan['context_tokens'], plan['target_tokens'],
+                plan['activation_geometry_bytes'] + plan['fp8_saved_backward_weight_bytes'],
+                # The raw denominator includes FP8 projection copies saved by
+                # autograd so future forecasts learn the same live storage.
                 observed_activation)
         for key in totals:
             totals[key] += metrics[key]

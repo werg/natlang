@@ -6,7 +6,7 @@ import torch
 from torch import nn
 
 from natlang_neuralese.train.fp8_backend import (
-    ROW_MULTIPLE, SavedTensorAudit, _eligible_paths, make_te_linear_preserving_rng,
+    ROW_MULTIPLE, FP8ExpertAdapter, SavedTensorAudit, _eligible_paths, make_te_linear_preserving_rng,
 )
 from natlang_neuralese.train.direct_sft import direct_sft_calibration_kind
 
@@ -116,4 +116,25 @@ def test_activation_calibration_namespaces_do_not_mix_fp8_backends():
     assert direct_sft_calibration_kind('te-fp8', 'delayed', 'sequential', False) == \
         'direct-sft-fp8-delayed-sequential-checkpointed-0'
     assert direct_sft_calibration_kind('triton-experts', 'delayed', 'sequential', False) == \
-        'direct-sft-fp8-experts-sequential-checkpointed-0'
+        'direct-sft-fp8-experts-saved-q-v1-sequential-checkpointed-0'
+
+
+def test_expert_fp8_saved_weight_estimate_tracks_autograd_retention_and_checkpointing():
+    class ExpertWeights(nn.Module):
+        def __init__(self, gate_shape, down_shape):
+            super().__init__()
+            self.register_buffer('gate_up', torch.empty(gate_shape, dtype=torch.bfloat16))
+            self.register_buffer('down', torch.empty(down_shape, dtype=torch.bfloat16))
+
+    class Model(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layer_a = ExpertWeights((2, 6, 4), (2, 4, 3))
+            self.layer_b = ExpertWeights((2, 3, 4), (2, 4, 2))
+
+    adapter = object.__new__(FP8ExpertAdapter)
+    adapter.model = Model()
+    adapter.experts = ['layer_a', 'layer_b']
+    # FP8 bytes per weight plus one FP32 scale per flattened output row.
+    assert adapter.saved_backward_weight_bytes_estimate(False) == 152 + 96
+    assert adapter.saved_backward_weight_bytes_estimate(True) == 152
