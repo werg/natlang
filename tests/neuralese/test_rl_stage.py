@@ -179,3 +179,45 @@ def test_rft_epoch_exposes_each_distinct_trajectory_turn(monkeypatch):
     _, plan = direct_schedule(windows, a)
     seen = {window['document'] for batch, *_ in plan for window in batch}
     assert seen == {document['target']['content'] for document in documents}
+
+
+def test_rft_same_text_different_supervised_boundary_remains_distinct(monkeypatch):
+    from natlang_neuralese.data import text_corpus
+    monkeypatch.setattr(text_corpus, 'tokenizer_fingerprint', lambda _: 'fp')
+    monkeypatch.setattr(text_corpus, 'native_gold_packet', lambda tok, messages, target, tools, **kw:
+                        ('same-text', [1, 2, 3, 4], target['boundary']))
+    rows = rl_stage.render_rows([{'task_id': 't', 'split': 'train', 'messages': [], 'tools': None,
+         'target': {'boundary': boundary}} for boundary in [1, 2]], object(), 'full')
+    assert rows[0]['text'] == rows[1]['text']
+    assert rows[0]['sampling_group'] != rows[1]['sampling_group']
+
+
+def test_value_rft_routes_to_shared_graph_ce_instead_of_text_flattening(tmp_path, monkeypatch):
+    import transformers
+    from natlang_neuralese.train import direct_sft
+    from natlang_neuralese.data import text_corpus
+    block = 'nz1_' + 'a' * 52
+    rows = [_rollout('task', q) for q in [1., 0.]]
+    for row in rows:
+        row['turns'][0]['sampling'] = {'schema': 'natlang.rl-sampling/1', 'temperature': 1., 'guided': False,
+            'prompt': [['tokens', [1]], ['block', block]], 'items': [['tok', 2]],
+            'samples': [{'item': 0, 'token': 2, 'logp': -1.}]}
+    source = tmp_path / 'rollouts.jsonl'
+    source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    bundle = tmp_path / 'bundle.json'
+    bundle.write_text(json.dumps({'blocks': {block: {'length': 2}}}))
+    held = tmp_path / 'held.jsonl'
+    held.write_text(json.dumps({'split': 'test', 'text': 'held', 'source_groups': ['h']}) + '\n')
+    monkeypatch.setattr(transformers.AutoTokenizer, 'from_pretrained', lambda path: object())
+    monkeypatch.setattr(text_corpus, 'tokenizer_fingerprint', lambda _: 'fp')
+    monkeypatch.setattr(rl_stage, 'render_rows', lambda *args: pytest.fail('must not flatten actual values'))
+    calls = []
+    monkeypatch.setattr(direct_sft, 'main', lambda argv: calls.append(argv))
+    out = tmp_path / 'out'
+    rl_stage.main(['--rollouts', str(source), '--rl-tokenizer', str(tmp_path), '--out', str(out),
+        '--rl-mode', 'rft', '--rl-policy-id', 'policy', '--rl-block-bundle', str(bundle),
+        '--rl-held-text-data', str(held)])
+    spec = json.loads((out / 'rl-objective.json').read_text())
+    assert spec['mode'] == 'rft' and spec['block_bundle'] == str(bundle)
+    assert spec['documents'][0]['sampling']['prompt'][1] == ['block', block]
+    assert '--rl-objective' in calls[0]

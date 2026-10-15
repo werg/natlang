@@ -47,3 +47,30 @@ def test_checkpoint_restores_writer_and_token_readout_exactly(family, tmp_path):
         restore_neuralese_projections(engine, bad)
     with pytest.raises(ValueError, match='does not contain'):
         restore_neuralese_projections(engine, {**state, 'token_choice_projection': None})
+
+
+def test_rft_without_grpo_objective_retains_trainable_projections_and_optimizer_slots(tmp_path):
+    from test_backbone_policy import tiny_lfm
+    from natlang_neuralese.train.direct_sft import restore_trainable_projections
+    from natlang_neuralese.train.optim import PortMuonAdamW
+    backbone = tiny_lfm()
+    engine = SimpleNamespace(backbone=backbone, heads=PortHeads(backbone,
+        cutoff=backbone.num_layers, profile='raw-token-v1'), device='cpu')
+    writer = NeuraleseProjection(backbone.config.hidden_size, hidden=16)
+    choice = TokenChoiceProjection(backbone.config.hidden_size, blocks=2, hidden=16, kernel=4)
+    state = {'neuralese_projection': writer.state_dict(), 'token_choice_projection': choice.state_dict(),
+             'identity': {'options': {'projection_hidden': 16, 'projection_blocks': 2, 'projection_kernel': 4}}}
+    modules = restore_trainable_projections(engine, state)  # RFT has no rl_objective flag
+    named = [(key + '.' + name, parameter) for key, module in modules.items() for name, parameter in module.named_parameters()]
+    assert {key for key in modules} == {'neuralese_projection', 'token_choice_projection'}
+    assert all(parameter.requires_grad for _, parameter in named)
+    optimizer = PortMuonAdamW(named, lr=1e-5, vocab_size=128)
+    sum(parameter.square().sum() for _, parameter in named).backward()
+    optimizer.step(); optimizer.zero_grad(set_to_none=True)
+    saved = optimizer.state_dict()
+    restored = PortMuonAdamW(named, lr=1e-5, vocab_size=128)
+    restored.load_state_dict(saved)
+    from natlang_neuralese.train.optim_restore import own_host_tensors
+    own_host_tensors(restored)
+    assert restored.state_dict()['schema'] == saved['schema']
+    assert all(module.training for module in modules.values())

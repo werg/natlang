@@ -211,3 +211,17 @@ def test_replay_memory_counts_transitive_writer_context(tmp_path):
     assert train[0]['visible_forward_tokens'] == 3
     assert train[0]['producer_forward_tokens'] == 32
     assert _window_length(train[0]) == 35
+
+
+def test_value_rft_reuses_exact_replay_but_never_importance_clips_ce(tmp_path, monkeypatch):
+    engine = SimpleNamespace(backbone=None, heads=None)
+    spec = tmp_path / 'rft.json'
+    spec.write_text(json.dumps({'mode': 'rft', 'documents': [{
+        'document_sha256': 'doc', 'advantage': -1., 'messages': [], 'target': {'content': 'x'}}]}))
+    objective = FullPolicyObjective(engine, spec, [{'document': 'doc'}], tmp_path)
+    parameter = torch.tensor(-2., requires_grad=True)
+    objective.cache = {'doc': torch.tensor([-20., -20.])}  # would entirely clip positive GRPO
+    monkeypatch.setattr(objective, '_score', lambda row: parameter.expand(2))
+    value = objective.forward([{'document': 'doc', 'ids': [1, 2, 3]}])[0]
+    value.backward()
+    assert value == 2. and parameter.grad == -1.

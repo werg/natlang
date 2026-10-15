@@ -76,9 +76,13 @@ def select_rft_documents(rollouts: Iterable[dict[str, Any]], *, max_success_rate
         split = "test" if held_task(task_id, held_fraction) else "train"
         selected.append({"task_id": task_id, "success_rate": rate, "successes": len(successes), "split": split})
         for rollout in successes:
-            for turn in rollout.get("turns") or []:
+            from .graph_replay import producer_turns
+            producers = producer_turns(rollout)
+            for index, turn in enumerate(rollout.get("turns") or []):
                 documents.append({"task_id": task_id, "split": split, "messages": turn["messages"],
-                                  "tools": turn.get("tools"), "target": turn["target"]})
+                                  "tools": turn.get("tools"), "target": turn["target"],
+                                  **({"sampling": turn["sampling"], "producers": producers,
+                                      "read_bindings": producers[index]["read_bindings"]} if turn.get("sampling") else {})})
     receipt = {"schema": SCHEMA, "mode": "rft", "max_success_rate": max_success_rate, "held_fraction": held_fraction,
                "tasks_seen": len(tasks), "tasks_selected": selected, "skipped": skipped,
                "documents": len(documents)}
@@ -95,7 +99,7 @@ def render_rows(documents: list[dict[str, Any]], tokenizer, prompt_rendering: st
                                                  document["tools"], prompt_rendering=prompt_rendering)
         rows.append({"text": text, "token_ids": ids, "supervised_suffix_start": boundary,
                      "tokenizer_sha256": fingerprint, "split": document["split"],
-                     "source_groups": ["s7-task:" + document["task_id"]], "sampling_group": hashlib.sha256(text.encode()).hexdigest(),
+                     "source_groups": ["s7-task:" + document["task_id"]], "sampling_group": hashlib.sha256(json.dumps([text, boundary, fingerprint], ensure_ascii=False).encode()).hexdigest(),
                      "text_cohort": "s7-rft", "prompt_rendering": prompt_rendering})
     return rows
 
@@ -143,9 +147,20 @@ def main(argv=None) -> None:
                                                  held_fraction=0. if a.rl_held_text_data else a.rft_held_fraction)
     if not any(d["split"] == "train" for d in documents) or (not a.rl_held_text_data and not any(d["split"] == "test" for d in documents)):
         raise SystemExit("RL stage needs train and held documents: " + json.dumps(receipt["skipped"]))
+    from .graph_replay import block_ids
+    value_rft = a.rl_mode == 'rft' and any(block_ids(documents))
+    if value_rft:
+        if not a.rl_block_bundle or not a.rl_policy_id:
+            raise ValueError('captured value RFT requires durable block bundle and its policy identity')
+        from .sampling import capture_items
+        for document in documents:
+            capture_items(document.get('sampling') or {}, require_samples=False)
+        documents = [{**document, 'advantage': 1.} for document in documents if document['sampling']['samples']]
+        receipt['replay_kind'] = 'captured-value-RFT-CE; deterministic producers retained; no importance ratios'
+        receipt['policy_action_documents'] = len(documents)
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained(str(a.rl_tokenizer))
-    if a.rl_mode == 'grpo':
+    if a.rl_mode == 'grpo' or value_rft:
         from .sampling import capture_items
         from ..data.text_corpus import tokenizer_fingerprint
         fingerprint = tokenizer_fingerprint(tokenizer)
@@ -172,10 +187,10 @@ def main(argv=None) -> None:
                 'token_ids': prompt_ids + target_ids, 'tokenizer_sha256': fingerprint,
                 'supervised_suffix_start': len(prompt_ids), 'split': document['split'],
                 'source_groups': ['s7-task:' + document['task_id']], 'sampling_group': key,
-                'text_cohort': 's7-grpo', 'prompt_rendering': a.rl_prompt_rendering,
+                'text_cohort': 's7-rft-value' if value_rft else 's7-grpo', 'prompt_rendering': a.rl_prompt_rendering,
                 'rl_planning_only': True})
         spec = a.out / 'rl-objective.json'
-        spec.write_text(json.dumps({'schema': 'natlang.full-policy-grpo/1', 'policy_id': a.rl_policy_id,
+        spec.write_text(json.dumps({'schema': 'natlang.full-policy-grpo/1', 'mode': a.rl_mode, 'policy_id': a.rl_policy_id,
             'clip_low': a.rl_clip_low, 'clip_high': a.rl_clip_high,
             'block_bundle': str(a.rl_block_bundle.resolve()) if a.rl_block_bundle else None,
             'documents': documents}, ensure_ascii=False) + '\n')

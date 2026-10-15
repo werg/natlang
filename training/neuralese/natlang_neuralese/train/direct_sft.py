@@ -410,6 +410,19 @@ def mixed_additions(state, mix, keys):
     return [key for key in keys if not isinstance(state.get(key), dict) or is_legacy_projection_state(state[key])]
 
 
+def restore_trainable_projections(engine, state):
+    """Retain useful mixed writer/readout on RFT, GRPO or ordinary continuation."""
+    from ..eval.task_cadence import restore_neuralese_projections
+    restore_neuralese_projections(engine, state)
+    projections = {'neuralese_projection': engine.neuralese_projection}
+    if engine.token_choice_projection is not None:
+        projections['token_choice_projection'] = engine.token_choice_projection
+    for module in projections.values():
+        module.train()
+        module.requires_grad_(True)
+    return projections
+
+
 def neuralese_spans(mix, repo, *, include_uncovered=False):
     """The mixed run's Neuralese output spans (``e2e_mix.neuralese_spans``, a {path, sha256} sidecar beside a union
     rendering: one row per direct document, {"id", "spans": [[begin, end, write_name, has_edge], ...]} in the row's
@@ -1523,9 +1536,10 @@ def main(argv=None):
     # writer (mixed_additions).
     mixed_addition = mixed_additions(resume_state, a.e2e_mix, ('token_choice_projection', 'neuralese_projection'))
     rl_projection_state = None
-    if a.rl_objective and (resume_state is not None or a.continue_from is not None):
+    if resume_state is not None or a.continue_from is not None:
         parent = resume_state if resume_state is not None else CheckpointPolicy.load(a.continue_from)
-        if parent.get('neuralese_projection') is not None:
+        from ..model.neuralese_projection import is_legacy_projection_state
+        if isinstance(parent.get('neuralese_projection'), dict) and not is_legacy_projection_state(parent['neuralese_projection']):
             rl_projection_state = {key: parent.get(key) for key in (
                 'neuralese_projection', 'token_choice_projection', 'identity', 'step')}
         parent = None
@@ -1611,16 +1625,10 @@ def main(argv=None):
         projections['neuralese_projection'] = neuralese
         print(json.dumps({'event': 'mixed_writer', **writer_alignment}), flush=True)
     if rl_projection_state is not None and a.e2e_mix is None:
-        from ..eval.task_cadence import restore_neuralese_projections
-        restore_neuralese_projections(engine, rl_projection_state)
+        projections = restore_trainable_projections(engine, rl_projection_state)
         neuralese, token_choice = engine.neuralese_projection, engine.token_choice_projection
-        projections = {'neuralese_projection': neuralese}
-        if token_choice is not None:
-            projections['token_choice_projection'] = token_choice
-        for module in projections.values():
-            module.train()
-            module.requires_grad_(True)
         rl_projection_state = None
+    retained_projection_continuation = neuralese is not None and a.e2e_mix is None
     head_named = [(key + '.' + n, q) for key, module in projections.items() for n, q in module.named_parameters()]
     # The latent split, entries and options are shared with the end-to-end stage (train/optim.py).
     from .optim import beta_for_half_life, latent_entries, latent_options as latent_options_for, latent_split
@@ -2078,7 +2086,7 @@ def main(argv=None):
         # the TokenChoiceProjection (identity-initialised, its optimizer state fresh) and the projections' own rates.
         mixed_keys = mixed_additions(state, a.e2e_mix, projections)
         mixed_added = [key + '.' + n for key in mixed_keys for n, _ in projections[key].named_parameters()]
-        if a.e2e_mix is not None or a.rl_objective:
+        if a.e2e_mix is not None or a.rl_objective or retained_projection_continuation:
             phase_keys |= {'e2e_mix', 'token_choice_projection', 'token_choice_lr', 'token_choice_optimizer',
                            'neuralese_projection_lr', 'neuralese_projection_optimizer'}
         changed_objective = sorted(key for key in set(previous_options) & set(current_options)

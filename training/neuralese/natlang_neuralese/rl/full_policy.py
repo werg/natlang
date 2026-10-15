@@ -107,6 +107,8 @@ class FullPolicyObjective:
         from ..serve.grad import GradSession
         self.spec_path = Path(spec_path)
         self.spec = json.loads(self.spec_path.read_text())
+        if self.spec.get('mode', 'grpo') not in ('grpo', 'rft'):
+            raise ValueError('unknown full-policy replay objective')
         self.session = GradSession(engine)
         if self.spec.get('block_bundle'):
             from .graph_replay import restore_bundle
@@ -200,15 +202,20 @@ class FullPolicyObjective:
             if row.get('sampling'):
                 hits += int((self.last_predictions == self.last_targets).sum())
             old = self.cache[key].to(logps.device)
-            loss = clipped_token_loss(logps, old, row['advantage'],
-                clip_low=self.spec.get('clip_low', 0.2), clip_high=self.spec.get('clip_high', 0.28)).sum() * row.get('multiplicity', 1) / denominator
+            if self.spec.get('mode', 'grpo') == 'rft':
+                losses = -logps  # exact captured actions, no off-policy importance ratio
+            else:
+                losses = clipped_token_loss(logps, old, row['advantage'],
+                    clip_low=self.spec.get('clip_low', 0.2), clip_high=self.spec.get('clip_high', 0.28))
+            loss = losses.sum() * row.get('multiplicity', 1) / denominator
             total = loss if total is None else total + loss
             tokens += logps.numel()
             nll += float(-logps.detach().sum())
         metrics = {'ce': nll / max(tokens, 1), 'gold_accuracy': hits / max(tokens, 1), 'windows': len(windows),
                    'supervised_tokens': tokens, 'target_tokens': tokens,
                    'real_tokens': sum(len(w['ids']) - 2 for w in windows),
-                   'forward_tokens': sum(len(w['ids']) - 2 for w in windows), 'rl': True}
+                   'forward_tokens': sum(w.get('replay_forward_tokens', len(w['ids']) - 2) for w in windows),
+                   'rl': True, 'objective': self.spec.get('mode', 'grpo')}
         device = total.device
         return (total, metrics, torch.zeros((), device=device), torch.zeros((), device=device),
                 {'valid_positions': tokens, 'weight_mass': float(tokens)})
