@@ -98022,6 +98022,37 @@
         "held_text": {}
       },
       "notes": "Seed52107 v32 reviewed train-only; 80 roots/389 approved decisions; LFM and Mellum twin renders."
+    },
+    {
+      "id": "neuralese-e2e-cloud-small-protected-20261015-v2",
+      "owner": "dgx",
+      "path": "runs/neuralese-e2e-cloud-small-protected-20261015-v2",
+      "include": [
+        "records.jsonl",
+        "pieces.jsonl",
+        "edges.jsonl",
+        "chains.jsonl",
+        "omissions.jsonl",
+        "receipt.json",
+        "independent-graph-audit.json",
+        "current-admission-review.json",
+        "transfer-manifest.json"
+      ],
+      "source_class": "source-reviewed native whole trajectories with authenticated producer-consumer Neuralese edges",
+      "license": "Inherited original Clef and static curriculum source licenses; recorded source paths and conversion receipts in receipt.json",
+      "split": "Whole chains retain original train/test split; all train-chain context checked against protected groups, quality quarantine and exact decision holds",
+      "admission": "4221 records/340 whole chains/1180 authenticated edges (712 train,468 held); shared edge metadata repair and complete-chain reauthentication, global held/quality/exact-decision exclusions; latest source-review delta zero intersections",
+      "training_admission": true,
+      "training_admission_reason": "Independent complete-chain reauthentication and split/protection checks pass; latest source-review delta and every transfer/receipt content hash verified before this explicit admission",
+      "derived_from": [
+        "assembly-v3",
+        "clef-new",
+        "clef-pools-20261011-v2",
+        "clef-pools-20261012-v1"
+      ],
+      "review_status": "Static graph, source and split admission passed; no model success certificate",
+      "required_conversion": "Bind exact records/pieces in shared E2E recipes on both lines; merge additional authenticated sources incrementally",
+      "notes": "First4 of33 independently durable mined source archives. Parent receipt retains original v31 review binding; separate admission proof records current review.10 upstream authentication omissions remain explicit. Transfer alone did not admit data. No claim of model exposure."
     }
   ],
   "coverage_backlog": [
