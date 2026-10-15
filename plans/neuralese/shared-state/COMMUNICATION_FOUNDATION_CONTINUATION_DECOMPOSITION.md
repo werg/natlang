@@ -97,3 +97,44 @@ transaction. Remaining supervised obligations continue interleaved through the
 existing CE path. Neither empty rollouts nor an initial refresh ends the recipe.
 Actual SDK worker qualification and independent integrated review remain open
 before production controller deployment.
+
+## Standalone semantic continuation
+
+The policy is the same declared comprehensive curriculum: if no RL bootstrap is
+configured, continue successful finite semantic publications until their actual
+phase/source quotas finish. Do not turn partial success into a terminal stage.
+
+1. Verify the successful report and persist its immutable publication binding
+   in controller state. Recovery may discover a valid child report written just
+   before its supervisor stopped. An exit code alone never grants publication.
+2. If quotas remain, derive one next output directory from the exact parent
+   publication. Pass its checkpoint, adapter and report in `semantic_parent` in
+   the existing participant manifest. Keep the previous successful output intact.
+3. Use the existing supervised child launch/ownership/stop/recovery mechanism.
+   Bind that child's completion path in its durable launch record so a restarted
+   supervisor watches and validates the same work. Commands declare `{out}` and
+   `{participants}` placeholders for per-cycle destinations.
+4. The shared trainer verifies the parent, restores full model/VAE/optimizer/RNG
+   state and credits, and includes that parent binding in its operational cycle
+   identity. A new parent starts new finite work; retrying an interrupted child
+   resumes that same cycle rather than replaying completed updates.
+5. Each phase starts pending-row search at its existing durable source cursor
+   and wraps to find older, increased or newly appended quotas. No ordered prefix
+   scan repeats for every update. Current KV is recomputed from current weights.
+6. Publish only after the same actual current checks. Continue until actual
+   full exposure and mandatory full held evaluation complete; subsequent restart
+   observes that publication without relaunching finished work.
+
+This is one shared trainer and one child mechanism. The controller's crisp code
+verifies exact artifacts, chooses deterministic durability paths and applies
+the already declared continue-until-quotas-complete policy. It introduces no
+separate optimization objective, new science barrier or arbitrary training cap.
+
+Checkpoint continuation metadata stores only parent content identities, not a
+recursive path dependency on all historical full-model checkpoints. The current
+parent's full bindings are explicit participant-manifest launch inputs. Keep the
+last successful parent while its child is unfinished; an independently loaded
+current actor remains self-contained. Curriculum/source/participant changes
+recompute semantic obligations once; each committed graph then subtracts only
+its actual newly consumed pair visits. Final proof recomputes the whole ledger
+exactly. This avoids a second full-corpus scan on every optimizer update.

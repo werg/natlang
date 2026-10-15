@@ -329,13 +329,13 @@ def _recover_child(launch):
     return _RecoveredChild(launch, identity, survivors) if survivors else None
 
 
-def _launch_child(argv, kind, config, out, signature, rl_signature):
+def _launch_child(argv, kind, config, out, signature, rl_signature, *, semantic_completion=None):
     # Persist the unique launch before spawning, so a supervisor killed between
     # Popen and its next state write can rediscover the exact child safely.
     launch = {'schema': 'natlang.native-controller-child/1', 'status': 'launching',
         'token': uuid.uuid4().hex, 'argv': argv, 'cwd': str(Path(config.get('workdir') or '.').resolve()),
         'out': str(out), 'child_kind': kind, 'execution_signature': signature,
-        'rl_signature': rl_signature}
+        'rl_signature': rl_signature, 'semantic_completion':str(semantic_completion) if semantic_completion else None}
     path = out/'child-launch.json'
     write_json_durable(path, launch)
     try:
@@ -377,6 +377,7 @@ def _run(config_path, *, once=False, stop):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         child, child_kind, last_success, rl_last_success, active_rl_signature = None, None, None, None, None
         published = {}
+        semantic_publication=None
         forwarded = False
         pair_cache = None
         retry = None
@@ -386,6 +387,7 @@ def _run(config_path, *, once=False, stop):
             last_success = previous_state.get('last_successful_participants')
             rl_last_success = previous_state.get('last_successful_rl_bootstrap')
             retry = previous_state.get('retry')
+            semantic_publication=previous_state.get('last_semantic_publication')
         launch_path = out/'child-launch.json'
         launch = json.loads(launch_path.read_text()) if launch_path.exists() else None
         if not once and launch and launch.get('status') in {'launching', 'running'}:
@@ -454,6 +456,46 @@ def _run(config_path, *, once=False, stop):
                 published[(signature, curriculum_signature)] = {
                     'execution_signature': execution_signature, 'models': [item['model_id'] for item in ready]}
                 completion = out/'shared-stage-completion.json'
+                semantic_out=out
+                semantic_pending=False
+                if not config.get('rl_bootstrap'):
+                    # Recover a successfully published child even when the
+                    # controller died before its following state commit.
+                    recovered=Path((launch or {}).get('semantic_completion') or completion)
+                    if child is None and recovered.is_file():
+                        try:
+                            candidate,candidate_success=validate_completion(recovered,published)
+                        except Exception:
+                            pass  # ordinary launch/retry path reports invalid evidence
+                        else:
+                            semantic_publication={'path':str(recovered.resolve()),'sha256':sha256_file_hex_cached(recovered)}
+                            last_success=candidate_success
+                            retry=None;retry_ready=True
+                    if semantic_publication:
+                        try:
+                            previous_path=_bound(semantic_publication)
+                            previous=json.loads(previous_path.read_text())
+                            previous_key=(previous['participants_signature'],previous['curriculum_signature'])
+                            previous_adapter=json.loads(_bound(previous['adapter']).read_text())
+                            previous_published={previous_key:{'models':list(previous_adapter['models']),
+                                'execution_signature':last_success}}
+                            previous,_=validate_completion(previous_path,previous_published)
+                            semantic_pending=(previous.get('semantic_obligations') or {}).get('complete') is False
+                        except Exception as error:
+                            retry=_retry_failure(retry,'native-semantic',execution_signature,interval,error=error)
+                            retry_ready=False
+                            pending.append({'reason':'semantic publication needs repair: '+str(error),'repair_required':True})
+                        else:
+                            if semantic_pending or execution_signature!=last_success:
+                                if not any('{out}' in arg for arg in command) or not any('{participants}' in arg for arg in command):
+                                    raise ValueError('autonomous semantic continuation requires {out} and {participants} command placeholders')
+                                parent={'completion':semantic_publication,'checkpoint':previous['checkpoint'],'adapter':previous['adapter']}
+                                semantic_out=out/'semantic-continuations'/canonical_json_sha256_hex(parent)
+                                semantic_out.mkdir(parents=True,exist_ok=True)
+                                participants=semantic_out/'participants.json'
+                                manifest['semantic_parent']=parent
+                                write_json_durable(participants,manifest)
+                                completion=semantic_out/'shared-stage-completion.json'
                 if (child is None and config.get('rl_bootstrap') and completion.is_file()
                         and not once and not stop.requested and retry_ready):
                     proof = None
@@ -480,10 +522,10 @@ def _run(config_path, *, once=False, stop):
                                 except OSError as error:
                                     retry = _retry_failure(retry, 'native-rl', execution_signature, interval, error=error)
                                     retry_ready = False
-                if child is None and execution_signature != last_success and not once and not stop.requested and retry_ready:
-                    argv = [arg.replace('{participants}', str(participants)).replace('{out}', str(out)) for arg in command]
+                if child is None and (execution_signature != last_success or semantic_pending) and not once and not stop.requested and retry_ready:
+                    argv = [arg.replace('{participants}', str(participants)).replace('{out}', str(semantic_out)) for arg in command]
                     try:
-                        child, launch = _launch_child(argv, 'native-semantic', config, out, execution_signature, None)
+                        child, launch = _launch_child(argv, 'native-semantic', config, out, execution_signature, None,semantic_completion=completion)
                         child_kind = 'native-semantic'
                     except OSError as error:
                         retry = _retry_failure(retry, 'native-semantic', execution_signature, interval, error=error)
@@ -493,6 +535,7 @@ def _run(config_path, *, once=False, stop):
                      'child_ownership': launch if child else None,
                      'last_successful_participants': last_success,
                      'last_successful_rl_bootstrap': rl_last_success,
+                     'last_semantic_publication':semantic_publication,
                      'execution_signature': execution_signature, 'curriculum_signature': curriculum_signature,
                      'retry': retry, 'status': 'running' if child else 'retry_wait' if retry else 'monitoring'}
             if child is not None and stop.requested and not forwarded:
@@ -505,7 +548,8 @@ def _run(config_path, *, once=False, stop):
                     state['child_pid'] = child.pid
             if child is not None and child.poll() is not None:
                 state['exit_code'] = child.returncode
-                write_json_durable(launch_path, {**launch, 'status': 'exited', 'exit_code': child.returncode})
+                launch={**launch,'status':'exited','exit_code':child.returncode}
+                write_json_durable(launch_path,launch)
                 if stop.requested:
                     state['child_pid'] = None
                     state['status'] = 'stopped-after-checkpoint-request'
@@ -523,7 +567,7 @@ def _run(config_path, *, once=False, stop):
                     rl_last_success = active_rl_signature
                     state['last_successful_rl_bootstrap'] = rl_last_success
                 else:
-                    completion = out/'shared-stage-completion.json'
+                    completion = Path(launch.get('semantic_completion') or out/'shared-stage-completion.json')
                     try:
                         if not completion.is_file():
                             raise RuntimeError('shared-stage command exited without actual completion/exposure receipt')
@@ -538,6 +582,8 @@ def _run(config_path, *, once=False, stop):
                         time.sleep(interval)
                         continue
                     state['last_successful_participants'] = last_success
+                    semantic_publication={'path':str(completion.resolve()),'sha256':sha256_file_hex_cached(completion)}
+                    state['last_semantic_publication']=semantic_publication
                 retry = None
                 state['retry'] = None
                 state['child_pid'] = None

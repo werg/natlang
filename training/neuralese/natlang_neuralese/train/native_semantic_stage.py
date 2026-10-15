@@ -404,10 +404,33 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     config_path, out = Path(config_path), Path(out)
     config = validate_config(json.loads(config_path.read_text()))
     manifest, bindings = _manifest(participants_path)
+    semantic_parent=manifest.get('semantic_parent')
+    if semantic_parent is not None:
+        if not isinstance(semantic_parent,dict) or set(semantic_parent)!={'checkpoint','adapter','completion'}:
+            raise ValueError('semantic continuation parent must bind its exact checkpoint, adapter and completion')
+        parent_checkpoint=_bound(semantic_parent['checkpoint'])
+        parent_adapter=json.loads(_bound(semantic_parent['adapter']).read_text())
+        parent_completion=json.loads(_bound(semantic_parent['completion']).read_text())
+        if (parent_adapter.get('checkpoint')!=semantic_parent['checkpoint']
+                or parent_completion.get('checkpoint')!=semantic_parent['checkpoint']
+                or parent_completion.get('adapter')!=semantic_parent['adapter']
+                or parent_completion.get('production_ready') is not True):
+            raise ValueError('semantic continuation parent is not its exact qualified publication')
+        from .native_readiness import validate_completion
+        validate_completion(_bound(semantic_parent['completion']),
+            {(parent_completion['participants_signature'],parent_completion['curriculum_signature']):
+                {'models':list(parent_adapter['models']),'execution_signature':'semantic-parent'}})
+        if resume is None:resume=parent_checkpoint
     prior = CheckpointPolicy.load(resume) if resume else None
     if prior and prior.get('schema') != SHARED_CHECKPOINT_SCHEMA:
         raise ValueError('semantic continuation needs its complete shared model/VAE/optimizer checkpoint')
     training = dict(prior['training']) if prior else {'step': 0, 'exposure': {}, 'config_history': []}
+    if semantic_parent is not None:
+        parent_identity={role+'_sha256':binding['sha256'] for role,binding in semantic_parent.items()}
+        if (sha256_file_hex_cached(resume)!=semantic_parent['checkpoint']['sha256']
+                and training.get('semantic_parent_identity')!=parent_identity):
+            raise ValueError('semantic continuation checkpoint belongs to a different publication cycle')
+        training['semantic_parent_identity']=parent_identity
     train, held = _sources(config, training.get('source_bindings'))
     resolver = ExternalArtifacts(config)
     participants = {name: load_participant(name, binding, config, device) for name, binding in bindings.items()}
@@ -499,6 +522,8 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             training['config_history'].append({'step': training['step'], 'sha256': config_sha, 'config': config})
             last_config = config_sha
         manifest, bindings = _manifest(participants_path)
+        if manifest.get('semantic_parent')!=semantic_parent:
+            raise ValueError('semantic parent changed inside a running cycle; checkpoint and resume the declared parent')
         if manifest['signature'] != previous_manifest:
             cursors = {}
             previous_manifest = manifest['signature']
@@ -515,6 +540,10 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         if set(participants) - set(bindings):
             raise ValueError('ready-model manifest removed an active semantic participant')
         from . import native_semantic_refresh as refresh_schedule
+        obligation_signature=canonical_json_sha256_hex({'phases':config['phases'],'source':train.binding,'participants':sorted(participants)})
+        if training.get('semantic_obligation_signature')!=obligation_signature:
+            training['semantic_obligations']=refresh_schedule.exposure_summary(config['phases'],train,participants,training['exposure'])
+            training['semantic_obligation_signature']=obligation_signature
         refresh_cycle=refresh_schedule.initialize(training,config,manifest)
         if refresh_cycle is not None:
             work=refresh_schedule.work(config['phases'],train.entries,participants,training['exposure'],
@@ -582,12 +611,17 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         training['step'] += 1
         counts = training['exposure'].setdefault(phase['id'], {}).setdefault(row_id, {})
         # joint_loss includes every unordered pair of selected participants.
+        consumed_obligations=0
         for a, b in itertools.combinations(sorted(selected), 2):
             key = pair_key(a, b)
+            consumed_obligations+=int(counts.get(key,0)<phase['epochs'])
             counts[key] = counts.get(key, 0) + 1
         if refresh_cycle is not None:
             refresh_schedule.committed(training,refresh_cycle,phase,refresh_row_index,len(train.entries))
-        training['semantic_obligations']=refresh_schedule.exposure_summary(config['phases'],train,participants,training['exposure'])
+        obligations=training['semantic_obligations']
+        obligations['remaining_pair_visits']-=consumed_obligations
+        if obligations['remaining_pair_visits']<0:raise RuntimeError('semantic exposure counter underflow')
+        obligations['complete']=obligations['remaining_pair_visits']==0
         metrics = {'step': training['step'], 'phase': phase['id'], 'source_row': row_id,
                    'loss': float(loss.detach()), 'gradient_norm': float(norm), 'details': details,
                    'seconds': time.time() - started}

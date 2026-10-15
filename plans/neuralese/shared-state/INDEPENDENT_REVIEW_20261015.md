@@ -326,3 +326,20 @@ passed24; eligible rotating-held coverage passed1; final six stage tests passed,
 including changed-weight interruption before joint/distillation. Quick passed. Controller deployment still requires
 parent independent review and actual SDK worker proof; production cutover,
 Neuralese lift, direct adapter-value and second-order support remain open.
+
+Standalone semantic-only supervision now continues successful partial
+publications through the same shared trainer and owned-child mechanism. Parent
+checkpoint/adapter/report bindings determine a per-cycle output; the previous
+successful artifact remains intact. Crash recovery adopts a valid child report
+when its controller-state commit was lost, and a failed VAE-only child resumes
+its own checkpoint without replaying that phase. Pure parent content identities
+in training metadata avoid retaining all historical full-weight checkpoints.
+Pending search starts at its existing durable cursor and wraps; owed-visit
+accounting is incremental rather than a full scan after every update.
+Evidence: standalone/readiness/process-owner checks passed30; strengthened
+failed-child/lost-state recovery passed24; final hotpath/counter integration
+passed30, invalid-parent guards passed3, and live parent-mutation preservation
+passed1. Quick passed. The restart fixture
+executes actual tiny LFM/Mellum optimization but explicitly stubs qualification;
+it does not claim runtime/task success. Separate actual compact-wire certificates
+and production task evidence remain required, with parent review before cutover.

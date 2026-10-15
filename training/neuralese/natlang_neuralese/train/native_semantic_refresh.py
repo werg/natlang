@@ -16,7 +16,8 @@ def initialize(training,config,manifest):
     required={phase['id']:(phase.get('options') or {}).get('refresh_updates',default) for phase in config['phases']}
     if any(type(value) is not int or value<=0 for value in required.values()):
         raise ValueError('adaptive semantic refresh requires positive declared updates for every phase')
-    signature=canonical_json_sha256_hex({'models':manifest['models'],'config':config})
+    signature=canonical_json_sha256_hex({'models':manifest['models'],'config':config,
+        **({'semantic_parent':{role:binding['sha256'] for role,binding in manifest['semantic_parent'].items()}} if manifest.get('semantic_parent') else {})})
     current=training.get('refresh_cycle')
     if current is None or current.get('signature')!=signature:
         current={'schema':'natlang.native-semantic-refresh-cycle/1','signature':signature,
@@ -36,8 +37,11 @@ def work(phases,entries,participants,exposure,cycle,cursors):
     for phase in phases:
         if cycle['completed_updates'][phase['id']]>=cycle['required_updates'][phase['id']]:continue
         counts=exposure.get(phase['id'],{})
-        # Prefer actual remaining curriculum obligations in source order.
-        for index,entry in enumerate(entries):
+        # Continue from the last committed whole row and wrap to catch older
+        # deficits, increased quotas and appended sources without prefix scans.
+        start=cursors.get(phase['id'],0)%len(entries)
+        for offset in range(len(entries)):
+            index=(start+offset)%len(entries);entry=entries[index]
             pairs=needed_pairs(entry,participants,counts.get(entry['id'],{}),phase['epochs'])
             if pairs:return phase,entry['id'],pairs,index
         # Additional adaptation advances through the whole qualified source,

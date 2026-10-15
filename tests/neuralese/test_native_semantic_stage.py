@@ -203,10 +203,15 @@ def test_adaptive_all_phase_quanta_resume_and_carry_whole_cohort(tmp_path,monkey
     config['held_pairs']['sha256']=sha256_file_hex(held)
     config.update(adaptive_refresh={'updates_per_phase':1},held_eval_rows=1)
     monkeypatch.setattr(stage.PairedSource,'get',lambda *args:pytest.fail('phase changes must restart the stream, never scan the remaining corpus then randomly reread'))
+    from natlang_neuralese.train import native_semantic_refresh as scheduler
+    summary_calls=[];summarize=scheduler.exposure_summary
+    def summary(*args):summary_calls.append(True);return summarize(*args)
+    monkeypatch.setattr(scheduler,'exposure_summary',summary)
     path.write_text(json.dumps(config))
     torch.manual_seed(1234)
     whole=stage.run(path,manifest,tmp_path/'whole',device='cpu')
     assert whole['step']==3 and not whole['completed'] and not whole['exposure_complete']
+    assert len(summary_calls)==2  # curriculum initialization + final proof, never each committed update
     assert whole['semantic_obligations']['remaining_pair_visits']==6
     assert whole['refresh_progress']['completed_updates']==dict.fromkeys(('vae','joint','distill'),1)
     assert whole['metrics']['held']['scope']=='rotating'
@@ -259,3 +264,138 @@ def test_adaptive_all_phase_quanta_resume_and_carry_whole_cohort(tmp_path,monkey
     assert all(len(rows)==3 for rows in third['exposure'].values())
     final_export=json.loads((tmp_path/'third/semantic-adapter.json').read_text())
     assert validate_boundary(third,final_export,config) is True
+
+
+def test_semantic_only_controller_restart_consumes_real_remaining_phase_rows(tmp_path,monkeypatch):
+    """Actual two-port updates/resume; qualification is an explicit control stub.
+
+    The tiny in-memory tokenizer fixture cannot qualify production serving.
+    Existing separate real-wire tests exercise that qualification mechanism.
+    """
+    from natlang_neuralese.train import native_readiness as controller
+    from natlang_neuralese.train.native_semantic_refresh import validate_boundary
+    path,manifest,config,row=_fixture(tmp_path,monkeypatch)
+    train=Path(config['pairs']['path'])
+    rows=[copy.deepcopy(row) for _ in range(3)]
+    for index,value in enumerate(rows):value['id']='remaining:'+str(index)
+    train.write_text(''.join(json.dumps(value)+'\n' for value in rows));config['pairs']['sha256']=sha256_file_hex(train)
+    config.update(adaptive_refresh={'updates_per_phase':1},held_eval_rows=1)
+    path.write_text(json.dumps(config))
+    selected=json.loads(manifest.read_text())['models']
+    out=tmp_path/'controller'
+    declaration={'schema':'natlang.native-shared-stage-controller/1','out':str(out),
+        'participants':[],'curriculum':str(path),'poll_seconds':.001,
+        'command':['actual-stage-fixture','{participants}','{out}']}
+    controller_path=tmp_path/'controller.json';controller_path.write_text(json.dumps(declaration))
+    monkeypatch.setattr(controller,'ready_participants',lambda config:(selected,[]))
+    def validate(report_path,published):
+        proof=json.loads(Path(report_path).read_text());export=json.loads(Path(proof['adapter']['path']).read_text())
+        validate_boundary(proof,export,stage.validate_config(json.loads(Path(proof['curriculum']['path']).read_text())))
+        key=(proof['participants_signature'],proof['curriculum_signature'])
+        return proof,published[key]['execution_signature']
+    monkeypatch.setattr(controller,'validate_completion',validate)
+    class Stop:
+        requested=False
+    stop=Stop();launches=[];outputs=[]
+    class Child:
+        pid=12345
+        def __init__(self,code=0):self.returncode=code
+        def poll(self):return self.returncode
+        def terminate(self):pass
+    def launch(argv,**kwargs):
+        child_manifest,child_out=Path(argv[1]),Path(argv[2])
+        launches.append(json.loads(child_manifest.read_text()))
+        resume=child_out/'checkpoint.pt'
+        report=stage.run(path,child_manifest,child_out,device='cpu',resume=resume if resume.is_file() else None,
+            max_updates=1 if len(launches)==2 else None)
+        # Control-only fixture attestation. This is not a runtime/task pass.
+        ready=all(report['refresh_progress']['completed_updates'][key]>=value for key,value in report['refresh_progress']['required_updates'].items())
+        report['production_ready']=ready;report['refresh_ready']=ready
+        (child_out/'shared-stage-completion.json').write_text(json.dumps(report))
+        outputs.append((child_out,report))
+        return Child(0 if ready else 75)
+    monkeypatch.setattr(controller.subprocess,'Popen',launch)
+    def pause(seconds):
+        # Stop after the first publication, then simulate a complete supervisor
+        # restart using durable state rather than in-memory cursors.
+        if len(outputs)==1 and not (out/'stopped-once').exists():
+            (out/'stopped-once').write_text('first successful partial publication')
+            stop.requested=True
+        elif len(outputs)==2 and not (out/'stopped-in-cycle').exists():
+            (out/'stopped-in-cycle').write_text('incomplete child checkpoint')
+            stop.requested=True
+        elif outputs and outputs[-1][1]['completed']:stop.requested=True
+    monkeypatch.setattr(controller.time,'sleep',pause)
+    first=controller._run(controller_path,stop=stop)
+    assert len(outputs)==1 and first['last_semantic_publication']
+    initial_dir,initial=outputs[0];initial_sha=sha256_file_hex(initial_dir/'checkpoint.pt')
+    assert initial['step']==3 and not initial['completed']
+    # Simulate loss of the controller state commit after the successful child
+    # report: exact child/report recovery must adopt it rather than replay it.
+    state_path=out/'controller.json';lost=json.loads(state_path.read_text())
+    lost['last_semantic_publication']=None;lost['last_successful_participants']=None
+    state_path.write_text(json.dumps(lost))
+    stop.requested=False
+    interrupted=controller._run(controller_path,stop=stop)
+    assert len(outputs)==2 and outputs[-1][1]['step']==4 and interrupted['retry']
+    assert interrupted['last_semantic_publication']==first['last_semantic_publication']
+    stop.requested=False
+    final=controller._run(controller_path,stop=stop)
+    assert len(outputs)==4 and outputs[-1][1]['completed'] and outputs[-1][1]['step']==9
+    assert final['last_semantic_publication']['path']==str((outputs[-1][0]/'shared-stage-completion.json').resolve())
+    assert len({str(directory) for directory,_ in outputs})==3
+    assert outputs[1][0]==outputs[2][0] and outputs[2][1]['step']==6
+    assert sha256_file_hex(initial_dir/'checkpoint.pt')==initial_sha
+    assert 'semantic_parent' not in launches[0]
+    assert all('semantic_parent' in value for value in launches[1:])
+    final_state=CheckpointPolicy.load(outputs[-1][0]/'checkpoint.pt')
+    assert all(len(values)==3 for values in final_state['training']['exposure'].values())
+    assert all(counts[stage.pair_key('lfm','mellum')]==1 for values in final_state['training']['exposure'].values() for counts in values.values())
+    # A further supervisor restart observes full completion without relaunch.
+    inspection=controller._run(controller_path,once=True,stop=Stop())
+    assert len(outputs)==4 and inspection['last_semantic_publication']==final['last_semantic_publication']
+
+
+def test_adaptive_pending_cursor_avoids_prefix_scan_and_wraps_owed_rows(monkeypatch):
+    from natlang_neuralese.train import native_semantic_refresh as refresh
+    entries=[{'id':str(index),'models':['a','b']} for index in range(1000)]
+    phase={'id':'joint','kind':'joint','epochs':1};key=stage.pair_key('a','b')
+    exposure={'joint':{str(index):{key:1} for index in range(900)}}
+    cycle={'required_updates':{'joint':16},'completed_updates':{'joint':0}}
+    calls=[];original=stage.needed_pairs
+    def count(*args):calls.append(args[0]['id']);return original(*args)
+    monkeypatch.setattr(stage,'needed_pairs',count)
+    chosen=refresh.work([phase],entries,{'a':None,'b':None},exposure,cycle,{'joint':900})
+    assert chosen[1]=='900' and calls==['900']
+    # A new obligation before the cursor remains owed and is found on wrap.
+    exposure['joint']={str(index):{key:1} for index in range(1000)}
+    del exposure['joint']['0'];calls.clear()
+    chosen=refresh.work([phase],entries,{'a':None,'b':None},exposure,cycle,{'joint':998})
+    assert chosen[1]=='0' and calls==['998','999','0']
+
+
+@pytest.mark.parametrize('parent',[{},False,{'checkpoint':{}}])
+def test_invalid_semantic_parent_cannot_silently_restart_training(tmp_path,monkeypatch,parent):
+    config,manifest,_,_=_fixture(tmp_path,monkeypatch)
+    value=json.loads(manifest.read_text());value['semantic_parent']=parent
+    manifest.write_text(json.dumps(value))
+    with pytest.raises(ValueError,match='exact checkpoint, adapter and completion'):
+        stage.run(config,manifest,tmp_path/'must-not-start',device='cpu')
+    assert not (tmp_path/'must-not-start/checkpoint.pt').exists()
+
+
+def test_live_parent_change_cannot_reset_current_cycle_credits(tmp_path,monkeypatch):
+    path,manifest,config,_=_fixture(tmp_path,monkeypatch)
+    config['adaptive_refresh']={'updates_per_phase':1};path.write_text(json.dumps(config))
+    actual=stage.joint_loss
+    def change(*args,**kwargs):
+        value=actual(*args,**kwargs)
+        altered=json.loads(manifest.read_text());altered['semantic_parent']={}
+        manifest.write_text(json.dumps(altered))
+        return value
+    monkeypatch.setattr(stage,'joint_loss',change)
+    with pytest.raises(ValueError,match='parent changed inside a running cycle'):
+        stage.run(path,manifest,tmp_path/'current',device='cpu')
+    saved=CheckpointPolicy.load(tmp_path/'current/checkpoint.pt')
+    assert saved['training']['step']==1
+    assert saved['training']['refresh_cycle']['completed_updates']=={'vae':1,'joint':0,'distill':0}

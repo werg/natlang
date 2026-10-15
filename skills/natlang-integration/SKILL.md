@@ -307,3 +307,14 @@ and its actual exposure while adding the new work.
 If changed participant weights require adaptive refresh, declare positive
 `adaptive_refresh.updates_per_phase` for actual VAE/joint/distill work before
 merging; old exposure remains credited but never licenses a stale adapter.
+
+A shared semantic controller without RL bootstrap automatically continues partial
+publications until its semantic quotas finish. Retain its `last_semantic_publication`,
+child launch record and per-cycle outputs when restarting. A continuation-parent
+or wrong-cycle checkpoint error requires restoring the exact bound publication
+and matching child checkpoint; do not substitute a different model or clear row
+credits. A command-placeholder error requires `{participants}` and `{out}` in the
+shared-stage command so each new cycle keeps its successful parent intact.
+A parent change during an active cycle requires checkpointing and resuming with
+the new declared parent. An exposure-counter underflow requires investigating
+row quotas against the last valid checkpoint; never clear credits to bypass it.

@@ -688,3 +688,9 @@ all-phase partial refresh from complete exposure. Both skills document recovery
 for missing work/held/transport/foundation dependencies. Live 48-sample model-facing
 measurement remains debt for the next own-model teacher window; exact two-port
 wire tests and task receipts prove mechanisms/observed tasks only, not lift.
+
+2026-10-15 standalone semantic continuation: controller status now retains its
+last qualified publication and advances partial semantic cycles without RL
+bootstrap. Both skills document exact parent/checkpoint and command-placeholder
+recovery. Live 48-sample measurement is pending the next own-model teacher
+window; controller/state tests do not establish learned task quality.
