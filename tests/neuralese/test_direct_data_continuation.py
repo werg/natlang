@@ -100,6 +100,9 @@ def test_windowing_change_replays_unmatched_geometry_and_keeps_merged_target_spa
     assert len(old_plan) == 2
     assert [w for batch, _ in plan[1:] for w in batch] == new
     assert record['unseen_target_windows'] == 1
+    grouped = dict(new[0], groups=['b', 'a'])
+    assert trainer.window_occurrence_key(grouped) == trainer.window_occurrence_key(dict(new[0], groups=['a', 'b']))
+    assert trainer.window_occurrence_key(grouped) != trainer.window_occurrence_key(dict(new[0], groups=['other']))
 
 
 def test_repeated_cohort_draws_are_consumed_by_multiplicity():
@@ -115,6 +118,7 @@ def test_repeated_cohort_draws_are_consumed_by_multiplicity():
     expected = trainer._subtract_window_counts(trainer._first_pass_windows(
         trainer.direct_sampler(data, a.cohort_repeats), a.seed), trainer._window_counts(consumed))
     trained = [w for batch, _ in plan[1:] for w in batch]
+    assert record['unseen_target_windows'] == 5  # counts repeated epoch draw occurrences, not unique source windows
     assert sorted(map(trainer.window_occurrence_key, trained)) == sorted(map(trainer.window_occurrence_key, expected))
     assert len(trained) == 5
 
@@ -382,7 +386,8 @@ def test_prepared_window_cache_restores_roles_invalidates_and_rebuilds_corruptio
     rows = [
         {'id': 'train', 'text': '<|im_start|>system hello <|im_start|>user question <|im_start|>assistant answer',
          'token_ids': [99, 10, 30, 31, 99, 11, 32, 99, 12, 33, 34, 35, 36],
-         'split': 'train', 'source_groups': ['train-group'], 'supervised_suffix_start': 9},
+         'split': 'train', 'source_groups': ['train-group'], 'supervised_suffix_start': 9,
+         'context_only_spans': [[9, 10]], 'token_choice_detached_spans': [[10, 11]]},
         {'id': 'held', 'text': '<|im_start|>system hello <|im_start|>user prompt <|im_start|>assistant held',
          'token_ids': [99, 10, 30, 31, 99, 11, 32, 99, 12, 33, 34, 35, 36],
          'split': 'test', 'source_groups': ['held-group'], 'supervised_suffix_start': 9},
@@ -436,6 +441,12 @@ def test_prepared_window_cache_restores_roles_invalidates_and_rebuilds_corruptio
     _, streamed_schedule = trainer.direct_schedule(streamed_plan[0], schedule_args)
     _, cached_schedule = trainer.direct_schedule(cached_plan[0], schedule_args)
     assert trainer.plan_documents_sha256(cached_schedule) == trainer.plan_documents_sha256(streamed_schedule)
+    assert trainer.plan_windows_sha256(cached_schedule) == trainer.plan_windows_sha256(streamed_schedule)
+    assert trainer.plan_windows_sha256(cached_schedule) == trainer.plan_windows_sha256(
+        trainer.direct_schedule(cold[1], schedule_args)[1])
+    assert all('role_mask_sha256' in window and 'roles' not in window for window in cached_plan[0])
+    assert any(window.get('context_only_spans') for window in cached_plan[0])
+    assert any(window.get('token_choice_detached_spans') for window in cached_plan[0])
     assert trainer.held_documents(cached_plan[1]) == trainer.held_documents(streamed_plan[1])
 
     spec = prepared_windows.cache_spec(engine, a, data)

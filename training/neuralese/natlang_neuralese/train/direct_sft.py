@@ -685,6 +685,8 @@ def window_occurrence_key(window):
         'supervised_spans': window.get('supervised_spans'), 'merged_rows': window.get('merged_rows'),
         'context_only_spans': window.get('context_only_spans'),
         'token_choice_detached_spans': window.get('token_choice_detached_spans'),
+        'role_mask_sha256': window.get('role_mask_sha256'),
+        'source_groups': sorted(set(window.get('groups') or ())),
         'cohort': window.get('cohort', 'native'), 'sampling_group': window.get('sampling_group'),
     }
     return canonical_json_sha256_hex(semantic)
@@ -712,6 +714,30 @@ def _subtract_window_counts(windows, consumed):
 
 def _first_pass_windows(sampler, seed):
     return [window for document in sampler.epoch(0, seed) for window in document]
+
+
+def attach_supervision_descriptor(window, row=None):
+    """Attach compact, source-row supervision metadata to one full or light window."""
+    if row is not None:
+        context = row.get('context_only_spans') or []
+        detached = row.get('token_choice_detached_spans') or []
+        if context or detached:
+            window['context_only_spans'] = context
+            window['token_choice_detached_spans'] = detached
+    roles = window.get('roles')
+    if roles is not None:
+        window['role_mask_sha256'] = hashlib.sha256(bytes(bytearray(roles))).hexdigest()
+    return window
+
+
+def attach_cached_supervision(windows, rows_meta):
+    """Rehydrate row-level masks from prepared-cache metadata, then fingerprint restored role windows."""
+    by_document = {hashlib.sha256(meta['text'].encode()).hexdigest(): meta
+                   for meta in rows_meta if meta.get('text') is not None}
+    for split_windows in windows.values():
+        for window in split_windows:
+            attach_supervision_descriptor(window, by_document.get(window['document']))
+    return windows
 
 
 def _pack_first_pass(windows, a, seed):
@@ -855,7 +881,9 @@ def data_continuation(previous_targets, previous_held, targets, held, *, consume
                             if not k.startswith('seen_document_') and k != 'seen_window_counts'}
                            if previous else None)}
     _, plan = direct_schedule(targets, a, record)
-    unseen = continued_unseen(targets, record)
+    unseen = (_subtract_window_counts(
+        _first_pass_windows(direct_sampler(targets, getattr(a, 'cohort_repeats', None)), a.seed), window_counts)
+        if record.get('schema') == CONTINUATION_SCHEMA else continued_unseen(targets, record))
     legacy_coverage = record.get('legacy_window_coverage')
     if legacy_coverage is not None and previous and previous.get('schema') == LEGACY_CONTINUATION_SCHEMA:
         legacy_hashes = set(previous.get('seen_document_sha256', ())) if previous else set()
@@ -1036,6 +1064,7 @@ def _stage_text_data(engine, a, text_data, cache_spec, cache_path, cached):
         from . import prepared_windows
         if cached is not None:
             windows, rows_meta, receipt, _ = cached
+            attach_cached_supervision(windows, rows_meta)
             held, held_selection = select_held_document_windows(windows['test'], a.held_documents)
             targets = [w for w in windows['train'] if target_bearing(w)]
             print(json.dumps({'event': 'prepared_window_cache', 'status': 'hit',
@@ -1057,6 +1086,9 @@ def _stage_text_data(engine, a, text_data, cache_spec, cache_path, cached):
                 mask_system_prompt=True,
                 train_target_tokens=getattr(a, 'train_target_tokens', None),
                 train_min_context_tokens=getattr(a, 'train_min_context_tokens', 0))
+            for split_windows in one.values():
+                for window in split_windows:
+                    attach_supervision_descriptor(window, row)
             for split in windows:
                 backing.add(one[split])
                 windows[split].extend(one[split])
@@ -1092,6 +1124,10 @@ def _stage_text_data(engine, a, text_data, cache_spec, cache_path, cached):
                                                  target_tokens=a.target_tokens, mask_system_prompt=True,
                                                  train_target_tokens=getattr(a, 'train_target_tokens', None),
                 train_min_context_tokens=getattr(a, 'train_min_context_tokens', 0))
+    rows_by_document = {hashlib.sha256(row['text'].encode()).hexdigest(): row for row in rows}
+    for split_windows in windows.values():
+        for window in split_windows:
+            attach_supervision_descriptor(window, rows_by_document.get(window['document']))
     held, held_selection = select_held_document_windows(windows['test'], a.held_documents)
     targets = [w for w in windows['train'] if target_bearing(w)]
     return windows['train'], targets, held, held_selection, mask_receipt, rows
@@ -1237,7 +1273,7 @@ def stage_plan_data(engine, a, text_data):
     equals the one over ``stage_data``'s windows (the trainer checks the plan's hash)."""
     from .text_warmup import prepare_text_windows, select_held_document_windows
 
-    def light(window, masks=None):
+    def light(window):
         value = {'ids': range(len(window['ids'])), 'prefix': window['prefix'], 'document': window['document'],
                  'document_id': window.get('document_id'), 'cohort': window.get('cohort', 'native'),
                  'groups': window.get('groups'), 'offset': window.get('offset', 0),
@@ -1246,8 +1282,9 @@ def stage_plan_data(engine, a, text_data):
             value['supervised_suffix_start'] = window['supervised_suffix_start']
         if 'supervised_spans' in window:
             value['supervised_spans'] = window['supervised_spans']
-        if masks:
-            value.update(masks)
+        for key in ('context_only_spans', 'token_choice_detached_spans', 'role_mask_sha256'):
+            if key in window:
+                value[key] = window[key]
         if window.get('sampling_group') is not None:
             value['sampling_group'] = window['sampling_group']
         if window.get('merged_rows'):
@@ -1262,15 +1299,11 @@ def stage_plan_data(engine, a, text_data):
             cached = prepared_windows.load(path, spec) if acquired else None
         if cached is not None:
             windows, rows_meta, _, expected_selection = cached
-            masks_by_document = {hashlib.sha256(meta['text'].encode()).hexdigest(): {
-                'context_only_spans': meta.get('context_only_spans', []),
-                'token_choice_detached_spans': meta.get('token_choice_detached_spans', []),
-            } for meta in rows_meta if meta.get('text') is not None}
-            tests = [light(w, masks_by_document.get(w['document'])) for w in windows['test']]
+            attach_cached_supervision(windows, rows_meta)
+            tests = [light(w) for w in windows['test']]
             held, selection = select_held_document_windows(tests, a.held_documents)
             if selection == expected_selection:
-                targets = [light(w, masks_by_document.get(w['document'])) for w in windows['train']
-                           if target_bearing(w)]
+                targets = [light(w) for w in windows['train'] if target_bearing(w)]
                 print(json.dumps({'event': 'prepared_window_cache', 'status': 'plan-hit',
                                   'target_windows': len(targets), 'test_windows': len(tests)}), flush=True)
                 return targets, held, selection
@@ -1280,11 +1313,11 @@ def stage_plan_data(engine, a, text_data):
                                           target_tokens=a.target_tokens, mask_system_prompt=True,
                                           train_target_tokens=getattr(a, 'train_target_tokens', None),
                 train_min_context_tokens=getattr(a, 'train_min_context_tokens', 0))
-        masks = ({'context_only_spans': row.get('context_only_spans', []),
-                  'token_choice_detached_spans': row.get('token_choice_detached_spans', [])}
-                 if row.get('context_only_spans') or row.get('token_choice_detached_spans') else None)
-        targets += [light(w, masks) for w in windows['train'] if target_bearing(w)]
-        tests += [light(w, masks) for w in windows['test']]
+        for split_windows in windows.values():
+            for window in split_windows:
+                attach_supervision_descriptor(window, row)
+        targets += [light(w) for w in windows['train'] if target_bearing(w)]
+        tests += [light(w) for w in windows['test']]
     held, held_selection = select_held_document_windows(tests, a.held_documents)
     return targets, held, held_selection
 
