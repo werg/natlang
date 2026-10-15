@@ -337,3 +337,24 @@ def test_pair_resume_expansion_processes_uncovered_edges_in_a_completed_chain():
     assert set(previous['requested_edge_ids']) < all_ids
     assert module._remaining_edges_by_chain({'chain-a': mixed[:2], 'chain-b': mixed[2:]},
         set(previous['requested_edge_ids'])) == {'chain-a': [mixed[1]], 'chain-b': [mixed[2]]}
+
+
+def test_pair_worker_commit_removes_only_reported_edges_from_chain_frontier():
+    import hashlib
+    import importlib.util
+    import json
+    from pathlib import Path
+
+    script = Path(__file__).parents[2] / 'scripts/neuralese_data/build_native_semantic_pairs_e2e.py'
+    spec = importlib.util.spec_from_file_location('e2e_pair_builder_frontier', script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    edges = [{'trajectory': 'same-chain', 'id': i, 'split': 'train' if i < 2 else 'test'}
+             for i in range(4)]
+    identity = lambda edge: hashlib.sha256(json.dumps(
+        edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    frontier = {'same-chain': list(edges)}
+    module._remove_completed_edges(frontier, 'same-chain', {identity(edges[1]), identity(edges[3])})
+    assert frontier == {'same-chain': [edges[0], edges[2]]}
+    module._remove_completed_edges(frontier, 'same-chain', {identity(edges[0]), identity(edges[2])})
+    assert frontier == {}
