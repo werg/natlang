@@ -22,7 +22,7 @@ from neuralese_data.select_repair_handoffs import select as select_repair_handof
 
 BASE = Path('/srv/storage/natlang-artifacts/free-provider-generation-20261013-v1')
 HELD = ROOT / 'runs/natlang-held-task-packet-v3-20261012/cases.jsonl'
-RUNTIME = Path('/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1/runtime-bounded-iterate-v2')
+RUNTIME = Path('/srv/storage/natlang-artifacts/free-provider-generation-20261012-v1/runtime-gateway-hold-v3')
 FAMILIES = ('contract_diagnosis', 'workbench_tickets', 'logic_proof_verifier',
             'actor_route_replan', 'folder_criteria_reducer',
             'iterate_schedule_repair', 'relational_late_argmax',
