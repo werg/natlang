@@ -1,0 +1,46 @@
+{
+  "schema": "natlang.source-review-registry-manifest/1",
+  "id": "source-reviews-20261015-v34",
+  "previous": null,
+  "files": [
+    {
+      "path": "training/source-reviews/holds.jsonl",
+      "bytes": 165353,
+      "sha256": "09b5d963cb676564b0cadad0d487b2b15a06bbddbddb72e40442fbb3366d8cf6",
+      "lines": 277
+    },
+    {
+      "path": "training/source-reviews/family-holds.json",
+      "bytes": 2106,
+      "sha256": "ae38254aa59a9422f7d5793427d44c1898adfc2268bfd9652865d8d653cfc8f0"
+    },
+    {
+      "path": "training/source-reviews/datasets.json",
+      "bytes": 435,
+      "sha256": "b597f17436c7848ac693070d72d080036f57187cd764185e13738dd7783a901a"
+    }
+  ],
+  "record_count": 277,
+  "pending_count": 277,
+  "identity_count": 350,
+  "per_dataset": {
+    "ag_news": 55,
+    "anli": 7,
+    "banking77": 15,
+    "clinc/clinc_oos": 8,
+    "entailmentbank": 1,
+    "folio": 18,
+    "hotpotqa": 9,
+    "kqapro": 1,
+    "musique": 74,
+    "natlang-inline-curriculum": 5,
+    "scifact": 20,
+    "sms_spam": 5,
+    "sst2": 18,
+    "tatqa": 40,
+    "workflowevals:agent-trace-observability": 1
+  },
+  "family_hold_count": 5,
+  "training_admission": false,
+  "note": "A registry of source-review holds, not a training corpus; no entry grants admission."
+}
