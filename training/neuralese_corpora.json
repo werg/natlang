@@ -91227,6 +91227,30 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "luna-held-shapes-s52093-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52093-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "82 independently reviewed exact accepted roots; 566 approved native decisions out of 685 materialized from 87 exact parents; five whole-parent process/quality holds and 22 unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v21 source review, independent visible-feed semantic review, protected checks, exact parent holds for missing process or degraded child judgments, and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Five exact-success roots held whole: three missing declared iterateOn, one brittle regex/hardcoded per-file judgments after repeated child errors, one mixed-inbox chain with unsupported hardcoded routing. Ten rejected roots reviewed; five source identities held in v21, verbose evidence-equivalent Hotpot response is not a DPO negative.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins v21, with ten rejected and no accepted source overlap. Source-group action-shape quarantine would remove two clean siblings, so exact five trajectory holds are authoritative. Materialized using current native status gate."
     }
   ],
   "coverage_backlog": [
