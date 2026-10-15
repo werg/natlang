@@ -9,25 +9,9 @@ import json
 from pathlib import Path
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
+from natlang_neuralese.common.runtime_inventory import task_runtime_inventory
 from natlang_neuralese.model.native_bundle import composite_dependencies, _semantic_dependencies
 from natlang_neuralese.train.recipe import native_source_dependencies
-
-
-def task_runtime_inventory(path):
-    path = Path(path)
-    names = ['prelude.js', 'package.json', '../package.json', '../package-lock.json',
-             '../training/source-reviews/holds.jsonl',
-             '../training/source-reviews/family-holds.json',
-             '../training/source-reviews/datasets.json']
-    required = [path/'dist/teacher/cli.js', path/'prelude.js', path/'package.json',
-                *(path/name for name in names)]
-    if not all(item.is_file() for item in required):
-        raise ValueError('provider task runtime needs built CLI and pinned npm manifests')
-    result = {str(p.relative_to(path)): sha256_file_hex_cached(p)
-              for p in sorted((path/'dist').rglob('*')) if p.is_file()}
-    result.update({name: sha256_file_hex_cached(path/name)
-                   for name in names})
-    return result
 
 
 def dependency_closure(request, *, namespace='/work/native-production'):
