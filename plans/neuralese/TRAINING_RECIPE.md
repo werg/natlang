@@ -1,5 +1,16 @@
 # Shared neuralese training recipe
 
+Architecture correction, owner 2026-10-15: the production destination is shared
+positional KV/hybrid-state Neuralese spans with ordinary token embeddings and
+learned low-rank embedding transforms, one-forward graph training, and distinct
+producer/consumer marker pairs. The projected-value/recurrent replay approach
+described in older sections below is diagnostic legacy during migration. Keep
+the current cloud runs useful as diagnostics; after implementation and local
+validation restart BOTH models on the full recipe using the replacement. All
+usable data must be converted and retained with its protected splits. The later
+joint semantic VAE/dialect stage follows training of several networks; it is not
+already available. See `SHARED_STATE_MIGRATION_20261015.md` for cutover status.
+
 Owner correction, 2026-10-15: comprehensively train BOTH models through the
 ENTIRE production recipe and all usable available data. Completing a probe,
 warmup or partial epoch is not completing production training. Declare full

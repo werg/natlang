@@ -1,5 +1,43 @@
 # Main goal: keep moving forward (owner, 2026-10-11)
 
+## Neuralese architecture replacement (owner, 2026-10-15)
+
+The destination is shared positional KV and hybrid-state spans, replacing the
+projected-value channel in BOTH training and inference. These instructions
+supersede older projection/recursive graph-replay foundation rules for new work.
+
+- Neuralese tokens use ordinary token embeddings with a learned low-rank
+  transformation in embedding space. Do not train or collect a projection into
+  a separate communication latent space in this phase.
+- Producers supply positional KV spans and other shareable hidden state;
+  consumers splice that state with correct positions. Handle LFM convolution
+  and linear state explicitly. Train teacher-forced graphs in one graph forward
+  pass using masks and state handling, rather than recursive graph replay.
+  Verify outputs and gradients against explicit cached execution; do not claim
+  one-pass execution while secretly replaying the graph.
+- Use different beginning AND end markers for producing versus consuming
+  Neuralese. Producers learn independently useful exported state; consumers
+  learn to use imported state. Stored Neuralese includes text and a sequence
+  of token embeddings. Preserve tokenizer provenance and make cross-tokenizer
+  matching explicitly best effort, not assumed exact state interchange.
+- After several networks are trained, train a VAE through a shared joint
+  semantic adaptation space to predict deltas reproducing source KV in the
+  target. Follow with behavioral distillation/self-supervised SFT. Those
+  per-token semantic encodings become the shared dialect. Do not claim that
+  this later adapter is already trained or substitute the old projection.
+- Replace the old approach end to end: shared trainers, conversions, inference,
+  block storage/transport, natlang harness, evaluators and recipes. Retain all
+  usable source data and protected evaluation splits through conversion, and
+  share mechanisms between LFM and Mellum.
+- Current old-paradigm cloud runs continue as DIAGNOSTICS during implementation
+  and local validation. Then restart BOTH models on the entire production
+  recipe using the replacement. Continued legacy training is not replacement
+  completion. Preserve useful diagnostic parents until cutover/dependency
+  checks; then apply the standing discarded-work hygiene policy.
+
+Track implementation and cutover in
+`plans/neuralese/SHARED_STATE_MIGRATION_20261015.md`.
+
 Owner correction, 2026-10-15: the lodestar is comprehensive training of BOTH
 models through the ENTIRE production recipe and all usable available data.
 Stages are steps to progress through, not endpoints. Half measures, short
