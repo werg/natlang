@@ -267,3 +267,10 @@ and after reading. Keep ordinary symlink rejection as the default and reject
 directory links even in this mode. The independent decoded member verifier
 still checks every byte; restored archives contain regular files. This changes
 storage plumbing only and grants no source or training admission.
+
+Publish a stable receipt for each completed rendering as soon as its tokenizer
+twins and omission ledger are complete. Later rendering work must not delay
+use of ready data or mutate that rendering's receipt. Each ready view still
+uses the same current-holds admission checks; copy or bind its completed
+files into a published cohort before training. The final aggregate receipt is
+an overview, not a barrier to using completed views.

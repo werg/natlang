@@ -45,6 +45,7 @@ from render_native_turn_corpus import canonical, file_sha, role_counter, sha, wh
 from text_tokenizer_twin import document_identity, IDENTITY_FIELDS, PROVENANCE_FIELDS  # noqa: E402
 from source_review import pending_unpinned_source_groups, registry_sha256  # noqa: E402
 from neuralese_data.decision_holds import load_decision_holds  # noqa: E402
+from natlang_neuralese.common.jsonio import write_json_durable  # noqa: E402
 
 SCHEMA = 'natlang.native-text-union/2'
 
@@ -539,8 +540,16 @@ def main(argv=None):
         if len(identities) != 1:
             raise SystemExit(f'{rendering}: tokenizer twins differ in id/split/groups identities')
         receipt['renderings'][rendering] = rendering_receipt
+        # A ready view can feed production while unrelated renderings continue.
+        # This scoped receipt is never rewritten by subsequent rendering work.
+        scoped = {**receipt, 'renderings': {rendering: rendering_receipt},
+                  'completed_renderings': [rendering],
+                  'pending_renderings': [name for name in members if name not in receipt['renderings']],
+                  'scope': 'Completed rendering; other views are not admission or consumption prerequisites',
+                  'seconds': round(time.time() - t0)}
+        write_json_durable(a.out_dir / f'receipt-{rendering}.json', scoped)
     receipt['seconds'] = round(time.time() - t0)
-    (a.out_dir / 'receipt.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+    write_json_durable(a.out_dir / 'receipt.json', receipt)
 
 
 if __name__ == '__main__':
