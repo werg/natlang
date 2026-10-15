@@ -63,3 +63,37 @@ def test_native_loader_rejects_legacy_checkpoint(tmp_path):
     torch.save({'schema': 'natlang.neuralese-direct/1'}, checkpoint)
     with pytest.raises(ValueError, match='legacy projection'):
         load_native_checkpoint(checkpoint)
+
+
+def test_native_composite_checkpoint_applies_named_patch_and_has_restorable_effective_identity(tmp_path):
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    from natlang_neuralese.model.native_composite import write_native_composite_checkpoint
+
+    base = tmp_path / 'base'
+    tiny_source(base)
+    model, _, _, config = load_native_model(base, dtype=torch.float32, rank=4)
+    base_checkpoint = tmp_path / 'base-native.pt'
+    torch.save({'schema': CHECKPOINT_SCHEMA, 'model_config': config, **model_state(model)}, base_checkpoint)
+    base_sha = sha256_file_hex_cached(base_checkpoint)
+    parent_identity = native_identity(model, config, checkpoint_sha256=base_sha)
+    with torch.no_grad():
+        model.input_rows.add_(0.125)
+        model.adapter.up.weight.add_(0.025)
+    expected_input = model.input_rows.detach().clone()
+    expected_up = model.adapter.up.weight.detach().clone()
+    receipt = write_native_composite_checkpoint(base_checkpoint, tmp_path / 'composite', model, config,
+        base_identity=parent_identity, optimizer={'name': 'adam', 'step': 7, 'lr': 0.001},
+        optimizer_tensors={'m.adapter.up.weight': torch.ones_like(model.adapter.up.weight),
+                           'v.adapter.up.weight': torch.full_like(model.adapter.up.weight, 2.)},
+        update_provenance={'step': 7, 'reason': 'test optimizer update'})
+    restored, _, _, restored_config, state = load_native_checkpoint(receipt['path'])
+    assert state['schema'] == 'natlang.neuralese-native-composite-checkpoint/1'
+    assert state['optimizer'] == {'name': 'adam', 'step': 7, 'lr': 0.001}
+    torch.testing.assert_close(state['optimizer_tensors']['m.adapter.up.weight'],
+                               torch.ones_like(model.adapter.up.weight))
+    assert receipt['native_identity']['checkpoint_sha256'] == sha256_file_hex_cached(receipt['path'])
+    assert torch.equal(restored.input_rows, expected_input)
+    assert torch.equal(restored.adapter.up.weight, expected_up)
+    assert native_identity(restored, restored_config,
+        checkpoint_sha256=receipt['native_identity']['checkpoint_sha256']) == receipt['native_identity']
+    assert sha256_file_hex_cached(base_checkpoint) == base_sha

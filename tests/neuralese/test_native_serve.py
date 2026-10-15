@@ -61,6 +61,12 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         with urllib.request.urlopen(endpoint + path, timeout=30) as response:
             return json.loads(response.read())
 
+    def request(path, method, body):
+        request = urllib.request.Request(endpoint + path, data=body, method=method,
+            headers={'content-type': 'application/octet-stream'})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.read()
+
     try:
         with urllib.request.urlopen(endpoint + '/v1/neuralese/info', timeout=30) as response:
             info = json.loads(response.read())
@@ -132,6 +138,7 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
             'exact-native-state', 'best-effort-text-retokenization']
         assert {'native.text-write', 'native.init-body'} <= set(info['capabilities'])
         assert {'decide', 'score'} <= set(info['capabilities'])
+        assert 'store.native-tensor-artifact' in info['capabilities']
         placeholder = post_path('/v1/neuralese/native-states/write-text',
                                 {'text': 'placeholder body', 'type': 'Neuralese<string>'})
         assert placeholder['id'].startswith('nzs1_')
@@ -164,6 +171,19 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert batch['results'][0]['tokens'] == single['tokens']
         assert max(abs(a - b) for a, b in zip(batch['results'][0]['log_probs'], single['log_probs'])) < 1e-6
         assert 'error' in batch['results'][1]
+        from natlang_neuralese.model.native_artifact import (NativeTensorArtifact,
+            decode_native_tensor_artifact, encode_native_tensor_artifact)
+        tensor_artifact = NativeTensorArtifact('parameter-gradient', engine.native_identity,
+            {'adapter.up.weight': torch.ones((2, 3))}, source_artifact_id=record.id,
+            provenance={'objective': 'service-route-test'})
+        encoded_artifact = encode_native_tensor_artifact(tensor_artifact)
+        _, artifact_id = decode_native_tensor_artifact(encoded_artifact)
+        stored_meta = json.loads(request(f'/v1/neuralese/native-tensor-artifacts/{artifact_id}',
+                                        'PUT', encoded_artifact))
+        assert stored_meta['id'] == artifact_id and stored_meta['kind'] == 'parameter-gradient'
+        fetched_artifact, fetched_id = decode_native_tensor_artifact(
+            request(f'/v1/neuralese/native-tensor-artifacts/{artifact_id}', 'GET', b''))
+        assert fetched_id == artifact_id and fetched_artifact.native_identity == engine.native_identity
         initialized = post_path('/v1/neuralese/native-states/init-body', {
             'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': 'before '},
                 {'type': 'native_state', 'id': placeholder['id']}, {'type': 'text', 'text': ' after'}]}],

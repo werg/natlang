@@ -19,3 +19,14 @@ The native learner operates on one declared native invocation graph and one exac
 ## Qualification
 
 Exercise existing `neuralese-learning.test.mjs` contracts against native LFM and Mellum services, including first/second derivatives where advertised, optimizer update plus forward change and resume, adapter application/gradient, single-vs-batched candidate scoring, and guided cache rollback with exact `/2` capture. Compare graph outputs and gradients against the explicit cached native reference; do not loosen tolerances around an unexplained discrepancy. Base-relative KL is telemetry only. The shared full-check service and independent review own integrated qualification; focused DGX probes run through the memory ledger.
+
+## Live implementation status
+
+Native cached `/decide` and `/score` now use the shared renderer and the native
+Engine cache/step path. Named native tensor artifacts use a distinct content
+identity and the existing durable owner/pin/collection store. A composite
+checkpoint binds an immutable full native parent, named interface parameter
+patch, and optimizer tensor state without rewriting the parent. Native `/grad`,
+`/optim`, adapter application/creation, second-order execution, and guidance
+remain open until their actual client paths and both-backbone validation land;
+capability denial is not counted as implementation.

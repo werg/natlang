@@ -62,6 +62,16 @@ def native_state_id(block) -> str:
     return "nzs1_" + base64.b32encode(digest.digest()).decode().rstrip("=").lower()
 
 
+@dataclass
+class NativeTensorRecord:
+    """Named native parameter/gradient/update artifact in the shared store."""
+    id: str
+    artifact: object
+
+    def meta(self):
+        return {'id': self.id, **self.artifact.metadata()}
+
+
 def encode_native_state(block) -> bytes:
     """Encode a validated NativeStateBlock as deterministic multi-tensor safetensors."""
     from ..model.state_block import NativeStateBlock
@@ -322,7 +332,13 @@ class TensorStore:
         path = self._path(block.id)
         path.parent.mkdir(exist_ok=True)
         partial = path.with_suffix(f".{os.getpid()}.partial")
-        payload = encode_native_state(block.block) if isinstance(block, NativeStateRecord) else encode_block(block)
+        if isinstance(block, NativeStateRecord):
+            payload = encode_native_state(block.block)
+        elif isinstance(block, NativeTensorRecord):
+            from ..model.native_artifact import encode_native_tensor_artifact
+            payload = encode_native_tensor_artifact(block.artifact)
+        else:
+            payload = encode_block(block)
         with partial.open("wb") as stream:
             stream.write(payload)
             stream.flush()
@@ -340,6 +356,8 @@ class TensorStore:
     def _size(block) -> int:
         if isinstance(block, NativeStateRecord):
             return sum(tensor.numel() * tensor.element_size() for tensor in block.block.tensors().values())
+        if isinstance(block, NativeTensorRecord):
+            return sum(tensor.numel() * tensor.element_size() for tensor in block.artifact.tensors.values())
         return block.payload.numel() * block.payload.element_size() + len(block.wire_payload or b"")
 
     def _keep(self, block) -> None:
@@ -371,6 +389,10 @@ class TensorStore:
             if block_id.startswith("nzs1_"):
                 native, actual = decode_native_state(body)
                 block = NativeStateRecord(actual, native)
+            elif block_id.startswith("nnt1_"):
+                from ..model.native_artifact import decode_native_tensor_artifact
+                artifact, actual = decode_native_tensor_artifact(body)
+                block = NativeTensorRecord(actual, artifact)
             else:
                 block = decode_block(body)
         except FileNotFoundError:
@@ -437,6 +459,43 @@ class TensorStore:
             if not isinstance(block, NativeStateRecord):
                 raise ValueError(f"{block_id} is a legacy projected block, not native shared state")
             return block
+
+    def put_native_tensor_artifact(self, artifact, owner: str | None = None) -> NativeTensorRecord:
+        """Store typed named native tensors through the shared durable store and owner lifecycle."""
+        from ..model.native_artifact import NativeTensorArtifact, native_tensor_artifact_id
+        if not isinstance(artifact, NativeTensorArtifact):
+            raise TypeError('expected NativeTensorArtifact')
+        artifact.validate()
+        cpu_tensors = {name: tensor.detach().to('cpu').contiguous().clone()
+                       for name, tensor in artifact.tensors.items()}
+        stored_artifact = NativeTensorArtifact(artifact.kind, dict(artifact.native_identity), cpu_tensors,
+            artifact.source_artifact_id, dict(artifact.provenance or {})).validate()
+        record = NativeTensorRecord(native_tensor_artifact_id(stored_artifact), stored_artifact)
+        with self._lock:
+            found = self._load(record.id)
+            if found is not None:
+                from ..model.native_artifact import encode_native_tensor_artifact
+                if not isinstance(found, NativeTensorRecord) or encode_native_tensor_artifact(found.artifact) != encode_native_tensor_artifact(stored_artifact):
+                    raise ValueError('native tensor artifact content ID collision')
+                stored = found
+            else:
+                if self.directory is not None:
+                    self._write(record)
+                self._db.execute('INSERT INTO blocks (id, bytes) VALUES (?, ?)', (record.id, self._size(record)))
+                self._keep(record)
+                stored = record
+            if owner is not None:
+                self._db.execute('INSERT OR IGNORE INTO holds (id, owner) VALUES (?, ?)', (record.id, owner))
+            return stored
+
+    def get_native_tensor_artifact(self, artifact_id: str) -> NativeTensorRecord | None:
+        with self._lock:
+            artifact = self._load(artifact_id)
+            if artifact is None:
+                return None
+            if not isinstance(artifact, NativeTensorRecord):
+                raise ValueError(f'{artifact_id} is not a native tensor artifact')
+            return artifact
 
     # Holds, pins, collection ---------------------------------------------------------------------------
     def hold(self, owner: str, block_ids) -> None:

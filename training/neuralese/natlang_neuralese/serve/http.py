@@ -63,7 +63,8 @@ from .store import decode_block, encode_block, decode_native_state, encode_nativ
 
 _BLOCK = re.compile(r"^/v1/neuralese/blocks/(nz1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
 _NATIVE_STATE = re.compile(r"^/v1/neuralese/native-states/(nzs1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
-_BLOCK_ID = re.compile(r"^(?:nz1_|nzs1_)[a-z2-7]+$")
+_NATIVE_TENSOR = re.compile(r"^/v1/neuralese/native-tensor-artifacts/(nnt1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
+_BLOCK_ID = re.compile(r"^(?:nz1_|nzs1_|nnt1_)[a-z2-7]+$")
 OWNER_HEADER = "x-natlang-owner"
 
 
@@ -85,7 +86,7 @@ CAPABILITIES = sorted([
     "decide", "embed", "encode", "grad", "grad.order2", "guidance", "guidance.check", "init-body", "optim", "parts.value-type",
     "native.text-write", "native.init-body", "render", "score", "store", "store.owners", "store.native-state", "template", "template.argument-path", "template.value-type", "view", "write"])
 NATIVE_CAPABILITIES = sorted([
-    "chat", "chat.stream", "decide", "score", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state",
+    "chat", "chat.stream", "decide", "score", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
     "store.owners", "template", "template.argument-path", "template.value-type", "view"])
 NATIVE_CAPABILITY_GAPS = sorted(set(CAPABILITIES) - set(NATIVE_CAPABILITIES))
 
@@ -234,6 +235,19 @@ def make_handler(engine: Engine):
                     return self._json(200, record.meta())
                 self._hold(record.id)
                 return self._send(200, encode_native_state(record.block), "application/octet-stream")
+            tensor = _NATIVE_TENSOR.match(self.path)
+            if tensor and tensor.group(2) in (None, "/meta"):
+                try:
+                    record = engine.store.get_native_tensor_artifact(tensor.group(1))
+                except ValueError as error:
+                    return self._error(409, "neuralese-native-artifact-kind", str(error))
+                if record is None:
+                    return self._error(404, "neuralese-unknown-native-artifact", tensor.group(1))
+                if tensor.group(2) == "/meta":
+                    return self._json(200, record.meta())
+                from ..model.native_artifact import encode_native_tensor_artifact
+                self._hold(record.id)
+                return self._send(200, encode_native_tensor_artifact(record.artifact), "application/octet-stream")
             self._error(404, "not-found", self.path)
 
         def _unavailable(self, capability: str):
@@ -265,6 +279,9 @@ def make_handler(engine: Engine):
             native = _NATIVE_STATE.match(self.path)
             if native and native.group(2) is None:
                 return self._put_native_state(native.group(1))
+            tensor = _NATIVE_TENSOR.match(self.path)
+            if tensor and tensor.group(2) is None:
+                return self._put_native_tensor_artifact(tensor.group(1))
             match = _BLOCK.match(self.path)
             if not match or match.group(2):
                 return self._error(404, "not-found", self.path)
@@ -285,6 +302,17 @@ def make_handler(engine: Engine):
             if actual_id != expected_id:
                 return self._error(400, "neuralese-id-mismatch", f"content hashes to {actual_id}")
             stored = engine.store.put_native_state(block, self._owner)
+            return self._json(201, stored.meta())
+
+        def _put_native_tensor_artifact(self, expected_id):
+            from ..model.native_artifact import decode_native_tensor_artifact
+            try:
+                artifact, actual_id = decode_native_tensor_artifact(self._body())
+            except ValueError as error:
+                return self._error(400, "neuralese-bad-native-artifact", str(error))
+            if actual_id != expected_id:
+                return self._error(400, "neuralese-id-mismatch", f"content hashes to {actual_id}")
+            stored = engine.store.put_native_tensor_artifact(artifact, self._owner)
             return self._json(201, stored.meta())
 
         def do_POST(self):
@@ -460,7 +488,8 @@ def make_handler(engine: Engine):
                     return self._json(201, block.meta())
                 match = _BLOCK.match(self.path)
                 native = _NATIVE_STATE.match(self.path)
-                pin_match = match or native
+                tensor = _NATIVE_TENSOR.match(self.path)
+                pin_match = match or native or tensor
                 if pin_match and pin_match.group(2) in ("/pin", "/unpin"):
                     if pin_match.group(2) == "/pin":
                         engine.store.pin(pin_match.group(1), self._owner)

@@ -1,0 +1,157 @@
+"""Typed named tensors for native parameter sets, gradients and updates.
+
+These artifacts preserve tensor names and provenance. They are intentionally
+not compatible with the old flattened ``nz1`` value/vector domain.
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import re
+import struct
+from dataclasses import dataclass
+
+import torch
+
+SCHEMA = 'natlang.neuralese-native-tensor-artifact/1'
+DOMAIN = 'natlang.neuralese-native-tensor-artifact/1'
+_DTYPES = {torch.float16: ('F16', 2), torch.bfloat16: ('BF16', 2),
+           torch.float32: ('F32', 4), torch.float64: ('F64', 8)}
+_FROM_SAFE = {name: (dtype, size) for dtype, (name, size) in _DTYPES.items()}
+_KINDS = {'parameter-set', 'parameter-gradient', 'parameter-update', 'state-gradient', 'optimizer-state'}
+
+
+def _raw(tensor):
+    value = tensor.detach().contiguous().cpu()
+    return (value.view(torch.int16).numpy().tobytes() if value.dtype == torch.bfloat16
+            else value.numpy().tobytes())
+
+
+@dataclass
+class NativeTensorArtifact:
+    kind: str
+    native_identity: dict
+    tensors: dict[str, torch.Tensor]
+    source_artifact_id: str | None = None
+    provenance: dict | None = None
+
+    def validate(self):
+        if self.kind not in _KINDS:
+            raise ValueError(f'unsupported native tensor artifact kind {self.kind!r}')
+        identity = self.native_identity
+        if not isinstance(identity, dict) or set(identity) != {
+                'checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'}:
+            raise ValueError('native artifact needs the exact four-field model identity')
+        for name in ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256'):
+            if not isinstance(identity.get(name), str) or not re.fullmatch(r'[0-9a-f]{64}', identity[name]):
+                raise ValueError(f'native artifact {name} must be a SHA-256 digest')
+        if not isinstance(identity.get('architecture'), str) or not identity['architecture']:
+            raise ValueError('native artifact architecture is required')
+        if self.source_artifact_id is not None and not re.fullmatch(r'nzs1_[a-z2-7]+|nnt1_[a-z2-7]+', self.source_artifact_id):
+            raise ValueError('native artifact source must identify a native state or tensor artifact')
+        if not isinstance(self.tensors, dict) or not self.tensors:
+            raise ValueError('native tensor artifact needs named tensors')
+        for name, tensor in self.tensors.items():
+            if not isinstance(name, str) or not name or not isinstance(tensor, torch.Tensor):
+                raise ValueError('native tensors require nonempty names and tensor values')
+            if tensor.dtype not in _DTYPES or tensor.ndim < 1 or any(size <= 0 for size in tensor.shape):
+                raise ValueError(f'native tensor {name!r} must have a supported floating dtype and positive dimensions')
+            if not bool(torch.isfinite(tensor).all()):
+                raise ValueError(f'native tensor {name!r} contains non-finite values')
+        if self.provenance is not None and not isinstance(self.provenance, dict):
+            raise ValueError('native artifact provenance must be an object')
+        return self
+
+    def metadata(self):
+        self.validate()
+        tensors = [{'name': name, 'dtype': _DTYPES[value.dtype][0], 'shape': list(value.shape)}
+                   for name, value in sorted(self.tensors.items())]
+        return {'schema': SCHEMA, 'kind': self.kind, 'native_identity': self.native_identity,
+                'source_artifact_id': self.source_artifact_id, 'provenance': self.provenance or {},
+                'tensors': tensors}
+
+
+def native_tensor_artifact_id(artifact):
+    metadata = json.dumps(artifact.metadata(), ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()
+    digest = hashlib.sha256()
+    digest.update(DOMAIN.encode() + b'\0' + struct.pack('<Q', len(metadata)) + metadata)
+    for name, tensor in sorted(artifact.tensors.items()):
+        encoded_name = name.encode()
+        raw = _raw(tensor)
+        descriptor = json.dumps({'dtype': _DTYPES[tensor.dtype][0], 'shape': list(tensor.shape)},
+                                separators=(',', ':')).encode()
+        digest.update(struct.pack('<I', len(encoded_name)) + encoded_name)
+        digest.update(struct.pack('<I', len(descriptor)) + descriptor)
+        digest.update(struct.pack('<Q', len(raw)) + raw)
+    return 'nnt1_' + base64.b32encode(digest.digest()).decode().rstrip('=').lower()
+
+
+def encode_native_tensor_artifact(artifact):
+    artifact.validate()
+    entries, payloads, offset = {}, [], 0
+    for name, tensor in sorted(artifact.tensors.items()):
+        raw = _raw(tensor)
+        entries[name] = {'dtype': _DTYPES[tensor.dtype][0], 'shape': list(tensor.shape),
+                         'data_offsets': [offset, offset + len(raw)]}
+        payloads.append(raw)
+        offset += len(raw)
+    artifact_id = native_tensor_artifact_id(artifact)
+    metadata = {'id': artifact_id, **artifact.metadata()}
+    entries['__metadata__'] = {'natlang.native_tensor_artifact': json.dumps(
+        metadata, ensure_ascii=False, sort_keys=True, separators=(',', ':'))}
+    header = json.dumps(entries, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()
+    header += b' ' * ((8 - len(header) % 8) % 8)
+    return struct.pack('<Q', len(header)) + header + b''.join(payloads)
+
+
+def decode_native_tensor_artifact(body):
+    try:
+        if len(body) < 8:
+            raise ValueError('not a safetensors body')
+        (header_size,) = struct.unpack('<Q', body[:8])
+        if header_size > len(body) - 8:
+            raise ValueError('header exceeds body')
+        header = json.loads(body[8:8 + header_size])
+        if not isinstance(header, dict):
+            raise ValueError('native tensor header must be an object')
+        metadata = json.loads(header.get('__metadata__', {}).get('natlang.native_tensor_artifact', '{}'))
+        if not isinstance(metadata, dict) or metadata.get('schema') != SCHEMA:
+            raise ValueError('unsupported native tensor artifact schema')
+        tensors, spans = {}, []
+        payload = body[8 + header_size:]
+        for name, entry in header.items():
+            if name == '__metadata__':
+                continue
+            dtype, itemsize = _FROM_SAFE[entry['dtype']]
+            shape, offsets = entry['shape'], entry['data_offsets']
+            if (not isinstance(shape, list) or not shape or any(type(d) is not int or d <= 0 for d in shape)
+                    or not isinstance(offsets, list) or len(offsets) != 2 or any(type(i) is not int for i in offsets)):
+                raise ValueError(f'invalid tensor descriptor {name!r}')
+            count = 1
+            for size in shape:
+                count *= size
+            start, end = offsets
+            if start < 0 or end < start or end > len(payload) or end - start != count * itemsize:
+                raise ValueError(f'invalid tensor byte range {name!r}')
+            spans.append((start, end, name))
+            raw = payload[start:end]
+            tensor = (torch.frombuffer(bytearray(raw), dtype=torch.int16).view(torch.bfloat16)
+                      if dtype == torch.bfloat16 else torch.frombuffer(bytearray(raw), dtype=dtype))
+            tensors[name] = tensor.reshape(shape).clone()
+        spans.sort()
+        if not spans or spans[0][0] != 0 or spans[-1][1] != len(payload) or any(a[1] != b[0] for a, b in zip(spans, spans[1:])):
+            raise ValueError('native tensor payload has gaps or overlaps')
+        expected = {row['name']: (row['dtype'], row['shape']) for row in metadata.get('tensors', [])}
+        actual = {name: (_DTYPES[value.dtype][0], list(value.shape)) for name, value in tensors.items()}
+        if expected != actual:
+            raise ValueError('native tensor descriptors differ from metadata inventory')
+        artifact = NativeTensorArtifact(metadata['kind'], metadata['native_identity'], tensors,
+            metadata.get('source_artifact_id'), metadata.get('provenance'))
+        artifact.validate()
+        actual_id = native_tensor_artifact_id(artifact)
+        if metadata.get('id') != actual_id:
+            raise ValueError(f'native tensor artifact ID does not match content ({actual_id})')
+        return artifact, actual_id
+    except (KeyError, TypeError, IndexError, OverflowError, AttributeError, json.JSONDecodeError) as error:
+        raise ValueError(f'malformed native tensor artifact: {error}') from error

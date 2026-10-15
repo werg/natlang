@@ -13,6 +13,7 @@ from .shared_state import SharedStateModel, provision_role_tokens
 
 CHECKPOINT_SCHEMA = 'natlang.neuralese-native-checkpoint/1'
 SHARED_CHECKPOINT_SCHEMA = 'natlang.neuralese-native-shared-checkpoint/1'
+COMPOSITE_CHECKPOINT_SCHEMA = 'natlang.neuralese-native-composite-checkpoint/1'
 
 
 def configure_native_precision():
@@ -117,6 +118,15 @@ def restore_model_state(model, state):
 
 def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, participant=None):
     """Return (model, tokenizer, roles, model_config, full_checkpoint_state)."""
+    from pathlib import Path
+    path = Path(path).resolve(strict=True)
+    with path.open('rb') as stream:
+        prefix = stream.read(1)
+    if prefix == b'{':
+        manifest = json.loads(path.read_text())
+        if manifest.get('schema') == COMPOSITE_CHECKPOINT_SCHEMA:
+            from .native_composite import load_native_composite_checkpoint
+            return load_native_composite_checkpoint(path, base=base, device=device, dtype=dtype)
     from ..train.checkpoint_policy import CheckpointPolicy
     state = CheckpointPolicy.load(path)
     if state.get('schema') == SHARED_CHECKPOINT_SCHEMA:
