@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-mined-port-view-ask-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-port-view-ask-archive-20261015-v1",
+  "files": [
+    {
+      "path": "port-record-view-ask-v3.receipt.json",
+      "bytes": 228427,
+      "sha256": "0ac907bc9681d67d3568feb1f13e9baf554dd806f93ce7b45cd27ac7f8216ce5"
+    },
+    {
+      "path": "port-record-view-ask-v3.roundtrip-proof.json",
+      "bytes": 378,
+      "sha256": "93ad8f14d3ba3d28474b40874c451ee8b8f51415553294ca506e7217667c7c76"
+    },
+    {
+      "path": "port-record-view-ask-v3.tar.zst",
+      "bytes": 198360345,
+      "sha256": "41cc8a477103b3391471735837173821cdeca89fdddf06201ba4e9647b4fbd7c"
+    }
+  ],
+  "bytes": 198589150
+}

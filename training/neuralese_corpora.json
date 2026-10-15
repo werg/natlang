@@ -94069,6 +94069,21 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "neuralese-e2e-mined-port-view-ask-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-port-view-ask-archive-20261015-v1",
+      "include": [
+        "port-record-view-ask-v3.tar.zst",
+        "port-record-view-ask-v3.receipt.json",
+        "port-record-view-ask-v3.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact 1501-file/31898584865-byte mined-source archive with independent decoded member hash verification. Source mapping, whole-chain current source/decision/held/quality filtering, graph reauthentication and model transport qualification remain separate.",
+      "license": "Original source lineage facts retained in archived records; all accepted by owner.",
+      "notes": "Assigned complete bulk cloud protected assembly; originals retained pending private object durability and verified relocation. Future pack/verify calls share scripts/coreweave/source_archive.py."
     }
   ],
   "coverage_backlog": [
