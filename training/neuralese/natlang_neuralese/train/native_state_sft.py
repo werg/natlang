@@ -64,11 +64,20 @@ class NativeGraphSource:
     unions and authenticated E2E archives are large enough that keeping parsed
     plans for every row can exceed host memory by orders of magnitude.
     """
-    def __init__(self, path, tokenizer_fingerprint, *, required_split):
+    def __init__(self, path, tokenizer_fingerprint, *, required_split, pair_model=None, role_ids=None, _parents=()):
         from ..data.native_graph import parse_graph
         from ..common import row_index
         from ..common.hashing import canonical_json_sha256_hex
         self.path = Path(path)
+        if self.path.resolve() in _parents:
+            raise ValueError('native graph source manifests cannot contain cycles')
+        self.kind = 'semantic-pairs' if pair_model is not None else 'native-graphs'
+        self.pair_model, self.role_ids = pair_model, tuple(role_ids or ())
+        self.tokenizer_fingerprint = tokenizer_fingerprint
+        self.required_split = required_split
+        if self.path.suffix == '.json' and pair_model is None:
+            self._init_manifest(_parents)
+            return
         before = self.path.stat()
         self.tokenizer_fingerprint = tokenizer_fingerprint
         self.required_split = required_split
@@ -76,12 +85,31 @@ class NativeGraphSource:
         package = Path(__file__).resolve().parents[1]
         policy = canonical_json_sha256_hex({name: sha256_file_hex_cached(package / name) for name in (
             'data/native_graph.py', 'model/shared_state.py', 'train/native_state_sft.py',
-            'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')})
+            'train/native_semantic.py', 'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')})
         key = {'source_sha256': self.file_sha256, 'tokenizer': tokenizer_fingerprint,
-               'split': required_split, 'policy_sha256': policy}
+               'split': required_split, 'policy_sha256': policy,
+               'kind': self.kind, 'pair_model': pair_model, 'role_ids': self.role_ids}
         index_path = row_index.entry_path('native-graphs', canonical_json_sha256_hex(key))
-        cached = row_index.load(index_path)
-        if (cached and cached.get('key') == key and isinstance(cached.get('entries'), list)
+        candidates = [(index_path, key)]
+        if self.kind == 'native-graphs':
+            # Exact previous trainer implementation; unchanged parser/compiler
+            # hashes remain mandatory. Streaming still verifies each row before
+            # its optimizer update. Never reuse ordinary indexes for paired data.
+            legacy_policy = {name: sha256_file_hex_cached(package/name) for name in (
+                'data/native_graph.py', 'model/shared_state.py', 'common/row_index.py',
+                'common/jsonio.py', 'common/hashing.py')}
+            legacy_policy['train/native_state_sft.py'] = 'd8f3d6413a40f26389c90b6e5c3cc50781e3fdae70942de241301fd678327c9d'
+            legacy_key = {'source_sha256': self.file_sha256, 'tokenizer': tokenizer_fingerprint,
+                'split': required_split, 'policy_sha256': canonical_json_sha256_hex(legacy_policy)}
+            candidates.append((row_index.entry_path('native-graphs', canonical_json_sha256_hex(legacy_key)), legacy_key))
+        cached = None
+        for candidate_path, candidate_key in candidates:
+            candidate = row_index.load(candidate_path)
+            if (candidate and candidate.get('key') == candidate_key
+                    and candidate.get('metadata_sha256') == canonical_json_sha256_hex(candidate.get('entries'))):
+                cached = candidate
+                break
+        if (cached and isinstance(cached.get('entries'), list)
                 and cached['entries']
                 and cached.get('metadata_sha256') == canonical_json_sha256_hex(cached['entries'])):
             self.entries = cached['entries']
@@ -98,15 +126,15 @@ class NativeGraphSource:
         self.bindings = {}
         self.groups = set()
         for row in _jsonl(self.path):
-            example = parse_graph(row, tokenizer_fingerprint=tokenizer_fingerprint)
+            example, binding = self._parse(row)
             if example.split != required_split:
                 raise ValueError(f'{self.path}: expected {required_split} rows, got {example.split!r} in {example.id}')
             if example.id in self.bindings:
                 raise ValueError(f'{self.path}: duplicate example id {example.id!r}')
-            binding = _row_bindings([example])[example.id]
             visits = {'id': example.id, 'groups': example.source_groups, 'binding': binding,
                       'supervised_tokens': sum(weight > 0 for weight in example.target_weights),
-                      'forward_tokens': example.plan.token_count}
+                      'forward_tokens': example.plan.token_count,
+                      'communication': self.kind == 'semantic-pairs'}
             self.entries.append(visits)
             self.bindings[example.id] = binding
             self.groups.update(example.source_groups)
@@ -120,6 +148,98 @@ class NativeGraphSource:
         row_index.save(index_path, {'key': key, 'entries': self.entries,
             'metadata_sha256': canonical_json_sha256_hex(self.entries)})
 
+    def _init_manifest(self, parents):
+        before = self.path.stat()
+        manifest = json.loads(self.path.read_text())
+        if manifest.get('schema') != 'natlang.native-graph-sources/1' or not manifest.get('sources'):
+            raise ValueError('native graph source manifest requires its schema and bound sources')
+        self.kind = 'manifest'
+        self.file_sha256 = sha256_file_hex_cached(self.path)
+        self.children, self.entries, self.bindings, self.groups = [], [], {}, set()
+        for binding in manifest['sources']:
+            kind = binding.get('kind')
+            if kind not in {'native-graphs', 'semantic-pairs'}:
+                raise ValueError('native graph manifest source kind must be explicit')
+            if kind == 'semantic-pairs' and not isinstance(binding.get('model'), str):
+                raise ValueError('semantic graph source must select its exact model view')
+            path = Path(binding['path'])
+            if not path.is_absolute():
+                path = self.path.parent / path
+            if sha256_file_hex_cached(path) != binding.get('sha256'):
+                raise ValueError('native graph manifest source SHA-256 mismatch: ' + str(path))
+            child = NativeGraphSource(path, self.tokenizer_fingerprint, required_split=self.required_split,
+                pair_model=binding.get('model') if kind == 'semantic-pairs' else None,
+                role_ids=self.role_ids, _parents=(*parents, self.path.resolve()))
+            if child.file_sha256 != binding['sha256']:
+                raise ValueError('native graph manifest dependency changed during validation')
+            if self.bindings.keys() & child.bindings.keys():
+                raise ValueError('native graph manifest repeats a graph identity across sources')
+            self.children.append(child)
+            self.entries.extend(child.entries)
+            self.bindings.update(child.bindings)
+            self.groups.update(child.groups)
+        state = self.path.stat()
+        if (before.st_size, before.st_mtime_ns, before.st_ino) != (state.st_size, state.st_mtime_ns, state.st_ino):
+            raise ValueError('native graph manifest changed during validation')
+        self.file_binding = (state.st_size, state.st_mtime_ns, state.st_ino)
+
+    def _parse(self, row):
+        from ..data.native_graph import parse_graph
+        if self.kind != 'semantic-pairs':
+            example = parse_graph(row, tokenizer_fingerprint=self.tokenizer_fingerprint)
+            return example, _row_bindings([example])[example.id]
+        from types import SimpleNamespace
+        from .native_semantic import parse_pair
+        from ..common.hashing import canonical_json_sha256_hex
+        if len(self.role_ids) != 4 or len(set(self.role_ids)) != 4:
+            raise ValueError('paired native SFT requires actual four model role-token IDs')
+        models = row.get('models') or {}
+        if not isinstance(models, dict) or self.pair_model not in models:
+            raise ValueError('semantic pair lacks the selected student model view')
+        participants = {name: SimpleNamespace(config={'tokenizer_fingerprint': (
+            self.tokenizer_fingerprint if name == self.pair_model else view['graph']['tokenizer_fingerprint'])})
+            for name, view in models.items()}
+        parsed = parse_pair(row, participants, required_split=self.required_split)
+        example, view = parsed[self.pair_model]
+        _require_communication_graph(example, view, self.role_ids)
+        provenance = view['graph'].get('source_pairing') or {}
+        occurrences = provenance.get('consumed_occurrences')
+        original_sha = provenance.get('consumer_original_text_sha256')
+        if (not isinstance(occurrences, list) or not occurrences or not isinstance(original_sha, str)
+                or len(original_sha) != 64 or any(c not in '0123456789abcdef' for c in original_sha)
+                or not provenance.get('consumer_source_row_id')):
+            raise ValueError('paired SFT needs source-bound consumed occurrence provenance')
+        expected_imports = sorted(edge.at for node in example.plan.invocations
+            if node.name in view['consumer_nodes'] for edge in node.imports)
+        observed = []
+        for occurrence in occurrences:
+            start, stop = occurrence.get('wrapped_token_start'), occurrence.get('wrapped_token_stop')
+            at = occurrence.get('consumer_import_at')
+            if (type(start) is not int or type(stop) is not int or not 0 <= start < stop
+                    or type(at) is not int or at < 0
+                    or occurrence.get('source_row_id') != provenance['consumer_source_row_id']
+                    or occurrence.get('payload_sha256') != row['payload_sha256']):
+                raise ValueError('paired SFT consumed occurrence differs from its source payload witness')
+            observed.append(at)
+        if sorted(observed) != expected_imports:
+            raise ValueError('paired SFT consumed occurrence proof differs from actual imports')
+        binding = canonical_json_sha256_hex({'graph': _row_bindings([example])[example.id],
+            'paired_source': canonical_json_sha256_hex(row), 'model': self.pair_model})
+        return example, binding
+
+    def iter_indices(self, indices):
+        """Yield exactly the requested order, streaming monotone runs in bounded memory."""
+        indices = list(indices)
+        if len(set(indices)) != len(indices) or any(type(i) is not int or not 0 <= i < len(self) for i in indices):
+            raise ValueError('native requested row indices must be distinct and in range')
+        start = 0
+        for stop in range(1, len(indices)+1):
+            if stop == len(indices) or indices[stop] < indices[stop-1]:
+                run = indices[start:stop]
+                if run:
+                    yield from self.iter_from(run[0], selected=set(run))
+                start = stop
+
     def __len__(self):
         return len(self.entries)
 
@@ -130,6 +250,18 @@ class NativeGraphSource:
         from ..data.native_graph import parse_graph
         if not 0 <= start <= len(self.entries):
             raise ValueError(f'{self.path}: row cursor outside indexed source')
+        state = self.path.stat()
+        if (state.st_size, state.st_mtime_ns, state.st_ino) != self.file_binding:
+            raise ValueError(f'{self.path}: source changed after index validation')
+        if self.kind == 'manifest':
+            offset = 0
+            for child in self.children:
+                stop = offset + len(child)
+                selected_child = None if selected is None else {i-offset for i in selected if offset <= i < stop}
+                if stop > start and (selected_child is None or selected_child):
+                    yield from child.iter_from(max(0, start-offset), selected=selected_child)
+                offset = stop
+            return
         with open_jsonl_text(self.path) as handle:
             index = 0
             for line_number, line in enumerate(handle, 1):
@@ -140,9 +272,9 @@ class NativeGraphSource:
                         row = json.loads(line)
                     except json.JSONDecodeError as exc:
                         raise ValueError(f'{self.path}:{line_number}: invalid JSONL') from exc
-                    example = parse_graph(row, tokenizer_fingerprint=self.tokenizer_fingerprint)
+                    example, binding = self._parse(row)
                     entry = self.entries[index]
-                    if (example.id != entry['id'] or _row_bindings([example])[example.id] != entry['binding']):
+                    if (example.id != entry['id'] or binding != entry['binding']):
                         raise ValueError(f'{self.path}:{line_number}: graph source changed after index validation')
                     yield example
                 index += 1
@@ -160,10 +292,61 @@ class NativeGraphSource:
                 value['examples'] += 1
                 value['supervised_tokens'] += entry['supervised_tokens']
         return {'path': str(self.path.resolve()), 'sha256': self.file_sha256,
-                'rows': len(self.entries), 'by_source_group': counts}
+                'rows': len(self.entries), 'by_source_group': counts,
+                'communication_graphs': sum(bool(entry.get('communication')) for entry in self.entries),
+                **({'sources': [child.receipt() for child in self.children]} if self.kind == 'manifest' else {})}
 
     def ordered_ids(self):
         return [entry['id'] for entry in self.entries]
+
+
+def _require_communication_graph(example, view, role_ids):
+    """Reject marker-only and loss-free pairs: actual exported state must be read."""
+    produce_open, produce_close, consume_open, consume_close = role_ids
+    plan = example.plan
+    nodes = {node.name: node for node in plan.invocations}
+    exported = view['export']
+    producer = nodes[exported['node']]
+    declared = producer.logical_producing if exported.get('logical', False) else producer.producing
+    if not any(start <= exported['start'] < exported['stop'] <= stop for start, stop in declared):
+        raise ValueError('paired SFT export must address an actually declared producing span')
+    producing = False
+    consumed = set()
+    for node, offset in zip(plan.invocations, plan.offsets):
+        for start, stop in node.producing:
+            if not (0 < start < stop < len(node.token_ids)
+                    and node.token_ids[start-1] == produce_open and node.token_ids[stop] == produce_close):
+                raise ValueError('paired SFT producer span needs actual producing boundary tokens')
+            producing = True
+        for edge in node.imports:
+            if edge.source not in nodes:
+                raise ValueError('paired SFT needs its actual in-graph producer state, not external placeholders')
+            if not (0 < edge.at < len(node.token_ids) and node.token_ids[edge.at-1] == consume_open
+                    and node.token_ids[edge.at] == consume_close):
+                raise ValueError('paired SFT import needs actual consuming boundary tokens')
+            if not any(weight > 0 for weight in example.target_weights[offset+edge.at+1:offset+len(node.token_ids)]):
+                raise ValueError('paired SFT needs supervised consumer tokens after its imported state')
+            consumed.add(node.name)
+    source_index = next(i for i, node in enumerate(plan.invocations) if node.name == producer.name)
+    bounds = plan.boundaries[source_index]
+    export_bounds = ((exported['start'], exported['stop']) if exported.get('logical', False)
+                     else (bounds[exported['start']], bounds[exported['stop']]))
+    for name in view['consumer_nodes']:
+        matching = [edge for edge in nodes[name].imports if edge.source == producer.name and
+            ((edge.start, edge.stop) if edge.logical else (bounds[edge.start], bounds[edge.stop])) == export_bounds]
+        if not matching:
+            raise ValueError('paired SFT consumer does not import the authenticated exported span')
+    if not producing or not set(view['consumer_nodes']) <= consumed:
+        raise ValueError('paired SFT must train genuine producing and consuming graph nodes')
+
+
+def communication_exposure(entries, counts, quotas):
+    selected = [entry for entry in entries if entry.get('communication')]
+    return {'graphs': len(selected),
+            'required_graph_visits': sum(quotas[entry['id']] for entry in selected),
+            'graph_visits': sum(counts.get(entry['id'], 0) for entry in selected),
+            'complete': bool(selected) and all(counts.get(entry['id'], 0) >= quotas[entry['id']] > 0
+                                              for entry in selected)}
 
 
 def batch_boundaries(entries, *, batch_graphs=1, batch_tokens=0):
@@ -185,21 +368,29 @@ def batch_boundaries(entries, *, batch_graphs=1, batch_tokens=0):
 def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1, batch_tokens=0):
     """Schedule only missing row visits, including rows appended after completion.
 
-    Each pass preserves source order. Completed visits remain credits across
+    Each pass schedules authenticated communication deficits first, preserving
+    source order within each class. Completed visits remain credits across
     changed packing and appended sources; fractional epochs cover the declared
     source prefix. The checkpoint's actual row counts determine what remains.
     """
     whole = int(epochs)
     fractional = math.ceil((epochs - whole) * len(entries))
-    quotas = {entry['id']: whole + (index < fractional) for index, entry in enumerate(entries)}
+    quotas = {entry['id']: max(int(bool(entry.get('communication'))), whole + (index < fractional))
+              for index, entry in enumerate(entries)}
     batches = []
-    for visit in range(math.ceil(epochs)):
-        indices = [index for index, entry in enumerate(entries)
-                   if exposure_counts.get(entry['id'], 0) <= visit < quotas[entry['id']]]
-        selected = [entries[index] for index in indices]
-        boundaries = batch_boundaries(selected, batch_graphs=batch_graphs, batch_tokens=batch_tokens)
-        for left, right in boundaries:
-            batches.append((visit, indices[left:right], right == len(indices)))
+    pending = {visit: [index for index, entry in enumerate(entries)
+                       if exposure_counts.get(entry['id'], 0) <= visit < quotas[entry['id']]]
+               for visit in range(math.ceil(epochs))}
+    for communication in (True, False):
+        for visit, remaining in pending.items():
+            indices = [index for index in remaining
+                       if bool(entries[index].get('communication')) == communication]
+            selected = [entries[index] for index in indices]
+            boundaries = batch_boundaries(selected, batch_graphs=batch_graphs, batch_tokens=batch_tokens)
+            for left, right in boundaries:
+                last = right == len(indices) and (not communication or all(
+                    entries[index].get('communication') for index in remaining))
+                batches.append((visit, indices[left:right], last))
     return quotas, batches
 
 
@@ -407,7 +598,7 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None)
     scope = backend.native_modules() if backend is not None else contextlib.nullcontext()
     try:
         with scope, torch.no_grad():
-            total_weight, total_loss, total_correct, total_tokens = 0., 0., 0., 0
+            total_weight, total_loss, total_correct, total_tokens, total_graphs, forward_tokens = 0., 0., 0., 0, 0, 0
             for example in examples:
                 loss, detail = graph_loss(model, example, checkpoint_layers=checkpoint_layers,
                                           chunk_tokens=chunk_tokens)
@@ -416,12 +607,52 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None)
                 total_correct += detail['accuracy'] * weight
                 total_weight += weight
                 total_tokens += detail['supervised_tokens']
+                total_graphs += 1
+                forward_tokens += example.plan.token_count
     finally:
         model.train(previous_mode)
     if not math.isfinite(total_loss) or total_weight <= 0:
         raise FloatingPointError('native held evaluation is nonfinite or empty')
     return {'loss': total_loss / total_weight, 'weighted_accuracy': total_correct / total_weight,
-            'weight': total_weight, 'supervised_tokens': total_tokens, 'examples': len(examples)}
+            'weight': total_weight, 'supervised_tokens': total_tokens, 'examples': total_graphs,
+            'forward_tokens': forward_tokens}
+
+
+def held_cadence_indices(entries, cursor=0, *, token_budget=0, graph_budget=0):
+    """Rotate complete held graphs; never truncate a graph to fit a cadence."""
+    if min(cursor, token_budget, graph_budget) < 0 or not entries:
+        raise ValueError('held cadence needs nonempty data and nonnegative budgets/cursor')
+    indices, tokens = [], 0
+    for advance in range(len(entries)):
+        index = (cursor+advance) % len(entries)
+        size = entries[index]['forward_tokens']
+        if indices and ((token_budget and tokens+size > token_budget)
+                        or (graph_budget and len(indices) >= graph_budget)):
+            break
+        indices.append(index)
+        tokens += size
+    return indices, (indices[-1]+1) % len(entries)
+
+
+def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backend=None):
+    coverage = coverage or {}
+    if final:
+        indices, cursor = list(range(len(source))), 0
+    else:
+        indices, cursor = held_cadence_indices(source.entries, int(coverage.get('cursor', 0)),
+            token_budget=args.held_eval_tokens, graph_budget=args.held_eval_graphs)
+    started = time.monotonic()
+    result = _evaluate(model, source.iter_indices(indices), checkpoint_layers=args.checkpoint_layers,
+                       chunk_tokens=args.chunk_tokens, backend=backend)
+    result.update(scope='full' if len(indices) == len(source) else 'cadence-subset',
+                  source_sha256=source.file_sha256,
+                  source_graphs=len(source), cursor_before=int(coverage.get('cursor', 0)),
+                  cursor_after=cursor, seconds=time.monotonic()-started)
+    coverage = {'cursor': cursor, 'graph_visits': int(coverage.get('graph_visits', 0))+len(indices),
+        'forward_token_visits': int(coverage.get('forward_token_visits', 0))+result['forward_tokens'],
+        'completed_sweeps': int(coverage.get('completed_sweeps', 0)) +
+            (1 if final else (int(coverage.get('cursor', 0)) % len(source)+len(indices))//len(source))}
+    return result, coverage
 
 
 def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, source_receipts,
@@ -464,6 +695,9 @@ def build_parser():
     parser.add_argument('--weight-decay', type=float, default=.1)
     parser.add_argument('--latent-ns', choices=('quintic', 'cubic5'), default='quintic')
     parser.add_argument('--eval-every', type=int, default=100)
+    parser.add_argument('--held-eval-tokens', type=int, default=0,
+        help='rotating whole-graph held-token budget per cadence; final evaluation always covers all held data')
+    parser.add_argument('--held-eval-graphs', type=int, default=0)
     parser.add_argument('--checkpoint-every', type=int, default=0)
     parser.add_argument('--checkpoint-seconds', type=float, default=3600.)
     parser.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=True)
@@ -488,7 +722,7 @@ def main(argv=None):
     checkpoint_options = {key: str(value) if isinstance(value, Path) else value
                           for key, value in vars(args).items()}
     if not (math.isfinite(args.epochs) and args.epochs > 0) or min(args.batch_graphs, args.eval_every,
-            args.chunk_tokens, args.rank) < 1 or min(args.checkpoint_every, args.batch_tokens) < 0:
+            args.chunk_tokens, args.rank) < 1 or min(args.checkpoint_every, args.batch_tokens, args.held_eval_tokens, args.held_eval_graphs) < 0:
         raise ValueError('native SFT requires positive epochs/batch/eval/chunk/rank and nonnegative checkpoint cadence')
     if not math.isfinite(args.checkpoint_seconds) or args.checkpoint_seconds < 0:
         raise ValueError('checkpoint-seconds must be finite and nonnegative')
@@ -542,8 +776,8 @@ def main(argv=None):
     fingerprint = tokenizer_fingerprint(tokenizer)
     if fingerprint != config['tokenizer_fingerprint']:
         raise ValueError('loaded tokenizer differs from native model configuration')
-    train = NativeGraphSource(args.native_graphs, fingerprint, required_split='train')
-    held = NativeGraphSource(args.held_native_graphs, fingerprint, required_split='test')
+    train = NativeGraphSource(args.native_graphs, fingerprint, required_split='train', role_ids=roles.ids)
+    held = NativeGraphSource(args.held_native_graphs, fingerprint, required_split='test', role_ids=roles.ids)
     train_groups, held_groups = train.groups, held.groups
     if train_groups & held_groups:
         raise ValueError('native train/held source groups overlap: ' + ', '.join(sorted(train_groups & held_groups)[:8]))
@@ -570,7 +804,7 @@ def main(argv=None):
             if objective.identity != actual:
                 raise ValueError('native policy objective differs from the actual loaded actor embedding/checkpoint identity')
     training_identity = {'schema': TRAINING_SCHEMA, 'config': config, 'train_source_hash': source_hash,
-                'schedule': 'source-order-stream/1',
+                'schedule': 'row-visit-deficit/2',
                 'held_sha256': source_receipts[1]['sha256'], 'optimizer': 'shared-muon-sr-in-backward-v1',
                 'optimizer_options': {'lr': args.learning_rate, 'weight_decay': args.weight_decay,
                                       'latent_ns': args.latent_ns},
@@ -587,15 +821,24 @@ def main(argv=None):
             'optimizer': shared_resume['optimizer'], 'rng': shared_resume['rng'],
             'fp8': shared_resume.get('fp8'), 'step': 0, 'global_step': shared_resume['step']}
     if resume is not None:
+        predecessors = dict((resume.get('options') or {}).get('source_predecessors') or {})
         for role, position in (('continued_native_graphs', 0), ('continued_held_native_graphs', 1)):
             predecessor = getattr(args, role)
             if predecessor is not None:
                 prior_receipts = resume.get('source_receipts') or []
-                if (len(prior_receipts) <= position
-                        or sha256_file_hex_cached(predecessor) != prior_receipts[position]['sha256']):
+                digest = sha256_file_hex_cached(predecessor)
+                adopted = (len(prior_receipts) > position
+                    and source_receipts[position]['sha256'] == prior_receipts[position]['sha256']
+                    and predecessors.get(role) == digest)
+                if (not adopted and (len(prior_receipts) <= position
+                        or digest != prior_receipts[position]['sha256'])):
                     raise ValueError('native data continuation predecessor differs from the actual checkpoint: ' + role)
+                predecessors[role] = digest
+        checkpoint_options['source_predecessors'] = predecessors
         previous = resume.get('identity') or {}
-        stable = ('schema', 'config', 'schedule', 'optimizer', 'seed', 'rank', 'fp8', 'objective')
+        stable = ('schema', 'config', 'optimizer', 'seed', 'rank', 'fp8', 'objective')
+        if previous.get('schedule') not in {'source-order-stream/1', 'row-visit-deficit/2'}:
+            raise ValueError('native SFT checkpoint has an unsupported row-credit schedule')
         if parent_continuation and args.objective_continuation:
             stable = tuple(key for key in stable if key not in {'objective', 'batch_graphs', 'batch_tokens'})
         if any(previous.get(key, 0 if key == 'batch_tokens' else None) != training_identity.get(key) for key in stable):
@@ -699,8 +942,8 @@ def main(argv=None):
             del state
         if 'parent_state' in locals():
             del parent_state
-    # Source order is the exact epoch order. This keeps compressed corpora
-    # streaming and makes the row cursor a real resumable position.
+    # Actual per-row optimizer credits drive the schedule. Source identity
+    # remains append-only while communication deficits execute first.
     whole_epochs = int(args.epochs)
     fractional_rows = math.ceil((args.epochs - whole_epochs) * len(train))
     target_rows = whole_epochs * len(train) + fractional_rows
@@ -710,30 +953,33 @@ def main(argv=None):
         step = 0
     required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
         epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens)
+    target_rows = sum(required_visits.values())
     total_end = step + len(pending_batches)
     if step > total_end:
         raise ValueError('native checkpoint update is beyond the declared epoch exposure')
     resumed_step = step
     last_saved_step = step if policy.slot.is_file() and not parent_continuation else -1
-    source_iter, source_pass = None, None
+    source_iters = {}
     pass_indices = {}
     for visit, indices, _ in pending_batches:
-        pass_indices.setdefault(visit, set()).update(indices)
+        pass_indices.setdefault(visit, []).extend(indices)
     schedule = iter(pending_batches)
     eval_at = max(1, args.eval_every)
     started = time.time()
     while step < total_end and not policy.signaled:
         update_started = time.monotonic()
         visit, indices, pass_end = next(schedule)
-        if source_pass != visit:
-            source_iter = train.iter_from(min(pass_indices[visit]), selected=pass_indices[visit])
-            source_pass = visit
+        if visit not in source_iters:
+            source_iters[visit] = train.iter_indices(pass_indices[visit])
+        source_iter = source_iters[visit]
         try:
             batch = [next(source_iter) for _ in indices]
         except StopIteration as error:
             raise ValueError('native graph source ended before its validated row count') from error
+        if [item.id for item in batch] != [train.entries[index]['id'] for index in indices]:
+            raise ValueError('native graph stream differs from scheduled optimizer-credit order')
         batch_tokens = sum(train.entries[index]['forward_tokens'] for index in indices)
-        epoch, cursor = (visit + 1, 0) if pass_end else (visit, indices[-1] + 1)
+        cursor = indices[-1] + 1
         if backend is not None:
             backend.reset_row_counts()
         optimizer.zero_grad(set_to_none=True)
@@ -771,6 +1017,9 @@ def main(argv=None):
         global_step += 1
         for example in batch:
             exposure_counts[example.id] += 1
+        epoch = min(exposure_counts[key] for key, required in required_visits.items() if required > 0)
+        if pass_end and all(exposure_counts[key] >= required for key, required in required_visits.items()):
+            cursor = 0
         # Telemetry is appended after the actual optimizer update. The rolling
         # checkpoint remains the authority for committed resume/exposure; logs
         # can include work subsequently replayed after an uncheckpointed crash.
@@ -784,7 +1033,12 @@ def main(argv=None):
                     'seconds': seconds, 'forward_tokens_per_second': batch_tokens / max(seconds, 1e-9),
                     'supervised_tokens_per_second': supervised_tokens / max(seconds, 1e-9),
                     'elapsed_seconds': time.time() - started, 'timestamp': time.time(),
-                    'checkpoint_step': last_saved_step}
+                    'checkpoint_step': last_saved_step,
+                    'communication_exposure': communication_exposure(train.entries, exposure_counts, required_visits)}
+        if str(args.device).startswith('cuda'):
+            progress['cuda_memory_bytes'] = {'allocated': torch.cuda.memory_allocated(args.device),
+                'reserved': torch.cuda.memory_reserved(args.device),
+                'lifetime_peak_allocated': torch.cuda.max_memory_allocated(args.device)}
         with (args.out / 'train.jsonl').open('a') as log:
             log.write(json.dumps(progress, sort_keys=True) + '\n')
         write_json(args.out / 'progress.json', progress)
@@ -793,9 +1047,9 @@ def main(argv=None):
                     bool(args.task_eval_every and step % args.task_eval_every == 0))
         due_eval = step % eval_at == 0 or step == total_end or due_task
         if due_eval:
-            metrics = {'train_loss': train_loss,
-                       'held': _evaluate(model, held, checkpoint_layers=args.checkpoint_layers,
-                                         chunk_tokens=args.chunk_tokens, backend=backend),
+            held_metrics, held_coverage = _evaluate_cadence(model, held, args=args,
+                coverage=metrics.get('held_coverage'), final=step == total_end, backend=backend)
+            metrics = {'train_loss': train_loss, 'held': held_metrics, 'held_coverage': held_coverage,
                        'step': step, 'epoch': epoch, 'cursor': cursor,
                        'elapsed_seconds': time.time() - started,
                        'fp8': backend.inventory() if backend is not None else {'enabled': False}}
@@ -841,8 +1095,8 @@ def main(argv=None):
             last_saved_step = step
     if (step != resumed_step or policy.signaled) and last_saved_step != step:
         if not policy.signaled and not metrics.get('held'):
-            metrics['held'] = _evaluate(model, held, checkpoint_layers=args.checkpoint_layers,
-                                        chunk_tokens=args.chunk_tokens, backend=backend)
+            metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
+                coverage=metrics.get('held_coverage'), final=step == total_end, backend=backend)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
               global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
               source_hash=source_hash, source_row_bindings=source_row_bindings,
@@ -852,6 +1106,21 @@ def main(argv=None):
               fp8_state=backend.extra_state() if backend is not None else None)
         last_saved_step = step
     completed = all(exposure_counts[key] >= visits for key, visits in required_visits.items())
+    if completed and not policy.signaled and (metrics.get('held', {}).get('scope') != 'full'
+            or metrics.get('held', {}).get('source_sha256') != held.file_sha256):
+        metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
+            coverage=metrics.get('held_coverage'), final=True, backend=backend)
+        metrics.pop('task_checkpoint_sha256', None)
+        metrics.pop('task_native_identity', None)
+        _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+            global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+            source_hash=source_hash, source_row_bindings=source_row_bindings,
+            held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+            rng=capture_training_rng_state(args.device), metrics=metrics,
+            architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
+            fp8_state=backend.extra_state() if backend is not None else None)
+    completed = (completed and metrics.get('held', {}).get('scope') == 'full'
+                 and metrics.get('held', {}).get('source_sha256') == held.file_sha256)
     # A continuation may inherit a completed checkpoint made before task
     # summaries were checkpointed. At the same final weights, make one real
     # cadence call; do not reuse an unbound log row or enter final_at's retry
@@ -944,7 +1213,9 @@ def main(argv=None):
             counts['supervised_token_visits'] += token_visits
     exposure_counts_sha256 = hashlib.sha256(json.dumps(sorted(exposure_counts.items()),
         ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
-    report = {'schema': 'natlang.neuralese-native-sft-report/1', 'completed': completed,
+    communication = communication_exposure(train.entries, exposure_counts, required_visits)
+    report = {'schema': 'natlang.neuralese-native-sft-report/1',
+              'communication_exposure': communication, 'completed': completed,
               'numerics_ok': runtime_report.get('passed') is True, 'qualified': False,
               'quality_status': 'measured-for-supervisor',
               'train_exposure': {key: sum(exposure_counts[entry['id']] * entry['supervised_tokens']
@@ -959,7 +1230,8 @@ def main(argv=None):
               'base_kl': {'status': 'telemetry-only', 'measured': False}}
     write_json(args.out / 'report.json', report)
     write_json(args.out / 'native-training-receipt.json', {
-        'schema': 'natlang.native-training-readiness/1', 'model_id': config['architecture'] + ':' +
+        'schema': 'natlang.native-training-readiness/1',
+        'communication_exposure': communication, 'model_id': config['architecture'] + ':' +
         config['base_inventory_sha256'], 'lineage': str(args.out.resolve()),
         'stage_id': args.stage_id or args.out.name,
         'checkpoint': {'path': str(policy.slot.resolve()), 'sha256': report['checkpoint_sha256'],
@@ -969,7 +1241,8 @@ def main(argv=None):
                                 'sha256': sha256_file_hex_cached(runtime_path),
                                 'passed': runtime_report.get('passed') is True},
         'prerequisite_stages': prerequisites, 'recipe': recipe_binding,
-        'completed': bool(completed and runtime_report.get('passed') is True and task_receipt_ok and
+        'completed': bool(completed and communication['complete'] and
+                          runtime_report.get('passed') is True and task_receipt_ok and
                           all(item.get('completed') is True for item in prerequisites)),
         'task_eval': task_summary,
         'task_execution_receipt': ({'path': str(task_receipt_path.resolve()),

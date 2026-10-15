@@ -40,7 +40,7 @@ HANDLERS = {
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
                          'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs'},
                          'parameters': {'base', 'rank', 'dtype', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
-                             'latent_ns', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'chunk_tokens',
+                             'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'seed', 'task_eval',
                              'task_eval_every', 'forward_atol', 'gradient_atol'}, 'result': 'checkpoint.pt'},
     # Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md): plain target SFT from a base model with the
@@ -363,7 +363,7 @@ def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
         missing = missing_stage_inputs(stage['kind'], result)
         if missing:
             raise ValueError('missing required stage input(s): ' + ', '.join(sorted(missing)))
-        return result
+        return _bind_native_source_dependencies(result)
     catalog = recipe.get('input_bindings', {})
     overrides = overrides or {}
     unknown = set(overrides) - set(catalog)
@@ -387,7 +387,47 @@ def resolve_stage_inputs(recipe, stage, defaults, overrides=None):
         if actual_sha != spec['sha256']:
             raise ValueError('input binding content hash mismatch: ' + name)
         result[role] = {'binding': name, 'path': str(path), 'sha256': actual_sha}
-    return result
+    return _bind_native_source_dependencies(result)
+
+
+def native_source_dependencies(path, *, parents=()):
+    """Validate portable immutable graph manifests and enumerate every actual input."""
+    path = Path(path).resolve()
+    if path.suffix != '.json':
+        return []
+    manifest = json.loads(path.read_text())
+    if manifest.get('schema') != 'natlang.native-graph-sources/1':
+        raise ValueError('native graph JSON input must be a bound source manifest')
+    if path in parents or not manifest.get('sources'):
+        raise ValueError('native graph manifest is empty or cyclic')
+    dependencies = {}
+    for source in manifest['sources']:
+        if source.get('kind') not in {'native-graphs', 'semantic-pairs'}:
+            raise ValueError('native graph manifest source kind must be explicit')
+        child = Path(source['path'])
+        child = child if child.is_absolute() else path.parent / child
+        child = child.resolve()
+        digest = sha(child)
+        if digest != source.get('sha256'):
+            raise ValueError('native graph manifest dependency content hash mismatch: ' + str(child))
+        dependencies[str(child)] = digest
+        if source['kind'] == 'native-graphs':
+            for value in native_source_dependencies(child, parents=(*parents, path)):
+                dependencies[value['path']] = value['sha256']
+    return [{'path': child, 'sha256': digest} for child, digest in dependencies.items()]
+
+
+def _bind_native_source_dependencies(inputs):
+    for role in ('native_graphs', 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs'):
+        if role in inputs:
+            dependencies = native_source_dependencies(inputs[role]['path'])
+            if dependencies:
+                inputs[role]['dependencies'] = dependencies
+    return inputs
+
+
+def _binding_files(value):
+    return [value, *value.get('dependencies', [])]
 
 
 def _staged_inputs(resolved):
@@ -395,13 +435,14 @@ def _staged_inputs(resolved):
     (common/hdd_guard.py ``input_path``)."""
     from ..common import hdd_guard
     return {role: ({**value, 'path': hdd_guard.input_path(role, value['path'], value.get('sha256'))}
-                   if isinstance(value, dict) and 'path' in value and role != 'direct_artifact_manifest' else value) for role, value in resolved.items()}
+                   if isinstance(value, dict) and 'path' in value and role != 'direct_artifact_manifest' and not value.get('dependencies') else value) for role, value in resolved.items()}
 
 
 def require_input_decoders(stage_inputs):
     """Fail plan-only before creating a lineage if a declared compressed input cannot be read."""
     compressed = sorted({value['path'] for resolved in stage_inputs.values() for value in resolved.values()
-                         if isinstance(value, dict) and str(value.get('path', '')).endswith('.zst')})
+                         if isinstance(value, dict) for value in _binding_files(value)
+                         if str(value.get('path', '')).endswith('.zst')})
     if compressed and shutil.which('zstd') is None:
         raise RuntimeError('zstd CLI is required for compressed training inputs; install or mount it before '
                            'plan-only or launch (first input: ' + compressed[0] + ')')
@@ -1265,8 +1306,8 @@ DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'coho
 def direct_windowing_handoffs(old_recipe, new_recipe, out):
     """Declared trainer-supported tuning, preserving each trainer's resume checks."""
     tuning = {'neuralese_direct': DIRECT_WINDOWING_PARAMETERS,
-              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay', 'latent_ns'),
-              'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay', 'latent_ns')}
+              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs'),
+              'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs')}
     def parameters(recipe, stage):
         merged = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
         merged.update(stage.get('parameters', {}))
@@ -1585,8 +1626,9 @@ def _without_activated_stage_policy(old_recipe, new_recipe, activated):
 def _inputs_without(inputs, stage_inputs, changes, side):
     """The plan's input identity map minus files read only by the changed (unstarted) stages."""
     kept = {value['path'] for stage_id, roles in stage_inputs.items() if stage_id not in changes
-            for value in roles.values()}
-    dropped = {value['path'] for change in changes.values() for value in change[side].values()} - kept
+            for value in roles.values() for value in _binding_files(value)}
+    dropped = {value['path'] for change in changes.values() for value in change[side].values()
+               for value in _binding_files(value)} - kept
     return {path: digest for path, digest in inputs.items() if path not in dropped}
 
 
@@ -2108,7 +2150,8 @@ def main(argv=None):
             inputs[str(resolved)] = sha(resolved)
     for resolved in stage_inputs.values():
         for value in resolved.values():
-            inputs[value['path']] = value['sha256']
+            for dependency in _binding_files(value):
+                inputs[dependency['path']] = dependency['sha256']
     package = Path(__file__).parents[1]
     frozen = args.out / 'runtime' / 'natlang_neuralese'
     plan_path = args.out / 'recipe-plan.json'

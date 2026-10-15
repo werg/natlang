@@ -32,3 +32,43 @@ accounting is crisp mechanism for the recipe's complete-exposure policy.
 ## Shared recipe policy
 
 LFM and Mellum inherit one `native_state_sft` stage declaration and objective. Only backbone-inherent optimizer/memory settings may differ. Mellum uses its established MuonSR/in-backward and FP8 memory provisions; an AdamW-only 12B path is invalid. Recipe continuations append newly admitted sources while preserving all already consumed work and optimizer state. Full recipe progression and actual data exposure remain visible to the parent recipe runner.
+
+## Genuine communication before shared-space training
+
+Policy: teach each student its own authenticated producing/consuming graph from
+every admitted semantic pair before declaring that student ready for the shared
+VAE. Keep all ordinary trajectories and their actual row-visit credits. On an
+admitted source append, expose missing communication visits first, then continue
+ordinary deficits; never wait for the huge ordinary backlog to finish before
+teaching the newly available communication rows.
+
+Exact mechanisms: `NativeGraphSource` accepts an immutable
+`natlang.native-graph-sources/1` manifest of native-graph files and semantic-pair
+files with selected model names and SHA-256 bindings. It reuses the shared pair
+verifier, checks actual model role IDs and consumer supervision, and indexes the
+selected whole graph without retaining token arrays. Prior ordinary row hashes
+and source order remain an unchanged prefix. Communication priority changes
+execution order only; requested indices must yield exactly that order even for
+compressed inputs. The durable authority is actual per-row optimizer-update
+credits, preserving RNG and moments across source append, partial stops and
+repacking. Report and readiness contain matching `communication_exposure`
+{graphs, required_graph_visits, graph_visits, complete}; ordinary-only training
+cannot declare readiness for the VAE. These verifiers, streaming mechanics and
+exact accounting are crisp; the exposure-first policy is stated above.
+
+Cadence held-loss evaluation may rotate through whole held graphs under declared
+`held_eval_tokens` / `held_eval_graphs`; oversized graphs are evaluated intact.
+Coverage cursor, actual graph/token visits, elapsed time and scope are saved in
+checkpoint metrics. This is an operational/resumable cadence setting. Final
+completion always evaluates the full held source. Training data and graph
+lengths remain uncapped. CUDA progress records allocated/reserved bytes and
+lifetime peak allocation without synchronization or resetting the peak.
+
+Native source manifests recursively bind every referenced graph/pair file in
+recipe input identities, decoder checks and adaptive handoff filtering. Relative
+references stay portable; the tiny manifest is read in place so moving it alone
+to an HDD cache cannot break its relative paths. Declared predecessor hashes
+are remembered after adoption, allowing subsequent restarts with the same
+continuation declaration. An exact known previous ordinary-index policy may be
+reused only with unchanged parser/compiler hashes and verified metadata; every
+streamed graph is rechecked against its immutable row binding before training.
