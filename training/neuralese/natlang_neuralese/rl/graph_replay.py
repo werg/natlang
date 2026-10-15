@@ -34,6 +34,25 @@ def block_ids(value):
             yield from block_ids(item)
 
 
+def verified_bundle_bytes(manifest_path, block_id, *, policy_id):
+    """Reuse exact durable bytes when an interrupted actor lease is restarted."""
+    from ..common.hashing import sha256_file_hex_cached
+    manifest_path = Path(manifest_path)
+    if not manifest_path.exists():
+        return None
+    manifest = json.loads(manifest_path.read_text())
+    if manifest.get('schema') != 'natlang.rl-block-bundle/1' or manifest.get('policy_id') != policy_id:
+        raise ValueError('RL archive belongs to a different policy')
+    entry = manifest['blocks'].get(block_id)
+    if entry is None:
+        return None
+    path = (manifest_path.parent / entry['path']).resolve(strict=True)
+    if (path.parent != manifest_path.parent.resolve() or path.stat().st_size != entry['bytes']
+            or sha256_file_hex_cached(path) != entry['sha256']):
+        raise ValueError('RL archived block path/size/hash changed')
+    return path.read_bytes()
+
+
 def save_bundle(rollouts, out, *, policy_id, fetch):
     """Fetch recursively referenced blocks with Server.get_bytes or a local store."""
     from ..serve.store import decode_block, decode_native_state

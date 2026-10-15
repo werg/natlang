@@ -29,3 +29,18 @@ atomic state, scheduling and actual optimizer updates.
 No new trainer, state transport or recursive graph replay is introduced. Old
 projection/direct stages remain legacy diagnostics. Synchronous sealed rounds
 are the implemented baseline; actor/learner overlap is not claimed.
+
+## Existing sandbox bridge
+
+The coordinator sends one exact request artifact to the provider bridge for a
+whole sealed local round, or one shared refresh after both learners finish.
+The bridge stages verified inputs, starts an owned remote worker, polls it,
+and returns the complete SHA-bound result inventory. No remote localhost is
+assumed reachable from another machine. Policy/task choice remains S7; these
+are outside-world services and atomic-result verifiers.
+
+A stop requests checkpoints: the coordinator writes a request-bound stop file;
+the host bridge forwards TERM to its exact remote worker and continues draining
+checkpoint/result artifacts. The worker forwards TERM to its exact local
+children and waits. Publication waits for all learner and semantic refresh
+receipts. A bridge exit code alone proves nothing about completed training.

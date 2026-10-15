@@ -49,10 +49,33 @@ def validate_actor_receipts(receipts, *, policy_id, neuralese_server):
     return receipts
 
 
+class RunControl:
+    """Share one stop request across explicit child processes and thread workers."""
+    def __init__(self, stop):
+        self.stop = stop
+
+    def wait(self, child, *, stop_file=None, stop_request=None):
+        forwarded = False
+        while True:
+            if self.stop.requested and not forwarded:
+                if stop_file is not None:
+                    write_json_durable(stop_file, {'schema': 'natlang.native-rl-bridge-stop/1',
+                        'checkpoint_requested': True, 'request': stop_request})
+                elif child.poll() is None:
+                    child.terminate()  # exact child PID, trainer checkpoints before exiting
+                forwarded = True
+            try:
+                return child.wait(timeout=.2)
+            except subprocess.TimeoutExpired:
+                pass
+
+
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
-            case_seconds=600, max_model_requests=128, max_turns=160):
+            case_seconds=600, max_model_requests=128, max_turns=160, control=None):
     """Bounded subprocess fanout; existing collector and exact task verifier."""
+    if control is not None and control.stop.requested:
+        raise InterruptedError('collection stop requested')
     if not endpoints or workers < 1:
         raise ValueError('RL needs served endpoints and positive worker concurrency')
     from ..common.hashing import sha256_file_hex
@@ -112,7 +135,11 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         if neuralese_server:
             command.append('--neuralese-server')
         with (directory / f'worker-{index}.log').open('a') as log:
-            code = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT).returncode
+            if control is None:
+                code = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT).returncode
+            else:
+                process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+                code = control.wait(process)
         return {'worker': index, 'returncode': code, 'journal': str(journal)}
     with ThreadPoolExecutor(max_workers=workers) as pool:
         results = list(pool.map(worker, range(workers)))
@@ -127,6 +154,11 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         servers = [Server(url) for url in endpoints]
         origins = {}
         def fetch(block_id):
+            from .graph_replay import verified_bundle_bytes
+            previous = verified_bundle_bytes(out / 'blocks/manifest.json', block_id, policy_id=policy_id)
+            if previous is not None:
+                origins[block_id] = 'retained-verified-prior-actor-lease'
+                return previous
             errors = []
             for server in servers:
                 try:
@@ -145,7 +177,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     if actor_receipts() != actors:
         raise ValueError('RL actor policy changed during collection')
     report.update(collector_workers=results, preparation=preparation,
-                  actor_receipts=actors, collection_complete=True)
+                  actor_receipts=actors, collection_complete=not (control and control.stop.requested))
     write_json_durable(out / 'score.json', report)
     return report
 
@@ -164,7 +196,15 @@ def run_command(template, values):
             command.pop()
             continue
         command.append(part)
-    subprocess.run(command, check=True)
+    control = values.get('_run_control')
+    if control is None:
+        subprocess.run(command, check=True)
+    else:
+        child = subprocess.Popen(command)
+        code = control.wait(child, stop_file=values.get('_bridge_stop_file'),
+                            stop_request=values.get('_bridge_request'))
+        if code and not control.stop.requested:
+            raise subprocess.CalledProcessError(code, command)
 
 
 def collect_with_actor(config, values, **kwargs):
@@ -176,6 +216,7 @@ def collect_with_actor(config, values, **kwargs):
     completed = Path(kwargs['out']) / 'score.json'
     if completed.is_file() and json.loads(completed.read_text()).get('collection_complete'):
         return collect(**kwargs)  # sealed packet already owns exact durable blocks
+    control = kwargs.get('control')
     template = config.get('actor_command')
     if not template:
         return collect(**kwargs)
@@ -192,6 +233,8 @@ def collect_with_actor(config, values, **kwargs):
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
         try:
             while True:
+                if control is not None and control.stop.requested:
+                    raise InterruptedError('actor stop requested before collection')
                 if process.poll() is not None:
                     raise RuntimeError('managed RL actor exited; see actor.log')
                 try:
@@ -205,7 +248,12 @@ def collect_with_actor(config, values, **kwargs):
         finally:
             if process.poll() is None:
                 process.terminate()  # explicit child PID; no pattern/process-wide kill
-            process.wait()
+            # Keep polling so Python handles stop signals while the actor exits.
+            if control is not None:
+                control.wait(process)
+            else:
+                from ..train.loop import wait_forwarding_signals
+                wait_forwarding_signals(process)
 
 
 def select_tasks(cases, stats, budget, *, command=None):
@@ -255,12 +303,13 @@ def trained_counts(directory, progress):
             for key in ('supervised_tokens', 'target_tokens')}
 
 
-def run(config_path, *, rounds=None, defer_native_refresh=False):
+def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
     """Hot-reload configuration at round boundaries; preserve actual state/exposure."""
     from ..common.hashing import sha256_file_hex
     config_path = Path(config_path)
     from ..train.recipe import resolve_recipe_data
     initial = resolve_recipe_data(config_path)
+    control = RunControl(stop) if stop is not None else None
     out = Path(initial['out']).resolve()
     out.mkdir(parents=True, exist_ok=True)
     # One owner for this controller's exact state; no double learner updates.
@@ -272,8 +321,13 @@ def run(config_path, *, rounds=None, defer_native_refresh=False):
                   'checkpoint': initial['checkpoint'], 'trained_rounds': 0, 'collected_task_ids': [], 'attempted_task_ids': [],
                   'trained_task_ids': [], 'trained_supervised_tokens': 0, 'trained_target_tokens': 0,
                   'production_complete': False})
+        write_json_durable(state_path, state)
         completed = 0
         while rounds is None or completed < rounds:
+            if control is not None and control.stop.requested:
+                state['phase'] = 'requested_stop'
+                write_json_durable(state_path, state)
+                return state
             config = resolve_recipe_data(config_path)
             if not config.get('after_update') and not config.get('actor_command'):
                 raise ValueError('configure after_update before learning: every endpoint needs new weights')
@@ -316,6 +370,8 @@ def run(config_path, *, rounds=None, defer_native_refresh=False):
                       'learner_out': str(round_dir / 'learner'), 'block_bundle': '',
                       'continue_identity': str(Path(state['checkpoint']).parent / 'identity-check.json'),
                       'continue_monitor_reference': str(Path(state['checkpoint']).parent / 'monitor-reference.pt')}
+            if control is not None:
+                values['_run_control'] = control
             from ..train.recipe import stage_parameter_args
             if config.get('native_state'):
                 values['semantic_adapter'] = state.get('semantic_adapter', config['semantic_adapter'])
@@ -328,16 +384,25 @@ def run(config_path, *, rounds=None, defer_native_refresh=False):
                 values['heads_sha256'] = sha256_file_hex(Path(config['heads']))
             if config.get('before_collect'):
                 run_command(config['before_collect'], values)
-            report = collect_with_actor(config, values, cases=selected_path, out=round_dir,
-                endpoints=config['endpoints'], policy_id=policy,
-                rows=len(selected), offset=0,
-                group=selection[0]['samples'], workers=config.get('workers', 4),
-                root_mode=config.get('root_mode', 'student'), runtime=config.get('runtime'),
-                seed_base=700000 + state['round'] * 1000000,
-                neuralese_server=config.get('neuralese_server', True),
-                case_seconds=config.get('case_seconds', 600),
-                max_model_requests=config.get('max_model_requests', 128),
-                max_turns=config.get('max_turns', 160))
+            try:
+                report = collect_with_actor(config, values, cases=selected_path, out=round_dir,
+                    endpoints=config['endpoints'], policy_id=policy,
+                    rows=len(selected), offset=0,
+                    group=selection[0]['samples'], workers=config.get('workers', 4),
+                    root_mode=config.get('root_mode', 'student'), runtime=config.get('runtime'),
+                    seed_base=700000 + state['round'] * 1000000,
+                    neuralese_server=config.get('neuralese_server', True),
+                    case_seconds=config.get('case_seconds', 600),
+                    max_model_requests=config.get('max_model_requests', 128),
+                    max_turns=config.get('max_turns', 160), control=control)
+            except InterruptedError:
+                state['phase'] = 'requested_stop'
+                write_json_durable(state_path, state)
+                return state
+            if control is not None and control.stop.requested:
+                state.update(phase='stopped_collecting', latest_reward=report)
+                write_json_durable(state_path, state)
+                return state
             values['block_bundle'] = report.get('block_bundle', '')
             rows = list(read_jsonl(round_dir / 'rollouts.jsonl'))
             collected = set(state.get('collected_task_ids', [])) | {r['task_id'] for r in rows if r.get('turns')}
@@ -414,6 +479,10 @@ def run(config_path, *, rounds=None, defer_native_refresh=False):
                 if not already_complete:
                     run_command(config['seed_command'] if mode == 'seed' else config['learner_command'], values)
                 checkpoint = stage_out / 'checkpoint.pt'
+                if (not checkpoint.is_file() or not learner_report.is_file()) and control is not None and control.stop.requested:
+                    state['phase'] = 'requested_stop'
+                    write_json_durable(state_path, state)
+                    return state
                 if not checkpoint.is_file() or not learner_report.is_file():
                     raise RuntimeError('learner produced no recoverable full checkpoint/progress report')
                 progress = json.loads(learner_report.read_text())
@@ -451,18 +520,20 @@ def run(config_path, *, rounds=None, defer_native_refresh=False):
                 state.update(phase='awaiting_semantic_refresh', pending_native_checkpoint=str(checkpoint),
                              pending_native_round_dir=str(round_dir))
                 write_json_durable(state_path, state)
-                if defer_native_refresh:
+                if defer_native_refresh or (control is not None and control.stop.requested):
                     return state
                 from .native_refresh import refresh
                 deployment = refresh(adapter=values['semantic_adapter'],
                     updates={config['native_participant']: str(checkpoint)},
                     config=config['semantic_refresh_config'], out=round_dir/'semantic-refresh',
-                    device=config.get('refresh_device', 'cuda'))
+                    device=config.get('refresh_device', 'cuda'), stop=stop)
                 checkpoint = Path(deployment['checkpoint']['path'])
                 state['semantic_adapter'] = deployment['semantic_adapter']['path']
                 values.update(semantic_adapter=state['semantic_adapter'],
                     semantic_adapter_sha256=deployment['semantic_adapter']['sha256'],
                     deployment=str(round_dir/'semantic-refresh/deployment.json'))
+            if control is not None and control.stop.requested:
+                return state
             # Publishing weights is a required boundary, not optional fake
             # success: collection must not silently keep using the old policy.
             values['checkpoint'] = str(checkpoint)
@@ -649,7 +720,12 @@ def main(argv=None):
         configure(a)
         return
     if a.command == 'run':
-        run(a.config, rounds=a.rounds)
+        from ..train.loop import StopSignal
+        stop = StopSignal().install()
+        try:
+            run(a.config, rounds=a.rounds, stop=stop)
+        finally:
+            stop.restore()
     else:
         print(json.dumps(collect(cases=a.cases, out=a.out, endpoints=a.endpoint, policy_id=a.policy_id,
             rows=a.rows, group=a.group, workers=a.workers, runtime=a.runtime)))

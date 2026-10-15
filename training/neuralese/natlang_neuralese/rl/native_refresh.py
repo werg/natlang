@@ -13,7 +13,7 @@ from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
 from ..common.jsonio import write_json_durable
 
 
-def refresh(*, adapter, updates, config, out, device='cuda'):
+def refresh(*, adapter, updates, config, out, device='cuda', stop=None):
     from ..train.native_semantic_stage import run
     adapter, out = Path(adapter).resolve(), Path(out).resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -57,7 +57,9 @@ def refresh(*, adapter, updates, config, out, device='cuda'):
     own_checkpoint = out/'checkpoint.pt'
     # A partially refreshed stage resumes its own full VAE/model/optimizer slot.
     report = run(config, participants, out, resume=own_checkpoint if own_checkpoint.exists() else parent['path'],
-                 refresh_participants=True, device=device)
+                 refresh_participants=True, device=device, stop=stop)
+    if stop is not None and stop.requested:
+        raise InterruptedError('semantic refresh checkpointed after stop request; deployment unchanged')
     if not report.get('completed') or not report.get('production_ready'):
         raise RuntimeError('semantic refresh incomplete or runtime/task evidence missing; actors retain previous deployment')
     exported = out/'semantic-adapter.json'

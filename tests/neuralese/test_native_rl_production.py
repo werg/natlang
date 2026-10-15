@@ -43,7 +43,8 @@ def test_native_parallel_round_merges_both_updates_before_refresh(tmp_path, monk
     barrier = threading.Barrier(2)
     def learner(path, **kwargs):
         config = json.loads(path.read_text())
-        assert kwargs == {'rounds': 1, 'defer_native_refresh': True}
+        assert kwargs['rounds'] == 1 and kwargs['defer_native_refresh'] is True
+        assert kwargs['stop'].requested is False
         barrier.wait(timeout=10)  # proves independent learner jobs overlap
         directory = Path(config['out']); directory.mkdir()
         state = {'checkpoint': str(parent), 'round': 0, 'trained_rounds': 0,
@@ -220,3 +221,30 @@ def test_bootstrap_binds_actual_export_and_train_files_then_preserves_hot_config
     # Even an unchanged plan rechecks admitted artifacts before reuse.
     with pytest.raises(ValueError, match='artifact changed'):
         native_rounds.bootstrap_configs(plan, completion, tmp_path/'rl')
+
+
+def test_joint_stop_waits_for_both_learners_without_refresh_or_publication(tmp_path, monkeypatch):
+    import threading
+    from natlang_neuralese.rl import native_refresh
+    from natlang_neuralese.train.loop import StopSignal
+    parent = tmp_path/'parent'; parent.write_bytes(b'joint')
+    adapter = tmp_path/'adapter'; adapter.write_text('{}')
+    paths = []
+    for name in ('lfm', 'mellum'):
+        path = tmp_path/(name+'.json')
+        path.write_text(json.dumps({'native_state': True, 'native_participant': name,
+            'out': str(tmp_path/name), 'checkpoint': str(parent), 'semantic_adapter': str(adapter),
+            'semantic_refresh_config': str(tmp_path/'semantic')}))
+        paths.append(path)
+    barrier = threading.Barrier(2); stop = StopSignal(); drained = []
+    def learner(path, **kwargs):
+        assert kwargs['stop'] is stop
+        barrier.wait(timeout=10)
+        stop.request()
+        drained.append(path)
+        return {'phase': 'learner_pending', 'partial_checkpoint': 'actual-owned-worker-output'}
+    monkeypatch.setattr(native_rounds, 'run', learner)
+    monkeypatch.setattr(native_refresh, 'refresh', lambda **kw: pytest.fail('stop cannot publish new adapter'))
+    result = native_rounds.run_rounds(paths, tmp_path/'joint', rounds=1, stop=stop)
+    assert result['phase'] == 'requested_stop' and len(drained) == 2
+    assert len(result['states']) == 2

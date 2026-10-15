@@ -355,7 +355,7 @@ def measure_tasks(participants, export, config, out, step, device):
     return results
 
 
-def run(config_path, participants_path, out, *, resume=None, max_updates=None, device='cuda', refresh_participants=False):
+def run(config_path, participants_path, out, *, resume=None, max_updates=None, device='cuda', refresh_participants=False, stop=None):
     """Run the actual curriculum; max_updates is an explicit incomplete pause."""
     config_path, out = Path(config_path), Path(out)
     config = validate_config(json.loads(config_path.read_text()))
@@ -415,7 +415,11 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             latent_width=config.get('latent_width', 128), hidden_width=config.get('hidden_width', 512)).to(device)
         optimizer = _vae_optimizer(vae, config)
     policy = CheckpointPolicy(out, every_steps=config['checkpoint_every'],
-        every_seconds=config['checkpoint_seconds'], prune_best=False).install_signal_handlers()
+        every_seconds=config['checkpoint_seconds'], prune_best=False)
+    if stop is None:
+        policy.install_signal_handlers()
+    else:
+        policy.stop = stop
     started_step, started = training['step'], time.time()
     trainable = {name: {key for key, value in entry.model.named_parameters() if value.requires_grad}
                  for name, entry in participants.items()}

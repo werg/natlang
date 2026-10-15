@@ -14,7 +14,7 @@ from pathlib import Path
 
 from ..common.hashing import sha256_file_hex_cached
 from ..common.jsonio import write_json_durable
-from .production import run, run_command
+from .production import run, run_command, RunControl
 
 
 def bootstrap_configs(plan_path, completion_path, out):
@@ -78,13 +78,27 @@ def bootstrap_configs(plan_path, completion_path, out):
             out=out/model, config=config_path, port=declaration['port'])
         config = configure_native(args)
         overrides = declaration.get('commands') or {}
-        if set(overrides) - {'actor_command', 'learner_command', 'seed_command',
-                             'before_collect', 'before_update', 'after_update'}:
+        if set(overrides) - {'actor_command', 'learner_command', 'seed_command', 'round_command',
+                             'refresh_command', 'before_collect', 'before_update', 'after_update'}:
             raise ValueError('native RL bootstrap has an unsupported provider command hook')
         for name, argv in overrides.items():
             if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) for arg in argv):
                 raise ValueError('native RL provider bridge commands must be explicit nonempty argv lists')
             config[name] = argv
+        if plan.get('refresh_command'):
+            argv = plan['refresh_command']
+            if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) for arg in argv):
+                raise ValueError('native RL refresh provider must be an explicit argv list')
+            config['refresh_command'] = argv
+        if declaration.get('provider'):
+            config['provider'] = declaration['provider']
+        if declaration.get('provider_queue'):
+            import sys
+            config['round_command'] = [sys.executable, '-m', 'natlang_neuralese.rl.native_bridge',
+                '--queue', declaration['provider_queue'], '--request', '{request}',
+                '--result', '{result}', '--stop-file', '{stop_file}']
+        if plan.get('refresh_provider'):
+            config['refresh_provider'] = plan['refresh_provider']
         config['bootstrap_binding'] = binding
         config['source_admission'] = declaration.get('source_admission')
         write_json_durable(config_path, config)
@@ -93,6 +107,67 @@ def bootstrap_configs(plan_path, completion_path, out):
         'binding': binding, 'configs': [str(path.resolve()) for path in results],
         'participants': sorted(participants), 'provider_commands_executed': False})
     return results
+
+
+def bridge_result(command, request, stop):
+    from .native_bridge import binding, verify_result
+    from .production import RunControl
+    request = Path(request)
+    result = request.with_suffix('.result.json')
+    stop_file = request.with_suffix('.stop.json')
+    payload = json.loads(request.read_text())
+    values = {'request': str(request), 'result': str(result), 'stop_file': str(stop_file),
+              'out': payload['out'], 'native_participant': payload.get('native_participant', ''),
+              '_run_control': RunControl(stop), '_bridge_stop_file': stop_file,
+              '_bridge_request': binding(request)}
+    run_command(command, values)
+    if not result.is_file():
+        raise RuntimeError('provider bridge returned without draining its exact remote worker/result')
+    value = verify_result(request, result)
+    if value['status'] == 'failed':
+        raise RuntimeError('provider native worker failed: ' + value.get('error', 'see durable result'))
+    if value['status'] == 'stopped' and not stop.requested:
+        raise RuntimeError('provider native worker stopped unexpectedly; resume its preserved state')
+    return value
+
+
+def round_job(config_path, config, directory, stop):
+    if not config.get('round_command'):
+        return run(config_path, rounds=1, defer_native_refresh=True, stop=stop)
+    if stop.requested:
+        return {'phase': 'requested_stop'}
+    from .native_bridge import write_request
+    from ..train.native_readiness import _bound
+    state = Path(config['out'])/'state.json'
+    request = write_request(directory, kind='round', out=config['out'], config=config_path,
+                            state=state if state.exists() else None)
+    result = bridge_result(config['round_command'], request, stop)
+    if result.get('state'):
+        return json.loads(_bound(result['state']).read_text())
+    if stop.requested:
+        return {'phase': 'requested_stop'}
+    raise RuntimeError('remote sealed round returned no exact durable state')
+
+
+def refresh_job(configs, adapter, updates, semantic_config, directory, device, stop):
+    from .native_refresh import refresh
+    commands = [config['refresh_command'] for config in configs if config.get('refresh_command')]
+    if not commands:
+        return refresh(adapter=adapter, updates=updates, config=semantic_config,
+                       out=directory/'semantic-refresh', device=device, stop=stop)
+    if any(command != commands[0] for command in commands):
+        raise ValueError('native learners declared different joint refresh providers')
+    from .native_bridge import write_request
+    from ..train.native_readiness import _bound
+    request = write_request(directory/'bridge-refresh', kind='refresh',
+        out=directory/'semantic-refresh', adapter=adapter, updates=updates,
+        semantic_config=semantic_config, device=device, provider=configs[0].get('refresh_provider'))
+    result = bridge_result(commands[0], request, stop)
+    if result.get('deployment'):
+        return json.loads(_bound(result['deployment']).read_text())
+    if stop.requested:
+        raise InterruptedError('remote semantic refresh checkpointed; no actor publication')
+    raise RuntimeError('remote semantic refresh returned no exact deployment')
 
 
 def apply_deployment(config, deployment):
@@ -126,7 +201,7 @@ def apply_deployment(config, deployment):
         write_json_durable(path, state)
 
 
-def run_rounds(config_paths, out, *, rounds=None, device='cuda'):
+def _run_rounds(config_paths, out, *, rounds=None, device='cuda', stop):
     from .native_refresh import refresh
     from ..train.recipe import resolve_recipe_data
     out = Path(out).resolve(); out.mkdir(parents=True, exist_ok=True)
@@ -135,6 +210,8 @@ def run_rounds(config_paths, out, *, rounds=None, device='cuda'):
         latest = out/'latest.json'
         completed = 0
         while rounds is None or completed < rounds:
+            if stop.requested:
+                return {'phase': 'requested_stop', 'production_complete': False}
             configs = [resolve_recipe_data(path) for path in config_paths]
             names = [config.get('native_participant') for config in configs]
             if (len(configs) < 2 or len(set(names)) != len(names)
@@ -159,7 +236,8 @@ def run_rounds(config_paths, out, *, rounds=None, device='cuda'):
             # Each existing controller durably seals its packet and finishes
             # its complete shared-trainer epoch before returning its update.
             with ThreadPoolExecutor(max_workers=len(configs)) as pool:
-                futures = [pool.submit(run, path, rounds=1, defer_native_refresh=True) for path in config_paths]
+                futures = [pool.submit(round_job, path, config, out/f'round-{cycle:06d}'/'bridge-rounds'/name, stop)
+                           for path, config, name in zip(config_paths, configs, names)]
                 states, failures = [], []
                 for future in futures:
                     try:
@@ -169,22 +247,26 @@ def run_rounds(config_paths, out, *, rounds=None, device='cuda'):
                         states.append(None)
             if failures:
                 raise failures[0]  # successful sibling checkpoints remain resumable/pending
+            if stop.requested:
+                return {'phase': 'requested_stop', 'states': states, 'production_complete': False}
             updates = {name: state['pending_native_checkpoint'] for name, state in zip(names, states)
                        if state.get('pending_native_checkpoint')}
             if not updates and rounds is None:
                 import time
-                time.sleep(60)  # actor leases are closed; new tasks/config are checked next cycle
+                for _ in range(300):
+                    if stop.requested:
+                        return {'phase': 'requested_stop', 'states': states, 'production_complete': False}
+                    time.sleep(.2)
                 continue
             if not updates:
                 return {'phase': 'await_useful_rollouts_or_data', 'states': states, 'production_complete': False}
             directory = out/f'round-{cycle:06d}'
-            deployment = refresh(adapter=adapter, updates=updates, config=next(iter(semantic_configs)),
-                                 out=directory/'semantic-refresh', device=device)
+            deployment = refresh_job(configs, adapter, updates, next(iter(semantic_configs)), directory, device, stop)
             # All external actors receive the whole joint publication, not
             # only the model which happened to finish its learner first.
             for config in configs:
                 if config.get('after_update'):
-                    run_command(config['after_update'], {**config,
+                    run_command(config['after_update'], {**config, '_run_control': RunControl(stop),
                         'checkpoint': deployment['checkpoint']['path'],
                         'policy_id': deployment['checkpoint']['sha256'],
                         'semantic_adapter': deployment['semantic_adapter']['path'],
@@ -196,6 +278,22 @@ def run_rounds(config_paths, out, *, rounds=None, device='cuda'):
                 apply_deployment(config, deployment)
             completed += 1
         return {'phase': 'collect', 'deployment': deployment, 'production_complete': False}
+
+
+def run_rounds(config_paths, out, *, rounds=None, device='cuda', stop=None):
+    from ..train.loop import StopSignal
+    owned = stop is None
+    if owned:
+        stop = StopSignal().install()
+    try:
+        return _run_rounds(config_paths, out, rounds=rounds, device=device, stop=stop)
+    except InterruptedError:
+        if not stop.requested:
+            raise
+        return {'phase': 'requested_stop', 'production_complete': False}
+    finally:
+        if owned:
+            stop.restore()
 
 
 def main(argv=None):

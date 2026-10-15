@@ -130,3 +130,50 @@ is not a transfer. Native graph and full-pair curriculum bindings come from
 the admitted production conversion manifests. With no useful selected tasks,
 the continuous controller closes actor leases and checks for new work every
 minute. This wait does not count as production completion.
+
+## Colocated round bridge and graceful interruption
+
+Run readiness and the round coordinator on the Mellum sandbox with the actual
+shared assets resident. Provider account credentials remain on the DGX. Each
+model plan may set `provider_queue` to
+`/work/native-production/shared/bridge-ipc` and `provider` metadata identifying
+its existing sandbox. Set the shared `refresh_command` to the same queue-client
+argv and `refresh_provider` to the qualified Mellum sandbox metadata. The
+bootstrap generates `round_command` automatically from `provider_queue`:
+
+```
+python -m natlang_neuralese.rl.native_bridge --queue /work/native-production/shared/bridge-ipc --request {request} --result {result} --stop-file {stop_file}
+```
+
+`native_bridge.py` defines the request/result protocol. Requests bind a unique
+attempt, immutable configuration/state snapshots, actual parent checkpoint,
+semantic adapter, participant and output namespace. The local-file queue writes
+`requests/<request_id>.json` provider envelopes. A credentialed host bridge reads
+these envelopes, allowlists the existing participant sandbox, stages all declared
+assets and runs this exact worker remotely:
+
+```
+python -m natlang_neuralese.rl.native_bridge --request REQUEST_PATH --result RESULT_PATH
+```
+
+The worker reuses the shared learner and semantic refresh. The host bridge must
+fetch every returned `artifacts` entry to the coordinator namespace, verify its
+SHA/size, and publish the result JSON **last**. The coordinator independently
+verifies the inventory, exact attempt, parent and participant update bindings.
+Queue inspection uses `--queue PATH --list-queue`; no SDK or account credential
+is required by the sandbox. The concrete provider worker remains a required
+execution binding, not something this generic queue client supplies.
+
+Stop requests name the exact request. The queue client stays alive while the
+host forwards TERM to the exact worker and waits for checkpoint and artifact
+drain. Local learner children likewise receive TERM and are awaited; parallel
+rounds drain both learners before returning. An interrupted shared refresh saves
+its optimizer state and never publishes an incomplete adapter. Resume uses the
+returned durable state and checkpoint. Do not kill a coordinator while leaving
+its remote children untracked.
+
+Transfer actual full-state artifacts, not weight-only estimates: measured native
+SFT checkpoints are 47,738,195,645 bytes for Mellum and 2,003,763,339 bytes for
+QAD LFM. No production joint checkpoint existed when this protocol was added;
+its size is measured from its eventual artifact inventory. Reuse immutable
+parents and stream cloud-to-cloud rather than downloading full state to DGX.

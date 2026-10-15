@@ -152,3 +152,26 @@ def test_refresh_keeps_rl_participant_and_retrains_all_semantic_phases(tmp_path,
                                    loaded_values[name], atol=.01, rtol=.01)
     assert all(counts[stage.pair_key('lfm', 'mellum')] == 1
                for values in state['training']['exposure'].values() for counts in values.values())
+
+
+def test_shared_stop_checkpoints_without_publishing_incomplete_curriculum(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    path, manifest, config, _ = _fixture(tmp_path, monkeypatch)
+    stage.run(path, manifest, tmp_path/'parent-run', device='cpu')
+    parent = tmp_path/'parent-run/checkpoint.pt'
+    before = CheckpointPolicy.load(parent)
+    for phase in config['phases']:
+        phase['epochs'] = 2
+    path.write_text(json.dumps(config))
+    stopped = stage.run(path, manifest, tmp_path/'stopped', resume=parent, device='cpu',
+                        stop=SimpleNamespace(requested=True))
+    assert not stopped['completed'] and not stopped['production_ready']
+    assert stopped['step'] == before['training']['step']
+    checkpoint = tmp_path/'stopped/checkpoint.pt'
+    saved = CheckpointPolicy.load(checkpoint)
+    _assert_same(saved['vae_optimizer'], before['vae_optimizer'])
+    for name in before['participants']:
+        _assert_same(saved['participants'][name]['optimizer'], before['participants'][name]['optimizer'])
+    resumed = stage.run(path, manifest, tmp_path/'stopped', resume=checkpoint, device='cpu',
+                        stop=SimpleNamespace(requested=False))
+    assert resumed['completed'] and resumed['step'] == stopped['step'] + 3
