@@ -304,7 +304,9 @@ def copy_partial_for_resume(previous_jobs, retry_jobs, root_seed):
 
 def retry_transient(campaign, worker, seed, number, job, result, retry_dirs, *, repair=False):
     """Retry a resultless provider error or measured collection budget exhaustion."""
-    if result.get('status') != 'incomplete' or result.get('exit_code') != 2:
+    stream_overflow = (result.get('status') == 'provider_stream_overflow' and
+                       result.get('resource_limit_reason') == 'provider_tool_call_stream_overflow')
+    if not stream_overflow and (result.get('status') != 'incomplete' or result.get('exit_code') != 2):
         return False
     if result.get('output_accounting', {}).get('exact_result_rows') != 0:
         return False
@@ -329,15 +331,15 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs, *, 
         return True
     last = own_retries[-1] if own_retries else worker / f'case-{queue_ordinal(worker, job["key"]):03d}'
     errors = sorted((last / 'jobs').glob('*.error.json'))
-    if not errors:
+    if not errors and not stream_overflow:
         return False
-    message = json.loads(errors[-1].read_text()).get('error', '')
-    resource_budget = (result.get('resource_limit_reason') == 'model_request_budget' and
+    message = json.loads(errors[-1].read_text()).get('error', '') if errors else ''
+    resource_budget = (bool(errors) and result.get('resource_limit_reason') == 'model_request_budget' and
                        'NATLANG_MODEL_REQUEST_BUDGET' in errors[-1].read_text())
     provider_error = any(phrase in message for phrase in
                          ('Codex error: An error occurred while processing your request',
                           'rate limit', '429 Too Many Requests', 'Error: terminated'))
-    if not (resource_budget or provider_error):
+    if not (resource_budget or provider_error or stream_overflow):
         return False
     attempt = len(own_retries) + 1
     if attempt > (1 if resource_budget else 3):
