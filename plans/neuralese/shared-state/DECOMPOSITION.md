@@ -32,6 +32,51 @@ The shared `pending_exposure_batches` function implements step 7 as exact batch
 packing and credit accounting. The source manifest's existing `training_priority`
 is the policy input; this adds no model-facing text or independent scheduler.
 
+## Reuse identical ordinary causal prefixes
+
+Read-only sampling of 1,000 admitted Qwen V5 graphs found that 72.4% of physical
+token queries repeat an identical prefix inside the existing 32,768-token
+batches; the corresponding evidence-header sample showed 6.7%. These are
+potential backbone savings, not measured end-to-end speedups.
+
+1. Retain each original example, target weight, normalization and exposure.
+2. For an ordinary batch with one unadapted invocation per example and no
+   imported or external state, form a compact trie of exact token prefixes.
+3. Execute each trie segment once. Children import the complete raw causal
+   prefix at its original positions through the existing KV/convolution alias
+   mechanism. Cache exports are explicitly distinct from Neuralese-producing
+   spans: they never activate the learned embedding adapter or earn
+   communication credit.
+4. Gather the original per-example prediction queries from their shared physical
+   rows. Retain all targets, including the first target after every branch,
+   duplicate examples, and examples ending inside another example's prefix.
+5. Keep authenticated communication graphs and policy objectives on their
+   existing graph layout. Exact full-context identity is required for sharing;
+   matching text in a different state is insufficient.
+6. Compare logits, normalized losses, gradients and actual optimizer updates
+   against disjoint packing on both backbones before production adoption. Keep
+   an explicit packing switch for diagnosis and continuation.
+
+Trie construction, raw cache-export validation, query gathers and numerical
+comparison are crisp mechanisms for this policy. No corpus, prompt, tokenizer,
+source authentication, quota or inference transport changes are implied.
+
+Local qualification: 13 focused cases passed for both ports, including logits,
+all gradients, two actual MuonSR updates with matched per-matrix rounding draws,
+duplicate/interior-terminal targets and old RL graph identities. The existing
+96 shared-state/trainer/optimizer cases also passed. A separate actual trainer
+test passed a cached update and an uncached continuation with exact earned row
+counts and retained optimizer history. The packing switch defaults off pending
+full-size CUDA qualification and a useful throughput measurement.
+
+The initial optimizer comparison found different BF16 momentum bits despite
+close raw FP32 gradients. Every stored coordinate is now checked exactly against
+its own previous BF16 momentum promoted to FP32, the actual gradient and the
+final BF16 cast. This accounts for cast-midpoint differences and their recurrence;
+raw-gradient, actual-weight and other optimizer-state tolerances were not widened.
+This proves matched-draw update correctness, not bit-identical production random
+draw scheduling or identical rounded momentum across different graph layouts.
+
 ## Exact mechanisms and interfaces
 
 - `model/shared_state.py`: immutable invocation/import specifications compile

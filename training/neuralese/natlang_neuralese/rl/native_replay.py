@@ -382,16 +382,16 @@ class NativePolicyObjective:
 
 def graph_identity(example):
     """Content identity excludes derived padding/compiler layouts, includes every semantic mask and edge."""
-    from dataclasses import asdict
+    from ..model.native_graph_plan import invocation_dict
     return {'id': example.id, 'split': example.split, 'source_groups': list(example.source_groups),
             'tokenizer_fingerprint': example.tokenizer_fingerprint,
-            'nodes': [asdict(node) for node in example.plan.invocations],
+            'nodes': [invocation_dict(node) for node in example.plan.invocations],
             'target_weights': list(example.target_weights), 'external_states': example.external_states}
 
 
 def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo'):
     """Admit whole training episodes and retain real graph/action provenance."""
-    from dataclasses import asdict
+    from ..model.native_graph_plan import invocation_dict
     from ..data.native_graph import SCHEMA, parse_graph
     from ..common.hashing import canonical_json_sha256_hex
     from .graph_replay import producer_turns
@@ -428,7 +428,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 weights[action['query']+1] = 1.
             nodes = []
             for node, offset in zip(replay.plan.invocations, replay.plan.offsets):
-                value = asdict(node)
+                value = invocation_dict(node)
                 value['token_ids'] = list(node.token_ids)
                 value['target_weights'] = weights[offset:offset+len(node.token_ids)]
                 nodes.append(value)

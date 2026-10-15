@@ -242,11 +242,11 @@ def native_training_update(model, optimizer, batch, *, backend=None, checkpoint_
                 with backend.autocast():
                     loss, details = packed_graph_loss(model, batch,
                         checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
-                        objective=objective)
+                        objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False))
             else:
                 loss, details = packed_graph_loss(model, batch,
                     checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
-                    objective=objective)
+                    objective=objective, share_causal_prefixes=getattr(model, 'share_causal_prefixes', False))
             loss.backward()
         if optimizer.latent is not None:
             optimizer.latent._armed = None
@@ -288,24 +288,35 @@ def sparse_row_updates(model, before):
     return result
 
 
-def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=128, objective=None):
+def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=128, objective=None,
+                      share_causal_prefixes=False):
     """One backbone graph forward for a minibatch; mean the original per-graph losses."""
     import torch.nn.functional as F
     from torch.utils.checkpoint import checkpoint
-    plan, target_weights, ownership, external_name_maps = pack_native_graphs(examples)
+    from .native_prefix_packing import pack_causal_prefixes
+    shared = pack_causal_prefixes(examples) if share_causal_prefixes and objective is None else None
+    if shared is None:
+        plan, target_weights, ownership, external_name_maps = pack_native_graphs(examples)
+        physical_rows = tuple(tuple(range(plan.offsets[first],
+            plan.offsets[last-1]+len(plan.invocations[last-1].token_ids))) for first,last in ownership)
+    else:
+        plan, physical_rows = shared
     model.port.checkpoint_layers = checkpoint_layers
-    row_offsets = {example.id: {'node_start': first_node, 'node_stop': last_node,
+    if objective is not None:
+        row_offsets = {example.id: {'node_start': first_node, 'node_stop': last_node,
         'physical_start': plan.offsets[first_node],
         'physical_stop': plan.offsets[last_node - 1] + len(plan.invocations[last_node - 1].token_ids),
         'external_names': external_name_maps[index]}
         for index, (example, (first_node, last_node)) in enumerate(zip(examples, ownership))}
-    context = {'plan': plan, 'examples': examples, 'target_weights': target_weights,
+        context = {'plan': plan, 'examples': examples, 'target_weights': target_weights,
                'ownership': ownership, 'row_offsets': row_offsets,
                'external_names': {example.id: external_name_maps[index]
                                   for index, example in enumerate(examples)},
                'external_states': {example.id: getattr(example, 'external_states', {})
                                    for example in examples}}
-    forward_inputs = objective.forward_inputs(context) if objective is not None else {}
+        forward_inputs = objective.forward_inputs(context)
+    else:
+        forward_inputs = {}
     result = model(plan, retain_states=False, **(forward_inputs or {}))
     if objective is not None:
         loss, details = objective(model, result, context)
@@ -314,15 +325,14 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         return loss, details
     hidden = result['h_final'][0]
     losses, details = [], []
-    for graph_index, (first_node, last_node) in enumerate(ownership):
+    for graph_index, example in enumerate(examples):
         queries, targets, weights = [], [], []
-        for node_index in range(first_node, last_node):
-            node, offset = plan.invocations[node_index], plan.offsets[node_index]
+        for node, offset in zip(example.plan.invocations, example.plan.offsets):
             for local in range(1, len(node.token_ids)):
                 target = offset + local
-                weight = target_weights[target]
+                weight = example.target_weights[target]
                 if weight > 0:
-                    queries.append(target - 1)
+                    queries.append(physical_rows[graph_index][target - 1])
                     targets.append(int(node.token_ids[local]))
                     weights.append(weight)
         if not queries:
@@ -347,6 +357,8 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         losses.append(total / denominator)
         details.append({'weight': float(denominator.detach()),
                         'supervised_tokens': len(queries),
+                        'packed_physical_tokens': plan.token_count,
+                        'original_physical_tokens': sum(item.plan.token_count for item in examples),
                         'accuracy': float((correct / denominator).detach())})
     return torch.stack(losses).mean(), details
 
@@ -505,6 +517,8 @@ def build_parser():
     parser.add_argument('--batch-graphs', type=int, default=1)
     parser.add_argument('--batch-tokens', type=int, default=0,
         help='pack whole sequential graphs to this token volume instead of graph-count batching')
+    parser.add_argument('--share-causal-prefixes', action=argparse.BooleanOptionalAction, default=False,
+        help='reuse exact ordinary token prefixes with unchanged targets, losses and exposure')
     parser.add_argument('--dtype', choices=('float32', 'bfloat16', 'float16'), default=None,
         help='fresh backbone precision; required for a new lineage, resumes retain exact checkpoint dtype')
     from ..model.native_precision import PRODUCTION_NATIVE_LINEAR_PRECISIONS
@@ -662,6 +676,7 @@ def main(argv=None):
             actual = native_identity(model, config, checkpoint_sha256=sha256_file_hex_cached(args.continue_from))
             if objective.identity != actual:
                 raise ValueError('native policy objective differs from the actual loaded actor embedding/checkpoint identity')
+    model.share_causal_prefixes = args.share_causal_prefixes
     training_identity = {'schema': TRAINING_SCHEMA, 'config': config, 'train_source_hash': source_hash,
                 'schedule': 'row-visit-deficit/2',
                 'held_sha256': source_receipts[1]['sha256'], 'optimizer': 'shared-muon-sr-in-backward-v1',
@@ -937,6 +952,11 @@ def main(argv=None):
                     'communication_exposure': communication_exposure(train.entries, exposure_counts, required_visits)}
         if getattr(model, 'native_sparse_updates', None):
             progress['sparse_row_updates'] = model.native_sparse_updates
+        if objective is None and details:
+            physical_tokens = details[0]['packed_physical_tokens']
+            progress['physical_forward_tokens'] = physical_tokens
+            progress['reused_prefix_tokens'] = details[0]['original_physical_tokens'] - physical_tokens
+            progress['physical_forward_tokens_per_second'] = physical_tokens / max(seconds, 1e-9)
         if str(args.device).startswith('cuda'):
             progress['cuda_memory_bytes'] = {'allocated': torch.cuda.memory_allocated(args.device),
                 'reserved': torch.cuda.memory_reserved(args.device),

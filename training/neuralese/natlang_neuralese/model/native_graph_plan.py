@@ -1,7 +1,7 @@
 """Exact positional graph structure and compiler, independent of neural kernels."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import torch
 
 
@@ -21,6 +21,17 @@ class Invocation:
     imports: tuple[ImportSpan, ...] = ()
     producing: tuple[tuple[int, int], ...] = ()
     logical_producing: tuple[tuple[int, int], ...] = ()
+    # Internal exact prefix reuse, distinct from learned Neuralese production.
+    # Raw complete causal state is exportable without adapting its embeddings.
+    cache_prefix: bool = False
+
+
+def invocation_dict(node):
+    """Stable semantic serialization, preserving pre-cache graph identities."""
+    value = asdict(node)
+    if not node.cache_prefix:
+        value.pop('cache_prefix')
+    return value
 
 
 @dataclass(frozen=True)
@@ -91,6 +102,9 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
     own_positions, sources, positions, node_ids, slot_offsets, producing = [], [], [], [], [], []
     physical_count = 0
     for node in invocations:
+        if type(node.cache_prefix) is not bool or (node.cache_prefix and
+                (node.producing or node.logical_producing or len(node.imports) > 1)):
+            raise ValueError('raw prefix caches require unadapted tokens and at most one complete prefix import')
         if node.name in known or node.name in external_sizes:
             raise ValueError('invocations need unique names distinct from external state names')
         offset = physical_count
@@ -123,11 +137,17 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
                     lo, hi = boundaries[source_index][edge.start], boundaries[source_index][edge.stop]
                     declared = tuple((boundaries[source_index][a], boundaries[source_index][b])
                                      for a, b in source_node.producing)
+                if source_node.cache_prefix:
+                    if not edge.logical or edge.at != 0 or lo != 0 or hi != len(sequences[source_index]):
+                        raise ValueError('raw prefix cache imports must include the complete causal prefix at position zero')
+                    declared = ((0, len(sequences[source_index])),)
                 if not 0 <= lo <= hi <= len(sequences[source_index]):
                     raise ValueError('import span is outside the source logical state')
                 if not any(a <= lo and hi <= b for a, b in declared):
                     raise ValueError('imports must reference an explicitly producing span')
                 imported = sequences[source_index][lo:hi]
+            if node.cache_prefix and (edge.source in external_sizes or not source_node.cache_prefix):
+                raise ValueError('raw prefix caches can extend only another raw complete prefix cache')
             edges.setdefault(edge.at, []).append(imported)
         logical = []
         own = []
