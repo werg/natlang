@@ -16,6 +16,8 @@ export type SourceReview = {
   dataset: string;
   id: string;
   aliases: readonly string[];
+  /** Exact opaque source groups carried by already-rendered static programs. */
+  sourceGroups?: readonly string[];
   text: string;
   annotatedLabel: string;
   status: 'pending' | 'resolved';
@@ -36,7 +38,7 @@ export type SourceReviewDatasets = {
   identityFromCurriculumShape: readonly string[];
 };
 
-const REVIEW_KEYS = new Set(['dataset', 'id', 'aliases', 'text', 'annotatedLabel', 'status', 'reason',
+const REVIEW_KEYS = new Set(['dataset', 'id', 'aliases', 'sourceGroups', 'text', 'annotatedLabel', 'status', 'reason',
   'sourceRevision', 'sourceSnapshotSha256', 'sourcePrompt']);
 
 /** The folder of the registry: `NATLANG_SOURCE_REVIEWS`, else `training/source-reviews` found above this module. */
@@ -73,6 +75,9 @@ export function parseSourceReviews(text: string, file = 'holds.jsonl'): SourceRe
       if (value[key] !== undefined && typeof value[key] !== 'string') fail(file, where, `${key} must be a string when present`);
     if (value.status !== 'pending' && value.status !== 'resolved') fail(file, where, 'status must be "pending" or "resolved"');
     if (!Array.isArray(value.aliases) || value.aliases.some(alias => typeof alias !== 'string')) fail(file, where, 'aliases must be an array of strings');
+    if (value.sourceGroups !== undefined &&
+        (!Array.isArray(value.sourceGroups) || value.sourceGroups.some(group => typeof group !== 'string' || !group)))
+      fail(file, where, 'sourceGroups must be an array of nonempty strings when present');
     for (const identity of [value.id as string, ...(value.aliases as string[])]) {
       const key = `${value.dataset}\0${identity}`;
       if (identities.has(key)) fail(file, where, `repeats the identity ${JSON.stringify(identity)} of dataset ${JSON.stringify(value.dataset)}; one entry holds each identity`);
@@ -174,6 +179,11 @@ export function sourceReviewReason(record: Record<string, unknown>):
     if (SOURCE_REVIEWS.some(review => review.dataset === dataset && review.status === 'pending' && texts.includes(review.text)))
       return 'source_review_pending';
   }
+  const sourceGroups = Array.isArray(record.source_groups) ? record.source_groups : [];
+  if (SOURCE_REVIEWS.some(review => review.dataset === dataset && review.status === 'pending' &&
+      !review.sourceRevision && !review.sourceSnapshotSha256 &&
+      sourceGroups.some(group => typeof group === 'string' && review.sourceGroups?.includes(group))))
+    return 'source_review_pending';
   const ids = [record.dataset_records, record.source_ids, DATASETS.identityFromSourceGroups.includes(dataset) ? record.source_groups : []]
     .flatMap(value => Array.isArray(value) ? value : []);
   if (DATASETS.identityFromCurriculumShape.includes(dataset) && curriculum?.shape) ids.push(curriculum.shape);
