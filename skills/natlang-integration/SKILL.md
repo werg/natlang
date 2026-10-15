@@ -240,3 +240,9 @@ exported source tokenizers; do not load an unrelated shape-compatible adapter.
 The `learned-semantic-state-deltas` receipt records the exact adapter and token
 alignment. `neuralese-semantic-adapter-mismatch` requires the matching native
 model/adapter export or a fresh write through the target's native text writer.
+
+Compact messages use `neuralese.semantic-state/1` within the existing `nzs1_`
+artifact/archive protocol. Their dialect is bound to the semantic adapter SHA,
+and their token-first tensors retain text, source embeddings and semantic code.
+Even same-model consumers decode them. RL captures retain the actual decoded
+observation and an additional exact raw producer archive for gradient replay.

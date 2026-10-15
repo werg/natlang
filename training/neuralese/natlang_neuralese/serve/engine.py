@@ -629,7 +629,8 @@ class Engine:
               self._native_block_identity(block) in self.semantic_channel.bindings.values()):
             try:
                 adapted, adaptation = self.semantic_channel.adapt(block, target_name=self.semantic_participant,
-                    target_model=self.shared_model, target_tokenizer=self.tokenizer, target_identity=self.native_identity)
+                    target_model=self.shared_model, target_tokenizer=self.tokenizer, target_identity=self.native_identity,
+                    allow_nearest=True)
             except ValueError as error:
                 raise RequestError('neuralese-semantic-adapter-mismatch',
                     f'{error}; restore the matching model/adapter export or write the text with the target native writer') from error
@@ -787,6 +788,8 @@ class Engine:
             seq.native_template_suffix = []
         if seq.request.rl_capture:
             seq.native_rl_writes.append({"state_id": record.id,
+                **({'raw_state_id': self.store.put_native_state(block).id}
+                   if record.block.metadata()['schema'] == 'neuralese.semantic-state/1' else {}),
                 "begin_sample": seq.native_write_start_sample,
                 "end_sample": (seq.native_write_close_sample + 1
                                if seq.native_write_close_sample is not None else None),
@@ -817,7 +820,9 @@ class Engine:
                                  architecture=self.model_config.get("architecture") or self.backbone.config.model_type,
                                  **fields)
         block.validate()
-        return block, self.store.put_native_state(block)
+        channel = getattr(self, 'semantic_channel', None)
+        stored = channel.message(block) if channel is not None else block
+        return block, self.store.put_native_state(stored)
 
     def native_write_text(self, text: str, *, value_type: str | None = None):
         """Force supplied text through this model's actual producer transform and archive its native state."""
@@ -918,24 +923,11 @@ class Engine:
                     block_id = rendered.blocks[segment]
                     if kinds[segment] != "native_state":
                         raise RequestError("neuralese-native-state-text", "legacy projected blocks cannot initialize native state")
-                    temp = Sequence(GenerationRequest(messages=[]), Future(), cache=cache)
+                    temp = Sequence(GenerationRequest(messages=[], rl_capture=True), Future(), cache=cache)
                     self._native_consume(temp, block_id)
                     cache = temp.cache
-                    imported = self.store.get_native_state(block_id)
-                    source_segments.append({"kind": "tokens", "token_ids": [self.role_tokens.consume_open],
-                                            "producing": [False]})
-                    source_own_position += 1
-                    if temp.native_imports[-1]["mode"] == "exact-native-state":
-                        source_segments.append({"kind": "native_state", "id": block_id,
-                                                "native_identity": self._native_block_identity(imported.block)})
-                    else:
-                        fallback = self._tokens(imported.block.text)
-                        source_segments.append({"kind": "tokens", "token_ids": fallback,
-                                                "producing": [False] * len(fallback)})
-                        source_own_position += len(fallback)
-                    source_segments.append({"kind": "tokens", "token_ids": [self.role_tokens.consume_close],
-                                            "producing": [False]})
-                    source_own_position += 1
+                    source_segments.extend(temp.native_rl_prompt)
+                    source_own_position += temp.native_own_position
                 elif index == body_segment:
                     if left:
                         cache = native_step(self.shared_model, torch.tensor([left], dtype=torch.long, device=self.device), cache)["cache"]

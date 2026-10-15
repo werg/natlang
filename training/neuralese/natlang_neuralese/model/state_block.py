@@ -29,7 +29,7 @@ class NativeStateBlock:
     layers: tuple[dict[str, Any], ...]
     architecture: str
 
-    def validate(self) -> NativeStateBlock:
+    def _validate_token_fields(self):
         if not isinstance(self.text, str) or not isinstance(self.architecture, str) or not self.architecture:
             raise ValueError('native state needs text and an architecture identity')
         for name in ('tokenizer_fingerprint', 'checkpoint_sha256', 'embedding_weight_sha256'):
@@ -48,6 +48,10 @@ class NativeStateBlock:
         if count > 1 and not bool((self.positions[1:] == self.positions[:-1] + 1).all()):
             raise ValueError('native state positions must form a contiguous span')
         self._float_tensor('embeddings', self.embeddings, count, 2)
+        return count
+
+    def validate(self) -> NativeStateBlock:
+        count = self._validate_token_fields()
         if not self.layers:
             raise ValueError('native state must contain every backbone layer state')
         for index, layer in enumerate(self.layers):
@@ -104,6 +108,9 @@ class NativeStateBlock:
 
     @classmethod
     def from_tensors(cls, metadata, tensors):
+        if metadata.get('schema') == 'neuralese.semantic-state/1':
+            from .semantic_message import SemanticStateMessage
+            return SemanticStateMessage.from_tensors(metadata, tensors)
         if metadata.get('schema') != SCHEMA:
             raise ValueError('unsupported native state schema')
         kinds = metadata.get('layer_kinds')

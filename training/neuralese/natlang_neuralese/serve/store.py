@@ -429,7 +429,7 @@ class TensorStore:
             return self._load(block_id)
 
     def put_native_state(self, block, owner: str | None = None) -> NativeStateRecord:
-        """Store NativeStateBlock through the same immutable file, holds, pins and collection lifecycle."""
+        """Store raw native state or semantic codes with the same durable lifecycle."""
         from ..model.state_block import NativeStateBlock
         block.validate()
         cpu_tensors = {name: tensor.detach().to("cpu").contiguous().clone() for name, tensor in block.tensors().items()}

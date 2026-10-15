@@ -81,28 +81,51 @@ class SemanticChannel:
         return mean, {'source_model': name, 'adapter_sha256': self.adapter_sha256,
                       'posterior': 'mean', 'source_native_identity': self.bindings[name]}
 
-    def adapt(self, block, *, target_name, target_model, target_tokenizer, target_identity,
-              allow_nearest=False):
-        self.require_target(target_name, target_identity)
+    def message(self, block):
+        from .semantic_message import SemanticStateMessage
         source_name = self.model_name(block)
         source_tokenizer = self.tokenizers[source_name]
         source_tokens = source_tokenizer(block.text, add_special_tokens=False, return_offsets_mapping=True)
         if list(source_tokens['input_ids']) != block.token_ids.detach().cpu().tolist():
             raise ValueError('semantic source payload tokens need an explicit retained-offset alignment repair')
+        device = next(self.vae.parameters()).device
+        from .state_block import NativeStateBlock
+        local = NativeStateBlock.from_tensors(block.metadata(), {name: value.to(device)
+                                                  for name, value in block.tensors().items()})
+        code, _ = self.encode(local)
+        return SemanticStateMessage(text=block.text, token_ids=local.token_ids,
+            positions=local.positions, embeddings=local.embeddings, layers=(),
+            **{key: getattr(block, key) for key in ('architecture', 'tokenizer_fingerprint',
+                'checkpoint_sha256', 'embedding_weight_sha256')},
+            code=code, offsets=[list(pair) for pair in source_tokens['offset_mapping']],
+            source_model=source_name, adapter_sha256=self.adapter_sha256).validate()
+
+    def adapt(self, block, *, target_name, target_model, target_tokenizer, target_identity,
+              allow_nearest=False):
+        from .semantic_message import SemanticStateMessage
+        self.require_target(target_name, target_identity)
+        message = block if isinstance(block, SemanticStateMessage) else self.message(block)
+        message.validate()
+        source_name = self.model_name(message)
+        if message.adapter_sha256 != self.adapter_sha256 or message.source_model != source_name:
+            raise ValueError('semantic message requires the exact trained adapter and source model')
+        source_tokens = self.tokenizers[source_name](message.text, add_special_tokens=False, return_offsets_mapping=True)
+        if (source_tokens['input_ids'] != message.token_ids.detach().cpu().tolist()
+                or [list(pair) for pair in source_tokens['offset_mapping']] != message.offsets):
+            raise ValueError('semantic message source token IDs/offsets differ from its bound tokenizer')
+        if message.code.shape[1] != self.vae.latent_width:
+            raise ValueError('semantic message code width differs from its trained adapter')
         target_tokens = target_tokenizer(block.text, add_special_tokens=False, return_offsets_mapping=True)
         ids = tuple(target_tokens['input_ids'])
         op, close = target_model.marker_ids[:2]
         plan = compile_graph([Invocation('__semantic_payload', (op, *ids, close), producing=((1, 1+len(ids)),))])
         baseline = capture_block(target_model(plan), '__semantic_payload', 1, 1+len(ids),
                                  text=block.text, **target_identity)
-        # Tensor transfer is explicit and preserves gradients for callers that
-        # use this same mechanism in additional joint adaptation.
         device = next(self.vae.parameters()).device
-        from .state_block import NativeStateBlock
-        local = NativeStateBlock.from_tensors(block.metadata(), {name: value.to(device)
-                                                  for name, value in block.tensors().items()})
-        code, receipt = self.encode(local)
-        alignment, matching = alignment_weights(source_tokens['offset_mapping'], target_tokens['offset_mapping'],
+        code = message.code.to(device)
+        receipt = {'source_model': source_name, 'adapter_sha256': self.adapter_sha256,
+                   'posterior': 'mean', 'source_native_identity': self.bindings[source_name]}
+        alignment, matching = alignment_weights(message.offsets, target_tokens['offset_mapping'],
             device=device, allow_nearest=allow_nearest)
         if baseline.embeddings.device != device:
             raise ValueError('semantic adapter and target model must use the declared serving device')

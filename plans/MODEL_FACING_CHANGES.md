@@ -639,3 +639,9 @@ not learned model behavior; measure in the next native teacher window.
 errors and native view sampling/whole-source receipts are not yet live-measured
 (0/48). Measure in the next own-model sandbox generation window; no Luna
 measurement or data generation. Existing view/part/combine instructions retained.
+
+2026-10-15 compact semantic artifacts: `neuralese.semantic-state/1` messages
+preserve typed value references but bind dialect metadata to the trained adapter
+SHA. Existing semantic-adapter recovery text is reused. Metadata/behavior changes
+have 0/48 live executor samples; measure during the native sandbox teacher window.
+Codec, actual state decoding and gradient replay checks prove mechanism only.

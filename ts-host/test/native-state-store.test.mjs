@@ -1,5 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { FileNeuraleseStore } from '../dist/neuralese/node-block-store.js';
 import { decodeNativeState, encodeNativeState, nativeStateContentId } from '../dist/native/neuralese-store.js';
 
 const bytes = hex => Uint8Array.from(hex.match(/../g), value => Number.parseInt(value, 16));
@@ -14,6 +18,33 @@ const tensors = {
   'layers.0.v': { dtype: 'F16', shape: [2, 1, 2], data: bytes('0000000000000000') },
   'layers.1.gated_inputs': { dtype: 'F32', shape: [2, 3], data: bytes('0000803f0000803f0000803f0000803f0000803f0000803f') },
 };
+
+test('compact semantic wire matches Python and survives persistent archive lifecycle', async () => {
+  const meta = { ...metadata, schema: 'neuralese.semantic-state/1', layer_kinds: [],
+    source_model: 'source', adapter_sha256: 'a'.repeat(64), offsets: [[0, 2], [2, 5]], posterior: 'mean' };
+  const payload = { token_ids: tensors.token_ids, positions: tensors.positions,
+    embeddings: { dtype: 'F32', shape: [2, 2], data: bytes('0000803f000000400000404000008040') },
+    code: { dtype: 'F32', shape: [2, 2], data: bytes('0000803e0000003f0000403f0000803f') } };
+  const artifact = { metadata: meta, tensors: payload };
+  const id = 'nzs1_xofmfyndloaqeocvcncwznmmkbg3ncxnc2va6hxk6srtn3p44xuq';
+  assert.equal(nativeStateContentId(meta, payload), id);
+  const wire = encodeNativeState(artifact);
+  assert.equal(decodeNativeState(wire).id, id);
+  const directory = await mkdtemp(join(tmpdir(), 'natlang-semantic-'));
+  try {
+    let store = await FileNeuraleseStore.open(directory, { residentBytes: 0 });
+    await store.putNativeState(artifact);
+    store = await FileNeuraleseStore.open(directory, { residentBytes: 0 });
+    assert.equal(store.peek(id).dialect, `semantic-state/${'a'.repeat(64)}`);
+    assert.deepEqual([...encodeNativeState(await store.getNativeState(id))], [...wire]);
+    await store.pin(id);
+    assert.deepEqual(await store.collect(new Set()), []);
+    await store.unpin(id);
+    assert.deepEqual(await store.collect(new Set()), [id]);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+  const bad = structuredClone(artifact); bad.metadata.offsets[1][1] = 6;
+  assert.throws(() => encodeNativeState(bad), /offsets/);
+});
 
 test('native-state identity and safetensors wire match Python', () => {
   const id = 'nzs1_zqbj3ixi4kqxyhv5ofcpuhabvqd76bwigo4z6wq42ujoq6lbpewq';

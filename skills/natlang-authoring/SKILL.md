@@ -248,3 +248,8 @@ native value by decoding shared per-token codes into target-state deltas.
 Keep the value reference and its actual consumption receipt. On
 `neuralese-semantic-adapter-mismatch`, rewrite the payload with the target
 model's native writer or restore the matching checkpoint and adapter export.
+
+After shared adaptation, native writes may contain a compact semantic message
+with text, source embeddings and learned codes. Keep its typed reference through
+storage and calls. Its codes require the matching adapter before KV splicing;
+`neuralese-semantic-adapter-mismatch` has the same recovery described above.

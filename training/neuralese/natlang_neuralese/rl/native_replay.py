@@ -187,8 +187,20 @@ def compile_replay(turns, *, identity, roles, fetch_block):
                     or mask[prompt_length+begin] or mask[prompt_length+end-1]):
                 raise ValueError('native RL write boundaries/embedding roles differ from the captured payload')
             block_id = write['state_id']
-            block = fetch_block(block_id)
+            block = fetch_block(write.get('raw_state_id', block_id))
             block.require_native(**identity)
+            if write.get('raw_state_id', block_id) != block_id:
+                from ..model.semantic_message import SemanticStateMessage
+                message = fetch_block(block_id)
+                if not isinstance(message, SemanticStateMessage):
+                    raise ValueError('native RL semantic write must reference its actual compact message')
+                message.validate()
+                if (any(getattr(message, key) != value for key, value in identity.items())
+                        or message.text != block.text
+                        or not torch.equal(message.token_ids, block.token_ids)
+                        or not torch.equal(message.embeddings, block.embeddings)
+                        or not torch.equal(message.positions, block.positions)):
+                    raise ValueError('native RL semantic message differs from its archived producer state')
             if block.token_ids.tolist() != [sample['token_id'] for sample in samples[lo:hi]]:
                 raise ValueError('native RL archived write tokens differ from its sampled payload')
             span = (prompt_length+lo, prompt_length+hi)
