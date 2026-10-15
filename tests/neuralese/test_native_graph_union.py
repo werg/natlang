@@ -30,6 +30,7 @@ def _graph(identity, split, groups, fingerprint):
 
 def _builds(root, *, overlap=False):
     full_root, rest_root = root / 'full', root / 'rest'
+    manifest_path = root / 'training' / 'corpus-manifests' / 'full.json'
     base_models, rest_outputs, child_paths = {}, {}, {}
     for alias in ('lfm25', 'mellum21'):
         outputs, child_outputs, rest_splits = {}, [], {}
@@ -50,7 +51,16 @@ def _builds(root, *, overlap=False):
         base_models[alias] = {'model_id': MODELS[alias], 'child_receipt': f'{alias}/receipt.json'}
         rest_outputs[alias] = rest_splits
     full_receipt = full_root / 'receipt.json'
-    full_receipt.write_text(json.dumps({'schema': 'natlang.native-graph-full-build/1', 'models': base_models}))
+    full_receipt.write_text(json.dumps({'schema': 'natlang.native-graph-full-build/1',
+        'id': 'fixture-full', 'corpus_manifest': str(manifest_path), 'models': base_models}))
+    manifest_files = []
+    for path in sorted(full_root.rglob('*')):
+        if path.is_file():
+            manifest_files.append({'path': str(path.relative_to(full_root)),
+                                   'bytes': path.stat().st_size, 'sha256': _sha(path)})
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(json.dumps({'schema': 'natlang.corpus-snapshot/1',
+        'id': 'fixture-full', 'path': 'full', 'files': manifest_files}))
     rest_receipt = rest_root / 'receipt.json'
     rest_receipt.write_text(json.dumps({'schema': 'natlang.native-semantic-e2e-build/2',
         'model_ids': MODELS, 'tokenizers': {alias: {'expanded': FINGERPRINTS[alias]} for alias in MODELS},
@@ -76,4 +86,11 @@ def test_native_graph_union_keeps_full_prefix_and_binds_both_splits(tmp_path):
 def test_native_graph_union_rejects_protected_group_crossing(tmp_path):
     full_receipt, rest_receipt = _builds(tmp_path, overlap=True)
     with pytest.raises(ValueError, match='source groups cross train/held'):
+        assemble(full_receipt, rest_receipt, tmp_path / 'union')
+
+
+def test_native_graph_union_rejects_unmanifested_full_receipt_change(tmp_path):
+    full_receipt, rest_receipt = _builds(tmp_path)
+    full_receipt.write_text(full_receipt.read_text().replace('fixture-full', 'changed-full'))
+    with pytest.raises(ValueError, match='FULL corpus manifest does not bind'):
         assemble(full_receipt, rest_receipt, tmp_path / 'union')

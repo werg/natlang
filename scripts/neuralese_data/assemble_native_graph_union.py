@@ -28,11 +28,57 @@ def _json(path):
     return json.loads(Path(path).resolve(strict=True).read_text())
 
 
+def _validate_full_manifest(base_path, base):
+    """Prove the FULL receipt and every advertised graph are the admitted files."""
+    manifest_ref = base.get('corpus_manifest')
+    if not isinstance(manifest_ref, str) or not manifest_ref:
+        raise ValueError('FULL build has no immutable corpus-manifest binding')
+    manifest_path = Path(manifest_ref)
+    if not manifest_path.is_absolute():
+        manifest_path = Path(__file__).resolve().parents[2] / manifest_path
+    manifest = _json(manifest_path)
+    if (manifest.get('schema') != 'natlang.corpus-snapshot/1'
+            or manifest.get('id') != base.get('id')):
+        raise ValueError('FULL corpus manifest does not bind this build identity')
+    run_path = (manifest_path.parents[2] / manifest['path']).resolve(strict=True)
+    if run_path != base_path.parent:
+        raise ValueError('FULL receipt is outside its admitted corpus path')
+    advertised = {item.get('path'): item for item in manifest.get('files', [])
+                  if isinstance(item, dict) and isinstance(item.get('path'), str)}
+    if len(advertised) != len(manifest.get('files', [])):
+        raise ValueError('FULL corpus manifest contains malformed or duplicate file bindings')
+
+    def verify(relative, expected_sha):
+        item = advertised.get(relative)
+        if not isinstance(item, dict) or item.get('sha256') != expected_sha:
+            raise ValueError(f'FULL manifest omits or changes file binding: {relative}')
+        target = (run_path / relative).resolve(strict=True)
+        if not target.is_relative_to(run_path):
+            raise ValueError('FULL manifest path escapes its corpus root')
+        if sha256_file_hex(target) != expected_sha:
+            raise ValueError(f'FULL immutable file digest differs: {relative}')
+
+    verify('receipt.json', sha256_file_hex(base_path))
+    for alias, model in base.get('models', {}).items():
+        child_rel = model.get('child_receipt')
+        child_path = (base_path.parent / child_rel).resolve(strict=True)
+        if not child_path.is_relative_to(run_path):
+            raise ValueError(f'{alias} child receipt escapes FULL corpus root')
+        verify(str(child_path.relative_to(run_path)), sha256_file_hex(child_path))
+        child = _json(child_path)
+        for row in child.get('outputs', []):
+            target = (child_path.parent / row['path']).resolve(strict=True)
+            if not target.is_relative_to(run_path):
+                raise ValueError(f'{alias} graph output escapes FULL corpus root')
+            verify(str(target.relative_to(run_path)), row['sha256'])
+
+
 def _paths(base_receipt_path, added_receipt_path, alias):
     base_path = Path(base_receipt_path).resolve(strict=True)
     base = _json(base_path)
     if base.get('schema') != 'natlang.native-graph-full-build/1':
         raise ValueError('base input is not an admitted FULL native graph build')
+    _validate_full_manifest(base_path, base)
     model = base.get('models', {}).get(alias)
     if not isinstance(model, dict):
         raise ValueError('FULL build lacks participant ' + alias)
@@ -109,6 +155,7 @@ def assemble(base_receipt, added_receipt, out_dir):
         base_data, added_data = _json(base_receipt), _json(added_receipt)
         if base_data.get('schema') != 'natlang.native-graph-full-build/1':
             raise ValueError('base input is not an admitted FULL graph build')
+        _validate_full_manifest(base_receipt, base_data)
         if added_data.get('schema') != 'natlang.native-semantic-e2e-build/2':
             raise ValueError('addition input is not a complete E2E graph build')
         for alias in ('lfm25', 'mellum21'):
