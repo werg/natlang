@@ -1,6 +1,7 @@
 """The Luna replenisher must distinguish a long resumable case from a stall."""
 
 import json
+import hashlib
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -42,3 +43,44 @@ def test_large_partial_gets_resume_memory_budget(tmp_path):
     retry = worker / 'retry-000-01'
     retry.mkdir()
     assert luna.launch_budget_gb(retry) == '1.5'
+
+
+def test_worker_and_retry_keep_campaign_runtime_after_default_changes(tmp_path, monkeypatch):
+    campaign = tmp_path / 'provider-luna-held-shapes-s52116-v1'
+    retry = campaign / 'worker-01' / 'retry-000-01'
+    retry.mkdir(parents=True)
+    (campaign / 'campaign-manifest.json').write_text(json.dumps({'seed': 52116}))
+    pinned = tmp_path / 'pinned-runtime'
+    pinned.mkdir()
+    fingerprint_file = pinned / 'frozen-runtime.json'
+    fingerprint_file.write_text('{}\n')
+    (campaign / 'runtime-pin.json').write_text(json.dumps({
+        'schema': 'natlang.generation-runtime-pin/1', 'runtime': str(pinned),
+        'runtime_sha256': hashlib.sha256(fingerprint_file.read_bytes()).hexdigest()}))
+    monkeypatch.setattr(luna, 'RUNTIME', tmp_path / 'new-default')
+
+    assert luna.runtime_for_queue(campaign / 'worker-01') == pinned
+    assert luna.runtime_for_queue(retry) == pinned
+    fingerprint_file.write_text('{"changed":true}\n')
+    try:
+        luna.runtime_for_queue(retry)
+    except ValueError as exc:
+        assert 'fingerprint changed' in str(exc)
+    else:
+        raise AssertionError('changed runtime must not resume a pinned queue')
+
+
+def test_repair_queue_uses_manifest_runtime(tmp_path, monkeypatch):
+    campaign = tmp_path / 'repair' / 'teacher'
+    worker = campaign / 'worker-01'
+    worker.mkdir(parents=True)
+    pinned = tmp_path / 'pinned-repair-runtime'
+    pinned.mkdir()
+    fingerprint_file = pinned / 'frozen-runtime.json'
+    fingerprint_file.write_text('{}\n')
+    (campaign / 'campaign-manifest.json').write_text(json.dumps({
+        'seed': 52114, 'repair_cycle': True, 'runtime': str(pinned),
+        'runtime_sha256': hashlib.sha256(fingerprint_file.read_bytes()).hexdigest()}))
+    monkeypatch.setattr(luna, 'RUNTIME', tmp_path / 'new-default')
+
+    assert luna.runtime_for_queue(worker) == pinned

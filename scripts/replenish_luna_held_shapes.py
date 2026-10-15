@@ -259,6 +259,31 @@ def has_launchable_waiting_worker(campaign):
     return False
 
 
+def runtime_for_queue(queue_dir):
+    """Resume a queue with its campaign's frozen runtime, including retries."""
+    campaign = next((parent for parent in queue_dir.parents
+                     if (parent / 'campaign-manifest.json').is_file()), None)
+    if campaign is None:
+        raise ValueError(f'queue has no campaign manifest: {queue_dir}')
+    manifest = json.loads((campaign / 'campaign-manifest.json').read_text())
+    pin_path = campaign / 'runtime-pin.json'
+    pin = json.loads(pin_path.read_text()) if pin_path.is_file() else manifest
+    runtime = Path(pin.get('runtime', RUNTIME))
+    if not runtime.is_dir():
+        raise FileNotFoundError(f'campaign runtime missing: {runtime}')
+    expected = pin.get('runtime_sha256')
+    if expected and sha256_file_hex(runtime / 'frozen-runtime.json') != expected:
+        raise ValueError(f'campaign runtime fingerprint changed: {runtime}')
+    return runtime
+
+
+def pin_runtime(campaign):
+    """Record the current snapshot before any worker starts."""
+    pin = {'schema': 'natlang.generation-runtime-pin/1', 'runtime': str(RUNTIME),
+           'runtime_sha256': sha256_file_hex(RUNTIME / 'frozen-runtime.json')}
+    (campaign / 'runtime-pin.json').write_text(json.dumps(pin, indent=2) + '\n')
+
+
 def launch_queue(queue_dir, unit):
     # The worker cap is global across overlapping campaigns and retries. The
     # memory ledger constrains RAM independently; it is not a concurrency cap.
@@ -267,7 +292,7 @@ def launch_queue(queue_dir, unit):
                           'active_luna_workers': WORKERS}), flush=True)
         return False
     command = ['python3', 'scripts/run_bonsai_queue.py', str(queue_dir / 'queue.jsonl'),
-               str(queue_dir / 'journal.jsonl'), '--runtime', str(RUNTIME),
+               str(queue_dir / 'journal.jsonl'), '--runtime', str(runtime_for_queue(queue_dir)),
                '--case-seconds', '1800', '--provider', 'openai-codex',
                '--model-id', 'gpt-6-luna', '--model-concurrency', '1',
                '--execution-plans', '--reasoning-effort', 'low', '--min-free-mib', '1024']
@@ -658,6 +683,7 @@ def prepare(campaign, seed, source, excluded, excluded_groups):
                     world_exclusion='same family and all visible semantics (including folder_files and operation; excluding gold expected/oracle) against held and earlier sources',
                     training_admission=False, status='generation_only_pending_quality_review')
     (campaign / 'campaign-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    pin_runtime(campaign)
     write_queues(campaign, seed, [(source, source_rows.index(row), row) for row in selected])
 
 
