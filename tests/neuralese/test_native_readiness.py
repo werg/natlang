@@ -56,6 +56,8 @@ def test_second_ready_model_proceeds_without_waiting_for_all_models(tmp_path):
     # The once inspection must never accidentally start a GPU process.
 
 
+
+
 def test_changed_checkpoint_or_missing_stage_does_not_count_ready(tmp_path):
     path, receipt, requirement = ready(tmp_path, 'lfm')
     assert validate_ready(path, requirement)['model_id'] == 'lfm'
@@ -63,6 +65,28 @@ def test_changed_checkpoint_or_missing_stage_does_not_count_ready(tmp_path):
         validate_ready(path, {**requirement, 'stage_ids': ['full', 'graph', 'whole']})
     Path(receipt['checkpoint']['path']).write_bytes(b'changed')
     with pytest.raises(ValueError, match='artifact changed'):
+        validate_ready(path, requirement)
+
+
+def test_inherited_recipe_readiness_binds_file_bytes_and_resolved_recipe(tmp_path):
+    from natlang_neuralese.train.recipe import recipe_identity_sha256
+    path, receipt, requirement = ready(tmp_path, 'lfm')
+    recipe_dir = tmp_path/'recipes'; recipe_dir.mkdir()
+    parent = recipe_dir/'base.json'
+    child = recipe_dir/'line.json'
+    parent.write_text(json.dumps({'schema':'natlang.neuralese-training-recipe/1',
+        'id':'base', 'stages':[], 'runtime':{'precision':'bf16'}, 'description':'base policy'}))
+    child.write_text(json.dumps({'schema':'natlang.neuralese-training-recipe/1',
+        'id':'line', 'extends':'base', 'description':'line policy', 'stages':[]}))
+    identity = recipe_identity_sha256(child)
+    file_sha = sha256_file_hex(child)
+    receipt['recipe'] = {'path':str(child), 'sha256':identity, 'file_sha256':file_sha}
+    path.write_text(json.dumps(receipt))
+    requirement['recipe_sha256'] = identity
+    assert validate_ready(path, requirement)['model_id'] == 'lfm'
+    parent.write_text(json.dumps({'schema':'natlang.neuralese-training-recipe/1',
+        'id':'base', 'stages':[], 'runtime':{'precision':'fp32'}, 'description':'changed inherited policy'}))
+    with pytest.raises(ValueError, match='production recipe inheritance changed'):
         validate_ready(path, requirement)
 
 

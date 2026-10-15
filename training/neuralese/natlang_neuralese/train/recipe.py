@@ -24,6 +24,12 @@ from ..common.hashing import sha256_file_hex_cached as sha  # cached by (realpat
 
 
 HANDLERS = {
+    # One recipe-owned rendezvous launches the shared curriculum after both
+    # native SFT receipts become ready. Participant state belongs to the
+    # controller because readiness arrives asynchronously.
+    'native_shared_stage_controller': {'module': 'natlang_neuralese.train.native_readiness',
+        'required_inputs': {'controller_config'}, 'optional_inputs': set(),
+        'parameters': set(), 'result': 'shared-stage-completion.json'},
     'native_semantic_training': {'module': 'natlang_neuralese.train.native_semantic_stage',
         'required_inputs': {'semantic_config', 'native_participants'}, 'optional_inputs': {'resume'},
         'parameters': set(), 'result': 'checkpoint.pt'},
@@ -276,7 +282,7 @@ DIRECT_PHASE_CONTINUATION = {'continue_from': 'checkpoint.pt', 'continue_identit
 # Stage kinds that train the direct checkpoint with the direct trainer and so continue phase to phase (S7 RL included).
 DIRECT_TRAINING_KINDS = frozenset({'neuralese_direct', 'neuralese_rl'})
 NATIVE_TRAINING_KINDS = frozenset({'native_state_sft'})
-SHARED_NATIVE_KINDS = frozenset({'native_semantic_training'})
+SHARED_NATIVE_KINDS = frozenset({'native_semantic_training', 'native_shared_stage_controller'})
 HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | SHARED_NATIVE_KINDS
 NATIVE_IDENTITY_QUALIFICATION = 'native_state_runtime_qualified'
 
@@ -398,7 +404,8 @@ def stage_input_args(resolved, kind):
     args = []
     supported = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
     resolved = _staged_inputs(resolved)
-    for role, flag in (('semantic_config', '--config'), ('native_participants', '--participants'), ('resume', '--resume')):
+    for role, flag in (('semantic_config', '--config'), ('controller_config', '--config'),
+                       ('native_participants', '--participants'), ('resume', '--resume')):
         if role in resolved and role in supported:
             args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'native_graphs',
@@ -414,6 +421,16 @@ def stage_input_args(resolved, kind):
             raise ValueError('direct_artifact_manifest must bind the artifact manifest.json file')
         args += ['--direct-artifact', str(manifest.parent)]
     return args
+
+
+def validate_shared_controller_output(config_path, stage_directory):
+    """Bind controller-owned durable state to this exact recipe stage output."""
+    config = json.loads(Path(config_path).read_text())
+    if config.get('schema') != 'natlang.native-shared-stage-controller/1':
+        raise ValueError('native shared controller input has the wrong schema')
+    if Path(config.get('out', '')).resolve() != Path(stage_directory).resolve():
+        raise ValueError('native shared controller output must equal its declared recipe stage directory')
+    return config
 
 
 def mapped_fixup_continuation(stage, reports):
@@ -2196,8 +2213,13 @@ def main(argv=None):
                 command = [sys.executable, '-m', HANDLERS[kind]['module']]
                 if not direct_artifact_stage and kind not in HEADLESS_NATIVE_KINDS:
                     command += ['--heads', hdd_guard.input_path('heads', stage_heads)]
-                command += stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
-                           str(output if kind == 'token_identity' else directory), '--device', args.device]
+                if kind == 'native_shared_stage_controller':
+                    controller_path = stage_inputs[stage['id']]['controller_config']['path']
+                    validate_shared_controller_output(controller_path, directory)
+                    command += stage_input_args(stage_inputs[stage['id']], kind)
+                else:
+                    command += stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
+                               str(output if kind == 'token_identity' else directory), '--device', args.device]
                 previous_phase = direct_phase_predecessor(recipe, stage)
                 if previous_phase is not None:
                     # A later phase of a direct lineage continues from its predecessor phase's final full state and

@@ -106742,6 +106742,48 @@
           }
         }
       }
+    },
+    {
+      "id": "native-state-full-graphs-20261015-v1",
+      "owner": "dgx",
+      "path": "runs/native-state-full-graphs-20261015",
+      "include": [
+        "receipt.json",
+        "lfm25/receipt.json",
+        "mellum21/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst"
+      ],
+      "source_class": "static-role-aware-native-state-graph-conversion-of-admitted-full-turn-corpus",
+      "split": "Exact source train/test inheritance; 53,223 train graphs and 3,155 protected held graphs per model.",
+      "admission": "All usable FULL-ready source rows converted to complete ordinary-text one-node graphs for both actual tokenizers. This transformation infers no producer/consumer edges; native typed E2E pairs remain a separate source-bound training input.",
+      "training_admission": true,
+      "training_admission_reason": "Derived only from admitted full-ready corpus natlang-target-union-20261015-next-incremental-v2-full-ready-v1; immutable source and graph output SHA-256 bindings in training/corpus-manifests/native-state-full-graphs-20261015-v1.json; source held split and source groups are retained.",
+      "derived_from": [
+        "natlang-target-union-20261015-next-incremental-v2-full-ready-v1"
+      ],
+      "license": "Inherited unchanged from the admitted source corpus; owner accepts all licenses.",
+      "renders": {
+        "train": {
+          "lfm25": {
+            "sha256": "78ffd90e24a685516354f91e33a76d60f26a086818c27b0caf0c6fc313971096"
+          },
+          "mellum21": {
+            "sha256": "09cd0cae32c9e269c23a071b5f9504f310dbb4cf79d615a436c85b47b5f62c58"
+          }
+        },
+        "held": {
+          "lfm25": {
+            "sha256": "07b2dba5a3ce8dc68fe955c64d135f7f342bb141b9001de2d007dcea340dfc67"
+          },
+          "mellum21": {
+            "sha256": "dad9caf0cea25c1f21039fad9c88478f14e100acbc9d9f199de4d5055d7a952c"
+          }
+        }
+      },
+      "manifest": "training/corpus-manifests/native-state-full-graphs-20261015-v1.json"
     }
   ],
   "coverage_backlog": [

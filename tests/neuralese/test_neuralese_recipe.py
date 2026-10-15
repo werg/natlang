@@ -26,6 +26,26 @@ def test_compressed_recipe_input_checks_decoder_before_launch(monkeypatch):
     recipe.require_input_decoders(inputs)
 
 
+def test_native_shared_controller_is_a_headless_recipe_stage(tmp_path):
+    from natlang_neuralese.train.recipe import (HANDLERS, HEADLESS_NATIVE_KINDS,
+        NATIVE_IDENTITY_QUALIFICATION, SHARED_NATIVE_KINDS, stage_input_args,
+        validate_shared_controller_output)
+    assert 'native_shared_stage_controller' in HEADLESS_NATIVE_KINDS
+    assert 'native_shared_stage_controller' in SHARED_NATIVE_KINDS
+    assert HANDLERS['native_shared_stage_controller']['required_inputs'] == {'controller_config'}
+    assert HANDLERS['native_shared_stage_controller']['module'] == 'natlang_neuralese.train.native_readiness'
+    assert NATIVE_IDENTITY_QUALIFICATION == 'native_state_runtime_qualified'
+    assert stage_input_args({'controller_config': {'path': '/bound/controller.json',
+        'sha256': 'a' * 64}}, 'native_shared_stage_controller') == [
+            '--config', '/bound/controller.json']
+    path = tmp_path/'controller.json'
+    output = tmp_path/'shared-stage'
+    path.write_text(json.dumps({'schema':'natlang.native-shared-stage-controller/1', 'out':str(output)}))
+    validate_shared_controller_output(path, output)
+    with pytest.raises(ValueError, match='output must equal'):
+        validate_shared_controller_output(path, tmp_path/'other-stage')
+
+
 def declared():
     return legacy_recipes.foundation()
 
