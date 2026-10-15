@@ -95,7 +95,8 @@ def test_actual_backbone_update_reload_and_sparse_target_resume(tmp_path,family,
         assert 'momentum.'+backbone in state and 'momentum.adapter.up.weight' in state
     # Actual remote placement: no original checkpoint/sidecar/base path survives.
     import shutil
-    from types import SimpleNamespace
+    from concurrent.futures import Future
+    from natlang_neuralese.serve.engine import GenerationRequest,Sequence
     from natlang_neuralese.model.native_bundle import export_bundle,verify_bundle
     from natlang_neuralese.model.native_composite import resolve_composite_artifact
     bundle = export_bundle(updated['checkpoint']['path'],tmp_path/'bundle')
@@ -111,13 +112,16 @@ def test_actual_backbone_update_reload_and_sparse_target_resume(tmp_path,family,
                for name,value in engine.shared_model.named_parameters())
     # Native chat uses an invocation-local generator. Check the next sample
     # after an intervening draw and reconstructed actor, with identical RNG state.
-    req = SimpleNamespace(temperature=.8)
+    req = GenerationRequest(messages=[],temperature=.8)
     logits = engine._native_logits(engine._native_forward([4,5],None)['h_final'])
-    first = SimpleNamespace(request=req,logits=logits,rng=torch.Generator().manual_seed(73),bans={},native_own_position=2)
+    banned=int(logits[0].argmax())
+    first = Sequence(request=req,future=Future(),logits=logits,rng=torch.Generator().manual_seed(73),
+                     bans={2:{banned}},native_own_position=2)
     engine._native_token(first)
     saved_request_rng = first.rng.get_state().clone()
-    second = SimpleNamespace(request=req,logits=relocated._native_logits(relocated._native_forward([4,5],None)['h_final']),
-                             rng=torch.Generator().set_state(saved_request_rng),bans={},native_own_position=2)
+    second = Sequence(request=req,future=Future(),
+        logits=relocated._native_logits(relocated._native_forward([4,5],None)['h_final']),
+        rng=torch.Generator().set_state(saved_request_rng),bans={2:{banned}},native_own_position=2)
     assert engine._native_token(first)==relocated._native_token(second)
     assert torch.equal(first.rng.get_state(),second.rng.get_state())
     manifest_path = Path(bundle['checkpoint']['resolved'])
