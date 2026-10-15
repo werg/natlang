@@ -33,7 +33,8 @@ PAGES = {'dgx': 'plans/neuralese/HANDOVER.md', 'pop': 'plans/POP_CURRENT.md'}
 POINTERS = [
     ('AGENTS.md', 'owner rules (start here)'),
     ('plans/REVIEW_20261012.md', 'strategic review and the accepted direction'),
-    ('plans/neuralese/NEURALESE_DIRECT_V1.md', 'the active training design'),
+    ('plans/neuralese/SHARED_STATE_MIGRATION_20261015.md', 'native-state replacement and cutover requirements'),
+    ('plans/neuralese/NEURALESE_DIRECT_V1.md', 'legacy diagnostic training design'),
     ('plans/neuralese/LINE_PARITY.md', 'Mellum/LFM line parity'),
     ('plans/neuralese/DECISIONS.md', 'recorded decisions'),
     ('plans/MACHINE_COORDINATION.md', 'coordination protocol, data sync, storage'),

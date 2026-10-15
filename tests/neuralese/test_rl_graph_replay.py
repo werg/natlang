@@ -27,6 +27,31 @@ def test_bundle_roundtrip_recurses_producer_dependencies_and_detects_corruption(
         restore_bundle(engine, tmp_path / 'manifest.json', policy_id='p')
 
 
+def test_native_bundle_archives_prompt_write_and_json_argument_references(tmp_path):
+    from test_native_state_store import _block
+    from natlang_neuralese.serve.store import encode_native_state, native_state_id
+    first = _block()
+    from dataclasses import replace
+    second = replace(first, text='another producer')
+    blocks = {native_state_id(block): block for block in (first, second)}
+    first_id, second_id = blocks
+    rollouts = [{'turns': [{'sampling': {'schema': 'natlang.native-rl-sampling/1',
+        'prompt': [{'kind': 'native_state', 'id': first_id}],
+        'writes': [{'state_id': second_id}]},
+        'messages': [{'tool_calls': [{'function': {'arguments': json.dumps(
+            {'value': [{'type': 'native_state', 'id': first_id}]})}}]}]}]}]
+    manifest = save_bundle(rollouts, tmp_path, policy_id='p',
+                           fetch=lambda bid: encode_native_state(blocks[bid]))
+    assert set(manifest['blocks']) == set(blocks)
+    assert all(entry['format'] == 'native-state' for entry in manifest['blocks'].values())
+    engine = SimpleNamespace(store=TensorStore(), native_state_enabled=True)
+    restore_bundle(engine, tmp_path / 'manifest.json', policy_id='p')
+    for block_id in blocks:
+        assert encode_native_state(engine.store.get_native_state(block_id).block) == encode_native_state(blocks[block_id])
+    with pytest.raises(ValueError, match='native-state learner'):
+        restore_bundle(SimpleNamespace(store=TensorStore()), tmp_path / 'manifest.json', policy_id='p')
+
+
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
 def test_consumer_reward_gradient_reaches_recorded_value_writer(family, tmp_path):
     from natlang_neuralese.model.heads import PortHeads

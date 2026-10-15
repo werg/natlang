@@ -17,8 +17,15 @@ from ..common.jsonio import write_bytes_durable, write_json_durable
 
 
 def block_ids(value):
-    if isinstance(value, str) and re.fullmatch(r'nz1_[a-z2-7]{52}', value):
+    if isinstance(value, str) and re.fullmatch(r'(?:nz1|nzs1)_[a-z2-7]{52}', value):
         yield value
+    elif isinstance(value, str) and value.lstrip().startswith(('{', '[')):
+        # Tool-call arguments remain JSON text in stored assistant messages.
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            return
+        yield from block_ids(decoded)
     elif isinstance(value, dict):
         for item in value.values():
             yield from block_ids(item)
@@ -29,7 +36,7 @@ def block_ids(value):
 
 def save_bundle(rollouts, out, *, policy_id, fetch):
     """Fetch recursively referenced blocks with Server.get_bytes or a local store."""
-    from ..serve.store import decode_block
+    from ..serve.store import decode_block, decode_native_state
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     pending = set(block_ids(rollouts))
@@ -39,14 +46,25 @@ def save_bundle(rollouts, out, *, policy_id, fetch):
         if block_id in entries:
             continue
         raw = fetch(block_id)
-        block = decode_block(raw)  # verifies content ID and payload dimensions
-        if block.id != block_id:
+        native = block_id.startswith('nzs1_')
+        if native:
+            block, actual = decode_native_state(raw)
+        else:
+            block = decode_block(raw)
+            actual = block.id
+        if actual != block_id:
             raise ValueError('RL block fetch returned a different content ID')
         destination = out / (block_id + '.nzb')
         write_bytes_durable(destination, raw)
         entries[block_id] = {'path': destination.name, 'sha256': hashlib.sha256(raw).hexdigest(),
-                             'bytes': len(raw), 'length': block.length, 'width': block.width}
-        pending.update(set(block_ids(block.producer)) - entries.keys())
+                             'bytes': len(raw), 'length': len(block.token_ids) if native else block.length,
+                             'width': block.embeddings.shape[1] if native else block.width,
+                             'format': 'native-state' if native else 'legacy-projected'}
+        if native:
+            entries[block_id]['native_identity'] = {name: getattr(block, name) for name in (
+                'checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')}
+        else:
+            pending.update(set(block_ids(block.producer)) - entries.keys())
     manifest = {'schema': 'natlang.rl-block-bundle/1', 'policy_id': policy_id, 'blocks': entries}
     destination = out / 'manifest.json'
     write_json_durable(destination, manifest)
@@ -54,7 +72,7 @@ def save_bundle(rollouts, out, *, policy_id, fetch):
 
 
 def restore_bundle(engine, manifest_path, *, policy_id):
-    from ..serve.store import decode_block
+    from ..serve.store import decode_block, decode_native_state
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text())
     if manifest.get('schema') != 'natlang.rl-block-bundle/1' or manifest.get('policy_id') != policy_id:
@@ -66,10 +84,23 @@ def restore_bundle(engine, manifest_path, *, policy_id):
         raw = path.read_bytes()
         if len(raw) != entry['bytes'] or hashlib.sha256(raw).hexdigest() != entry['sha256']:
             raise ValueError('RL block bundle bytes changed')
-        block = decode_block(raw)
-        if block.id != block_id or block.width != engine.width:
-            raise ValueError('RL block bundle identity/width differs from learner')
-        engine.store.put(block)
+        if block_id.startswith('nzs1_'):
+            if not getattr(engine, 'native_state_enabled', False):
+                raise ValueError('native RL state bundle requires a native-state learner')
+            block, actual = decode_native_state(raw)
+            identity = {name: getattr(block, name) for name in (
+                'checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')}
+            if actual != block_id or entry.get('native_identity') != identity:
+                raise ValueError('native RL block identity differs from its archive receipt')
+            # Foreign source blocks can be present in a real multi-model graph.
+            # Store exact bytes; the graph/runtime must select explicit native,
+            # learned-adaptation or text-reencoding consumption, never width-cast.
+            engine.store.put_native_state(block)
+        else:
+            block = decode_block(raw)
+            if block.id != block_id or block.width != engine.width:
+                raise ValueError('RL block bundle identity/width differs from learner')
+            engine.store.put(block)
     return manifest
 
 
