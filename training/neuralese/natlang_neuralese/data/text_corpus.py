@@ -1490,6 +1490,7 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
     text, ids, offsets, character_cursor = [], [], [], 0
     special_spellings = set(tokenizer.all_special_tokens)
     special_spellings.update(("<|neuralese|>", "<|/neuralese|>"))
+    offset_options = {"return_offsets_mapping": True} if return_offsets else {}
 
     def append_offsets(run, encoded):
         if not return_offsets:
@@ -1508,7 +1509,7 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
         for run, escaped in split_escaped(segment, prompt.escape_nonce):
             text.append(run)
             encoded = tokenizer(run, add_special_tokens=False, split_special_tokens=escaped,
-                                return_offsets_mapping=return_offsets)
+                                **offset_options)
             ids.extend(encoded["input_ids"])
             append_offsets(run, encoded)
             character_cursor += len(run)
@@ -1516,7 +1517,7 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
     for run, escaped in reply_runs:
         text.append(run)
         encoded = tokenizer(run, add_special_tokens=False, split_special_tokens=escaped,
-                            return_offsets_mapping=return_offsets)
+                            **offset_options)
         ids.extend(encoded["input_ids"])
         append_offsets(run, encoded)
         character_cursor += len(run)

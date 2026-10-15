@@ -104,7 +104,7 @@ def catalog(repo, config=None):
         manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
         registered_corpora.append({**entry, 'manifest': str(manifest_path.relative_to(repo)),
             'manifest_sha256': sha256_file(manifest_path) if manifest else None,
-            'snapshot_bytes': manifest['bytes'] if manifest else None,
+            'snapshot_bytes': manifest.get('bytes', sum(item['bytes'] for item in manifest['files'])) if manifest else None,
             'snapshot_files': len(manifest['files']) if manifest else None,
             'availability': 'present' if (repo / entry['path']).is_dir() else 'missing',
             'integration': 'dedicated_neuralese_pipeline; admission remains explicit, not a native-SFT input'})
