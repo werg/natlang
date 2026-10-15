@@ -102670,6 +102670,30 @@
         }
       },
       "notes": "Adaptive production whole-trajectory cohort ready: 369860 train/13214 held documents per tokenizer. Completed selected-rendering twins and actual omission ledger; independent audit covers all 366 parent member views, global held/quality references, current source review and exact decision holds. Full identity multisets match across tokenizers. The current protection proof is separate from original R11 build pins; registration is availability, not a claim of model training consumption."
+    },
+    {
+      "id": "luna-held-shapes-s52110-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52110-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with oracle-accepted outcomes and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "86 independently reviewed oracle-accepted roots; 492 approved native decisions out of 665 materialized; 7 exact whole-parent process holds and 10 unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v36 source-review and protected-source check; exact structural action-shape and manual noisy-process parent holds; native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Rejected oracle outcomes are not DPO negatives without further semantic review; source-defect zero-result attempts excluded.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins prior source-review; collection used current v36. Exact trajectory holds govern. Global union requires current source-review and non-success hold checks."
     }
   ],
   "coverage_backlog": [
