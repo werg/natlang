@@ -109,7 +109,10 @@ def main() -> None:
                 raise ValueError('input must contain approved train decisions only')
             parent_id = turn['teacher_trajectory_id']
             family = turn['task_family']
-            curriculum = turn['task']['program_ir'].get('curriculum') or {}
+            # Compact native decisions may omit the source task. Family rules
+            # still apply; declared process requirements are available only
+            # when the task is carried in this representation.
+            curriculum = turn.get('task', {}).get('program_ir', {}).get('curriculum') or {}
             requirements = (curriculum.get('inline'), curriculum.get('iterate'))
             groups = tuple(turn['source_groups'])
             parent = parents.setdefault(parent_id, {'family': family, 'groups': groups,

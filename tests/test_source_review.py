@@ -80,8 +80,7 @@ class RegistryTests(unittest.TestCase):
         self.assertFalse(manifest["training_admission"])
         for entry in manifest["files"]:
             self.assertTrue((ROOT / entry["path"]).is_file())
-        newest = sorted(path.stem for path in sr.MANIFESTS.glob("source-reviews-*-v*.json"))[-1]
-        current = json.loads((sr.MANIFESTS / f"{newest}.json").read_text(encoding="utf-8"))
+        current = json.loads(sr.latest_manifest_path(sr.MANIFESTS).read_text(encoding="utf-8"))
         rebuilt = sr.build_manifest(current["id"], sr.REGISTRY, current["previous"])
         self.assertEqual(rebuilt["files"], current["files"], "the newest manifest matches the registry bytes")
 
