@@ -92390,6 +92390,876 @@
         "held_text": {}
       },
       "notes": "Seed 52096 independently reviewed native decisions; LFM and Mellum full, program-header, and whole-trajectory train-only twins; semantic holds and current union exclusions apply."
+    },
+    {
+      "id": "natlang-target-union-20261015-r10-protected-expansion",
+      "owner": "dgx",
+      "path": "runs/natlang-target-union-20261015-r10-protected-expansion",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "shared-natlang-target-training-set",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: natlang-target-union-20261014-r9-teacher-refresh, external-expansion-gatc-native-20261014-v1-render, greenhouse-iterated-measured-render-20261015-v1, luna-held-shapes-s52067-curated-render-20261015-v1, luna-held-shapes-s52068-curated-render-20261015-v1, external-expansion-codeagent-native-20261014-v1-render, luna-held-shapes-s52069-curated-render-20261015-v1, luna-held-shapes-s52070-curated-render-20261015-v1, gemini-clinc-static-reviewed-render-20261015-v1, luna-held-shapes-s52071-curated-render-20261015-v1, gemini-clinc-static-b45-b46-reviewed-render-20261015-v1, luna-held-shapes-s52072-curated-render-20261015-v1, luna-held-shapes-s52073-curated-render-20261015-v1, luna-held-shapes-s52074-curated-render-20261015-v1, gemini-semantic-mixed-static-reviewed-render-20261015-v1, luna-dataset-workbench-salvaged-render-20261015-v1; variants: full/lfm25, full/mellum21, program-header/lfm25, program-header/mellum21, whole-trajectory/lfm25, whole-trajectory/mellum21; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "natlang-target-union-20261014-r9-teacher-refresh",
+        "external-expansion-gatc-native-20261014-v1-render",
+        "greenhouse-iterated-measured-render-20261015-v1",
+        "luna-held-shapes-s52067-curated-render-20261015-v1",
+        "luna-held-shapes-s52068-curated-render-20261015-v1",
+        "external-expansion-codeagent-native-20261014-v1-render",
+        "luna-held-shapes-s52069-curated-render-20261015-v1",
+        "luna-held-shapes-s52070-curated-render-20261015-v1",
+        "gemini-clinc-static-reviewed-render-20261015-v1",
+        "luna-held-shapes-s52071-curated-render-20261015-v1",
+        "gemini-clinc-static-b45-b46-reviewed-render-20261015-v1",
+        "luna-held-shapes-s52072-curated-render-20261015-v1",
+        "luna-held-shapes-s52073-curated-render-20261015-v1",
+        "luna-held-shapes-s52074-curated-render-20261015-v1",
+        "gemini-semantic-mixed-static-reviewed-render-20261015-v1",
+        "luna-dataset-workbench-salvaged-render-20261015-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl.zst",
+            "sha256": "d8d8386912d4da59b6d6704be7ae2a856470f15f7a0fda5c53f46e18958efaf8",
+            "compression": "zstd",
+            "decoded_sha256": "9d39021cebd705051900e5503d37f7142fe6068a8705f8c6e480c1079fe8a327",
+            "decoded_bytes": 3425751812,
+            "documents": 48763,
+            "by_split": {
+              "test": {
+                "documents": 3140,
+                "supervised_tokens": 695393,
+                "tokens": 34441827
+              },
+              "train": {
+                "documents": 45623,
+                "supervised_tokens": 16572171,
+                "tokens": 336455224
+              }
+            },
+            "by_member": {
+              "external-expansion-codeagent-native-20261014-v1-render": {
+                "documents": 7500,
+                "supervised_tokens": 11829799,
+                "test_documents": 130,
+                "tokens": 66449446,
+                "train_documents": 7370
+              },
+              "external-expansion-gatc-native-20261014-v1-render": {
+                "documents": 600,
+                "supervised_tokens": 161192,
+                "test_documents": 252,
+                "tokens": 12012365,
+                "train_documents": 348
+              },
+              "gemini-clinc-static-b45-b46-reviewed-render-20261015-v1": {
+                "documents": 888,
+                "supervised_tokens": 40208,
+                "test_documents": 0,
+                "tokens": 6910209,
+                "train_documents": 888
+              },
+              "gemini-clinc-static-reviewed-render-20261015-v1": {
+                "documents": 1018,
+                "supervised_tokens": 45889,
+                "test_documents": 0,
+                "tokens": 7919889,
+                "train_documents": 1018
+              },
+              "gemini-semantic-mixed-static-reviewed-render-20261015-v1": {
+                "documents": 22,
+                "supervised_tokens": 1087,
+                "test_documents": 0,
+                "tokens": 126004,
+                "train_documents": 22
+              },
+              "greenhouse-iterated-measured-render-20261015-v1": {
+                "documents": 168,
+                "supervised_tokens": 21914,
+                "test_documents": 0,
+                "tokens": 1110408,
+                "train_documents": 168
+              },
+              "luna-dataset-workbench-salvaged-render-20261015-v1": {
+                "documents": 62,
+                "supervised_tokens": 5673,
+                "test_documents": 0,
+                "tokens": 411729,
+                "train_documents": 62
+              },
+              "luna-held-shapes-s52067-curated-render-20261015-v1": {
+                "documents": 361,
+                "supervised_tokens": 37259,
+                "test_documents": 0,
+                "tokens": 2374217,
+                "train_documents": 361
+              },
+              "luna-held-shapes-s52068-curated-render-20261015-v1": {
+                "documents": 599,
+                "supervised_tokens": 66165,
+                "test_documents": 0,
+                "tokens": 3917735,
+                "train_documents": 599
+              },
+              "luna-held-shapes-s52069-curated-render-20261015-v1": {
+                "documents": 673,
+                "supervised_tokens": 75502,
+                "test_documents": 0,
+                "tokens": 4393223,
+                "train_documents": 673
+              },
+              "luna-held-shapes-s52070-curated-render-20261015-v1": {
+                "documents": 547,
+                "supervised_tokens": 59226,
+                "test_documents": 0,
+                "tokens": 3589641,
+                "train_documents": 547
+              },
+              "luna-held-shapes-s52071-curated-render-20261015-v1": {
+                "documents": 544,
+                "supervised_tokens": 58871,
+                "test_documents": 0,
+                "tokens": 3503996,
+                "train_documents": 544
+              },
+              "luna-held-shapes-s52072-curated-render-20261015-v1": {
+                "documents": 648,
+                "supervised_tokens": 69568,
+                "test_documents": 0,
+                "tokens": 4199903,
+                "train_documents": 648
+              },
+              "luna-held-shapes-s52073-curated-render-20261015-v1": {
+                "documents": 41,
+                "supervised_tokens": 4860,
+                "test_documents": 0,
+                "tokens": 259525,
+                "train_documents": 41
+              },
+              "luna-held-shapes-s52074-curated-render-20261015-v1": {
+                "documents": 19,
+                "supervised_tokens": 1910,
+                "test_documents": 0,
+                "tokens": 122135,
+                "train_documents": 19
+              },
+              "r9-protected-teacher-refresh": {
+                "documents": 35073,
+                "supervised_tokens": 4788441,
+                "test_documents": 2758,
+                "tokens": 253596626,
+                "train_documents": 32315
+              }
+            }
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl.zst",
+            "sha256": "200090b5e26701adaf98f3a18ca52629945ee2c8db35277ebd17b429cd44c8ad",
+            "compression": "zstd",
+            "decoded_sha256": "c9c0e14298b89a5e44166040857e1fc5e9b4f7316f0de9015301d836906b3176",
+            "decoded_bytes": 3403653139,
+            "documents": 48763,
+            "by_split": {
+              "test": {
+                "documents": 3140,
+                "supervised_tokens": 701498,
+                "tokens": 38605718
+              },
+              "train": {
+                "documents": 45623,
+                "supervised_tokens": 16485574,
+                "tokens": 357519969
+              }
+            },
+            "by_member": {
+              "external-expansion-codeagent-native-20261014-v1-render": {
+                "documents": 7500,
+                "supervised_tokens": 11158920,
+                "test_documents": 130,
+                "tokens": 65588361,
+                "train_documents": 7370
+              },
+              "external-expansion-gatc-native-20261014-v1-render": {
+                "documents": 600,
+                "supervised_tokens": 149524,
+                "test_documents": 252,
+                "tokens": 11423740,
+                "train_documents": 348
+              },
+              "gemini-clinc-static-b45-b46-reviewed-render-20261015-v1": {
+                "documents": 888,
+                "supervised_tokens": 51123,
+                "test_documents": 0,
+                "tokens": 6842751,
+                "train_documents": 888
+              },
+              "gemini-clinc-static-reviewed-render-20261015-v1": {
+                "documents": 1018,
+                "supervised_tokens": 58516,
+                "test_documents": 0,
+                "tokens": 7843693,
+                "train_documents": 1018
+              },
+              "gemini-semantic-mixed-static-reviewed-render-20261015-v1": {
+                "documents": 22,
+                "supervised_tokens": 1359,
+                "test_documents": 0,
+                "tokens": 127978,
+                "train_documents": 22
+              },
+              "greenhouse-iterated-measured-render-20261015-v1": {
+                "documents": 168,
+                "supervised_tokens": 24507,
+                "test_documents": 0,
+                "tokens": 1127720,
+                "train_documents": 168
+              },
+              "luna-dataset-workbench-salvaged-render-20261015-v1": {
+                "documents": 62,
+                "supervised_tokens": 6598,
+                "test_documents": 0,
+                "tokens": 412900,
+                "train_documents": 62
+              },
+              "luna-held-shapes-s52067-curated-render-20261015-v1": {
+                "documents": 361,
+                "supervised_tokens": 42190,
+                "test_documents": 0,
+                "tokens": 2409307,
+                "train_documents": 361
+              },
+              "luna-held-shapes-s52068-curated-render-20261015-v1": {
+                "documents": 599,
+                "supervised_tokens": 74397,
+                "test_documents": 0,
+                "tokens": 3963467,
+                "train_documents": 599
+              },
+              "luna-held-shapes-s52069-curated-render-20261015-v1": {
+                "documents": 673,
+                "supervised_tokens": 84839,
+                "test_documents": 0,
+                "tokens": 4442625,
+                "train_documents": 673
+              },
+              "luna-held-shapes-s52070-curated-render-20261015-v1": {
+                "documents": 547,
+                "supervised_tokens": 66722,
+                "test_documents": 0,
+                "tokens": 3633024,
+                "train_documents": 547
+              },
+              "luna-held-shapes-s52071-curated-render-20261015-v1": {
+                "documents": 544,
+                "supervised_tokens": 66387,
+                "test_documents": 0,
+                "tokens": 3538434,
+                "train_documents": 544
+              },
+              "luna-held-shapes-s52072-curated-render-20261015-v1": {
+                "documents": 648,
+                "supervised_tokens": 78311,
+                "test_documents": 0,
+                "tokens": 4238682,
+                "train_documents": 648
+              },
+              "luna-held-shapes-s52073-curated-render-20261015-v1": {
+                "documents": 41,
+                "supervised_tokens": 5396,
+                "test_documents": 0,
+                "tokens": 260524,
+                "train_documents": 41
+              },
+              "luna-held-shapes-s52074-curated-render-20261015-v1": {
+                "documents": 19,
+                "supervised_tokens": 2191,
+                "test_documents": 0,
+                "tokens": 124567,
+                "train_documents": 19
+              },
+              "r9-protected-teacher-refresh": {
+                "documents": 35073,
+                "supervised_tokens": 5316092,
+                "test_documents": 2758,
+                "tokens": 280147914,
+                "train_documents": 32315
+              }
+            }
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl.zst",
+            "sha256": "76ce92742dce7e03f28280b4bc6c7ee7c7c3475d6cf4142b6153abe684c4ccba",
+            "compression": "zstd",
+            "decoded_sha256": "544deba038051203f777bfdc0bf6788ac4d2cdd8fd3f5140a03f8c33874f3802",
+            "decoded_bytes": 67803496493,
+            "documents": 867079,
+            "by_split": {
+              "test": {
+                "documents": 72091,
+                "supervised_tokens": 21466640,
+                "tokens": 1408050235
+              },
+              "train": {
+                "documents": 794988,
+                "supervised_tokens": 349203768,
+                "tokens": 6148546989
+              }
+            },
+            "by_member": {
+              "external-expansion-codeagent-native-20261014-v1-render": {
+                "documents": 149840,
+                "supervised_tokens": 236370734,
+                "test_documents": 2334,
+                "tokens": 644430702,
+                "train_documents": 147506
+              },
+              "external-expansion-gatc-native-20261014-v1-render": {
+                "documents": 12125,
+                "supervised_tokens": 4391881,
+                "test_documents": 5074,
+                "tokens": 193320054,
+                "train_documents": 7051
+              },
+              "gemini-clinc-static-b45-b46-reviewed-render-20261015-v1": {
+                "documents": 885,
+                "supervised_tokens": 40118,
+                "test_documents": 0,
+                "tokens": 2332889,
+                "train_documents": 885
+              },
+              "gemini-clinc-static-reviewed-render-20261015-v1": {
+                "documents": 19981,
+                "supervised_tokens": 905702,
+                "test_documents": 0,
+                "tokens": 52683233,
+                "train_documents": 19981
+              },
+              "gemini-semantic-mixed-static-reviewed-render-20261015-v1": {
+                "documents": 622,
+                "supervised_tokens": 27213,
+                "test_documents": 0,
+                "tokens": 792163,
+                "train_documents": 622
+              },
+              "greenhouse-iterated-measured-render-20261015-v1": {
+                "documents": 168,
+                "supervised_tokens": 21914,
+                "test_documents": 0,
+                "tokens": 393635,
+                "train_documents": 168
+              },
+              "luna-dataset-workbench-salvaged-render-20261015-v1": {
+                "documents": 769,
+                "supervised_tokens": 74351,
+                "test_documents": 0,
+                "tokens": 1613173,
+                "train_documents": 769
+              },
+              "luna-held-shapes-s52067-curated-render-20261015-v1": {
+                "documents": 361,
+                "supervised_tokens": 37259,
+                "test_documents": 0,
+                "tokens": 766414,
+                "train_documents": 361
+              },
+              "luna-held-shapes-s52068-curated-render-20261015-v1": {
+                "documents": 599,
+                "supervised_tokens": 66165,
+                "test_documents": 0,
+                "tokens": 1239121,
+                "train_documents": 599
+              },
+              "luna-held-shapes-s52069-curated-render-20261015-v1": {
+                "documents": 673,
+                "supervised_tokens": 75502,
+                "test_documents": 0,
+                "tokens": 1398499,
+                "train_documents": 673
+              },
+              "luna-held-shapes-s52070-curated-render-20261015-v1": {
+                "documents": 547,
+                "supervised_tokens": 59226,
+                "test_documents": 0,
+                "tokens": 1138971,
+                "train_documents": 547
+              },
+              "luna-held-shapes-s52071-curated-render-20261015-v1": {
+                "documents": 544,
+                "supervised_tokens": 58871,
+                "test_documents": 0,
+                "tokens": 1090951,
+                "train_documents": 544
+              },
+              "luna-held-shapes-s52072-curated-render-20261015-v1": {
+                "documents": 648,
+                "supervised_tokens": 69568,
+                "test_documents": 0,
+                "tokens": 1318465,
+                "train_documents": 648
+              },
+              "luna-held-shapes-s52073-curated-render-20261015-v1": {
+                "documents": 676,
+                "supervised_tokens": 74278,
+                "test_documents": 0,
+                "tokens": 1365286,
+                "train_documents": 676
+              },
+              "luna-held-shapes-s52074-curated-render-20261015-v1": {
+                "documents": 782,
+                "supervised_tokens": 85735,
+                "test_documents": 0,
+                "tokens": 1648487,
+                "train_documents": 782
+              },
+              "r9-protected-teacher-refresh": {
+                "documents": 677859,
+                "supervised_tokens": 128311891,
+                "test_documents": 64683,
+                "tokens": 6651065181,
+                "train_documents": 613176
+              }
+            }
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl.zst",
+            "sha256": "a4f01209f3db86711a283ca2c389fd7589629d56e9292e94321419df399ad932",
+            "compression": "zstd",
+            "decoded_sha256": "e2cd465da978c5e476b8640cdb0a8b96f6bb7ebe57a5777a7a91fe96e86cee4a",
+            "decoded_bytes": 71681268358,
+            "documents": 867079,
+            "by_split": {
+              "test": {
+                "documents": 72091,
+                "supervised_tokens": 21589130,
+                "tokens": 1708758114
+              },
+              "train": {
+                "documents": 794988,
+                "supervised_tokens": 345840749,
+                "tokens": 7476865597
+              }
+            },
+            "by_member": {
+              "external-expansion-codeagent-native-20261014-v1-render": {
+                "documents": 149840,
+                "supervised_tokens": 223284722,
+                "test_documents": 2334,
+                "tokens": 624308241,
+                "train_documents": 147506
+              },
+              "external-expansion-gatc-native-20261014-v1-render": {
+                "documents": 12125,
+                "supervised_tokens": 4287675,
+                "test_documents": 5074,
+                "tokens": 182158248,
+                "train_documents": 7051
+              },
+              "gemini-clinc-static-b45-b46-reviewed-render-20261015-v1": {
+                "documents": 885,
+                "supervised_tokens": 51006,
+                "test_documents": 0,
+                "tokens": 2285744,
+                "train_documents": 885
+              },
+              "gemini-clinc-static-reviewed-render-20261015-v1": {
+                "documents": 19981,
+                "supervised_tokens": 1153423,
+                "test_documents": 0,
+                "tokens": 51632584,
+                "train_documents": 19981
+              },
+              "gemini-semantic-mixed-static-reviewed-render-20261015-v1": {
+                "documents": 622,
+                "supervised_tokens": 34925,
+                "test_documents": 0,
+                "tokens": 830680,
+                "train_documents": 622
+              },
+              "greenhouse-iterated-measured-render-20261015-v1": {
+                "documents": 168,
+                "supervised_tokens": 24507,
+                "test_documents": 0,
+                "tokens": 407351,
+                "train_documents": 168
+              },
+              "luna-dataset-workbench-salvaged-render-20261015-v1": {
+                "documents": 769,
+                "supervised_tokens": 85073,
+                "test_documents": 0,
+                "tokens": 1616716,
+                "train_documents": 769
+              },
+              "luna-held-shapes-s52067-curated-render-20261015-v1": {
+                "documents": 361,
+                "supervised_tokens": 42190,
+                "test_documents": 0,
+                "tokens": 793680,
+                "train_documents": 361
+              },
+              "luna-held-shapes-s52068-curated-render-20261015-v1": {
+                "documents": 599,
+                "supervised_tokens": 74397,
+                "test_documents": 0,
+                "tokens": 1270751,
+                "train_documents": 599
+              },
+              "luna-held-shapes-s52069-curated-render-20261015-v1": {
+                "documents": 673,
+                "supervised_tokens": 84839,
+                "test_documents": 0,
+                "tokens": 1432341,
+                "train_documents": 673
+              },
+              "luna-held-shapes-s52070-curated-render-20261015-v1": {
+                "documents": 547,
+                "supervised_tokens": 66722,
+                "test_documents": 0,
+                "tokens": 1169959,
+                "train_documents": 547
+              },
+              "luna-held-shapes-s52071-curated-render-20261015-v1": {
+                "documents": 544,
+                "supervised_tokens": 66387,
+                "test_documents": 0,
+                "tokens": 1111935,
+                "train_documents": 544
+              },
+              "luna-held-shapes-s52072-curated-render-20261015-v1": {
+                "documents": 648,
+                "supervised_tokens": 78311,
+                "test_documents": 0,
+                "tokens": 1341535,
+                "train_documents": 648
+              },
+              "luna-held-shapes-s52073-curated-render-20261015-v1": {
+                "documents": 676,
+                "supervised_tokens": 83280,
+                "test_documents": 0,
+                "tokens": 1383389,
+                "train_documents": 676
+              },
+              "luna-held-shapes-s52074-curated-render-20261015-v1": {
+                "documents": 782,
+                "supervised_tokens": 96232,
+                "test_documents": 0,
+                "tokens": 1683859,
+                "train_documents": 782
+              },
+              "r9-protected-teacher-refresh": {
+                "documents": 677859,
+                "supervised_tokens": 137916190,
+                "test_documents": 64683,
+                "tokens": 8312196698,
+                "train_documents": 613176
+              }
+            }
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl.zst",
+            "sha256": "29dc73769d00d27c6245ee8b983e61e610cbade9ffb6c866ec847e86f8c86fc2",
+            "compression": "zstd",
+            "decoded_sha256": "6c86573812eab445d12c24b63199179ce74f586598e7f3f22ad28451b3b78092",
+            "decoded_bytes": 20667886918,
+            "documents": 323896,
+            "by_split": {
+              "test": {
+                "documents": 13020,
+                "supervised_tokens": 83451180,
+                "tokens": 329998969
+              },
+              "train": {
+                "documents": 310876,
+                "supervised_tokens": 529797179,
+                "tokens": 1979557164
+              }
+            },
+            "by_member": {
+              "external-expansion-codeagent-native-20261014-v1-render": {
+                "documents": 74920,
+                "supervised_tokens": 236985089,
+                "test_documents": 1167,
+                "tokens": 531315420,
+                "train_documents": 73753
+              },
+              "external-expansion-gatc-native-20261014-v1-render": {
+                "documents": 4768,
+                "supervised_tokens": 4440174,
+                "test_documents": 2015,
+                "tokens": 84542903,
+                "train_documents": 2753
+              },
+              "gemini-clinc-static-b45-b46-reviewed-render-20261015-v1": {
+                "documents": 444,
+                "supervised_tokens": 43422,
+                "test_documents": 0,
+                "tokens": 1329333,
+                "train_documents": 444
+              },
+              "gemini-clinc-static-reviewed-render-20261015-v1": {
+                "documents": 10052,
+                "supervised_tokens": 982189,
+                "test_documents": 0,
+                "tokens": 30088367,
+                "train_documents": 10052
+              },
+              "gemini-semantic-mixed-static-reviewed-render-20261015-v1": {
+                "documents": 311,
+                "supervised_tokens": 29475,
+                "test_documents": 0,
+                "tokens": 476616,
+                "train_documents": 311
+              },
+              "greenhouse-iterated-measured-render-20261015-v1": {
+                "documents": 56,
+                "supervised_tokens": 17063,
+                "test_documents": 0,
+                "tokens": 137015,
+                "train_documents": 56
+              },
+              "luna-dataset-workbench-salvaged-render-20261015-v1": {
+                "documents": 601,
+                "supervised_tokens": 67534,
+                "test_documents": 0,
+                "tokens": 1226580,
+                "train_documents": 601
+              },
+              "luna-held-shapes-s52067-curated-render-20261015-v1": {
+                "documents": 212,
+                "supervised_tokens": 30058,
+                "test_documents": 0,
+                "tokens": 421088,
+                "train_documents": 212
+              },
+              "luna-held-shapes-s52068-curated-render-20261015-v1": {
+                "documents": 377,
+                "supervised_tokens": 56421,
+                "test_documents": 0,
+                "tokens": 735265,
+                "train_documents": 377
+              },
+              "luna-held-shapes-s52069-curated-render-20261015-v1": {
+                "documents": 449,
+                "supervised_tokens": 66448,
+                "test_documents": 0,
+                "tokens": 874900,
+                "train_documents": 449
+              },
+              "luna-held-shapes-s52070-curated-render-20261015-v1": {
+                "documents": 362,
+                "supervised_tokens": 51364,
+                "test_documents": 0,
+                "tokens": 699199,
+                "train_documents": 362
+              },
+              "luna-held-shapes-s52071-curated-render-20261015-v1": {
+                "documents": 369,
+                "supervised_tokens": 53888,
+                "test_documents": 0,
+                "tokens": 705147,
+                "train_documents": 369
+              },
+              "luna-held-shapes-s52072-curated-render-20261015-v1": {
+                "documents": 446,
+                "supervised_tokens": 61806,
+                "test_documents": 0,
+                "tokens": 855487,
+                "train_documents": 446
+              },
+              "luna-held-shapes-s52073-curated-render-20261015-v1": {
+                "documents": 459,
+                "supervised_tokens": 66925,
+                "test_documents": 0,
+                "tokens": 886107,
+                "train_documents": 459
+              },
+              "luna-held-shapes-s52074-curated-render-20261015-v1": {
+                "documents": 543,
+                "supervised_tokens": 75266,
+                "test_documents": 0,
+                "tokens": 1085381,
+                "train_documents": 543
+              },
+              "r9-protected-teacher-refresh": {
+                "documents": 229527,
+                "supervised_tokens": 370221237,
+                "test_documents": 9838,
+                "tokens": 1654177325,
+                "train_documents": 219689
+              }
+            }
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl.zst",
+            "sha256": "9090e977f1bf1ef4cb6cc1f4a5d17d36223d9fd5d8189ad136546338c44cf4df",
+            "compression": "zstd",
+            "decoded_sha256": "7e1cd2ec261c869267e54da93eff873e95c33fee2005d6dd0fa124bd424b0bb9",
+            "decoded_bytes": 21373275026,
+            "documents": 323896,
+            "by_split": {
+              "test": {
+                "documents": 13020,
+                "supervised_tokens": 93725050,
+                "tokens": 402703409
+              },
+              "train": {
+                "documents": 310876,
+                "supervised_tokens": 570370175,
+                "tokens": 2290748094
+              }
+            },
+            "by_member": {
+              "external-expansion-codeagent-native-20261014-v1-render": {
+                "documents": 74920,
+                "supervised_tokens": 225712172,
+                "test_documents": 1167,
+                "tokens": 511938498,
+                "train_documents": 73753
+              },
+              "external-expansion-gatc-native-20261014-v1-render": {
+                "documents": 4768,
+                "supervised_tokens": 4496657,
+                "test_documents": 2015,
+                "tokens": 79589218,
+                "train_documents": 2753
+              },
+              "gemini-clinc-static-b45-b46-reviewed-render-20261015-v1": {
+                "documents": 444,
+                "supervised_tokens": 63979,
+                "test_documents": 0,
+                "tokens": 1315810,
+                "train_documents": 444
+              },
+              "gemini-clinc-static-reviewed-render-20261015-v1": {
+                "documents": 10052,
+                "supervised_tokens": 1449408,
+                "test_documents": 0,
+                "tokens": 29792248,
+                "train_documents": 10052
+              },
+              "gemini-semantic-mixed-static-reviewed-render-20261015-v1": {
+                "documents": 311,
+                "supervised_tokens": 43973,
+                "test_documents": 0,
+                "tokens": 509963,
+                "train_documents": 311
+              },
+              "greenhouse-iterated-measured-render-20261015-v1": {
+                "documents": 56,
+                "supervised_tokens": 28755,
+                "test_documents": 0,
+                "tokens": 148870,
+                "train_documents": 56
+              },
+              "luna-dataset-workbench-salvaged-render-20261015-v1": {
+                "documents": 601,
+                "supervised_tokens": 90326,
+                "test_documents": 0,
+                "tokens": 1243673,
+                "train_documents": 601
+              },
+              "luna-held-shapes-s52067-curated-render-20261015-v1": {
+                "documents": 212,
+                "supervised_tokens": 45431,
+                "test_documents": 0,
+                "tokens": 434145,
+                "train_documents": 212
+              },
+              "luna-held-shapes-s52068-curated-render-20261015-v1": {
+                "documents": 377,
+                "supervised_tokens": 81117,
+                "test_documents": 0,
+                "tokens": 755347,
+                "train_documents": 377
+              },
+              "luna-held-shapes-s52069-curated-render-20261015-v1": {
+                "documents": 449,
+                "supervised_tokens": 93429,
+                "test_documents": 0,
+                "tokens": 896183,
+                "train_documents": 449
+              },
+              "luna-held-shapes-s52070-curated-render-20261015-v1": {
+                "documents": 362,
+                "supervised_tokens": 73677,
+                "test_documents": 0,
+                "tokens": 716597,
+                "train_documents": 362
+              },
+              "luna-held-shapes-s52071-curated-render-20261015-v1": {
+                "documents": 369,
+                "supervised_tokens": 76518,
+                "test_documents": 0,
+                "tokens": 723323,
+                "train_documents": 369
+              },
+              "luna-held-shapes-s52072-curated-render-20261015-v1": {
+                "documents": 446,
+                "supervised_tokens": 85972,
+                "test_documents": 0,
+                "tokens": 873383,
+                "train_documents": 446
+              },
+              "luna-held-shapes-s52073-curated-render-20261015-v1": {
+                "documents": 459,
+                "supervised_tokens": 94455,
+                "test_documents": 0,
+                "tokens": 908012,
+                "train_documents": 459
+              },
+              "luna-held-shapes-s52074-curated-render-20261015-v1": {
+                "documents": 543,
+                "supervised_tokens": 103814,
+                "test_documents": 0,
+                "tokens": 1108207,
+                "train_documents": 543
+              },
+              "r9-protected-teacher-refresh": {
+                "documents": 229527,
+                "supervised_tokens": 431555542,
+                "test_documents": 9838,
+                "tokens": 2062498026,
+                "train_documents": 219689
+              }
+            }
+          }
+        }
+      },
+      "union_omissions": {
+        "full": {},
+        "program-header": {
+          "gemini-clinc-static-b45-b46-reviewed-render-20261015-v1: exact_duplicate_document": 3,
+          "gemini-clinc-static-reviewed-render-20261015-v1: exact_duplicate_document": 123
+        },
+        "whole-trajectory": {}
+      },
+      "build": {
+        "script": "scripts/neuralese_data/build_native_turn_union.py",
+        "code": {
+          "scripts/neuralese_data/build_native_turn_union.py": "e9de9bba34ea089c74b159644a2fe229b230d8f301508d27218349a2aac9fd29",
+          "scripts/neuralese_data/render_native_turn_corpus.py": "cd22423d7181576175120a299ae1de2511cf3be9048353621840506f98da592f",
+          "scripts/neuralese_data/text_tokenizer_twin.py": "e860b66f5f0281efed48400aa73a922b6b7eea801ae9d3789ca8a81f7c2c2d2a",
+          "scripts/source_review.py": "589ce3a15409cf7d301bbcefe2838b3f0f33ffca1b07ba34cfc2b2391ab2f8ab"
+        },
+        "receipt": "runs/natlang-target-union-20261015-r10-protected-expansion/receipt.json"
+      },
+      "notes": "Protected R10 expansion from16 admitted source renderings/96member views. Independent all-six-view multiset identities, held groups/text and canonical quality/source-review filters verified; current holds SHA bound before registration. Frozen R8 cloud inputs unchanged; new recipe binding is separate."
     }
   ],
   "coverage_backlog": [
