@@ -67,3 +67,10 @@ before execution, then remove it. This is SDK argument-size plumbing: a full
 compiled-runtime inventory can exceed Linux's single-argument limit even when
 the metadata itself is small. Remote failures retain bounded stdout/stderr in
 the private host receipt directory, never in public logs or source bundles.
+
+Small immutable artifact inventories are transported as one existing TAR+zstd
+source archive. The real SDK fixture exposed roughly forty minutes of per-file
+RPC latency for 1.4 MB. This is crisp transport plumbing, not a new scheduling
+policy: large reusable checkpoint objects retain the existing private ferry.
+The source archive verifier binds every member; atomic restore rejects escaped
+paths and links and verifies each destination byte before the result commit.

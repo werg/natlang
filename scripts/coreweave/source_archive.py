@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import tarfile
 import time
+import tempfile
 
 
 def digest_file(path):
@@ -181,12 +182,63 @@ def verify(spool, name):
     return proof
 
 
+def restore(spool, name, target):
+    """Restore an already sealed archive atomically per member, with exact bytes."""
+    spool,target=Path(spool),Path(target)
+    proof=verify(spool,name)
+    target.mkdir(parents=True,exist_ok=True);target=target.resolve(strict=True)
+    receipt=json.loads((spool/(name+'.receipt.json')).read_text())
+    expected={name+'/'+row['path']:row for row in receipt['manifest']['files']}
+    for row in expected.values():
+        relative=Path(row['path'])
+        if relative.is_absolute() or '..' in relative.parts or not relative.parts:
+            raise ValueError('archive restore member escaped its target')
+    process=subprocess.Popen(['zstd','-dcq','--long=27','--',str(receipt['archive'])],stdout=subprocess.PIPE)
+    restored=0;seen=set()
+    try:
+        with tarfile.open(fileobj=process.stdout,mode='r|') as tar:
+            for member in tar:
+                if member.name in seen:raise ValueError('duplicate archive restore member')
+                seen.add(member.name)
+                stream=tar.extractfile(member)
+                if member.name==name+'/transfer-manifest.json':
+                    if json.load(stream)!=receipt['manifest']:raise ValueError('embedded restore manifest changed')
+                    continue
+                row=expected[member.name]
+                if not member.isfile():raise ValueError('archive restore refuses nonregular members')
+                path=target/row['path']
+                if not path.parent.resolve().is_relative_to(target):
+                    raise ValueError('archive restore target escaped through a link')
+                path.parent.mkdir(parents=True,exist_ok=True)
+                if not path.parent.resolve().is_relative_to(target) or path.is_symlink():
+                    raise ValueError('archive restore target escaped through a link')
+                digest,size=hashlib.sha256(),0
+                with tempfile.NamedTemporaryFile(dir=path.parent,prefix='.cw-restore-',delete=False) as out:
+                    pending=Path(out.name)
+                    try:
+                        while block:=stream.read(8<<20):out.write(block);digest.update(block);size+=len(block)
+                        out.flush();os.fsync(out.fileno())
+                        if size!=row['bytes'] or size!=member.size or digest.hexdigest()!=row['sha256']:
+                            raise ValueError('restored member differs from declared bytes')
+                        os.replace(pending,path)
+                        directory=os.open(path.parent,os.O_DIRECTORY)
+                        try:os.fsync(directory)
+                        finally:os.close(directory)
+                    finally:pending.unlink(missing_ok=True)
+                restored+=1
+        if process.wait()!=0 or restored!=len(expected):raise ValueError('archive restore decoder/member count differs')
+    except BaseException:
+        process.terminate();process.wait();raise
+    return {**proof,'target':str(target),'restored_files':restored}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('pack', 'verify'))
+    parser.add_argument('operation', choices=('pack', 'verify', 'restore'))
     parser.add_argument('--source', type=Path)
     parser.add_argument('--spool', type=Path, required=True)
     parser.add_argument('--name', required=True)
+    parser.add_argument('--target',type=Path)
     parser.add_argument('--reserve-gb', type=float, default=20)
     parser.add_argument('--dereference-file-symlinks', action='store_true',
                         help='archive immutable linked file bytes as regular members, recording target provenance')
@@ -196,6 +248,9 @@ def main(argv=None):
             parser.error('pack requires --source and a nonnegative reserve')
         result = pack(args.source, args.spool, args.name, reserve_bytes=int(args.reserve_gb * 2**30),
                       dereference_file_symlinks=args.dereference_file_symlinks)
+    elif args.operation=='restore':
+        if args.target is None:parser.error('restore requires --target')
+        result=restore(args.spool,args.name,args.target)
     else:
         result = verify(args.spool, args.name)
     print(json.dumps({key: value for key, value in result.items() if key != 'manifest'}), flush=True)

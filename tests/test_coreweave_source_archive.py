@@ -55,6 +55,20 @@ def test_pack_refuses_symlinks_and_spools_inside_source(tmp_path):
         archive.pack(source, source / 'spool', 'native', reserve_bytes=0)
 
 
+def test_atomic_restore_preserves_exact_bytes_and_rejects_escaped_target(tmp_path):
+    source=tmp_path/'source';source.mkdir();(source/'nested').mkdir()
+    (source/'nested/value').write_bytes(b'unchanged\r\n\x00')
+    spool=tmp_path/'spool';archive.pack(source,spool,'native',reserve_bytes=0)
+    target=tmp_path/'target'
+    assert archive.restore(spool,'native',target)['restored_files']==1
+    assert (target/'nested/value').read_bytes()==b'unchanged\r\n\x00'
+    (target/'nested/value').unlink();(target/'nested').rmdir()
+    outside=tmp_path/'outside';outside.mkdir();(target/'nested').symlink_to(outside,target_is_directory=True)
+    with pytest.raises(ValueError,match='escaped through a link'):
+        archive.restore(spool,'native',target)
+    assert not (outside/'value').exists()
+
+
 def test_explicit_file_symlink_mode_seals_regular_bytes_and_target_provenance(tmp_path):
     source, spool = tmp_path / 'source', tmp_path / 'spool'
     source.mkdir()
