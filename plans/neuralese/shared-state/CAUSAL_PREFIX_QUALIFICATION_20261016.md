@@ -1,8 +1,9 @@
 # Causal-prefix qualification: open
 
 Production prefix sharing remains off. The independent review identified and
-repaired a shared attention accumulation-order defect; full-size qualification
-of the repair and actual FP8 execution remain pending.
+repaired a shared attention accumulation-order defect. Full-size LFM now passes;
+Mellum forward passes with actual FP8 execution, but its gradient qualification
+remains open.
 
 Frozen production inputs were commit `5706256bc`, with all 426 tracked runtime
 files verified unchanged in
@@ -68,6 +69,32 @@ Ledgered validation after the repair:
 
 All timings so far include the active historical LFM held collector. They are
 paired diagnostic timings, not isolated throughput or task-lift evidence.
-Remaining work: full-size repaired LFM/Mellum and actual FP8 comparisons;
-benchmark the masked-traversal cost; qualify full cached/import-gap gradients;
+Full-size repaired checks used the fresh isolated `631a39b2a` runtime plus the
+ordered-mask repair, in NGC 26.09 (Torch 2.14/CUDA 13.4) on the local SM121 GPU.
+This does not establish CoreWeave SM120/restored-parent qualification.
+
+- `native-prefix-repaired-lfm-20261016`: PASS. All 12,581 gathered hidden rows,
+  all 824,508,416 logits and production loss match bitwise. Input-gradient
+  relative L2 is 3.7567e-6, cosine .99999999999295, maximum error 6.85e-6.
+  The original 1e-5 absolute/1e-4 relative gates are unchanged. Physical work
+  remains 6,697 rows (46.77% reduction). Peak allocated CUDA 4,177,625,600 bytes.
+  Report: `/home/werg/data/dgxops/native-prefix-repaired-lfm-20261016.json`.
+- `native-prefix-repaired-mellum-20261016`: forward PASS, gradient FAIL.
+  Both invariant BF16 and actual FP8 produce bitwise hidden states, all
+  1,215,578,420 logits and loss. FP8 executed 336 actual grouped projection
+  calls. Input-gradient relative L2 is .0173762 (BF16) and .0690566 (FP8),
+  cosine .9998591 and .9976384 respectively. These are unresolved failures;
+  no tolerance change or production enablement follows. Physical rows remain
+  12,365 to 6,297 (49.07% reduction); peak allocated CUDA 30,518,377,472 bytes.
+  Report: `/home/werg/data/dgxops/native-prefix-repaired-mellum-20261016.json`.
+- `native-attention-order-cost-20261016`: actual first-layer Q/K/V, five
+  alternating paired CUDA-event samples per layout. Disjoint forward medians
+  25.161 ms legacy / 20.998 ms ordered; backward 60.403 / 72.671 ms (+20.3%).
+  Shared forward 7.272 / 6.848 ms; backward 33.051 / 33.712 ms (+2.0%).
+  These noisy concurrent-collector primitive timings do not establish full
+  trainer throughput. Report:
+  `/home/werg/data/dgxops/native-attention-order-cost-20261016.json`.
+
+Remaining work: localize and repair Mellum adjoint differences against exact
+references; qualify full cached/import-gap gradients and actual cloud runtime;
 independent integration review before enabling either production recipe.
