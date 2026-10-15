@@ -122,8 +122,10 @@ def set_learning_rates(optimizer, named_params, learning_rates):
                 buckets.setdefault(rate, []).append(parameter)
                 if rate != group['lr']:
                     changes.append({'name': name, 'optimizer': kind, 'old_lr': group['lr'], 'new_lr': rate})
-            groups.extend({**group, 'params': parameters, 'lr': rate}
-                          for rate, parameters in buckets.items())
+            for rate,parameters in buckets.items():
+                changed={**{k:v for k,v in group.items() if k!='param_names'},'params':parameters,'lr':rate}
+                if 'qat_latent_lr' in changed:changed['qat_latent_lr']=rate
+                groups.append(changed)
             if not buckets:
                 groups.append(group)
         child.param_groups = groups
@@ -246,7 +248,7 @@ def _restore_optimizer_state(optimizer, saved, named_params, declared_added=(), 
                     undeclared.append(name)
                 idx.append(local)
                 local += 1
-            groups.append({**{k: v for k, v in group.items() if k != "params"}, "params": idx})
+            groups.append({**{k: v for k, v in group.items() if k not in {"params","param_names"}}, "params": idx})
         aligned[kind] = {"state": state, "param_groups": groups}
     removed = sorted(set(saved_info) - set(current))
     problems = []
@@ -262,8 +264,10 @@ def _restore_optimizer_state(optimizer, saved, named_params, declared_added=(), 
         raise OptimizerRestoreError("refusing optimizer-state restore (" + "; ".join(problems) +
                                     "). Declare additions explicitly, or pass --optimizer-state fresh to reset deliberately.")
     if hasattr(optimizer, "muon"):
-        payload = {"format": saved["format"], "schema": optimizer.schema, "muon": aligned["muon"],
-                   "adamw": aligned.get("adamw")}
+        payload = {"format": saved["format"], "schema": optimizer.schema, "muon": aligned.get("muon"),
+                   "adamw": aligned.get("adamw"),
+                   "param_names":{kind:[by_id[id(p)] for group in child.param_groups for p in group['params']]
+                                  for kind,child in kids}}
         if getattr(optimizer, 'latent', None) is not None:
             payload[optimizer.latent_key] = aligned[optimizer.latent_key]
     else:
@@ -350,4 +354,86 @@ def drop_port_optimizer_slots(saved, names_by_group, drop):
     if cursor != len(groups):
         raise OptimizerRestoreError("more named groups than saved optimizer groups")
     out["schema"] = [entry for entry in saved["schema"] if not drop(entry.get("name") or "")]
+    if 'param_names' in saved:
+        out['param_names']={kind:[name for name in names if not drop(name or '')]
+                            for kind,names in saved['param_names'].items() if out.get(kind) is not None}
     return out, kept_names, dropped
+
+
+def port_saved_slot_names(saved, kind, child):
+    """Actual serialized child slot names; schema order never binds split groups."""
+    groups=child['param_groups'];slots=[index for group in groups for index in group['params']]
+    bound=(saved.get('param_names') or {}).get(kind)
+    schema=[entry['name'] for entry in saved['schema'] if entry['optimizer']==kind]
+    if bound is None:
+        if all(len(group['params'])==1 and isinstance(group.get('name'),str) for group in groups):
+            bound=[group['name'] for group in groups]
+        elif len(groups)==1:
+            bound=schema  # original unsplit child construction order is exact
+        elif all(isinstance(group.get('param_names'),list) for group in groups):
+            bound=[name for group in groups for name in group['param_names']]
+        else:
+            raise OptimizerRestoreError('historical split optimizer groups lack exact parameter-name bindings: '+kind)
+    if (len(set(slots))!=len(slots) or len(bound)!=len(slots) or len(set(bound))!=len(bound) or set(bound)!=set(schema)
+            or any(not isinstance(name,str) for name in bound)):
+        raise OptimizerRestoreError('optimizer slot-name inventory differs from its declared parameter contracts: '+kind)
+    return list(bound)
+
+
+def load_named_port_state(optimizer,saved,*,allow_added_names=(),allow_promoted_names=()):
+    """Restore raw PortMuonAdamW by actual names, preserving per-name group options."""
+    from .optim import FORMAT
+    if saved.get('format')!=FORMAT:
+        raise OptimizerRestoreError('port optimizer checkpoint format differs')
+    prior={entry['name']:entry for entry in saved['schema']}
+    current={entry['name']:entry for entry in optimizer.schema}
+    if len(prior)!=len(saved['schema']) or len(current)!=len(optimizer.schema):
+        raise OptimizerRestoreError('optimizer parameter contracts repeat names')
+    added=current.keys()-prior.keys();removed=prior.keys()-current.keys()
+    if removed or not added<=set(allow_added_names):
+        raise OptimizerRestoreError('optimizer existing parameter contracts differ beyond explicitly declared additions')
+    for name,contract in prior.items():
+        actual=current[name]
+        promoted=(name in allow_promoted_names and contract['dtype'] in ('torch.bfloat16','torch.float16')
+                  and actual=={**contract,'dtype':'torch.float32'})
+        if actual!=contract and not promoted:
+            raise OptimizerRestoreError('optimizer parameter name/shape/dtype/partition changed: '+name)
+    by_name={};group_serial=0
+    for kind,child in _saved_children(saved):
+        names=port_saved_slot_names(saved,kind,child);cursor=0
+        for group in child['param_groups']:
+            for index in group['params']:
+                name=names[cursor];cursor+=1
+                by_name[name]=(kind,child['state'].get(index),group_serial,group)
+            group_serial+=1
+    if set(by_name)!=set(prior):
+        raise OptimizerRestoreError('optimizer state omits declared parameter slots')
+    prepared=[]
+    for kind,child in _children(optimizer):
+        groups=[];states={};serial_groups=[];local=0
+        for gi,group in enumerate(child.param_groups):
+            buckets={}
+            for parameter in group['params']:
+                name=optimizer._parameter_names[id(parameter)]
+                if name in by_name:
+                    old_kind,history,bucket,options=by_name[name]
+                    if old_kind!=kind:raise OptimizerRestoreError('optimizer child changed: '+name)
+                    for key,value in (history or {}).items():
+                        if key in {'momentum','momentum_buffer','exp_avg','exp_avg_sq'} and torch.is_tensor(value) and value.shape!=parameter.shape:
+                            raise OptimizerRestoreError('optimizer moment geometry differs: '+name+'/'+key)
+                else:
+                    history=None;bucket=('new',gi);options=group
+                if bucket not in buckets:buckets[bucket]=[options,[],[],[]]
+                entry=buckets[bucket];entry[1].append(parameter);entry[2].append(local);entry[3].append(name)
+                if history is not None:states[local]=history
+                local+=1
+            for options,parameters,indices,names in buckets.values():
+                metadata={k:v for k,v in options.items() if k not in {'params','param_names'}}
+                groups.append({**metadata,'params':parameters})
+                serial_groups.append({**metadata,'params':indices})
+        prepared.append((child,groups,{'state':states,'param_groups':serial_groups}))
+    for child,groups,state in prepared:
+        child.param_groups=groups
+        child.load_state_dict(state)
+    optimizer.param_groups=optimizer._groups()
+    own_host_tensors(optimizer)

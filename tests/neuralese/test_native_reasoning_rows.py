@@ -18,7 +18,8 @@ def optimizer_rows(optimizer):
         child=state.get(key)
         if child is None:continue
         ids=[index for group in child['param_groups'] for index in group['params']]
-        names=[item['name'] for item in state['schema'] if item['optimizer']==key]
+        from natlang_neuralese.train.optim_restore import port_saved_slot_names
+        names=port_saved_slot_names(state,key,child)
         result.update({name:child['state'].get(index,{}) for name,index in zip(names,ids)})
     return result
 

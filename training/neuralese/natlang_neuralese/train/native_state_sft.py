@@ -125,7 +125,7 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
     return quotas, batches
 
 
-def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in_backward=True):
+def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in_backward=True, learned_row_lr=None):
     """Reuse the production port optimizer and its in-backward MuonSR memory path."""
     from .backbone_policy import configure_backbone_training
     from .optim import PortMuonAdamW, latent_entries, latent_options, latent_split
@@ -160,6 +160,9 @@ def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in
         embedding_ids={id(model.port.embedding_weight)},
         latent=latent_entries(latent, 'muonsr', lr), latent_optimizer='muonsr',
         latent_options=latent_options('muonsr', weight_decay=weight_decay, ns=latent_ns))
+    optimizer._native_named_parameters = named
+    from .native_learning_rates import apply_native_learning_rates
+    apply_native_learning_rates(optimizer,backbone_lr=lr,learned_row_lr=learned_row_lr)
     if in_backward and optimizer.latent is not None:
         optimizer.latent.step_in_backward(gated=True)
     return optimizer, named
@@ -524,6 +527,7 @@ def build_parser():
     parser.add_argument('--native-linear-precision', choices=PRODUCTION_NATIVE_LINEAR_PRECISIONS, default=None,
         help='explicit native GEMM arithmetic transition; preserves source dtype, optimizer, RNG and row exposure')
     parser.add_argument('--learning-rate', type=float, default=3e-6)
+    parser.add_argument('--learned-row-learning-rate',type=float,default=None)
     parser.add_argument('--weight-decay', type=float, default=.1)
     parser.add_argument('--latent-ns', choices=('quintic', 'cubic5'), default='quintic')
     parser.add_argument('--eval-every', type=int, default=100)
@@ -684,7 +688,7 @@ def main(argv=None):
     training_identity = {'schema': TRAINING_SCHEMA, 'config': config, 'train_source_hash': source_hash,
                 'schedule': 'row-visit-deficit/2',
                 'held_sha256': source_receipts[1]['sha256'], 'optimizer': 'shared-muon-sr-in-backward-v1',
-                'optimizer_options': {'lr': args.learning_rate, 'weight_decay': args.weight_decay,
+                'optimizer_options': {'lr': args.learning_rate, 'learned_row_lr':args.learned_row_learning_rate, 'weight_decay': args.weight_decay,
                                       'latent_ns': args.latent_ns},
                 'batch_graphs': args.batch_graphs, 'batch_tokens': args.batch_tokens, 'seed': args.seed, 'rank': config['rank'],
                 'fp8': {'kind': args.fp8_training, 'recipe': args.fp8_recipe,
@@ -783,6 +787,7 @@ def main(argv=None):
                               'cursor': resume.get('cursor'), 'policy': 'immutable source-order prefix then appended rows'}),
                   flush=True)
         training_identity['optimizer_options'] = {'lr': args.learning_rate,
+            'learned_row_lr':args.learned_row_learning_rate,
             'weight_decay': args.weight_decay, 'latent_ns': args.latent_ns,
             'continued_from': previous.get('optimizer_options')}
         training_identity['prior_source_hash'] = previous.get('train_source_hash')
@@ -807,7 +812,7 @@ def main(argv=None):
     model.port.checkpoint_layers = args.checkpoint_layers
     model.to(args.device)
     model.train()
-    optimizer, named = make_native_optimizer(model, lr=args.learning_rate,
+    optimizer, named = make_native_optimizer(model, lr=args.learning_rate, learned_row_lr=args.learned_row_learning_rate,
                                               weight_decay=args.weight_decay, latent_ns=args.latent_ns)
     task_eval = None
     task_spec = None
@@ -838,10 +843,9 @@ def main(argv=None):
             optimizer.load_state_dict(resume['optimizer'])
         # Adaptive production may tune the step size without discarding moments.
         # The new value is recorded in optimizer_options while moments/RNG stay exact.
-        for group in optimizer.param_groups:
-            group['lr'] = args.learning_rate
-            if 'qat_latent_lr' in group:
-                group['qat_latent_lr'] = args.learning_rate
+        from .native_learning_rates import apply_native_learning_rates
+        apply_native_learning_rates(optimizer,backbone_lr=args.learning_rate,
+                                    learned_row_lr=args.learned_row_learning_rate)
         if optimizer.latent is not None:
             for group in optimizer.latent.param_groups:
                 group['weight_decay'] = args.weight_decay
@@ -958,6 +962,7 @@ def main(argv=None):
                         'elapsed_seconds': time.time() - started, 'timestamp': time.time(),
                         'checkpoint_step': last_saved_step,
                         'communication_exposure': communication_exposure(train.entries, exposure_counts, required_visits)}
+            progress['learning_rates']=optimizer.native_learning_rates
             if getattr(model, 'native_sparse_updates', None):
                 progress['sparse_row_updates'] = model.native_sparse_updates
             if objective is None and details:
@@ -985,7 +990,8 @@ def main(argv=None):
                 metrics = {'train_loss': train_loss, 'held': held_metrics, 'held_coverage': held_coverage,
                            'step': step, 'epoch': epoch, 'cursor': cursor,
                            'elapsed_seconds': time.time() - started,
-                           'fp8': backend.inventory() if backend is not None else {'enabled': False}}
+                           'fp8': backend.inventory() if backend is not None else {'enabled': False},
+                           'learning_rates':optimizer.native_learning_rates}
                 write_json(args.out / 'metrics.json', metrics)
             if policy.signaled:
                 break
