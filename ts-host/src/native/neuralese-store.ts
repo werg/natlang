@@ -43,6 +43,14 @@ export type NativeTensorDtype = 'F16' | 'BF16' | 'F32' | 'F64';
 export type NativeTensorValue = { dtype: NativeTensorDtype; shape: number[]; data: Uint8Array };
 export type NativeModelIdentity = { checkpoint_sha256: string; tokenizer_fingerprint: string;
   embedding_weight_sha256: string; architecture: string };
+
+/** Compare exact model identity fields independently of JSON property order. */
+export function nativeModelIdentityEqual(left: NativeModelIdentity, right: NativeModelIdentity): boolean {
+  const keys = ['checkpoint_sha256','tokenizer_fingerprint','embedding_weight_sha256','architecture'] as const;
+  return Object.keys(left).length === keys.length && Object.keys(right).length === keys.length &&
+    keys.every(key => left[key] === right[key]);
+}
+
 export type NativeTensorArtifactMetadata = { schema: 'natlang.neuralese-native-tensor-artifact/1';
   kind: 'parameter-set' | 'parameter-gradient' | 'parameter-update' | 'state-gradient' | 'optimizer-state';
   native_identity: NativeModelIdentity; source_artifact_id: string | null; provenance: Record<string, unknown>;

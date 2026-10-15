@@ -205,3 +205,47 @@ Final `native-review-priority-adoption-20261015` passed 4 focused checks after
 the adoption repair (real priority-tweaked resume plus both cache reloads and
 priority identity checks). `native-review-priority-publishquick-20261015` passed
 quick checks. No competing broad check or cloud process was started.
+
+Advanced native learning-service follow-up:
+
+- Repaired interface-only optimization: named backbone and interface parameters
+  now use the existing composite storage/loader, shared standard SGD/Adam factory
+  and training gradient/commit helpers. Publication clones selected/tied tensors
+  and the module tree, preserves untouched storage, verifies the unchanged exact
+  parent and never mutates the live actor.
+- Repaired dropped optimizer history when requests alternate target sets:
+  per-parameter Adam moments/steps and SGD momentum persist across updates and
+  serving reloads. Shared RNG capture plus immutable training-state sidecars
+  preserve continuation; the immutable parent retains its original trainer state.
+- Repaired unbounded directory/recursion growth: updates share one directory and
+  restore ancestor patches iteratively. Interface-only historical manifests
+  remain loadable. Full named patch inventories and actual restored model
+  configuration are verified.
+- Native gradient requests previously ignored requested order2/derived and
+  adapter fields despite absent support. These now fail explicitly before
+  computation. Honest capability denial does not complete higher-order,
+  adapter-value application or guided-generation implementation; those remain
+  assigned open work. A changed native checkpoint needs semantic adapter refresh.
+- TS clients compare exact identity fields independently of JSON property order,
+  restore archived gradient/optimizer artifacts, and validate gradient, update,
+  optimizer and returned-checkpoint bindings. Their HTTP/archive fixture covers
+  restarted serving storage and rejects an inconsistent deployment identity.
+
+Ledger native-review-fullupdatesc-20261015 passed 23 actual model/service checks.
+Native-review-fullupdates-final-20261015 passed 12 final actual LFM/Mellum
+SGD/Adam, checkpoint and unsupported-operation checks. Native-review-fullupdates-
+node-final-20261015 built the TS host and passed 3 client/codec/persistent-store
+checks. Initial new fixtures failed on absent/wrong chat templates and an
+ordinary-only graph's legitimately zero producer-adapter gradient; they were
+corrected to actual family templates and producing spans, without changing
+numerical criteria. These are mechanism controls, not learned-quality evidence.
+Both skills contain recovery guidance; live model-facing measurement is recorded
+as debt. The cloud agent was told to include the new training_state sidecar in
+provider dependency closure. Overall migration/cutover review remains OPEN.
+
+Final chain-memory check native-review-fullupdates-chain-20261015 passed the
+actual three-step LFM Adam reload: only the original full trainer parent and
+latest optimizer state stay resident, rather than retaining every ancestor's
+optimizer tensors. Quick checks passed under native-review-fullupdates-quickb-
+20261015; the first larger quick reservation was refused before execution, then
+rerun with the measured sub-1-GiB quick-check footprint and a 2-GiB claim.

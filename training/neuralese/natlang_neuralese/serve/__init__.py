@@ -172,6 +172,7 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
                     embedding_weight_sha256=identity['embedding_weight_sha256'])
     engine.native_identity = identity
     engine.native_checkpoint = str(checkpoint)
+    engine.native_training_state = (_state.get('training') or _state.get('shared_training') or {})
     if semantic_adapter:
         from ..model.semantic_channel import SemanticChannel
         engine.semantic_channel = SemanticChannel.load(semantic_adapter, device=device)

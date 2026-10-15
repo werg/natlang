@@ -1,12 +1,13 @@
 """Restorable native checkpoints with immutable named-tensor updates.
 
 The manifest hash is the effective checkpoint identity. Each manifest points
-to an immutable full native parent and a content-addressed named interface
-patch, so small updates do not rewrite a multi-gigabyte backbone checkpoint.
+to an immutable full native parent and a content-addressed named parameter
+patch, so updates need not rewrite unchanged multi-gigabyte backbone tensors.
 """
 from __future__ import annotations
 
 import json
+import io
 import os
 import tempfile
 from pathlib import Path
@@ -59,34 +60,58 @@ def _channel_tensors(model):
 
 def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_config, *,
                                       base_identity, source_gradient_id=None, optimizer=None,
-                                      optimizer_tensors=None, update_provenance=None, participant=None):
+                                      optimizer_tensors=None, update_provenance=None, participant=None,
+                                      updated_parameter_names=None, parent_model=None, training_state=None):
     """Write a durable immutable composite checkpoint over `base_checkpoint`.
 
-    Only the actual shared embedding adapter and four role rows are patched;
-    no projected-value/head tensors are accepted. Future full-backbone updates
-    require a declared named trainable set and its measured storage policy.
+    Old interface-only callers preserve their channel contract. Named full
+    updates require a detached selected-parameter copy and its unchanged parent;
+    no projected-value/head tensors are accepted.
     """
     base = Path(base_checkpoint).resolve(strict=True)
     base_sha = sha256_file_hex_cached(base)
     if base_identity.get('checkpoint_sha256') != base_sha:
         raise ValueError('native composite base identity does not match the parent checkpoint bytes')
-    binding = getattr(model, '_native_backbone_binding', None)
-    current_parameters = tuple((name, id(parameter), parameter._version)
-                               for name, parameter in model.port.hf.named_parameters())
-    if (not isinstance(binding, dict) or binding.get('checkpoint_sha256') != base_sha
-            or binding.get('parameters') != current_parameters):
-        raise ValueError('interface-only composite update requires the unchanged backbone loaded from this exact parent checkpoint')
     if base_identity.get('architecture') != model_config.get('architecture'):
         raise ValueError('native composite base architecture differs from the live model')
-    channel, tensors, has_output_rows = _channel_tensors(model)
-    expected_names = {'input_rows', 'adapter.down.weight', 'adapter.up.weight'}
-    if has_output_rows:
-        expected_names.add('output_rows')
-    if set(tensors) != expected_names:
-        raise ValueError('native composite parameter inventory differs from the model channel contract')
+    if updated_parameter_names is None:
+        binding = getattr(model, '_native_backbone_binding', None)
+        current_parameters = tuple((name, id(parameter), parameter._version)
+                                   for name, parameter in model.port.hf.named_parameters())
+        if (not isinstance(binding, dict) or binding.get('checkpoint_sha256') != base_sha
+                or binding.get('parameters') != current_parameters):
+            raise ValueError('interface-only composite update requires the unchanged backbone loaded from this exact parent checkpoint')
+        channel, tensors, has_output_rows = _channel_tensors(model)
+        expected_names = {'input_rows', 'adapter.down.weight', 'adapter.up.weight'}
+        if has_output_rows:
+            expected_names.add('output_rows')
+        if set(tensors) != expected_names:
+            raise ValueError('native composite parameter inventory differs from the model channel contract')
+        scope = 'native-interface'
+    else:
+        if parent_model is None or parent_model is model:
+            raise ValueError('full native parameter publication needs its unchanged live parent')
+        binding = getattr(parent_model, '_native_parameter_binding', None)
+        parent_parameters = dict(parent_model.named_parameters())
+        current = tuple((name,id(value),value._version) for name,value in parent_parameters.items())
+        if (not binding or binding['checkpoint_sha256'] != base_sha or binding['parameters'] != current):
+            raise ValueError('native parameter update parent changed since exact checkpoint restoration')
+        parameters = dict(model.named_parameters())
+        names = set(updated_parameter_names)
+        if not names or len(names) != len(updated_parameter_names) or not names <= parameters.keys() or parameters.keys() != parent_parameters.keys():
+            raise ValueError('native parameter patch must declare its exact model parameter inventory')
+        for name,value in parameters.items():
+            parent = parent_parameters[name]
+            if name in names:
+                if value is parent or value.shape != parent.shape or value.dtype != parent.dtype:
+                    raise ValueError('native updated parameters must be detached matching parent copies')
+            elif value is not parent:
+                raise ValueError('native patch changed an undeclared model parameter: '+name)
+        tensors = {name: parameters[name].detach().cpu().clone() for name in sorted(names)}
+        scope = 'model-parameters'
     artifact = NativeTensorArtifact('parameter-update', dict(base_identity), tensors,
         source_gradient_id, {'base_checkpoint_sha256': base_sha,
-                             'operation': 'replace-native-interface-parameters',
+                             'operation': 'replace-native-interface-parameters' if scope == 'native-interface' else 'replace-native-model-parameters',
                              'optimizer': optimizer or {}, **(update_provenance or {})}).validate()
     artifact_bytes = encode_native_tensor_artifact(artifact)
     from .native_artifact import native_tensor_artifact_id
@@ -107,9 +132,20 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
         _durable_immutable(optimizer_path, encode_native_tensor_artifact(optimizer_artifact))
         optimizer_binding = {'id': optimizer_id, 'path': optimizer_path.name,
                              'sha256': sha256_file_hex_cached(optimizer_path)}
+    training_binding = None
+    if training_state is not None:
+        buffer = io.BytesIO()
+        torch.save(training_state, buffer)
+        payload = buffer.getvalue()
+        import hashlib
+        digest = hashlib.sha256(payload).hexdigest()
+        path = directory / f'native-training-{digest}.pt'
+        _durable_immutable(path, payload)
+        training_binding = {'path':path.name,'sha256':digest}
     from .native_model import native_identity
     output_embed_sha = native_identity(model, model_config, checkpoint_sha256=base_sha)['embedding_weight_sha256']
-    manifest = {'schema': SCHEMA,
+    manifest = {'schema': SCHEMA, 'parameter_scope': scope,
+        'updated_parameter_names': sorted(tensors), 'training_state': training_binding,
         'base_checkpoint': {'path': str(base), 'sha256': base_sha, 'participant': participant},
         'parameter_artifact': {'path': tensor_path.name, 'id': artifact_id,
                                'sha256': sha256_file_hex_cached(tensor_path)},
@@ -118,6 +154,7 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
             'tokenizer_fingerprint', 'base_inventory_sha256', 'precision', 'dtype')},
         'output_embedding_weight_sha256': output_embed_sha,
         'optimizer': optimizer or {}, 'update_provenance': update_provenance or {}}
+    manifest['model_config']['native_linear_precision'] = model_config.get('native_linear_precision','ieee')
     payload = canonical_json_bytes(manifest) + b'\n'
     import hashlib
     manifest_sha = hashlib.sha256(payload).hexdigest()
@@ -131,8 +168,58 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
             'parameter_artifact_id': artifact_id}
 
 
+def native_update_directory(checkpoint):
+    """Use one stable directory across arbitrarily many immutable updates."""
+    current = Path(checkpoint).resolve(strict=True)
+    seen = set()
+    while current not in seen:
+        seen.add(current)
+        with current.open('rb') as stream:
+            if stream.read(1) != b'{':
+                return current.parent/'native-updates'
+        manifest = json.loads(current.read_text())
+        if manifest.get('schema') != SCHEMA:
+            return current.parent/'native-updates'
+        parent = manifest['base_checkpoint']
+        current = Path(parent['path']).resolve(strict=True)
+        if sha256_file_hex_cached(current) != parent['sha256']:
+            raise ValueError('native composite update ancestor bytes changed')
+    raise ValueError('native composite checkpoint ancestry contains a cycle')
+
+
 def load_native_composite_checkpoint(path, *, base=None, device='cpu', dtype=None):
-    """Restore the verified base, then apply its exact named native interface patch."""
+    """Restore full parent once, then apply immutable patches oldest to newest."""
+    from .native_model import load_native_checkpoint
+    current = Path(path).resolve(strict=True)
+    chain, seen = [], set()
+    participant = None
+    while True:
+        if current in seen:
+            raise ValueError('native composite checkpoint ancestry contains a cycle')
+        seen.add(current)
+        with current.open('rb') as stream:
+            prefix = stream.read(1)
+        if prefix != b'{':
+            break
+        manifest = json.loads(current.read_text())
+        if manifest.get('schema') != SCHEMA:
+            break
+        chain.append(current)
+        parent = manifest['base_checkpoint']
+        current = Path(parent['path']).resolve(strict=True)
+        if sha256_file_hex_cached(current) != parent['sha256']:
+            raise ValueError('native composite parent checkpoint bytes changed')
+        participant = parent.get('participant')
+    if not chain:
+        raise ValueError('unsupported native composite checkpoint schema')
+    result = load_native_checkpoint(current,base=base,device=device,dtype=dtype,participant=participant)
+    for manifest_path in reversed(chain):
+        result = _apply_native_composite_checkpoint(manifest_path,result)
+    return result
+
+
+def _apply_native_composite_checkpoint(path, restored):
+    """Apply one verified patch to the already restored immediate parent."""
     manifest_path = Path(path).resolve(strict=True)
     manifest_bytes = manifest_path.read_bytes()
     try:
@@ -147,11 +234,8 @@ def load_native_composite_checkpoint(path, *, base=None, device='cpu', dtype=Non
     base_path = Path(parent['path']).resolve(strict=True)
     if sha256_file_hex_cached(base_path) != parent['sha256']:
         raise ValueError('native composite parent checkpoint bytes changed')
-    from .native_model import load_native_checkpoint, native_identity
-    kwargs = {'base': base, 'device': device, 'dtype': dtype}
-    if parent.get('participant') is not None:
-        kwargs['participant'] = parent['participant']
-    model, tokenizer, roles, config, parent_state = load_native_checkpoint(base_path, **kwargs)
+    from .native_model import native_identity
+    model, tokenizer, roles, config, parent_state = restored
     parent_identity = native_identity(model, config, checkpoint_sha256=parent['sha256'])
     artifact_binding = manifest['parameter_artifact']
     artifact_path = (manifest_path.parent / artifact_binding['path']).resolve(strict=True)
@@ -164,18 +248,33 @@ def load_native_composite_checkpoint(path, *, base=None, device='cpu', dtype=Non
         raise ValueError('native composite patch artifact binding or kind is invalid')
     if artifact.native_identity != parent_identity:
         raise ValueError('native composite patch belongs to another exact parent model')
-    from .shared_state import channel_checkpoint, restore_channel_checkpoint
-    channel = channel_checkpoint(model)
-    required = {'input_rows', 'adapter.down.weight', 'adapter.up.weight'}
-    if channel['output_rows'] is not None:
-        required.add('output_rows')
-    if set(artifact.tensors) != required:
-        raise ValueError('native composite patch tensor names differ from the native interface')
-    channel['input_rows'] = artifact.tensors['input_rows']
-    channel['output_rows'] = artifact.tensors.get('output_rows')
-    channel['adapter'] = {name.removeprefix('adapter.'): value for name, value in artifact.tensors.items()
-                          if name.startswith('adapter.')}
-    restore_channel_checkpoint(model, channel)
+    scope = manifest.get('parameter_scope','native-interface')
+    if scope == 'model-parameters':
+        parameters = dict(model.named_parameters())
+        names = manifest['updated_parameter_names']
+        if set(artifact.tensors) != set(names) or len(names) != len(set(names)) or not set(names) <= parameters.keys():
+            raise ValueError('native composite full parameter inventory differs from the declared patch')
+        with torch.no_grad():
+            for name,value in artifact.tensors.items():
+                parameter = parameters[name]
+                if value.shape != parameter.shape or value.dtype != parameter.dtype:
+                    raise ValueError('native composite full parameter shape/dtype differs: '+name)
+                parameter.copy_(value.to(parameter.device))
+    elif scope == 'native-interface':
+        from .shared_state import channel_checkpoint, restore_channel_checkpoint
+        channel = channel_checkpoint(model)
+        required = {'input_rows', 'adapter.down.weight', 'adapter.up.weight'}
+        if channel['output_rows'] is not None:
+            required.add('output_rows')
+        if set(artifact.tensors) != required:
+            raise ValueError('native composite patch tensor names differ from the native interface')
+        channel['input_rows'] = artifact.tensors['input_rows']
+        channel['output_rows'] = artifact.tensors.get('output_rows')
+        channel['adapter'] = {name.removeprefix('adapter.'): value for name, value in artifact.tensors.items()
+                              if name.startswith('adapter.')}
+        restore_channel_checkpoint(model, channel)
+    else:
+        raise ValueError('unsupported native composite parameter patch scope')
     optimizer_binding = manifest.get('optimizer_state_artifact')
     optimizer_artifact = None
     if optimizer_binding is not None:
@@ -187,12 +286,27 @@ def load_native_composite_checkpoint(path, *, base=None, device='cpu', dtype=Non
                 or optimizer_artifact.native_identity != parent_identity
                 or optimizer_artifact.source_artifact_id != artifact_id):
             raise ValueError('native composite optimizer-state artifact is not bound to its parameter update')
+    if any(config.get(key) != value for key,value in manifest['model_config'].items()):
+        raise ValueError('native composite model configuration differs from the restored parent')
     output_identity = native_identity(model, config,
         checkpoint_sha256=__import__('hashlib').sha256(manifest_bytes).hexdigest())
     if (output_identity['embedding_weight_sha256'] != manifest['output_embedding_weight_sha256']
             or manifest['model_config']['architecture'] != config['architecture']):
         raise ValueError('native composite effective model identity differs from its manifest')
-    state = {'schema': SCHEMA, 'model_config': config, 'base_state': parent_state,
+    training = {}
+    if manifest.get('training_state') is not None:
+        binding = manifest['training_state']
+        path = (manifest_path.parent/binding['path']).resolve(strict=True)
+        if path.parent != manifest_path.parent or sha256_file_hex_cached(path) != binding['sha256']:
+            raise ValueError('native composite training state changed or escaped its manifest directory')
+        training = torch.load(path,map_location='cpu',weights_only=False)
+        if not isinstance(training,dict):
+            raise ValueError('native composite training state must be a dictionary')
+    # Preserve the original full trainer parent once; retaining every ancestor's
+    # optimizer tensors would make reload memory grow with update count.
+    root_state = parent_state.get('base_state',parent_state) if parent_state.get('schema') == SCHEMA else parent_state
+    state = {'schema': SCHEMA, 'training': training, 'model_config': config, 'base_state': root_state,
+             'parent_checkpoint': parent,
              'parameter_artifact_id': artifact_id, 'optimizer': manifest.get('optimizer') or {},
              'optimizer_tensors': optimizer_artifact.tensors if optimizer_artifact is not None else {},
              'update_provenance': manifest.get('update_provenance') or {}}

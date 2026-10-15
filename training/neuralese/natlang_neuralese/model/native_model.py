@@ -127,6 +127,8 @@ def restore_model_state(model, state):
 
 def _bind_backbone_revision(model, checkpoint_sha256):
     """Remember the exact immutable parent whose backbone is currently loaded."""
+    model._native_parameter_binding = {'checkpoint_sha256': checkpoint_sha256,
+        'parameters': tuple((name,id(parameter),parameter._version) for name,parameter in model.named_parameters())}
     model._native_backbone_binding = {
         'checkpoint_sha256': checkpoint_sha256,
         'parameters': tuple((name, id(parameter), parameter._version)

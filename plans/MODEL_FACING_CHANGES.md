@@ -656,3 +656,9 @@ Original historical source SFT and failed samples retain their identities.
 Live measurement is assigned to the current Qwen CoreWeave teacher window;
 collect at least48 samples before adopting the derivative's measured outcome
 quality. No runtime prompt, result classification or existing oracle is changed.
+
+2026-10-15 native learning service: named backbone/interface checkpoint updates,
+SGD momentum option and explicit recovery for unsupported second-order/adapter
+gradient requests. Both authoring/integration skills updated. Live model-facing
+48-sample validation remains debt for the next own-model teacher window; focused
+numerical/service tests validate mechanisms, not prompt adoption.

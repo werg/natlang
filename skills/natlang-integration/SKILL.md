@@ -253,3 +253,16 @@ compact outputs. Contextual `source_capture.imports` binds original references,
 `observed_native_state_id` and semantic adaptation identities; preserve and
 archive both sides when publishing a `.nz` body. Never reinterpret code tensors
 as raw KV or relabel a named semantic dialect to another adapter.
+
+Native graph learning preserves named tensor artifacts through the normal store.
+`nativeOptimizerStep` accepts actual backbone or interface gradient names and
+publishes a new immutable checkpoint; reload it and restore the returned
+optimizer-state artifact for continuation. SGD supports explicit momentum.
+Refresh semantic adapters for changed participant identities before promotion.
+Do not send second-order/derived requests to a first-order native service:
+`neuralese-native-grad-order` requires removing derived computations or selecting
+a `grad.order2` service. `neuralese-adapters-unavailable` requires loading an
+applied identity-bound checkpoint rather than sending an ignored adapter value.
+For `neuralese-native-gradient-binding` or `neuralese-native-update-binding`,
+restore the exact current checkpoint's gradient/update/optimizer artifacts and
+retry; never change identity metadata to make unrelated tensors appear compatible.

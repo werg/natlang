@@ -8,7 +8,7 @@ from pathlib import Path
 import torch
 
 from ..model.native_artifact import decode_native_tensor_artifact
-from ..model.native_composite import write_native_composite_checkpoint
+from ..model.native_composite import write_native_composite_checkpoint, native_update_directory
 from ..common.hashing import sha256_file_hex_cached
 from .chat import RequestError
 
@@ -31,12 +31,27 @@ def _optimizer_parent(engine, state_id):
     return record.artifact
 
 
-def native_optimizer_step(engine, body, owner):
-    """Apply SGD/Adam to the compact native interface and atomically publish its new identity.
+def _copy_parameter_targets(model, names):
+    """Copy the module tree and selected tied parameters; share untouched storage."""
+    available = dict(model.named_parameters())
+    if not names or not names <= available.keys():
+        raise ValueError('gradient names must select actual native model parameters')
+    selected = {id(available[name]): torch.nn.Parameter(available[name].detach().clone(), requires_grad=True)
+                for name in names}
+    modules = {}
+    def clone(module):
+        if id(module) in modules:
+            return modules[id(module)]
+        result = copy.copy(module)
+        modules[id(module)] = result
+        result._parameters = {name:selected.get(id(value),value) for name,value in module._parameters.items()}
+        result._modules = {name:clone(child) if child is not None else None for name,child in module._modules.items()}
+        return result
+    return clone(model)
 
-    Only a detached interface copy is changed. Full backbone gradients remain
-    explicitly unsupported until the full-checkpoint writer can persist them.
-    """
+
+def native_optimizer_step(engine, body, owner):
+    """Publish named backbone/interface updates without modifying the live actor."""
     if body.get('schema') != 'natlang.native-optimizer-request/1':
         raise RequestError('neuralese-native-optim-schema', 'native optimizer requests need schema natlang.native-optimizer-request/1')
     try:
@@ -51,17 +66,8 @@ def native_optimizer_step(engine, body, owner):
         if gradient.kind != 'parameter-gradient' or gradient.native_identity != identity:
             raise ValueError('gradient kind or model identity differs from the live checkpoint')
         names = set(gradient.tensors)
-        allowed = {'input_rows', 'adapter.down.weight', 'adapter.up.weight', 'output_rows'}
-        if not names or not names <= allowed:
-            raise ValueError('gradient names must select only restorable native interface parameters')
-        updated_model = copy.copy(engine.shared_model)
-        updated_model._modules = dict(engine.shared_model._modules)
-        updated_model._parameters = {key: torch.nn.Parameter(value.detach().clone(), requires_grad=False)
-            if value is not None else None for key, value in engine.shared_model._parameters.items()}
-        updated_model.adapter = copy.deepcopy(engine.shared_model.adapter)
+        updated_model = _copy_parameter_targets(engine.shared_model, names)
         parameters = dict(updated_model.named_parameters())
-        if not names <= parameters.keys():
-            raise ValueError('gradient names are not parameters of the live native interface')
         options = body.get('optimizer')
         if not isinstance(options, dict) or options.get('name') not in {'sgd', 'adam'}:
             raise ValueError('optimizer name must be sgd or adam')
@@ -75,6 +81,9 @@ def native_optimizer_step(engine, body, owner):
         if name == 'adam' and (not 0 <= beta1 < 1 or not 0 <= beta2 < 1
                                or not torch.isfinite(torch.tensor(eps)) or eps <= 0):
             raise ValueError('Adam beta values and epsilon are out of range')
+        momentum = float(options.get('momentum',0.))
+        if not torch.isfinite(torch.tensor(momentum)) or momentum < 0:
+            raise ValueError('SGD momentum must be finite and nonnegative')
         old_state = _optimizer_parent(engine, body.get('optimizer_state_id'))
         if old_state is not None:
             if old_state.kind != 'optimizer-state' or old_state.native_identity['architecture'] != identity['architecture']:
@@ -86,39 +95,60 @@ def native_optimizer_step(engine, body, owner):
         else:
             prior_step, state_tensors = 0, {}
         step = prior_step + 1
-        if name == 'sgd':
-            next_state = {'optimizer.step': torch.tensor([step], dtype=torch.float32)}
-        else:
-            next_state = {}
-        with torch.no_grad():
-            for param_name in sorted(names):
-                parameter = parameters[param_name]
-                grad = gradient.tensors[param_name].to(device=parameter.device, dtype=parameter.dtype)
-                if tuple(grad.shape) != tuple(parameter.shape) or not torch.isfinite(grad).all():
-                    raise ValueError(f'gradient shape or values are invalid for {param_name}')
-                g = grad + weight_decay * parameter if weight_decay else grad
-                if name == 'sgd':
-                    update = g
-                else:
-                    mname, vname = f'm.{param_name}', f'v.{param_name}'
-                    m = state_tensors.get(mname, torch.zeros_like(parameter)).to(parameter)
-                    v = state_tensors.get(vname, torch.zeros_like(parameter)).to(parameter)
-                    if m.shape != parameter.shape or v.shape != parameter.shape:
-                        raise ValueError(f'optimizer state shape differs for {param_name}')
-                    m = beta1*m + (1-beta1)*g
-                    v = beta2*v + (1-beta2)*g.square()
-                    next_state[mname], next_state[vname] = m.detach().cpu(), v.detach().cpu()
-                    update = (m / (1-beta1**step)) / ((v / (1-beta2**step)).sqrt() + eps)
-                parameter.add_(update, alpha=-lr)
-            receipt = write_native_composite_checkpoint(engine.native_checkpoint,
-                Path(engine.native_checkpoint).resolve().parent / 'native-updates', updated_model,
-                engine.model_config, base_identity=identity, source_gradient_id=gradient_id,
-                optimizer={'name': name, 'learning_rate': lr, 'weight_decay': weight_decay,
-                    'beta1': beta1, 'beta2': beta2, 'eps': eps, 'step': step},
-                optimizer_tensors=next_state,
-                update_provenance={'objective': gradient.provenance.get('objective'),
-                    'gradient_artifact_id': gradient_id, 'updated_parameter_names': sorted(names),
-                    'optimizer_state_parent_id': body.get('optimizer_state_id')})
+        from ..train.optim import named_service_optimizer
+        from ..train.loop import capture_training_rng_state, accumulate_gradients, commit_optimizer_step
+        named = [(param_name,parameters[param_name]) for param_name in sorted(names)]
+        optimizer = named_service_optimizer(named,name=name,learning_rate=lr,weight_decay=weight_decay,
+            beta1=beta1,beta2=beta2,eps=eps,momentum=momentum)
+        gradients = []
+        for param_name,parameter in named:
+            grad = gradient.tensors[param_name].to(device=parameter.device,dtype=parameter.dtype)
+            if grad.shape != parameter.shape or not torch.isfinite(grad).all():
+                raise ValueError(f'gradient shape or values are invalid for {param_name}')
+            gradients.append(grad)
+            if name == 'adam' and 'm.'+param_name in state_tensors:
+                values = {'exp_avg':state_tensors['m.'+param_name], 'exp_avg_sq':state_tensors['v.'+param_name]}
+                if any(value.shape != parameter.shape for value in values.values()):
+                    raise ValueError(f'optimizer state shape differs for {param_name}')
+                optimizer.state[parameter] = {key:value.to(parameter).clone() for key,value in values.items()}
+                optimizer.state[parameter]['step'] = state_tensors.get('step.'+param_name,
+                    torch.tensor([prior_step],dtype=torch.float32)).reshape(()).cpu().clone()
+            if name == 'sgd' and 'momentum.'+param_name in state_tensors:
+                value = state_tensors['momentum.'+param_name]
+                if value.shape != parameter.shape:
+                    raise ValueError(f'optimizer state shape differs for {param_name}')
+                optimizer.state[parameter]['momentum_buffer'] = value.to(parameter).clone()
+        accumulate_gradients([value for _,value in named],gradients)
+        commit_optimizer_step(optimizer)
+        # Retain omitted parameter state, including its own step counter; a
+        # later request can return to it without silently restarting Adam.
+        next_state = {key:value.detach().cpu().clone() for key,value in state_tensors.items()}
+        next_state['optimizer.step'] = torch.tensor([step],dtype=torch.float64)
+        for param_name,parameter in named:
+            values = optimizer.state.get(parameter,{})
+            if name == 'adam':
+                next_state['m.'+param_name] = values['exp_avg'].detach().cpu()
+                next_state['v.'+param_name] = values['exp_avg_sq'].detach().cpu()
+                next_state['step.'+param_name] = values['step'].detach().cpu().reshape(1)
+            elif 'momentum_buffer' in values:
+                next_state['momentum.'+param_name] = values['momentum_buffer'].detach().cpu()
+        device = next(updated_model.parameters()).device
+        prior_training = getattr(engine,'native_training_state',{})
+        rng = prior_training.get('rng') or capture_training_rng_state(device)
+        training = {**{key:value for key,value in prior_training.items() if key.startswith('service_')},
+                    'rng':rng, 'service_optimizer_step':step,
+                    'service_parent_checkpoint_sha256':identity['checkpoint_sha256']}
+        receipt = write_native_composite_checkpoint(engine.native_checkpoint,
+            native_update_directory(engine.native_checkpoint), updated_model,
+            engine.model_config, base_identity=identity, source_gradient_id=gradient_id,
+            optimizer={'name':name,'learning_rate':lr,'weight_decay':weight_decay,
+                'beta1':beta1,'beta2':beta2,'eps':eps,'momentum':momentum,'step':step},
+            optimizer_tensors=next_state,updated_parameter_names=sorted(names),parent_model=engine.shared_model,
+            participant=(getattr(engine,'rl_policy_binding',{}) or {}).get('native_participant'),
+            training_state=training,
+            update_provenance={'objective':gradient.provenance.get('objective'),
+                'gradient_artifact_id':gradient_id,'updated_parameter_names':sorted(names),
+                'optimizer_state_parent_id':body.get('optimizer_state_id')})
         update_record = engine.store.put_native_tensor_artifact(
             decode_native_tensor_artifact((Path(receipt['path']).parent /
                 f"{receipt['parameter_artifact_id']}.safetensors").read_bytes())[0], owner)

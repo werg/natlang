@@ -59,6 +59,10 @@ def native_graph_gradient(engine, body, owner):
     """
     if body.get('schema') != 'natlang.native-gradient-request/1':
         raise RequestError('neuralese-native-grad-schema', 'native graph gradients require schema natlang.native-gradient-request/1')
+    if type(body.get('order',1)) is not int or body.get('order',1) != 1 or body.get('derived') or body.get('create_graph'):
+        raise RequestError('neuralese-native-grad-order', 'native graph learning currently accepts first-order objectives only; remove derived computations or use a service advertising grad.order2')
+    if body.get('adapters'):
+        raise RequestError('neuralese-adapters-unavailable', 'native graph learning requires an applied, identity-bound checkpoint; reload that checkpoint before requesting gradients')
     objective_request = body.get('objective', 'graph-ce')
     if objective_request not in ('graph-ce', None) and not isinstance(objective_request, dict):
         raise RequestError('neuralese-native-grad-objective', 'objective must be graph-ce or a registered native-policy spec binding')

@@ -259,3 +259,15 @@ Keep its reference intact. DefaultDialect may use a consumer's explicitly
 advertised native adaptation/reencoding; a named semantic dialect still requires
 that exact adapter. A consumer-unavailable error requires configuring the
 matching adapter or an explicitly supported text reencoding path.
+
+Native graph learning targets explicitly named model parameters or consumed raw
+KV/hybrid-state tensors. Native optimizer updates can publish backbone and
+interface changes as a new checkpoint; reload that checkpoint and restore its
+archived optimizer state before continuing. A prior semantic adapter needs
+refresh against changed weights. `neuralese-native-grad-order` means the service
+supports first order only; remove derived computations or choose a service
+advertising `grad.order2`. `neuralese-adapters-unavailable` means load the applied,
+identity-bound checkpoint before requesting native graph gradients.
+If a native gradient/update binding error occurs, restore the artifacts for the
+exact current checkpoint and repeat the request; never relabel tensors or reuse
+an adapter against changed weights.

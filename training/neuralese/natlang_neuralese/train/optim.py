@@ -825,3 +825,19 @@ def make_muon_optimizer(model, *, lr, momentum=0.95, ns_steps=5):
             vocabulary_ids.update(id(parameter) for parameter in module.parameters())
     return MuonWithAdamW(model.named_parameters(), lr=lr, excluded_ids=vocabulary_ids,
                          momentum=momentum, ns_steps=ns_steps)
+
+
+def named_service_optimizer(named_parameters, *, name, learning_rate, weight_decay=0.,
+                            beta1=.9, beta2=.999, eps=1e-8, momentum=0.):
+    """Standard explicitly requested optimizers for named native service updates.
+
+    Production MuonSR remains the native trainer's policy. Service SGD/Adam use
+    PyTorch's exact optimizer implementation, not a second handwritten update.
+    """
+    parameters = [parameter for _, parameter in named_parameters]
+    if name == 'sgd':
+        return torch.optim.SGD(parameters, lr=learning_rate, weight_decay=weight_decay, momentum=momentum)
+    if name == 'adam':
+        return torch.optim.Adam(parameters, lr=learning_rate, weight_decay=weight_decay,
+                                betas=(beta1,beta2), eps=eps)
+    raise ValueError('native named optimizer must be sgd or adam')
