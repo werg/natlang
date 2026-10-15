@@ -105032,6 +105032,183 @@
         }
       },
       "notes": "Adaptive production FULL continuation cohort from incremental union v2: 53,223 train/3,155 held documents per tokenizer. FULL tokenizer twins and actual omission ledger verified. Independent protection audit covers all 453 current references (381 exact cached R11 references plus 72 v2 additions), global held/quality protection, current source review and exact decision holds. This is a separate new cohort; registration records availability, not model training consumption."
+    },
+    {
+      "id": "luna-held-shapes-s52113-render-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52113-parent-review-20261015-v1/render-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: luna-held-shapes-s52113-curated-20261015-v1; variants: full/lfm25, full/mellum21, program-header/lfm25, program-header/mellum21, whole-trajectory/lfm25, whole-trajectory/mellum21; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "luna-held-shapes-s52113-curated-20261015-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "b4b5ded8e15e3ccd341a4b63baaaf7504484f6045e49de62dc0842a829be00fa",
+            "documents": 18,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 18,
+                "supervised_tokens": 1966,
+                "tokens": 116942,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 7737,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "6aab9bc9b520f2a9482301c77b58c568ab898941d2857d8c9deda9bd77ddfaf3",
+            "documents": 18,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 18,
+                "supervised_tokens": 2198,
+                "tokens": 117226,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 7868,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "2fd929478da84855015579f7dba4d99fd0244825d4be66a773a9e0614530d691",
+            "documents": 311,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 311,
+                "supervised_tokens": 33822,
+                "tokens": 622840,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 3378,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "1f3f95702c2ae2dadde97e5084f277b5bdbbf0ff62a7c7b44757725f7ba22800",
+            "documents": 311,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 311,
+                "supervised_tokens": 38102,
+                "tokens": 633676,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 3576,
+            "merge_omissions": {}
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "fbe6c3b7cc5f1cd76b08912bdeb3c80549f6ffbe32b6a410d44e52b7d91fb30e",
+            "documents": 187,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 92972,
+                "documents": 187,
+                "opening_tokens": 64800,
+                "supervised_tokens": 28172,
+                "tokens": 363740,
+                "tool_tokens": 36948
+              }
+            },
+            "max_document_tokens": 3284,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "6fd5ed61ad60d594d748d1a8acd4cfa497d237ab95937a815b5778d90a6d94d8",
+            "documents": 187,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 107796,
+                "documents": 187,
+                "opening_tokens": 66344,
+                "supervised_tokens": 41452,
+                "tokens": 376356,
+                "tool_tokens": 39149
+              }
+            },
+            "max_document_tokens": 3576,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 311,
+        "selected:train": 311,
+        "source_rows": 311
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 293,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 293
+      },
+      "program_header_parity": {
+        "equal_text_serving_token_boundaries": 622,
+        "retokenization_checked": 0
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "cd22423d7181576175120a299ae1de2511cf3be9048353621840506f98da592f",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/luna-s52113-parent-review-20261015-v1/render-v1/receipt.json",
+        "sources": {
+          "runs/luna-s52113-parent-review-20261015-v1/approved-turns.jsonl": {
+            "bytes": 23588201,
+            "sha256": "5d51f31217701dddbafe7b74ddf34e7a5f4e231c19d8ebc1e6dce5a07f53a36d"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {}
+      },
+      "notes": ""
     }
   ],
   "coverage_backlog": [
