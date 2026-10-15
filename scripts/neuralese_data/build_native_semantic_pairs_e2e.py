@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor
+import multiprocessing
 import copy
 import hashlib
 import json
@@ -22,20 +24,14 @@ from transformers import AutoTokenizer
 from natlang_neuralese.data.native_graph_conversion import text_row_graph, witnessed_pair_graph
 from natlang_neuralese.data.text_corpus import gold_text_rows, tokenizer_fingerprint
 from natlang_neuralese.model.shared_state import ROLE_MARKERS
+from natlang_neuralese.common.hashing import sha256_hex as sha256_bytes
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file
 
 PAIR_SCHEMA = 'natlang.native-semantic-pair/1'
-
-
-def sha256_bytes(value):
-    return hashlib.sha256(value).hexdigest()
-
-
-def sha256_file(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as source:
-        for block in iter(lambda: source.read(8 * 1024 * 1024), b''):
-            digest.update(block)
-    return digest.hexdigest()
+BUILD_SCHEMA = 'natlang.native-semantic-e2e-build/2'
+BUILD_POLICY = 'complete-source-trajectories-expanded-tokenizer-native-graphs-v2'
+CHECKPOINT_TRAJECTORIES = 16
+RESUME_SCHEMA = 'natlang.native-semantic-e2e-resume/2'
 
 
 def jsonl(path, digest=None):
@@ -82,6 +78,72 @@ class CompressedRows:
             self.proc.terminate(); self.proc.wait()
         if not self.raw.closed: self.raw.close()
         Path(self.tmp).unlink(missing_ok=True)
+
+
+class JsonlRows:
+    """Atomic plain JSONL chunk for the source-specific omission ledger."""
+    def __init__(self, path):
+        self.path = Path(path); self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd, self.tmp = tempfile.mkstemp(prefix='.' + self.path.name + '.', suffix='.tmp', dir=self.path.parent)
+        self.raw = os.fdopen(fd, 'wb'); self.count = 0
+
+    def write(self, row):
+        self.raw.write(json.dumps(row, ensure_ascii=False, separators=(',', ':')).encode() + b'\n')
+        self.count += 1
+
+    def finish(self):
+        self.raw.flush(); os.fsync(self.raw.fileno()); self.raw.close()
+        os.replace(self.tmp, self.path)
+        return {'path': str(self.path), 'rows': self.count, 'bytes': self.path.stat().st_size,
+                'sha256': sha256_file(self.path)}
+
+    def abort(self):
+        if not self.raw.closed: self.raw.close()
+        Path(self.tmp).unlink(missing_ok=True)
+
+
+def atomic_json(path, value):
+    path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix='.' + path.name + '.', suffix='.tmp', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            json.dump(value, stream, ensure_ascii=False, indent=2); stream.write('\n')
+            stream.flush(); os.fsync(stream.fileno())
+        os.replace(tmp, path)
+        directory = os.open(path.parent, os.O_DIRECTORY)
+        try: os.fsync(directory)
+        finally: os.close(directory)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def source_stat_identity(path):
+    stat = Path(path).stat()
+    return {'device': stat.st_dev, 'inode': stat.st_ino, 'size': stat.st_size,
+            'mtime_ns': stat.st_mtime_ns}
+
+
+def jsonl_with_offsets(path, start=0, digest=None):
+    with open(path, 'rb') as source:
+        source.seek(start)
+        while True:
+            line_start = source.tell()
+            line = source.readline()
+            if not line: break
+            line_stop = source.tell()
+            if digest is not None: digest.update(line)
+            if line.strip():
+                try: yield json.loads(line), line_start, line_stop
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f'{path}@{line_start}: invalid JSON') from exc
+
+
+def _chunk_parts(chunk):
+    for by_split in chunk['graphs'].values():
+        yield from by_split.values()
+    yield from chunk['pairs'].values()
+    yield chunk['omissions']
 
 
 def _walk(value):
@@ -271,7 +333,7 @@ def _replace_pointer(root, pointer, replacement):
 
 
 def normalized_pair_rows(writer_record, reader_record, pieces, *, tokenizer, payload,
-                         occurrence, role_markers):
+                         occurrence, role_markers, tokenizer_sha256):
     """Render full source turns with the unique typed source value role-bounded."""
     writer, reader = copy.deepcopy(writer_record), copy.deepcopy(reader_record)
     # The unchanged full-turn graph also enters native SFT. This paired view
@@ -282,9 +344,11 @@ def normalized_pair_rows(writer_record, reader_record, pieces, *, tokenizer, pay
     _replace_pointer(reader, occurrence['reader_json_pointer'],
         {'type': 'text', 'text': role_markers[2] + payload + role_markers[3]})
     writer_rows, _, writer_omitted, _ = gold_text_rows([writer], pieces, tokenizer=tokenizer,
-        require_independent_splits=False, target_reasoning=False, include_token_offsets=True)
+        require_independent_splits=False, target_reasoning=False, include_token_offsets=True,
+        tokenizer_sha256=tokenizer_sha256)
     reader_rows, _, reader_omitted, _ = gold_text_rows([reader], pieces, tokenizer=tokenizer,
-        require_independent_splits=False, target_reasoning=True, include_token_offsets=True)
+        require_independent_splits=False, target_reasoning=True, include_token_offsets=True,
+        tokenizer_sha256=tokenizer_sha256)
     if len(writer_rows) != 1 or writer_omitted or len(reader_rows) != 1 or reader_omitted:
         raise ValueError('normalized full producer/consumer turns did not render uniquely')
     return (materialize_role_markers(writer_rows[0], role_markers=role_markers,
@@ -334,6 +398,152 @@ def provision(tokenizer):
     return ids
 
 
+_RENDER_CONTEXT = {}
+
+
+def _render_trajectory(task):
+    chain, records = task
+    context = _RENDER_CONTEXT
+    args = context['args']
+    tokenizers = context['tokenizers']
+    pieces = context['pieces']
+    expanded_fps = context['expanded_fps']
+    role_ids = context['role_ids']
+    model_ids = context['model_ids']
+    edges_by_chain = context['edges_by_chain']
+    local = defaultdict(int)
+    graphs = {split: {model: [] for model in tokenizers} for split in ('train', 'test')}
+    pairs = {split: [] for split in ('train', 'test')}
+    omitted_pairs = []
+    local['trajectories'] += 1
+    rendered = {}
+    for model, tok in tokenizers.items():
+        rows, receipt, omitted, _ = gold_text_rows(records, pieces, tokenizer=tok,
+            require_independent_splits=False, target_reasoning=True,
+            tokenizer_sha256=expanded_fps[model])
+        rendered[model] = rows
+        local['rendered_' + model] += len(rows)
+        local['render_omitted_' + model] += len(omitted)
+    row_maps = {}
+    for model, rows in rendered.items():
+        mapping = {}
+        for row in rows:
+            for record_id in row.get('source_record_ids') or [row['id']]:
+                if record_id in mapping and mapping[record_id] is not row:
+                    raise ValueError(f'{model} rendered record maps to conflicting text rows: {record_id}')
+                mapping[record_id] = row
+            # Every rendered whole turn also enters native SFT as ordinary one-node supervision.
+            # gold_text_rows tokenizes with this already-expanded
+            # tokenizer, so its row fingerprint is the expanded one.
+            graph = text_row_graph(row, source_tokenizer_fingerprint=expanded_fps[model], tokenizer=tokenizers[model],
+                expanded_tokenizer_fingerprint=expanded_fps[model], context_weight=.05)
+            graphs[row['split']][model].append(graph)
+    record_map = {row['id']: row for row in records}
+    for model, rows in rendered.items():
+        row_maps[model] = {}
+        for row in rows:
+            for record_id in row.get('source_record_ids') or [row['id']]:
+                row_maps[model][record_id] = row
+    for edge in edges_by_chain.get(chain, []):
+        edge_id = hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        edge_identity = edge_id
+        local['source_edges'] += 1
+        try:
+            writer_record = record_map[edge['writer_record_id']]
+            reader_record = record_map[edge['reader_record_id']]
+            if (writer_record.get('split') != edge.get('split')
+                    or reader_record.get('split') != edge.get('split')):
+                raise ValueError('edge, writer and reader do not share the admitted split')
+            body = writer_payload(writer_record, edge['write_name'], edge['body_sha256'])
+            occurrence = source_occurrences(writer_record, reader_record, edge['write_name'],
+                body, edge['body_sha256'])
+            occurrence_binding = {'edge_id': edge_identity, 'trajectory': chain,
+                'writer_source_row_sha256': (writer_record.get('source_ref') or {}).get('source_row_sha256'),
+                'reader_source_row_sha256': (reader_record.get('source_ref') or {}).get('source_row_sha256'),
+                **occurrence}
+            communication = {'schema': 'natlang.native-semantic-communication/1',
+                'source_id': edge_identity, 'writer_record_id': edge['writer_record_id'],
+                'reader_record_id': edge['reader_record_id'], 'write_name': edge['write_name'],
+                'occurrence': json.dumps(occurrence_binding, sort_keys=True, separators=(',', ':'),
+                                         ensure_ascii=False),
+                'source_binding': {'corpus_id': 'neuralese-e2e-cloud-rest27-protected-20261015-v2',
+                    'records': {'path': str(args.records), 'sha256': args.records_sha256},
+                    'edges': {'path': str(args.edges), 'sha256': args.edges_sha256}}}
+            communication_sha = hashlib.sha256(json.dumps(communication, sort_keys=True,
+                separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+            views = {}
+            for model in tokenizers:
+                writer_row, reader_row = normalized_pair_rows(writer_record, reader_record, pieces,
+                    tokenizer=tokenizers[model], payload=body, occurrence=occurrence,
+                    role_markers=ROLE_MARKERS, tokenizer_sha256=expanded_fps[model])
+                writer_span = exact_marked_span(writer_row, tokenizers[model], body,
+                    open_marker=ROLE_MARKERS[0], close_marker=ROLE_MARKERS[1],
+                    expected_sha256=edge['body_sha256'])
+                reader_span = exact_marked_span(reader_row, tokenizers[model], body,
+                    open_marker=ROLE_MARKERS[2], close_marker=ROLE_MARKERS[3],
+                    expected_sha256=edge['body_sha256'])
+                views[model_ids[model]] = model_view(edge, writer_row, reader_row, writer_record, reader_record,
+                    tokenizer=tokenizers[model], source_fingerprint=expanded_fps[model],
+                    expanded_fingerprint=expanded_fps[model], role_ids=role_ids[model],
+                    communication_sha256=communication_sha,
+                    writer_span=writer_span, reader_span=reader_span)
+            model_views = list(views.values())
+            groups = sorted(set(model_views[0]['graph']['source_groups']) |
+                            set(model_views[1]['graph']['source_groups']))
+            if model_views[0]['export']['text'] != model_views[1]['export']['text']:
+                raise ValueError('cross-model payload text differs after rendering')
+            row = {'schema': PAIR_SCHEMA, 'id': 'e2e-edge:' + edge_id,
+                'split': edge['split'], 'source_groups': groups,
+                'payload_sha256': edge['body_sha256'], 'models': views,
+                'communication': communication, 'communication_sha256': communication_sha,
+                'conversion': {'kind': 'static-transformation', 'native_capture': False,
+                    'normalized_typed_occurrence': True,
+                    'source_corpus': 'neuralese-e2e-cloud-rest27-protected-20261015-v2',
+                    'trajectory': chain, 'edge_id': edge_id,
+                    'source_writer_id': edge['writer_record_id'],
+                    'source_reader_id': edge['reader_record_id'],
+                    'source_span_id': edge['write_name']}}
+            pairs[edge['split']].append(row)
+            local['paired_edges'] += 1
+        except (KeyError, TypeError, ValueError) as exc:
+            local['pair_omissions'] += 1
+            omitted_pairs.append({'edge': edge, 'reason': str(exc)})
+    return {'graphs': graphs, 'pairs': pairs, 'omissions': omitted_pairs, 'totals': dict(local)}
+
+
+def _initialize_render_worker(config):
+    """Load tokenizer/source context once in each isolated CPU worker."""
+    from types import SimpleNamespace
+    tokenizers, expanded_fps, role_ids = {}, {}, {}
+    for model, path in config['tokenizer_paths'].items():
+        tok = AutoTokenizer.from_pretrained(path, trust_remote_code=False, local_files_only=True)
+        ids = provision(tok)
+        fingerprint = tokenizer_fingerprint(tok)
+        if fingerprint != config['expanded_fps'][model] or list(ids) != config['role_ids'][model]:
+            raise ValueError(f'worker tokenizer identity changed for {model}')
+        tokenizers[model], expanded_fps[model], role_ids[model] = tok, fingerprint, ids
+    if sha256_file(config['pieces_path']) != config['pieces_sha256']:
+        raise ValueError('worker pieces source differs from the parent pinned SHA')
+    if sha256_file(config['edges_path']) != config['edges_sha256']:
+        raise ValueError('worker edges source differs from the parent pinned SHA')
+    pieces = {row['name']: row['text'] for row in jsonl(config['pieces_path'])
+              if isinstance(row.get('name'), str) and isinstance(row.get('text'), str)}
+    edges_by_chain = defaultdict(list)
+    edge_ids = set()
+    for edge in jsonl(config['edges_path']):
+        edge_id = hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        if edge_id in edge_ids:
+            raise ValueError('duplicate admitted E2E edge identity in render worker')
+        edge_ids.add(edge_id)
+        edges_by_chain[edge['trajectory']].append(edge)
+    _RENDER_CONTEXT.clear()
+    _RENDER_CONTEXT.update({'args': SimpleNamespace(records=Path(config['records_path']),
+        records_sha256=config['records_sha256'], edges=Path(config['edges_path']),
+        edges_sha256=config['edges_sha256']), 'tokenizers': tokenizers, 'pieces': pieces,
+        'expanded_fps': expanded_fps, 'role_ids': role_ids,
+        'model_ids': config['model_ids'], 'edges_by_chain': edges_by_chain})
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--records', type=Path, required=True)
@@ -346,9 +556,21 @@ def main():
     parser.add_argument('--edges-sha256', required=True)
     parser.add_argument('--max-trajectories', type=int, default=None,
                         help='bounded converter test only; omit for corpus admission')
+    parser.add_argument('--resume', action='store_true',
+                        help='resume only from the last atomically receipted complete trajectory')
+    parser.add_argument('--resume-if-present', action='store_true',
+                        help='resume a matching incomplete manifest automatically after a ledger restart')
+    parser.add_argument('--checkpoint-trajectories', type=int, default=CHECKPOINT_TRAJECTORIES,
+                        help='trajectory count between durable output frontiers')
+    parser.add_argument('--workers', type=int, default=8,
+                        help='independent complete-trajectory render workers')
     args = parser.parse_args()
     if args.max_trajectories is not None and args.max_trajectories < 1:
         parser.error('--max-trajectories must be positive')
+    if args.checkpoint_trajectories < 1:
+        parser.error('--checkpoint-trajectories must be positive')
+    if args.workers < 1:
+        parser.error('--workers must be positive')
     tokenizers, source_fps, expanded_fps, role_ids = {}, {}, {}, {}
     model_ids, base_inventory_shas = {}, {}
     from natlang_neuralese.model.native_model import base_inventory
@@ -367,151 +589,228 @@ def main():
     pieces = {row['name']: row['text'] for row in jsonl(args.pieces, pieces_digest)
               if isinstance(row.get('name'), str) and isinstance(row.get('text'), str)}
     edges_by_chain = defaultdict(list)
+    edge_ids = set()
     for edge in jsonl(args.edges, edges_digest):
+        edge_id = hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        if edge_id in edge_ids:
+            raise ValueError('duplicate admitted E2E edge identity')
+        edge_ids.add(edge_id)
         edges_by_chain[edge['trajectory']].append(edge)
-    writers = {split: {model: CompressedRows(args.out / 'graphs' / model / split / 'native-graphs.jsonl.zst')
-                       for model in tokenizers} for split in ('train', 'test')}
-    pair_writers = {split: CompressedRows(args.out / 'pairs' / split / 'semantic-pairs.jsonl.zst')
-                    for split in ('train', 'test')}
-    omissions_path = args.out / 'pair-omissions.jsonl'
-    omissions_path.parent.mkdir(parents=True, exist_ok=True)
-    omissions = open(omissions_path, 'w', encoding='utf-8')
-    totals = defaultdict(int)
-    seen_chains, seen_edges = set(), set()
+    if edges_digest.hexdigest() != args.edges_sha256:
+        raise ValueError('source edges SHA differs from the admitted immutable source binding')
+    state_path = args.out / 'resume-manifest.json'
+    records_stat = source_stat_identity(args.records)
+    resume_mode = args.resume or (args.resume_if_present and state_path.is_file())
+    input_identity = {'records': {'path': str(args.records.resolve()), 'sha256': args.records_sha256},
+        'pieces': {'path': str(args.pieces.resolve()), 'sha256': pieces_digest.hexdigest()},
+        'edges': {'path': str(args.edges.resolve()), 'sha256': args.edges_sha256}}
+    tokenizer_identity = {model: {'source': source_fps[model], 'expanded': expanded_fps[model],
+        'role_ids': list(role_ids[model]), 'model_id': model_ids[model],
+        'base_inventory_sha256': base_inventory_shas[model]} for model in tokenizers}
+    chunks, totals, completed_chains, resume_offset = [], defaultdict(int), [], 0
+    if resume_mode:
+        if not state_path.is_file():
+            raise ValueError('--resume requires a durable resume-manifest.json')
+        previous = json.loads(state_path.read_text())
+        if (previous.get('schema') != RESUME_SCHEMA
+                or previous.get('build_policy') != BUILD_POLICY
+                or previous.get('inputs') != input_identity
+                or previous.get('tokenizers') != tokenizer_identity
+                or previous.get('complete') is True):
+            raise ValueError('resume manifest does not bind this incomplete exact source/tokenizer/policy build')
+        # Trust the pinned file identity after the initial source SHA binding;
+        # rehash only if an in-place update or replacement changed its stat key.
+        if previous.get('records_stat') != records_stat and sha256_file(args.records) != args.records_sha256:
+            raise ValueError('records source changed since the last durable conversion frontier')
+        chunks = previous['chunks']
+        completed_chains = previous['completed_chain_ids']
+        if (len(completed_chains) != previous['completed_trajectories']
+                or len(set(completed_chains)) != len(completed_chains)):
+            raise ValueError('resume manifest trajectory frontier is inconsistent')
+        for chunk in chunks:
+            for part in _chunk_parts(chunk):
+                path = Path(part['path']).resolve(strict=True)
+                if path.parent != (args.out / 'chunks').resolve() and (args.out / 'chunks').resolve() not in path.parents:
+                    raise ValueError('resume part escaped its owned output directory')
+                if sha256_file(path) != part['sha256']:
+                    raise ValueError('resume output chunk changed: ' + str(path))
+        totals.update(previous['totals'])
+        resume_offset = previous['resume_offset']
+        for orphan in (args.out / 'chunks').glob('.*.tmp'):
+            orphan.unlink(missing_ok=True)
+    elif state_path.exists():
+        raise ValueError('output already contains a resumable conversion; use --resume or --resume-if-present')
+    elif (args.out / 'chunks').exists():
+        chunks_root = args.out / 'chunks'
+        leftovers = list(chunks_root.iterdir())
+        if any(not path.is_file() or not path.name.startswith('.') or not path.name.endswith('.tmp')
+               for path in leftovers):
+            raise ValueError('output has unreceipted conversion chunks; inspect or choose a new output')
+        for path in leftovers: path.unlink()
+        chunks_root.rmdir()
+    args.out.mkdir(parents=True, exist_ok=True)
+    seen_chains = set(completed_chains)
+    chunk_start_count = len(completed_chains)
+    writers, pair_writers, omissions = {}, {}, None
+
+    def open_chunk(index):
+        nonlocal writers, pair_writers, omissions
+        root = args.out / 'chunks'
+        writers = {split: {model: CompressedRows(root / f'graphs-{model}-{split}-{index:06d}.jsonl.zst')
+                           for model in tokenizers} for split in ('train', 'test')}
+        pair_writers = {split: CompressedRows(root / f'pairs-{split}-{index:06d}.jsonl.zst')
+                        for split in ('train', 'test')}
+        omissions = JsonlRows(root / f'omissions-{index:06d}.jsonl')
+
+    def close_chunk(next_offset):
+        nonlocal chunk_start_count
+        index = len(chunks)
+        current = {'graphs': {model: {} for model in tokenizers}, 'pairs': {}, 'omissions': None}
+        try:
+            for model in tokenizers:
+                for split in ('train', 'test'):
+                    current['graphs'][model][split] = writers[split][model].finish()
+            for split in ('train', 'test'):
+                current['pairs'][split] = pair_writers[split].finish()
+            current['omissions'] = omissions.finish()
+        except BaseException:
+            for mapping in writers.values():
+                for writer in mapping.values(): writer.abort()
+            for writer in pair_writers.values(): writer.abort()
+            omissions.abort()
+            raise
+        chunks.append(current)
+        manifest = {'schema': RESUME_SCHEMA, 'build_policy': BUILD_POLICY,
+            'inputs': input_identity, 'tokenizers': tokenizer_identity, 'records_stat': records_stat,
+            'completed_trajectories': len(completed_chains), 'completed_chain_ids': completed_chains,
+            'resume_offset': next_offset, 'totals': dict(totals), 'chunks': chunks, 'complete': False}
+        atomic_json(state_path, manifest)
+        chunk_start_count = len(completed_chains)
+        open_chunk(len(chunks))
+
+    def abort_chunk():
+        for mapping in writers.values():
+            for writer in mapping.values(): writer.abort()
+        for writer in pair_writers.values(): writer.abort()
+        if omissions is not None: omissions.abort()
+
+    open_chunk(len(chunks))
     chain_rows, current = [], None
 
-    def process(chain, records):
+
+    def commit_result(chain, result, next_offset):
         if chain in seen_chains:
             raise ValueError('trajectory rows are not contiguous in their admitted source')
         seen_chains.add(chain)
-        totals['trajectories'] += 1
-        rendered = {}
-        for model, tok in tokenizers.items():
-            rows, receipt, omitted, _ = gold_text_rows(records, pieces, tokenizer=tok,
-                require_independent_splits=False, target_reasoning=True)
-            rendered[model] = rows
-            totals['rendered_' + model] += len(rows)
-            totals['render_omitted_' + model] += len(omitted)
-        row_maps = {}
-        for model, rows in rendered.items():
-            mapping = {}
-            for row in rows:
-                for record_id in row.get('source_record_ids') or [row['id']]:
-                    if record_id in mapping and mapping[record_id] is not row:
-                        raise ValueError(f'{model} rendered record maps to conflicting text rows: {record_id}')
-                    mapping[record_id] = row
-                # Every rendered whole turn also enters native SFT as ordinary one-node supervision.
-                # gold_text_rows tokenizes with this already-expanded
-                # tokenizer, so its row fingerprint is the expanded one.
-                graph = text_row_graph(row, source_tokenizer_fingerprint=expanded_fps[model], tokenizer=tokenizers[model],
-                    expanded_tokenizer_fingerprint=expanded_fps[model], context_weight=.05)
-                writers[row['split']][model].write(graph)
-        record_map = {row['id']: row for row in records}
-        for model, rows in rendered.items():
-            row_maps[model] = {}
-            for row in rows:
-                for record_id in row.get('source_record_ids') or [row['id']]:
-                    row_maps[model][record_id] = row
-        for edge in edges_by_chain.pop(chain, []):
-            edge_id = hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-            edge_identity = edge_id
-            if edge_id in seen_edges:
-                raise ValueError('duplicate admitted E2E edge identity')
-            seen_edges.add(edge_id)
-            totals['source_edges'] += 1
-            try:
-                writer_record = record_map[edge['writer_record_id']]
-                reader_record = record_map[edge['reader_record_id']]
-                if (writer_record.get('split') != edge.get('split')
-                        or reader_record.get('split') != edge.get('split')):
-                    raise ValueError('edge, writer and reader do not share the admitted split')
-                body = writer_payload(writer_record, edge['write_name'], edge['body_sha256'])
-                occurrence = source_occurrences(writer_record, reader_record, edge['write_name'],
-                    body, edge['body_sha256'])
-                occurrence_binding = {'edge_id': edge_identity, 'trajectory': chain,
-                    'writer_source_row_sha256': (writer_record.get('source_ref') or {}).get('source_row_sha256'),
-                    'reader_source_row_sha256': (reader_record.get('source_ref') or {}).get('source_row_sha256'),
-                    **occurrence}
-                communication = {'schema': 'natlang.native-semantic-communication/1',
-                    'source_id': edge_identity, 'writer_record_id': edge['writer_record_id'],
-                    'reader_record_id': edge['reader_record_id'], 'write_name': edge['write_name'],
-                    'occurrence': json.dumps(occurrence_binding, sort_keys=True, separators=(',', ':'),
-                                             ensure_ascii=False),
-                    'source_binding': {'corpus_id': 'neuralese-e2e-cloud-rest27-protected-20261015-v2',
-                        'records': {'path': str(args.records), 'sha256': args.records_sha256},
-                        'edges': {'path': str(args.edges), 'sha256': args.edges_sha256}}}
-                communication_sha = hashlib.sha256(json.dumps(communication, sort_keys=True,
-                    separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
-                views = {}
-                for model in tokenizers:
-                    writer_row, reader_row = normalized_pair_rows(writer_record, reader_record, pieces,
-                        tokenizer=tokenizers[model], payload=body, occurrence=occurrence,
-                        role_markers=ROLE_MARKERS)
-                    writer_span = exact_marked_span(writer_row, tokenizers[model], body,
-                        open_marker=ROLE_MARKERS[0], close_marker=ROLE_MARKERS[1],
-                        expected_sha256=edge['body_sha256'])
-                    reader_span = exact_marked_span(reader_row, tokenizers[model], body,
-                        open_marker=ROLE_MARKERS[2], close_marker=ROLE_MARKERS[3],
-                        expected_sha256=edge['body_sha256'])
-                    views[model_ids[model]] = model_view(edge, writer_row, reader_row, writer_record, reader_record,
-                        tokenizer=tokenizers[model], source_fingerprint=expanded_fps[model],
-                        expanded_fingerprint=expanded_fps[model], role_ids=role_ids[model],
-                        communication_sha256=communication_sha,
-                        writer_span=writer_span, reader_span=reader_span)
-                model_views = list(views.values())
-                groups = sorted(set(model_views[0]['graph']['source_groups']) |
-                                set(model_views[1]['graph']['source_groups']))
-                if model_views[0]['export']['text'] != model_views[1]['export']['text']:
-                    raise ValueError('cross-model payload text differs after rendering')
-                row = {'schema': PAIR_SCHEMA, 'id': 'e2e-edge:' + edge_id,
-                    'split': edge['split'], 'source_groups': groups,
-                    'payload_sha256': edge['body_sha256'], 'models': views,
-                    'communication': communication, 'communication_sha256': communication_sha,
-                    'conversion': {'kind': 'static-transformation', 'native_capture': False,
-                        'normalized_typed_occurrence': True,
-                        'source_corpus': 'neuralese-e2e-cloud-rest27-protected-20261015-v2',
-                        'trajectory': chain, 'edge_id': edge_id,
-                        'source_writer_id': edge['writer_record_id'],
-                        'source_reader_id': edge['reader_record_id'],
-                        'source_span_id': edge['write_name']}}
-                pair_writers[edge['split']].write(row)
-                totals['paired_edges'] += 1
-            except (KeyError, TypeError, ValueError) as exc:
-                totals['pair_omissions'] += 1
-                omissions.write(json.dumps({'edge': edge, 'reason': str(exc)}, separators=(',', ':')) + '\n')
+        edges_by_chain.pop(chain, None)
+        for name, count in result['totals'].items():
+            totals[name] += count
+        for split, by_model in result['graphs'].items():
+            for model, rows in by_model.items():
+                for graph in rows:
+                    writers[split][model].write(graph)
+        for split, rows in result['pairs'].items():
+            for row in rows: pair_writers[split].write(row)
+        for row in result['omissions']: omissions.write(row)
+        completed_chains.append(chain)
+        if len(completed_chains) - chunk_start_count >= args.checkpoint_trajectories:
+            close_chunk(next_offset)
 
+    worker_config = {'tokenizer_paths': {'lfm25': str(args.lfm_tokenizer),
+                                         'mellum21': str(args.mellum_tokenizer)},
+        'expanded_fps': expanded_fps, 'role_ids': {model: list(ids) for model, ids in role_ids.items()},
+        'model_ids': model_ids, 'records_path': str(args.records),
+        'records_sha256': args.records_sha256, 'pieces_path': str(args.pieces),
+        'pieces_sha256': pieces_digest.hexdigest(), 'edges_path': str(args.edges),
+        'edges_sha256': args.edges_sha256}
     try:
-        for record in jsonl(args.records, records_digest):
-            chain = record.get('teacher_trajectory_id') or (record.get('source_ref') or {}).get('trajectory_id')
-            if not isinstance(chain, str) or not chain:
-                raise ValueError('admitted E2E record lacks its complete trajectory identity')
-            if current is None: current = chain
-            if chain != current:
-                process(current, chain_rows)
-                if args.max_trajectories and len(seen_chains) >= args.max_trajectories:
+        if resume_mode:
+            completed_set = set(completed_chains)
+            for chain in completed_set: edges_by_chain.pop(chain, None)
+        last_offset = resume_offset
+        pending = []
+        stopped_at_limit = False
+
+        def flush_pending(executor):
+            nonlocal stopped_at_limit
+            if not pending:
+                return
+            batch, pending[:] = list(pending), []
+            results = list(executor.map(_render_trajectory, [(item[0], item[1]) for item in batch]))
+            for (chain_id, _, safe_offset), result in zip(batch, results):
+                commit_result(chain_id, result, safe_offset)
+                if args.max_trajectories and len(completed_chains) >= args.max_trajectories:
+                    stopped_at_limit = True
                     break
-                current, chain_rows = chain, []
-            chain_rows.append(record)
-        else:
-            if chain_rows: process(current, chain_rows)
+
+        with ProcessPoolExecutor(max_workers=args.workers, mp_context=multiprocessing.get_context('spawn'),
+                initializer=_initialize_render_worker, initargs=(worker_config,)) as executor:
+            for record, line_start, line_stop in jsonl_with_offsets(args.records, resume_offset,
+                    None if resume_mode else records_digest):
+                chain = record.get('teacher_trajectory_id') or (record.get('source_ref') or {}).get('trajectory_id')
+                if not isinstance(chain, str) or not chain:
+                    raise ValueError('admitted E2E record lacks its complete trajectory identity')
+                if current is None: current = chain
+                if chain != current:
+                    pending.append((current, chain_rows, line_start))
+                    current, chain_rows = chain, []
+                    remaining = (args.max_trajectories - len(completed_chains) - len(pending)
+                                 if args.max_trajectories else args.workers)
+                    until_checkpoint = args.checkpoint_trajectories - (len(completed_chains) - chunk_start_count)
+                    batch_size = max(1, min(args.workers, remaining, until_checkpoint))
+                    if len(pending) >= batch_size:
+                        flush_pending(executor)
+                    if stopped_at_limit:
+                        last_offset = line_start
+                        break
+                chain_rows.append(record)
+                last_offset = line_stop
+            else:
+                if chain_rows:
+                    pending.append((current, chain_rows, Path(args.records).stat().st_size))
+                flush_pending(executor)
+                if not args.max_trajectories and not resume_mode and records_digest.hexdigest() != args.records_sha256:
+                    raise ValueError('source records SHA differs from the admitted immutable source binding')
+        if len(completed_chains) > chunk_start_count or not chunks:
+            close_chunk(last_offset)
         if not args.max_trajectories:
             if edges_by_chain:
                 missing = sum(map(len, edges_by_chain.values()))
                 raise ValueError(f'{missing} admitted E2E edges have no corresponding source trajectory rows')
-        if not args.max_trajectories and (records_digest.hexdigest() != args.records_sha256
-                or edges_digest.hexdigest() != args.edges_sha256):
-            raise ValueError('source records/edges SHA differs from the admitted immutable source binding')
-        omissions.flush(); os.fsync(omissions.fileno()); omissions.close()
-        graph_outputs = {model: {split: writers[split][model].finish() for split in ('train', 'test')}
-                         for model in tokenizers}
-        pair_outputs = {split: pair_writers[split].finish() for split in ('train', 'test')}
+            if resume_mode and sha256_file(args.records) != args.records_sha256:
+                raise ValueError('resumed source records SHA differs from the admitted immutable source binding')
+            if not resume_mode and records_digest.hexdigest() != args.records_sha256:
+                raise ValueError('source records SHA differs from the admitted immutable source binding')
+        abort_chunk()
     except BaseException:
-        if not omissions.closed: omissions.close()
-        for mapping in writers.values():
-            for writer in mapping.values(): writer.abort()
-        for writer in pair_writers.values(): writer.abort()
+        abort_chunk()
         raise
-    receipt = {'schema': 'natlang.native-semantic-e2e-build/1',
+
+    def merge_parts(parts, destination):
+        destination = Path(destination); destination.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix='.' + destination.name + '.', suffix='.tmp', dir=destination.parent)
+        with os.fdopen(fd, 'wb') as target:
+            for part in parts:
+                with open(part['path'], 'rb') as source:
+                    while block := source.read(8 * 1024 * 1024): target.write(block)
+            target.flush(); os.fsync(target.fileno())
+        os.replace(tmp, destination)
+        return {'path': str(destination), 'rows': sum(part['rows'] for part in parts),
+                'bytes': destination.stat().st_size, 'sha256': sha256_file(destination)}
+
+    graph_outputs = {model: {split: merge_parts(
+        [chunk['graphs'][model][split] for chunk in chunks],
+        args.out / 'graphs' / model / split / 'native-graphs.jsonl.zst')
+        for split in ('train', 'test')} for model in tokenizers}
+    pair_outputs = {split: merge_parts([chunk['pairs'][split] for chunk in chunks],
+        args.out / 'pairs' / split / 'semantic-pairs.jsonl.zst') for split in ('train', 'test')}
+    omissions_path = args.out / 'pair-omissions.jsonl'
+    merge_parts([chunk['omissions'] for chunk in chunks], omissions_path)
+    final_manifest = json.loads(state_path.read_text())
+    final_manifest['complete'] = args.max_trajectories is None
+    final_manifest['outputs'] = {'graphs': graph_outputs, 'pairs': pair_outputs}
+    atomic_json(state_path, final_manifest)
+    receipt = {'schema': BUILD_SCHEMA,
         'source': {'records': {'path': str(args.records), 'sha256': args.records_sha256},
                    'pieces': {'path': str(args.pieces), 'sha256': pieces_digest.hexdigest()},
                    'edges': {'path': str(args.edges), 'sha256': args.edges_sha256}},
@@ -522,13 +821,15 @@ def main():
         'outputs': {'graphs': graph_outputs, 'pairs': pair_outputs},
         'pair_omissions': {'path': str(omissions_path), 'rows': totals['pair_omissions'],
                            'sha256': sha256_file(omissions_path)},
+        'resume_manifest': {'path': str(state_path), 'sha256': sha256_file(state_path)},
         'conversion': 'all rendered trajectories become ordinary native one-node SFT graphs; cross-model pairs only for exact admitted writer/reader edges'}
-    args.out.mkdir(parents=True, exist_ok=True)
     receipt_path = args.out / 'receipt.json'
-    temp = receipt_path.with_suffix('.json.tmp')
-    temp.write_text(json.dumps(receipt, indent=2) + '\n')
-    with temp.open('rb') as handle: os.fsync(handle.fileno())
-    os.replace(temp, receipt_path)
+    atomic_json(receipt_path, receipt)
+    # The concatenated zstd frames are the single consumer representation;
+    # per-chunk staging is removed after the complete output hashes are durable.
+    if args.max_trajectories is None:
+        import shutil
+        shutil.rmtree(args.out / 'chunks')
     print(json.dumps(receipt, sort_keys=True))
 
 
