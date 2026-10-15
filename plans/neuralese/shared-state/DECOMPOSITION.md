@@ -20,6 +20,17 @@ local correctness checks; old projected-value jobs are diagnostic only.
 6. After native training, learn per-model VAE adapters through a joint semantic
    space, then improve actual consumer behavior by distillation and SFT. An
    untrained adapter is not a usable dialect.
+7. Keep communication learning moving while immediately exploiting explicitly
+   prioritized teacher data. Start with a communication batch, then alternate
+   communication and positive-priority ordinary batches until either stream
+   ends. Finish the remaining stream before ordinary priority-zero data. Within
+   each stream retain declared priority, source order and visit order. A changed
+   schedule never changes row quotas, earned exposure or the fixed communication
+   foundation; completion still requires every declared visit.
+
+The shared `pending_exposure_batches` function implements step 7 as exact batch
+packing and credit accounting. The source manifest's existing `training_priority`
+is the policy input; this adds no model-facing text or independent scheduler.
 
 ## Exact mechanisms and interfaces
 

@@ -687,13 +687,39 @@ def test_source_priority_changes_schedule_not_rows_quotas_or_binding(tmp_path):
     assert updated.file_sha256 != before[2]
     quotas,batches = pending_exposure_batches(updated.entries,{},epochs=2)
     assert [updated.entries[index]['id'] for _,indices,_ in batches for index in indices] == [
-        'lfm:pair','lfm:pair','a','b','a','b']
+        'lfm:pair','a','lfm:pair','b','a','b']
     assert quotas == {key:2 for key in updated.ordered_ids()}
     for value in (-1,True,1.5,'1'):
         declaration['sources'][0]['training_priority'] = value
         manifest.write_text(json.dumps(declaration))
         with pytest.raises(ValueError,match='nonnegative integer'):
             NativeGraphSource(manifest,'1'*64,required_split='train',role_ids=(58,59,60,61))
+
+
+def test_priority_teacher_interleave_preserves_deficits_across_resume_and_append():
+    from collections import Counter
+    from natlang_neuralese.train.native_state_sft import pending_exposure_batches
+    entries = [dict(id=name,forward_tokens=7,communication=communication,training_priority=priority)
+               for name,communication,priority in [('ordinary',False,0),('teacher',False,1),
+                   ('pair1',True,0),('pair2',True,0),('urgent',False,2)]]
+    credits = {'pair1':1,'teacher':1}
+    quotas,batches = pending_exposure_batches(entries,credits,epochs=2,batch_tokens=8)
+    names = [entries[index]['id'] for _,indices,_ in batches for index in indices]
+    assert names[:4] == ['pair2','urgent','pair1','urgent']
+    assert names[-2:] == ['ordinary','ordinary']
+    assert Counter(names) == {entry['id']:quotas[entry['id']]-credits.get(entry['id'],0)
+                              for entry in entries}
+    # Stop after a mixed prefix, append teacher data, then change packing.
+    for _,indices,_ in batches[:3]:
+        for index in indices:
+            name=entries[index]['id'];credits[name]=credits.get(name,0)+1
+    entries.append(dict(id='new-teacher',forward_tokens=3,training_priority=1))
+    quotas,resumed = pending_exposure_batches(entries,credits,epochs=2,batch_graphs=2)
+    observed=Counter(entries[index]['id'] for _,indices,_ in resumed for index in indices)
+    assert observed == {entry['id']:quotas[entry['id']]-credits.get(entry['id'],0)
+                        for entry in entries if quotas[entry['id']]>credits.get(entry['id'],0)}
+    for index,(visit,_,last) in enumerate(resumed):
+        assert last == all(other_visit!=visit for other_visit,_,_ in resumed[index+1:])
 
 
 @pytest.mark.parametrize('paired', [False,True])

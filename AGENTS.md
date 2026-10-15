@@ -78,6 +78,20 @@ supersede older projection/recursive graph-replay foundation rules for new work.
 Track implementation and cutover in
 `plans/neuralese/SHARED_STATE_MIGRATION_20261015.md`.
 
+Native token learnability (engineering qualification, 2026-10-15): existing
+tokenizer entries are not evidence of usable frozen output rows. The QAD
+thinking boundaries were almost identical, imposing a fixed output-probability
+limit regardless of backbone training. Current native models use learned sparse
+rows for the existing reasoning boundaries and FP32 masters for all learned
+Neuralese/reasoning rows, with the backbone's activation casts. Upgrade legacy
+parents explicitly, preserving exact numeric parameter/moment values, RNG and
+exposure; never reset history or silently reinterpret an old checkpoint.
+Check actual parameter changes as well as gradients: BF16 sparse rows lost
+production-rate updates despite nonzero gradients. The shared trainer records
+per-row gradient/update norms and changed coordinates. Diagnose an unexpected
+zero update before attributing poor learning to the model. See
+`plans/neuralese/shared-state/REASONING_TOKEN_LEARNABILITY_20261015.md`.
+
 Owner correction, 2026-10-15: the lodestar is comprehensive training of BOTH
 models through the ENTIRE production recipe and all usable available data.
 Stages are steps to progress through, not endpoints. Half measures, short

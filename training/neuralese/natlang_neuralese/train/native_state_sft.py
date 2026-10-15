@@ -78,7 +78,8 @@ def batch_boundaries(entries, *, batch_graphs=1, batch_tokens=0):
 def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1, batch_tokens=0):
     """Schedule only missing row visits, including rows appended after completion.
 
-    Each pass schedules authenticated communication deficits first, preserving
+    Communication starts first and alternates with explicitly prioritized
+    ordinary data; priority-zero ordinary data follows both streams. Preserve
     source order within each class. Completed visits remain credits across
     changed packing and appended sources; fractional epochs cover the declared
     source prefix. The checkpoint's actual row counts determine what remains.
@@ -101,6 +102,27 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
             for left, right in boundaries:
                 last = right == len(indices) and all(scheduling_rank(entries[index]) <= rank for index in remaining)
                 batches.append((visit, indices[left:right], last))
+    # A positive source priority must take effect while a large communication
+    # cohort is still pending, rather than waiting for its entire completion.
+    # Only reorder already packed batches: quotas and authenticated credits do
+    # not depend on this policy, and no row is replayed or omitted.
+    communication, urgent, ordinary = [], [], []
+    for batch in batches:
+        entry = entries[batch[1][0]]
+        destination = (communication if entry.get('communication') else
+                       urgent if entry.get('training_priority', 0) > 0 else ordinary)
+        destination.append(batch)
+    if urgent and communication:
+        interleaved = []
+        for index in range(max(len(communication), len(urgent))):
+            if index < len(communication):
+                interleaved.append(communication[index])
+            if index < len(urgent):
+                interleaved.append(urgent[index])
+        batches = interleaved + ordinary
+        last_by_visit = {visit: index for index, (visit, _, _) in enumerate(batches)}
+        batches = [(visit, indices, last_by_visit[visit] == index)
+                   for index, (visit, indices, _) in enumerate(batches)]
     return quotas, batches
 
 
