@@ -6,8 +6,9 @@ import pytest
 
 def native_open_finish(termination):
     return {"status": "incomplete", "output_accounting": {
-        "manifest_valid": True, "expected_jobs": 1, "job_states": [{
-            "state": "failed", "terminal_error": {"sha256": "a" * 64,
+        "manifest_valid": True, "source_sha256": "c"*64, "expected_jobs": 1, "job_states": [{
+            "state": "failed", "digest": "b"*64, "terminal_error": {"sha256": "a" * 64,
+                "record_binding_verified": True, "program_ir_sha256": "b"*64, "source_sha256": "c"*64,
                 "error": "Error: model stream error: " + json.dumps({
                     "code": "neuralese-native-state-open",
                     "message": f"neuralese-native-state-open: generation {termination} inside a produce span"})}}]}}
@@ -119,3 +120,16 @@ def test_missing_result_with_explicit_transport_accounting_is_unscored_infrastru
     finish['output_accounting']['job_states'][0]['state'] = 'failed'
     assert classify_case(None, finish) == 'unresolved'
     assert classify_case(None, {'status': 'incomplete', 'completion_tokens': 8192}) == 'unresolved'
+
+
+@pytest.mark.parametrize('mutation',['unverified','missing_record','missing_source','wrong_record','wrong_source','missing_current_source'])
+def test_native_termination_rejects_unbound_or_mismatched_record_source(mutation):
+    finish=native_open_finish('stopped');accounting=finish['output_accounting']
+    error=accounting['job_states'][0]['terminal_error']
+    if mutation=='unverified':error.pop('record_binding_verified')
+    elif mutation=='missing_record':error.pop('program_ir_sha256')
+    elif mutation=='missing_source':error.pop('source_sha256')
+    elif mutation=='wrong_record':error['program_ir_sha256']='d'*64
+    elif mutation=='wrong_source':error['source_sha256']='d'*64
+    else:accounting.pop('source_sha256')
+    assert classify_case(None,finish)=='unresolved'

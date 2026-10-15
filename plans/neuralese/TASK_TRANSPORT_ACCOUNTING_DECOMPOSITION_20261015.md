@@ -12,3 +12,11 @@ Native producer termination accounting (2026-10-16):
 1. Recognize only an exact, manifest-bound single-job terminal stream error with a recorded error-file SHA, using the existing queue accounting. Unknown or mixed failures remain unresolved; transport failures retain precedence.
 2. The native engine reports `generation ended inside a produce span` only at its request token ceiling: classify this as budget exhaustion. It reports `generation stopped inside a produce span` only after sampling a stop token: classify this as model incompletion.
 3. Match the parsed protocol code and complete message, never arbitrary generated text or a substring. Keep missing-result/export completeness unchanged and preserve historical reports when rescoring.
+
+
+Native producer termination attribution requires a queue-verified binding to
+the current full program-IR digest and immutable source SHA, as well as the
+exact error artifact SHA and valid complete-output manifest accounting. An
+unbound legacy error remains unresolved; matching only index and program ID
+does not identify a record version. Generated model text never supplies this
+trusted verifier flag. Existing historical transport precedence is unchanged.
