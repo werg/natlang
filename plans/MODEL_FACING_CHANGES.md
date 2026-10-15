@@ -624,3 +624,8 @@ readout/guidance operations before dispatch. **Measurement debt:** 0/48 live
 executor samples for these new recovery messages. Deterministic tiny LFM/Mellum
 HTTP state-splice and TypeScript runtime tests establish mechanism correctness,
 not learned model behavior; measure in the next native teacher window.
+
+2026-10-15 native forced-state completion: empty-library/source-integrity recovery
+errors and native view sampling/whole-source receipts are not yet live-measured
+(0/48). Measure in the next own-model sandbox generation window; no Luna
+measurement or data generation. Existing view/part/combine instructions retained.

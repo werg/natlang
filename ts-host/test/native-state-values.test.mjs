@@ -112,3 +112,24 @@ test('native server capability gaps fail before sending unsupported guidance or 
     /neuralese-template-unavailable/);
   assert.equal(chatRequests, 0);
 });
+
+test('zero-token native identity preserves exact layer layout through persistent and nz archives', async () => {
+  const input = nativeStateFixture(); input.metadata.text = '';
+  for (const tensor of Object.values(input.tensors)) { tensor.shape[0] = 0; tensor.data = new Uint8Array(); }
+  const store = new MemoryNeuraleseStore(), empty = await store.putNativeState(input);
+  const bytes = await saveNz({ identity: { type: 'Neuralese<string>', value: neuraleseRef('Neuralese<string>', empty.id) } },
+    { store, dialect: 'native-state/fixture' });
+  const loaded = await loadNz(bytes, { store });
+  assert.equal(loaded.nativeStates.get(empty.id).tensors.token_ids.shape[0], 0);
+  const directory = await mkdtemp(join(tmpdir(), 'native-empty-'));
+  try {
+    const disk = await FileNeuraleseStore.open(directory, { residentBytes: 0 });
+    await disk.putNativeState(input);
+    const restored = await (await FileNeuraleseStore.open(directory)).getNativeState(empty.id);
+    assert.equal(restored.id, empty.id);
+    for (const [name, tensor] of Object.entries(restored.tensors)) {
+      assert.deepEqual(tensor.shape, empty.tensors[name].shape);
+      assert.equal(tensor.data.length, 0);
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

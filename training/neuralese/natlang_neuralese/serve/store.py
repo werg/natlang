@@ -108,7 +108,7 @@ def decode_native_state(body: bytes):
                 raise ValueError(f"unsupported native state dtype {entry['dtype']}")
             dtype, itemsize = dtype_info
             shape, offsets = entry["shape"], entry["data_offsets"]
-            if (not isinstance(shape, list) or not shape or any(type(dim) is not int or dim <= 0 for dim in shape)
+            if (not isinstance(shape, list) or not shape or any(type(dim) is not int or dim < 0 for dim in shape)
                     or not isinstance(offsets, list) or len(offsets) != 2 or any(type(x) is not int for x in offsets)):
                 raise ValueError(f"invalid native tensor descriptor: {name}")
             start, end = offsets
@@ -120,7 +120,7 @@ def decode_native_state(body: bytes):
             spans.append((start, end, name))
             raw = payload[start:end]
             torch_dtype = dtype
-            tensor = (torch.frombuffer(bytearray(raw), dtype=torch.int16).view(torch.bfloat16) if dtype == torch.bfloat16
+            tensor = (torch.empty(0, dtype=dtype) if not raw else torch.frombuffer(bytearray(raw), dtype=torch.int16).view(torch.bfloat16) if dtype == torch.bfloat16
                       else torch.frombuffer(bytearray(raw), dtype=dtype))
             tensors[name] = tensor.reshape(shape).clone()
         spans.sort()

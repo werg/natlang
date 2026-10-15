@@ -118,3 +118,26 @@ def test_the_registered_conversion_rewrites_digest_parts_and_the_piece(tmp_path)
     assert piece == {"name": "prompt:view", "kind": "system-prompt", "text": INSTRUCTIONS}
     receipt = json.loads((tmp_path / "new" / "conversion.json").read_text())
     assert receipt["counts"]["digest_parts"] == 1 and set(receipt["output_sha256"]) == {"records.jsonl", "pieces.jsonl", "summary.json"}
+
+
+def test_chunked_views_reduce_multiple_combine_levels_with_actual_context_fit():
+    class Words:
+        def __call__(self, text, add_special_tokens=False): return {'input_ids': text.split()}
+        def decode(self, ids): return ' '.join(ids)
+    writes = []
+    def write(messages):
+        writes.append(messages)
+        return f'view{len(writes)}'
+    def fits(messages):
+        content = messages[1]['content']
+        return sum(part.get('type') == 'neuralese' for part in content) <= 2
+    final, count = view.write_view(write, 'sys', ' '.join(f'w{i}' for i in range(9)), None, Words(), 1, fits=fits)
+    assert count == 9 and final == f'view{len(writes)}'
+    combines = writes[9:]
+    assert len(combines) == 8
+    assert all(fits(messages) for messages in combines)
+    previous = {f'view{i}' for i in range(1, 10)}
+    for index, messages in enumerate(combines, 10):
+        imports = [part['id'] for part in messages[1]['content'] if part['type'] == 'neuralese']
+        assert len(imports) == 2 and set(imports) <= previous
+        previous.add(f'view{index}')

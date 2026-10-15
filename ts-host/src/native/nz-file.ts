@@ -385,6 +385,19 @@ export async function saveNz(exports: Record<string, NzSaveExport>, options: { s
     }
     return value;
   };
+  // Contextual native bodies depend on actual imported state from their source capture.
+  // Preserve only explicit source-capture references; arbitrary provenance strings are not edges.
+  const sourceDependencies = async (value: unknown): Promise<void> => {
+    if (!value || typeof value !== 'object') return;
+    const object = value as Record<string, unknown>;
+    for (const key of ['source_capture', 'native_source_capture']) {
+      const capture = object[key] as { segments?: { kind?: string; id?: string }[] } | undefined;
+      if (Array.isArray(capture?.segments)) for (const segment of capture.segments)
+        if (segment.kind === 'native_state' && typeof segment.id === 'string') await use(segment.id, 'native source capture');
+    }
+    for (const nested of Object.values(object)) await sourceDependencies(nested);
+  };
+  await sourceDependencies(options.provenance);
   const header: NzHeader = { format: NZ_FORMAT, dialect: options.dialect, exports: {}, blocks: headers, ...(Object.keys(nativeHeaders).length ? { native_states: nativeHeaders } : {}),
     ...(options.types ? { types: options.types } : {}), ...(options.skill ? { skill: options.skill } : {}),
     ...(options.provenance ? { provenance: options.provenance } : {}) };

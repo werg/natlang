@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import { Context, createNatlangRuntime, learningService, createLearning, loadVirtualNatlang, initBodyInContext } from '../../dist/index.js';
 import { MemoryNeuraleseStore } from '../../dist/native/neuralese-store.js';
 import { neuraleseServerModelTurn } from '../../dist/model/neuralese-server.js';
+import { neuraleseServerInfo } from '../../dist/model/neuralese-info.js';
+import { nativeStateWritePort } from '../../dist/neuralese/native-state-client.js';
 import { rankedProbabilityScore } from '../../dist/skills/graded.js';
 
 /** Values of a case's result type and the gold distribution over them (as export-decision-prompts.mjs). */
@@ -69,6 +71,7 @@ export async function bounded(items, limit, fn) {
 /** A runtime and learning surface against a Neuralese server, with typed decision calls. */
 export function decisionSession(endpoint) {
   const store = new MemoryNeuraleseStore();
+  const nativePort = neuraleseServerInfo(endpoint).then(info => info.native_state?.enabled ? nativeStateWritePort({ endpoint, store, info }) : undefined);
   const learning = createLearning(learningService({ endpoint, store }));
   const traces = [];
   const driver = neuraleseServerModelTurn({ endpoint, model: 'natlang-neuralese', store });
@@ -106,6 +109,8 @@ export function decisionSession(endpoint) {
     return event.probabilities;
   }
   async function embed(text, type = 'Neuralese<string>') {
+    const port = await nativePort;
+    if (port) return { $neuralese: { type, id: (await port.write(text, { type })).id } };
     const response = await fetch(`${endpoint}/v1/neuralese/embed`, { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ text, type }) });
     if (!response.ok) throw Error(`embed failed: ${response.status} ${await response.text()}`);
@@ -113,6 +118,8 @@ export function decisionSession(endpoint) {
   }
   /** A block encoding `text` in one forward pass through the port (one vector per token; no summarising call). */
   async function encode(text, type = 'Neuralese<string>') {
+    const port = await nativePort;
+    if (port) return { $neuralese: { type, id: (await port.write(text, { type })).id } };
     const response = await fetch(`${endpoint}/v1/neuralese/encode`, { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ text, type }) });
     if (!response.ok) throw Error(`encode failed: ${response.status} ${await response.text()}`);
@@ -125,7 +132,7 @@ export function decisionSession(endpoint) {
    * serves a family. Returns the skill and the init record (gate, exactness).
    */
   async function initSkill(text, c, type = 'Neuralese<string>') {
-    const result = await initBodyInContext({ endpoint, text, type,
+    const result = await initBodyInContext({ store, endpoint, text, type,
       render: (placeholder, driver) => call(c, { skill: { $neuralese: { type, id: placeholder } } },
         createNatlangRuntime({ model: { driver }, neuralese: { store }, seed: { mode: 'backend' } })) });
     return { skill: { $neuralese: { type, id: result.id } }, init: { case: c.id, context: result.context, ...result.init, gate: result.gate } };

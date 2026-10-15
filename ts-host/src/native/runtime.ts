@@ -693,7 +693,12 @@ export class NativeRuntime {
       source: metadata.source, marker_context: metadata.markerContext,
       ...(metadata.argumentName ? { argument_type: type } : { result_type: type }), text_body_sha256: bodySha,
       ...(producer.result_path ? { result_path: producer.result_path } : {}),
-      ...(producer.argument_name ? { argument_name: producer.argument_name } : {}) }, metadata.inputs);
+      ...(producer.argument_name ? { argument_name: producer.argument_name } : {}),
+      ...(block.native_state ? { format: 'native-state', native_identity: {
+        architecture: block.native_state.architecture, checkpoint_sha256: block.native_state.checkpoint_sha256,
+        tokenizer_fingerprint: block.native_state.tokenizer_fingerprint,
+        embedding_weight_sha256: block.native_state.embedding_weight_sha256 },
+        source_capture: block.producer?.native_source_capture } : {}) }, metadata.inputs);
     return neuraleseRef(type, block.id);
   }
 

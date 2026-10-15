@@ -69,7 +69,7 @@ export type { NeuraleseServerOptions } from '../model/neuralese-server.js';
 export { neuraleseServerInfo, checkNeuraleseReader, type NeuraleseServerInfo } from '../model/neuralese-info.js';
 export { supportsNeuralese, NeuraleseUnsupportedError, textToParts, hasNeuraleseSentinel, nativeStateConsumerFromInfo,
   type NativeStateConsumer } from '../native/neuralese.js';
-export { serverViewer, VIEW_TYPE, type Viewer, type ViewSite } from '../neuralese/view.js';
+export { serverViewer, VIEW_TYPE, type Viewer, type ViewSite, type NativeViewTurn } from '../neuralese/view.js';
 // The standard library from and to bytes (Node's variants also take a path).
 export { COMBINATORS, buildStandardLibrary, loadStandardLibrary, createNeuraleseLibrary } from '../neuralese/combinators.js';
 export type { StandardLibrary, CombinatorName } from '../neuralese/combinators.js';
@@ -113,3 +113,5 @@ export type { ModelTurn, ModelTurnRequest, ModelTurnDelta, ModelTurnOptions, Mod
 export * from '../adaptation/index.js';
 
 export type { FolderProposal } from '../native/scoped-fs.js';
+
+export { nativeStateWritePort, nativeTextOperation, type NativeClientOptions, type NativeSourceCapture, type NativeTextResult } from '../neuralese/native-state-client.js';

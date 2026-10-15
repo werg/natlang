@@ -1,3 +1,4 @@
+import { parseType } from '../native/types.js';
 /**
  * `natlang:neuralese`, the combinator library (spec/SPEC.md, Neuralese chapter; S0 §4): `map`, `zip`, `ap`, `combine`,
  * `empty`, `split`, `splitList`, `read`, `convert`, `gloss`, and the query operator `ask(block, question)`, defined as
@@ -16,6 +17,8 @@
  * and coercions), a representation-generic call used for its Neuralese form (runtime/kernel.ts) and the builtin `view`
  * write.
  */
+import { nativeStateConsumerFromInfo, dialectBinding } from '../native/neuralese.js';
+import { nativeStateWritePort } from './native-state-client.js';
 import { currentFrame } from '../runtime/context.js';
 import { softFunction } from '../runtime/contexts.js';
 import { graphNode, traceFor, valueInputs } from '../native/graph.js';
@@ -53,7 +56,7 @@ export type CombinatorName = keyof typeof COMBINATORS;
 
 export type TextReadSource = { schema: 'natlang.text-read-source/1'; export: 'read'; bodyId: string; type: string;
   source: string; sourceSha256: string; learnedVectors: false };
-export type StandardLibrary = { dialect: string; width: number; bodies: Record<CombinatorName, string>;
+export type StandardLibrary = { dialect: string; width: number; bodies: Record<CombinatorName, string>; emptyState?: string;
   /** Explicit provider-text implementation of the read instruction; it does not claim learned-vector semantics. */
   textReadSource?: TextReadSource };
 
@@ -86,10 +89,17 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
   const headers = options.headers ?? {};
   const remote = new HttpNeuraleseStore(options.endpoint, options.headers);
   const info = await (await fetchModel(options.endpoint.replace(/\/$/, '') + '/v1/neuralese/info', { headers: options.headers })).json() as
-    { dialects: string[]; width: number };
+    { dialects: string[]; width: number } & import('../model/neuralese-info.js').NeuraleseServerInfo;
   const local = new MemoryNeuraleseStore();
+  const native = !!(info.native_state as { enabled?: boolean } | undefined)?.enabled;
+  const nativePort = native ? await nativeStateWritePort({ endpoint: options.endpoint, headers, store: local, info }) : undefined;
   const fetchBlock = async (id: string) => {
     if (!(await local.has(id))) {
+      if (id.startsWith('nzs1_')) {
+        const artifact = await remote.getNativeState(id);
+        if (!artifact) throw new Error(`neuralese standard library: the server lost native state ${id}`);
+        const { id: _, ...input } = artifact; await local.putNativeState(input); return id;
+      }
       const block = await remote.get(id);
       if (!block) throw new Error(`neuralese standard library: the server lost block ${id}`);
       const { id: _, ...rest } = block.meta;
@@ -97,8 +107,10 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
     }
     return id;
   };
-  const value = async (text: string, type: string, path = '/v1/neuralese/encode') =>
+  const value = async (text: string, type: string, path = '/v1/neuralese/encode') => nativePort ?
+    neuraleseRef(type, (await nativePort.write(text, { type })).id) :
     neuraleseRef(type, await fetchBlock(String((await postJson(options.endpoint, path, { text, type }, headers)).id)));
+  const emptyState = nativePort ? (await nativePort.write('', { type: 'Neuralese<unknown>' })).id : undefined;
   const v = await value(SAMPLE_VALUE, 'Neuralese<string>');
   const w = await value(SAMPLE_PARTNER, 'Neuralese<string>');
   const record = await value(JSON.stringify({ city: 'Lyon', day: 'Tuesday' }), 'Neuralese<{ city: string; day: string }>');
@@ -114,13 +126,14 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
   const exports: Record<string, { type: string; value: unknown; description: string }> = {};
   for (const [name, entry] of Object.entries(COMBINATORS) as [CombinatorName, (typeof COMBINATORS)[CombinatorName]][]) {
     const type = `Neuralese<${entry.type}>`;
-    const result = await initBodyInContext({ endpoint: options.endpoint, headers, text: entry.text, type,
+    const result = await initBodyInContext({ endpoint: options.endpoint, headers, store: local, text: entry.text, type,
       acceptFailedGate: options.acceptFailedGate, replyTokens: options.gateReplyTokens,
       render: async (placeholder, driver) => {
         await fetchBlock(placeholder);
         const all = Object.fromEntries(Object.keys(COMBINATORS).map(key => [key, placeholder])) as Record<CombinatorName, string>;
         const lib = createNeuraleseLibrary({ dialect: info.dialects[0]!, width: info.width, bodies: all });
-        const runtime = createNatlangRuntime({ model: driver as never, neuralese: { store: local } });
+        const runtime = createNatlangRuntime({ model: driver as never, neuralese: { store: local, dialect: info.dialects[0]!,
+          nativeStateConsumer: nativeStateConsumerFromInfo(info), ...(nativePort ? { port: nativePort } : {}) } });
         return runtime.run(() => samples[name](lib));
       } });
     bodies[name] = result.id;
@@ -128,16 +141,19 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
     exports[name] = { type, description: entry.text,
       value: { kind: 'soft-function', type, body: result.id, captures: {} } };
   }
-  const store = { async get(id: string): Promise<NeuraleseBlock | undefined> {
+  const store = { async getNativeState(id: string) {
+    return (await options.store?.getNativeState?.(id)) ?? (await local.getNativeState(id)) ?? (await remote.getNativeState(id));
+  }, async get(id: string): Promise<NeuraleseBlock | undefined> {
     return (await options.store?.get(id)) ?? (await remote.get(id)); } } as NeuraleseStore;
   const textReadSource = options.textProviderRead ? {
     schema: 'natlang.text-read-source/1' as const, export: 'read' as const, bodyId: bodies.read,
     type: `Neuralese<${COMBINATORS.read.type}>`, source: COMBINATORS.read.text,
     sourceSha256: hexDigest(COMBINATORS.read.text), learnedVectors: false as const,
   } : undefined;
+  if (emptyState) exports.empty = { type: 'Neuralese<unknown>', value: neuraleseRef('Neuralese<unknown>', emptyState), description: 'The empty native state.' };
   const bytes = await saveNz(exports, { store, dialect: info.dialects[0]!, provenance: { kind: 'natlang-standard-library',
     initialisation: 'text-in-context', init_gates: gates, ...(textReadSource ? { text_read_source: textReadSource } : {}) } });
-  return { library: { dialect: info.dialects[0]!, width: info.width, bodies, ...(textReadSource ? { textReadSource } : {}) }, bytes };
+  return { library: { dialect: info.dialects[0]!, width: info.width, bodies, ...(emptyState ? { emptyState } : {}), ...(textReadSource ? { textReadSource } : {}) }, bytes };
 }
 /**
  * Read a standard-library `.nz` file from its bytes, registering its blocks in `store`. On Node, `loadStandardLibrary`
@@ -146,11 +162,13 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
 export async function loadStandardLibrary(bytes: Uint8Array, store?: NeuraleseStore): Promise<StandardLibrary> {
   if (typeof bytes === 'string')
     throw new TypeError('loadStandardLibrary takes the .nz file\'s bytes here; read the file first (fetch(url).then(r => r.arrayBuffer())), or use @natlang/node, which also takes a path');
-  const { header, blocks } = decodeNz(bytes);
+  const { header, blocks, nativeStates } = decodeNz(bytes);
   if (store) for (const block of blocks.values()) if (!(await store.has(block.meta.id))) {
     const { id: _, ...rest } = block.meta;
     await store.put({ ...rest, data: block.data });
   }
+  if (store && nativeStates.size && !store.putNativeState) throw new Error('neuralese-native-archive-unavailable: native standard library needs a native-capable archive');
+  if (store) for (const { id: _, ...artifact } of nativeStates.values()) await store.putNativeState!(artifact);
   const bodies = {} as Record<CombinatorName, string>;
   const exports = header.exports as Record<string, { value?: unknown; description?: string }>;
   let width = 0, dialect = '';
@@ -161,6 +179,8 @@ export async function loadStandardLibrary(bytes: Uint8Array, store?: NeuraleseSt
     bodies[name] = spec.body;
     const block = blocks.get(spec.body);
     if (block) { width = block.meta.width; dialect = block.meta.dialect; }
+    const nativeBody = nativeStates.get(spec.body);
+    if (nativeBody) { width = nativeBody.tensors.embeddings!.shape[1]!; dialect = `native-state/${nativeBody.metadata.architecture}`; }
   }
   let textReadSource: TextReadSource | undefined;
   const candidate = header.provenance?.text_read_source;
@@ -169,11 +189,15 @@ export async function loadStandardLibrary(bytes: Uint8Array, store?: NeuraleseSt
     if (source.schema !== 'natlang.text-read-source/1' || source.export !== 'read' || source.bodyId !== bodies.read ||
         source.type !== `Neuralese<${COMBINATORS.read.type}>` || typeof source.source !== 'string' ||
         source.source !== exports.read?.description || source.sourceSha256 !== hexDigest(source.source) ||
-        source.learnedVectors !== false || !blocks.has(bodies.read))
+        source.learnedVectors !== false || !(blocks.has(bodies.read) || nativeStates.has(bodies.read)))
       throw new Error('the standard library text read source does not match its declared read body, type, description, or digest');
     textReadSource = source as TextReadSource;
   }
-  return { dialect, width, bodies, ...(textReadSource ? { textReadSource } : {}) };
+  const emptyValue = exports.empty?.value as { $neuralese?: { id?: string } } | undefined;
+  const emptyState = emptyValue?.$neuralese?.id;
+  if (dialect.startsWith('native-state/') && (!emptyState || nativeStates.get(emptyState)?.tensors.token_ids?.shape[0] !== 0))
+    throw new Error('neuralese-native-empty-unavailable: native libraries must archive their model-bound zero-token identity');
+  return { dialect, width, bodies, ...(emptyState ? { emptyState } : {}), ...(textReadSource ? { textReadSource } : {}) };
 }
 
 const record = (kind: 'combinator' | 'readout', data: Json, inputs: unknown) => {
@@ -261,7 +285,10 @@ export async function readNeuraleseForCurrentTask(value: unknown): Promise<unkno
   // The read body reads its library's dialect only. As at coercion (native/values.ts), a block whose dialect the
   // task's store cannot tell without I/O is not checked here.
   const written = store.peek?.(value.$neuralese.id)?.dialect;
-  if (library.dialect && written !== undefined && written !== library.dialect)
+  const declared = parseType(value.$neuralese.type);
+  const nativeCompatible = declared.kind === 'neuralese' && declared.dialect === 'DefaultDialect' && written !== undefined &&
+    dialectBinding(task?.runtime.options.neuralese)?.nativeDefaultCompatible?.(value.$neuralese.id, written, library.dialect);
+  if (library.dialect && written !== undefined && written !== library.dialect && !nativeCompatible)
     throw new NeuraleseDialectError(`read(value) reads dialect ${JSON.stringify(library.dialect)}, but block ` +
       `${value.$neuralese.id} was written in ${JSON.stringify(written)}; convert it first with ` +
       `\`convert(value, ${JSON.stringify(library.dialect)})\`, or read it with a standard library of its dialect`);
@@ -270,6 +297,10 @@ export async function readNeuraleseForCurrentTask(value: unknown): Promise<unkno
 
 /** The content ID of the zero-length block of a library's dialect and width (the identity of `combine`). */
 function emptyId(library: StandardLibrary): string {
+  if (library.dialect.startsWith('native-state/')) {
+    if (!library.emptyState) throw new Error('neuralese-native-empty-unavailable: load the native library with its zero-token state');
+    return library.emptyState;
+  }
   return emptyBlock(library.dialect, library.width).meta.id;
 }
 

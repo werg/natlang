@@ -235,3 +235,10 @@ through captures and typed results. `neuralese-native-consumer-unavailable` mean
 the target must explicitly declare state adaptation or text reencoding before
 consuming another model's native value. Preserve the source artifact and use a
 configured native reader; do not paste its text to bypass the typed boundary.
+
+Native computed Neuralese strings, including `""`, use the configured native
+write port. Native `empty()` comes from a loaded native standard library's
+model-bound zero-token state. For `neuralese-native-empty-unavailable`, rebuild
+or load that library with its archived empty state. Contextual native body
+initialization preserves its actual source capture and does not claim equality
+with an ordinary-text prompt.

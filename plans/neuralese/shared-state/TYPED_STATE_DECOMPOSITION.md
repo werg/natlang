@@ -51,3 +51,24 @@ server's advertised operations, source capture and artifact identity; the
 existing natural-language functions retain policy. Native body initialization
 reports whether it is contextual and token aligned; it does not claim that new
 producer/consumer state has the logits of an ordinary text-instructed call.
+
+Native empty and view completion (2026-10-15):
+
+1. `empty()` is the model-bound zero-token state archived with the native
+   standard library. Capture/codec/compiler/import exact helpers permit an empty
+   token axis while retaining every positive layer/embedding dimension and all
+   identities. Empty spans consume no positions or hybrid history; no synthetic
+   token or legacy vector represents them.
+2. View retains the existing natural-language view/part/combine stages. Crisp
+   plumbing schedules these exact bounded sites, groups summaries by the actual
+   target context and reduces the number of groups structurally. An impossible
+   two-summary context returns an explicit operational error.
+3. Every native view site returns its actual sampled template trajectory,
+   producer/import identities and native artifacts. The TypeScript client
+   archives every source/output, validates provenance and records the actual
+   turns and shared block-write graph edges; callers outside a runtime can retain
+   the same source turns with the observer callback.
+4. Contextual placeholders select one exact occurrence when their content ID
+   also occurs as an imported value (in particular a zero-token identity).
+   Ambiguous default selection fails with a teachable error; callers can pass
+   the explicit zero-based occurrence without changing other imported state.

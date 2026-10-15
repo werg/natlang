@@ -219,3 +219,17 @@ consumption modes from `/v1/neuralese/info`. On
 persistence. On `neuralese-native-consumer-unavailable`, bind a reader declaring
 adaptation or reencoding. Named dialect types remain strict; a best-effort
 consumption receipt is not exact KV interchange or a learned semantic dialect.
+
+For native forced writes and contextual body initialization, use the native
+text-write/init-body endpoints and archive the returned artifact plus every
+native import in `source_capture`. Preserve that receipt in library provenance.
+A `neuralese-native-source-integrity` error requires repairing the mismatched
+source identity, payload or role markers before retrying. Native views retain
+all chunk/combine `source_turns`; archive their imports and outputs before use,
+and retain the observer receipts when running outside an invocation trace.
+Native empty states have zero token rows and full model/layer identities;
+`neuralese-native-empty-unavailable` means load the native library's empty state.
+When a body placeholder shares its content ID with another imported value,
+`neuralese-native-state-placeholder` means pass `placeholderOccurrence` with the
+zero-based matching native-part occurrence of the intended body; other matching
+parts retain their actual imported state. Never replace all equal content IDs.

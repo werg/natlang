@@ -23,6 +23,8 @@ import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { createNatlangRuntime, createLearning, learningService, loadStandardLibrary, createNeuraleseLibrary, softFunction,
   replayRecordSink, initBodyInContext } from '../dist/index.js';
+import { neuraleseServerInfo } from '../dist/model/neuralese-info.js';
+import { nativeStateWritePort } from '../dist/neuralese/native-state-client.js';
 import { MemoryNeuraleseStore } from '../dist/native/neuralese-store.js';
 import { neuraleseServerModelTurn } from '../dist/model/neuralese-server.js';
 
@@ -34,6 +36,8 @@ for (const key of ['endpoint', 'library', 'cases', 'out']) if (!args[key]) throw
 
 const programs = new Set(args.programs.split(',').filter(Boolean));
 const store = new MemoryNeuraleseStore();
+const info = await neuraleseServerInfo(args.endpoint);
+const nativePort = info.native_state?.enabled ? await nativeStateWritePort({ endpoint: args.endpoint, store, info }) : undefined;
 const library = await loadStandardLibrary(args.library, store);
 const lib = createNeuraleseLibrary(library);
 let current = {};
@@ -56,13 +60,13 @@ async function post(path, body) {
   if (!response.ok) throw new Error(`${path}: ${response.status} ${(await response.text()).slice(0, 300)}`);
   return response.json();
 }
-const encode = async (text, type = 'Neuralese<string>') => ({ $neuralese: { type, id: (await post('/v1/neuralese/encode', { text, type })).id } });
+const encode = async (text, type = 'Neuralese<string>') => ({ $neuralese: { type, id: nativePort ? (await nativePort.write(text, { type })).id : (await post('/v1/neuralese/encode', { text, type })).id } });
 // A transform's soft body is initialised in context (src/neuralese/text-init.ts): in a call of the soft function on the
 // case's text, so that at initialisation it is the text-instructed function. Its gate is kept in the case's records.
 const FUNCTION_TYPE = 'Neuralese<(text: string) => string>';
 let gate = null;
 async function instructionBody(instruction, text) {
-  const result = await initBodyInContext({ endpoint: args.endpoint, text: instruction, type: FUNCTION_TYPE,
+  const result = await initBodyInContext({ store, endpoint: args.endpoint, text: instruction, type: FUNCTION_TYPE,
     acceptFailedGate: true, replyTokens: Number(args['gate-reply-tokens']),
     render: (placeholder, driver) => createNatlangRuntime({ model: driver, neuralese: { store } })
       .run(() => softFunction({ type: '(text: string) => string', body: placeholder })(text)) });

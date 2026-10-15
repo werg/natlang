@@ -36,8 +36,8 @@ class NativeStateBlock:
             if not isinstance(getattr(self, name), str) or not re.fullmatch('[0-9a-f]{64}', getattr(self, name)):
                 raise ValueError(f'native state {name} must be a SHA-256 digest')
         if (not isinstance(self.token_ids, torch.Tensor) or self.token_ids.dtype != torch.int64
-                or self.token_ids.ndim != 1 or not len(self.token_ids)):
-            raise ValueError('native state token_ids must be nonempty int64 [tokens]')
+                or self.token_ids.ndim != 1):
+            raise ValueError('native state token_ids must be int64 [tokens]')
         count = len(self.token_ids)
         if bool((self.token_ids < 0).any()):
             raise ValueError('native state token IDs must be nonnegative')
@@ -72,7 +72,7 @@ class NativeStateBlock:
     @staticmethod
     def _float_tensor(name, value, count, dimensions):
         if (not isinstance(value, torch.Tensor) or value.ndim != dimensions or value.shape[0] != count
-                or any(size <= 0 for size in value.shape) or value.dtype not in FLOAT_DTYPES):
+                or any(size <= 0 for size in value.shape[1:]) or value.dtype not in FLOAT_DTYPES):
             raise ValueError(f'native state {name} must have token-first floating dimensions')
         if not bool(torch.isfinite(value).all()):
             raise ValueError(f'native state {name} contains non-finite values')

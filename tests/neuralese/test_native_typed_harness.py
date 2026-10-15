@@ -13,6 +13,7 @@ import pytest
 import torch
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
+from tokenizers.pre_tokenizers import WhitespaceSplit
 from transformers import PreTrainedTokenizerFast
 
 from test_shared_state import tiny
@@ -26,9 +27,10 @@ from natlang_neuralese.serve.http import serve
 
 
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
-def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypatch, family):
+@pytest.mark.parametrize('mode', ['handoff', 'forced'])
+def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypatch, family, mode):
     repo = Path(__file__).resolve().parents[2]
-    fixture = repo / 'ts-host/test/fixtures/native-state-child-parent.mjs'
+    fixture = repo / ('ts-host/test/fixtures/native-state-child-parent.mjs' if mode == 'handoff' else 'ts-host/test/fixtures/native-state-forced-text.mjs')
     if not (repo / 'ts-host/dist/native/neuralese.js').is_file():
         pytest.fail('build:node must run before the integrated native harness test')
     node = shutil.which('node')
@@ -43,12 +45,22 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
     for marker, token in zip(ROLE_MARKERS, model.marker_ids):
         del vocabulary[f't{token}']
         vocabulary[marker] = token
-    tokenizer = PreTrainedTokenizerFast(tokenizer_object=Tokenizer(WordLevel(vocabulary, unk_token='t0')),
+    raw_tokenizer = Tokenizer(WordLevel(vocabulary, unk_token='t0'))
+    if mode == 'forced':
+        raw_tokenizer.pre_tokenizer = WhitespaceSplit()
+    tokenizer = PreTrainedTokenizerFast(tokenizer_object=raw_tokenizer,
         unk_token='t0', bos_token='t1', eos_token='t2', pad_token='t3', additional_special_tokens=list(ROLE_MARKERS))
     last_only = ' and loop.last' if family == 'lfm' else ''
     tokenizer.chat_template = ("{% for message in messages %}"
         "{% if message['role'] == 'assistant' and message.get('reasoning_content')" + last_only + " %}"
         "{{ message['reasoning_content'] }}{% endif %}{{ message['content'] }}{% endfor %}assistant:")
+    if mode == 'forced':
+        tokenizer.chat_template = ("{% for message in messages %}{{ message['role'] }}:"
+            "{% if message['role'] == 'assistant' and message.get('reasoning_content')" + last_only + " %}"
+            "{{ message['reasoning_content'] }}{% endif %}{{ message['content'] }}"
+            "{% for tool in message.get('tool_calls', []) %}"
+            "{{ tool['function']['name'] }}({{ tool['function']['arguments'] | tojson }})"
+            "{% endfor %}{% endfor %}{% if add_generation_prompt %}assistant:{% endif %}")
     config = {'architecture': port.config.model_type, 'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer)}
     weights = tmp_path / 'weights.pt'
     torch.save(model_state(model), weights)
@@ -56,9 +68,17 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
     engine = Engine(port, None, tokenizer, TensorStore(), f"native-state/{config['architecture']}",
         shared_model=model, role_tokens=RoleTokens(*model.marker_ids), model_config=config,
         checkpoint_sha256=identity['checkpoint_sha256'], embedding_weight_sha256=identity['embedding_weight_sha256'])
+    if mode == 'forced':
+        engine.context = 2048
+        engine.max_block = 8
     # One payload token is actually forwarded/captured; parent then samples EOS.
-    samples = iter([(60, -.1), (5, -.2), (61, -.3), (2, -.4), (2, -.5)])
-    monkeypatch.setattr(engine, '_native_token', lambda _sequence: next(samples))
+    samples = iter([(5, -.2), (61, -.3), (2, -.4)] * 4 if mode == 'forced' else [(60, -.1), (5, -.2), (61, -.3), (2, -.4), (2, -.5)])
+    def forced_sample(sequence):
+        if sequence.request.messages[-1].get('content') == 'empty-fixture':
+            return ((61, -.3) if sequence.native_capture_open else
+                    (60, -.1) if sequence.generated_positions == 0 else (2, -.4))
+        return ((5, -.2) if not sequence.native_capture_ids else (61, -.3)) if sequence.native_capture_open else (2, -.4)
+    monkeypatch.setattr(engine, '_native_token', forced_sample if mode == 'forced' else lambda _sequence: next(samples))
     imports, original_consume = [], engine._native_consume
     def record_consume(sequence, block_id):
         original_consume(sequence, block_id)
@@ -73,13 +93,17 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
         process = subprocess.run(command, cwd=repo, text=True, capture_output=True, timeout=60)
         assert process.returncode == 0, process.stdout + process.stderr
         receipt = json.loads(process.stdout.splitlines()[-1])
-        assert imports == [{'id': receipt['state_id'], 'mode': 'exact-native-state'}]
-        assert receipt['parent_result'] == 'consumed' and receipt['archived']
-        block = engine.store.get_native_state(receipt['state_id']).block
-        assert block.token_ids.tolist() == [5]
-        assert any(layer['kind'] == 'attention' for layer in block.layers)
-        if family == 'lfm':
-            assert any(layer['kind'] == 'finite_convolution' for layer in block.layers)
+        if mode == 'forced':
+            assert receipt == {'forced': True, 'contextual': True, 'view_parts': 2}
+            assert imports and all(item['mode'] == 'exact-native-state' for item in imports)
+        else:
+            assert imports[0] == {'id': receipt['state_id'], 'mode': 'exact-native-state'}
+            assert receipt['parent_result'] == 'consumed' and receipt['archived']
+            block = engine.store.get_native_state(receipt['state_id']).block
+            assert block.token_ids.tolist() == [5]
+            assert any(layer['kind'] == 'attention' for layer in block.layers)
+            if family == 'lfm':
+                assert any(layer['kind'] == 'finite_convolution' for layer in block.layers)
     finally:
         server.shutdown()
         server.server_close()

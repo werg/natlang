@@ -87,8 +87,8 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
     if not isinstance(kv_block_alignment, int) or kv_block_alignment < 1:
         raise ValueError('KV block alignment must be a positive integer')
     external_sizes = external_sizes or {}
-    if any(not isinstance(size, int) or size < 1 for size in external_sizes.values()):
-        raise ValueError('external state sizes must be positive integers')
+    if any(not isinstance(size, int) or size < 0 for size in external_sizes.values()):
+        raise ValueError('external state sizes must be nonnegative integers')
     external_offsets = {}
     next_external = sum(len(node.token_ids) for node in invocations)
     for name, size in external_sizes.items():
@@ -105,7 +105,7 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
         count = len(node.token_ids)
         producer = [False] * count
         for start, stop in node.producing:
-            if not 0 <= start < stop <= count:
+            if not 0 <= start <= stop <= count:
                 raise ValueError('producing span is outside invocation tokens')
             producer[start:stop] = [True] * (stop-start)
         edges = {}
@@ -113,7 +113,7 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
             if not 0 <= edge.at <= count:
                 raise ValueError('imports require a valid insertion boundary')
             if edge.source in external_sizes:
-                if not 0 <= edge.start < edge.stop <= external_sizes[edge.source]:
+                if not 0 <= edge.start <= edge.stop <= external_sizes[edge.source]:
                     raise ValueError('import span is outside external state tokens')
                 ext_offset = external_offsets[edge.source]
                 imported = tuple(range(ext_offset+edge.start, ext_offset+edge.stop))
@@ -125,12 +125,12 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
                     lo, hi = edge.start, edge.stop
                     declared = source_node.logical_producing
                 else:
-                    if not 0 <= edge.start < edge.stop <= len(source_node.token_ids):
+                    if not 0 <= edge.start <= edge.stop <= len(source_node.token_ids):
                         raise ValueError('import span is outside source tokens')
                     lo, hi = boundaries[source_index][edge.start], boundaries[source_index][edge.stop]
                     declared = tuple((boundaries[source_index][a], boundaries[source_index][b])
                                      for a, b in source_node.producing)
-                if not 0 <= lo < hi <= len(sequences[source_index]):
+                if not 0 <= lo <= hi <= len(sequences[source_index]):
                     raise ValueError('import span is outside the source logical state')
                 if not any(a <= lo and hi <= b for a, b in declared):
                     raise ValueError('imports must reference an explicitly producing span')
@@ -157,7 +157,7 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
             own_positions.append(pos)
             node_ids.append(len(sequences))
         for start, stop in node.logical_producing:
-            if not 0 <= start < stop <= len(logical):
+            if not 0 <= start <= stop <= len(logical):
                 raise ValueError('logical producing span is outside invocation state')
             # Logical exports may mix own queries with already-produced aliases.
             # Apply the embedding transform to their own physical rows only;
@@ -516,7 +516,7 @@ def capture_invocation_span(result, invocation, start, stop):
     if index is None:
         raise ValueError('capture invocation is not present in the graph')
     node = plan.invocations[index]
-    if not 0 <= start < stop <= len(node.token_ids):
+    if not 0 <= start <= stop <= len(node.token_ids):
         raise ValueError('capture span is outside invocation tokens')
     if not any(a <= start and stop <= b for a, b in node.producing):
         raise ValueError('capture requires an explicitly producing span')
@@ -528,7 +528,7 @@ def capture_invocation_span(result, invocation, start, stop):
 def capture_logical_span(result, invocation, start, stop):
     plan = result['plan']
     index = next((i for i, node in enumerate(plan.invocations) if node.name == invocation), None)
-    if index is None or not any(a <= start < stop <= b for a, b in plan.invocations[index].logical_producing):
+    if index is None or not any(a <= start <= stop <= b for a, b in plan.invocations[index].logical_producing):
         raise ValueError('capture requires an explicitly declared logical producing span')
     return _capture_logical(result, index, start, stop)
 
@@ -626,14 +626,28 @@ def native_step(model, ids, cache=None, *, producing=False):
     """
     from .lfm2_port import PortCache, ConvState, append_kv
     port = model.port
-    if ids.ndim != 2 or ids.shape[0] != 1 or ids.shape[1] == 0:
-        raise ValueError('native_step requires one nonempty token sequence')
+    if ids.ndim != 2 or ids.shape[0] != 1:
+        raise ValueError('native_step requires one token sequence')
     cache = cache or PortCache.empty(port.num_layers)
     if cache.pad is not None or len(set(cache.lengths)) != 1:
         raise ValueError('native state requires an unpadded cache with aligned layer positions')
     start = cache.lengths[0]
     positions = torch.arange(start, start+ids.shape[1], device=ids.device)
     raw = model.embed(ids)
+    if ids.shape[1] == 0:
+        # An empty span carries the exact model/layer layout but consumes no
+        # positions and does not mutate the consumer's hybrid or attention state.
+        layers = []
+        for index, layer in enumerate(port.layers):
+            if port.is_attention(index):
+                attn = layer.self_attn
+                shape = (0, attn.k_proj.out_features // attn.head_dim, attn.head_dim)
+                layers.append({'kind': 'attention', 'raw_k': raw.new_empty(shape, dtype=torch.float32), 'v': raw.new_empty(shape, dtype=torch.float32)})
+            else:
+                layers.append({'kind': 'finite_convolution',
+                               'gated_inputs': raw.new_empty((0, layer.conv.conv.weight.shape[0]), dtype=torch.float32)})
+        return {'h_final': raw, 'cache': cache, 'token_ids': ids[0], 'embeddings': raw[0],
+                'positions': positions, 'layers': tuple(layers)}
     mask = torch.full(ids.shape, producing, device=ids.device, dtype=torch.bool) if isinstance(producing, bool) else producing
     h = model.adapter(raw, mask)
     states, captures = [], []
@@ -712,14 +726,15 @@ def splice_block(model, cache, block, *, checkpoint_sha256, tokenizer_fingerprin
             prefix = (gated.new_zeros(1, channels, port.conv_window) if previous is None else previous.window)
             state = ConvState(torch.cat([prefix, gated], dim=2)[:, :, -port.conv_window:])
         states.append(state)
-    return PortCache(tuple(states), (start+count,)*port.num_layers)
+    return cache if count == 0 else PortCache(tuple(states), (start+count,)*port.num_layers)
 
 
 def concatenate_captures(chunks):
     """Join actual producing chunks; reject gaps or mixed layer layouts."""
     if not chunks:
-        raise ValueError('native capture needs at least one nonempty chunk')
-    expected = int(chunks[0]['positions'][0])
+        raise ValueError('native capture needs an actual model-layout capture chunk')
+    first_nonempty = next((chunk for chunk in chunks if len(chunk['positions'])), None)
+    expected = int(first_nonempty['positions'][0]) if first_nonempty is not None else 0
     for chunk in chunks:
         positions = chunk['positions']
         if not torch.equal(positions, torch.arange(expected, expected+len(positions), device=positions.device)):

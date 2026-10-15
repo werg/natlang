@@ -125,7 +125,7 @@ function validateNativeState(metadata: NativeStateMetadata, tensors: Record<stri
   const expected = new Set(['token_ids', 'positions', 'embeddings']);
   const count = (name: string, rank: number): number[] => {
     const tensor = tensors[name];
-    if (!tensor || tensor.shape.length !== rank || tensor.shape.some(size => !Number.isSafeInteger(size) || size <= 0) ||
+    if (!tensor || tensor.shape.length !== rank || tensor.shape.some((size, index) => !Number.isSafeInteger(size) || (index === 0 ? size < 0 : size <= 0)) ||
         !Number.isSafeInteger(tensor.shape.reduce((n, size) => n * size, 1)) ||
         tensor.data.length !== tensor.shape.reduce((n, size) => n * size, 1) * NATIVE_DTYPE_BYTES[tensor.dtype])
       throw new RangeError(`invalid native-state tensor ${name}`);
@@ -134,7 +134,7 @@ function validateNativeState(metadata: NativeStateMetadata, tensors: Record<stri
   const ids = tensors.token_ids, positions = tensors.positions;
   const tokenShape = count('token_ids', 1), positionShape = count('positions', 1), embeddingShape = count('embeddings', 2);
   if (ids!.dtype !== 'I64' || positions!.dtype !== 'I64' || tokenShape[0] !== positionShape[0] ||
-      embeddingShape[0] !== tokenShape[0] || tokenShape[0]! <= 0)
+      embeddingShape[0] !== tokenShape[0])
     throw new RangeError('native-state token axes or integer tensor types differ');
   const i64 = (tensor: NativeStateTensor) => new DataView(tensor.data.buffer, tensor.data.byteOffset, tensor.data.byteLength);
   const iv = i64(ids!), pv = i64(positions!);
@@ -198,7 +198,7 @@ export function nativeStateContentId(metadata: NativeStateMetadata, tensors: Rec
   for (const name of Object.keys(tensors).sort()) {
     const tensor = tensors[name]!;
     const elements = tensor.shape.reduce((product, size) => product * size, 1);
-    if (!tensor.shape.length || tensor.shape.some(size => !Number.isSafeInteger(size) || size <= 0) ||
+    if (!tensor.shape.length || tensor.shape.some((size, index) => !Number.isSafeInteger(size) || (index === 0 ? size < 0 : size <= 0)) ||
         tensor.data.length !== elements * NATIVE_DTYPE_BYTES[tensor.dtype]) throw new RangeError(`invalid native tensor ${name}`);
     const nameBytes = new TextEncoder().encode(name);
     const descriptor = new TextEncoder().encode(nativeCanonicalJson({ dtype: tensor.dtype, shape: tensor.shape }));
@@ -250,7 +250,7 @@ export function decodeNativeState(bytes: Uint8Array): NativeStateArtifact {
     if (name === '__metadata__') continue;
     const entry = raw as { dtype?: NativeStateDtype; shape?: number[]; data_offsets?: [number, number] };
     if (!entry || !entry.dtype || !(entry.dtype in NATIVE_DTYPE_BYTES) || !Array.isArray(entry.shape) ||
-        !entry.shape.length || entry.shape.some(size => !Number.isSafeInteger(size) || size <= 0) ||
+        !entry.shape.length || entry.shape.some((size, index) => !Number.isSafeInteger(size) || (index === 0 ? size < 0 : size <= 0)) ||
         !Array.isArray(entry.data_offsets) || entry.data_offsets.length !== 2)
       throw new RangeError(`invalid native tensor descriptor ${name}`);
     const [start, end] = entry.data_offsets;

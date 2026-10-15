@@ -86,7 +86,7 @@ CAPABILITIES = sorted([
     "native.text-write", "native.init-body", "render", "score", "store", "store.owners", "store.native-state", "template", "template.argument-path", "template.value-type", "view", "write"])
 NATIVE_CAPABILITIES = sorted([
     "chat", "chat.stream", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state",
-    "store.owners", "template", "template.argument-path", "template.value-type"])
+    "store.owners", "template", "template.argument-path", "template.value-type", "view"])
 NATIVE_CAPABILITY_GAPS = sorted(set(CAPABILITIES) - set(NATIVE_CAPABILITIES))
 
 
@@ -293,7 +293,7 @@ def make_handler(engine: Engine):
                     unavailable = {
                         "/v1/neuralese/grad": "grad", "/v1/neuralese/optim": "optim",
                         "/v1/neuralese/adapters": "adapters.create", "/v1/neuralese/embed": "embed",
-                        "/v1/neuralese/write": "write", "/v1/neuralese/view": "view",
+                        "/v1/neuralese/write": "write",
                         "/v1/neuralese/init_body": "init-body", "/v1/neuralese/encode": "encode",
                         "/v1/natlang/score": "score", "/v1/neuralese/decide_many": "decide",
                     }.get(self.path)
@@ -305,7 +305,8 @@ def make_handler(engine: Engine):
                 if self.path == "/v1/neuralese/native-states/init-body":
                     body = self._object()
                     return self._json(201, engine.native_init_body(body.get("messages") or [], body.get("tools"),
-                        body.get("placeholder"), body.get("text"), value_type=body.get("type")))
+                        body.get("placeholder"), body.get("text"), value_type=body.get("type"),
+                        placeholder_occurrence=body.get("placeholder_occurrence")))
                 if self.path == "/v1/chat/completions":
                     return self._chat(self._object())
                 if self.path == "/v1/neuralese/collect":
@@ -352,25 +353,59 @@ def make_handler(engine: Engine):
                         return self._error(500, "neuralese-write", "the write produced no block")
                     return self._json(201, blocks[0])
                 if self.path == "/v1/neuralese/view":
-                    from ..view import INSTRUCTIONS, REPLY_TOKENS, TEMPLATE, TOOLS, window_of, write_view
+                    from ..view import INSTRUCTIONS, REPLY_TOKENS, PART_MARGIN, TEMPLATE, TOOLS, view_site, window_of, write_view
 
                     body = self._object()
 
+                    source_turns = []
+                    native = bool(getattr(engine, "native_state_enabled", False))
                     def write(messages):
+                        if native:
+                            messages = [{**message, "content": [
+                                {**part, "type": "native_state"} if isinstance(part, dict) and part.get("type") == "neuralese" and str(part.get("id", "")).startswith("nzs1_") else part
+                                for part in message["content"]]} if isinstance(message.get("content"), list) else message
+                                for message in messages]
                         # The template write of view's body: the reply forced to return_result, its value written.
                         request = GenerationRequest(messages=messages, tools=TOOLS, template=dict(TEMPLATE),
-                                                    max_tokens=engine.max_block + REPLY_TOKENS)
-                        blocks = (engine.submit(request).result().get("neuralese") or {}).get("blocks") or []
+                                                    max_tokens=engine.max_block + REPLY_TOKENS,
+                                                    temperature=1.0 if native else 0.0, rl_capture=native)
+                        response = engine.submit(request).result()
+                        if native:
+                            receipt = response.get("x_natlang_rl_capture")
+                            if not isinstance(receipt, dict) or receipt.get("schema") != "natlang.native-rl-sampling/2":
+                                raise RequestError("neuralese-view-source", "native view must retain its actual template sampling receipt")
+                            source_turns.append({"messages": messages, "tools": TOOLS, "template": dict(TEMPLATE),
+                                                 "response": response})
+                        blocks = (response.get("native_state" if native else "neuralese") or {}).get("blocks") or []
                         if not blocks:
                             raise RequestError("neuralese-view", "a view write produced no block")
                         return blocks[0]["id"]
 
                     instructions = body.get("instructions") or None
                     system = body.get("system") or INSTRUCTIONS
-                    window = window_of(engine, instructions, body.get("window"), system)
+                    fits = None
+                    if native:
+                        def native_messages(messages):
+                            return [{**message, "content": [
+                                {**part, "type": "native_state"} if isinstance(part, dict) and part.get("type") == "neuralese" and str(part.get("id", "")).startswith("nzs1_") else part
+                                for part in message["content"]]} if isinstance(message.get("content"), list) else message
+                                for message in messages]
+                        reserve = engine.max_block + REPLY_TOKENS + PART_MARGIN
+                        available = engine.context - engine.prompt_positions(view_site(system, "", instructions), TOOLS) - reserve
+                        requested = body.get("window")
+                        if requested is not None and (type(requested) is not int or requested <= 0):
+                            raise RequestError("neuralese-view-window", "view window must be a positive token count")
+                        if available < 1:
+                            raise RequestError("context-length", "view site and output reserve do not fit this model context")
+                        window = min(available, requested) if requested is not None else available
+                        fits = lambda messages: engine.prompt_positions(native_messages(messages), TOOLS) + reserve < engine.context
+                    else:
+                        window = window_of(engine, instructions, body.get("window"), system)
                     block, parts = write_view(write, system, body.get("value") or "", instructions, engine.tokenizer,
-                                              window)
-                    return self._json(201, {**engine.lookup(block).meta(), "parts": parts, "window": window})
+                                              window, fits=fits)
+                    record = engine.store.get_native_state(block) if native else engine.lookup(block)
+                    return self._json(201, {**record.meta(), "parts": parts, "window": window,
+                                           **({"source_turns": source_turns} if native else {})})
                 if self.path == "/v1/neuralese/guidance/check":
                     from .guidance import Guide
 

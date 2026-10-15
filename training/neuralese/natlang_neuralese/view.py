@@ -122,7 +122,7 @@ def window_of(engine, instructions: str | None, requested: int | None = None, sy
     return min(available, requested) if requested else available
 
 
-def write_view(write, system, value: str, instructions: str | None, tokenizer, window: int):
+def write_view(write, system, value: str, instructions: str | None, tokenizer, window: int, *, fits=None):
     """Run the plan with `write(messages) -> block ID` (a template write at the site): the final view's block ID and
     the number of parts."""
     steps = plan(tokenizer, value, window)
@@ -130,7 +130,22 @@ def write_view(write, system, value: str, instructions: str | None, tokenizer, w
         return write(view_site(system, value, instructions)), 1
     parts = [write(part_site(system, chunk, instructions, i, len(steps.chunks)))
              for i, chunk in enumerate(steps.chunks)]
-    return write(combine_site(system, instructions, parts)), len(parts)
+    count = len(parts)
+    # Large documents can yield more summaries than a final write can attend to.
+    # Reduce ordered groups through the same view site until one final group fits.
+    while fits is not None and not fits(combine_site(system, instructions, parts)):
+        groups, current = [], []
+        for part in parts:
+            if current and not fits(combine_site(system, instructions, current + [part])):
+                groups.append(current)
+                current = []
+            current.append(part)
+        if current:
+            groups.append(current)
+        if len(groups) >= len(parts):
+            raise ValueError('view context cannot combine even two part states; increase serving context or reduce produced view lengths')
+        parts = [write(combine_site(system, instructions, group)) if len(group) > 1 else group[0] for group in groups]
+    return write(combine_site(system, instructions, parts)), count
 
 
 def reject_digest_part(part: dict) -> None:

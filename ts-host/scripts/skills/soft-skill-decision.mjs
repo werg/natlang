@@ -169,7 +169,7 @@ const step = (family, arm, from, to, trace, gains) => appendFile(join(out, 'impr
   trajectory: { id: `soft-skill-decision:${family}:${arm}`, step: 0 } })) + '\n');
 // The text-initialised skill, in context (text-init.ts, owner 2026-10-10): the first family's first support case renders
 // the call; its body makes that call the call with the skill as text (gated).
-const initResult = await initBodyInContext({ endpoint: options.endpoint, text: initText, type: 'Neuralese<string>',
+const initResult = await initBodyInContext({ store, endpoint: options.endpoint, text: initText, type: 'Neuralese<string>',
   render: (placeholder, driver) => call(split[families[0]].support[0], { $neuralese: { type: 'Neuralese<string>', id: placeholder } },
     createNatlangRuntime({ model: { driver }, neuralese: { store }, seed: { mode: 'backend' } })) });
 const init = { $neuralese: { type: 'Neuralese<string>', id: initResult.id } };

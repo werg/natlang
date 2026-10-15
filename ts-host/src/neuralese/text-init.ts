@@ -14,12 +14,15 @@
  * the prompt's generation position and a greedy reply). A failed gate is an error unless the caller accepts it.
  */
 import { chatCompletionModelTurn, fetchModel } from '../model/chat-completion.js';
+import { neuraleseServerInfo } from '../model/neuralese-info.js';
+import { nativeTextOperation, type NativeSourceCapture } from './native-state-client.js';
+import type { NeuraleseStore } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;
 
 export type TextInitGate = { passed: boolean; agreement: number; kl: number; bit_exact: boolean; positions: number;
   max_abs_logit_delta: number; reply_preview?: string };
-export type TextInitResult = { id: string; init: { exact: boolean; aligned: boolean; exact_transport: boolean; tokens: number };
+export type TextInitResult = { id: string; init: { exact: boolean; aligned: boolean; exact_transport: boolean; tokens: number; source_capture?: NativeSourceCapture; source_text_sha256?: string };
   gate: TextInitGate | null;
   /** `call`: the rendered call holds the body; `system-message`: it did not (a piece the sample call does not show),
    * and the body was initialised as the system message of a minimal call. */
@@ -71,10 +74,36 @@ export async function captureCallRequest(run: (driver: unknown) => Promise<unkno
  * Initialise the soft body for `text` in the context of the call that `render(bodyId, driver)` makes: a placeholder
  * block is registered (token embeddings of the text), the call is rendered with it, and the server returns the body.
  */
-export async function initBodyInContext(options: { endpoint: string; headers?: Record<string, string>; text: string;
+export async function initBodyInContext(options: { endpoint: string; headers?: Record<string, string>; store?: NeuraleseStore; text: string;
   type: string; render: (bodyId: string, driver: unknown) => Promise<unknown>; gate?: boolean; acceptFailedGate?: boolean;
-  replyTokens?: number; fallbackToSystemMessage?: boolean }): Promise<TextInitResult> {
+  replyTokens?: number; fallbackToSystemMessage?: boolean; placeholderOccurrence?: number }): Promise<TextInitResult> {
   const { endpoint, headers = {}, text, type } = options;
+  const server = await neuraleseServerInfo(endpoint, { headers });
+  if ((server.native_state as { enabled?: boolean } | undefined)?.enabled) {
+    if (!options.store?.putNativeState || !options.store.getNativeState)
+      throw Object.assign(new Error('neuralese-native-archive-unavailable: contextual native bodies need a native-capable archive'),
+        { code: 'neuralese-native-archive-unavailable' });
+    const client = { endpoint, headers, store: options.store, info: server };
+    const placeholder = (await nativeTextOperation(client, 'write-text', { text, type,
+      producer: { source_kind: 'native-body-placeholder' } })).result.id;
+    let request = await captureCallRequest(driver => options.render(placeholder, driver));
+    let context: TextInitResult['context'] = 'call';
+    if (!JSON.stringify(request.messages ?? []).includes(placeholder)) {
+      if (!options.fallbackToSystemMessage)
+        throw new Error('native body init: the rendered call must contain its exact native placeholder');
+      request = { messages: [{ role: 'system', content: [{ type: 'native_state', id: placeholder }] },
+        { role: 'user', content: 'Begin.' }] };
+      context = 'system-message';
+    }
+    const { result } = await nativeTextOperation(client, 'init-body', { messages: request.messages,
+      tools: request.tools, placeholder, text, type, gate: false,
+      ...(options.placeholderOccurrence === undefined ? {} : { placeholder_occurrence: options.placeholderOccurrence }) });
+    if (!result.init || result.init.exact !== false || result.init.aligned !== true ||
+        result.init.exact_transport !== true || result.init.contextual !== true || result.gate !== null)
+      throw new Error('native body init: server must distinguish contextual native capture from ordinary-text logit identity');
+    return { id: result.id, init: { ...result.init, source_capture: result.source_capture, source_text_sha256: result.source_text_sha256 } as TextInitResult['init'], gate: null, context };
+  }
+
   const placeholder = String((await post(endpoint, '/v1/neuralese/embed', { text, type }, headers)).id);
   let request = await captureCallRequest(driver => options.render(placeholder, driver));
   let context: TextInitResult['context'] = 'call';

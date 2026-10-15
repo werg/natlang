@@ -35,10 +35,11 @@ const dialect = info.dialect ?? info.dialects?.[0] ?? 'nd:natlang@1';
 const sample = loadVirtualNatlang({ 'summarize.nl': '---\nargs: { text: string }\nreturns: string\n---\n' +
   'Summarize the text in one sentence.\n' }, 'summarize.nl');
 const values = {}, digests = {}, inits = {};
+const nativeArchive = new MemoryNeuraleseStore();
 for (const piece of pieces) {
-  const result = await initBodyInContext({ endpoint, text: piece.text, type: SYSTEM_PROMPT_TYPE, acceptFailedGate,
+  const result = await initBodyInContext({ store: nativeArchive, endpoint, text: piece.text, type: SYSTEM_PROMPT_TYPE, acceptFailedGate,
     fallbackToSystemMessage: true,
-    render: (placeholder, driver) => createNatlangRuntime({ model: driver, neuralese: { store: new MemoryNeuraleseStore(),
+    render: (placeholder, driver) => createNatlangRuntime({ model: driver, neuralese: { store: nativeArchive,
       systemPrompts: systemPromptBank({ [piece.id]: neuraleseRef(SYSTEM_PROMPT_TYPE, placeholder) }) } })
       .run(() => sample('Anna meets Paul in Lyon on Tuesday to sign the contract.')) });
   values[piece.id] = neuraleseRef(SYSTEM_PROMPT_TYPE, result.id);

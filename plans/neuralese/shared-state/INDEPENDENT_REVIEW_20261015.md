@@ -49,3 +49,38 @@ and a parent's exact native-state splice. Sampling/tool syntax is controlled:
 this establishes runtime/state correctness, not learned task quality. Require
 both the actual production backbones and the full integrated recipe before
 cutover. New recovery messages retain live measurement debt.
+
+Native client completion follow-up:
+
+- Forced typed strings and contextual bodies now call real native producer
+  routes, verify exact text/token/role/source identities, archive output/imports
+  and preserve captures through `.nz` provenance. Empty strings use zero rows
+  with the complete model/layer layout; imported zero spans are cache no-ops.
+- Native views run the existing natural-language single/part/combine stages
+  through actual native template writes. The endpoint retains every source
+  turn; the client archives every intermediate and records shared graph edges.
+  Context-fit grouping reduces large sets of part states structurally.
+- Focused tiny LFM/Mellum forwards and deterministic sample controls test the
+  mechanism. They do not qualify a trained model's task performance.
+
+Advanced native learner-service remains an explicitly assigned repair, owned by
+root for scheduling and shared native-objective integration. These are live
+consumers, not deprecated features to silently strip:
+
+| Consumer | Required service | Required native validation |
+|---|---|---|
+| `neuralese/learning.ts` `evaluate`, `grad`, `valueAndGrad` | `POST /v1/neuralese/grad`, first and second derivatives | Whole native invocation graph objective, native parameter/checkpoint identity, exact gradient agreement; reuse `test/neuralese-learning.test.mjs` cases on both models. |
+| `neuralese/learning.ts` SGD/Adam optimizer methods | `POST /v1/neuralese/optim` | Real native parameter updates, optimizer resume and changed forward behavior; no projection/head alias. |
+| `neuralese/learning.ts` adapter creation and `withAdapters` | `POST /v1/neuralese/adapters` plus request adapter application | Explicit native adapter representation, correct checkpoint identity and functional/gradient validation. |
+| `model/neuralese-server.ts` decision readout and batch scorer | `POST /v1/neuralese/decide`, `POST /v1/natlang/score` | Exact cached native candidate scoring with typed imports, per-item and batched agreement; exercise `scripts/skills/decision-lib.mjs` and graded decision tests. |
+| `neuralese/learning.ts` distribution/delta/memetic methods | native multi-tensor delta/parameter operations | Preserve model/layer identities and tensor semantics through diff/apply/compose/interference/learnMerge/save; native KV is not a flat legacy vector. |
+| Native guided requests through the ordinary agent | `guidance` chat operation | Native cache/state rollback and sampled trajectory correctness, not merely syntax checking. |
+
+Structured unsupported capability errors keep these paths honest; they are not
+completion of the requested architecture replacement. Production cutover is
+OPEN until the integrated functionality, executable cross-model stages, data
+coverage and real model training/task checks are independently reviewed.
+
+Validation for native client/zero/view follow-up: ledger `native-review-complete-final-e2e-20261015` ran 59 passing CPU tests and 8 GPU skips; `native-review-complete-final-node-20261015` ran 49 passing Node tests. Final quick ratchets/typecheck passed. Actual full production-backbone GPU qualification remains separate.
+
+Final narrow follow-up: `native-review-publish-e2e-20261015` passed6 actual two-architecture tests after contextual length checks; `native-review-empty-dtypes-20261015` passed4 FP32/BF16 LFM/Mellum zero-state tests. Empty attention/convolution payloads retain the normal capture FP32 dtype even when embeddings are BF16.

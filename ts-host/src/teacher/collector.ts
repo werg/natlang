@@ -1,3 +1,5 @@
+import { nativeStateWritePort } from '../neuralese/native-state-client.js';
+import { serves } from '../model/neuralese-info.js';
 import { nativeStateConsumerFromInfo } from '../native/neuralese.js';
 import { controlledProviderProfile, type ProviderRequestControls } from './provider-request-controls.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -902,7 +904,12 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
     }) : undefined;
     if (config.neuraleseServer && !nativeInfo?.dialects?.[0])
       throw new Error('Neuralese server must declare its value dialect');
-    const valueRuntime = nativeStore ? { store: nativeStore, dialect: nativeInfo!.dialects![0]!, nativeStateConsumer: nativeStateConsumerFromInfo(nativeInfo!) } : textNeuralese?.runtime;
+    const nativePort = nativeStore && (nativeInfo?.native_state as { enabled?: boolean } | undefined)?.enabled &&
+      serves(nativeInfo!, 'native.text-write') ? await nativeStateWritePort({ endpoint: config.endpoint!, store: nativeStore,
+        headers: config.apiKeyEnv ? { authorization: 'Bearer ' + process.env[config.apiKeyEnv] } : undefined,
+        info: nativeInfo! as import('../model/neuralese-info.js').NeuraleseServerInfo }) : undefined;
+    const valueRuntime = nativeStore ? { store: nativeStore, dialect: nativeInfo!.dialects![0]!,
+      nativeStateConsumer: nativeStateConsumerFromInfo(nativeInfo!), ...(nativePort ? { port: nativePort } : {}) } : textNeuralese?.runtime;
     const session = config.provider ? createManagedModelSession(controlledProviderProfile(config.provider,
       config.modelId, config.piOptions, config.providerRequestControls)) : undefined;
     const judgeConfig = config.judgeModel;

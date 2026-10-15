@@ -114,7 +114,7 @@ for (const episode of rows) {
   await record({ arm: 'none', ...none });
   // The text-initialised skill, in context (text-init.ts, owner 2026-10-10): the first support case's call rendered
   // with the skill as a placeholder; the body makes it the call with the skill as text (gated).
-  const initResult = await initBodyInContext({ endpoint: options.endpoint, text: initText, type: 'Neuralese<string>',
+  const initResult = await initBodyInContext({ store, endpoint: options.endpoint, text: initText, type: 'Neuralese<string>',
     render: (placeholder, driver) => createNatlangRuntime({ model: driver, neuralese: { store } })
       .run(() => solve.in(base.with({ skill: { $neuralese: { type: 'Neuralese<string>', id: placeholder } } }))(...support[0].args)) });
   const init = { $neuralese: { type: 'Neuralese<string>', id: initResult.id } };
