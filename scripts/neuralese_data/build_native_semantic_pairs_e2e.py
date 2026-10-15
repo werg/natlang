@@ -28,6 +28,29 @@ from natlang_neuralese.model.shared_state import ROLE_MARKERS
 
 PAIR_SCHEMA = 'natlang.native-semantic-pair/1'
 BUILD_SCHEMA = 'natlang.native-semantic-e2e-build/2'
+
+
+def rebind_pair_source_corpus(row, corpus_id):
+    """Exact derived metadata repair; token/state geometry is unchanged."""
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    if not isinstance(corpus_id, str) or not corpus_id.strip():
+        raise ValueError('source corpus ID must be explicitly declared')
+    old_hash = canonical_json_sha256_hex(row['communication'])
+    if old_hash != row['communication_sha256']:
+        raise ValueError('original communication hash changed before corpus repair')
+    for view in row['models'].values():
+        if (view['witness']['communication_sha256'] != old_hash or
+                view['graph']['source_pairing']['communication_sha256'] != old_hash):
+            raise ValueError('original model witness changed before corpus repair')
+    result = copy.deepcopy(row)
+    result['communication']['source_binding']['corpus_id'] = corpus_id
+    result['conversion']['source_corpus'] = corpus_id
+    new_hash = canonical_json_sha256_hex(result['communication'])
+    result['communication_sha256'] = new_hash
+    for view in result['models'].values():
+        view['witness']['communication_sha256'] = new_hash
+        view['graph']['source_pairing']['communication_sha256'] = new_hash
+    return result
 BUILD_POLICY = 'complete-source-trajectories-expanded-tokenizer-native-graphs-v2'
 CHECKPOINT_TRAJECTORIES = 16
 RESUME_SCHEMA = 'natlang.native-semantic-e2e-resume/2'
@@ -704,7 +727,7 @@ def _render_trajectory(task):
                 'communication': communication, 'communication_sha256': communication_sha,
                     'conversion': {'kind': 'static-transformation', 'native_capture': False,
                         'normalized_typed_occurrence': True, 'transformation': occurrence['transform'],
-                    'source_corpus': 'neuralese-e2e-cloud-rest27-protected-20261015-v2',
+                    'source_corpus': args.source_corpus_id,
                     'trajectory': chain, 'edge_id': edge_id,
                     'source_writer_id': edge['writer_record_id'],
                     'source_reader_id': edge['reader_record_id'],
@@ -766,7 +789,7 @@ def main():
     parser.add_argument('--mellum-tokenizer', type=Path, required=True)
     parser.add_argument('--records-sha256', required=True)
     parser.add_argument('--edges-sha256', required=True)
-    parser.add_argument('--source-corpus-id', default='neuralese-e2e-cloud-rest27-protected-20261015-v2',
+    parser.add_argument('--source-corpus-id', required=True,
                         help='exact registered source corpus ID recorded in each communication witness')
     parser.add_argument('--max-trajectories', type=int, default=None,
                         help='bounded converter test only; omit for corpus admission')

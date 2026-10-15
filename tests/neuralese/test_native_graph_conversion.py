@@ -4,6 +4,48 @@ from natlang_neuralese.data.native_graph_conversion import (
 )
 
 
+def test_pair_source_corpus_repair_rebinds_all_witnesses_without_changing_model_graphs():
+    import copy
+    import pytest
+    from types import SimpleNamespace
+    from test_native_state_sft import authenticated_pair
+    from scripts.neuralese_data.build_native_semantic_pairs_e2e import rebind_pair_source_corpus
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    from natlang_neuralese.data.native_pair_schema import parse_pair
+    row=authenticated_pair('actual-source-edge');row['conversion']={'source_corpus':'wrong-rest-default'}
+    for view in row['models'].values():
+        view['graph']['source_pairing']['communication_sha256']=row['communication_sha256']
+    original=copy.deepcopy(row)
+    repaired=rebind_pair_source_corpus(row,'neuralese-e2e-cloud-big2-protected-20261015-v1')
+    assert row==original and repaired['id']==original['id']
+    assert repaired['communication']['source_binding']['corpus_id']==repaired['conversion']['source_corpus']
+    assert repaired['communication_sha256']==canonical_json_sha256_hex(repaired['communication'])
+    assert repaired['communication_sha256']!=original['communication_sha256']
+    for name,view in repaired['models'].items():
+        assert view['graph']['nodes']==original['models'][name]['graph']['nodes']
+        assert view['export']==original['models'][name]['export']
+        assert view['witness']['communication_sha256']==repaired['communication_sha256']
+        assert view['graph']['source_pairing']['communication_sha256']==repaired['communication_sha256']
+    participants={name:SimpleNamespace(config={'tokenizer_fingerprint':view['graph']['tokenizer_fingerprint']})
+                  for name,view in row['models'].items()}
+    assert set(parse_pair(repaired,participants,required_split='train'))==set(participants)
+    bad=copy.deepcopy(row);next(iter(bad['models'].values()))['witness']['communication_sha256']='changed'
+    with pytest.raises(ValueError,match='original model witness changed'):
+        rebind_pair_source_corpus(bad,'correct')
+
+
+def test_e2e_conversion_requires_explicit_source_corpus_before_opening_inputs(monkeypatch,capsys):
+    import pytest
+    from scripts.neuralese_data.build_native_semantic_pairs_e2e import main
+    args=['builder']
+    for flag in ['records','pieces','edges','out','lfm-tokenizer','mellum-tokenizer','records-sha256','edges-sha256']:
+        args.extend(['--'+flag,'not-opened'])
+    monkeypatch.setattr('sys.argv',args)
+    with pytest.raises(SystemExit) as error:main()
+    assert error.value.code==2
+    assert '--source-corpus-id' in capsys.readouterr().err
+
+
 class AsciiTokenizer:
     def decode(self, ids, skip_special_tokens=False):
         return ''.join(chr(value) for value in ids)

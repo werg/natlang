@@ -74,3 +74,14 @@ that token IDs transfer between tokenizers.
 - Both model recipe plans resolve the exact admitted graph and text manifests,
   held packets, and task packet. A focused trainer execution verifies actual
   graph exposure and continuation; no stage-name-only completion qualifies.
+# Exact source-corpus provenance repair
+
+The corpus declaration is an explicit converter input, never a hidden REST
+default. A wrong declaration is repaired as a new derived artifact without
+replaying expensive tokenization: validate the original communication hash and
+all bound witnesses, change the declared corpus metadata, recompute its hash and
+every witness binding, and preserve the original file hashes in a repair
+receipt. Graph IDs, tokens, state-splice geometry, groups, edge IDs and split
+remain exact. This crisp transformation verifies artifact identity and does not
+grant admission or change the natural-language data-selection policy.
+
