@@ -42,6 +42,8 @@ Pair with `natlang-authoring` for substantial natural-language algorithms when t
 
 Persistent eval helpers support TypeScript `as const` assertions for literal and tuple results; the assertion needs no captured type binding. Other referenced named types must remain available in the call scope.
 
+For native shared-state turns, keep `{type: 'native_state', id}` references structured through message history and nested tool-call arguments. Before a request, restore each referenced artifact from the runtime store; if the server reports `neuralese-unknown-native-state`, fetch the same ID and retry without rewriting its arguments. The server may splice KV/hybrid state only when the exact model identities match; a foreign block uses its stored text for target-tokenizer re-encoding and discards foreign tensors. Retain the `natlang.native-rl-sampling/1` receipt and copy every referenced produced state artifact before releasing the serving owner.
+
 ## Student prompt rendering
 
 Use `promptRendering: "program-header"` in the model profile (or runtime `model`

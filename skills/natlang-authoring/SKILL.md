@@ -71,6 +71,8 @@ For embedding in an application, pair this skill with `natlang-integration` when
 
 Persistent eval helpers support TypeScript `as const` assertions for literal and tuple results; the assertion needs no captured type binding. Other referenced named types must remain available in the call scope.
 
+When a conversation carries a `native_state` content part, preserve its ID as an opaque exact-state reference through history and tool arguments. Same-model state can be spliced only when checkpoint, tokenizer, embedding and architecture identities match. A `neuralese-unknown-native-state` response means restore/upload that referenced artifact and retry the same request; an identity mismatch permits only explicit text retokenization, never reuse of its foreign tensors.
+
 ## Recover from service argument-shape errors
 
 A service declaration defines its positional arguments. When a service error gives the expected typed call, inspect that method with `read_code`, bind each declared argument separately, and retry the stated positional invocation. For the story witness service, use `storyEvidence.checkWitnesses(snapshot, witnesses)` with a `SourceSnapshot` and a `Witness[]`. Keep this recovery in the boundary error and skill guidance; the application prompt need not enumerate invalid call forms. Natural-language stages still decide what the witnesses mean; the service verifies their exact source identity and quotation.

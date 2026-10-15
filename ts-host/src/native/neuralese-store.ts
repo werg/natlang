@@ -55,6 +55,10 @@ export interface NeuraleseStore {
   unpin(id: string): Promise<void>;
   /** Drop every unpinned block that `referenced` does not name. Returns the IDs removed. */
   collect(referenced: ReadonlySet<string>): Promise<string[]>;
+  /** Exact positional-KV/hybrid-state artifacts share this store's ownership lifecycle when supported. */
+  putNativeState?(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact>;
+  getNativeState?(id: string): Promise<NativeStateArtifact | undefined>;
+  hasNativeState?(id: string): Promise<boolean>;
 }
 
 const BYTES: Record<NeuraleseDtype, number> = { f32: 4, f16: 2, bf16: 2 };
@@ -261,6 +265,7 @@ export function checkBlockShape(block: NeuraleseBlockInput): void {
 /** Process-local store; the default for runtimes without a model-side store, and for tests. */
 export class MemoryNeuraleseStore implements NeuraleseStore {
   private readonly blocks = new Map<string, NeuraleseBlock>();
+  private readonly nativeStates = new Map<string, NativeStateArtifact>();
   /** Metadata of blocks held elsewhere (`note`). */
   private readonly noted = new Map<string, NeuraleseBlockMeta>();
   private readonly pins = new Map<string, number>();
@@ -286,7 +291,21 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
     const found = this.blocks.get(id);
     return found && { ...found.meta };
   }
-  async has(id: string): Promise<boolean> { return this.blocks.has(id); }
+  async has(id: string): Promise<boolean> { return this.blocks.has(id) || this.nativeStates.has(id); }
+  async putNativeState(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
+    const id = nativeStateContentId(artifact.metadata, artifact.tensors);
+    const stored = { id, metadata: structuredClone(artifact.metadata), tensors: Object.fromEntries(
+      Object.entries(artifact.tensors).map(([name, tensor]) => [name, { ...tensor, shape: [...tensor.shape], data: tensor.data.slice() }])) };
+    const found = this.nativeStates.get(id);
+    if (found) return structuredClone(found);
+    this.nativeStates.set(id, stored);
+    return structuredClone(stored);
+  }
+  async getNativeState(id: string): Promise<NativeStateArtifact | undefined> {
+    const found = this.nativeStates.get(id);
+    return found && structuredClone(found);
+  }
+  async hasNativeState(id: string): Promise<boolean> { return this.nativeStates.has(id); }
   peek(id: string): NeuraleseBlockMeta | undefined {
     const found = this.blocks.get(id)?.meta ?? this.noted.get(id);
     return found && { ...found };
@@ -295,7 +314,7 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
     if (!this.blocks.has(meta.id)) this.noted.set(meta.id, { ...meta });
   }
   async pin(id: string): Promise<void> {
-    if (!this.blocks.has(id)) throw new Error(`neuralese-unknown-block: ${id}`);
+    if (!this.blocks.has(id) && !this.nativeStates.has(id)) throw new Error(`neuralese-unknown-block: ${id}`);
     this.pins.set(id, (this.pins.get(id) ?? 0) + 1);
   }
   async unpin(id: string): Promise<void> {
@@ -304,12 +323,14 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
   }
   async collect(referenced: ReadonlySet<string>): Promise<string[]> {
     const removed: string[] = [];
-    for (const id of [...this.blocks.keys()])
-      if (!referenced.has(id) && !this.pins.has(id)) { this.blocks.delete(id); removed.push(id); }
+    for (const id of [...this.blocks.keys(), ...this.nativeStates.keys()])
+      if (!referenced.has(id) && !this.pins.has(id)) {
+        this.blocks.delete(id); this.nativeStates.delete(id); removed.push(id);
+      }
     for (const id of [...this.noted.keys()]) if (!referenced.has(id)) this.noted.delete(id);
     return removed;
   }
-  get size(): number { return this.blocks.size; }
+  get size(): number { return this.blocks.size + this.nativeStates.size; }
 }
 
 /** Write port: turns what a model wrote inside a literal into a stored block. */

@@ -25,7 +25,8 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
  * may be such arrays, where the server wrote a block. A transport that carries parts sets `neuralese: true` on its
  * driver function; the runtime fails a call with `neuralese-unsupported-backend` rather than send blocks elsewhere.
  */
-export type ModelContentPart = { type: 'text'; text: string } | { type: 'neuralese'; id: string; value_type?: 'string' | 'unknown' };
+export type ModelContentPart = { type: 'text'; text: string } | { type: 'neuralese'; id: string; value_type?: 'string' | 'unknown' } |
+  { type: 'native_state'; id: string };
 /** Calls are an ordered, non-atomic batch. Dependent calls belong in later turns. */
 export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: string;
   raw_calls?: unknown[]; completion_tokens?: number; prompt_tokens?: number;
@@ -59,6 +60,7 @@ export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: st
 export type ModelTurnDelta = { type: 'text'; text: string } | { type: 'reasoning'; text: string } |
   { type: 'tool_call'; index: number; id?: string; name?: string; arguments?: string } |
   { type: 'neuralese'; part: Extract<ModelContentPart, { type: 'neuralese' }>; block?: Record<string, unknown> } |
+  { type: 'native_state'; part: Extract<ModelContentPart, { type: 'native_state' }>; block?: Record<string, unknown> } |
   { type: 'reset' };
 /**
  * Per-call options of a model-turn driver, its optional third argument: `(request, signal?, options?)`. They are not

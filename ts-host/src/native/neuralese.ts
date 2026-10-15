@@ -22,11 +22,59 @@ export const NEURALESE_CLOSE = '<|/neuralese|>';
 export type NeuraleseRef = { readonly $neuralese: { readonly type: string; readonly id: string } };
 export type NeuraleseTextPart = { type: 'text'; text: string };
 export type NeuraleseContentPart = { type: 'neuralese'; id: string };
+export type NativeStateContentPart = { type: 'native_state'; id: string };
 export type ContentPart = NeuraleseTextPart | NeuraleseContentPart;
+export type RuntimeContentPart = ContentPart | NativeStateContentPart;
 
 const ID = /^nz1_[a-z2-7]{20,}$/;
 const SENTINEL_OPEN = '', SENTINEL_CLOSE = '';
 const SENTINEL = /(nz1_[a-z2-7]+)/g;
+const NATIVE_SENTINEL_OPEN = '', NATIVE_SENTINEL_CLOSE = '';
+const NATIVE_STATE_ID = /^nzs1_[a-z2-7]{52}$/;
+const NATIVE_SENTINEL = /(nzs1_[a-z2-7]{52})/g;
+
+export function isNativeStateId(value: unknown): value is string {
+  return typeof value === 'string' && NATIVE_STATE_ID.test(value);
+}
+
+export function nativeStateSentinel(id: string): string {
+  if (!isNativeStateId(id)) throw new TypeError(`not a native-state block ID: ${JSON.stringify(id)}`);
+  return `${NATIVE_SENTINEL_OPEN}${id}${NATIVE_SENTINEL_CLOSE}`;
+}
+
+export function nativeStateSentinelIds(text: string): string[] {
+  return [...text.matchAll(NATIVE_SENTINEL)].map(match => match[1]!);
+}
+
+export function runtimePartsToText(parts: readonly RuntimeContentPart[]): string {
+  return parts.map(part => part.type === 'text' ? part.text :
+    part.type === 'neuralese' ? neuraleseSentinel(part.id) : nativeStateSentinel(part.id)).join('');
+}
+
+export function runtimeTextToParts(text: string): RuntimeContentPart[] {
+  const parts: RuntimeContentPart[] = [];
+  const markers = [...text.matchAll(/(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})/g)];
+  let last = 0;
+  for (const match of markers) {
+    if (match.index! > last) parts.push({ type: 'text', text: text.slice(last, match.index) });
+    parts.push(match[1] ? { type: 'neuralese', id: match[1] } : { type: 'native_state', id: match[2]! });
+    last = match.index! + match[0].length;
+  }
+  if (last < text.length || !parts.length) parts.push({ type: 'text', text: text.slice(last) });
+  return parts;
+}
+
+export function nativeStateTextToParts(text: string): RuntimeContentPart[] {
+  const parts: RuntimeContentPart[] = [];
+  let last = 0;
+  for (const match of text.matchAll(NATIVE_SENTINEL)) {
+    if (match.index! > last) parts.push({ type: 'text', text: text.slice(last, match.index) });
+    parts.push({ type: 'native_state', id: match[1]! });
+    last = match.index! + match[0].length;
+  }
+  if (last < text.length || !parts.length) parts.push({ type: 'text', text: text.slice(last) });
+  return parts;
+}
 
 export function isNeuraleseId(value: unknown): value is string { return typeof value === 'string' && ID.test(value); }
 

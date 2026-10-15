@@ -6,6 +6,7 @@
  * and token accounting.
  */
 import type { DecisionScorer, ModelContentPart, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
+import { runtimePartsToText, type RuntimeContentPart } from '../native/neuralese.js';
 
 type Json = Record<string, unknown>;
 /** Streamed chunks (`chat.completion.chunk`), or a single complete `chat.completion` body. */
@@ -103,6 +104,13 @@ export async function assembleChatCompletion(chunks: AsyncIterable<Json>, onDelt
     if (last?.type === 'text') last.text += text; else parts.push({ type: 'text', text });
     if (text) emit({ type: 'text', text });
   };
+  const blockFor = (chunk: Json, id: string) => {
+    for (const key of ['neuralese', 'native_state']) {
+      const block = (chunk[key] as Json | undefined)?.block as Json | undefined;
+      if (block?.id === id) return block;
+    }
+    return undefined;
+  };
   for await (const chunk of chunks) {
     if (!Object.keys(head).length) head = { id: chunk.id, model: chunk.model, created: chunk.created };
     for (const key of ['usage', 'timings', 'system_fingerprint'] as const) if (chunk[key] != null) extra[key] = chunk[key];
@@ -118,12 +126,16 @@ export async function assembleChatCompletion(chunks: AsyncIterable<Json>, onDelt
     if (typeof delta.content === 'string') { addText(delta.content); sawContent = true; }
     else if (Array.isArray(delta.content)) {
       sawContent = true; partsOnly = false;
-      const block = (chunk.neuralese as Json | undefined)?.block as Json | undefined;
       for (const part of delta.content as ModelContentPart[]) {
         if (part?.type === 'text') addText(part.text);
         else if (part?.type === 'neuralese') {
           parts.push({ ...part });
-          emit({ type: 'neuralese', part: { ...part }, ...(block && block.id === part.id ? { block } : {}) });
+          const block = blockFor(chunk, part.id);
+          emit({ type: 'neuralese', part: { ...part }, ...(block ? { block } : {}) });
+        } else if (part?.type === 'native_state') {
+          parts.push({ ...part });
+          const block = blockFor(chunk, part.id);
+          emit({ type: 'native_state', part: { ...part }, ...(block ? { block } : {}) });
         }
       }
     }
@@ -151,6 +163,17 @@ export async function assembleChatCompletion(chunks: AsyncIterable<Json>, onDelt
     ...(sawReasoning ? { reasoning_content: reasoning } : {}),
     ...(calls.length ? { tool_calls: calls.filter(Boolean) } : {}) };
   return { ...head, object: 'chat.completion', choices: [{ index: 0, message, finish_reason: finish }], ...extra };
+}
+
+function contentText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value) && value.every(part => part && typeof part === 'object' &&
+      (part.type === 'text' && typeof part.text === 'string' ||
+       part.type === 'neuralese' && typeof part.id === 'string' ||
+       part.type === 'native_state' && typeof part.id === 'string')))
+    return runtimePartsToText(value as RuntimeContentPart[]);
+  if (value == null) return '';
+  throw new Error('model content contains unsupported structured parts');
 }
 
 /** Tool schemas as the model sees them: the runtime's private annotations (`x-natlang…`, `x-optional`) removed. */
@@ -272,17 +295,18 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
           return [reverse[wireName] ?? wireName, decodeArguments(fn?.arguments)];
         });
         // A tool call the server could not parse arrives as markup in the text: it is a malformed call, not a reply.
-        if (!calls.length && TOOL_MARKUP.test(String(message?.content ?? ''))) throw new LeakedCall('the tool call came back as text');
+        const replyText = contentText(message?.content);
+        if (!calls.length && TOOL_MARKUP.test(replyText)) throw new LeakedCall('the tool call came back as text');
         // A reply that is nothing but one offered tool's arguments, written out as JSON, is that call.
-        const written = calls.length ? undefined : callWrittenAsText(String(message?.content ?? ''), tools);
+        const written = calls.length ? undefined : callWrittenAsText(replyText, tools);
         if (written) calls.push([reverse[written[0]] ?? written[0], written[1]]);
         const reasoning = message?.reasoning_content ?? message?.reasoning;
-        return finish({ calls, text: String(message?.content ?? ''), raw_calls: rawCalls,
+        return finish({ calls, text: replyText, raw_calls: rawCalls,
           ...(typeof reasoning === 'string' && reasoning.trim() ? { reasoning } : {}),
           ...(truncated ? { truncated: true } : {}), ...counts(), raw_response: body });
       } catch (error) {
         // A reply cut off mid tool call is a truncated turn, not a transport failure.
-        if (truncated) return finish({ calls: [], text: String(message?.content ?? ''), truncated: true,
+        if (truncated) return finish({ calls: [], text: contentText(message?.content), truncated: true,
           ...counts(), raw_response: body });
         // A second leaked call ends the turn as an empty reply: its markup must never read as the answer.
         if (retries >= 1 && error instanceof LeakedCall) return finish({ calls: [], text: '', ...counts(), raw_response: body });
@@ -290,7 +314,7 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
           throw new Error(`model returned malformed tool arguments after ${retries + 1} attempt${retries ? 's' : ''}: ` +
             `${error instanceof Error ? error.message : String(error)}`, { cause: error });
         retries++;
-        attemptMessages = [...messages, { role: 'assistant', content: String(message?.content ?? '') },
+        attemptMessages = [...messages, { role: 'assistant', content: contentText(message?.content) },
           { role: 'user', content: MALFORMED_RETRY }];
       }
     }

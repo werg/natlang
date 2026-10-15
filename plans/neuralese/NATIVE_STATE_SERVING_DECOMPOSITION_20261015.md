@@ -9,6 +9,7 @@ Serving treats a native state block as immutable model state, not as projected N
 3. **Resolve a consumer reference** — message parsing recognizes a distinct native-state part and carries its ID as structured input; it never serializes raw tensor state into prompt text. Exact-compatible blocks invoke the shared model's splice operation at the consumer marker and current positional boundary. A foreign block can use its text only through explicit target tokenization and construction of target-native cache state; raw foreign KV is never passed as compatible.
 4. **Return producer references** — responses preserve the text and return a distinct native-state content part plus verified metadata. Structured references participate in existing pin/collect behavior exactly like other content-addressed blocks.
 5. **Compatibility and cutover** — the legacy `nz1_` projected-block route remains available for diagnostic parents. The new format uses a disjoint versioned identifier and rejects cross-version interpretation. Legacy removal is a later qualified cutover decision after both model serving and transport consumers use this path.
+6. **Capture a replayable native sampling turn** — when requested, the serving boundary emits `natlang.native-rl-sampling/1`: exact policy identities; ordered prompt token/native-state segments; every sampled token, its normalized log probability, the role used on its next model input, and terminal status; produced state IDs with half-open ranges; and the effective sampling seed/law. The runtime keeps this record on the raw model response through collection and rollout emission. Native state IDs are transitive artifact references: the collection actor archives each referenced artifact before it releases its server-side owner.
 
 ## Components
 
@@ -19,6 +20,7 @@ Serving treats a native state block as immutable model state, not as projected N
 | NativeStateBlock validation and content identity | Crisp verifier | Byte-for-byte identity and shape/dtype checks must be deterministic across Python and TypeScript. |
 | Persistence, pin/hold/collect, HTTP and client transport | Existing crisp store/service mechanisms, extended for a second versioned record kind | Atomic writes and external transport are exact durability/service boundaries. |
 | Reference rendering and response parsing | Natural-language message policy with crisp structured-part parsing | References remain values; raw state is never rendered as ordinary prompt text. |
+| Native rollout sampling receipt | Exact serving/collector metadata beside the natural-language task trajectory | Token IDs, sampled log probabilities, marker roles, range boundaries and artifact identities must round-trip unchanged for the native graph objective. |
 
 ## Required verification
 
