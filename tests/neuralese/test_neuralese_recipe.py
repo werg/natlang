@@ -921,10 +921,11 @@ def test_active_native_data_handoff_binds_both_exact_predecessors(tmp_path):
     path = out / 'recipe-plan.json'
     candidate = plan(True)
     candidate['recipe']['stages'][0]['parameters'].update(
-        epochs=2, batch_tokens=8192, learning_rate=6e-6, weight_decay=.05, latent_ns='cubic5')
+        epochs=2, batch_tokens=32768, chunk_tokens=1024, learning_rate=6e-6, weight_decay=.05, latent_ns='cubic5')
     result = runner.lineage_handoff(copy.deepcopy(existing), candidate, frozen, package, path, out, dry_run=True)
     assert result['handoffs'][-1]['stage_input_changes']['native']['kind'] == 'data_continuation'
     assert result['handoffs'][-1]['windowing_changes']['native']['epochs'] == [1, 2]
+    assert result['handoffs'][-1]['windowing_changes']['native']['chunk_tokens'] == [None, 1024]
     invalid = copy.deepcopy(candidate)
     invalid['stage_inputs']['native']['continued_held_native_graphs']['sha256'] = 'unrelated-held'
     with pytest.raises(ValueError, match='started stage'):
