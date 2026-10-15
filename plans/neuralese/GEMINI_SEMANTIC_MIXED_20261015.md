@@ -30,3 +30,9 @@ is for scripted static SFT only, with the one held program excluded at render
 and global held/source-quality filters still required. The mixed tranche was a
 temporary source-diversity window. The CLINC replenisher timer resumed after
 batch02 closed and has started batch47 at its one-minute cadence.
+
+The LFM/Mellum twin render is registered as
+`gemini-semantic-mixed-static-reviewed-render-20261015-v1` (manifest
+`e4966936`) and verified on DGX. It selects 622 native decisions and excludes
+all 18 decisions from the one held program, with exact program-header parity.
+The DGX protected union still makes the final cross-corpus admission decision.

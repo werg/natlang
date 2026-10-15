@@ -20,4 +20,8 @@ were excluded. The curated source corpus
 groups against the original admitted seed52067–52072 corpora. Original seed
 corpora remain immutable. The 69,763,284-byte candidate-turn materialization
 was pruned after curation; the curated source and exact parent/audit evidence
-remain. LFM/Mellum twin rendering and protected union inclusion are pending.
+remain. LFM/Mellum twin rendering is registered as
+`luna-dataset-workbench-salvaged-render-20261015-v1` (manifest `c0207e02`),
+verified on DGX: all 769 curated turns selected, zero unexpected omissions,
+with 5% of programs sampled for full-prompt warmup. Protected union inclusion
+remains the DGX owner's next admission step.
