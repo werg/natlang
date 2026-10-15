@@ -51,6 +51,11 @@ supersede older projection/recursive graph-replay foundation rules for new work.
   target. Follow with behavioral distillation/self-supervised SFT. Those
   per-token semantic encodings become the shared dialect. Do not claim that
   this later adapter is already trained or substitute the old projection.
+  This requires completed training on genuine producer/consumer shared-state
+  graphs in each participating model before VAE adaptation. Ordinary one-node
+  text SFT alone does not qualify. Admit those communication graphs into the
+  active shared trainer promptly, preserve completed per-row exposure and
+  optimizer state, and record their complete exposure explicitly in readiness.
 - Replace the old approach end to end: shared trainers, conversions, inference,
   block storage/transport, natlang harness, evaluators and recipes. Retain all
   usable source data and protected evaluation splits through conversion, and

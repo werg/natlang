@@ -21,7 +21,9 @@ def ready(tmp_path, name):
                 'embedding_weight_sha256': '3'*64, 'architecture': name}
     recipe = artifact('recipe', {'native_stages': ['full', 'graph']})
     prior = artifact('prior-exposure', {'completed': True})
-    report = artifact('report', {'completed': True, 'checkpoint_sha256': checkpoint['sha256']})
+    communication = {'graphs': 4, 'required_graph_visits': 4, 'graph_visits': 4, 'complete': True}
+    report = artifact('report', {'completed': True, 'checkpoint_sha256': checkpoint['sha256'],
+                                 'communication_exposure': communication})
     runtime = artifact('runtime', {'schema': 'natlang.native-runtime-certificate/1', 'passed': True,
         'native_identity': identity, 'backbone_optimizer_tested': True, 'backbone_optimizer_updates': 20,
         'forward_atol': 1e-4, 'gradient_atol': 1e-5,
@@ -32,11 +34,37 @@ def ready(tmp_path, name):
         'completed': True, 'stage_id': 'graph', 'native_identity': identity, 'checkpoint': checkpoint,
         'recipe': recipe, 'prerequisite_stages': [{'id': 'full', 'completed': True, 'exposure_receipt': prior}],
         'training_receipt': report, 'runtime_certificate': runtime, 'task_execution_receipt': task,
+        'communication_exposure': communication,
         'exposure': {'consumed_updates': 20, 'supervised_token_visits': 800}}
     path = root/'readiness.json'; path.write_text(json.dumps(receipt))
     requirement = {'model_id': name, 'readiness': str(path), 'recipe_sha256': recipe['sha256'],
                    'stage_ids': ['full', 'graph'], 'forward_atol': 1e-4, 'gradient_atol': 1e-5}
     return path, receipt, requirement
+
+
+@pytest.mark.parametrize('communication', [None,
+    {'graphs': 0, 'required_graph_visits': 0, 'graph_visits': 0, 'complete': True},
+    {'graphs': 4, 'required_graph_visits': 4, 'graph_visits': 3, 'complete': False},
+    {'graphs': 4, 'required_graph_visits': 2, 'graph_visits': 2, 'complete': True}])
+def test_ordinary_or_partial_communication_training_cannot_start_vae(tmp_path, communication):
+    path, receipt, requirement = ready(tmp_path, 'lfm')
+    report_path = Path(receipt['training_receipt']['path'])
+    report = json.loads(report_path.read_text())
+    report['communication_exposure'] = communication
+    report_path.write_text(json.dumps(report))
+    receipt['training_receipt']['sha256'] = sha256_file_hex(report_path)
+    receipt['communication_exposure'] = communication
+    path.write_text(json.dumps(receipt))
+    with pytest.raises(ValueError, match='genuine producer/consumer'):
+        validate_ready(path, requirement)
+
+
+def test_readiness_communication_exposure_must_match_bound_training_report(tmp_path):
+    path, receipt, requirement = ready(tmp_path, 'lfm')
+    receipt['communication_exposure'] = {**receipt['communication_exposure'], 'graph_visits': 5}
+    path.write_text(json.dumps(receipt))
+    with pytest.raises(ValueError, match='genuine producer/consumer'):
+        validate_ready(path, requirement)
 
 
 def test_second_ready_model_proceeds_without_waiting_for_all_models(tmp_path):
@@ -151,11 +179,15 @@ def test_optional_rl_launch_waits_for_shared_validation_and_uses_same_child_supe
         stop.requested = True
         return Child(False)
     monkeypatch.setattr(controller.subprocess, 'Popen', launch)
-    monkeypatch.setattr(controller.time, 'sleep', lambda seconds: None)
+    def pause(seconds):
+        if not qualified:
+            stop.requested = True
+    monkeypatch.setattr(controller.time, 'sleep', pause)
     if not qualified:
-        with pytest.raises(ValueError, match='qualification missing'):
-            controller.run(path)
+        result = controller.run(path)
         assert len(launched) == 1
+        assert result['last_successful_participants'] is None
+        assert result['retry']['reason'].startswith('shared completion rejected:')
     else:
         result = controller.run(path)
         assert len(launched) == 2

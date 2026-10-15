@@ -27,14 +27,16 @@ def test_shared_file_digest_does_not_qualify_wrong_participant_or_adapter(tmp_pa
             validate_actor_receipts({'endpoint': {**receipt, **change}}, policy_id=binding['sha256'], neuralese_server=True, expected_native=expected)
 
 
-@pytest.mark.parametrize('rl', [False, True])
-@pytest.mark.parametrize('launch_failure', [False, True])
-def test_failed_child_retries_preserved_work_without_marking_success(tmp_path, monkeypatch, rl, launch_failure):
+@pytest.mark.parametrize('rl,failure_kind', [(False, 'exit'), (True, 'exit'),
+    (False, 'launch'), (True, 'launch'), (False, 'missing-completion'), (False, 'invalid-completion')])
+def test_failed_child_retries_preserved_work_without_marking_success(tmp_path, monkeypatch, rl, failure_kind):
     from natlang_neuralese.train import native_readiness as controller, loop
     out = tmp_path/'controller'; out.mkdir()
     curriculum = tmp_path/'curriculum.json'; curriculum.write_text('{}')
     config = {'schema': 'natlang.native-shared-stage-controller/1', 'out': str(out),
         'command': ['semantic-fixture'], 'curriculum': str(curriculum), 'participants': [], 'poll_seconds': 1}
+    if failure_kind == 'invalid-completion':
+        (out/'shared-stage-completion.json').write_text('{}')
     if rl:
         config['rl_bootstrap'] = {'path': 'fixture-plan', 'sha256': '1'*64}
         (out/'shared-stage-completion.json').write_text(json.dumps({
@@ -54,9 +56,13 @@ def test_failed_child_retries_preserved_work_without_marking_success(tmp_path, m
     def sleep(seconds):
         saved = json.loads((out/'controller.json').read_text())
         assert saved['retry']['attempts'] == 1
-        assert saved['retry']['exit_code'] == (None if launch_failure else 7)
-        if launch_failure:
+        assert saved['retry']['exit_code'] == (None if failure_kind == 'launch' else
+                                               7 if failure_kind == 'exit' else 0)
+        if failure_kind == 'launch':
             assert 'launch failed' in saved['retry']['reason']
+        if failure_kind.endswith('completion'):
+            assert 'completion rejected' in saved['retry']['reason']
+            assert saved['last_successful_participants'] is None
         assert saved['last_successful_rl_bootstrap'] is None
         clock[0] += seconds
     monkeypatch.setattr(controller.time, 'sleep', sleep)
@@ -69,9 +75,9 @@ def test_failed_child_retries_preserved_work_without_marking_success(tmp_path, m
         launches.append(argv)
         if len(launches) == 2:
             stop.requested = True
-        if launch_failure and len(launches) == 1:
+        if failure_kind == 'launch' and len(launches) == 1:
             raise FileNotFoundError('repairable missing worker executable')
-        return Child(7 if len(launches) == 1 else 0)
+        return Child(7 if len(launches) == 1 and failure_kind == 'exit' else 0)
     monkeypatch.setattr(controller.subprocess, 'Popen', launch)
     result = controller.run(path)
     assert len(launches) == 2 and launches[0] == launches[1] == (['rl-fixture'] if rl else ['semantic-fixture'])

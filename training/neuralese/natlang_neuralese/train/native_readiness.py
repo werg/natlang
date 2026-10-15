@@ -75,6 +75,14 @@ def validate_ready(path, requirement):
     if (report.get('completed') is not True or report.get('checkpoint_sha256') != checkpoint['sha256']
             or exposure.get('consumed_updates', 0) <= 0 or exposure.get('supervised_token_visits', 0) <= 0):
         raise ValueError('native readiness has no bound completed optimizer/data exposure')
+    communication = receipt.get('communication_exposure') or {}
+    if (communication != report.get('communication_exposure')
+            or communication.get('complete') is not True
+            or any(type(communication.get(key)) is not int or communication[key] <= 0
+                   for key in ('graphs', 'required_graph_visits', 'graph_visits'))
+            or communication['required_graph_visits'] < communication['graphs']
+            or communication['graph_visits'] < communication['required_graph_visits']):
+        raise ValueError('native readiness requires complete genuine producer/consumer communication training before VAE')
     runtime = json.loads(_bound(receipt['runtime_certificate']).read_text())
     if (runtime.get('schema') != 'natlang.native-runtime-certificate/1' or runtime.get('passed') is not True
             or runtime.get('native_identity') != identity or runtime.get('backbone_optimizer_tested') is not True
@@ -413,18 +421,30 @@ def _run(config_path, *, once=False, stop):
                 completion = out/'shared-stage-completion.json'
                 if (child is None and config.get('rl_bootstrap') and completion.is_file()
                         and not once and not stop.requested and retry_ready):
-                    candidate = json.loads(completion.read_text())
-                    candidate_key = (candidate.get('participants_signature'), candidate.get('curriculum_signature'))
-                    if candidate_key == (signature, curriculum_signature):
-                        proof, last_success = validate_completion(completion, published)
-                        argv, active_rl_signature = rl_bootstrap_command(config, completion, proof)
-                        if active_rl_signature != rl_last_success:
-                            try:
-                                child, launch = _launch_child(argv, 'native-rl', config, out, execution_signature, active_rl_signature)
-                                child_kind = 'native-rl'
-                            except OSError as error:
-                                retry = _retry_failure(retry, 'native-rl', execution_signature, interval, error=error)
-                                retry_ready = False
+                    proof = None
+                    try:
+                        candidate = json.loads(completion.read_text())
+                        candidate_key = (candidate.get('participants_signature'), candidate.get('curriculum_signature'))
+                        if candidate_key == (signature, curriculum_signature):
+                            proof, last_success = validate_completion(completion, published)
+                        elif last_success == execution_signature:
+                            last_success = None
+                    except Exception as error:
+                        last_success = None
+                        pending.append({'reason': 'shared completion rejected: ' + str(error), 'repair_required': True})
+                    if proof is not None:
+                        try:
+                            argv, active_rl_signature = rl_bootstrap_command(config, completion, proof)
+                        except Exception as error:
+                            pending.append({'reason': 'RL bootstrap requires repair: ' + str(error), 'repair_required': True})
+                        else:
+                            if active_rl_signature != rl_last_success:
+                                try:
+                                    child, launch = _launch_child(argv, 'native-rl', config, out, execution_signature, active_rl_signature)
+                                    child_kind = 'native-rl'
+                                except OSError as error:
+                                    retry = _retry_failure(retry, 'native-rl', execution_signature, interval, error=error)
+                                    retry_ready = False
                 if child is None and execution_signature != last_success and not once and not stop.requested and retry_ready:
                     argv = [arg.replace('{participants}', str(participants)).replace('{out}', str(out)) for arg in command]
                     try:
@@ -464,17 +484,27 @@ def _run(config_path, *, once=False, stop):
                     write_json_durable(state_path, state)
                     time.sleep(interval)
                     continue
-                retry = None
-                state['retry'] = None
                 if child_kind == 'native-rl':
                     rl_last_success = active_rl_signature
                     state['last_successful_rl_bootstrap'] = rl_last_success
                 else:
                     completion = out/'shared-stage-completion.json'
-                    if not completion.is_file():
-                        raise RuntimeError('shared-stage command exited without actual completion/exposure receipt')
-                    proof, last_success = validate_completion(completion, published)
+                    try:
+                        if not completion.is_file():
+                            raise RuntimeError('shared-stage command exited without actual completion/exposure receipt')
+                        proof, last_success = validate_completion(completion, published)
+                    except Exception as error:
+                        retry = _retry_failure(retry, child_kind, execution_signature, interval, exit_code=0)
+                        retry['reason'] = 'shared completion rejected: ' + type(error).__name__ + ': ' + str(error)
+                        state.update(retry=retry, status='retry_wait', child_pid=None, child_kind=None)
+                        child, child_kind = None, None
+                        forwarded = False
+                        write_json_durable(state_path, state)
+                        time.sleep(interval)
+                        continue
                     state['last_successful_participants'] = last_success
+                retry = None
+                state['retry'] = None
                 state['child_pid'] = None
                 state['child_kind'] = None
                 child, child_kind = None, None
