@@ -5,8 +5,10 @@ One implementation (owner rule: one implementation per concept) of the policy in
 agreement, at a cadence; past ``--drift-warn`` (or below ``--drift-agreement-warn``) the behaviour gate runs and is
 REPORTED (``gate_below_floor`` when its pass falls below its reference minus ``max_gate_drop``); it never stops a stage
 (owner decision 2026-10-12, plans/neuralese/DECISIONS.md: the 48-probe gate is report-only; qualification is natlang task
-success, eval/task_cadence.py, plus drift). Response KL past ``--drift-stop`` stops at once (a catastrophic shift).
-Crisp by design: it is an exact verifier of what the stage produced, not a policy.
+success, eval/task_cadence.py). Owner correction 2026-10-15: base-relative KL
+and agreement are telemetry only; legacy stop thresholds never stop or deny
+qualification. Numerical failures remain independently checked.
+Crisp metric/diagnostic plumbing under the declared owner policy.
 
 The reference is either the quantization component's teacher held rows, or (``--monitor`` with ``data``) the base
 model's own answers and top-k on the monitor prompts, captured before any update and kept in the run directory.
@@ -43,9 +45,11 @@ def add_drift_arguments(parser, *, drift_rows: int = 16) -> None:
                         help='also run the drift monitor (held KL on --drift-rows, its guard and the gate at a warn) '
                              'every this many updates between evals, logged to drift.jsonl; 0: only at evals')
     parser.add_argument('--drift-warn', type=float, default=.05)
-    parser.add_argument('--drift-stop', type=float, default=.5)
+    parser.add_argument('--drift-stop', type=float, default=.5,
+                        help='legacy threshold retained for resume compatibility; base drift never stops training')
     parser.add_argument('--drift-agreement-warn', type=float, default=.97)
-    parser.add_argument('--drift-agreement-stop', type=float, default=0.)
+    parser.add_argument('--drift-agreement-stop', type=float, default=0.,
+                        help='legacy threshold retained for resume compatibility; base agreement never stops training')
     parser.add_argument('--drift-gate', action=argparse.BooleanOptionalAction, default=True,
                         help='run the behaviour gate at an eval whose drift is past warn and report it (report-only '
                              'since 2026-10-12: a gate regression is logged as gate_below_floor, never a stop)')
@@ -145,8 +149,7 @@ class DriftMonitor:
             drift['gate_report_only'] = True  # owner decision 2026-10-12: reported, never a stop
             if gate['gate_pass'] < floor - 1e-9:
                 drift['gate_below_floor'] = True
-        elif drift['guard'] == 'stop':
-            drift['stop_reason'] = 'response KL or agreement past the hard stop'
+        drift['policy'] = 'report-only'
         return drift
 
     def gate(self):

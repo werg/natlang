@@ -11,7 +11,7 @@
   },
   "e2e": {
    "base": {"recipe": "neuralese-e2e-v1"},
-   "acceptance": {"description": "The shared E2E acceptance is the base recipe's e2e_acceptance (neuralese-e2e-v1; train/e2e_acceptance.py writes e2e-certificate.json; compared across lines as e2e_acceptance.*): consumers reading values (V) against consumers reading the gold tokens (T) on the same held producer calls, V CE at most T CE, V beats shuffled and zeroed blocks by 0.05 nats, at least 32 paired readers; exact-oracle task success, V at most 0.02 below T; no drift stop. Reported only: the 48-probe behaviour gate (owner 2026-10-12), the token-readout regression (eval/direct_token_readout.py, held-consumer arm, penalty 0.05 nats), the greedy-T arm. Runtime qualification of the exact starting weights is the lineage's first stage (direct_runtime)."},
+   "acceptance": {"description": "The shared E2E acceptance is the base recipe's e2e_acceptance (neuralese-e2e-v1; train/e2e_acceptance.py writes e2e-certificate.json; compared across lines as e2e_acceptance.*): consumers reading values (V) against consumers reading the gold tokens (T) on the same held producer calls, V CE at most T CE, V beats shuffled and zeroed blocks by 0.05 nats, at least 32 paired readers; exact-oracle task success, V at most 0.02 below T; base-relative drift report-only (owner 2026-10-15). Reported only: the 48-probe behaviour gate (owner 2026-10-12), the token-readout regression (eval/direct_token_readout.py, held-consumer arm, penalty 0.05 nats), the greedy-T arm. Runtime qualification of the exact starting weights is the lineage's first stage (direct_runtime)."},
    "lines": {
     "mellum": {"recipe": "neuralese-e2e-mellum-v1"},
     "lfm": {"recipe": "neuralese-e2e-lfm-v1"}

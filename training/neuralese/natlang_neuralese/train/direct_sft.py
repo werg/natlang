@@ -15,7 +15,7 @@ PortMuonAdamW.
 Every ``--eval-every`` updates (declared points): held CE, gold accuracy and agreement against the base model's own
 predictions on the same windows, and ``behaviour_drift`` with its guard, and (``--task-eval``) the in-run task-success evaluation: a fixed held subset of
 natlang tasks executed for real against the model being trained (eval/task_cadence.py). At the end: the behaviour
-gate, report-only (texts kept). Qualification (owner decision 2026-10-12): held CE below base, no drift stop, and
+gate, report-only (texts kept). Qualification (owner correction 2026-10-15): held CE below base and
 the final task evaluation passing its relative bar (at least the base, not below the previous evaluation minus
 measured noise; eval/task_cadence.task_gate); the 48-probe behaviour gate is reported only. Full state at declared checkpoint points,
 on a stop and at the end; a restart resumes from it. The default ``--window-execution auto`` accumulates gradients
@@ -79,6 +79,7 @@ OPERATIONAL = frozenset({'out', 'weight_drift_base', 'stop_at', 'steps', 'checkp
                          'gate_held_rows', 'window_execution', 'continue_from', 'continue_identity',
                          'continue_monitor_reference', 'gradient_digest_steps', 'state_hash_steps',
                          'continued_text_data', 'plan_only', 'plan_out', 'objective_continuation',
+                         'sdpa_backend', 'deterministic_training',
                          # the in-run task-success evaluation (owner 2026-10-12) is a verifier, not the objective
                          'task_eval', 'task_eval_every', 'stop_after_training_seconds'})
 # Objective components a declared objective continuation may change in an active stage (recipe.py
@@ -255,12 +256,14 @@ def parse(argv=None):
                    help='diagnostic: SHA-256 each named gradient tensor for this many initial updates')
     p.add_argument('--state-hash-steps', type=int, default=0,
                    help='diagnostic: save exact named parameter/optimizer/RNG/FP8 state hashes around initial updates')
-    p.add_argument('--sdpa-backend', choices=('default', 'math'), default='default',
-                   help='diagnostic attention backend; math forces PyTorch SDPBackend.MATH for direct-SFT forwards')
+    p.add_argument('--sdpa-backend', choices=('default', 'math', 'flash'), default='default',
+                   help='process-wide attention backend, also recorded for asynchronous task evaluators')
+    p.add_argument('--deterministic-training', action=argparse.BooleanOptionalAction, default=False,
+                   help='optional repeatable-kernel diagnostics; production uses normal fast kernels')
     from .drift_monitor import add_drift_arguments
     # The drift guard (owner 2026-10-11; train/drift_monitor.py, shared with the end-to-end stage): response KL or
     # agreement past warn runs the behaviour gate and stops when the gate falls below its reference minus
-    # max_gate_drop; response KL past --drift-stop stops at once.
+    # max_gate_drop; all base-relative drift is report-only (owner20261015).
     add_drift_arguments(p)
     p.add_argument('--task-eval', default=None,
                    help='the in-run task-success evaluation (eval/task_cadence.py; owner 2026-10-12): JSON '
@@ -616,7 +619,7 @@ def same_resume_identity(saved: dict, current: dict) -> bool:
     never part of the identity."""
     # The stateless FP8 expert backend (current per-row scaling) is an execution choice, like --moe-kernel: a run
     # switches it on or off at a resume (owner 2026-10-12: v4 onto FP8 experts at a stop/resume).
-    strip = lambda options: {k: v for k, v in options.items() if k not in INPUT_PATH_OPTIONS
+    strip = lambda options: {k: v for k, v in options.items() if k not in INPUT_PATH_OPTIONS and k not in OPERATIONAL
                              and k not in REMOVED_OPTIONS
                              and not (k == 'fp8_training' and v in ('off', 'triton-experts'))}
     return (strip(saved['options']) == strip(current['options'])
@@ -1245,12 +1248,11 @@ def main(argv=None):
     a = parse(raw_argv)
     if a.plan_only:
         return plan_only(a)
-    # Flash SDPA's default BF16 backward can return different gradients for the
-    # same weights, batch, and RNG state. PyTorch's deterministic mode keeps the
-    # flash kernel on CUDA while selecting its repeatable backward path. Set the
-    # cuBLAS workspace before the first CUDA handle is created as well.
-    os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
-    torch.use_deterministic_algorithms(True)
+    from ..common.attention_backend import configure_sdpa_backend
+    configure_sdpa_backend(a.sdpa_backend)
+    if a.deterministic_training:
+        os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
+    torch.use_deterministic_algorithms(a.deterministic_training)
     stop = StopSignal().install()
     from ..common.hashing import sha256_file_hex
     from ..model.neuralese_projection import TokenChoiceProjection, project_token_states
@@ -2659,22 +2661,24 @@ def main(argv=None):
     drift_stopped = any((json.loads(line).get('behaviour_drift') or {}).get('guard') == 'stop'
                         for name in ('eval.jsonl', 'drift.jsonl') if (a.out / name).is_file()
                         for line in (a.out / name).open())
-    # Owner decision 2026-10-12 (plans/neuralese/DECISIONS.md): qualification is task success plus drift. The 48-probe behaviour
+    # Owner correction 2026-10-15: base-relative drift is telemetry. The 48-probe behaviour
     # gate is report-only; without a declared task evaluation the stage cannot qualify.
     from ..eval.task_cadence import task_gate as task_gate_of
     task_gate = task_gate_of(final_task_summary, task_eval_spec)
-    qualified = bool(finished and step >= a.steps and final.get('ce_delta', 0.0) < 0 and not drift_stopped and
+    qualified = bool(finished and step >= a.steps and final.get('ce_delta', 0.0) < 0 and
                      task_gate is not None and task_gate['passed'])
     identity_file = a.out / 'identity-check.json'
     final.update(identity_check=json.loads(identity_file.read_text()) if identity_file.is_file() else None)
-    status = ('complete' if step >= a.steps else 'stopped_at') if finished else ('checkpointed_on_drift_guard' if drift_stopped else 'checkpointed_on_signal')
+    status = ('complete' if step >= a.steps else 'stopped_at') if finished else ('checkpointed_on_drift_guard' if drift_stopped_here else 'checkpointed_on_signal')
     final.update(status=status, stop_signals=stop.received, completed=step >= a.steps, steps=step,
                  stopped_at=timed_prefix_step or a.stop_at or None, best=best,
                  training_seconds=training_seconds, training_time_limit_seconds=a.stop_after_training_seconds,
                  behaviour_gate=gate, behaviour_gate_report_only=True, task_gate=task_gate,
                  final_task_eval=final_task_summary,
-                 qualification='held CE below base, no drift stop, final task successes at least the base and '
-                               'not below the previous evaluation minus noise (owner/coordinator 2026-10-12)', drift_stopped=drift_stopped, qualified=qualified,
+                 qualification='held CE below base, final task successes at least the base and '
+                               'not below the previous evaluation minus noise; base drift report-only (owner 2026-10-15)',
+                 drift_stopped=drift_stopped_here, historical_drift_stop=drift_stopped,
+                 drift_policy='report-only', qualified=qualified,
                  seconds=time.time() - started, budget=budget, data_continuation=continuation_summary(continuation),
                  epochs_covered=schedule[step - 1][1] if step else 0.0, this_run=dict(totals),
                  cuda_peak_allocated_gb=torch.cuda.max_memory_allocated(a.device) / 2 ** 30 if cuda_active else None,

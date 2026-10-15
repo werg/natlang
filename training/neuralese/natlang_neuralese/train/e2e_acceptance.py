@@ -2,7 +2,8 @@
 
 The requirement (owner decisions 2026-10-11 and 2026-10-12; plans/neuralese/NEURALESE_DIRECT_V1.md "End-to-end
 stage"): consumers reading the producer's Neuralese values (V) against the same consumers reading the producer's
-tokens on the same held producer calls, on loss and on task success, with no drift stop. On loss the tokens are the
+tokens on the same held producer calls, on loss and on task success. Base drift is report-only (owner 2026-10-15).
+On loss the tokens are the
 producer's actual emitted tokens on the identical producer states and lengths: V <= that matched token reader
 within the declared margin (``max_v_minus_t_ce_nats``). Independently generated T_self (greedy and sampled at 0.6,
 train/self_text.py) and gold crisp text are reported separately. Forced-history loss does not certify autonomous
@@ -60,8 +61,8 @@ def validate_declaration(declaration):
             or not _number(task['max_success_drop_vs_parent'])):
         raise ValueError('e2e_acceptance.task_success is {oracle: "exact", max_success_drop_vs_t: number, '
                          'max_success_drop_vs_parent: number}')
-    if declaration['drift'] != {'no_drift_stop': True}:
-        raise ValueError('e2e_acceptance.drift is {"no_drift_stop": true}')
+    if declaration['drift'] not in ({'report_only': True}, {'no_drift_stop': True}):
+        raise ValueError('e2e_acceptance.drift is {"report_only": true}; legacy declarations remain loadable')
     reported = declaration.get('reported', [])
     if not isinstance(reported, list) or any(not isinstance(item, str) for item in reported):
         raise ValueError('e2e_acceptance.reported lists report-only measurements by name')
@@ -135,10 +136,9 @@ def evaluate(declaration, summary):
     criterion('task_success_vs_parent', drop, measured and drop <= task['max_success_drop_vs_parent'],
               max_drop=task['max_success_drop_vs_parent'],
               parent=parent.get('task_successes'), final=t_arm.get('task_successes'), cases=t_arm.get('cases'))
-    guard = summary.get('drift_guard')
-    criterion('no_drift_stop', None if guard is None else not guard.get('stopped', True),
-              guard is not None and guard.get('stopped') is False)
     reported = {name: summary.get(name) for name in declaration.get('reported', []) if name in summary}
+    if 'drift_guard' in summary:
+        reported['drift_guard'] = summary['drift_guard']
     return criteria, reported
 
 
@@ -153,7 +153,7 @@ def certificate(declaration, summary_path, *, recipe_sha256, stage, report_path)
             'stage_report': str(report_path),
             'scope': 'consumers reading values against matched emitted-token embeddings on identical producer '
                      'states and lengths (independent T_self and gold text reported) on the paired held readers, '
-                     'exact-oracle task success, no drift stop; behaviour gate report-only (owner 2026-10-12)'}
+                     'exact-oracle task success; base drift and behaviour gate report-only (owner 2026-10-15)'}
 
 
 # The projection on the embedding manifold (owner 2026-10-13): the end-to-end lineage starts from the NeuraleseProjection

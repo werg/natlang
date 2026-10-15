@@ -1,5 +1,7 @@
 # Neuralese direct v1: plain target SFT with a NeuraleseProjection (TokenChoiceProjection declared, off)
 
+Owner correction 2026-10-15: base-relative KL/agreement are report-only. A completed, numerically valid direct stage may continue training while performance remains unqualified; qualification stays honestly reported. Both models must progress through the full production recipe with newly usable data and shared improvements, not stop at partial stages. Earlier base-drift hard stops are superseded.
+
 Owner decision, 2026-10-11. It replaces the warm-up audit fixes (4), (5) and (7) and the variant A/B plan. It applies
 to both lines (Mellum, LFM) with the same shared code, and only declared, backbone-inherent differences.
 

@@ -77,7 +77,7 @@ def test_acceptance_compares_values_with_tokens_and_keeps_missing_evidence_pendi
     assert {k: c['status'] for k, c in criteria.items()} == {
         'paired_readers': 'pass', 'v_minus_t_ce': 'pass', 'v_margin_over_shuffled': 'pass',
         'v_margin_over_zeroed': 'pass', 'task_success': 'pending', 'task_success_vs_parent': 'pass',
-        'no_drift_stop': 'pass'}
+        }
     summary['task_eval'] = {**summary['task_eval'], 'task_successes': 0, 'task_success_rate': 0.0, 'outcome_counts': task_counts(2),
                             'case_successes': {'0': False, '3': False}}
     summary['task_eval_neuralese'] = {**arm, 'fused_cases': [0], 'fused_case_successes': {'0': True}}

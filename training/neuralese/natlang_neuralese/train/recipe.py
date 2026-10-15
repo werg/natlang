@@ -2,7 +2,9 @@
 
 Stage implementations are shared Python modules. Extend HANDLERS with a typed
 handler and declare its dependencies in a JSON recipe. No shell command strings.
-An unsuccessful stage cannot advance its dependents or issue a certificate.
+Failed mechanisms cannot advance. A completed, numerically valid direct stage
+may continue training while its measured performance remains unqualified;
+continuation never issues a false qualification certificate (owner20261015).
 """
 import argparse
 import hashlib
@@ -39,7 +41,7 @@ HANDLERS = {
                            'latent_ns','latent_weight_decay','grad_spike_clip','stop_at','stop_after_training_seconds','weight_drift_base','save_state',
                            'fp8_training','fp8_recipe','fp8_amax_history_len',
                            'gradient_audit_steps','saved_tensor_audit_steps','gradient_digest_steps',
-                           'state_hash_steps','sdpa_backend','task_eval','task_eval_every'},'result':'report.json'},
+                           'state_hash_steps','sdpa_backend','deterministic_training','task_eval','task_eval_every'},'result':'report.json'},
     # S7 RL on the full direct checkpoint (plans/neuralese/S7_RL.md §6): rl/stage.py turns scored policy rollouts into
     # RL text data (mode rft) and runs the shared direct trainer on it, continued from the pre-RL checkpoint with the
     # drift reference captured from those weights. Its parameters are the direct stage's plus the RL data decision;
@@ -1026,7 +1028,7 @@ def stage_quantization(recipe, stage, parameters, reports, init_mix=None):
     return stage_component(spec, stage['id'], start=start, end=end, init_mix=init_mix)
 
 
-def require_gate(report, kind):
+def require_gate(report, kind, *, training_progress=False):
     quantization = report.get('quantization') if isinstance(report, dict) else None
     if isinstance(quantization, dict) and quantization.get('precisions_qualified') is False:
         raise ValueError('stage did not pass every required precision: ' +
@@ -1059,8 +1061,20 @@ def require_gate(report, kind):
         if report.get('qualified') is not True:raise ValueError('text warm-up alignment goal not met')
     elif kind in ('neuralese_direct', 'neuralese_rl'):
         if report.get('qualified') is not True:
-            raise ValueError('Neuralese direct stage not qualified (held CE below base, no drift stop, final task '
-                             'successes >= min_successes; the behaviour gate is report-only, owner 2026-10-12)')
+            # Task/held regression is evidence for the supervisor, not an
+            # automatic ban on learning through the next production stage.
+            delta = report.get('ce_delta')
+            if (training_progress and report.get('completed') is True
+                    and (report.get('identity_check') or {}).get('passed') is True
+                    and isinstance(delta, (int, float)) and math.isfinite(delta)
+                    and (report.get('final_task_eval') or {}).get('eligible') is True):
+                print(json.dumps({'event': 'continuing_unqualified_training_stage',
+                                  'kind': kind, 'qualified': False, 'ce_delta': delta,
+                                  'task_gate': report.get('task_gate'),
+                                  'scope': 'Owner20261015 adaptive production; qualification remains false'}), flush=True)
+                return
+            raise ValueError('Neuralese direct stage not qualified (held CE below base, final task '
+                             'successes >= min_successes; base drift and behaviour gate report-only, owner 2026-10-15)')
     elif kind=='text_warmup_runtime':
         if report.get('runtime_qualified') is not True or report.get('output_reference_qualified') is not True:
             raise ValueError('adapted warm-up runtime/output reference gate failed')
@@ -1941,7 +1955,7 @@ def main(argv=None):
             kind = stage['kind']
             if report_path.exists():
                 report = json.loads(report_path.read_text())
-                require_gate(report['gate'], kind)
+                require_gate(report['gate'], kind, training_progress=True)
                 # A report written before a handoff gave unstarted stages new inputs carries the previous input map.
                 lineage_inputs = [inputs] + [record['previous_inputs'] for record in plan.get('handoffs', [])
                                              if 'previous_inputs' in record]
@@ -1957,7 +1971,8 @@ def main(argv=None):
                                      (' (' + stage['admission'] + ')' if isinstance(stage.get('admission'), str) else ''))
                 for dependency in stage['requires']:
                     predecessor = next(report for report in reports if report['id'] == dependency)
-                    require_gate(predecessor['gate'], predecessor['kind'])
+                    require_gate(predecessor['gate'], predecessor['kind'],
+                                 training_progress=kind in DIRECT_TRAINING_KINDS)
                 output = directory / HANDLERS[kind]['result']
                 stage_heads = args.heads
                 continuation_checkpoint = None
@@ -2089,7 +2104,7 @@ def main(argv=None):
                 if kind == 'neuralese_direct' and gate.get('data_continuation') is not None:
                     report['data_continuation'] = gate['data_continuation']  # previous data, seen count, new budget
                 write_json(args.out / (stage['id'] + '-attempt.json'), report)
-                require_gate(gate, kind)
+                require_gate(gate, kind, training_progress=True)
                 write_json(report_path, report)
             reports.append(report)
             if kind == 'causal_embedding_distillation':

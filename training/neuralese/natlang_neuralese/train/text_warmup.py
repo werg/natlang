@@ -382,15 +382,15 @@ def copy_restored_values(targets, values):
 
 
 def behaviour_drift_level(drift, a):
-    """The drift guard (plans/mellum-port.md "Behaviour gate bug hunt") on a ``behaviour_drift`` report: ``stop`` when
-    the response KL to BF16 Mellum exceeds ``--drift-stop`` or the response greedy agreement falls below
-    ``--drift-agreement-stop``, ``warn`` at ``--drift-warn`` / ``--drift-agreement-warn``, else ``ok``. Prompt-position
-    KL is reported, never guarded: whole-trajectory training moves it by design. Calibration (16 rows): BF16 Mellum
-    0.0003 / 0.9999; equal-norm noise of 0.1-0.37% ~0.009 / 0.98 (routing near-ties)."""
+    """Report change from the base; it is not a capability regression (owner 2026-10-15).
+
+    Response KL/agreement may warn and request diagnostic samples, but never
+    stop training. Legacy stop arguments remain loadable for exact resumes.
+    Numerical validity is checked by the metric producer, independently.
+    """
     kl=drift.get('held_response_kl');agreement=drift.get('held_response_agreement')
     def beyond(value,limit,above):
         return bool(limit) and value is not None and (value>limit if above else value<limit)
-    if beyond(kl,a.drift_stop,True) or beyond(agreement,a.drift_agreement_stop,False):return 'stop'
     if beyond(kl,a.drift_warn,True) or beyond(agreement,a.drift_agreement_warn,False):return 'warn'
     return 'ok'
 

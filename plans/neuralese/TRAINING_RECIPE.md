@@ -1,5 +1,32 @@
 # Shared neuralese training recipe
 
+Owner correction, 2026-10-15: comprehensively train BOTH models through the
+ENTIRE production recipe and all usable available data. Completing a probe,
+warmup or partial epoch is not completing production training. Declare full
+stage progression, whole-data coverage and subsequent additions explicitly;
+resolve impediments and continue. Base-relative KL and greedy disagreement
+are telemetry, never automatic stops or qualification failures. Keep actual
+task-performance, held-loss, numerical, runtime and transport checks.
+Stop and tweak any run when a potential improvement warrants it; the supervisor
+chooses a redo or exact-state continuation from the evidence (owner
+clarification, 2026-10-15). Preserve the useful state and keep progressing
+towards the full recipe, rather than treating an interruption as completion.
+
+Shared production kernel selection is `sdpa_backend` (`default`, `math`,
+`flash`) for the trainer and its task evaluator threads/jobs. The H100's
+changing-shape cuDNN SDPA path grew native memory during serving; Flash kept
+the full-model task run at about 1.7 GB RSS and completed it. Select Flash for
+that runtime, keeping this mechanism shared across model lines. Repeatable
+kernel mode is an explicit `deterministic_training` diagnostic option, off
+by default; production does not pay for scientific reproducibility.
+
+A completed direct stage with passed identity, finite held-loss measurement
+and eligible actual task evaluation may proceed into further training even
+when its task/held performance is not yet qualified. Preserve that failed
+qualification in reports/certificates and surface it for diagnosis; it does
+not automatically forbid useful learning through later stages. Incomplete
+stages, invalid numerics and failed mechanism checks still require repair.
+
 New neuralese training lineages use the shared recipes that
 `training/neuralese/line-parity.json` names: the direct stage's base
 `neuralese-direct-v3` with its line recipes (`neuralese-direct-mellum-v4`,

@@ -10,6 +10,37 @@ ROOT = Path(__file__).resolve().parents[2]
 RECIPES = ROOT / 'training/neuralese/recipes'
 
 
+def test_safe_completed_stage_can_continue_training_without_false_qualification():
+    from natlang_neuralese.train.recipe import require_gate
+    report = {'qualified':False, 'completed':True, 'identity_check':{'passed':True},
+              'ce_delta':0.2, 'final_task_eval':{'eligible':True}}
+    require_gate(report, 'neuralese_direct', training_progress=True)
+    assert report['qualified'] is False
+    with pytest.raises(ValueError, match='not qualified'):
+        require_gate(report, 'neuralese_direct')
+    for bad in [{'completed':False}, {'identity_check':{'passed':False}},
+                {'ce_delta':float('nan')}, {'final_task_eval':{'eligible':False}}]:
+        with pytest.raises(ValueError, match='not qualified'):
+            require_gate({**report, **bad}, 'neuralese_direct', training_progress=True)
+
+
+def test_flash_backend_is_shared_with_evaluators_and_is_operational(monkeypatch):
+    from natlang_neuralese.common.attention_backend import configure_sdpa_backend
+    from natlang_neuralese.train.direct_sft import OPERATIONAL, same_resume_identity
+    flags = {}
+    monkeypatch.setenv('NATLANG_NEURALESE_SDPA_BACKEND', 'default')
+    for name in ('flash', 'math', 'mem_efficient', 'cudnn'):
+        monkeypatch.setattr(torch.backends.cuda, 'enable_' + name + '_sdp',
+                            lambda enabled, name=name: flags.__setitem__(name, enabled))
+    assert configure_sdpa_backend('flash') == 'flash'
+    assert flags == {'flash':True, 'math':False, 'mem_efficient':False, 'cudnn':False}
+    assert {'sdpa_backend', 'deterministic_training'} <= OPERATIONAL
+    previous = {'options':{'lr':0.01, 'sdpa_backend':'default'}, 'inputs':{'old':'sha'}}
+    current = {'options':{'lr':0.01, 'sdpa_backend':'flash'}, 'inputs':{'new':'sha'}}
+    assert same_resume_identity(previous, current)
+    assert not same_resume_identity(previous, {**current, 'options':{'lr':0.02}})
+
+
 @pytest.mark.parametrize('finished,drift_stopped_here,expected',
                          [(False, True, True), (True, False, True), (False, False, False)])
 def test_terminal_evaluations_include_off_cadence_guard_stops_but_not_handoffs(

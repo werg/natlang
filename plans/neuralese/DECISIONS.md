@@ -1845,3 +1845,27 @@ Decision (design: NEURALESE_DIRECT_V1.md section 4 "The Neuralese value"):
 - Both lines: Mellum at the v4 gap on its parent export (dgx-ops), LFM on Pop's running QAD lineage at its e2e
   handoff. An existing lineage's projection of the removed design cannot be continued (another architecture); every
   line enters with C = 0. Measurements: NEURALESE_DIRECT_V1.md "Projection alignment fit (2026-10-13)".
+
+## Owner correction 2026-10-15: comprehensive production training; drift is telemetry
+
+The lodestar is to train both models comprehensively through the entire
+production recipe and all usable available data. Stages are execution steps,
+not substitutes for completing the recipe. The owner forbids half measures.
+Track actual source exposure and stage progression, repair impediments and
+continue; add prepared sources through explicit immutable continuations.
+
+The owner challenged stopping improvement because the model changed from its
+base. Base-relative response KL and greedy disagreement remain reported and
+may trigger diagnostic sampling, but no longer stop training or disqualify a
+stage. This supersedes the October 12 KL 1.5 hard stop. Preserve old reports
+and checkpoints as historical evidence; resume exact optimizer/RNG state under
+the corrected declared policy. Identity, held CE, actual task success,
+numerical validity and runtime/transport checks remain. Similarity checks for
+an exact implementation or transport reference still verify that mechanism;
+they are distinct from asking a trained model to remain like its untrained base.
+
+Owner clarification: any training run may be stopped and tweaked at any time
+for a potential improvement. The supervising agent judges whether the issue
+necessitates a redo or continued training, preserves useful exact state, and
+records the evidence. Comprehensive production training remains the objective;
+it does not require running a defective or inferior configuration unchanged.

@@ -196,7 +196,7 @@
    "max_success_drop_vs_parent": 0.02
   },
   "drift": {
-   "no_drift_stop": true
+   "report_only": true
   },
   "reported": [
    "behaviour_gate",

@@ -2161,8 +2161,8 @@ def main(argv=None, embed=None):
             if quant.component.get('gate'):
                 behaviour = Behaviour(quant.component['gate'], engine.tokenizer, preserve.held if preserve else None,
                                       root=path_root('repo'))
-        # The shared drift monitor and guard (train/drift_monitor.py; LINE_PARITY.md: the behaviour gate is the hard
-        # criterion, response KL warns and runs the gate, and stops only at --drift-stop). Its KL reference is the
+        # The shared drift monitor reports base-relative change (owner 2026-10-15), never stops for it.
+        # Its KL reference is the
         # teacher's held rows, else the model at this stage's start (the direct export), captured once per run directory.
         from .drift_monitor import DriftMonitor, parse_monitor, setup_monitor
         behaviour, monitor_held = setup_monitor(parse_monitor(args.monitor), out, engine.backbone.hf, engine.tokenizer,
@@ -2174,9 +2174,11 @@ def main(argv=None, embed=None):
         drift_stopped_at = None
         if drift_monitor is not None and resumed is not None:
             drift_monitor.restore(resumed.get('drift_monitor'))
-            if resumed.get('drift_stopped_at') is not None and not new_continuation:
-                raise ValueError(f"the drift guard stopped this stage at update {resumed['drift_stopped_at']} "
-                                 f"(drift.jsonl), so it is not resumed: diagnose it, or start a declared continuation")
+            if resumed.get('drift_stopped_at') is not None:
+                print(json.dumps({'event': 'historical_base_drift_stop',
+                                  'step': resumed['drift_stopped_at'], 'policy': 'report-only',
+                                  'scope': 'Owner20261015 correction; exact state restored, historical evidence preserved'}),
+                      flush=True)
         if args.monitor and drift_monitor is None:
             raise ValueError('--monitor needs --drift-rows and a reference (the monitor\'s data or a teacher)')
         from ..maple.family import evaluate_members, family_members, member_backward, private_parameters, window_labels
@@ -3438,7 +3440,8 @@ def main(argv=None, embed=None):
     if drift_monitor is not None:
         # The shared acceptance's behaviour gate on the final weights (the hard criterion) and the guard's record.
         report["behaviour_gate"] = drift_monitor.final_gate(args.steps)
-        report["drift_guard"] = {'stopped': False, 'warn': args.drift_warn, 'stop': args.drift_stop,
+        report["drift_guard"] = {'stopped': False, 'policy': 'report-only', 'warn': args.drift_warn,
+                                 'legacy_stop_threshold': args.drift_stop,
                                  'log': 'drift.jsonl'}
     if quant is not None:
         report["quantization"] = {**quant.describe(args.steps), "columns": {}}

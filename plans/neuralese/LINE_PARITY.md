@@ -1,5 +1,7 @@
 # Line parity: Mellum (DGX) and LFM (Pop)
 
+Owner correction 2026-10-15: both models comprehensively progress through the entire production recipe, adapting runs and data as useful improvements arrive. Base-relative KL/agreement are telemetry only, never stops or qualification barriers. Share all generalizable improvements and as much code as possible; earlier hard-stop descriptions below are historical and superseded.
+
 Owner, 2026-10-11: both lines use the same recipe, data and code. Settings may differ only to fit a machine, or
 where the backbone requires it, and each such difference is declared with its reason. "Let's rethink things and make
 sure we're not accidentally drifting apart. And let's unify things towards the better."

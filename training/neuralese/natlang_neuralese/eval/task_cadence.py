@@ -416,6 +416,7 @@ class TaskEval:
                    'prompt_rendering': self.prompt_rendering, 'heads': heads, 'device': device,
                    'checkpoint': str(Path(checkpoint).resolve()), 'requested_at': time.time(),
                    'weights': str(weights),
+                   'sdpa_backend': os.environ.get('NATLANG_NEURALESE_SDPA_BACKEND', 'default'),
                    'trainer_code_commit': _git_head()}
         _write_json(request_dir / 'request.json', request)
         queue = request_queue()
@@ -586,6 +587,8 @@ def restore_engine(request: dict, *, dtype=None):
     with the snapshot's backbone trainables copied in by their plain names (a BF16 serving model: no quantization
     parametrizations, experts as buffers; train/backbone_policy.plain_named_tensors)."""
     import torch
+    from ..common.attention_backend import configure_sdpa_backend
+    configure_sdpa_backend(request.get('sdpa_backend', 'default'))
     from ..serve import load_engine
     from ..train.backbone_policy import plain_named_tensors
     from ..train.checkpoint_offload import load_state
