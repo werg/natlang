@@ -18,7 +18,8 @@
       "native_full_sft": {
         "parameters": {
           "base": "/work/native-production/models/mellum21",
-          "fp8_training": "triton-experts"
+            "fp8_training": "triton-experts",
+            "dtype": "bfloat16"
         }
       }
     }

@@ -24,6 +24,8 @@
       "parameters": {
         "rank": 8,
         "epochs": 1.0,
+        "dtype": "float32",
+        "batch_tokens": 8192,
         "batch_graphs": 1,
         "learning_rate": 3e-06,
         "weight_decay": 0.1,
@@ -66,7 +68,7 @@
           "reference_successes": null,
           "prompt_rendering": "full"
         },
-        "task_eval_every": 0,
+        "task_eval_every": 5000,
         "forward_atol": 0.0001,
         "gradient_atol": 1e-05,
         "base": "/work/native-production/models/lfm25-qad"
