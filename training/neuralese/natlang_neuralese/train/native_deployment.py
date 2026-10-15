@@ -20,7 +20,8 @@ def binding(path):
     return {'path': str(path), 'sha256': sha256_file_hex_cached(path)}
 
 
-def prepare(release_path, curriculum_path, out, *, participants, cases, runtime, namespace='/work/native-production'):
+def prepare(release_path, curriculum_path, out, *, participants, cases, runtime, namespace='/work/native-production',
+            refresh_curriculum_path=None):
     """Create runnable configuration without inventing future trained identities."""
     release_path, curriculum_path, out = map(Path, (release_path, curriculum_path, out))
     records = json.loads(release_path.read_text())
@@ -36,10 +37,12 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
     if not case_rows or any(row.get('split') != 'train' for row in case_rows):
         raise ValueError('native deployment requires the actual admitted nonempty train-only case packet')
     semantic = json.loads(curriculum_path.read_text())
-    if semantic.get('schema') != 'natlang.native-semantic-training/1':
-        raise ValueError('native deployment requires the declared semantic curriculum')
-    for key in ('pairs', 'held_pairs'):
-        _bound(semantic[key])
+    refresh = json.loads(Path(refresh_curriculum_path).read_text()) if refresh_curriculum_path else semantic
+    for declaration in (semantic, refresh):
+        if declaration.get('schema') != 'natlang.native-semantic-training/1':
+            raise ValueError('native deployment requires the declared semantic curriculum')
+        for key in ('pairs', 'held_pairs'):
+            _bound(declaration[key])
     out = out.resolve(); out.mkdir(parents=True, exist_ok=True)
     queue = str(Path(namespace)/'shared/bridge-ipc')
     client = [sys.executable, '-m', 'natlang_neuralese.rl.native_bridge', '--queue', queue,
@@ -66,7 +69,8 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
                 or inputs['foundation_native_graphs']['sha256'] != record['foundation_manifest']['sha256']):
             raise ValueError('release foundation differs from the actual training recipe')
         if role == 'mellum':
-            semantic['task_eval'] = parameters['task_eval']
+            for declaration in (semantic, refresh):
+                declaration['task_eval'] = parameters['task_eval']
         declared_base = record.get('base') or parameters.get('base')
         if not declared_base:
             raise ValueError('native deployment requires an explicit actual base path from release or recipe')
@@ -77,7 +81,8 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
         if (inventory_sha != participants[role].split(':', 1)[-1]
                 or isinstance(declared_base, dict) and declared_base.get('inventory_sha256') != inventory_sha):
             raise ValueError('native deployment resident base inventory differs from its exact participant')
-        semantic.setdefault('models', {}).setdefault(participants[role], {})['base'] = str(base)
+        for declaration in (semantic, refresh):
+            declaration.setdefault('models', {}).setdefault(participants[role], {})['base'] = str(base)
         models.append({'model': role, 'native_participant': participants[role],
             'production_recipe': binding(recipe_path), 'production_stage': stage['id'],
             'seed_native_graphs': inputs['native_graphs'], 'held_native_graphs': inputs['held_native_graphs'],
@@ -95,9 +100,13 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
             'foundation_sources': inputs['foundation_native_graphs'],
             'foundation_epochs': parameters.get('epochs', 1.), 'forward_atol': 1e-4, 'gradient_atol': 1e-5})
     curriculum = out/'curriculum.json'; write_json_durable(curriculum, semantic)
+    refresh_curriculum = curriculum
+    if refresh_curriculum_path:
+        refresh_curriculum = out/'refresh-curriculum.json'
+        write_json_durable(refresh_curriculum, refresh)
     bootstrap = out/'rl-bootstrap.json'
     write_json_durable(bootstrap, {'schema': 'natlang.native-rl-bootstrap/1', 'models': models,
-        'semantic_refresh_config': binding(curriculum), 'refresh_command': client,
+        'semantic_refresh_config': binding(refresh_curriculum), 'refresh_command': client,
         'refresh_provider': next(model['provider'] for model in models if model['model'] == 'mellum')})
     controller = out/'controller.json'
     shared = Path(namespace)/'shared'
@@ -107,7 +116,8 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
         'command': [sys.executable, '-m', 'natlang_neuralese.train.native_semantic_stage',
             '--config', str(curriculum), '--participants', '{participants}', '--out', '{out}', '--device', 'cuda'],
         'rl_bootstrap': binding(bootstrap), 'rl_out': str(shared/'native_rl'), 'rl_device': 'cuda',
-        'deployment_inputs': {'release': binding(release_path), 'curriculum': binding(curriculum_path)}})
+        'deployment_inputs': {'release': binding(release_path), 'curriculum': binding(curriculum_path),
+            **({'refresh_curriculum':binding(refresh_curriculum_path)} if refresh_curriculum_path else {})}})
     return controller
 
 
@@ -117,10 +127,12 @@ def main(argv=None):
         parser.add_argument('--'+flag, type=Path, required=True)
     parser.add_argument('--participant', action='append', required=True, help='role=exact architecture:base-inventory identity')
     parser.add_argument('--namespace', default='/work/native-production')
+    parser.add_argument('--refresh-curriculum', type=Path,
+                        help='expanded refresh source; keeps the first shared foundation curriculum fixed')
     args = parser.parse_args(argv)
     participants = dict(item.split('=', 1) for item in args.participant)
     print(prepare(args.release, args.curriculum, args.out, participants=participants, cases=args.cases,
-        runtime=args.runtime, namespace=args.namespace))
+        runtime=args.runtime, namespace=args.namespace, refresh_curriculum_path=args.refresh_curriculum))
 
 
 if __name__ == '__main__':

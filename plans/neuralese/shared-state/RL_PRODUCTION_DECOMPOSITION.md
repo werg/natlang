@@ -73,3 +73,13 @@ release metadata and admitted curriculum into the existing readiness/bootstrap
 interfaces. It makes no task selection or training policy. A terminal trainer
 exit is required before transferring optimizer ownership to the shared stage;
 unfinished CE is carried through the existing native continuation mechanism.
+
+The first shared curriculum uses the fixed original communication foundation.
+Later expanded cohorts belong to the separately declared refresh curriculum;
+they never move that first finish line. Deployment preparation accepts an
+optional refresh-curriculum input, verifies both source closures and binds the
+bootstrap controller to the first curriculum while binding RL refresh to the
+second. It adds the actual current base paths and task evaluator to both.
+Without that input, the existing one-curriculum behavior is preserved. The
+existing raw-row qualification gate still defers untrained expanded pairs to
+the last qualified semantic cohort, retaining every pending obligation.

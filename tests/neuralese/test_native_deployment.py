@@ -26,7 +26,8 @@ def test_terminal_trainer_required_before_transfer_of_optimizer_ownership(tmp_pa
 
 
 @pytest.mark.parametrize('routine_cadence', [0, 5000])
-def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_finishes(tmp_path, routine_cadence):
+@pytest.mark.parametrize('separate_refresh', [False, True])
+def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_finishes(tmp_path, routine_cadence, separate_refresh):
     runtime=tmp_path/'runtime';(runtime/'ts-host/dist/teacher').mkdir(parents=True)
     (runtime/'ts-host/dist/teacher/cli.js').write_text('// built collector fixture')
     train=tmp_path/'train';train.write_text('{}\n')
@@ -35,6 +36,12 @@ def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_fini
     curriculum=tmp_path/'semantic.json'
     curriculum.write_text(json.dumps({'schema':'natlang.native-semantic-training/1',
         'pairs':binding(train),'held_pairs':binding(held)}))
+    refresh_path = None
+    if separate_refresh:
+        expanded = tmp_path/'expanded-pairs'; expanded.write_text('{}\n{}\n')
+        refresh_path = tmp_path/'expanded-semantic.json'
+        refresh_path.write_text(json.dumps({'schema':'natlang.native-semantic-training/1',
+            'pairs':binding(expanded),'held_pairs':binding(held)}))
     records=[]; participants={}
     for role in ('lfm','mellum'):
         base=tmp_path/role/'base';base.mkdir(parents=True)
@@ -58,7 +65,7 @@ def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_fini
             'control':str(tmp_path/role/'owner')})
     release=tmp_path/'release.json';release.write_text(json.dumps(records))
     controller=prepare(release,curriculum,tmp_path/'deployment',participants=participants,
-        cases=cases,runtime=runtime,namespace=str(tmp_path))
+        cases=cases,runtime=runtime,namespace=str(tmp_path), refresh_curriculum_path=refresh_path)
     config=json.loads(controller.read_text())
     assert controller == tmp_path/'deployment/controller.json'
     assert config['out'] == str(tmp_path/'shared/native_shared_stage')
@@ -70,6 +77,22 @@ def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_fini
     assert {item['provider']['sandbox_id'] for item in bootstrap['models']}=={'lfm-existing','mellum-existing'}
     assert bootstrap['refresh_provider']['sandbox_id']=='mellum-existing'
     assert all(item['production_stage']=='native_full_sft' for item in bootstrap['models'])
+    first = json.loads(Path(config['curriculum']).read_text())
+    refresh = json.loads(Path(bootstrap['semantic_refresh_config']['path']).read_text())
+    assert first['pairs'] == binding(train)
+    assert refresh['pairs'] == binding(expanded if separate_refresh else train)
+    assert first['models'] == refresh['models']
+    assert first['task_eval'] == refresh['task_eval']
+    if separate_refresh:
+        assert bootstrap['semantic_refresh_config']['path'] != config['curriculum']
+        assert config['deployment_inputs']['refresh_curriculum'] == binding(refresh_path)
+        before = expanded.read_bytes(); expanded.write_bytes(b'changed expanded source')
+        with pytest.raises(ValueError, match='artifact changed'):
+            prepare(release,curriculum,tmp_path/'bad-refresh',participants=participants,
+                cases=cases,runtime=runtime,namespace=str(tmp_path),refresh_curriculum_path=refresh_path)
+        expanded.write_bytes(before)
+    else:
+        assert bootstrap['semantic_refresh_config']['path'] == config['curriculum']
     # Preparation may run early; actual controller waits, without launching models.
     selected,pending=ready_participants(config)
     assert not selected and len(pending)==2
