@@ -217,3 +217,45 @@ def test_shared_export_refuses_to_seal_a_missing_peer(tmp_path):
     with pytest.raises((FileNotFoundError, ValueError)):
         prepare(policy.slot, tmp_path/'exports', reserve_bytes=0)
     assert not list((tmp_path/'exports').glob('*.tar.zst'))
+
+
+def test_shared_export_release_waits_for_same_consumer_pack_without_blocking_training_commit(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    import fcntl
+    import threading
+    from scripts.coreweave import shared_export
+    policy, participants, channel, optimizer, export = actual_shared(tmp_path)
+    first = shared_export.prepare(policy.slot, tmp_path/'first', reserve_bytes=0)
+    private = {'private': True, 'source': first['archive']['path'],
+               'identity': {key: first['archive'][key] for key in ('sha256','bytes')},
+               'independent_verification': {key: first['archive'][key] for key in ('sha256','bytes')}}
+    entered, continue_pack, release_started, released = (threading.Event() for _ in range(4))
+    pack = shared_export.source_archive.pack
+    def blocked_pack(*args, **kwargs):
+        entered.set()
+        assert continue_pack.wait(10)
+        return pack(*args, **kwargs)
+    def releasing():
+        release_started.set()
+        result = shared_export.release(first, private)
+        released.set()
+        return result
+    monkeypatch.setattr(shared_export.source_archive, 'pack', blocked_pack)
+    with ThreadPoolExecutor(2) as pool:
+        preparing = pool.submit(shared_export.prepare, policy.slot, tmp_path/'second', reserve_bytes=0)
+        assert entered.wait(10)
+        ending = pool.submit(releasing)
+        assert release_started.wait(10)
+        try:
+            assert not released.wait(.1)
+            assert Path(first['pin']).is_dir()
+            # Packing owns only the export lifecycle lock, leaving training free to commit.
+            with (policy.out/'.shared-checkpoint.lock').open('a+b') as stream:
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(stream, fcntl.LOCK_UN)
+        finally:
+            continue_pack.set()
+        second = preparing.result(timeout=20)
+        assert ending.result(timeout=20)['pin_released']
+    assert second['checkpoint']['sha256'] == first['checkpoint']['sha256']
+    assert Path(second['archive']['path']).is_file()

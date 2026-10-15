@@ -146,3 +146,8 @@ Each independent durability/ferry consumer uses its own named closure pin scope,
 so releasing a completed private export cannot remove a simultaneous full-state
 ferry's pin. The scope changes storage ownership only; the global checkpoint SHA
 and participant/VAE/optimizer/RNG payload identities are unchanged.
+Packing and release additionally share a dedicated archive-lifecycle lock, separate
+from the training checkpoint lock. A same-consumer release waits until packing
+has finished; removing the verified pin is serialized with commit/pin/prune.
+The actual race test holds packing open, proves release blocks, and independently
+acquires the training commit lock so archive compression cannot stall a save.

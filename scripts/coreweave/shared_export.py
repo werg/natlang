@@ -7,6 +7,8 @@ belong here. A global manifest inode alone is never an exportable checkpoint.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import json
 from pathlib import Path
 import shutil
@@ -17,7 +19,25 @@ except ImportError:  # Direct CLI in an isolated runtime.
     import source_archive
 
 
+@contextlib.contextmanager
+def lifecycle_lock(checkpoint):
+    """Serialize this exporter only; never hold the training commit lock while packing."""
+    root = Path(checkpoint).resolve().parent
+    root.mkdir(parents=True, exist_ok=True)
+    with (root/'.private-shared-export.lock').open('a+b') as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(stream, fcntl.LOCK_UN)
+
+
 def prepare(checkpoint, spool, *, reserve_bytes=20 * 2**30):
+    with lifecycle_lock(checkpoint):
+        return _prepare(checkpoint, spool, reserve_bytes=reserve_bytes)
+
+
+def _prepare(checkpoint, spool, *, reserve_bytes):
     from natlang_neuralese.model.native_shared_checkpoint import pin_shared_checkpoint
     from natlang_neuralese.model.native_bundle import verify_bundle
     checkpoint, spool = Path(checkpoint).resolve(), Path(spool).resolve()
@@ -49,6 +69,11 @@ def prepare(checkpoint, spool, *, reserve_bytes=20 * 2**30):
 
 def release(prepared, private_receipt):
     """Release only the assigned pin after upload AND independent full GET agree."""
+    with lifecycle_lock(prepared['checkpoint']['path']):
+        return _release(prepared, private_receipt)
+
+
+def _release(prepared, private_receipt):
     if prepared.get('schema') != 'natlang.native-shared-private-export/1':
         raise ValueError('shared export preparation schema differs')
     archive = prepared['archive']
@@ -69,12 +94,14 @@ def release(prepared, private_receipt):
     expected_pin = checkpoint.parent/'pins'/prepared['checkpoint']['sha256']/scope
     if pin != expected_pin:
         raise ValueError('shared export cannot release an unrelated pin')
-    if pin.exists():
-        from natlang_neuralese.model.native_bundle import verify_bundle
-        verified = verify_bundle(pin)
-        if verified['checkpoint']['sha256'] != prepared['checkpoint']['sha256']:
-            raise ValueError('shared export pin identity differs')
-        shutil.rmtree(pin)
+    from natlang_neuralese.model.native_shared_checkpoint import shared_checkpoint_lock
+    with shared_checkpoint_lock(checkpoint.parent):
+        if pin.exists():
+            from natlang_neuralese.model.native_bundle import verify_bundle
+            verified = verify_bundle(pin)
+            if verified['checkpoint']['sha256'] != prepared['checkpoint']['sha256']:
+                raise ValueError('shared export pin identity differs')
+            shutil.rmtree(pin)
     result = {**prepared, 'private_durability': 'independent-full-get-sha-verified',
               'pin_released': True, 'private_receipt': private_receipt}
     source_archive._write_json(Path(prepared['spool'])/(prepared['name']+'.shared-export.json'), result)
