@@ -414,10 +414,11 @@ def captured_text_emulation_context(turn, context, tools):
             'reason': 'typed prompt blocks lack captured expanded text-emulation bodies'}
     by_id = {}
     for block in expanded:
+        block_type = block.get('type') if isinstance(block, dict) else None
         if (not isinstance(block, dict) or not isinstance(block.get('id'), str)
-                or block['id'] in by_id or not isinstance(block.get('type'), str)
-                or not block['type'].startswith('Neuralese<') or not isinstance(block.get('body'), str)
-                or block.get('learned_vectors') is not False):
+                or block['id'] in by_id or (block_type is not None and
+                    (not isinstance(block_type, str) or not block_type.startswith('Neuralese<')))
+                or not isinstance(block.get('body'), str) or block.get('learned_vectors') is not False):
             return None, None, None, {**omissions,
                 'reason': 'captured text-emulation block metadata is incomplete or ambiguous'}
         body_sha = hashlib.sha256(block['body'].encode('utf-8')).hexdigest()
@@ -434,7 +435,8 @@ def captured_text_emulation_context(turn, context, tools):
             'reason': 'captured provider-visible messages are missing or still contain unresolved blocks'}
     for block_id in set(references):
         block = by_id[block_id]
-        label = (f'[[Neuralese text block id={block_id} type={block["type"]}; exact JSON string body='
+        type_label = f' type={block["type"]}' if block.get('type') else ''
+        label = (f'[[Neuralese text block id={block_id}{type_label}; exact JSON string body='
                  f'{json.dumps(block["body"], ensure_ascii=False, separators=(",", ":"))}]]')
         if _count_value(rendered, label) < references.count(block_id):
             return None, None, None, {**omissions,

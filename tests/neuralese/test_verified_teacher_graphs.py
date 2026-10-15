@@ -272,6 +272,27 @@ def test_authenticated_text_emulation_restores_exact_provider_input_and_read_too
     assert omission is not None and 'digest mismatch' in omission['reason']
 
 
+def test_authenticated_text_emulation_preserves_renderer_omitted_null_type():
+    import hashlib
+    import json
+    block_id, body = 'nz1_untyped-source-state', 'oos'
+    block = {'id': block_id, 'type': None, 'body': body,
+        'body_sha256': hashlib.sha256(body.encode()).hexdigest(), 'learned_vectors': False}
+    label = (f'[[Neuralese text block id={block_id}; exact JSON string body='
+             f'{json.dumps(body, ensure_ascii=False, separators=(",", ":"))}]]')
+    context = [{'role': 'user', 'content': [{'type': 'neuralese', 'id': block_id}]}]
+    rendered = [{'role': 'user', 'content': label}]
+    transport = {'version': 'text-marker-standin/2', 'learned_vectors': False,
+        'qualification_certificate': False, 'training_admission': False,
+        'raw_request_sha256': 'a' * 64, 'rendered_request_sha256': 'b' * 64,
+        'rendered_messages': rendered, 'expanded_input_blocks': [block]}
+    messages, _, proof, omission = converter.captured_text_emulation_context(
+        {'model_response': {'transport_provenance': transport}}, context, [])
+    assert omission is None and messages == rendered
+    assert proof['expanded_blocks'] == [{'id': block_id, 'type': None,
+        'body_sha256': block['body_sha256'], 'occurrences': 1}]
+
+
 @pytest.mark.parametrize('code_selection', [False, 'list', 'count'])
 def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypatch, code_selection):
     from types import SimpleNamespace
