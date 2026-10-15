@@ -864,13 +864,23 @@ Owner: "I want our recipe to progress for both LFM and Mellum ... with as much u
   differences `line-parity.json` declares, each fit-only or backbone-inherent with its reason. Historical one-offs of
   a running lineage are dated `line_specific` entries there (reason, `date`, `expires`), removed once both lines are
   back on the shared recipe.
-- **Same moment.** A line moves from direct to e2e when the shared `parent_readiness` of neuralese-e2e-v1 holds on
-  its running direct phase (`python -m natlang_neuralese.train.e2e_acceptance readiness --recipe RECIPE
-  --direct-stage DIR`): held CE plateau over the last 3 evaluations on one held set (at most 2% relative), no drift
-  stop, held task success at least the base's once the phase measures it. Then: stop the phase at a checkpoint,
-  export it (train/direct_export.py), and launch the line's recipe extending neuralese-e2e-<line>-v1 with
-  `input_bindings.direct_artifact` (a snapshot taken mid-curriculum also holds its QAT progress,
-  `quantization.stage_progress.e2e = [p, p]`).
+- **Keep progressing on both lines (owner correction 2026-10-15).** Complete the
+  production stages and move into end-to-end training as its valid inputs and
+  runtime are ready. Base drift and a held-loss plateau are not prerequisites.
+  Preserve actual task/held/numerical/runtime evidence and diagnose regressions;
+  continuing useful training does not issue a successful qualification certificate.
+  A line may advance while the other is preparing its next stage; share every
+  generalizable improvement promptly rather than leaving a GPU idle for lockstep.
+- **Append missing future stages to a running lineage.** The supervisor decides
+  the next useful production stages in natural language. The recipe runner is
+  the exact mechanism: retain all existing stage IDs and order, append stages
+  with dependencies on earlier stages, refuse existing output for added IDs,
+  and bind their admitted inputs normally. The handoff records added descriptors
+  and input identities while preserving the active checkpoint/optimizer and
+  lineage ID. Appending stages does not permit changing a completed stage or
+  silently rewriting the current objective. New data follows the existing
+  data-continuation mechanism. This restores full production chains from old
+  warmup-only recipes without discarding useful training.
 - **Same data revision.** A new data union (r3, then r4) is adopted by both lines at the same revision, by the same
   mechanism (data continuation for an active phase, input change for an unstarted one).
 - **Checked in CI.** `tests/neuralese/test_line_parity.py` (in `scripts/check-main.sh --quick`) fails when a line

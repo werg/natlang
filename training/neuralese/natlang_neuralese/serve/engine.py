@@ -195,6 +195,7 @@ class GenerationRequest:
     # Set by the transport when the client has gone (a streamed reply's connection closed): the engine drops the
     # sequence at its next round and fails its future with RequestError("cancelled").
     cancelled: bool = False
+    rl_capture: bool = False  # optional exact rollout sampling receipt
 
 
 @dataclass
@@ -220,6 +221,7 @@ class Sequence:
     pieces: list = field(default_factory=list)  # decoded text of each item ("__nz" for a block), for the guide
     snapshots: list = field(default_factory=list)  # (item count, cache, logits, generated positions, cut state, top state)
     bans: dict = field(default_factory=dict)  # item index -> tokens rejected there
+    rl_samples: list = field(default_factory=list)
     retries: dict = field(default_factory=dict)  # reply offset -> rollbacks to it
     finish_reason: str = "stop"
     rng: torch.Generator | None = None
@@ -649,6 +651,8 @@ class Engine:
             generated += len(between)
         seq.cache, seq.logits, seq.generated_positions = cache, logits, generated
         seq.cut_state, seq.top_state, seq.token_history = cut_state, top_state, token_history
+        if seq.request.rl_capture:
+            seq.rl_samples = [sample for sample in seq.rl_samples if sample['item'] < target]
         seq.guide.rewind(starts[target])
         del seq.items[target:], seq.pieces[target:]
         seq.snapshots = [snap for snap in seq.snapshots if snap[0] <= target]
@@ -673,6 +677,8 @@ class Engine:
         for seq in seqs:
             try:
                 seq.adapters = self.resolve_adapters(seq.request.adapters)
+                if seq.request.rl_capture and seq.prompt_plan is None:
+                    seq.prompt_plan = self._prompt_plan(seq.request.messages, seq.request.tools)
                 embeds = self.prompt_embeddings(seq.request.messages, seq.request.tools, prepared=seq.prompt_plan)
                 self._plan(seq)
                 if seq.prefilled_forced:
@@ -812,7 +818,12 @@ class Engine:
             logits[list(banned)] = float("-inf")
         if seq.request.temperature and seq.request.temperature > 0:
             probs = torch.softmax(logits / seq.request.temperature, -1).cpu()
-            return int(torch.multinomial(probs, 1, generator=seq.rng))
+            token = int(torch.multinomial(probs, 1, generator=seq.rng))
+            if seq.request.rl_capture:
+                seq.rl_samples.append({'item': len(seq.items), 'token': token,
+                    'logp': float(torch.log_softmax(logits / seq.request.temperature, -1)[token]),
+                    'banned': sorted(banned or [])})
+            return token
         return int(logits.argmax())
 
     def _finish(self, seq: Sequence, reason: str):
@@ -972,5 +983,13 @@ class Engine:
             "usage": {"prompt_tokens": seq.prompt_positions, "completion_tokens": seq.generated_positions,
                       "total_tokens": seq.prompt_positions + seq.generated_positions},
             "neuralese": {"dialect": self.dialect, "blocks": [b.meta() for b in seq.blocks]},
+            **({'x_natlang_rl_capture': {
+                'schema': 'natlang.rl-sampling/1', 'temperature': seq.request.temperature,
+                'guided': seq.request.guidance is not None,
+                'prompt': seq.prompt_plan,
+                'items': [('block', item.id) if isinstance(item, Block) else ('tok', item) for item in seq.items],
+                'samples': seq.rl_samples,
+                'finish_reason': seq.finish_reason,
+            }} if seq.request.rl_capture else {}),
             **({"x_natlang_guidance": {"rejections": seq.guide.rejections}} if seq.guide is not None else {}),
         }

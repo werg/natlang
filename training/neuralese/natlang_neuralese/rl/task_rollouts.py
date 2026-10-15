@@ -100,6 +100,7 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
                 target["tool_calls"] = calls
         turns.append({"messages": copy.deepcopy(step["context"]),
                       "tools": copy.deepcopy(step.get("tools_offered") or None), "target": target,
+                      **({'sampling': copy.deepcopy(response['rl_sampling'])} if response.get('rl_sampling') else {}),
                       "replay": {"raw_calls_retained": "raw_calls" in response,
                                  "request_sha256": step.get("request_sha256"),
                                  "raw_response_sha256": step.get("raw_response_sha256")}})
@@ -142,6 +143,11 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
                    "source_cases": str(args.cases.resolve()),
                    "source_sha256": hashlib.sha256(args.cases.read_bytes()).hexdigest(),
                    "packet_sha256": hashlib.sha256(packet.read_bytes()).hexdigest()}
+    policy_id = getattr(args, 'policy_checkpoint_sha256', None)
+    if policy_id:
+        if len(policy_id) != 64 or any(c not in '0123456789abcdef' for c in policy_id):
+            raise ValueError('policy checkpoint must be a SHA-256 digest')
+        preparation['policy_checkpoint_sha256'] = policy_id
     seed_reference = getattr(args, "match_seeds_from", None)
     if seed_reference is not None:
         reference = seed_reference.resolve()
@@ -198,7 +204,9 @@ def score(run_dir: Path, emit: Path | None = None, round_: int = 0) -> dict[str,
         if emit is not None:
             emitted.append({"schema": "natlang.rollout/1", "round": round_, "task_id": task["id"],
                             "family": task.get("family"), "group": entry["group"], "sample": entry["sample"],
-                            "seed": entry["seed"], "policy": {"temperature": entry.get("temperature")},
+                            "seed": entry["seed"], "split": task.get("split"),
+                            "policy": {"temperature": entry.get("temperature"),
+                                "checkpoint_sha256": preparation.get("policy_checkpoint_sha256")},
                             "turns": rollout_turns(result), "outcome": outcome,
                             "reward": None if reward is None else {"quality": reward},
                             "unscored": outcome if reward is None else None})
@@ -253,6 +261,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--max-model-requests", type=int, default=32)
     p.add_argument("--max-turns", type=int, default=20)
     p.add_argument("--seed-base", type=int, default=7000)
+    p.add_argument("--policy-checkpoint-sha256", help="full checkpoint actually served for this rollout queue")
     p.add_argument("--match-seeds-from", type=Path,
                    help="copy seeds by task ID and sample from an existing prepared run; fail on missing or ambiguous matches")
     p.add_argument("--root-mode", choices=("authored", "student"), default="authored",
