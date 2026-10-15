@@ -98,7 +98,9 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
     if optimizer_tensors:
         optimizer_artifact = NativeTensorArtifact('optimizer-state', dict(base_identity),
             {name: value for name, value in optimizer_tensors.items()}, artifact_id,
-            {'for_parameter_artifact_id': artifact_id}).validate()
+            {'for_parameter_artifact_id': artifact_id,
+             **({'optimizer': optimizer['name'], 'step': optimizer['step']}
+                if isinstance(optimizer, dict) and 'name' in optimizer and 'step' in optimizer else {})}).validate()
         from .native_artifact import native_tensor_artifact_id
         optimizer_id = native_tensor_artifact_id(optimizer_artifact)
         optimizer_path = directory / f'{optimizer_id}.safetensors'

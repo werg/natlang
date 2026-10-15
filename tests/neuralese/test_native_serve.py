@@ -140,6 +140,7 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert {'decide', 'score'} <= set(info['capabilities'])
         assert 'store.native-tensor-artifact' in info['capabilities']
         assert info['grad'] is True and info['grad_order'] == 1
+        assert 'optim' in info['capabilities']
         placeholder = post_path('/v1/neuralese/native-states/write-text',
                                 {'text': 'placeholder body', 'type': 'Neuralese<string>'})
         assert placeholder['id'].startswith('nzs1_')
@@ -199,6 +200,49 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert gradient_id == gradient_reply['gradient']['id']
         assert gradient_artifact.kind == 'parameter-gradient'
         assert gradient_artifact.tensors['adapter.up.weight'].norm() > 0
+        live_before = engine.shared_model.adapter.up.weight.detach().clone()
+        optimized = post_path('/v1/neuralese/optim', {'schema': 'natlang.native-optimizer-request/1',
+            'native_identity': engine.native_identity, 'gradient_id': gradient_id,
+            'optimizer': {'name': 'adam', 'learning_rate': 0.01}})
+        assert optimized['checkpoint']['schema'] == 'natlang.neuralese-native-composite-checkpoint/1'
+        assert optimized['native_identity']['checkpoint_sha256'] == optimized['checkpoint']['sha256']
+        assert optimized['optimizer_state_id'].startswith('nnt1_')
+        torch.testing.assert_close(engine.shared_model.adapter.up.weight, live_before, rtol=0, atol=0)
+        updated_engine = load_native_engine(optimized['checkpoint']['path'], device='cpu', dtype=torch.float32)
+        assert updated_engine.native_identity == optimized['native_identity']
+        assert not torch.equal(updated_engine.shared_model.adapter.up.weight, live_before)
+        assert updated_engine.store.get_native_tensor_artifact(optimized['optimizer_state_id']) is None
+        # The next request restores the separately archived optimizer artifact
+        # into the new server, then validates it against the current manifest.
+        state_artifact, _ = decode_native_tensor_artifact(request(
+            f"/v1/neuralese/native-tensor-artifacts/{optimized['optimizer_state_id']}", 'GET', b''))
+        updated_engine.store.put_native_tensor_artifact(state_artifact)
+        updated_engine.start()
+        updated_server = serve(updated_engine, '127.0.0.1', 0)
+        updated_thread = threading.Thread(target=updated_server.serve_forever, daemon=True)
+        updated_thread.start()
+        updated_endpoint = f'http://{updated_server.server_address[0]}:{updated_server.server_address[1]}'
+        try:
+            new_gradient_req = urllib.request.Request(updated_endpoint + '/v1/neuralese/grad',
+                data=json.dumps({'schema': 'natlang.native-gradient-request/1', 'objective': 'graph-ce',
+                    'native_identity': updated_engine.native_identity, 'graph': train_graph,
+                    'target': {'kind': 'model-parameters', 'names': ['adapter.up.weight']}}).encode(),
+                headers={'content-type': 'application/json'})
+            with urllib.request.urlopen(new_gradient_req, timeout=30) as response:
+                new_gradient = json.loads(response.read())
+            second_request = urllib.request.Request(updated_endpoint + '/v1/neuralese/optim',
+                data=json.dumps({'schema': 'natlang.native-optimizer-request/1',
+                    'native_identity': updated_engine.native_identity, 'gradient_id': new_gradient['gradient']['id'],
+                    'optimizer_state_id': optimized['optimizer_state_id'],
+                    'optimizer': {'name': 'adam', 'learning_rate': 0.01}}).encode(),
+                headers={'content-type': 'application/json'})
+            with urllib.request.urlopen(second_request, timeout=30) as response:
+                second_update = json.loads(response.read())
+            assert second_update['step'] == 2
+            assert second_update['native_identity']['checkpoint_sha256'] != optimized['native_identity']['checkpoint_sha256']
+        finally:
+            updated_server.shutdown()
+            updated_thread.join(timeout=5)
         initialized = post_path('/v1/neuralese/native-states/init-body', {
             'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': 'before '},
                 {'type': 'native_state', 'id': placeholder['id']}, {'type': 'text', 'text': ' after'}]}],

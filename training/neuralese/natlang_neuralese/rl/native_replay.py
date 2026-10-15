@@ -308,6 +308,7 @@ class NativePolicyObjective:
             raise ValueError('native policy objective has no admitted episodes')
         self.identity = self.spec['policy']
         self.bundle = None
+        self.external_state_overrides = {}
         if self.spec.get('block_bundle'):
             bundle_path = Path(self.spec['block_bundle']).resolve()
             self.bundle = (bundle_path, json.loads(bundle_path.read_text()))
@@ -337,6 +338,12 @@ class NativePolicyObjective:
                 block.require_native(**self.identity)
                 if block_id != binding['id'] or len(block.token_ids) != binding['token_count']:
                     raise ValueError('native RL archived state differs from graph input binding')
+                override = self.external_state_overrides.get(binding['id'])
+                if override is not None:
+                    override.require_native(**self.identity)
+                    if len(override.token_ids) != binding['token_count']:
+                        raise ValueError('native RL state-gradient override differs from admitted graph binding')
+                    block = override
                 packed_name = context['external_names'][example.id][name]
                 blocks[packed_name] = block
         return {'external_blocks': blocks, 'external_identity': self.identity} if blocks else {}

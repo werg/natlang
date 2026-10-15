@@ -67,6 +67,8 @@ export type { FolderProposal } from './native/scoped-fs.js';
 
 export * from './improvement/index.js';
 export { learningService, isLearningService, createLearning, objectives, stopGradient, withAdapters, withSystemPrompts, ADAPTER_TYPE as ADAPTER_TYPE_NAME, Loss, LearningError, LAW_NAMES, type LawName } from './neuralese/learning.js';
+export { nativeGraphGradient, nativeOptimizerStep, type NativeGraphRow, type NativeGradientTarget,
+  type NativePolicyObjectiveBinding, type NativeOptimizerSpec } from './neuralese/native-learning-client.js';
 export { promptPieces, renderSystemPrompt, renderPromptMessages, type PromptRendering, systemPromptBank, softenText, softenMessages, findPieces, SYSTEM_PROMPT_TYPE, type PromptPiece, type SystemPromptBank } from './native/system-prompts.js';
 export { serverViewer, VIEW_TYPE, type Viewer, type ViewSite, type NativeViewTurn } from './neuralese/view.js';
 export type { LearningService, Gradient, Optimizer, OptimizerState, Trajectory } from './neuralese/learning.js';

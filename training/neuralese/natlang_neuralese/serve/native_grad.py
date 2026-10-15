@@ -11,7 +11,7 @@ from dataclasses import replace
 
 import torch
 
-from ..common.hashing import canonical_json_sha256_hex
+from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
 from ..data.native_graph import graph_loss, parse_graph
 from ..model.native_artifact import NativeTensorArtifact
 from .chat import RequestError
@@ -59,8 +59,9 @@ def native_graph_gradient(engine, body, owner):
     """
     if body.get('schema') != 'natlang.native-gradient-request/1':
         raise RequestError('neuralese-native-grad-schema', 'native graph gradients require schema natlang.native-gradient-request/1')
-    if body.get('objective', 'graph-ce') != 'graph-ce':
-        raise RequestError('neuralese-native-grad-objective', 'only the shared native graph CE objective is available on this endpoint')
+    objective_request = body.get('objective', 'graph-ce')
+    if objective_request not in ('graph-ce', None) and not isinstance(objective_request, dict):
+        raise RequestError('neuralese-native-grad-objective', 'objective must be graph-ce or a registered native-policy spec binding')
     row = body.get('graph')
     if not isinstance(row, dict):
         raise RequestError('neuralese-native-grad-graph', 'request must include one complete native graph row')
@@ -73,17 +74,25 @@ def native_graph_gradient(engine, body, owner):
         if body.get('graph_sha256') not in (None, graph_sha256):
             raise ValueError('declared graph digest differs from the supplied graph row')
         expected = _identity(engine)
-        imported, leaf_map = {}, {}
+        if body.get('native_identity') not in (None, expected):
+            raise ValueError('gradient request is bound to another exact live checkpoint')
+        imported, leaf_map, state_overrides = {}, {}, {}
         for name, binding in example.external_states.items():
             record = engine.store.get_native_state(binding['id'])
             if record is None:
+                if isinstance(objective_request, dict):
+                    continue  # The registered policy objective resolves its immutable block bundle.
                 raise ValueError(f'unknown external native state {binding["id"]}')
             block = record.block
             if len(block.token_ids) != binding['token_count']:
                 raise ValueError(f'external state token count changed for {name}')
             block.require_native(**expected)
-            imported[name], leaves = _leaf_block(block)
+            copied, leaves = _leaf_block(block)
             leaf_map.update({f'external.{name}.{key}': value for key, value in leaves.items()})
+            if isinstance(objective_request, dict):
+                state_overrides[binding['id']] = copied
+            else:
+                imported[name] = copied
 
         target = body.get('target')
         if not isinstance(target, dict):
@@ -119,23 +128,41 @@ def native_graph_gradient(engine, body, owner):
             raise ValueError('target.kind must be model-parameters or native-state')
         if not target_tensors:
             raise ValueError('gradient target has no tensors')
-        loss, stats = graph_loss(engine.shared_model, example, external_blocks=imported,
-                                 external_identity=expected)
+        if isinstance(objective_request, dict):
+            if objective_request.get('kind') != 'native-policy':
+                raise ValueError('only the registered native-policy objective is supported')
+            spec_path = objective_request.get('path')
+            if not isinstance(spec_path, str):
+                raise ValueError('native-policy objective needs its admitted spec path')
+            if sha256_file_hex_cached(spec_path) != objective_request.get('sha256'):
+                raise ValueError('native-policy objective bytes differ from the admitted SHA-256')
+            from ..rl.native_replay import NativePolicyObjective
+            from ..train.native_state_sft import packed_graph_loss
+            objective = NativePolicyObjective(spec_path)
+            if objective.identity != expected:
+                raise ValueError('native-policy objective is bound to another exact actor checkpoint')
+            objective.external_state_overrides = state_overrides
+            loss, stats = packed_graph_loss(engine.shared_model, [example], objective=objective)
+        else:
+            loss, stats = graph_loss(engine.shared_model, example, external_blocks=imported,
+                                     external_identity=expected)
         grads = torch.autograd.grad(loss, tuple(target_tensors.values()), allow_unused=True)
         tensors = {name: grad.detach() for name, grad in zip(target_tensors, grads) if grad is not None}
         if set(tensors) != set(target_tensors):
             absent = sorted(set(target_tensors) - set(tensors))
             raise ValueError(f'objective has no gradient path to requested tensors: {absent}')
         artifact = NativeTensorArtifact(artifact_kind, expected, tensors, source_id,
-            {'objective': 'native-graph-token-ce/1', 'graph_id': example.id,
+            {'objective': ('native-graph-token-ce/1' if not isinstance(objective_request, dict)
+                           else 'native-policy-objective/1'), 'graph_id': example.id,
              'graph_sha256': graph_sha256, 'target_kind': kind,
-             'target_names': sorted(tensors), 'loss': float(loss.detach()), 'stats': stats}).validate()
+             'target_names': sorted(tensors), 'loss': float(loss.detach()), 'stats': stats,
+             **({'objective_spec_sha256': objective_request['sha256']} if isinstance(objective_request, dict) else {})}).validate()
         stored = engine.store.put_native_tensor_artifact(artifact, owner)
         return {'loss': float(loss.detach()), 'stats': stats, 'gradient': stored.meta(),
-                'native_identity': expected, 'objective': 'native-graph-token-ce/1'}
+                'native_identity': expected, 'objective': artifact.provenance['objective']}
     except RequestError:
         raise
-    except (ValueError, KeyError, TypeError, RuntimeError) as error:
+    except (ValueError, KeyError, TypeError, OSError, RuntimeError) as error:
         raise RequestError('neuralese-native-grad-invalid', str(error)) from error
     finally:
         for parameter, enabled in restore_grad_flags.items():
