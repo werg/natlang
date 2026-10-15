@@ -156,9 +156,12 @@ def test_operational_stage_parameters_do_not_change_the_training_semantics(tmp_p
     old = legacy_lineage(tmp_path)
     new = copy.deepcopy(old)
     new['id'], new['description'] = 'legacy-operational', 'an operational handoff'
-    new['stage_parameter_defaults']['core_text_warmup'].update(moe_kernel='grouped', eval_every=256)
+    new['stage_parameter_defaults']['core_text_warmup'].update(moe_kernel='grouped', eval_every=256,
+                                                                         sdpa_backend='flash', deterministic_training=False)
     next(s for s in new['stages'] if s['id'] == 'recurrence_warmup')['parameters']['checkpoint_every'] = 50
     assert old != new and _without_operational(old) == _without_operational(new)
+    from natlang_neuralese.train.recipe import recipe_handoff_epoch_changes
+    assert recipe_handoff_epoch_changes(old, new) == {}
     changed = copy.deepcopy(new)
     changed['stage_parameter_defaults']['core_text_warmup']['lr'] = 1e-4
     assert _without_operational(changed) != _without_operational(old)

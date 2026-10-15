@@ -1095,6 +1095,7 @@ def write_json(path, value):
 # Stage parameters that change how a stage computes, not what it optimizes: a lineage may switch them in place
 # (``--handoff``). Each trainer also lists them among its resume-operational options.
 OPERATIONAL_STAGE_PARAMETERS = frozenset({'eval_every', 'checkpoint_every', 'moe_kernel',
+                                          'sdpa_backend', 'deterministic_training',
                                           # Recurrence resume already excludes this allocation envelope from its
                                           # objective identity; increasing it must not require a fresh optimizer.
                                           'memory_gb',
