@@ -97,7 +97,10 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation]) -> Gra
                 raise ValueError('import span is outside source tokens')
             if not any(a <= edge.start and edge.stop <= b for a, b in source_node.producing):
                 raise ValueError('imports must reference an explicitly producing span')
-            edges.setdefault(edge.at, []).append(tuple(range(source_offset+edge.start, source_offset+edge.stop)))
+            source_index = offsets.index(source_offset)
+            lo = own_positions[source_offset+edge.start]
+            hi = own_positions[source_offset+edge.stop-1]+1
+            edges.setdefault(edge.at, []).append(sequences[source_index][lo:hi])
         logical = []
         own = []
         for local in range(count+1):
@@ -436,3 +439,179 @@ def capture_invocation_span(result, invocation, start, stop):
 def capture_block(result, invocation, start, stop, **metadata):
     from .state_block import NativeStateBlock
     return NativeStateBlock(**metadata, **capture_invocation_span(result, invocation, start, stop)).validate()
+
+
+@dataclass(frozen=True)
+class RoleTokens:
+    produce_open: int
+    produce_close: int
+    consume_open: int
+    consume_close: int
+
+    @property
+    def ids(self):
+        return (self.produce_open, self.produce_close, self.consume_open, self.consume_close)
+
+
+def provision_role_tokens(port, tokenizer):
+    """Add four actual special tokens without stealing meaningful vocabulary rows.
+
+    Existing tokenizer files/checkpoints remain immutable; the caller saves the
+    expanded tokenizer and this model's marker contract with its new lineage.
+    Both HF backbones and the native Mellum/Maple wrapper are supported.
+    """
+    tokenizer.add_special_tokens({'additional_special_tokens': list(ROLE_MARKERS)},
+                                 replace_additional_special_tokens=False)
+    ids = tuple(tokenizer.convert_tokens_to_ids(marker) for marker in ROLE_MARKERS)
+    if len(set(ids)) != 4 or any(i is None or i == tokenizer.unk_token_id for i in ids):
+        raise ValueError('tokenizer failed to provision four distinct Neuralese role markers')
+    target = max(max(tokenizer.get_vocab().values())+1, port.embedding_weight.shape[0])
+    old_input = port.hf.get_input_embeddings()
+    old_output = port.hf.get_output_embeddings()
+    tied = old_input.weight is old_output.weight
+    if target > old_input.weight.shape[0]:
+        # Implement the exact embedding/head resize for both the HF model and
+        # native Mellum wrapper; no broad model reinitialization or row reuse.
+        embedding = nn.Embedding(target, old_input.weight.shape[1], device=old_input.weight.device,
+                                 dtype=old_input.weight.dtype)
+        with torch.no_grad():
+            embedding.weight[:old_input.weight.shape[0]].copy_(old_input.weight)
+            embedding.weight[old_input.weight.shape[0]:].copy_(old_input.weight.float().mean(0))
+        embedding.weight.requires_grad_(old_input.weight.requires_grad)
+        port.hf.model.embed_tokens = embedding
+        if tied:
+            old_output.weight = embedding.weight
+            if hasattr(old_output, 'out_features'):
+                old_output.out_features = target
+        else:
+            if getattr(old_output, 'bias', None) is not None:
+                raise ValueError('shared-state vocabulary expansion requires the declared bias-free LM head')
+            head = nn.Linear(old_output.weight.shape[1], target, bias=False,
+                             device=old_output.weight.device, dtype=old_output.weight.dtype)
+            with torch.no_grad():
+                head.weight[:old_output.weight.shape[0]].copy_(old_output.weight)
+                head.weight[old_output.weight.shape[0]:].copy_(old_output.weight.float().mean(0))
+            head.weight.requires_grad_(old_output.weight.requires_grad)
+            port.hf.lm_head = head
+        for configuration in (port.config, port.hf.config, getattr(port.hf.model, 'config', None)):
+            if configuration is not None:
+                configuration.vocab_size = target
+    return RoleTokens(*ids)
+
+
+def native_step(model, ids, cache=None, *, producing=False):
+    """Incremental inference with the exact same native layer math as the DAG.
+
+    Returned layer tensors cover only this chunk, retaining autograd when used
+    for an exact reference. Cached keys are already rotated at consumer-local
+    positions; block capture stores the raw keys separately in the result.
+    """
+    from .lfm2_port import PortCache, ConvState, append_kv
+    port = model.port
+    if ids.ndim != 2 or ids.shape[0] != 1 or ids.shape[1] == 0:
+        raise ValueError('native_step requires one nonempty token sequence')
+    cache = cache or PortCache.empty(port.num_layers)
+    if cache.pad is not None or len(set(cache.lengths)) != 1:
+        raise ValueError('native state requires an unpadded cache with aligned layer positions')
+    start = cache.lengths[0]
+    positions = torch.arange(start, start+ids.shape[1], device=ids.device)
+    raw = model.embed(ids)
+    mask = torch.full(ids.shape, producing, device=ids.device, dtype=torch.bool) if isinstance(producing, bool) else producing
+    h = model.adapter(raw, mask)
+    states, captures = [], []
+    for i, layer in enumerate(port.layers):
+        attention = port.is_attention(i)
+        values = _layer_inputs(port, layer, h, attention)
+        previous = cache.states[i]
+        if attention:
+            q, k, v = values
+            captures.append({'kind': 'attention', 'raw_k': k[0].transpose(0, 1), 'v': v[0].transpose(0, 1)})
+            q, rotated_k = _rotate(port, q, positions, i), _rotate(port, k, positions, i)
+            state = append_kv(previous, rotated_k, v, static=not torch.is_grad_enabled())
+            window = port.window(i) if hasattr(port, 'window') else None
+            if window is not None and state.length > window:
+                from .hf_port import _attend_window
+                out = _attend_window(layer.self_attn, q, state.k, state.v, ids.shape[1], window)
+            else:
+                out = port._attend_fast(layer.self_attn, q, state.k, state.v, ids.shape[1], previous is None, None)
+        else:
+            gated, c = values
+            captures.append({'kind': 'finite_convolution', 'gated_inputs': gated[0]})
+            gated_channels = gated.transpose(1, 2)
+            prefix = (gated_channels.new_zeros(1, gated_channels.shape[1], port.conv_window)
+                      if previous is None else previous.window)
+            full = torch.cat([prefix, gated_channels], dim=2)
+            out = F.conv1d(full, layer.conv.conv.weight, layer.conv.conv.bias,
+                           groups=gated_channels.shape[1]).transpose(1, 2) * c
+            state = ConvState(full[:, :, -port.conv_window:])
+        states.append(state)
+        h = _finish(port, layer, h, out, attention)
+    return {'h_final': h, 'cache': PortCache(tuple(states), (start+ids.shape[1],)*port.num_layers),
+            'token_ids': ids[0], 'embeddings': raw[0], 'positions': positions, 'layers': tuple(captures)}
+
+
+def splice_block(model, cache, block, *, checkpoint_sha256, tokenizer_fingerprint, embedding_weight_sha256):
+    """Append a verified native block with consumer-local positional encoding."""
+    from .lfm2_port import PortCache, ConvState, append_kv
+    block.validate()
+    for field, expected in (('checkpoint_sha256', checkpoint_sha256),
+                            ('tokenizer_fingerprint', tokenizer_fingerprint),
+                            ('embedding_weight_sha256', embedding_weight_sha256)):
+        if getattr(block, field) != expected:
+            raise ValueError(f'native Neuralese {field} differs; re-encode text with this model before consuming it')
+    port = model.port
+    cache = cache or PortCache.empty(port.num_layers)
+    if cache.pad is not None or len(set(cache.lengths)) != 1 or len(block.layers) != port.num_layers:
+        raise ValueError('native state layer layout or cache positions disagree')
+    if block.embeddings.shape[1] != port.embedding_weight.shape[1]:
+        raise ValueError('native state embedding width disagrees with the consumer')
+    start, count = cache.lengths[0], len(block.token_ids)
+    positions = torch.arange(start, start+count, device=port.embedding_weight.device)
+    states = []
+    for i, payload in enumerate(block.layers):
+        previous = cache.states[i]
+        if port.is_attention(i):
+            if payload['kind'] != 'attention':
+                raise ValueError('native state attention/convolution layout disagrees with the consumer')
+            raw_k = payload['raw_k'].to(device=positions.device, dtype=port.embedding_weight.dtype).transpose(0, 1)[None]
+            v = payload['v'].to(device=positions.device, dtype=port.embedding_weight.dtype).transpose(0, 1)[None]
+            attn = port.layers[i].self_attn
+            expected_heads = attn.k_proj.out_features // attn.head_dim
+            if raw_k.shape[1:] != (expected_heads, count, attn.head_dim):
+                raise ValueError('native state attention head layout disagrees with the consumer')
+            state = append_kv(previous, _rotate(port, raw_k, positions, i), v, static=not torch.is_grad_enabled())
+        else:
+            if payload['kind'] != 'finite_convolution':
+                raise ValueError('native state attention/convolution layout disagrees with the consumer')
+            gated = payload['gated_inputs'].to(device=positions.device, dtype=port.embedding_weight.dtype).T[None]
+            channels = port.layers[i].conv.conv.weight.shape[0]
+            if gated.shape[1] != channels:
+                raise ValueError('native state convolution channels disagree with the consumer')
+            prefix = (gated.new_zeros(1, channels, port.conv_window) if previous is None else previous.window)
+            state = ConvState(torch.cat([prefix, gated], dim=2)[:, :, -port.conv_window:])
+        states.append(state)
+    return PortCache(tuple(states), (start+count,)*port.num_layers)
+
+
+def concatenate_captures(chunks):
+    """Join actual producing chunks; reject gaps or mixed layer layouts."""
+    if not chunks:
+        raise ValueError('native capture needs at least one nonempty chunk')
+    expected = int(chunks[0]['positions'][0])
+    for chunk in chunks:
+        positions = chunk['positions']
+        if not torch.equal(positions, torch.arange(expected, expected+len(positions), device=positions.device)):
+            raise ValueError('native capture chunks must form one contiguous source span')
+        expected += len(positions)
+        if len(chunk['layers']) != len(chunks[0]['layers']):
+            raise ValueError('native capture chunks have different layer counts')
+    result = {name: torch.cat([chunk[name] for chunk in chunks])
+              for name in ('token_ids', 'embeddings', 'positions')}
+    layers = []
+    for i, first in enumerate(chunks[0]['layers']):
+        if any(chunk['layers'][i]['kind'] != first['kind'] for chunk in chunks):
+            raise ValueError('native capture chunks have different layer kinds')
+        keys = ('raw_k', 'v') if first['kind'] == 'attention' else ('gated_inputs',)
+        layers.append({'kind': first['kind'], **{key: torch.cat([chunk['layers'][i][key] for chunk in chunks]) for key in keys}})
+    result['layers'] = tuple(layers)
+    return result

@@ -126,3 +126,97 @@ def test_role_rows_and_logical_capture_are_native_embeddings():
     assert captured['layers'][1]['raw_k'].shape[0] == 4
     model.logits(result['h_final']).square().mean().backward()
     assert model.adapter.up.weight.grad.abs().sum() > 0
+
+
+@pytest.mark.parametrize('family', ['lfm', 'qwen', 'mellum'])
+def test_incremental_capture_splice_matches_one_pass_and_gradients(family):
+    from types import SimpleNamespace
+    from natlang_neuralese.model.shared_state import SharedStateModel, native_step, splice_block, capture_invocation_span
+    port = tiny(family)
+    vocab = port.embedding_weight.shape[0]
+    model = SharedStateModel(port, tuple(range(vocab-4, vocab)), rank=4)
+    torch.nn.init.normal_(model.adapter.up.weight, std=0.03)
+    plan = compile_graph([
+        Invocation('source', (2, 3, 4, 5, 6), producing=((2, 4),)),
+        Invocation('target', (7, 8, 9, 10), imports=(ImportSpan(2, 'source', 2, 4),)),
+    ])
+    flat = model(plan)
+    producer = native_step(model, torch.tensor([[2, 3, 4, 5, 6]]),
+                           producing=torch.tensor([[False, False, True, True, False]]))
+    captured = {**capture_invocation_span(flat, 'source', 2, 4)}
+    # Capture from the independently executed producer, not the flat result.
+    captured['layers'] = tuple({key: value[2:4] if key != 'kind' else value
+                               for key, value in layer.items()} for layer in producer['layers'])
+    captured['embeddings'] = producer['embeddings'][2:4]
+    identity = dict(checkpoint_sha256='a'*64, tokenizer_fingerprint='b'*64, embedding_weight_sha256='c'*64)
+    block = SimpleNamespace(**captured, **identity, validate=lambda: None)
+    prefix = native_step(model, torch.tensor([[7, 8]]))
+    cache = splice_block(model, prefix['cache'], block, **identity)
+    suffix = native_step(model, torch.tensor([[9, 10]]), cache)
+    actual = torch.cat([producer['h_final'], prefix['h_final'], suffix['h_final']], 1)
+    torch.testing.assert_close(actual, flat['h_final'], atol=3e-6, rtol=3e-5)
+    weight = torch.randn_like(actual)
+    params = (model.input_rows, model.adapter.up.weight)
+    a = torch.autograd.grad((actual*weight).sum(), params)
+    b = torch.autograd.grad((flat['h_final']*weight).sum(), params)
+    for ga, gb in zip(a, b):
+        torch.testing.assert_close(ga, gb, atol=3e-5, rtol=3e-4)
+    with pytest.raises(ValueError, match='checkpoint_sha256'):
+        splice_block(model, prefix['cache'], block, **{**identity, 'checkpoint_sha256': 'd'*64})
+
+
+def test_marker_tokenizer_expansion_preserves_all_original_rows():
+    from natlang_neuralese.model.shared_state import provision_role_tokens, ROLE_MARKERS, SharedStateModel
+    class Tokenizer:
+        unk_token_id = 0
+        def __init__(self):
+            self.vocab = {f'word{i}': i for i in range(64)}
+        def add_special_tokens(self, mapping, **kwargs):
+            for token in mapping['additional_special_tokens']:
+                self.vocab.setdefault(token, len(self.vocab))
+        def convert_tokens_to_ids(self, token):
+            return self.vocab.get(token, 0)
+        def get_vocab(self):
+            return self.vocab
+    port = tiny('lfm')
+    original = port.embedding_weight.detach().clone()
+    tokenizer = Tokenizer()
+    tokens = provision_role_tokens(port, tokenizer)
+    assert tokens.ids == (64, 65, 66, 67)
+    assert port.embedding_weight.shape[0] == 68
+    assert port.output_weight is port.embedding_weight
+    assert torch.equal(port.embedding_weight[:64], original)
+    assert [tokenizer.vocab[x] for x in ROLE_MARKERS] == list(tokens.ids)
+    model = SharedStateModel(port, tokens.ids)
+    assert model.logits(torch.randn(1, 1, 32)).shape[-1] == 68
+
+
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_nested_export_keeps_intervening_import_aliases(family):
+    from types import SimpleNamespace
+    from natlang_neuralese.model.shared_state import SharedStateModel, native_step, splice_block, capture_invocation_span
+    port = tiny(family)
+    vocab = port.embedding_weight.shape[0]
+    model = SharedStateModel(port, tuple(range(vocab-4, vocab)), rank=4)
+    plan = compile_graph([
+        Invocation('a', (2, 3, 4, 5), producing=((2, 4),)),
+        Invocation('b', (6, 7, 8, 9), imports=(ImportSpan(2, 'a', 2, 4),), producing=((1, 3),)),
+        Invocation('c', (10, 11, 12), imports=(ImportSpan(1, 'b', 1, 3),)),
+    ])
+    # b exports [7, 4, 5, 8], never its private [6] or suffix [9].
+    assert plan.sequences[2] == (8, 5, 2, 3, 6, 9, 10)
+    flat = model(plan)
+    reference = model(plan, reference=True)
+    torch.testing.assert_close(flat['h_final'], reference['h_final'], atol=4e-6, rtol=3e-5)
+    fields = capture_invocation_span(flat, 'b', 1, 3)
+    assert fields['token_ids'].tolist() == [7, 4, 5, 8]
+    identity = dict(checkpoint_sha256='a'*64, tokenizer_fingerprint='b'*64, embedding_weight_sha256='c'*64)
+    block = SimpleNamespace(**fields, **identity, validate=lambda: None)
+    prefix = native_step(model, torch.tensor([[10]]))
+    cache = splice_block(model, prefix['cache'], block, **identity)
+    suffix = native_step(model, torch.tensor([[11, 12]]), cache)
+    torch.testing.assert_close(suffix['h_final'], flat['h_final'][:, -2:], atol=4e-6, rtol=3e-5)
+    weight = torch.randn_like(suffix['h_final'])
+    a = torch.autograd.grad((suffix['h_final']*weight).sum(), model.adapter.up.weight, retain_graph=True)[0]
+    b = torch.autograd.grad((flat['h_final'][:, -2:]*weight).sum(), model.adapter.up.weight)[0]
+    torch.testing.assert_close(a, b, atol=3e-5, rtol=4e-4)
