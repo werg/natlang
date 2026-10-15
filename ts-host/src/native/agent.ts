@@ -565,17 +565,19 @@ export class NativeToolAgent {
       .map(block => [block.id as string, block])).values()) {
       const id = block.id as string;
       const artifact = await this.options.neuralese?.store.getNativeState?.(id);
+      if (!artifact) throw new Error(`native-state producer artifact ${id} was not archived before the agent turn`);
       const tokenIds = artifact?.tensors.token_ids;
       const embeddings = artifact?.tensors.embeddings;
-      graphNode(session.runtime.trace, 'native_state_write', { call_id: producer.call_id,
-        turn: turnNode ?? '', native_state: id, source_kind: 'native-state-producer',
-        token_count: tokenIds?.shape[0] ?? null, embedding_width: embeddings?.shape[1] ?? null,
-        native_identity: artifact ? { architecture: artifact.metadata.architecture,
+      if (!tokenIds || !embeddings) throw new Error(`native-state producer artifact ${id} lacks token/embedding tensors`);
+      graphNode(session.runtime.trace, 'block_write', { call_id: producer.call_id,
+        turn: turnNode ?? '', block: id, format: 'native-state', source_kind: 'native-state-producer',
+        length: tokenIds.shape[0], width: embeddings.shape[1], truncated: false, stops: [],
+        native_identity: { architecture: artifact.metadata.architecture,
           checkpoint_sha256: artifact.metadata.checkpoint_sha256,
           tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
-          embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 } : null,
-        tensor_inventory: artifact ? Object.fromEntries(Object.entries(artifact.tensors)
-          .map(([name, tensor]) => [name, { dtype: tensor.dtype, shape: tensor.shape }])) : null,
+          embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
+        tensor_inventory: Object.fromEntries(Object.entries(artifact.tensors)
+          .map(([name, tensor]) => [name, { dtype: tensor.dtype, shape: tensor.shape }])),
         metadata: block },
         turnNode ? [{ node: turnNode, port: 'turn' }] : []);
     }
@@ -587,25 +589,47 @@ export class NativeToolAgent {
    * [message, part] in the request; a server that reports payload positions gives token positions), and the
    * `model_turn` with its sampling settings and the tool calls it chose.
    */
-  private modelTurnNode(session: NativeSession, messages: readonly unknown[], response: ModelTurn, turn: number): string | undefined {
+  private async modelTurnNode(session: NativeSession, messages: readonly unknown[], response: ModelTurn, turn: number): Promise<string | undefined> {
     const trace = session.runtime.trace;
     const callId = session.runtime.options.runId;
     const turnId = `${callId}#turn${turn}`;
     const reads: { node: string; port: string; block: string }[] = [];
     const seen = new Set<string>();
-    messages.forEach((message, index) => {
+    const native = new Set<string>();
+    const findRefs = (value: unknown): void => {
+      if (typeof value === 'string') {
+        for (const block of sentinelIds(value)) seen.add(block);
+        for (const block of nativeStateSentinelIds(value)) { seen.add(block); native.add(block); }
+      } else if (Array.isArray(value)) value.forEach(findRefs);
+      else if (value && typeof value === 'object') {
+        const record = value as { type?: unknown; id?: unknown };
+        if (record.type === 'native_state' && typeof record.id === 'string') {
+          seen.add(record.id); native.add(record.id);
+        } else if (record.type === 'neuralese' && typeof record.id === 'string') seen.add(record.id);
+        else Object.values(record).forEach(findRefs);
+      }
+    };
+    for (const [index, message] of messages.entries()) {
       const record = message as { content?: unknown; tool_calls?: { function?: { arguments?: unknown } }[] };
       const texts = [record.content, ...(record.tool_calls ?? []).map(call => call.function?.arguments)];
-      texts.forEach((text, part) => {
-        if (typeof text !== 'string') return;
-        for (const block of sentinelIds(text)) {
-          if (seen.has(block)) continue;
-          seen.add(block);
-          const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block, positions: [index, part] }, [blockInput(block, 'block')]);
+      for (const [part, value] of texts.entries()) {
+        const before = new Set(seen);
+        findRefs(value);
+        for (const block of seen) {
+          if (before.has(block)) continue;
+          const isNative = native.has(block);
+          const artifact = isNative ? await this.options.neuralese?.store.getNativeState?.(block) : undefined;
+          if (isNative && !artifact) throw new Error(`native-state consumer artifact ${block} is unavailable for provenance`);
+          const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block,
+            ...(isNative ? { format: 'native-state', native_identity: {
+              architecture: artifact!.metadata.architecture, checkpoint_sha256: artifact!.metadata.checkpoint_sha256,
+              tokenizer_fingerprint: artifact!.metadata.tokenizer_fingerprint,
+              embedding_weight_sha256: artifact!.metadata.embedding_weight_sha256 } } : {}),
+            positions: [index, part] }, [blockInput(block, 'block')]);
           if (node) reads.push({ node, port: 'read', block });
         }
-      });
-    });
+      }
+    }
     return graphNode(trace, 'model_turn', { call_id: callId, turn, temperature: this.options.temperature ?? null,
       seed: session.runtime.seedPolicy.mode === 'backend' ? null : deriveSeed(session.runtime.seedPolicy.root!,
         runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', turn - 1),
@@ -1181,7 +1205,7 @@ export class NativeToolAgent {
         ...(response.scheduling ? { batch_id: response.scheduling.batch_id, batch_size: response.scheduling.batch_size,
           in_flight: response.scheduling.in_flight, queue_wait_ms: response.scheduling.queue_wait_ms,
           schedule_priority: response.scheduling.priority } : {}) });
-      const turnNode = this.modelTurnNode(session, messages, response, turns + 1);
+      const turnNode = await this.modelTurnNode(session, messages, response, turns + 1);
       if (response.prompt_tokens !== undefined && sentChars > 0) tokensPerChar = response.prompt_tokens / sentChars;
       turns++;
       session.runtime.checkInterruption();

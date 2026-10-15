@@ -10,6 +10,8 @@
 | `GET /v1/neuralese/blocks/{id}/meta` | Block metadata as JSON. |
 | `POST /v1/neuralese/blocks/{id}/pin`, `…/unpin` | Keep or release a block through every collection (pins count per owner). |
 | `PUT`, `GET /v1/neuralese/native-states/{nzs1_id}`, `GET …/meta`, `POST …/pin`, `…/unpin` | Versioned multi-tensor NativeStateBlock safetensors artifact; the ID binds provenance, tensor inventory, dtypes, shapes and bytes. Uses the same durable store and owner holds as legacy blocks. |
+| `POST /v1/neuralese/native-states/write-text` | Force supplied text through the native producer transform and store its exact positional/hybrid state; returns source token and policy bindings. |
+| `POST /v1/neuralese/native-states/init-body` | Render a call with one native placeholder replaced by text, capture the text span at its actual causal position, and return the state plus ordered source segments. |
 | `POST /v1/neuralese/collect` | `{"referenced": […]}`: with an owner, the owner now holds exactly the referenced blocks (and its pinned ones); blocks it released are dropped unless another owner holds or pins them. Without an owner, drops the blocks no owner holds or pins that are not referenced. Answers `{"removed": […]}`. |
 | `POST /v1/neuralese/grad` | Gradient replay session (`grad.GradSession`): loss, per-term losses, gradient block IDs. |
 | `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?, "adapters"?}` → `{"log_probs", "tokens"}`, each option scored as the whole assistant reply after one prompt pass. |
@@ -81,9 +83,9 @@ _LORA = re.compile(r"^/v1/neuralese/adapters/(nz1_[a-z2-7]+)/lora$")
 CAPABILITIES = sorted([
     "adapters.create", "adapters.direct", "adapters.lora-export", "adapters.projection", "chat", "chat.stream",
     "decide", "embed", "encode", "grad", "grad.order2", "guidance", "guidance.check", "init-body", "optim", "parts.value-type",
-    "render", "score", "store", "store.owners", "store.native-state", "template", "template.argument-path", "template.value-type", "view", "write"])
+    "native.text-write", "native.init-body", "render", "score", "store", "store.owners", "store.native-state", "template", "template.argument-path", "template.value-type", "view", "write"])
 NATIVE_CAPABILITIES = sorted([
-    "chat", "chat.stream", "guidance.check", "parts.value-type", "render", "store", "store.native-state",
+    "chat", "chat.stream", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state",
     "store.owners", "template", "template.argument-path", "template.value-type"])
 NATIVE_CAPABILITY_GAPS = sorted(set(CAPABILITIES) - set(NATIVE_CAPABILITIES))
 
@@ -297,6 +299,13 @@ def make_handler(engine: Engine):
                     }.get(self.path)
                     if unavailable:
                         return self._unavailable(unavailable)
+                if self.path == "/v1/neuralese/native-states/write-text":
+                    body = self._object()
+                    return self._json(201, engine.native_write_text(body.get("text"), value_type=body.get("type")))
+                if self.path == "/v1/neuralese/native-states/init-body":
+                    body = self._object()
+                    return self._json(201, engine.native_init_body(body.get("messages") or [], body.get("tools"),
+                        body.get("placeholder"), body.get("text"), value_type=body.get("type")))
                 if self.path == "/v1/chat/completions":
                     return self._chat(self._object())
                 if self.path == "/v1/neuralese/collect":

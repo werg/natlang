@@ -495,7 +495,8 @@ class Engine:
             if isinstance(segment, str):
                 plan.append(("tokens", self._template_tokens(segment, rendered.escape_nonce)))
             else:
-                kind = (rendered.block_kinds or ["neuralese"] * len(rendered.blocks))[segment]
+                kind = (getattr(rendered, 'block_kinds', None) or
+                        ["neuralese"] * len(rendered.blocks))[segment]
                 plan.append(("native_state" if kind == "native_state" else "block", rendered.blocks[segment]))
         return plan
 
@@ -732,16 +733,9 @@ class Engine:
         return int(logits.argmax()), None
 
     def _native_finish_block(self, seq):
-        from ..model.state_block import NativeStateBlock
-        from ..model.shared_state import concatenate_captures
-        fields = concatenate_captures(seq.native_capture_chunks)
-        block = NativeStateBlock(text=self.tokenizer.decode(seq.native_capture_ids, skip_special_tokens=False),
-                                 tokenizer_fingerprint=self.model_config["tokenizer_fingerprint"],
-                                 checkpoint_sha256=self.checkpoint_sha256,
-                                 embedding_weight_sha256=self.embedding_weight_sha256,
-                                 architecture=self.model_config.get("architecture") or self.backbone.config.model_type,
-                                 **fields)
-        record = self.store.put_native_state(block)
+        block, record = self._native_store_capture(
+            seq.native_capture_ids, seq.native_capture_chunks,
+            text=self.tokenizer.decode(seq.native_capture_ids, skip_special_tokens=False))
         seq.blocks.append(record)
         seq.items.append(record)
         seq.native_capture_chunks.clear()
@@ -767,6 +761,182 @@ class Engine:
             seq.native_write_open_sample = None
         if seq.request.on_delta is not None:
             seq.request.on_delta({"native_state": record.meta()})
+
+    def _native_store_capture(self, token_ids, chunks, *, text):
+        """Store one actual producer span through the common versioned native-state path."""
+        from ..model.state_block import NativeStateBlock
+        from ..model.shared_state import concatenate_captures
+        fields = concatenate_captures(chunks)
+        expected = torch.as_tensor(token_ids, dtype=torch.int64, device=fields["token_ids"].device)
+        if not torch.equal(fields["token_ids"], expected):
+            raise ValueError("captured producer token IDs differ from the declared source span")
+        block = NativeStateBlock(text=text, tokenizer_fingerprint=self.model_config["tokenizer_fingerprint"],
+                                 checkpoint_sha256=self.checkpoint_sha256,
+                                 embedding_weight_sha256=self.embedding_weight_sha256,
+                                 architecture=self.model_config.get("architecture") or self.backbone.config.model_type,
+                                 **fields)
+        block.validate()
+        return block, self.store.put_native_state(block)
+
+    def native_write_text(self, text: str, *, value_type: str | None = None):
+        """Force supplied text through this model's actual producer transform and archive its native state."""
+        if not getattr(self, "native_state_enabled", False):
+            raise RequestError("neuralese-native-state-unavailable", "native text writes require shared-state serving")
+        if not isinstance(text, str) or not text:
+            raise RequestError("neuralese-native-state-text", "native text writes require nonempty text")
+        from .chat import escape_specials
+        nonce = hashlib.sha256((text + str(time.time_ns())).encode()).hexdigest()
+        ids = self._template_tokens(escape_specials(text, self.specials, nonce), nonce)
+        if not ids:
+            raise RequestError("neuralese-native-state-text", "native text writes require at least one token")
+        from ..model.shared_state import native_step
+        with torch.inference_mode():
+            opened = native_step(self.shared_model, torch.tensor([[self.role_tokens.produce_open]],
+                dtype=torch.long, device=self.device))
+            capture = native_step(self.shared_model, torch.tensor([ids], dtype=torch.long, device=self.device),
+                                  opened["cache"], producing=True)
+            native_step(self.shared_model, torch.tensor([[self.role_tokens.produce_close]],
+                dtype=torch.long, device=self.device), capture["cache"])
+        block, record = self._native_store_capture(ids, [capture], text=text)
+        meta = record.meta()
+        if value_type is not None:
+            meta["type"] = value_type
+        result = {"id": record.id, "native_state": meta}
+        result["source_capture"] = {"policy": self._native_block_identity(block), "segments": [
+            {"kind": "tokens", "token_ids": [self.role_tokens.produce_open], "producing": [False]},
+            {"kind": "tokens", "token_ids": ids, "producing": [True] * len(ids)},
+            {"kind": "tokens", "token_ids": [self.role_tokens.produce_close], "producing": [False]}],
+            "payload_start": 1, "payload_stop": len(ids) + 1}
+        result["source_text_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        return result
+
+    def native_init_body(self, messages, tools, placeholder: str, text: str, *, value_type: str | None = None):
+        """Capture supplied body tokens at their actual rendered causal position in a soft call."""
+        if not getattr(self, "native_state_enabled", False):
+            raise RequestError("neuralese-native-state-unavailable", "native body initialization requires shared-state serving")
+        if not isinstance(placeholder, str) or not placeholder.startswith("nzs1_") or not isinstance(text, str) or not text:
+            raise RequestError("neuralese-native-state-text", "native body initialization needs a native placeholder and nonempty text")
+        if self.store.get_native_state(placeholder) is None:
+            raise RequestError("neuralese-unknown-native-state", f"{placeholder} is not in this server's store; write it first")
+        marker = f"\ue000NATIVE_BODY_{hashlib.sha256((placeholder + text).encode()).hexdigest()}\ue001"
+        found = 0
+        def replace(value):
+            nonlocal found
+            if isinstance(value, list):
+                return [replace(item) for item in value]
+            if isinstance(value, dict):
+                if value.get("type") == "native_state" and value.get("id") == placeholder:
+                    found += 1
+                    return {"type": "text", "text": marker}
+                return {key: replace(item) for key, item in value.items()}
+            if isinstance(value, str):
+                before = found
+                try:
+                    parsed = json.loads(value)
+                except (TypeError, json.JSONDecodeError):
+                    return value
+                replaced = replace(parsed)
+                return json.dumps(replaced, ensure_ascii=False, separators=(",", ":")) if found != before else value
+            return value
+        rendered = self.render_request(replace(messages), tools)
+        if found != 1:
+            raise RequestError("neuralese-native-state-text", f"placeholder must occur exactly once, found {found}")
+        matches = [(index, segment) for index, segment in enumerate(rendered.segments)
+                   if isinstance(segment, str) and segment.count(marker) == 1]
+        if len(matches) != 1:
+            raise RequestError("neuralese-native-state-text", "rendered body marker must occur exactly once in text")
+        body_segment, source = matches[0]
+        before, after = source.split(marker)
+        from .chat import escape_specials
+        escaped_body = escape_specials(text, self.specials, rendered.escape_nonce)
+        whole = self._template_tokens(before + escaped_body + after, rendered.escape_nonce)
+        left = self._template_tokens(before, rendered.escape_nonce)
+        body = self._template_tokens(escaped_body, rendered.escape_nonce)
+        right = self._template_tokens(after, rendered.escape_nonce)
+        if not body:
+            raise RequestError("neuralese-native-state-text", "body text produces no tokenizer tokens")
+        if whole != left + body + right:
+            raise RequestError("neuralese-native-state-token-boundary",
+                               "rendered tokenizer merges body text with adjacent call text; use a boundary-separated body")
+        from ..model.shared_state import native_step
+        cache = None
+        captured = None
+        source_segments = []
+        source_own_position = 0
+        payload_start = None
+        payload_stop = None
+        def token_segment(ids, producing=False):
+            nonlocal source_own_position
+            if ids:
+                source_segments.append({"kind": "tokens", "token_ids": list(ids),
+                                        "producing": [bool(producing)] * len(ids)})
+                source_own_position += len(ids)
+        with torch.inference_mode():
+            for index, segment in enumerate(rendered.segments):
+                if isinstance(segment, int):
+                    kinds = rendered.block_kinds or ["neuralese"] * len(rendered.blocks)
+                    block_id = rendered.blocks[segment]
+                    if kinds[segment] != "native_state":
+                        raise RequestError("neuralese-native-state-text", "legacy projected blocks cannot initialize native state")
+                    temp = Sequence(GenerationRequest(messages=[]), Future(), cache=cache)
+                    self._native_consume(temp, block_id)
+                    cache = temp.cache
+                    imported = self.store.get_native_state(block_id)
+                    source_segments.append({"kind": "tokens", "token_ids": [self.role_tokens.consume_open],
+                                            "producing": [False]})
+                    source_own_position += 1
+                    if temp.native_imports[-1]["mode"] == "exact-native-state":
+                        source_segments.append({"kind": "native_state", "id": block_id,
+                                                "native_identity": self._native_block_identity(imported.block)})
+                    else:
+                        fallback = self._tokens(imported.block.text)
+                        source_segments.append({"kind": "tokens", "token_ids": fallback,
+                                                "producing": [False] * len(fallback)})
+                        source_own_position += len(fallback)
+                    source_segments.append({"kind": "tokens", "token_ids": [self.role_tokens.consume_close],
+                                            "producing": [False]})
+                    source_own_position += 1
+                elif index == body_segment:
+                    if left:
+                        cache = native_step(self.shared_model, torch.tensor([left], dtype=torch.long, device=self.device), cache)["cache"]
+                        token_segment(left)
+                    open_marker = [self.role_tokens.produce_open]
+                    cache = native_step(self.shared_model, torch.tensor([open_marker], dtype=torch.long, device=self.device),
+                                        cache)["cache"]
+                    token_segment(open_marker)
+                    payload_start = source_own_position
+                    captured = native_step(self.shared_model, torch.tensor([body], dtype=torch.long, device=self.device),
+                                           cache, producing=True)
+                    cache = captured["cache"]
+                    token_segment(body, producing=True)
+                    payload_stop = source_own_position
+                    close_marker = [self.role_tokens.produce_close]
+                    cache = native_step(self.shared_model, torch.tensor([close_marker], dtype=torch.long, device=self.device),
+                                        cache)["cache"]
+                    token_segment(close_marker)
+                    if right:
+                        cache = native_step(self.shared_model, torch.tensor([right], dtype=torch.long, device=self.device), cache)["cache"]
+                        token_segment(right)
+                else:
+                    ids = self._template_tokens(segment, rendered.escape_nonce)
+                    if ids:
+                        cache = native_step(self.shared_model, torch.tensor([ids], dtype=torch.long, device=self.device), cache)["cache"]
+                        token_segment(ids)
+        if captured is None:
+            raise RequestError("neuralese-native-state-text", "rendered call did not contain the body span")
+        block, record = self._native_store_capture(body, [captured], text=text)
+        meta = record.meta()
+        if value_type is not None:
+            meta["type"] = value_type
+        result = {"id": record.id, "native_state": meta}
+        result["init"] = {"schema": "natlang.native-state-text-init/1", "tokens": len(body),
+                          "exact": False, "aligned": True, "exact_transport": True, "contextual": True,
+                          "source_position_start": int(captured["positions"][0])}
+        result["gate"] = None
+        result["source_capture"] = {"policy": self._native_block_identity(block), "segments": source_segments,
+                                    "payload_start": payload_start, "payload_stop": payload_stop}
+        result["source_text_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        return result
 
     def _native_round(self, sequences):
         """Native marker-token generation through the same scheduler and TensorStore."""
@@ -801,7 +971,9 @@ class Engine:
                     continue
                 token, sampled_logp = self._native_token(seq)
                 sample_index = len(seq.rl_samples)
-                query_own_position = seq.native_own_position
+                # The next-token query is the output position of the last own
+                # input; imported KV slots do not contribute to this index.
+                query_own_position = seq.native_own_position - 1
                 terminal = token in self.stop_ids
                 producing_input = seq.native_capture_open and token not in (
                     self.role_tokens.produce_open, self.role_tokens.produce_close)
@@ -857,7 +1029,7 @@ class Engine:
     # Decoding ------------------------------------------------------------------------------
     def _round(self, sequences: list[Sequence]):
         """One scheduler round: every sequence advances one position; text and sketch steps run batched."""
-        if self.native_state_enabled:
+        if getattr(self, 'native_state_enabled', False):
             return self._native_round(sequences)
         for seq in sequences:
             if seq.request.cancelled:
@@ -1260,7 +1432,7 @@ class Engine:
 
     # Output --------------------------------------------------------------------------------
     def _response(self, seq: Sequence) -> dict:
-        if self.native_state_enabled:
+        if getattr(self, 'native_state_enabled', False):
             return self._native_response(seq)
         text, run, ids = [], [], []
         for item in seq.items:

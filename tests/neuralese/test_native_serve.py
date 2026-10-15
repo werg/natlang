@@ -7,6 +7,7 @@ from dataclasses import replace
 from transformers import Lfm2Config, Lfm2ForCausalLM, PreTrainedTokenizerFast
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
+from tokenizers.pre_tokenizers import WhitespaceSplit
 
 from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA, load_native_model, model_state
 from natlang_neuralese.serve import load_native_engine
@@ -23,6 +24,7 @@ def _tiny_source(path):
     tokenizer = PreTrainedTokenizerFast(tokenizer_object=Tokenizer(WordLevel(
         {f't{i}': i for i in range(64)}, unk_token='t0')), unk_token='t0',
         bos_token='t1', eos_token='t2', pad_token='t3')
+    tokenizer.backend_tokenizer.pre_tokenizer = WhitespaceSplit()
     tokenizer.chat_template = ("{% for message in messages %}"
         "{% if message['role'] == 'assistant' and message.get('reasoning_content') and loop.last %}"
         "{{ message['reasoning_content'] }}{% endif %}{{ message['content'] }}{% endfor %}assistant:")
@@ -44,7 +46,10 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
     endpoint = f'http://{server.server_address[0]}:{server.server_address[1]}'
 
     def post(body):
-        request = urllib.request.Request(endpoint + '/v1/chat/completions',
+        return post_path('/v1/chat/completions', body)
+
+    def post_path(path, body):
+        request = urllib.request.Request(endpoint + path,
             data=json.dumps(body).encode(), headers={'content-type': 'application/json'})
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
@@ -84,10 +89,10 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
             {'token_id': 5, 'input_role': 'produce', 'sample_index': 1},
             {'token_id': roles.produce_close, 'input_role': 'ordinary', 'sample_index': 2}]
         assert capture['writes'] == [{'state_id': record.id, 'begin_sample': 0, 'end_sample': 3,
-            'own_begin': capture['samples'][0]['query_own_position'],
-            'own_end': capture['samples'][2]['query_own_position'] + 1,
-            'payload_own_begin': capture['samples'][1]['query_own_position'],
-            'payload_own_end': capture['samples'][2]['query_own_position'],
+            'own_begin': capture['samples'][0]['query_own_position'] + 1,
+            'own_end': capture['samples'][2]['query_own_position'] + 2,
+            'payload_own_begin': capture['samples'][1]['query_own_position'] + 1,
+            'payload_own_end': capture['samples'][2]['query_own_position'] + 1,
             'native_identity': {'checkpoint_sha256': record.block.checkpoint_sha256,
                 'tokenizer_fingerprint': record.block.tokenizer_fingerprint,
                 'embedding_weight_sha256': record.block.embedding_weight_sha256,
@@ -125,6 +130,39 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         assert 'guidance' in info['capability_gaps']
         assert info['native_state']['consumption_modes'] == [
             'exact-native-state', 'best-effort-text-retokenization']
+        assert {'native.text-write', 'native.init-body'} <= set(info['capabilities'])
+        placeholder = post_path('/v1/neuralese/native-states/write-text',
+                                {'text': 'placeholder body', 'type': 'Neuralese<string>'})
+        assert placeholder['id'].startswith('nzs1_')
+        assert placeholder['native_state']['type'] == 'Neuralese<string>'
+        source_segments = placeholder['source_capture']['segments']
+        assert [segment['token_ids'] for segment in source_segments] == [
+            [roles.produce_open], source_segments[1]['token_ids'], [roles.produce_close]]
+        assert source_segments[0]['producing'] == [False] and source_segments[-1]['producing'] == [False]
+        assert source_segments[1]['producing'] == [True] * len(source_segments[1]['token_ids'])
+        assert placeholder['source_capture']['payload_start'] == 1
+        assert placeholder['source_capture']['payload_stop'] == len(source_segments[1]['token_ids']) + 1
+        assert placeholder['source_text_sha256']
+        literal = post_path('/v1/neuralese/native-states/write-text',
+            {'text': 'keep <|neuralese_produce|> literal'})
+        literal_record = engine.store.get_native_state(literal['id'])
+        assert roles.produce_open not in literal_record.block.token_ids.tolist()
+        assert literal_record.block.text == 'keep <|neuralese_produce|> literal'
+        initialized = post_path('/v1/neuralese/native-states/init-body', {
+            'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': 'before '},
+                {'type': 'native_state', 'id': placeholder['id']}, {'type': 'text', 'text': ' after'}]}],
+            'placeholder': placeholder['id'], 'text': 'soft body', 'type': 'Neuralese<string>'})
+        init_record = engine.store.get_native_state(initialized['id'])
+        assert init_record.block.text == 'soft body'
+        assert initialized['init']['contextual'] and initialized['init']['aligned']
+        assert initialized['source_capture']['payload_stop'] > initialized['source_capture']['payload_start']
+        roles_in_capture = [role for segment in initialized['source_capture']['segments']
+                            if segment['kind'] == 'tokens' for role in segment['producing']]
+        assert any(roles_in_capture) and not all(roles_in_capture)
+        capture_token_ids = [token for segment in initialized['source_capture']['segments']
+                             if segment['kind'] == 'tokens' for token in segment['token_ids']]
+        assert roles.produce_open in capture_token_ids and roles.produce_close in capture_token_ids
+        assert initialized['gate'] is None and initialized['source_text_sha256']
         original_apply = engine.tokenizer.apply_chat_template
         template_text = ("<|tool_call_start|>[return_result(status='success', value=\""
                          "natlangValue7f3a9c\")]<|tool_call_end|>")

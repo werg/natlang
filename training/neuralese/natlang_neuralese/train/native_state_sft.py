@@ -412,6 +412,8 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    checkpoint_options = {key: str(value) if isinstance(value, Path) else value
+                          for key, value in vars(args).items()}
     if not (math.isfinite(args.epochs) and args.epochs > 0) or min(args.batch_graphs, args.eval_every,
             args.chunk_tokens, args.rank) < 1 or args.checkpoint_every < 0:
         raise ValueError('native SFT requires positive epochs/batch/eval/chunk/rank and nonnegative checkpoint cadence')
@@ -668,7 +670,7 @@ def main(argv=None):
                   source_hash=source_hash, source_row_bindings=source_row_bindings,
                   held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
                   rng=capture_training_rng_state(args.device), metrics=metrics,
-                  architecture=config['architecture'], options={**vars(args), '_source_row_order': source_order},
+                  architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
                   fp8_state=backend.extra_state() if backend is not None else None)
             last_saved_step = step
             checkpoint_sha = sha256_file_hex_cached(policy.slot)
@@ -697,7 +699,7 @@ def main(argv=None):
                   source_hash=source_hash, source_row_bindings=source_row_bindings,
                   held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
                   rng=capture_training_rng_state(args.device), metrics=metrics,
-                  architecture=config['architecture'], options={**vars(args), '_source_row_order': source_order},
+                  architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
                   fp8_state=backend.extra_state() if backend is not None else None)
             last_saved_step = step
     if (step != resumed_step or policy.signaled) and last_saved_step != step:
@@ -709,7 +711,7 @@ def main(argv=None):
               source_hash=source_hash, source_row_bindings=source_row_bindings,
               held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
               rng=capture_training_rng_state(args.device), metrics=metrics,
-              architecture=config['architecture'], options={**vars(args), '_source_row_order': source_order},
+              architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
               fp8_state=backend.extra_state() if backend is not None else None)
         last_saved_step = step
     completed = epoch >= args.epochs and (whole_epochs == int(args.epochs) or fractional_rows > 0)
