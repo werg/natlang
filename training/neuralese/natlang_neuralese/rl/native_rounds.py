@@ -17,6 +17,84 @@ from ..common.jsonio import write_json_durable
 from .production import run, run_command
 
 
+def bootstrap_configs(plan_path, completion_path, out):
+    """Bind actual completed shared weights and admitted inputs, then configure both learners."""
+    from types import SimpleNamespace
+    from ..train.native_readiness import _bound, validate_completion
+    from .production import configure_native
+    from ..common.hashing import canonical_json_sha256_hex
+    plan_path, completion_path, out = Path(plan_path), Path(completion_path), Path(out)
+    plan = json.loads(plan_path.read_text())
+    if plan.get('schema') != 'natlang.native-rl-bootstrap/1' or len(plan.get('models') or []) < 2:
+        raise ValueError('native RL bootstrap requires a typed plan for at least two student models')
+    proof = json.loads(completion_path.read_text())
+    adapter_path = _bound(proof['adapter'])
+    adapter = json.loads(adapter_path.read_text())
+    key = (proof.get('participants_signature'), proof.get('curriculum_signature'))
+    validate_completion(completion_path, {key: {'execution_signature': 'bootstrap-completion-verifier',
+                                              'models': list(adapter['models'])}})
+    binding = {'plan_sha256': sha256_file_hex_cached(plan_path),
+               'completion_sha256': sha256_file_hex_cached(completion_path),
+               'adapter_sha256': sha256_file_hex_cached(adapter_path)}
+    (out/'configs').mkdir(parents=True, exist_ok=True)
+    receipt = out/'bootstrap.json'
+    reuse_configs = False
+    if receipt.exists():
+        prior = json.loads(receipt.read_text())
+        if prior['binding'] == binding and all(Path(path).is_file() for path in prior['configs']):
+            reuse_configs = True  # retain useful live operator tweaks after artifact verification
+    refresh_config = _bound(plan.get('semantic_refresh_config') or proof['curriculum'])
+    results, participants = [], set()
+    for declaration in plan['models']:
+        model = declaration['model']
+        participant = declaration.get('native_participant')
+        if participant is None:
+            architectures = {'lfm': {'lfm2', 'lfm2_moe'}, 'mellum': {'mellum', 'maple'}}[model]
+            candidates = [name for name, entry in adapter['models'].items()
+                          if entry['native_identity']['architecture'] in architectures]
+            if len(candidates) != 1:
+                raise ValueError('native RL bootstrap must name its unambiguous actual shared participant')
+            participant = candidates[0]
+        if participant in participants or participant not in adapter['models']:
+            raise ValueError('native RL bootstrap participants must be distinct actual exported models')
+        participants.add(participant)
+        inputs = {name: _bound(declaration[name]) for name in
+                  ('cases', 'production_recipe', 'seed_native_graphs', 'held_native_graphs')}
+        from ..common.jsonio import iter_jsonl_rows
+        cases = [row for _, row in iter_jsonl_rows(inputs['cases'])]
+        if not cases or any(row.get('split') != 'train' for row in cases):
+            raise ValueError('native RL bootstrap requires admitted nonempty train-only source cases')
+        runtime = Path(declaration['runtime']).resolve(strict=True)
+        if not (runtime/'dist/teacher/cli.js').is_file():
+            raise ValueError('native RL bootstrap collector runtime is not built')
+        config_path = out/'configs'/(model + '.json')
+        if reuse_configs:
+            results.append(config_path)
+            continue
+        args = SimpleNamespace(**inputs, model=model, native_participant=participant,
+            semantic_adapter=adapter_path, semantic_refresh_config=refresh_config,
+            checkpoint=Path(adapter['checkpoint']['path']), base=Path(declaration['base']),
+            production_stage=declaration['production_stage'], runtime=runtime,
+            out=out/model, config=config_path, port=declaration['port'])
+        config = configure_native(args)
+        overrides = declaration.get('commands') or {}
+        if set(overrides) - {'actor_command', 'learner_command', 'seed_command',
+                             'before_collect', 'before_update', 'after_update'}:
+            raise ValueError('native RL bootstrap has an unsupported provider command hook')
+        for name, argv in overrides.items():
+            if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) for arg in argv):
+                raise ValueError('native RL provider bridge commands must be explicit nonempty argv lists')
+            config[name] = argv
+        config['bootstrap_binding'] = binding
+        config['source_admission'] = declaration.get('source_admission')
+        write_json_durable(config_path, config)
+        results.append(config_path)
+    write_json_durable(receipt, {'schema': 'natlang.native-rl-bootstrap-receipt/1',
+        'binding': binding, 'configs': [str(path.resolve()) for path in results],
+        'participants': sorted(participants), 'provider_commands_executed': False})
+    return results
+
+
 def apply_deployment(config, deployment):
     """Idempotent publication bookkeeping, even after a crash between actors."""
     out = Path(config['out']); out.mkdir(parents=True, exist_ok=True)
@@ -93,6 +171,10 @@ def run_rounds(config_paths, out, *, rounds=None, device='cuda'):
                 raise failures[0]  # successful sibling checkpoints remain resumable/pending
             updates = {name: state['pending_native_checkpoint'] for name, state in zip(names, states)
                        if state.get('pending_native_checkpoint')}
+            if not updates and rounds is None:
+                import time
+                time.sleep(60)  # actor leases are closed; new tasks/config are checked next cycle
+                continue
             if not updates:
                 return {'phase': 'await_useful_rollouts_or_data', 'states': states, 'production_complete': False}
             directory = out/f'round-{cycle:06d}'
@@ -118,12 +200,18 @@ def run_rounds(config_paths, out, *, rounds=None, device='cuda'):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', action='append', type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument('--config', action='append', type=Path)
+    source.add_argument('--bootstrap', type=Path)
+    parser.add_argument('--shared-completion', type=Path)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--rounds', type=int)
     parser.add_argument('--device', default='cuda')
     args = parser.parse_args(argv)
-    return run_rounds(args.config, args.out, rounds=args.rounds, device=args.device)
+    if args.bootstrap and not args.shared_completion:
+        parser.error('--bootstrap requires actual --shared-completion')
+    configs = bootstrap_configs(args.bootstrap, args.shared_completion, args.out) if args.bootstrap else args.config
+    return run_rounds(configs, args.out, rounds=args.rounds, device=args.device)
 
 
 if __name__ == '__main__':

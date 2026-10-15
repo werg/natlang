@@ -176,3 +176,47 @@ def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_p
     handler = recipe.HANDLERS['native_state_rl']
     assert handler['required_inputs'].isdisjoint(handler['optional_inputs'])
     assert 'rl_block_bundle' in handler['optional_inputs']
+
+
+def test_bootstrap_binds_actual_export_and_train_files_then_preserves_hot_configs(tmp_path, monkeypatch):
+    from natlang_neuralese.train import native_readiness, recipe
+    parent = tmp_path/'joint.pt'; parent.write_bytes(b'fixture-parent')
+    def artifact(name, value):
+        path = tmp_path/name; path.write_text(json.dumps(value))
+        return {'path': str(path), 'sha256': sha256_file_hex(path)}
+    curriculum = artifact('curriculum.json', {})
+    adapter = artifact('adapter.json', {'schema': 'natlang.native-semantic-adapter/1',
+        'checkpoint': {'path': str(parent), 'sha256': sha256_file_hex(parent)},
+        'models': {name: {'native_identity': {'architecture': architecture}}
+                   for name, architecture in [('actual-lfm-id', 'lfm2'), ('actual-mellum-id', 'mellum')]}})
+    proof = {'adapter': adapter, 'curriculum': curriculum}
+    completion = tmp_path/'shared-stage-completion.json'; completion.write_text(json.dumps(proof))
+    monkeypatch.setattr(native_readiness, 'validate_completion', lambda *args: (proof, 'verified-fixture'))
+    monkeypatch.setattr(recipe, 'resolve_recipe_data', lambda path: {'stages': [
+        {'id': 'native_full_sft', 'kind': 'native_state_sft', 'parameters': {
+            'epochs': 1, 'task_eval': {'packet': 'held'}, 'task_eval_every': 5000}}]})
+    runtime = tmp_path/'runtime/dist/teacher'; runtime.mkdir(parents=True)
+    (runtime/'cli.js').write_text('// fixture build')
+    models = []
+    for model in ('lfm', 'mellum'):
+        models.append({'model': model, 'production_recipe': artifact(model+'-recipe.json', {}),
+            'production_stage': 'native_full_sft', 'base': str(tmp_path/'base'),
+            'seed_native_graphs': artifact(model+'-train.jsonl', {'fixture': 'train'}),
+            'held_native_graphs': artifact(model+'-held.jsonl', {'fixture': 'held'}),
+            'cases': artifact(model+'-cases.jsonl', {'id': model, 'split': 'train'}),
+            'runtime': str(runtime.parent.parent), 'port': 8097 if model == 'lfm' else 8098})
+    plan = tmp_path/'bootstrap-plan.json'
+    plan.write_text(json.dumps({'schema': 'natlang.native-rl-bootstrap/1', 'models': models}))
+    configs = native_rounds.bootstrap_configs(plan, completion, tmp_path/'rl')
+    assert len(configs) == 2
+    first = json.loads(configs[0].read_text())
+    assert first['native_participant'] == 'actual-lfm-id'
+    assert first['checkpoint'] == str(parent)
+    assert first['bootstrap_binding']['adapter_sha256'] == adapter['sha256']
+    first['workers'] = 7; configs[0].write_text(json.dumps(first))
+    native_rounds.bootstrap_configs(plan, completion, tmp_path/'rl')
+    assert json.loads(configs[0].read_text())['workers'] == 7
+    Path(models[0]['cases']['path']).write_text('{}')
+    # Even an unchanged plan rechecks admitted artifacts before reuse.
+    with pytest.raises(ValueError, match='artifact changed'):
+        native_rounds.bootstrap_configs(plan, completion, tmp_path/'rl')

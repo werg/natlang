@@ -98,3 +98,35 @@ replay; real VAE/joint/distillation refresh after a changed participant; paralle
 learner merge and idempotent publication. Fixture rewards do not establish
 natlang task success. Full-size task quality and complete production exposure
 remain actual run outcomes to measure after the required native stages finish.
+
+## Automatic start after the shared curriculum
+
+The existing `native_readiness` controller accepts `rl_bootstrap` as an exact
+`{path, sha256}` binding to a `natlang.native-rl-bootstrap/1` plan. `rl_out`
+defaults to its output directory plus `/rl`; `rl_device` defaults to `cuda`.
+The controller launches RL only after the full shared completion verifier passes,
+and forwards stop requests to the same supervised child. Inspection with
+`--once` starts neither training nor RL. Failed shared qualification never
+launches RL merely because a subprocess exited successfully.
+
+The plan contains `models` with at least two distinct exported participants.
+Each has `model` (`lfm` or `mellum`), optional exact `native_participant`
+(otherwise selected unambiguously from the actual export's architecture),
+`production_stage`, `base`, `runtime`, and `port`. The fields `cases`,
+`production_recipe`, `seed_native_graphs`, and `held_native_graphs` are exact
+`{path, sha256}` file bindings. Optional `semantic_refresh_config` is likewise
+bound; its default is the actual qualified completion's curriculum. Optional
+`commands` holds existing argv hooks, never shell strings. The implementation
+computes real learner configs from the completed export, not future checkpoint
+hashes. Restart verifies the declared artifacts and preserves useful edits to
+already generated controller configs.
+
+The existing admitted S7 task source is
+`/home/werg/natlang/runs/decision-rich-train-20261005-v2/cases.jsonl`, SHA-256
+`6f2a470a8de79d4fb9966fc5a5157ebdf16d3c58a02ae034322a2bdfcde20dca`
+(72 train rows, registered source `clef-rich-source-20261005-v1`). Its actual
+sandbox mirror must be staged and verified before use; declaring a remote path
+is not a transfer. Native graph and full-pair curriculum bindings come from
+the admitted production conversion manifests. With no useful selected tasks,
+the continuous controller closes actor leases and checks for new work every
+minute. This wait does not count as production completion.

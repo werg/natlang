@@ -13,6 +13,7 @@ import json
 import math
 from pathlib import Path
 import subprocess
+import sys
 import time
 
 from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
@@ -158,6 +159,21 @@ def validate_completion(path, published):
     return proof, published[key]['execution_signature']
 
 
+def rl_bootstrap_command(config, completion, proof):
+    """Exact optional next-stage plumbing after real shared qualification."""
+    plan = _bound(config['rl_bootstrap'])
+    value = json.loads(plan.read_text())
+    if value.get('schema') != 'natlang.native-rl-bootstrap/1' or len(value.get('models') or []) < 2:
+        raise ValueError('rl_bootstrap must declare a typed plan for both native learners')
+    out = Path(config.get('rl_out', str(Path(config['out'])/'rl'))).resolve()
+    argv = [sys.executable, '-m', 'natlang_neuralese.rl.native_rounds',
+            '--bootstrap', str(plan), '--shared-completion', str(Path(completion).resolve()),
+            '--out', str(out), '--device', config.get('rl_device', 'cuda')]
+    signature = canonical_json_sha256_hex({'plan_sha256': config['rl_bootstrap']['sha256'],
+        'shared_checkpoint': proof['checkpoint'], 'adapter': proof['adapter'], 'out': str(out)})
+    return argv, signature
+
+
 def run(config_path, *, once=False):
     config = json.loads(Path(config_path).read_text())
     if config.get('schema') != 'natlang.native-shared-stage-controller/1':
@@ -173,7 +189,7 @@ def run(config_path, *, once=False):
     out = Path(config['out']).resolve(); out.mkdir(parents=True, exist_ok=True)
     with (out/'controller.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        child, last_success = None, None
+        child, child_kind, last_success, rl_last_success, active_rl_signature = None, None, None, None, None
         published = {}
         from .loop import StopSignal
         stop = StopSignal()
@@ -183,7 +199,9 @@ def run(config_path, *, once=False):
         pair_cache = None
         state_path = out/'controller.json'
         if state_path.exists():
-            last_success = json.loads(state_path.read_text()).get('last_successful_participants')
+            previous_state = json.loads(state_path.read_text())
+            last_success = previous_state.get('last_successful_participants')
+            rl_last_success = previous_state.get('last_successful_rl_bootstrap')
         while True:
             updated = json.loads(Path(config_path).read_text())
             if updated.get('schema') != config['schema'] or Path(updated['out']).resolve() != out:
@@ -231,12 +249,26 @@ def run(config_path, *, once=False):
                 write_json_durable(participants, manifest)
                 published[(signature, curriculum_signature)] = {
                     'execution_signature': execution_signature, 'models': [item['model_id'] for item in ready]}
+                completion = out/'shared-stage-completion.json'
+                if (child is None and config.get('rl_bootstrap') and completion.is_file()
+                        and not once and not stop.requested):
+                    candidate = json.loads(completion.read_text())
+                    candidate_key = (candidate.get('participants_signature'), candidate.get('curriculum_signature'))
+                    if candidate_key == (signature, curriculum_signature):
+                        proof, last_success = validate_completion(completion, published)
+                        argv, active_rl_signature = rl_bootstrap_command(config, completion, proof)
+                        if active_rl_signature != rl_last_success:
+                            child = subprocess.Popen(argv, cwd=config.get('workdir'), start_new_session=False)
+                            child_kind = 'native-rl'
                 if child is None and execution_signature != last_success and not once and not stop.requested:
                     argv = [arg.replace('{participants}', str(participants)).replace('{out}', str(out)) for arg in command]
                     child = subprocess.Popen(argv, cwd=config.get('workdir'), start_new_session=False)
+                    child_kind = 'native-semantic'
             state = {'schema': 'natlang.native-shared-controller-state/1', 'ready_models': len(ready),
                      'pending': pending, 'participants': str(participants) if len(ready) >= 2 else None,
-                     'child_pid': child.pid if child else None, 'last_successful_participants': last_success,
+                     'child_pid': child.pid if child else None, 'child_kind': child_kind,
+                     'last_successful_participants': last_success,
+                     'last_successful_rl_bootstrap': rl_last_success,
                      'execution_signature': execution_signature, 'curriculum_signature': curriculum_signature}
             if child is not None and stop.requested and not forwarded:
                 child.terminate()
@@ -250,14 +282,19 @@ def run(config_path, *, once=False):
                     return state
                 if child.returncode != 0:
                     write_json_durable(state_path, state)
-                    raise RuntimeError('shared-stage command failed; resume its preserved checkpoint')
-                completion = out/'shared-stage-completion.json'
-                if not completion.is_file():
-                    raise RuntimeError('shared-stage command exited without actual completion/exposure receipt')
-                proof, last_success = validate_completion(completion, published)
-                state['last_successful_participants'] = last_success
+                    raise RuntimeError(str(child_kind) + ' command failed; resume its preserved checkpoint')
+                if child_kind == 'native-rl':
+                    rl_last_success = active_rl_signature
+                    state['last_successful_rl_bootstrap'] = rl_last_success
+                else:
+                    completion = out/'shared-stage-completion.json'
+                    if not completion.is_file():
+                        raise RuntimeError('shared-stage command exited without actual completion/exposure receipt')
+                    proof, last_success = validate_completion(completion, published)
+                    state['last_successful_participants'] = last_success
                 state['child_pid'] = None
-                child = None
+                state['child_kind'] = None
+                child, child_kind = None, None
             write_json_durable(state_path, state)
             if once:
                 return state

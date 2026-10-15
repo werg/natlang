@@ -97,3 +97,66 @@ def test_corrupt_third_model_is_a_repair_without_blocking_two_ready_models(tmp_p
     Path(receipt['runtime_certificate']['path']).write_text('{}')
     selected, pending = ready_participants({'participants': [third, first, second]})
     assert len(selected) == 2 and pending[0]['repair_required'] is True
+
+
+@pytest.mark.parametrize('qualified', [False, True])
+def test_optional_rl_launch_waits_for_shared_validation_and_uses_same_child_supervision(tmp_path, monkeypatch, qualified):
+    """Control-only child fixtures: never claims a completed model qualification."""
+    from natlang_neuralese.train import native_readiness as controller, loop
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    out = tmp_path/'controller'; out.mkdir()
+    curriculum = tmp_path/'curriculum.json'; curriculum.write_text('{}')
+    plan = tmp_path/'rl-plan.json'; plan.write_text(json.dumps({
+        'schema': 'natlang.native-rl-bootstrap/1', 'models': [{'model': 'lfm'}, {'model': 'mellum'}]}))
+    config = {'schema': 'natlang.native-shared-stage-controller/1', 'out': str(out),
+        'command': ['semantic-fixture', '{participants}'], 'curriculum': str(curriculum),
+        'participants': [], 'poll_seconds': .001,
+        'rl_bootstrap': {'path': str(plan), 'sha256': sha256_file_hex(plan)}}
+    path = tmp_path/'config.json'; path.write_text(json.dumps(config))
+    ready = [{'model_id': 'lfm'}, {'model_id': 'mellum'}]
+    monkeypatch.setattr(controller, 'ready_participants', lambda config: (ready, []))
+    class Stop:
+        requested = False
+        def install(self):
+            pass
+    stop = Stop()
+    monkeypatch.setattr(loop, 'StopSignal', lambda: stop)
+    launched, validated = [], []
+    proof = {'schema': 'control-only-fixture', 'checkpoint': {'path': 'fixture', 'sha256': 'hash'},
+        'adapter': {'path': 'fixture-adapter', 'sha256': 'adapter'},
+        'participants_signature': canonical_json_sha256_hex(ready),
+        'curriculum_signature': canonical_json_sha256_hex({})}
+    def validate(path, published):
+        validated.append(True)
+        if not qualified:
+            raise ValueError('shared qualification missing')
+        return proof, 'completed-semantic-fixture'
+    monkeypatch.setattr(controller, 'validate_completion', validate)
+    class Child:
+        pid = 12345
+        def __init__(self, semantic):
+            self.returncode = 0 if semantic else None
+        def poll(self):
+            return self.returncode
+        def terminate(self):
+            self.returncode = 0
+    def launch(argv, **kwargs):
+        launched.append(argv)
+        if len(launched) == 1:
+            (out/'shared-stage-completion.json').write_text(json.dumps(proof))
+            return Child(True)
+        assert validated and qualified  # no early RL despite zero semantic exit
+        stop.requested = True
+        return Child(False)
+    monkeypatch.setattr(controller.subprocess, 'Popen', launch)
+    monkeypatch.setattr(controller.time, 'sleep', lambda seconds: None)
+    if not qualified:
+        with pytest.raises(ValueError, match='qualification missing'):
+            controller.run(path)
+        assert len(launched) == 1
+    else:
+        result = controller.run(path)
+        assert len(launched) == 2
+        assert 'natlang_neuralese.rl.native_rounds' in launched[1]
+        assert '--bootstrap' in launched[1] and str(plan) in launched[1]
+        assert result['status'] == 'stopped-after-checkpoint-request'
