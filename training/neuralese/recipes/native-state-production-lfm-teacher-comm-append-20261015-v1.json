@@ -1,0 +1,28 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "native-state-production-lfm-teacher-comm-append-20261015-v1",
+  "extends": "native-state-production-lfm-20261015-v1",
+  "description": "Continue exact native weights, optimizer, RNG and per-row exposure on the existing FULL prefix plus admitted Qwen ordinary examples, corrected REST ordinary examples and genuine producer/consumer pairs. Communication visits run first, followed by prioritized Qwen visits and remaining FULL coverage; held evaluation uses a rotating whole-graph token budget and a complete final evaluation.",
+  "overrides": {
+    "input_bindings": {
+      "native_train_graphs": {
+        "path": "/work/native-production/data/native-state-teacher-comm-append-20261015-v1/lfm25/train-sources.json",
+        "sha256": "b89ba6d6ca13651636a43627d0bc091576a486435fdddcdbba3fa2b35efd2ec0"
+      },
+      "previous_native_train_graphs": {
+        "path": "/work/native-production/data/native-state-full-graphs-20261015-v1/lfm25/train/native-graphs.jsonl.zst",
+        "sha256": "78ffd90e24a685516354f91e33a76d60f26a086818c27b0caf0c6fc313971096"
+      }
+    },
+    "stages": {
+      "native_full_sft": {
+        "inputs": {
+          "continued_native_graphs": "previous_native_train_graphs"
+        },
+        "parameters": {
+          "held_eval_tokens": 524288
+        }
+      }
+    }
+  }
+}

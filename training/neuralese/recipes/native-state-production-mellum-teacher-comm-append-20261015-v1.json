@@ -1,0 +1,28 @@
+{
+  "schema": "natlang.neuralese-training-recipe/1",
+  "id": "native-state-production-mellum-teacher-comm-append-20261015-v1",
+  "extends": "native-state-production-mellum-20261015-v1",
+  "description": "Continue exact native weights, optimizer, RNG and per-row exposure on the existing FULL prefix plus admitted Qwen ordinary examples, corrected REST ordinary examples and genuine producer/consumer pairs. Communication visits run first, followed by prioritized Qwen visits and remaining FULL coverage; held evaluation uses a rotating whole-graph token budget and a complete final evaluation.",
+  "overrides": {
+    "input_bindings": {
+      "native_train_graphs": {
+        "path": "/work/native-production/data/native-state-teacher-comm-append-20261015-v1/mellum21/train-sources.json",
+        "sha256": "c30da08e6dd7edc144acf717626d00b3315b80895e8fbfea1a3f3241cc003955"
+      },
+      "previous_native_train_graphs": {
+        "path": "/work/native-production/data/native-state-full-graphs-20261015-v1/mellum21/train/native-graphs.jsonl.zst",
+        "sha256": "09cd0cae32c9e269c23a071b5f9504f310dbb4cf79d615a436c85b47b5f62c58"
+      }
+    },
+    "stages": {
+      "native_full_sft": {
+        "inputs": {
+          "continued_native_graphs": "previous_native_train_graphs"
+        },
+        "parameters": {
+          "held_eval_tokens": 524288
+        }
+      }
+    }
+  }
+}
