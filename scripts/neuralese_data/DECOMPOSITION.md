@@ -71,3 +71,13 @@ files remain byte-checked. This is a corrected exact verifier of the declared
 output, not a new prompt or a relaxation of expected answers. The transformer
 requires that known output contract before changing an inherited byte oracle.
 Historical v1 programs/results remain bound to their original verifier.
+
+## Paired role spans from actual rendered tokens
+
+The pair converter locates its inserted producer/consumer boundaries in the
+shared renderer's actual token offsets. Structured chat rendering can tokenize
+adjacent pieces separately; merging their decoded text and tokenizing it again
+can produce different, equally valid BPE IDs. The exact verifier preserves the
+original IDs, checks full decoding, offset geometry, marker identity, payload
+hash and each witnessed read occurrence. Rows without renderer offsets retain
+the canonical-tokenization check. No payload, target or admission rule changes.

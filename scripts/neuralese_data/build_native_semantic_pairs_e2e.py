@@ -411,12 +411,23 @@ def exact_marked_spans(row, tokenizer, body, *, open_marker, close_marker, expec
         starts.append(start); cursor = start + len(wrapper)
     if len(starts) != expected_count or sha256_bytes(body.encode()) != expected_sha256:
         raise ValueError('normalized typed payload wrappers differ from the authenticated read occurrences')
-    encoded = tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)
-    token_ids, offsets = encoded['input_ids'], encoded['offset_mapping']
-    if token_ids and isinstance(token_ids[0], list): token_ids = token_ids[0]
-    if offsets and isinstance(offsets[0][0], (list, tuple)): offsets = offsets[0]
-    if list(token_ids) != ids or len(offsets) != len(ids):
-        raise ValueError('whole-row tokenization differs from the statically normalized consumer')
+    offsets = row.get('token_offsets')
+    if offsets is None:
+        encoded = tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)
+        token_ids, offsets = encoded['input_ids'], encoded['offset_mapping']
+        if token_ids and isinstance(token_ids[0], list): token_ids = token_ids[0]
+        if offsets and isinstance(offsets[0][0], (list, tuple)): offsets = offsets[0]
+        if list(token_ids) != ids:
+            raise ValueError('whole-row tokenization differs from the statically normalized consumer')
+    # The shared chat renderer intentionally tokenizes structured/template and
+    # quoted segments separately. Their actual IDs may decode exactly while
+    # differing from a new whole-string BPE merge. Preserve the renderer's exact
+    # offsets rather than treating that legitimate segmentation as a bad row.
+    if (len(offsets) != len(ids) or any(not isinstance(pair, (list, tuple)) or len(pair) != 2
+            or any(type(value) is not int for value in pair)
+            or not 0 <= pair[0] <= pair[1] <= len(text) for pair in offsets)
+            or tokenizer.decode(ids, skip_special_tokens=False) != text):
+        raise ValueError('rendered consumer offsets or actual token decoding differ from its full source text')
     open_id, close_id = tokenizer.convert_tokens_to_ids(open_marker), tokenizer.convert_tokens_to_ids(close_marker)
     payload = tokenizer(body, add_special_tokens=False)['input_ids']
     if payload and isinstance(payload[0], list): payload = payload[0]
@@ -521,7 +532,10 @@ def normalized_pair_rows(writer_record, reader_record, pieces, *, tokenizer, pay
         require_independent_splits=False, target_reasoning=True, include_token_offsets=True,
         tokenizer_sha256=tokenizer_sha256)
     if len(writer_rows) != 1 or writer_omitted or len(reader_rows) != 1 or reader_omitted:
-        raise ValueError('normalized full producer/consumer turns did not render uniquely')
+        raise ValueError('normalized full producer/consumer turns did not render uniquely: ' +
+            json.dumps({'writer_rows': len(writer_rows), 'reader_rows': len(reader_rows),
+                        'writer_omissions': writer_omitted, 'reader_omissions': reader_omitted},
+                       ensure_ascii=False, sort_keys=True))
     return (materialize_role_markers(writer_rows[0], role_markers=role_markers,
                 role_ids=tuple(tokenizer.convert_tokens_to_ids(marker) for marker in role_markers), payload=payload, side='writer'),
             materialize_role_markers(reader_rows[0], role_markers=role_markers,

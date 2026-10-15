@@ -40,6 +40,37 @@ class RoleAsciiTokenizer(AsciiTokenizer):
                        else bytes([value]).decode() for value in ids)
 
 
+def test_pair_spans_preserve_actual_segmented_chat_tokens_instead_of_retokenizing():
+    import hashlib
+    from scripts.neuralese_data.build_native_semantic_pairs_e2e import exact_marked_spans
+    class MergedTokenizer(RoleAsciiTokenizer):
+        def __call__(self, text, **kwargs):
+            encoded = super().__call__(text, **kwargs)
+            if text.startswith('AB'):
+                encoded['input_ids'][:2] = [2001]
+                if 'offset_mapping' in encoded:
+                    encoded['offset_mapping'][:2] = [(0,2)]
+            return encoded
+        def decode(self, ids, **kwargs):
+            return ''.join('AB' if value == 2001 else super(MergedTokenizer,self).decode([value], **kwargs)
+                           for value in ids)
+        def convert_tokens_to_ids(self, marker):
+            return self.marker_ids[self.markers.index(marker)]
+    text = 'AB<|consume|>x<|/consume|>'
+    actual = RoleAsciiTokenizer()(text, return_offsets_mapping=True)
+    source = {'text':text, 'token_ids':actual['input_ids'], 'token_offsets':actual['offset_mapping']}
+    assert MergedTokenizer()(text)['input_ids'] != source['token_ids']
+    spans = exact_marked_spans(source, MergedTokenizer(), 'x', open_marker='<|consume|>',
+        close_marker='<|/consume|>', expected_sha256=hashlib.sha256(b'x').hexdigest(), expected_count=1)
+    assert spans[0]['container_start'] == 2 and spans[0]['container_stop'] == 5
+    assert spans[0]['payload_token_ids'] == [ord('x')]
+    source['token_offsets'][2] = (0,1)
+    import pytest
+    with pytest.raises(ValueError, match='role markers do not bind'):
+        exact_marked_spans(source, MergedTokenizer(), 'x', open_marker='<|consume|>',
+            close_marker='<|/consume|>', expected_sha256=hashlib.sha256(b'x').hexdigest(), expected_count=1)
+
+
 def row(identifier, text, *, split='train', groups=None, boundary=None):
     return {'id': identifier, 'text': text, 'token_ids': list(text.encode()),
             'tokenizer_sha256': 'a' * 64, 'split': split,
