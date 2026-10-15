@@ -106784,6 +106784,170 @@
         }
       },
       "manifest": "training/corpus-manifests/native-state-full-graphs-20261015-v1.json"
+    },
+    {
+      "id": "qwen-verified-positive-native-graphs-20261015-v1-v2",
+      "owner": "dgx",
+      "path": "runs/qwen-verified-positive-native-graphs-20261015-v1-v2-admitted",
+      "include": [
+        "v1/lfm25/receipt.json",
+        "v1/lfm25/test/native-graphs.jsonl.zst",
+        "v1/lfm25/train/native-graphs.jsonl.zst",
+        "v1/mellum21/receipt.json",
+        "v1/mellum21/test/native-graphs.jsonl.zst",
+        "v1/mellum21/train/native-graphs.jsonl.zst",
+        "v2/lfm25/receipt.json",
+        "v2/lfm25/test/native-graphs.jsonl.zst",
+        "v2/lfm25/train/native-graphs.jsonl.zst",
+        "v2/mellum21/receipt.json",
+        "v2/mellum21/test/native-graphs.jsonl.zst",
+        "v2/mellum21/train/native-graphs.jsonl.zst",
+        "receipt.json"
+      ],
+      "source_class": "verified-static-transformations-of-own-model-strong-teacher-positive-full-trajectories",
+      "split": "Train-only positive successes; no held rows. Each full captured action turn retains exact context, offered tools, raw assistant result and all prior outcomes in its trajectory; no inferred native communication edges.",
+      "training_admission": true,
+      "training_admission_reason": "Both immutable teacher snapshots passed exact selected-train success checks; 26/26 distinct execution identities, 624 complete turn graphs per model, tokenizer/model fingerprints pinned. Both selection proofs bind the current v36 source-review SHA. Independent current protection reconciliation found zero current held, quality or pending-unpinned source-review group intersections. Exact source/proof and graph digests are in the immutable corpus manifest and per-model build receipts.",
+      "derived_from": [
+        "clef-rich-source-20261005-v1"
+      ],
+      "source_binding": {
+        "teacher": {
+          "model": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+          "revision": "7b719225242aacd3dbd3f9407468c2ee9a9d2594",
+          "runtime_commit": "fa9c2673131621cafb9a527e61d97c25eac130a9",
+          "runtime_license_fact": "SGLang-derived runtime Apache-2.0; model license recorded from pinned model metadata"
+        },
+        "snapshots": [
+          {
+            "snapshot": "v1",
+            "role": "native-trajectories.jsonl",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v1/native-trajectories.jsonl",
+            "sha256": "12386ed90c0f81f1be210933315f74ef3a19f50ba5f129fcfb867928f2b251b8",
+            "bytes": 2603575
+          },
+          {
+            "snapshot": "v1",
+            "role": "transfer-receipt.json",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v1/transfer-receipt.json",
+            "sha256": "d9e8e0b2930cb4366a2333e35eb95ecd556e19e6fb00403a84bbf425716c09db",
+            "bytes": 4893
+          },
+          {
+            "snapshot": "v1",
+            "role": "selection-proof.json",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v1/selection-proof.json",
+            "sha256": "ea46a547754d5e5ac9e54fff910fe52f1d6a5e8b5a320837e7a8adb931492f63",
+            "bytes": 5488
+          },
+          {
+            "snapshot": "v1",
+            "role": "global-protection-join.json",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v1/global-protection-join.json",
+            "sha256": "dfa258df48048cbc5793f3c6d4adfbb2103de9c437c3f0e3348365cc785bf9ba",
+            "bytes": 551
+          },
+          {
+            "snapshot": "v1",
+            "role": "evidence-source-v2.json",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v1/evidence-source-v2.json",
+            "sha256": "f85ad200435425a068c19548e95f9efa5e44d99bd0a925824f45c53b36400123",
+            "bytes": 5584
+          },
+          {
+            "snapshot": "v1",
+            "role": "penny-server-binding.json",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v1/penny-server-binding.json",
+            "sha256": "1e2da3045523f6ec8da169f95635b32ee641c25282f1e351d07d5740381d52ea",
+            "bytes": 1965
+          },
+          {
+            "snapshot": "v1",
+            "role": "selected-cases.jsonl",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v1/selected-cases.jsonl",
+            "sha256": "1d6f89f8274a67f4355865ed3e81a94fa8f934a749944299b7ad9e287be962aa",
+            "bytes": 367736
+          },
+          {
+            "snapshot": "v2",
+            "role": "native-trajectories.jsonl",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v2/native-trajectories.jsonl",
+            "sha256": "6d048a168fbc45816eb480dfa026a6a2c8d1fc2d7dc9764e695b2150cd115570",
+            "bytes": 37484930
+          },
+          {
+            "snapshot": "v2",
+            "role": "transfer-receipt.json",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v2/transfer-receipt.json",
+            "sha256": "4b3c9b1c8744a9321a2adec1a2e8f64e33f73e41c0f0414dcedfea74fe6b6016",
+            "bytes": 19954
+          },
+          {
+            "snapshot": "v2",
+            "role": "selection-proof.json",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v2/selection-proof.json",
+            "sha256": "ea46a547754d5e5ac9e54fff910fe52f1d6a5e8b5a320837e7a8adb931492f63",
+            "bytes": 5488
+          },
+          {
+            "snapshot": "v2",
+            "role": "global-protection-join.json",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v2/global-protection-join.json",
+            "sha256": "dfa258df48048cbc5793f3c6d4adfbb2103de9c437c3f0e3348365cc785bf9ba",
+            "bytes": 551
+          },
+          {
+            "snapshot": "v2",
+            "role": "evidence-source-v2.json",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v2/evidence-source-v2.json",
+            "sha256": "f85ad200435425a068c19548e95f9efa5e44d99bd0a925824f45c53b36400123",
+            "bytes": 5584
+          },
+          {
+            "snapshot": "v2",
+            "role": "penny-server-binding.json",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v2/penny-server-binding.json",
+            "sha256": "1e2da3045523f6ec8da169f95635b32ee641c25282f1e351d07d5740381d52ea",
+            "bytes": 1965
+          },
+          {
+            "snapshot": "v2",
+            "role": "selected-cases.jsonl",
+            "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v2/selected-cases.jsonl",
+            "sha256": "1d6f89f8274a67f4355865ed3e81a94fa8f934a749944299b7ad9e287be962aa",
+            "bytes": 367736
+          }
+        ],
+        "current_protection": {
+          "reference_index_path": "/home/werg/data/dgxops/next-union-v2-protection-reference-index.json",
+          "reference_index_sha256": "f130d10bbe47b478eee6c6b33d6aaf4a144664fad3543f8b2b4a25a47bad142e",
+          "held_groups": 16133,
+          "quality_groups": 65161,
+          "held_quality_sets_match_r11_compact": true,
+          "source_review_manifest": "training/corpus-manifests/source-reviews-20261015-v36.json",
+          "source_review_manifest_sha256": "8d15b6e0ce4cd533b85ea2b8f537aa1d747aff3180a5fc030f0d73d175e31d56",
+          "source_review_holds_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+          "held_group_intersections": 0,
+          "quality_group_intersections": 0,
+          "pending_review_intersections": 0
+        },
+        "verified_execution_count": 26,
+        "teacher_action_graph_rows_per_model": 624,
+        "conversion": "complete captured request context + exact assistant action, ordinary native one-node full-turn graph; text-emulated neuralese remains ordinary text and no producer/consumer edge is claimed",
+        "tokenizers": {
+          "lfm25": {
+            "source": "e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008",
+            "expanded": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6"
+          },
+          "mellum21": {
+            "source": "1abe5e6333be0157f76f5484b389e5586b0e6dbb9bc776f54ca9fd62fce6cb56",
+            "expanded": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f",
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f"
+          }
+        }
+      },
+      "license": "Teacher/model license provenance recorded above; owner directs acceptance of all licenses."
     }
   ],
   "coverage_backlog": [
