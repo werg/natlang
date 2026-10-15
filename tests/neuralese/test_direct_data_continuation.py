@@ -347,6 +347,7 @@ def test_prepared_window_cache_restores_roles_invalidates_and_rebuilds_corruptio
         calls.append(1)
         return prepare_text_windows(*args, **kwargs)
 
+    streamed_plan = trainer.stage_plan_data(engine, a, data)
     monkeypatch.setattr('natlang_neuralese.train.text_warmup.prepare_text_windows', counted)
     cold = trainer.stage_data(engine, a, data)
     cold_calls = len(calls)
@@ -364,6 +365,14 @@ def test_prepared_window_cache_restores_roles_invalidates_and_rebuilds_corruptio
         )
 
     assert shape(warm) == shape(cold)
+    cached_plan = trainer.stage_plan_data(engine, a, data)
+    assert cached_plan == streamed_plan
+    assert len(calls) == cold_calls  # Neither the predecessor nor new-data planner tokenizes a warm cache.
+    schedule_args = SimpleNamespace(**vars(a), seed=0, batch_tokens=48, batch=1, epochs=1.0, steps=None)
+    _, streamed_schedule = trainer.direct_schedule(streamed_plan[0], schedule_args)
+    _, cached_schedule = trainer.direct_schedule(cached_plan[0], schedule_args)
+    assert trainer.plan_documents_sha256(cached_schedule) == trainer.plan_documents_sha256(streamed_schedule)
+    assert trainer.held_documents(cached_plan[1]) == trainer.held_documents(streamed_plan[1])
 
     spec = prepared_windows.cache_spec(engine, a, data)
     entry = prepared_windows.cache_path(spec)

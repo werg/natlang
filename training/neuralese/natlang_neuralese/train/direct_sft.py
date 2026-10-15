@@ -1158,6 +1158,22 @@ def stage_plan_data(engine, a, text_data):
         if window.get('merged_rows'):
             value['merged_rows'] = window['merged_rows']
         return value
+    # The same semantic identity and verifier as full preparation; this covers both the new and predecessor data.
+    from . import prepared_windows
+    spec = prepared_windows.cache_spec(engine, a, text_data)
+    path = prepared_windows.cache_path(spec)
+    if path is not None:
+        with prepared_windows.locked(path) as acquired:
+            cached = prepared_windows.load(path, spec) if acquired else None
+        if cached is not None:
+            windows, _, _, expected_selection = cached
+            tests = [light(w) for w in windows['test']]
+            held, selection = select_held_document_windows(tests, a.held_documents)
+            if selection == expected_selection:
+                targets = [light(w) for w in windows['train'] if target_bearing(w)]
+                print(json.dumps({'event': 'prepared_window_cache', 'status': 'plan-hit',
+                                  'target_windows': len(targets), 'test_windows': len(tests)}), flush=True)
+                return targets, held, selection
     targets, tests = [], []
     for row in stage_rows(a, text_data, engine.tokenizer):
         windows, _ = prepare_text_windows(engine, [row], tokens=a.tokens, prefix_tokens=a.prefix_tokens,
