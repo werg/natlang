@@ -72,8 +72,6 @@
       "why": "Owner rule (2026-10-13 NVMe relief): stays on the NVMe; never archived to /mnt/external. Active training inputs, the running lineage's latest checkpoint and reserve, scorer DBs, the HF model training loads, the live call store.",
       "paths": [
         "/home/werg/natlang/runs/natlang-target-union-20261011-r3",
-        "/home/werg/natlang/runs/neuralese-direct-mellum-20261011/run-v4/direct_sft/checkpoint.pt",
-        "/home/werg/natlang/runs/neuralese-direct-mellum-20261011/run-v4/direct_sft/.checkpoint-space.reserve",
         "/home/werg/data/bird-sqlite",
         "/home/werg/natlang-data-nvme",
         "/home/werg/data/models/mellum21-12b-a2.5b-thinking",
@@ -135,6 +133,6 @@
     "best_weights_only": false,
     "drop_optimizer_at_end": false,
     "disk_aware": true,
-    "best": "hard link to the best full-state write"
+    "best": "Independent immutable best full-state write; never hardlink mutable files. Retired lineage artifacts are removed under the standing owner order."
   }
 }
