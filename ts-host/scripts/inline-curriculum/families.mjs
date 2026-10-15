@@ -61,6 +61,10 @@ export const FAMILIES = {
   paged_late_row: { build: pagedLateRow, weight: 1 },
   contract_diagnosis: { build: contractDiagnosis, weight: 2 },
   folder_criteria_reducer: { build: folderCriteria, weight: 2 },
+  // Explicit evaluation-only source. The default builder excludes demonstration
+  // families; normal Luna allocation stays on the measured v2 source.
+  folder_criteria_semantic_trial: { build: (seed, index) => folderCriteria(seed, index, { semanticTrial: true }),
+    weight: 1, demonstration: true },
   child_sufficiency: { build: childSufficiency, weight: 1 },
   scoped_module_discovery: { build: moduleDiscovery, weight: 1 },
   policy_after_measure: { build: policyAfterMeasure, weight: 1 },

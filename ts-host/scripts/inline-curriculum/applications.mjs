@@ -183,13 +183,39 @@ const TICKET_FILES = {
   open: 'Status: open\nStill reproducing the sync failure on the customer\'s laptop.\n',
   wontfix: 'Status: closed\nDeclined: this is how the product is meant to work, and the customer accepted that.\n',
 };
+// Evaluation-only worlds: all outcomes mention similar ticket words, so the
+// latest issue and what the customer's reply actually confirms carry the
+// judgment. The exact oracle below remains pinned to authored categories.
+const SEMANTIC_TICKET_UPDATES = {
+  confirmed: [
+    'An older export report was still open. The latest patch restored missing rows. The customer tried this export again and wrote, "Everything arrives now; this fixes my report. Please close it."',
+    'A prior workaround had failed. After the replacement was installed, the account owner reran the export and confirmed that the current defect is resolved.',
+  ],
+  unconfirmed: [
+    'The customer confirmed last month that a login fix works. For the current export defect, engineering has deployed a patch, but the customer has not tried it or replied yet.',
+    'The prior billing issue was resolved and the customer confirmed it. The current export patch is ready; its result is still awaiting the customer\'s verification.',
+  ],
+  open: [
+    'The last export incident was resolved and the customer confirmed that older fix. A new export failure now drops rows; the customer reports it still happens and investigation is active.',
+    'A historical note says resolved, with customer confirmation for the old sync bug. Today the same account reports a different export error that remains under investigation.',
+  ],
+  wontfix: [
+    'The customer confirmed that the reported behavior matches the documented design and agreed to close the request without a product fix. An earlier draft called the issue unresolved.',
+    'The earlier note asked for a fix, but the latest exchange clarified intended behavior. The customer accepts that disposition and confirms there is no remaining action.',
+  ],
+};
 /** A directory reducer: read the criteria, then move the matching ticket files. Criteria differ by variant. */
-export function folderCriteria(seed, index) {
+export function folderCriteria(seed, index, { semanticTrial = false } = {}) {
   const rng = new Random(seed, `folder:${index}`);
   const names = nonceWords(rng, 5).map(name => `tickets/${name}.md`);
   const kinds = rng.shuffle(['confirmed', 'unconfirmed', 'open', 'wontfix', rng.pick(['confirmed', 'unconfirmed'])]);
-  const tickets = Object.fromEntries(names.map((name, i) => [name, TICKET_FILES[kinds[i]]]));
-  const criteria = {
+  const tickets = Object.fromEntries(names.map((name, i) => [name, semanticTrial
+    ? `Ticket ${name.split('/').pop()}: ${rng.pick(SEMANTIC_TICKET_UPDATES[kinds[i]])}\n`
+    : TICKET_FILES[kinds[i]]]));
+  const criteria = semanticTrial ? {
+    customer_confirmed: { text: 'Archive this ticket only when its current issue has been fixed and the customer has confirmed that current fix works. A reply about an older or different issue does not count.\n', keep: ['confirmed'] },
+    no_action_left: { text: 'Archive this ticket when its current issue has no work left and the customer agrees with the outcome: either the current fix works, or the reported behavior is accepted as intended. Older or unrelated confirmations do not count.\n', keep: ['confirmed', 'wontfix'] },
+  } : {
     customer_confirmed: { text: 'Archive a ticket once its problem is resolved and the customer has confirmed the fix.\n', keep: ['confirmed'] },
     no_action_left: { text: 'Archive every ticket on which nobody has anything left to do: fixed and confirmed by the customer, or closed with the customer\'s agreement.\n', keep: ['confirmed', 'wontfix'] },
   };
@@ -209,7 +235,9 @@ const verdicts = await Promise.all(ticketFiles.map(async file => ({ file, qualif
 const moved: string[] = [];
 for (const { file, qualifies } of verdicts) if (qualifies) { await file.moveTo(folder.dir('archive')); moved.push(file.name); }
 moved.sort()`;
-    return curriculumCase({ family: 'folder_criteria_reducer', familyVersion: 2, shape, variant, pairGroup: `folder:${shape}`,
+    return curriculumCase({ family: 'folder_criteria_reducer', familyVersion: semanticTrial ? 3 : 2,
+      shape, variant: semanticTrial ? `${variant}_semantic_trial` : variant,
+      pairGroup: semanticTrial ? `folder-semantic:${shape}` : `folder:${shape}`,
       slice: 'folder_failure', domain: 'other', mode: 'followup', inline: 'required',
       evidence: { world: [c.text, ...Object.entries(tickets).map(([p, t]) => `${p}: ${t.trim()}`)], retrieved: [c.text], background: [] },
       decisive: [{ marker: c.text.trim(), source: 'file', note: 'the archiving criteria' }],
