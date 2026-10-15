@@ -105263,6 +105263,207 @@
       "review_status": "Static graph, source and split admission passed; no model success certificate",
       "required_conversion": "Bind exact records/pieces in shared E2E recipes on both lines; merge additional authenticated sources incrementally",
       "notes": "27 independently durable mined sources in this cohort. Parent receipt retains original source-review binding; separate admission proof records current review. All upstream/whole-chain authentication omissions remain explicit in the pinned receipt and omission ledger. Transfer alone did not admit data. No claim of model exposure."
+    },
+    {
+      "id": "luna-held-shapes-s52114-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52114-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with oracle-accepted outcomes and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "76 independently reviewed oracle-accepted roots; 362 approved native decisions out of 521 materialized; eleven exact whole-parent process/structural holds and fourteen unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v36 source-review and protected-source check; exact structural action-shape and manual noisy-process parent holds; native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Four Hotpot answer-equivalence/format rejections are held from model-negative/DPO use. Remaining exact misses need independent review.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins prior source-review; collection used current v36. Exact trajectory holds govern. Global union requires current source-review and non-success hold checks."
+    },
+    {
+      "id": "luna-held-shapes-s52114-render-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52114-parent-review-20261015-v1/render-v1",
+      "include": [
+        "receipt.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "*.jsonl",
+        "*.json",
+        "render-omissions/*/omissions.jsonl",
+        "*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows; held stays held; train documents sharing a source group with any held document (this corpus, the 4962 union, the harness bench) are dropped",
+      "admission": "renders of admitted source corpora: luna-held-shapes-s52114-curated-20261015-v1; variants: full/lfm25, full/mellum21, program-header/lfm25, program-header/mellum21, whole-trajectory/lfm25, whole-trajectory/mellum21; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of training-admitted corpora (plans/neuralese/DATA_INVENTORY_20261011.md); program-header and whole-trajectory renderings are model-facing changes recorded as debt in plans/MODEL_FACING_CHANGES.md",
+      "derived_from": [
+        "luna-held-shapes-s52114-curated-20261015-v1"
+      ],
+      "license": "facts from the source rows (see the source corpora)",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "file": "full/lfm25/text-data.jsonl",
+            "sha256": "4363d22048556a983be51a6264b4c0c035c32b094c55970fda08a296d88f3794",
+            "documents": 13,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 13,
+                "supervised_tokens": 1567,
+                "tokens": 86336,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 7177,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "full/mellum21/text-data.jsonl",
+            "sha256": "abb230f9f48d63339a1049a54a8eaff8d643c0112edaa3ecd7f6947fdbdddfbd",
+            "documents": 13,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 13,
+                "supervised_tokens": 1772,
+                "tokens": 87154,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 7427,
+            "merge_omissions": {}
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "file": "program-header/lfm25/text-data.jsonl",
+            "sha256": "d5222a8fbf3d28bd39144b09a1626d940fae4a4645d1b2b2a7915ffe8671ab18",
+            "documents": 362,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 362,
+                "supervised_tokens": 37865,
+                "tokens": 733625,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 3390,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "program-header/mellum21/text-data.jsonl",
+            "sha256": "dafe68186fa5572991d42941f786f7077229b2a2e343b6d5b6bb196bfdd76717",
+            "documents": 362,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 362,
+                "supervised_tokens": 42961,
+                "tokens": 749170,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 3942,
+            "merge_omissions": {}
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "file": "whole-trajectory/lfm25/text-data.jsonl",
+            "sha256": "0cb7464c2ef8be605cdb5f8430fb0150fd1568f028e861e4cc4db1af2378a9eb",
+            "documents": 213,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 110547,
+                "documents": 213,
+                "opening_tokens": 79881,
+                "supervised_tokens": 30666,
+                "tokens": 417147,
+                "tool_tokens": 40881
+              }
+            },
+            "max_document_tokens": 3319,
+            "merge_omissions": {}
+          },
+          "mellum21": {
+            "file": "whole-trajectory/mellum21/text-data.jsonl",
+            "sha256": "f18baadd6738799bae0e181cb653669e2d23675a05fa5b86eb4ef31338315a1b",
+            "documents": 213,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 127372,
+                "documents": 213,
+                "opening_tokens": 81146,
+                "supervised_tokens": 46226,
+                "tokens": 431357,
+                "tool_tokens": 43161
+              }
+            },
+            "max_document_tokens": 3942,
+            "merge_omissions": {}
+          }
+        }
+      },
+      "selection": {
+        "reserved_groups": 0,
+        "reserved_programs_hit": 0,
+        "selected": 362,
+        "selected:train": 362,
+        "source_rows": 362
+      },
+      "render_omissions": {
+        "lfm25/all/decontaminated": 0,
+        "lfm25/decision/already_rendered_elsewhere": 0,
+        "lfm25/full/outside_warmup_sample": 349,
+        "mellum21/all/decontaminated": 0,
+        "mellum21/decision/already_rendered_elsewhere": 0,
+        "mellum21/full/outside_warmup_sample": 349
+      },
+      "program_header_parity": {
+        "equal_text_serving_token_boundaries": 724,
+        "retokenization_checked": 0
+      },
+      "build": {
+        "script": "scripts/neuralese_data/render_native_turn_corpus.py",
+        "wrapper": "scripts/neuralese_data/render_native_turn_corpus.sh",
+        "container": "natlang-neuralese:26.09",
+        "renderer_code": {
+          "scripts/neuralese_data/render_native_turn_corpus.py": "cd22423d7181576175120a299ae1de2511cf3be9048353621840506f98da592f",
+          "scripts/neuralese_data/strip_generic_system_prompt.py": "ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838",
+          "training/neuralese/natlang_neuralese/data/prompt_rendering.py": "6d14d8d1f65583e324b5ce0b9a48202d5333fd25d5c2fd035487efe51650f0ba",
+          "training/neuralese/natlang_neuralese/data/text_corpus.py": "8be442bf14eef2c92709cc93155b90a109e3eb7199a0c035c8a169e9a6120cfe",
+          "training/neuralese/natlang_neuralese/serve/chat.py": "169334710cc9920f63a2f4cb95be18c858805671d7f8b47e47c3d0264fdb95cc",
+          "training/prompt-pieces/pieces.json": "d8424be53ca451d98d66d67cdb0c47a5bbef1270bf4cb33d6cff57cddc8e098c"
+        },
+        "receipt": "runs/luna-s52114-parent-review-20261015-v1/render-v1/receipt.json",
+        "sources": {
+          "runs/luna-s52114-parent-review-20261015-v1/approved-turns.jsonl": {
+            "bytes": 27323543,
+            "sha256": "d71c80ad4da8ce64ad15b829abd2e03d0382458c33ddf1c210bd4938bc6e989b"
+          }
+        },
+        "exclude_programs": [],
+        "reserved": {
+          "path": "training/source-split-reservations.json",
+          "sha256": "87908527386eddf6117e81d2c11ee7c9df2e233db76a34afb15d3255a4de0291"
+        },
+        "protected": null,
+        "held_text": {}
+      },
+      "notes": ""
     }
   ],
   "coverage_backlog": [
