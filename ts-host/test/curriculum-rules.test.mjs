@@ -109,7 +109,7 @@ test('quarantine, generation-hold and runtime-failure ladders: registry policy e
   // The sample reaches every rung of the registry (the benchmark and source-review steps give their own reasons).
   for (const entry of QUARANTINE_RULES) if (entry.reason) assert.ok(seen.quarantine.has(entry.reason), `quarantine rung ${entry.id} never fired`);
   for (const entry of GENERATION_HOLD_RULES) assert.ok(seen.hold.has(entry.reason));
-  for (const entry of RUNTIME_FAILURE_RULES) if (entry.reason && entry.id !== 'markdown-terminal-newline')
+  for (const entry of RUNTIME_FAILURE_RULES) if (entry.reason && !['markdown-terminal-newline', 'child-provider-gateway'].includes(entry.id))
     assert.ok(seen.runtime.has(entry.reason), `runtime rung ${entry.id} never fired`);
 });
 
@@ -131,6 +131,17 @@ test('retired families are data and the set is unchanged', () => {
   assert.deepEqual([...RETIRED_FAMILIES], ['inline_type_repair']);
   assert.equal(retiredFamily({ curriculum: { family: 'inline_type_repair' } }), 'inline_type_repair');
   assert.equal(retiredFamily({ curriculum: { family: 'folder_find' } }), undefined);
+});
+
+test('child provider gateway failures are infrastructure, not model-negative evidence', () => {
+  const base = { task: { program_ir: { source: 'natlang-inline-curriculum', family: 'curriculum_recurrence_inline_graphs',
+    semantics: { expected: [] } } }, provenance: { runtime_contract_version: 19 },
+  outcome: { accepted: false, invocation_ledger: [{ completion_source: 'runtime_invocation_trace',
+    completion_status: 'failed', completion_detail: '<div class="cf-error-details cf-error-504">Gateway time-out</div>' }] } };
+  assert.equal(runtimeFailureReason(base), 'child_provider_gateway_failure');
+  assert.equal(runtimeFailureReason({ ...base, outcome: { ...base.outcome, accepted: true } }), undefined);
+  assert.equal(runtimeFailureReason({ ...base, outcome: { ...base.outcome, invocation_ledger: [{
+    completion_source: 'runtime_invocation_trace', completion_status: 'failed', completion_detail: 'invalid argument' }] } }), undefined);
 });
 
 test('the evaluator: conditions, order, steps and unknown names', () => {

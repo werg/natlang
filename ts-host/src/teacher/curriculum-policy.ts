@@ -74,6 +74,15 @@ export function runtimeFailureReason(row: { task: Record<string, unknown>; prove
   const effectiveFamily = () => (record.curriculum as { family?: string } | undefined)?.family ?? record.family;
   return firstReason(RUNTIME_FAILURE_RULES, contextOf(record, row), {
     predicates: {
+      'child-provider-gateway-failure': () => Array.isArray(row.outcome?.invocation_ledger) &&
+        row.outcome.invocation_ledger.some((entry: unknown) => {
+          if (!entry || typeof entry !== 'object') return false;
+          const completion = entry as Record<string, unknown>;
+          return completion.completion_source === 'runtime_invocation_trace' &&
+            completion.completion_status === 'failed' &&
+            typeof completion.completion_detail === 'string' &&
+            /cf-error-details cf-error-(?:502|503|504|520|522|524)\b/.test(completion.completion_detail);
+        }),
       'legacy-markdown-terminal-newline': () => legacyMarkdownTerminalNewlineFailure(row),
       'treedst-oracle-not-named-tree': () => typeof record.semantics.oracle !== 'object' || record.semantics.oracle.normalization !== 'named-tree',
       'effective-family-inline-late-binding': () => effectiveFamily() === 'inline_late_binding',

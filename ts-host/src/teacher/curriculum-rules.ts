@@ -128,6 +128,8 @@ export const GENERATION_HOLD_RULES: RuleRegistry = [
  * and named-tree rungs are code (steps and predicates): they need row-level reads that data does not state.
  */
 export const RUNTIME_FAILURE_RULES: RuleRegistry = [
+  { id: 'child-provider-gateway', reason: 'child_provider_gateway_failure', when: [],
+    violates: { predicate: 'child-provider-gateway-failure' } },
   { id: 'markdown-terminal-newline', reason: 'legacy_markdown_terminal_newline_oracle', when: [], violates: { predicate: 'legacy-markdown-terminal-newline' } },
   { id: 'treedst-named-tree', reason: 'obsolete_named_tree_oracle', when: [source('treedst')], violates: { predicate: 'treedst-oracle-not-named-tree' } },
   { step: 'benchmark-rules' },
