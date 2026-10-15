@@ -1,0 +1,78 @@
+# Frozen reasoning-token rows prevent reliable delimiter learning
+
+The LFM QAD native training lineage needs learned input and output rows for its
+existing thinking delimiters. Do not remove teacher reasoning or discard the
+useful backbone training. Continue from the latest exact parent after an explicit,
+qualified interface and optimizer extension. Apply the shared mechanism to both
+students; keep each tokenizer's actual token identities and initialization.
+
+## Evidence
+
+The exact QAD inventory is
+`f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6`.
+Its `<think>` and `</think>` tokens are IDs 64400 and 64401. Their output rows have
+cosine similarity 1.0 and maximum element difference 0.00006103515625. The current
+full-layer training policy freezes both vocabulary/readout and final RMS norm;
+only the separate four Neuralese role rows have learned vocabulary overrides.
+The teacher's exact positive targets require these thinking tokens.
+
+This is a fixed learnability limit, independent of the backbone weights. For
+output rows `a` and `b`, final RMS norm weights `w`, and hidden width `d`,
+Cauchy–Schwarz bounds the absolute pair log-odds by
+`sqrt(d) * norm(w * (a - b))`. The exact QAD tensors give
+**0.007926277764878096**. Either delimiter's probability is therefore at most
+**0.5019815590667979**, even if every other vocabulary token is suppressed.
+The source LFM RMS normalization multiplies directly by `w`, without an offset.
+More backbone updates cannot repair the frozen output distinction.
+
+Actual checkpoint 2000 (SHA
+`40191820e14014522dccb4ad15a54b63b08a7fe423f15790083a326c59286be3`)
+has high first-reply entropy on four held natlang contexts: approximately 7.69–7.72,
+with `<|fim_mid|>` the top token at probabilities around 0.0008. On three ordinary
+coding contexts, first-token probabilities remain useful and entropy is 1.50–2.64.
+New positive Qwen examples expecting `<think>` also expose the problematic reply
+boundary. Header-token predictions immediately before it remain confident.
+
+## Alternatives checked
+
+- Incremental inference and a flat graph forward agree on the first held prompt
+  within 0.00009 in logits, with the same top token.
+- The independent stock HF implementation over the restored checkpoint agrees
+  on ordinary vocabulary logits within 0.000081 and has the same first argmax.
+  The four learned Neuralese output overrides are compared separately from the
+  stock head. Its first probability is also approximately 0.00085.
+- The final normalization weights are exactly unchanged from QAD; hidden and
+  normalized hidden magnitudes have not collapsed. The HF readout remains tied.
+- The decoded 53,223-row old full source and the 4,691-turn raw Qwen V4 source
+  contain no `<|fim_mid|>` in either targets or contexts.
+- An independent optimizer audit reports exact full gradients, model weights and
+  optimizer state after two updates for both tiny ports, checkpointing on/off,
+  and multiple readout chunks. Its RFT/GRPO checks also agree exactly. These
+  focused CPU checks do not qualify all production CUDA kernels.
+
+The fixed thinking-row limit is established. Its complete contribution to every
+held task failure is not yet established; continue examining actual actions and
+task quality after repair.
+
+## Repair and acceptance
+
+Extend the existing sparse learned input/readout override mechanism. Keep the
+four Neuralese role IDs and their existing parameter tensors unchanged. Preserve
+old checkpoint behavior exactly until an explicit upgrade; initialize new rows
+from the exact restored vocabulary, and preserve all existing optimizer tensors,
+RNG, valid-row credits and continuation frames. Only new parameters start with
+fresh optimizer state. Include the learned rows in checkpoint/composite restore,
+serving, shared semantic training, RL, and native embedding identity.
+
+Before cloud continuation, verify exact old-parent logits at migration, exact
+old optimizer preservation, actual learning of distinct delimiters, save/resume,
+and both backbone paths. Measure the resulting task behavior on held data; never
+admit this diagnostic's held contexts or outputs into training.
+
+Private evidence and ledger logs live under
+`/home/werg/data/dgxops/lfm-native-task2000-held-diagnosis-20261015/`:
+`think-token-learnability-bound.json`, `think-token-embedding-audit.json`,
+`readout-weight-hidden-diagnosis.json`, and
+`prompt-boundary-reference-diagnosis.json`. The source scripts and failed initial
+probe attempts are retained there for this active investigation; failed probe
+setup is not a production model failure.
