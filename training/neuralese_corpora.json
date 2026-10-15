@@ -83516,6 +83516,145 @@
         "external-expansion-deepnlp-handoffs-20261015-v1"
       ],
       "license": "Pinned acquired source-card facts; unspecified license accepted"
+    },
+    {
+      "id": "external-expansion-deepnlp-native-20261015-v1-render",
+      "owner": "dgx",
+      "path": "runs/external-expansion-deepnlp-render-20261015-v1",
+      "include": [
+        "receipt.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "parts/*/receipt.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+      "admission": "renders of external-expansion-deepnlp-native-20261015-v1 in parts (scripts/neuralese_data/render_parts.py): program-header and whole-trajectory for every program, full only for the 5% warm-up sample (zstd); LFM2.5 and Mellum2.1 twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+      "derived_from": [
+        "external-expansion-deepnlp-native-20261015-v1"
+      ],
+      "license": "facts from the source rows",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "documents": 10,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 10,
+                "supervised_tokens": 1448,
+                "tokens": 74516,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 9758,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "a367f1cd0ae67413cbd4c2c86410b0eb17acceacc4358557bcbcd1af19f000ca",
+            "decoded_text_data_sha256": "a4c74ed6db3c158b2c58bec01abc5fb410712f767b11b691c8a9af89edde6050",
+            "decoded_text_data_bytes": 690708
+          },
+          "mellum21": {
+            "documents": 10,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 10,
+                "supervised_tokens": 1366,
+                "tokens": 67614,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 9350,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "6a94deea720c0c466ecb709a43fb03e4829ee93cb09c85c0a314527b3fef9e91",
+            "decoded_text_data_sha256": "037664d8e7d8829a37fd689e50ab785196206429ebdbb88508c6963c143f7b35",
+            "decoded_text_data_bytes": 639435
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "documents": 30,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 30,
+                "supervised_tokens": 5946,
+                "tokens": 86169,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 6594,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "2eb411c1b2fb505064586422721355abdd92866381548a47ef22bd60f5452add",
+            "decoded_text_data_sha256": "dc6feb353413d01e70a13e6f19a1d2e75b5c18842436ba1b405e8afff64c336b",
+            "decoded_text_data_bytes": 764810
+          },
+          "mellum21": {
+            "documents": 30,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 30,
+                "supervised_tokens": 5832,
+                "tokens": 72161,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 4822,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "bc5b7bd768f0e3f61ed3ac569ff875e685388e9da0d3770fc99849400551b318",
+            "decoded_text_data_sha256": "b07405d8641829d074c2ef745c2f156799abc5139466e3e0c821fbabd171e6c2",
+            "decoded_text_data_bytes": 675480
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "documents": 15,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 8184,
+                "documents": 15,
+                "opening_tokens": 2115,
+                "supervised_tokens": 6069,
+                "tokens": 48958,
+                "tool_tokens": 36661
+              }
+            },
+            "max_document_tokens": 6585,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "374980bb6271e094232b1f69a4bb9577634c0d11741d9ab4d1a94cb4df91a964",
+            "decoded_text_data_sha256": "1eecff70c7aeab8581d567d6de5ebfbaff56847b475793bea77e681def956052",
+            "decoded_text_data_bytes": 432821
+          },
+          "mellum21": {
+            "documents": 15,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 8667,
+                "documents": 15,
+                "opening_tokens": 2349,
+                "supervised_tokens": 6318,
+                "tokens": 41758,
+                "tool_tokens": 28930
+              }
+            },
+            "max_document_tokens": 4828,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "319b24054552deaf0e9a0f389998d57f59a7c2310d2ef0892a6652d6e5dbb6bc",
+            "decoded_text_data_sha256": "0b04ab9146fe80cbc3f33661633ae9977397592767b358a5efa2cf6188a40005",
+            "decoded_text_data_bytes": 386367
+          }
+        }
+      }
     }
   ],
   "coverage_backlog": [
