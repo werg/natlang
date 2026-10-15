@@ -213,11 +213,11 @@ function describe(d, req) {
   const among = `Among ${scoped}, consider those${which}.`;
   switch (req.output) {
     case 'count': return { text: `${among} How many are there?`, returns: 'number' };
-    case 'ids': return { text: `${among} Return their ids sorted by ${d.date} (oldest first), ties by id.`, returns: 'string[]' };
+    case 'ids': return { text: `${among} Return their ids sorted by ${d.date} (oldest first), breaking ties by the number after the leading letter in the id (T2 before T11).`, returns: 'string[]' };
     case 'group_count': return { text: `${among} Count them per ${d.group}; leave out ${d.group} values with none.`, returns: 'Record<string, number>' };
     case 'sum': return { text: `${among} Return the total ${d.numeric} across them.`, returns: 'number' };
     case 'classify_count': return { text: `Classify each of ${scoped} by ${cat} (${spec.values.map(v => `"${v}"`).join(', ')}) and count them per ${cat}, including every ${cat} with 0 when there are none.`, returns: 'Record<string, number>' };
-    case 'extract': return { text: `${among} For each, return { id, ${cat} } where ${cat} is one of ${spec.values.map(v => `"${v}"`).join(', ')}, sorted by id.`, returns: `{ id: string, ${cat}: string }[]` };
+    case 'extract': return { text: `${among} For each, return { id, ${cat} } where ${cat} is one of ${spec.values.map(v => `"${v}"`).join(', ')}, sorted by the number after the leading letter in the id (T2 before T11).`, returns: `{ id: string, ${cat}: string }[]` };
     case 'top_group': return { text: `${among} Which ${d.group} has the most of them? Break ties alphabetically; return null if there are none.`, returns: 'string | null' };
   }
 }
