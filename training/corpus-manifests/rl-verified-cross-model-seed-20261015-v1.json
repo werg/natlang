@@ -1,0 +1,68 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "rl-verified-cross-model-seed-20261015-v1",
+  "owner": "dgx",
+  "path": "runs/rl-verified-cross-model-seed-20261015-v1",
+  "files": [
+    {
+      "path": "lfm-packet.jsonl",
+      "bytes": 13804,
+      "sha256": "16f5ed5be4d313381770d60a57d87a4b9864da4654f5e2bc03afc55a21e0ceb7",
+      "lines": 2
+    },
+    {
+      "path": "lfm-preparation.json",
+      "bytes": 440,
+      "sha256": "95ae550895567f71f79289907d717b70e40ce20946094a81fdc13ca5344c8c00"
+    },
+    {
+      "path": "lfm-rollouts.jsonl",
+      "bytes": 7934193,
+      "sha256": "999bee881b30498b9701145ce4df06ac7468c518cc479c95b26eaaa3d1f161c4",
+      "lines": 4
+    },
+    {
+      "path": "lfm-score.json",
+      "bytes": 1903,
+      "sha256": "fe306e045ec1f990164b49a49816bd20c52ce0741739bf52b377b4a5aabc35d0"
+    },
+    {
+      "path": "lfm-validation.json",
+      "bytes": 2687,
+      "sha256": "07834f2261899c052559c65bbdef7ff1b9b794bcdfb7d65549687203313e69a5"
+    },
+    {
+      "path": "mellum-packet.jsonl",
+      "bytes": 13804,
+      "sha256": "16f5ed5be4d313381770d60a57d87a4b9864da4654f5e2bc03afc55a21e0ceb7",
+      "lines": 2
+    },
+    {
+      "path": "mellum-preparation.json",
+      "bytes": 440,
+      "sha256": "c11bb4289af66be7995c4fea5041c209d714fe59b6b078ae23c11ca2336b70f1"
+    },
+    {
+      "path": "mellum-rollouts.jsonl",
+      "bytes": 2495736,
+      "sha256": "ba921fc9e8e34e75bba1d6e437e0d88c05f8a51b1b5fbc0f716f36da5861892d",
+      "lines": 4
+    },
+    {
+      "path": "mellum-score.json",
+      "bytes": 1812,
+      "sha256": "250025e07820fe4e5217cc474f1645b84962163d9f9919c536db99370533af1d"
+    },
+    {
+      "path": "mellum-validation.json",
+      "bytes": 3060,
+      "sha256": "9932e941e95792d5a0dd5ccfc3713da4f76c004b1af32ad8eb15eda7c3fa43e3"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 3739,
+      "sha256": "34a9f184b191a3c4bfd07d90843899aff3ad80df90198023a9ee0aa09726d8e8"
+    }
+  ],
+  "bytes": 10471618
+}

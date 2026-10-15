@@ -100719,6 +100719,30 @@
           }
         }
       }
+    },
+    {
+      "id": "rl-verified-cross-model-seed-20261015-v1",
+      "owner": "dgx",
+      "path": "runs/rl-verified-cross-model-seed-20261015-v1",
+      "include": [
+        "*.json",
+        "*.jsonl"
+      ],
+      "source_class": "exact-verified-train-only-whole-trajectory-rft-rollouts",
+      "split": "train only; LFM negatives selection rates only",
+      "training_admission": true,
+      "training_admission_reason": "Owner explicitly requests reuse of exact-verified Mellum successes for both models, 2026-10-15.",
+      "admission": "Mellum successes RFT-only for both models; LFM failures only RFT task-rate selection, never positive labels. No on-policy GRPO admission.",
+      "license": "project-authored train tasks; Mellum model source terms accepted under owner standing instruction",
+      "training_roles": {
+        "mellum-rollouts.jsonl": "verified_success_rft",
+        "lfm-rollouts.jsonl": "selection_rate_only"
+      },
+      "derived_from": [
+        "decision-rich-train-20261005-v2"
+      ],
+      "documents": 4,
+      "tasks": 2
     }
   ],
   "coverage_backlog": [
