@@ -41,7 +41,7 @@ HANDLERS = {
                            'latent_ns','latent_weight_decay','grad_spike_clip','stop_at','stop_after_training_seconds','weight_drift_base','save_state',
                            'fp8_training','fp8_recipe','fp8_amax_history_len',
                            'gradient_audit_steps','saved_tensor_audit_steps','gradient_digest_steps',
-                           'state_hash_steps','sdpa_backend','deterministic_training','task_eval','task_eval_every'},'result':'report.json'},
+                           'state_hash_steps','sdpa_backend','deterministic_training','task_eval','task_eval_every','upgrade_window_coverage'},'result':'report.json'},
     # S7 RL on the full direct checkpoint (plans/neuralese/S7_RL.md §6): rl/stage.py turns scored policy rollouts into
     # RL text data (mode rft) and runs the shared direct trainer on it, continued from the pre-RL checkpoint with the
     # drift reference captured from those weights. Its parameters are the direct stage's plus the RL data decision;
@@ -1193,7 +1193,7 @@ def recipe_handoff_epoch_changes(old_recipe, new_recipe):
 # a handoff may change it on an unfinished direct stage; the trainer continues by a windowing continuation (the plan
 # it trained on rebuilt under the saved geometry, its consumed documents seen, the rest under the new geometry).
 DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'cohort_repeats', 'recovery_selection',
-                               'train_min_context_tokens')
+                               'train_min_context_tokens', 'upgrade_window_coverage')
 
 
 def direct_windowing_handoffs(old_recipe, new_recipe, out):

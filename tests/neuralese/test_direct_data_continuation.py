@@ -629,3 +629,48 @@ def test_epoch_only_handoff_still_rejects_consumed_batch_changes():
     bad[0] = ([], 0.0)
     with pytest.raises(ValueError, match='changes or discards consumed'):
         trainer.verify_epoch_budget_handoff(sampler, bad, a, previous_epochs=1.0, consumed=1)
+
+
+def test_explicit_same_data_legacy_upgrade_replays_unknown_windows_and_then_resumes(tmp_path, monkeypatch):
+    data = [window('legacy-doc', start, length=40 + start) for start in range(3)]
+    a = args(batch_tokens=20, text_data=tmp_path / 'current', continued_text_data=None,
+             upgrade_window_coverage=False)
+    inputs = {'current': 'same-data-sha'}
+    legacy = {'schema': trainer.LEGACY_CONTINUATION_SCHEMA, 'consumed_updates': 1, 'previous_updates': 1,
+              'seen_windows': 1, 'seen_documents': 1, 'seen_document_sha256': ['h-legacy-doc'],
+              'seen_document_ids': ['id-legacy-doc'], 'previous_epochs_covered': 1.0}
+    old_plan = trainer.direct_schedule(data, a, legacy)[1]
+    legacy['plan_documents_sha256'] = trainer.plan_documents_sha256(old_plan, 1)
+    state = {'step': 1, 'data_continuation': legacy, 'identity': {'inputs': inputs, 'options': dict(vars(a))},
+             'optimizer': object(), 'rng': object()}
+    optimizer, rng = state['optimizer'], state['rng']
+    assert trainer.continuation_mode(a, state, inputs) == ('resume', legacy)
+    a.upgrade_window_coverage = True
+    assert trainer.continuation_mode(a, state, inputs) == ('continue', legacy)
+    monkeypatch.setattr(trainer, 'identity_inputs', lambda _: inputs)
+    monkeypatch.setattr(trainer, 'stage_plan_data', lambda *_: (data, [], {}))
+    upgraded = trainer.compute_continuation(a, state, None, data, [], legacy, None)
+    assert upgraded['schema'] == trainer.CONTINUATION_SCHEMA
+    assert upgraded['coverage_upgrade']['requested'] is True
+    assert upgraded['consumed_updates'] == state['step'] == 1
+    assert upgraded['legacy_window_coverage']['replayed_uncertain_window_occurrences'] == 3
+    plan = trainer.direct_schedule(data, a, upgraded)[1]
+    assert len([w for batch, _ in plan[1:] for w in batch]) == 3
+    state['data_continuation'] = upgraded
+    assert trainer.continuation_mode(a, state, inputs) == ('resume', upgraded)
+    assert state['optimizer'] is optimizer and state['rng'] is rng
+
+
+def test_recipe_window_coverage_upgrade_is_declared_and_refuses_finished_stage(tmp_path):
+    assert 'upgrade_window_coverage' in runner.HANDLERS['neuralese_direct']['parameters']
+    old = {'stages': [{'id': 'direct_sft', 'kind': 'neuralese_direct', 'parameters': {'epochs': 1}}]}
+    new = copy.deepcopy(old)
+    new['stages'][0]['parameters']['upgrade_window_coverage'] = True
+    changed, before, after = runner.direct_windowing_handoffs(old, new, tmp_path)
+    assert changed == {'direct_sft': {'upgrade_window_coverage': [None, True]}}
+    assert before == after
+    assert runner.stage_parameter_args({'upgrade_window_coverage': True}) == ['--upgrade-window-coverage']
+    assert runner.stage_parameter_args({'upgrade_window_coverage': False}) == ['--no-upgrade-window-coverage']
+    (tmp_path / 'direct_sft-report.json').write_text('{}')
+    with pytest.raises(ValueError, match='finished stage'):
+        runner.direct_windowing_handoffs(old, new, tmp_path)
