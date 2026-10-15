@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-mined-refine-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-refine-archive-20261015-v1",
+  "files": [
+    {
+      "path": "refine.receipt.json",
+      "bytes": 1671,
+      "sha256": "3a86389ae85127951d907f9f35d20aad568b7ffc15372d7b2973157f4d55879f"
+    },
+    {
+      "path": "refine.roundtrip-proof.json",
+      "bytes": 350,
+      "sha256": "2cb5e3b131939a319893e3b391c7a40d02220581482f426ed4b15f31bc03b5e2"
+    },
+    {
+      "path": "refine.tar.zst",
+      "bytes": 925,
+      "sha256": "ab2d2fbad50a3674d8543caa32a44939599086d57de9af90169676bce2aa6be7"
+    }
+  ],
+  "bytes": 2946
+}

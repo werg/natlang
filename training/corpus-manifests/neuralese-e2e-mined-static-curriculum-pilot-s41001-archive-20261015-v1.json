@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-mined-static-curriculum-pilot-s41001-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-static-curriculum-pilot-s41001-archive-20261015-v1",
+  "files": [
+    {
+      "path": "static-curriculum-pilot-s41001.receipt.json",
+      "bytes": 32009,
+      "sha256": "1edc8fd876b7a6f2a5f8ed7a5f805c775fceb7b6bcad40828a569fe50611636b"
+    },
+    {
+      "path": "static-curriculum-pilot-s41001.roundtrip-proof.json",
+      "bytes": 383,
+      "sha256": "18900c7bbd3c6b3c085822d1531b8b89c512514ffbba311f11a1c69398897106"
+    },
+    {
+      "path": "static-curriculum-pilot-s41001.tar.zst",
+      "bytes": 18466862,
+      "sha256": "4d26ebaefed7ac4ee8326db57137b12e73ffa99aa86d34e6bb032fb34b04c18d"
+    }
+  ],
+  "bytes": 18499254
+}

@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-mined-static-curriculum-s7011-s7014-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-static-curriculum-s7011-s7014-archive-20261015-v1",
+  "files": [
+    {
+      "path": "static-curriculum-s7011-s7014.receipt.json",
+      "bytes": 38182,
+      "sha256": "da23e87b2fb17516f1ef8b97994a50ed369b92fc5617de2978275837d6dd3d4a"
+    },
+    {
+      "path": "static-curriculum-s7011-s7014.roundtrip-proof.json",
+      "bytes": 381,
+      "sha256": "189f818c4d1bc54f882ead94488e0887d51c68a17cfbc384d2fa04634ec51c3e"
+    },
+    {
+      "path": "static-curriculum-s7011-s7014.tar.zst",
+      "bytes": 1916790,
+      "sha256": "c705e0cdfd056db0c421fc3c0ef8b62040d36b399bf96e0e1b57002a78c22aac"
+    }
+  ],
+  "bytes": 1955353
+}

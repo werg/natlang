@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-mined-static-lambda-expansion-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-static-lambda-expansion-archive-20261015-v1",
+  "files": [
+    {
+      "path": "static-lambda-expansion.receipt.json",
+      "bytes": 4039,
+      "sha256": "bcf41a401318de4cde97f5a422225b507a5d7308bf6d2fd19bafdfa99b237bcb"
+    },
+    {
+      "path": "static-lambda-expansion.roundtrip-proof.json",
+      "bytes": 373,
+      "sha256": "3dd1571c0c8ebdc15a259297c4f3d3055e68a1cbb838d207fa548c4980177a0d"
+    },
+    {
+      "path": "static-lambda-expansion.tar.zst",
+      "bytes": 178043,
+      "sha256": "ed0f7cae037cdb68c247ed861b1dda8e003947aa8c54564b0d4c5bb83b252f86"
+    }
+  ],
+  "bytes": 182455
+}

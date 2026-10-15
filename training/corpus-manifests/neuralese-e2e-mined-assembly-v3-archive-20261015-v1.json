@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-mined-assembly-v3-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-assembly-v3-archive-20261015-v1",
+  "files": [
+    {
+      "path": "assembly-v3.receipt.json",
+      "bytes": 2487,
+      "sha256": "d4199db92466f9051c53a160b61afecf567b424bff69a881f61c950f88b4a349"
+    },
+    {
+      "path": "assembly-v3.roundtrip-proof.json",
+      "bytes": 362,
+      "sha256": "169663ced951be7e9552c70fbbc0f8ea36db4ab9cca562408de65088dc99e3dc"
+    },
+    {
+      "path": "assembly-v3.tar.zst",
+      "bytes": 1540035,
+      "sha256": "2dd0a261203f3ba41ee457915f5c1a5c7ceaedb7d361d85a110b100c442bcbb8"
+    }
+  ],
+  "bytes": 1542884
+}

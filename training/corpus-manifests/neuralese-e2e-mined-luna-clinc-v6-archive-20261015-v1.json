@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-mined-luna-clinc-v6-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-luna-clinc-v6-archive-20261015-v1",
+  "files": [
+    {
+      "path": "luna-clinc-v6.receipt.json",
+      "bytes": 1725,
+      "sha256": "ee7334ed0a79e3b5f285a086bfc95b54a98dd81c3a7bfc52eacdd9dde89e13c3"
+    },
+    {
+      "path": "luna-clinc-v6.roundtrip-proof.json",
+      "bytes": 361,
+      "sha256": "2dd2227f9ef1405de6f737c8d1081e6ef72fece83c5342346ed837806eed4204"
+    },
+    {
+      "path": "luna-clinc-v6.tar.zst",
+      "bytes": 45551,
+      "sha256": "4185642eae6ed2cd9db0dbc710c8dce765f7dc963546b4c74764b0cb15accb2e"
+    }
+  ],
+  "bytes": 47637
+}

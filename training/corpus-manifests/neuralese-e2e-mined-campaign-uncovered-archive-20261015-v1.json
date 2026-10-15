@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-mined-campaign-uncovered-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-campaign-uncovered-archive-20261015-v1",
+  "files": [
+    {
+      "path": "campaign-uncovered.receipt.json",
+      "bytes": 16153,
+      "sha256": "d3a6c270b3432c9d1a39cc0bac0c79cc448750f537b464bd247a3238b710b5db"
+    },
+    {
+      "path": "campaign-uncovered.roundtrip-proof.json",
+      "bytes": 370,
+      "sha256": "da032129b50d7df87c83daf1eb8f447b702fd67633c4863f32a6be35193cbd77"
+    },
+    {
+      "path": "campaign-uncovered.tar.zst",
+      "bytes": 4310887,
+      "sha256": "2f257a2b1b00250a456ee64b7c64a1797cc7a775ded36a0771848dc88bcfc768"
+    }
+  ],
+  "bytes": 4327410
+}

@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-mined-clef-pools-20261012-v1-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-clef-pools-20261012-v1-archive-20261015-v1",
+  "files": [
+    {
+      "path": "clef-pools-20261012-v1.receipt.json",
+      "bytes": 1773,
+      "sha256": "7ef15542a64ecead63f61a014cba36534cf43116240f53cfe82e52721d7e9881"
+    },
+    {
+      "path": "clef-pools-20261012-v1.roundtrip-proof.json",
+      "bytes": 371,
+      "sha256": "c438fc072416410c4e624497875dcee214038d52dd17220d8b77b746c355bcb2"
+    },
+    {
+      "path": "clef-pools-20261012-v1.tar.zst",
+      "bytes": 99240,
+      "sha256": "0b925d8db0023ce884635da21b7c70d7ddcde2102675e5b4e9d5fafec968dacb"
+    }
+  ],
+  "bytes": 101384
+}

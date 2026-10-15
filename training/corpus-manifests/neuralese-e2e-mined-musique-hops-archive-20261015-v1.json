@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-mined-musique-hops-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-musique-hops-archive-20261015-v1",
+  "files": [
+    {
+      "path": "musique-hops.receipt.json",
+      "bytes": 34353,
+      "sha256": "3b48f916149ea36034fb6c5c41bda187e7917d6b82f9434f3326ffc92c7a7759"
+    },
+    {
+      "path": "musique-hops.roundtrip-proof.json",
+      "bytes": 365,
+      "sha256": "caed975492300378483f16fe3c6c077639d6b895a7809478e75f63a4b286aa39"
+    },
+    {
+      "path": "musique-hops.tar.zst",
+      "bytes": 94694380,
+      "sha256": "154c2817c7a16508564faad22c9e962492778c2904030b0be259a58e9fd0b26d"
+    }
+  ],
+  "bytes": 94729098
+}

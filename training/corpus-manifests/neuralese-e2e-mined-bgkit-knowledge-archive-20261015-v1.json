@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-mined-bgkit-knowledge-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-bgkit-knowledge-archive-20261015-v1",
+  "files": [
+    {
+      "path": "bgkit-knowledge.receipt.json",
+      "bytes": 25093,
+      "sha256": "ca63570e5da390b33657451db11b2aeb62fd41dbad9d37c916d2a704aa770529"
+    },
+    {
+      "path": "bgkit-knowledge.roundtrip-proof.json",
+      "bytes": 368,
+      "sha256": "20c16bc6931af77562ee464e19defa69e92abf8e50b095e1f478b1e071a6ec83"
+    },
+    {
+      "path": "bgkit-knowledge.tar.zst",
+      "bytes": 20343228,
+      "sha256": "4c80833530ff4907d5b67db0427a07602989bc7279e203ffd8d17d17a87eeb14"
+    }
+  ],
+  "bytes": 20368689
+}

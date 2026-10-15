@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-mined-harness-bench-v4-archive-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/neuralese-e2e-mined-harness-bench-v4-archive-20261015-v1",
+  "files": [
+    {
+      "path": "harness-bench-v4.receipt.json",
+      "bytes": 3937,
+      "sha256": "089c5876c0b08d29ce1ac081d0c7c6ddac40121b763366e2e9d42e104bf2bf3c"
+    },
+    {
+      "path": "harness-bench-v4.roundtrip-proof.json",
+      "bytes": 361,
+      "sha256": "a9fafef0f60edbbff695846f5eca8cce8c93ca96003850e4c5056b3aa61e47ba"
+    },
+    {
+      "path": "harness-bench-v4.tar.zst",
+      "bytes": 1365,
+      "sha256": "25420f1ae71f0a52ccfa5e5942207480fad096a3238e7d2ce9add21a4d1da973"
+    }
+  ],
+  "bytes": 5663
+}

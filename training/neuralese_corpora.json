@@ -94625,6 +94625,471 @@
         "held_text": {}
       },
       "notes": "Seed 52101: 77 reviewed roots, 376 native decisions; source review v28 excludes Cannes source conflict, nine exact parent holds."
+    },
+    {
+      "id": "neuralese-e2e-mined-musique-hops-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-musique-hops-archive-20261015-v1",
+      "include": [
+        "musique-hops.tar.zst",
+        "musique-hops.receipt.json",
+        "musique-hops.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-static-curriculum-pilot-s41001-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-static-curriculum-pilot-s41001-archive-20261015-v1",
+      "include": [
+        "static-curriculum-pilot-s41001.tar.zst",
+        "static-curriculum-pilot-s41001.receipt.json",
+        "static-curriculum-pilot-s41001.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-port-record-s3-v3-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-port-record-s3-v3-archive-20261015-v1",
+      "include": [
+        "port-record-s3-v3.tar.zst",
+        "port-record-s3-v3.receipt.json",
+        "port-record-s3-v3.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-bgkit-knowledge-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-bgkit-knowledge-archive-20261015-v1",
+      "include": [
+        "bgkit-knowledge.tar.zst",
+        "bgkit-knowledge.receipt.json",
+        "bgkit-knowledge.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-s72-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-s72-archive-20261015-v1",
+      "include": [
+        "s72.tar.zst",
+        "s72.receipt.json",
+        "s72.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-v13-r2-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-v13-r2-archive-20261015-v1",
+      "include": [
+        "v13-r2.tar.zst",
+        "v13-r2.receipt.json",
+        "v13-r2.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-campaign-uncovered-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-campaign-uncovered-archive-20261015-v1",
+      "include": [
+        "campaign-uncovered.tar.zst",
+        "campaign-uncovered.receipt.json",
+        "campaign-uncovered.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-static-curriculum-s7k-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-static-curriculum-s7k-archive-20261015-v1",
+      "include": [
+        "static-curriculum-s7k.tar.zst",
+        "static-curriculum-s7k.receipt.json",
+        "static-curriculum-s7k.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-static-lambda-v2-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-static-lambda-v2-archive-20261015-v1",
+      "include": [
+        "static-lambda-v2.tar.zst",
+        "static-lambda-v2.receipt.json",
+        "static-lambda-v2.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-assembly-v3-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-assembly-v3-archive-20261015-v1",
+      "include": [
+        "assembly-v3.tar.zst",
+        "assembly-v3.receipt.json",
+        "assembly-v3.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-pop-v43-static-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-pop-v43-static-archive-20261015-v1",
+      "include": [
+        "pop-v43-static.tar.zst",
+        "pop-v43-static.receipt.json",
+        "pop-v43-static.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-static-curriculum-s7011-s7014-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-static-curriculum-s7011-s7014-archive-20261015-v1",
+      "include": [
+        "static-curriculum-s7011-s7014.tar.zst",
+        "static-curriculum-s7011-s7014.receipt.json",
+        "static-curriculum-s7011-s7014.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-luna-v17-v9-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-luna-v17-v9-archive-20261015-v1",
+      "include": [
+        "luna-v17-v9.tar.zst",
+        "luna-v17-v9.receipt.json",
+        "luna-v17-v9.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-misc-admitted-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-misc-admitted-archive-20261015-v1",
+      "include": [
+        "misc-admitted.tar.zst",
+        "misc-admitted.receipt.json",
+        "misc-admitted.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-e2e-union-v1-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-e2e-union-v1-archive-20261015-v1",
+      "include": [
+        "e2e-union-v1.tar.zst",
+        "e2e-union-v1.receipt.json",
+        "e2e-union-v1.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-free-provider-v73-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-free-provider-v73-archive-20261015-v1",
+      "include": [
+        "free-provider-v73.tar.zst",
+        "free-provider-v73.receipt.json",
+        "free-provider-v73.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-free-provider-v28-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-free-provider-v28-archive-20261015-v1",
+      "include": [
+        "free-provider-v28.tar.zst",
+        "free-provider-v28.receipt.json",
+        "free-provider-v28.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-static-lambda-expansion-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-static-lambda-expansion-archive-20261015-v1",
+      "include": [
+        "static-lambda-expansion.tar.zst",
+        "static-lambda-expansion.receipt.json",
+        "static-lambda-expansion.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-clef-pools-20261011-v2-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-clef-pools-20261011-v2-archive-20261015-v1",
+      "include": [
+        "clef-pools-20261011-v2.tar.zst",
+        "clef-pools-20261011-v2.receipt.json",
+        "clef-pools-20261011-v2.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-clef-pools-20261012-v1-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-clef-pools-20261012-v1-archive-20261015-v1",
+      "include": [
+        "clef-pools-20261012-v1.tar.zst",
+        "clef-pools-20261012-v1.receipt.json",
+        "clef-pools-20261012-v1.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-luna-v24-clinc-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-luna-v24-clinc-archive-20261015-v1",
+      "include": [
+        "luna-v24-clinc.tar.zst",
+        "luna-v24-clinc.receipt.json",
+        "luna-v24-clinc.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-luna-clinc-v5-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-luna-clinc-v5-archive-20261015-v1",
+      "include": [
+        "luna-clinc-v5.tar.zst",
+        "luna-clinc-v5.receipt.json",
+        "luna-clinc-v5.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-luna-clinc-v6-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-luna-clinc-v6-archive-20261015-v1",
+      "include": [
+        "luna-clinc-v6.tar.zst",
+        "luna-clinc-v6.receipt.json",
+        "luna-clinc-v6.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-clef-new-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-clef-new-archive-20261015-v1",
+      "include": [
+        "clef-new.tar.zst",
+        "clef-new.receipt.json",
+        "clef-new.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-free-provider-v29-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-free-provider-v29-archive-20261015-v1",
+      "include": [
+        "free-provider-v29.tar.zst",
+        "free-provider-v29.receipt.json",
+        "free-provider-v29.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-luna-v21-clinc-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-luna-v21-clinc-archive-20261015-v1",
+      "include": [
+        "luna-v21-clinc.tar.zst",
+        "luna-v21-clinc.receipt.json",
+        "luna-v21-clinc.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-harness-bench-v4-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-harness-bench-v4-archive-20261015-v1",
+      "include": [
+        "harness-bench-v4.tar.zst",
+        "harness-bench-v4.receipt.json",
+        "harness-bench-v4.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-luna-clinc-v10-lane01-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-luna-clinc-v10-lane01-archive-20261015-v1",
+      "include": [
+        "luna-clinc-v10-lane01.tar.zst",
+        "luna-clinc-v10-lane01.receipt.json",
+        "luna-clinc-v10-lane01.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-luna-clinc-v10-lane03-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-luna-clinc-v10-lane03-archive-20261015-v1",
+      "include": [
+        "luna-clinc-v10-lane03.tar.zst",
+        "luna-clinc-v10-lane03.receipt.json",
+        "luna-clinc-v10-lane03.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-luna-v19-children-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-luna-v19-children-archive-20261015-v1",
+      "include": [
+        "luna-v19-children.tar.zst",
+        "luna-v19-children.receipt.json",
+        "luna-v19-children.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
+    },
+    {
+      "id": "neuralese-e2e-mined-refine-archive-20261015-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/neuralese-e2e-mined-refine-archive-20261015-v1",
+      "include": [
+        "refine.tar.zst",
+        "refine.receipt.json",
+        "refine.roundtrip-proof.json"
+      ],
+      "source_class": "mined-producer-consumer-source-archive",
+      "training_admission": false,
+      "admission": "Exact mined source transport archive; every member independently SHA/byte verified. Protected source/decision/quality/held whole-chain filtering, source admission and graph reauthentication remain required before training.",
+      "license": "Original lineage facts preserved in archived source records; accepted under standing owner instruction.",
+      "notes": "Assigned complete protected cloud bulk assembly. Original source stays until explicit verified relocation; scoped private durability receipts are separate immutable evidence."
     }
   ],
   "coverage_backlog": [
