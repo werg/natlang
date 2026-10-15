@@ -719,10 +719,13 @@ def main():
         # Bound the overlap to three campaigns so a stalled pilot plus a
         # draining ordinary campaign can still replenish free worker slots.
         # Repair cycles still require their preceding campaigns to close.
+        if campaigns and run_repair_cycle(campaigns):
+            return
+        # A full teacher pool must not postpone CPU-only finalization of a
+        # closed repair window. The repair cycle itself applies the worker cap
+        # before launching any new provider attempt.
         if (len(pending_campaigns) >= 3 or active_luna_workers() >= WORKERS or
                 any(has_launchable_waiting_worker(campaign) for campaign in pending_campaigns)):
-            return
-        if campaigns and run_repair_cycle(campaigns):
             return
         seed = START_SEED if not campaigns else max(int(p.name.split('-s')[-1].split('-')[0]) for p in campaigns) + 1
         campaign = BASE / f'provider-luna-held-shapes-s{seed}-v1'
