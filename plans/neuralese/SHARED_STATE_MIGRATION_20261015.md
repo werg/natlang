@@ -48,13 +48,26 @@ through the projected-value implementation.
 
 ## Current status
 
-Replacement not yet deployed; both cloud lineages remain diagnostic. Full
-Mellum fixed-delta sparse attention now matches forward, consumer CE, all 28
-layer backward adjoints, source-adapter gradients and incremental inference
-bitwise. Actual QAD LFM and the isolated H100 destination pass the unchanged
-forward/gradient tolerances. Native SFT and typed/durable child handoffs,
-contextual writes, empty values and hierarchical views are integrated. The
-standing full check of 606f1ec3c5 is green.
+Raw native-state production training is deployed on BOTH sandboxes. These are
+the shared `native_state_sft` jobs under `/work/native-production`, currently
+on qualified runtime `cf7c53d6019a`; they are not continuing the old projected
+trainer. On October 15 at 22:52 UTC, the live LFM and Mellum updates were 3340
+and 3094. Their initial genuine communication foundation remains 26,312 pairs;
+neither model has completed it. The larger active source has 46,899 genuine
+communication pairs, with further admitted data entering explicit continuations.
+Only checkpointed row exposure, full optimizer/RNG and real readiness receipts
+count toward completion. Native SFT, typed durable child handoffs, contextual
+writes, empty values and hierarchical views are integrated.
+
+Full-model raw-state references and fixed-delta tests established the deployed
+channel. Subsequent prefix-sharing investigation found and repaired a separate
+sparse-attention traversal-order defect in newer code. LFM prefix reuse passes
+local strict checks; Mellum's remaining adjoint differences are localized to
+BF16 fan-in rounding and nonlinear FP8 input-adjoint quantization. Prefix reuse
+remains off in current production. See
+`shared-state/CAUSAL_PREFIX_QUALIFICATION_20261016.md`; do not transfer a
+qualification between arithmetic modes or silently claim the optional new
+FP8 path is already deployed. The standing full check of `bdadc5a203` is green.
 
 The shared semantic stage now implements VAE, joint producer/write-out/consumer
 adaptation, behavioral distillation, deferred full-model optimizers, complete
@@ -66,20 +79,34 @@ curriculum/data changes trigger continued work. Semantic adapter exports bind
 the exact joint checkpoint, participant and small source tokenizers. Learned
 decoding feeds the actual native cache/serving path, with explicit alignment.
 
-Cutover remains OPEN: admit the real source-witnessed paired graph conversion,
-bind both complete production recipes, verify an actual full-model joint update
-and placement, measure post-joint natlang behavior, finish advanced native
-learner/gradient/optimizer/adapter/guidance consumers, and complete persistent
-semantic-code transport. A functioning raw-state-to-semantic-to-target adapter
-is not yet a compressed shared-code wire dialect. Independent review reported
-these gaps; none is waived by capability denial or tiny-model tests.
+The complete replacement remains OPEN. Real source-witnessed paired conversion
+and both production recipe bindings are implemented and active. A full-size
+both-model VAE/joint/control/distillation/controlled-GRPO update now passes on
+the DGX, including actual counted FP8 projections, finite gradients and replay:
+see `NATIVE_JOINT_CUDA_FIT_20261015.md`. Those tests used pinned base models,
+not completed cloud-trained foundations, and do not establish task lift or
+target-container qualification. Canonical readiness scheduling must still
+progress from both completed foundations into trained shared-space adapters
+and measured post-joint behavior; no model is ready yet.
 
-Pop is closed; DGX supervises all remaining work. Generation continues ONLY
-through our own sandbox models. The dedicated generation sandbox is
-`dadd0462-0175-470d-b1ee-4d52edfe110e`; exact Mellum3600 assets and the harness
-are being prepared there. The stopped local Mellum teacher's four verified
-successes remain assigned for admission. Only Pop generation was to finish;
-the prior DGX generation-closeout interpretation was corrected by the owner.
+Persistent semantic-code transport is implemented through the existing durable
+artifact store, with text/tokenizer/embedding/adapter identities and decoded
+target state; see `shared-state/SEMANTIC_WIRE_DECOMPOSITION.md`. Its existence
+does not establish a trained shared dialect. First-order native graph gradients,
+named immutable parameter/optimizer application, portable continuation and
+guided generation are implemented. Native adapter/direct application and
+higher-order derived graphs remain explicit unfinished paths in
+`shared-state/NATIVE_LEARNING_SERVICE_DECOMPOSITION_20261015.md`. Capability
+denial is not completion. The independent review and actual trained-weight
+training/inference/transport qualification remain required.
+
+Pop is closed; DGX supervises all remaining work. The dedicated generation
+sandbox `dadd0462-0175-470d-b1ee-4d52edfe110e` runs the stronger self-hosted
+Qwen3.8-Flash-Next NVFP4 teacher with PennyRoyal/SGLang on SM120. Mellum and
+LFM are students, not generation teachers. Qwen V6 and the disjoint Big2
+1,000-chain tranche are admitted; staging is not trained exposure. See the
+current `HANDOVER.md`, immutable corpus manifests and live coordination status
+for changing run/data frontiers. No Luna/API generation or extra allocation.
 
 Owner clarification: no prototyping shortcuts or half-solutions at blockers.
 Assign a separate agent to independently review the completed integrated
