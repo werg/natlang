@@ -26,6 +26,7 @@ from ..model.native_model import (CHECKPOINT_SCHEMA, load_native_checkpoint, loa
                                   native_identity)
 from .checkpoint_policy import CheckpointPolicy
 from .loop import capture_training_rng_state, restore_training_rng_state
+from .native_source_streams import scheduling_rank, stream_pending_batches
 from .native_continuation import (collect_sft_progress, restore_sft_progress, progress_obligations,
     communication_foundation, raw_communication_rows)
 
@@ -92,8 +93,6 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
     pending = {visit: [index for index, entry in enumerate(entries)
                        if exposure_counts.get(entry['id'], 0) <= visit < quotas[entry['id']]]
                for visit in range(math.ceil(epochs))}
-    def scheduling_rank(entry):
-        return (not bool(entry.get('communication')), -entry.get('training_priority', 0))
     for rank in sorted({scheduling_rank(entry) for entry in entries}):
         for visit, remaining in pending.items():
             indices = [index for index in remaining if scheduling_rank(entries[index]) == rank]
@@ -543,6 +542,8 @@ def build_parser():
     parser.add_argument('--task-eval-every', type=int, default=0)
     parser.add_argument('--forward-atol', type=float, default=None)
     parser.add_argument('--gradient-atol', type=float, default=None)
+    parser.add_argument('--qualify-training-backend', action=argparse.BooleanOptionalAction, default=False,
+        help='qualify actual enabled backend on restored live weights before useful updates; preserve RNG/state')
     parser.add_argument('--recipe-binding', default=None)
     parser.add_argument('--stage-id', default=None)
     parser.add_argument('--prerequisite-stages', default='[]')
@@ -564,6 +565,9 @@ def main(argv=None):
     tolerances = [value for value in (args.forward_atol, args.gradient_atol) if value is not None]
     if args.task_eval_every < 0 or any(not math.isfinite(value) or value <= 0 for value in tolerances):
         raise ValueError('task cadence must be nonnegative and supplied native numerical tolerances positive')
+    if args.qualify_training_backend and (args.fp8_training == 'off' or
+            args.forward_atol is None or args.gradient_atol is None):
+        raise ValueError('training backend qualification needs an enabled backend and declared tolerances')
     args.out.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(args.seed)
     random.seed(args.seed)
@@ -870,6 +874,14 @@ def main(argv=None):
     if transition_check is not None:
         checkpoint_options['native_precision_transition']['reference_check'] = transition_check
         write_json(args.out / 'precision-transition.json', transition_check)
+    if args.qualify_training_backend:
+        from ..eval.native_backend import qualify_training_backend
+        backend_check = qualify_training_backend(model, tokenizer, roles, config, backend=backend,
+            checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
+                if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'],
+            forward_atol=args.forward_atol, gradient_atol=args.gradient_atol, device=args.device)
+        checkpoint_options['training_backend_check'] = backend_check
+        write_json(args.out / 'training-backend-check.json', backend_check)
     # Actual per-row optimizer credits drive the schedule. Source identity
     # remains append-only while communication deficits execute first.
     whole_epochs = int(args.epochs)
@@ -890,11 +902,7 @@ def main(argv=None):
     refresh_boundary = False
     if args.refresh_at_checkpoint and not (args.checkpoint_every or args.checkpoint_seconds):
         raise ValueError('semantic refresh needs a declared checkpoint step/time cadence')
-    source_iters = {}
-    pass_indices = {}
-    for visit, indices, _ in pending_batches:
-        pass_indices.setdefault(visit, []).extend(indices)
-    schedule = iter(pending_batches)
+    schedule = stream_pending_batches(train, pending_batches)
     eval_at = max(1, args.eval_every)
     started = time.time()
     def foundation_exposure():
@@ -908,123 +916,122 @@ def main(argv=None):
     def foundation_pending():
         return bool(foundation_template and foundation_template['graphs'] and not foundation_missing and
                     foundation_template['cohort_sha256'] not in prior_foundations)
-    while step < total_end and not policy.signaled and not foundation_pending():
-        update_started = time.monotonic()
-        visit, indices, pass_end = next(schedule)
-        if visit not in source_iters:
-            source_iters[visit] = train.iter_indices(pass_indices[visit])
-        source_iter = source_iters[visit]
-        try:
-            batch = [next(source_iter) for _ in indices]
-        except StopIteration as error:
-            raise ValueError('native graph source ended before its validated row count') from error
-        if [item.id for item in batch] != [train.entries[index]['id'] for index in indices]:
-            raise ValueError('native graph stream differs from scheduled optimizer-credit order')
-        batch_tokens = sum(train.entries[index]['forward_tokens'] for index in indices)
-        cursor = indices[-1] + 1
-        loss, details = native_training_update(model, optimizer, batch, backend=backend,
-            checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
-        step += 1
-        global_step += 1
-        for example in batch:
-            exposure_counts[example.id] += 1
-            if example.id in foundation_missing:
-                row=foundation_template['rows'][example.id]
-                if row['admitted_to_training'] and row['required_visits']>0 and exposure_counts[example.id]>=row['required_visits']:
-                    foundation_missing.remove(example.id)
-        epoch = min(exposure_counts[key] for key, required in required_visits.items() if required > 0)
-        if pass_end and all(exposure_counts[key] >= required for key, required in required_visits.items()):
-            cursor = 0
-        # Telemetry is appended after the actual optimizer update. The rolling
-        # checkpoint remains the authority for committed resume/exposure; logs
-        # can include work subsequently replayed after an uncheckpointed crash.
-        train_loss = float(loss.detach())
-        seconds = time.monotonic() - update_started
-        supervised_tokens = sum(sum(weight > 0 for weight in item.target_weights) for item in batch)
-        progress = {'schema': 'natlang.native-training-progress/1', 'kind': 'native',
-                    'step': step, 'global_step': global_step, 'epoch': epoch, 'cursor': cursor,
-                    'loss': train_loss, 'graphs': len(batch), 'forward_tokens': batch_tokens,
-                    'supervised_tokens': supervised_tokens, 'target_tokens': supervised_tokens,
-                    'seconds': seconds, 'forward_tokens_per_second': batch_tokens / max(seconds, 1e-9),
-                    'supervised_tokens_per_second': supervised_tokens / max(seconds, 1e-9),
-                    'elapsed_seconds': time.time() - started, 'timestamp': time.time(),
-                    'checkpoint_step': last_saved_step,
-                    'communication_exposure': communication_exposure(train.entries, exposure_counts, required_visits)}
-        if getattr(model, 'native_sparse_updates', None):
-            progress['sparse_row_updates'] = model.native_sparse_updates
-        if objective is None and details:
-            physical_tokens = details[0]['packed_physical_tokens']
-            progress['physical_forward_tokens'] = physical_tokens
-            progress['reused_prefix_tokens'] = details[0]['original_physical_tokens'] - physical_tokens
-            progress['physical_forward_tokens_per_second'] = physical_tokens / max(seconds, 1e-9)
-        if str(args.device).startswith('cuda'):
-            progress['cuda_memory_bytes'] = {'allocated': torch.cuda.memory_allocated(args.device),
-                'reserved': torch.cuda.memory_reserved(args.device),
-                'lifetime_peak_allocated': torch.cuda.max_memory_allocated(args.device)}
-        with (args.out / 'train.jsonl').open('a') as log:
-            log.write(json.dumps(progress, sort_keys=True) + '\n')
-        write_json(args.out / 'progress.json', progress)
-        print(json.dumps(progress, sort_keys=True), flush=True)
-        due_checkpoint = policy.due(step, end=step == total_end)
-        if policy.signaled:
-            break
-        due_task = task_eval is not None and (step == total_end or
-                    bool(args.task_eval_every and step % args.task_eval_every == 0))
-        due_eval = step % eval_at == 0 or step == total_end or due_task
-        if due_eval:
-            held_metrics, held_coverage = _evaluate_cadence(model, held, args=args,
-                coverage=metrics.get('held_coverage'), final=step == total_end, backend=backend)
-            metrics = {'train_loss': train_loss, 'held': held_metrics, 'held_coverage': held_coverage,
-                       'step': step, 'epoch': epoch, 'cursor': cursor,
-                       'elapsed_seconds': time.time() - started,
-                       'fp8': backend.inventory() if backend is not None else {'enabled': False}}
-            write_json(args.out / 'metrics.json', metrics)
-        if policy.signaled:
-            break
-        if due_task:
-            # Bind the task proof to the checkpoint from these exact weights.
-            _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
-                  global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
-                  source_hash=source_hash, source_row_bindings=source_row_bindings,
-                  held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
-                  rng=capture_training_rng_state(args.device), metrics=metrics,
-                  architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
-                  fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
-            last_saved_step = step
+    with contextlib.closing(schedule):
+        while step < total_end and not policy.signaled and not foundation_pending():
+            update_started = time.monotonic()
+            visit, indices, pass_end, batch = next(schedule)
+            batch_tokens = sum(train.entries[index]['forward_tokens'] for index in indices)
+            cursor = indices[-1] + 1
+            loss, details = native_training_update(model, optimizer, batch, backend=backend,
+                checkpoint_layers=args.checkpoint_layers, chunk_tokens=args.chunk_tokens, objective=objective)
+            step += 1
+            global_step += 1
+            for example in batch:
+                exposure_counts[example.id] += 1
+                if example.id in foundation_missing:
+                    row=foundation_template['rows'][example.id]
+                    if row['admitted_to_training'] and row['required_visits']>0 and exposure_counts[example.id]>=row['required_visits']:
+                        foundation_missing.remove(example.id)
+            epoch = min(exposure_counts[key] for key, required in required_visits.items() if required > 0)
+            if pass_end and all(exposure_counts[key] >= required for key, required in required_visits.items()):
+                cursor = 0
+            # Telemetry is appended after the actual optimizer update. The rolling
+            # checkpoint remains the authority for committed resume/exposure; logs
+            # can include work subsequently replayed after an uncheckpointed crash.
+            train_loss = float(loss.detach())
+            seconds = time.monotonic() - update_started
+            supervised_tokens = sum(sum(weight > 0 for weight in item.target_weights) for item in batch)
+            progress = {'schema': 'natlang.native-training-progress/1', 'kind': 'native',
+                        'step': step, 'global_step': global_step, 'epoch': epoch, 'cursor': cursor,
+                        'loss': train_loss, 'graphs': len(batch), 'forward_tokens': batch_tokens,
+                        'supervised_tokens': supervised_tokens, 'target_tokens': supervised_tokens,
+                        'seconds': seconds, 'forward_tokens_per_second': batch_tokens / max(seconds, 1e-9),
+                        'supervised_tokens_per_second': supervised_tokens / max(seconds, 1e-9),
+                        'elapsed_seconds': time.time() - started, 'timestamp': time.time(),
+                        'checkpoint_step': last_saved_step,
+                        'communication_exposure': communication_exposure(train.entries, exposure_counts, required_visits)}
+            if getattr(model, 'native_sparse_updates', None):
+                progress['sparse_row_updates'] = model.native_sparse_updates
+            if objective is None and details:
+                physical_tokens = details[0]['packed_physical_tokens']
+                progress['physical_forward_tokens'] = physical_tokens
+                progress['reused_prefix_tokens'] = details[0]['original_physical_tokens'] - physical_tokens
+                progress['physical_forward_tokens_per_second'] = physical_tokens / max(seconds, 1e-9)
+            if str(args.device).startswith('cuda'):
+                progress['cuda_memory_bytes'] = {'allocated': torch.cuda.memory_allocated(args.device),
+                    'reserved': torch.cuda.memory_reserved(args.device),
+                    'lifetime_peak_allocated': torch.cuda.max_memory_allocated(args.device)}
+            with (args.out / 'train.jsonl').open('a') as log:
+                log.write(json.dumps(progress, sort_keys=True) + '\n')
+            write_json(args.out / 'progress.json', progress)
+            print(json.dumps(progress, sort_keys=True), flush=True)
+            due_checkpoint = policy.due(step, end=step == total_end)
             if policy.signaled:
                 break
-            checkpoint_sha = sha256_file_hex_cached(policy.slot)
-            serving_identity = native_identity(model, config, checkpoint_sha256=checkpoint_sha)
-            engine = task_eval.engine
-            engine.checkpoint_sha256 = serving_identity['checkpoint_sha256']
-            engine.embedding_weight_sha256 = serving_identity['embedding_weight_sha256']
-            engine.native_identity = serving_identity
-            saved_rng = capture_training_rng_state(args.device)
-            model.eval()
-            try:
-                if backend is not None:
-                    with backend.native_modules():
+            due_task = task_eval is not None and (step == total_end or
+                        bool(args.task_eval_every and step % args.task_eval_every == 0))
+            due_eval = step % eval_at == 0 or step == total_end or due_task
+            if due_eval:
+                held_metrics, held_coverage = _evaluate_cadence(model, held, args=args,
+                    coverage=metrics.get('held_coverage'), final=step == total_end, backend=backend)
+                metrics = {'train_loss': train_loss, 'held': held_metrics, 'held_coverage': held_coverage,
+                           'step': step, 'epoch': epoch, 'cursor': cursor,
+                           'elapsed_seconds': time.time() - started,
+                           'fp8': backend.inventory() if backend is not None else {'enabled': False}}
+                write_json(args.out / 'metrics.json', metrics)
+            if policy.signaled:
+                break
+            if due_task:
+                # Bind the task proof to the checkpoint from these exact weights.
+                _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+                      global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+                      source_hash=source_hash, source_row_bindings=source_row_bindings,
+                      held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+                      rng=capture_training_rng_state(args.device), metrics=metrics,
+                      architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
+                      fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                last_saved_step = step
+                if policy.signaled:
+                    break
+                checkpoint_sha = sha256_file_hex_cached(policy.slot)
+                serving_identity = native_identity(model, config, checkpoint_sha256=checkpoint_sha)
+                engine = task_eval.engine
+                engine.checkpoint_sha256 = serving_identity['checkpoint_sha256']
+                engine.embedding_weight_sha256 = serving_identity['embedding_weight_sha256']
+                engine.native_identity = serving_identity
+                saved_rng = capture_training_rng_state(args.device)
+                model.eval()
+                try:
+                    if backend is not None:
+                        with backend.native_modules():
+                            metrics['task_eval'] = task_eval.cadence(step, final=step == total_end)
+                    else:
                         metrics['task_eval'] = task_eval.cadence(step, final=step == total_end)
-                else:
-                    metrics['task_eval'] = task_eval.cadence(step, final=step == total_end)
-            finally:
-                model.train()
-                restore_training_rng_state(saved_rng, args.device)
-            metrics['task_checkpoint_sha256'] = checkpoint_sha
-            metrics['task_native_identity'] = serving_identity
-            write_json(args.out / 'metrics.json', metrics)
-        if due_checkpoint and not due_task:
-            _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
-                  global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
-                  source_hash=source_hash, source_row_bindings=source_row_bindings,
-                  held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
-                  rng=capture_training_rng_state(args.device), metrics=metrics,
-                  architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
-                  fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
-            last_saved_step = step
-        if args.refresh_at_checkpoint and due_checkpoint:
-            refresh_boundary = True
-            break
+                finally:
+                    model.train()
+                    restore_training_rng_state(saved_rng, args.device)
+                metrics['task_checkpoint_sha256'] = checkpoint_sha
+                metrics['task_native_identity'] = serving_identity
+                write_json(args.out / 'metrics.json', metrics)
+            if due_checkpoint and not due_task:
+                _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
+                      global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
+                      source_hash=source_hash, source_row_bindings=source_row_bindings,
+                      held_row_bindings=held_row_bindings, exposure_counts=exposure_counts,
+                      rng=capture_training_rng_state(args.device), metrics=metrics,
+                      architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
+                      fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
+                last_saved_step = step
+            if args.refresh_at_checkpoint and due_checkpoint:
+                refresh_boundary = True
+                break
+        if step == total_end and not policy.signaled:
+            try:
+                next(schedule)
+            except StopIteration:
+                pass
+            else:
+                raise ValueError('native source schedule exceeds its declared updates')
     if (step != resumed_step or policy.signaled) and last_saved_step != step:
         if not policy.signaled and not metrics.get('held'):
             metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
