@@ -1,4 +1,61 @@
-from natlang_neuralese.eval.task_packet import TASK_OUTCOMES, classify_case
+from natlang_neuralese.eval.task_packet import TASK_OUTCOMES, accounted, classify_case, score_rows
+import copy
+import json
+import pytest
+
+
+def native_open_finish(termination):
+    return {"status": "incomplete", "output_accounting": {
+        "manifest_valid": True, "expected_jobs": 1, "job_states": [{
+            "state": "failed", "terminal_error": {"sha256": "a" * 64,
+                "error": "Error: model stream error: " + json.dumps({
+                    "code": "neuralese-native-state-open",
+                    "message": f"neuralese-native-state-open: generation {termination} inside a produce span"})}}]}}
+
+
+@pytest.mark.parametrize("termination,expected", [("ended", "budget_exhaustion"),
+                                                  ("stopped", "model_incomplete")])
+def test_manifest_bound_native_open_termination(termination, expected):
+    assert classify_case(None, native_open_finish(termination)) == expected
+
+
+@pytest.mark.parametrize("mutation", ["manifest", "sha", "mixed", "unknown", "malformed", "no_prefix"])
+def test_native_termination_requires_exact_terminal_accounting(mutation):
+    finish = native_open_finish("stopped")
+    accounting = finish["output_accounting"]
+    error = accounting["job_states"][0]["terminal_error"]
+    if mutation == "manifest":
+        accounting["manifest_valid"] = False
+    elif mutation == "sha":
+        error["sha256"] = ""
+    elif mutation == "mixed":
+        accounting["job_states"].append({"state": "failed"})
+    elif mutation == "unknown":
+        error["error"] = error["error"].replace("stopped", "crashed")
+    elif mutation == "malformed":
+        error["error"] += " trailing text"
+    else:
+        error["error"] = error["error"].removeprefix("Error: model stream error: ")
+    assert classify_case(None, finish) == "unresolved"
+
+
+def test_transport_and_explicit_limits_take_precedence_over_native_termination():
+    finish = native_open_finish("stopped")
+    transport = copy.deepcopy(finish)
+    transport["output_accounting"]["job_states"].append({"state": "transport_failed"})
+    assert classify_case(None, transport) == "infrastructure_error"
+    finish["resource_limit_reason"] = "model_request_budget"
+    assert classify_case(None, finish) == "budget_exhaustion"
+
+
+def test_accounted_native_failure_does_not_fabricate_an_exported_result():
+    score = score_rows([{"id": "case"}], [], {"key": native_open_finish("stopped")}, {0: "key"})
+    assert accounted(score)
+    assert score["outcome_counts"]["model_incomplete"] == 1
+    assert score["task_successes"] == 0
+    assert score["cases_with_exact_terminal_result"] == 0
+    assert score["complete"] is False
+    assert score["eligible_for_best"] is False
 
 
 def test_repeated_exact_empty_eos_is_model_incomplete_not_infrastructure_or_budget():
