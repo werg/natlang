@@ -101,7 +101,8 @@ def _wrap_span(ids: list[int], weights: list[float], span: Mapping[str, Any], *,
                 or not 0 <= container_start < container_stop <= len(ids)
                 or ids[container_start] != open_id or ids[container_stop - 1] != close_id
                 or not isinstance(body, str) or not isinstance(payload_ids, list)
-                or not payload_ids or any(type(token) is not int or token < 0 for token in payload_ids)):
+                or (not payload_ids and body != "")
+                or any(type(token) is not int or token < 0 for token in payload_ids)):
             raise ValueError("native contextual body needs exact structural role markers and standalone token IDs")
         body_sha = _sha_text(body)
         if required_body_sha256 is not None and body_sha != required_body_sha256:

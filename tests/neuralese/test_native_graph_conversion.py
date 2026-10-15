@@ -264,3 +264,33 @@ def test_contextual_body_uses_its_actual_standalone_tokenization():
     assert consumer.imports[0].at == 2
     assert parsed.target_weights[2:4] == (1., 1.)
     assert parsed.target_weights[parsed.plan.offsets[1] + 2] == 0.
+
+
+def test_empty_authenticated_payload_keeps_structural_native_import_without_fake_tokens():
+    import hashlib
+    tok = RoleAsciiTokenizer()
+    writer_text = 'q' + tok.markers[0] + tok.markers[1] + 'z'
+    reader_text = 'read' + tok.markers[2] + tok.markers[3] + ':answer'
+    writer, reader = row('empty-writer', writer_text, boundary=1), row('empty-reader', reader_text,
+        boundary=len(tok(reader_text)['input_ids']) - len(':answer'))
+    writer['token_ids'] = tok(writer_text)['input_ids']
+    reader['token_ids'] = tok(reader_text)['input_ids']
+    writer['tokenizer_sha256'] = reader['tokenizer_sha256'] = 'a' * 64
+    writer_start = writer['token_ids'].index(tok.marker_ids[0])
+    reader_start = reader['token_ids'].index(tok.marker_ids[2])
+    empty_span = {'container_start': writer_start, 'container_stop': writer_start + 2,
+                  'body_text': '', 'payload_token_ids': [], 'tokenize_payload_alone': True}
+    read_span = {'container_start': reader_start, 'container_stop': reader_start + 2,
+                 'body_text': '', 'payload_token_ids': [], 'tokenize_payload_alone': True}
+    graph = witnessed_pair_graph(writer, reader, source_tokenizer=tok,
+        source_tokenizer_fingerprint='a' * 64, expanded_tokenizer_fingerprint='a' * 64,
+        role_ids=tok.marker_ids, writer_span=empty_span, reader_span=read_span,
+        payload_sha256=hashlib.sha256(b'').hexdigest(), source_span_id='empty-write',
+        edge_id='empty-edge', chain_id='empty-chain')
+    parsed = parse_graph(graph, tokenizer_fingerprint='a' * 64)
+    producer, consumer = parsed.plan.invocations
+    assert producer.producing == ((writer_start + 1, writer_start + 1),)
+    assert len(consumer.imports) == 1 and consumer.imports[0].start == consumer.imports[0].stop
+    assert consumer.token_ids[consumer.imports[0].at] == tok.marker_ids[3]
+    assert parsed.target_weights[parsed.plan.offsets[1] + consumer.imports[0].at] == 0.
+    assert tok.decode(consumer.token_ids) == 'read' + tok.markers[2] + tok.markers[3] + ':answer'

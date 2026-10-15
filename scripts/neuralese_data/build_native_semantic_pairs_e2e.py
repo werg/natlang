@@ -271,7 +271,7 @@ def exact_marked_span(row, tokenizer, body, *, open_marker, close_marker, expect
         raise ValueError('normalized structural role tokens are not unique in this model input')
     payload = tokenizer(body, add_special_tokens=False)['input_ids']
     if payload and isinstance(payload[0], list): payload = payload[0]
-    if not payload or tokenizer.decode(payload, skip_special_tokens=False) != body:
+    if (not payload and body != "") or tokenizer.decode(payload, skip_special_tokens=False) != body:
         raise ValueError('standalone payload tokenization does not reproduce the exact authenticated body')
     return {'container_start': opens[0], 'container_stop': closes[0] + 1,
             'body_text': body, 'payload_token_ids': list(payload),
@@ -299,7 +299,7 @@ def exact_marked_spans(row, tokenizer, body, *, open_marker, close_marker, expec
     open_id, close_id = tokenizer.convert_tokens_to_ids(open_marker), tokenizer.convert_tokens_to_ids(close_marker)
     payload = tokenizer(body, add_special_tokens=False)['input_ids']
     if payload and isinstance(payload[0], list): payload = payload[0]
-    if not payload or tokenizer.decode(payload, skip_special_tokens=False) != body:
+    if (not payload and body != "") or tokenizer.decode(payload, skip_special_tokens=False) != body:
         raise ValueError('standalone payload tokenization does not reproduce the exact authenticated text')
     spans = []
     for start in starts:
