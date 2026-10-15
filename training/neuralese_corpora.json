@@ -107115,6 +107115,58 @@
       "split": "Train only; exact current held, quality and pending source-review intersections excluded. Empty test files are structural, not held evaluation evidence.",
       "training_admission": true,
       "training_admission_reason": "102 exact-success executions bound to original response rows and immutable batch case/selection/runtime receipts; current16,133 held and65,161 quality groups plus pending reviews checked.2,459 full action turns/model minus8 exact token+weight duplicates =2,451 new graphs/model. All graphs parsed with actual expanded tokenizer and source groups. Ordinary supervision only; no communication edge claim."
+    },
+    {
+      "id": "native-state-rest27-ordinary-graphs-20261015-v1",
+      "owner": "dgx",
+      "path": "runs/native-state-rest27-graphs-20261015-v1",
+      "include": [
+        "receipt.json",
+        "resume-manifest.json",
+        "ordinary-source-exclusions.jsonl",
+        "render-omissions.jsonl",
+        "graphs/lfm25/train/native-graphs.jsonl.zst",
+        "graphs/lfm25/test/native-graphs.jsonl.zst",
+        "graphs/mellum21/train/native-graphs.jsonl.zst",
+        "graphs/mellum21/test/native-graphs.jsonl.zst"
+      ],
+      "source_class": "static-role-aware-native-state-ordinary-trajectory-conversion-of-admitted-REST27-corpus",
+      "split": "Exact admitted REST27 source split inheritance; source train/test groups were audited disjoint from each other and from FULL protected/train groups before graph conversion.",
+      "admission": "Admits ordinary whole-trajectory graphs only. The original semantic-pair outputs in this build are excluded: they were superseded by a corrected source-bound rebuild. Exclusions remain fully enumerated in ordinary-source-exclusions.jsonl; 512 pending-review but accepted exact-oracle items are assigned a separate static repair, not included here.",
+      "training_admission": true,
+      "training_admission_reason": "Derived from admitted neuralese-e2e-cloud-rest27-protected-20261015-v2. Exact source records/pieces/edges SHA-256 bindings, current source review and protection proofs, model/tokenizer identities, per-split graph counts and output hashes are in receipt.json. Ordinary train/held graph source groups are disjoint and cross-checked against FULL train/held; no held-source groups or source rows enter train.",
+      "derived_from": [
+        "neuralese-e2e-cloud-rest27-protected-20261015-v2"
+      ],
+      "license": "Inherited from the admitted REST27 source corpus; owner accepts all licenses.",
+      "renders": {
+        "train": {
+          "lfm25": {
+            "rows": 129948,
+            "sha256": "538ec1fdf52aa12f6e52fdfcad80c401dcf9c97cf5f05b265e15a96e3ec0577f"
+          },
+          "mellum21": {
+            "rows": 129949,
+            "sha256": "332d71a465e9edddd1f9cbb3a6212c61549f439f55468760ef364c226667f288"
+          }
+        },
+        "held": {
+          "lfm25": {
+            "rows": 9987,
+            "sha256": "0541a0942a222614bd3abe77e2894b1ffc026efc88d7874491958ffc82591810"
+          },
+          "mellum21": {
+            "rows": 9987,
+            "sha256": "012a5f0f6153df26a0d7801f0f5ea29efbd466fa1b58fc64c4bb605f514e18a2"
+          }
+        }
+      },
+      "source_bindings": {
+        "records_sha256": "e23ea20b684bce525a297ba5767ed82f84fc5097045bbcf68e13784decf9a17e",
+        "pieces_sha256": "8987dc2e7fad483ec294050777198cf253edb956f86b426e94353e1115a2bb60",
+        "edges_sha256": "26053ffead5b96d640fce4dcbd50a1cdaee781bf8702dbee0b3d35bffe6c7226",
+        "current_source_review_sha256": "27b31f... (see source receipt and independent v36 review proof)"
+      }
     }
   ],
   "coverage_backlog": [
