@@ -1,4 +1,17 @@
-# Current supervision update, 2026-10-15 09:18 UTC
+# Current supervision update, 2026-10-15 11:04 UTC
+
+The owner now directs both existing cloud runs to continue as diagnostics while the shared-state Neuralese replacement is implemented and qualified. These continuations are not the destination architecture. No third GPU or new lineage was allocated.
+
+- LFM remains active on H100 sandbox `7ee701ae-8e56-49d8-b97a-594f7eb33fe9`, trainer138715. Update26745 had finite loss0.571,0.441seconds and38,489 supervised tokens/second. Task24000 was0/16:4invalid,3repetition,7semantic,2unresolved transport failures; no lift or qualification claim. Both actual error traces and representative semantic/invalid traces are durable on DGX. Full checkpoint26840 is privately verified by independent full readback:1,149,841,755bytes, SHA `1942307546a43b5ba78719a0b8a882b56acc5948a14ef48c4cdeaaf5d23569d6`. Current and predecessor PH prepared-window/2 caches are building on spare CPUs while the GPU continues training; the existing same-allocation handoff controller waits for their verified completion and an evaluation-safe cut.
+- Mellum on Blackwell96GB sandbox `5ffa592c-5f88-4b4f-b3cc-1507ab94a5dc` is relaunching the shared mixed diagnostic from exact full state3400, preserving optimizer/RNG. Full parent46,822,799,447bytes, SHA `4ac8ef724e46f255c0bb13eeb2eee1705d96e4cece84139cea9268d137d2fe0e`, is independently privately verified. No mixed optimizer update has completed yet. Last actual plain-SFT update3417 preceded3418OOM; safe3400 is retained. Task2400 remains5/16 versus inherited13, unqualified.
+
+Concrete mixed-startup bugs were repaired without dropping data/context: explicit layer checkpointing plus exact FP8 saved-quantized-weight accounting (603b7e0e); absent-to-absent QAT objective guard (0895de8164); exact MuonSR stacked grad_norm shape and original optimizer state dtype/value restoration (7a4bc9652d); and compatible decode-only FlexAttention32-query/64-key tiles for128-token sparse blocks (752fde9ea6). Last failed trainer59071 completed optimizer restoration, then hit the Flex compiler tile error before any mixed update. Actual Blackwell Torch2.14/CUDA13.4 cached-window and branch forward/backward qualification passed at11:03:27 with GQA32/4,dim128, cached lengths1031/8364: maximum output error0.00391 and relative gradient errors below0.00327 against math attention. Seven focused CPU tests and quick gate passed; no uncompleted full gate is claimed. Current launch source/recipe seal is c59ba570e1, with unchanged3400 parent.
+
+R11 PH and WT input bytes are SHA-verified on both sandboxes. The newer FULL cohort `natlang-target-union-20261015-next-incremental-v2-full-ready-v1` is also staged on both. First E2E cohort is admitted; rest27v2 is now admitted with147414 records,11713 complete chains and55484 authenticated edges, and is being staged for the next useful shared continuation. The two largest mined sources finished exact restore and their existing protected assembler is running on one spare CPU. Dolci/Cognitive has82/644 completed native shards; H100 anonymous host memory was12.82GB/64GiB with zero OOM kills. Search/OWL native data is privately durable and the data agent owns DGX restore/registration.
+
+The current Mellum legacy continuation budget22032 must not be described as comprehensive window/2 coverage: a same-data legacy-to-window-occurrence upgrade remains assigned for the next useful continuation. Training admission, archive durability and task qualification remain separate facts.
+
+# Historical supervision update, 2026-10-15 09:18 UTC
 
 Both existing allocations remain live; no third GPU or sandbox replacement was used.
 
