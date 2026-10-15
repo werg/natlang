@@ -97,12 +97,13 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
         'semantic_refresh_config': binding(curriculum), 'refresh_command': client,
         'refresh_provider': next(model['provider'] for model in models if model['model'] == 'mellum')})
     controller = out/'controller.json'
+    shared = Path(namespace)/'shared'
     write_json_durable(controller, {'schema': 'natlang.native-shared-stage-controller/1',
-        'out': str(out/'shared-stage'), 'curriculum': str(curriculum),
+        'out': str(shared/'native_shared_stage'), 'curriculum': str(curriculum),
         'participants': requirements, 'poll_seconds': 60,
         'command': [sys.executable, '-m', 'natlang_neuralese.train.native_semantic_stage',
             '--config', str(curriculum), '--participants', '{participants}', '--out', '{out}', '--device', 'cuda'],
-        'rl_bootstrap': binding(bootstrap), 'rl_out': str(out/'rl'), 'rl_device': 'cuda',
+        'rl_bootstrap': binding(bootstrap), 'rl_out': str(shared/'native_rl'), 'rl_device': 'cuda',
         'deployment_inputs': {'release': binding(release_path), 'curriculum': binding(curriculum_path)}})
     return controller
 

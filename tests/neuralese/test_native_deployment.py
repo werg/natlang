@@ -59,6 +59,9 @@ def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_fini
     controller=prepare(release,curriculum,tmp_path/'deployment',participants=participants,
         cases=cases,runtime=runtime,namespace=str(tmp_path))
     config=json.loads(controller.read_text())
+    assert controller == tmp_path/'deployment/controller.json'
+    assert config['out'] == str(tmp_path/'shared/native_shared_stage')
+    assert config['rl_out'] == str(tmp_path/'shared/native_rl')
     assert len(config['participants'])==2
     assert all(item['readiness_boundary']=='communication-foundation' and item['trainer_exit']
         for item in config['participants'])
