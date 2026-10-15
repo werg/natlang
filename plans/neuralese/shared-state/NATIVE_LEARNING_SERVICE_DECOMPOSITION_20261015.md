@@ -26,7 +26,7 @@ Native cached `/decide` and `/score` now use the shared renderer and the native
 Engine cache/step path. Named native tensor artifacts use a distinct content
 identity and the existing durable owner/pin/collection store. A composite
 checkpoint binds an immutable full native parent, named native parameter
-patch, and optimizer tensor state without rewriting the parent. Adapter application/creation, second-order execution, and guidance
+patch, and optimizer tensor state without rewriting the parent. Adapter application/creation and second-order execution
 remain open until their actual client paths and both-backbone validation land;
 capability denial is not counted as implementation.
 
@@ -60,8 +60,8 @@ The TS host exports explicit native graph-gradient and optimizer clients; they
 archive named gradients, parameter updates and optimizer state, and restore the
 state artifact before continuation. Identity equality compares exact fields
 independently of JSON property order. This does not reinterpret legacy flat
-value gradients as native graph requests. Adapters/direct-gradient/higher-order/
-guidance still need native implementations. Capability denial remains explicit;
+value gradients as native graph requests. Adapters/direct-gradient/higher-order
+still need native implementations. Guided generation is implemented below. Capability denial remains explicit;
 requesting unsupported order/derived computations or adapter application is
 rejected before any native graph computation rather than silently ignored.
 Actual LFM and Mellum tests cover gradients, immutable full-backbone/interface
@@ -108,8 +108,9 @@ against the resulting checkpoint before semantic promotion.
    startup or claim a model checkpoint resumes an unfinished chat invocation.
 
 This supports portable native parameter checkpoint application. Legacy adapter
-creation/direct application, higher-order graphs and guided generation remain
-separate open paths; the bundle does not advertise those capabilities.
+creation/direct application and higher-order graphs remain separate open
+paths; the bundle does not advertise those capabilities. Native guidance is
+implemented separately below.
 
 The bundle may also include the exact semantic adapter receipt and every bound
 participant tokenizer. The shared semantic loader uses the same role resolver
