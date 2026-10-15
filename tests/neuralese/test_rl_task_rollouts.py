@@ -98,3 +98,28 @@ def test_rollout_turns_keep_policy_samples_and_skip_authored_actions():
     assert len(turns) == 1 and turns[0]["messages"] == context
     call = turns[0]["target"]["tool_calls"][0]["function"]
     assert call["name"] == "return_result" and json.loads(call["arguments"])["value"] == 3
+
+
+def test_rollout_replay_preserves_reasoning_and_raw_calls_without_normalization():
+    from natlang_neuralese.rl.task_rollouts import rollout_turns
+    raw = {"id": "actual_17", "type": "function", "function": {
+        "name": "wire_eval", "arguments": '{ "code" : "2 + 2" }'}}
+    result = {"trajectory": [{"phase": "action", "context": [{"role": "user", "content": "q"}],
+        "assistant": {"content": "", "reasoning": "Read the input first.",
+                      "calls": [{"tool": "eval", "arguments": {"code": "2 + 2"}}]},
+        "model_response": {"raw_calls": [raw]}}]}
+    turn = rollout_turns(result)[0]
+    assert turn["target"]["reasoning_content"] == "Read the input first."
+    assert turn["target"]["tool_calls"] == [raw]
+    assert turn["replay"]["raw_calls_retained"]
+    turn["target"]["tool_calls"][0]["id"] = "changed"
+    assert raw["id"] == "actual_17"
+
+
+def test_rollout_plain_text_interpreted_as_call_stays_plain_text_for_replay():
+    from natlang_neuralese.rl.task_rollouts import rollout_turns
+    text = '{"value": 3}'
+    turn = rollout_turns({"trajectory": [{"phase": "action", "context": [],
+        "assistant": {"content": text, "calls": [{"tool": "return_result", "arguments": {"value": 3}}]},
+        "model_response": {"raw_calls": []}}]})[0]
+    assert turn["target"] == {"role": "assistant", "content": text}

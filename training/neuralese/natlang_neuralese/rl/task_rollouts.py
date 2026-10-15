@@ -15,6 +15,7 @@ against an OpenAI-compatible `natlang_neuralese.serve`), so RL trains and is jud
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -78,13 +79,30 @@ def rollout_turns(result: dict[str, Any] | None) -> list[dict[str, Any]]:
                 or step.get("action_provenance") or not isinstance(step.get("context"), list):
             continue
         target: dict[str, Any] = {"role": "assistant", "content": assistant.get("content") or ""}
-        calls = [{"id": f"call_{index}", "type": "function",
-                  "function": {"name": call.get("source_tool") or call.get("tool"),
-                               "arguments": json.dumps(call.get("arguments") or {}, ensure_ascii=False)}}
-                 for index, call in enumerate(assistant.get("calls") or [])]
-        if calls:
-            target["tool_calls"] = calls
-        turns.append({"messages": step["context"], "tools": step.get("tools_offered") or None, "target": target})
+        reasoning = assistant.get("reasoning")
+        if isinstance(reasoning, str) and reasoning:
+            target["reasoning_content"] = reasoning
+        response = step.get("model_response") or {}
+        # Raw calls are the sampled action. Normalized calls can rename tools,
+        # reserialize JSON, or even infer a tool call from plain output text.
+        # Those are runtime interpretations, not the policy's sampled tokens.
+        raw_calls = response.get("raw_calls")
+        if isinstance(raw_calls, list) and raw_calls:
+            target["tool_calls"] = copy.deepcopy(raw_calls)
+        elif "raw_calls" not in response:
+            # Legacy trajectories did not retain raw calls. Keep them usable for
+            # RFT; the receipt explicitly excludes exact on-policy replay.
+            calls = [{"id": call.get("call_id") or f"call_{index}", "type": "function",
+                      "function": {"name": call.get("source_tool") or call.get("tool"),
+                                   "arguments": json.dumps(call.get("arguments") or {}, ensure_ascii=False)}}
+                     for index, call in enumerate(assistant.get("calls") or [])]
+            if calls:
+                target["tool_calls"] = calls
+        turns.append({"messages": copy.deepcopy(step["context"]),
+                      "tools": copy.deepcopy(step.get("tools_offered") or None), "target": target,
+                      "replay": {"raw_calls_retained": "raw_calls" in response,
+                                 "request_sha256": step.get("request_sha256"),
+                                 "raw_response_sha256": step.get("raw_response_sha256")}})
     return turns
 
 

@@ -92,8 +92,11 @@ failure classes and states its choice. Shadow mode compares them before the NL o
   form trains an adapter block on the serving engine; the stage form trains the full direct checkpoint with the
   shared trainer.
 - **KL to the pre-RL checkpoint** is measured by the shared drift monitor (`train/drift_monitor.py`) with the pre-RL
-  checkpoint as reference: response KL warn 0.5 runs the behaviour gate, stop at 1.5, gate pass ≥ base − 0.1 (same
-  thresholds as the direct stages, LINE_PARITY.md). The in-loss β term is per-rollout and secondary.
+  checkpoint as reference: response KL warn 0.5 runs the report-only behaviour evaluation. KL and base agreement
+  never stop training or deny qualification (owner correction 2026-10-15). Actual task
+  quality, held separation, numerics and runtime correctness remain checked. The optional
+  in-loss β term is declared explicitly; default production adaptation does not penalize
+  changing the base distribution.
 - **Replay:** the stage mixes its train rows' SFT data (direct objective) at a declared weight; no general anchors.
 
 ## 6. Recipe stage (built 2026-10-13, commits c8bc0c7f, f18828c4)
@@ -114,7 +117,7 @@ optimizer, checkpoints, held CE, in-run task-success evaluation, drift monitor).
   rendering), reply as supervised suffix, task-level held split; receipt `rl-data-receipt.json`.
 - **KL to pre-RL:** the stage runs the trainer with `--fresh-monitor-reference`, so the drift reference is captured
   from the continued (pre-RL) weights at update 0 instead of copying the predecessor's base reference.
-- **Gate and report:** the direct gate (`qualified`: held CE, no drift stop, task-success cadence on the held packet);
+- **Gate and report:** the direct gate (`qualified`: held CE and task-success cadence on the held packet);
   epochs budget, objective arguments and `--plan-only` as for direct phases.
 - **Not yet:** signed advantage weights (GRPO on the full checkpoint) need per-document weights in the direct
   trainer; until then GRPO runs on adapters (`grpo.py round`, which also has `--objective rft` with the same task
