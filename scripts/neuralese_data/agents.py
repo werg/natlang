@@ -740,8 +740,9 @@ def finding_right_fit(limit=None):
                             yield f'{rid}:child:{child_index}', child, row, 'child'
 
     for rid, row, parent, role in _limited(rows(), limit):
-        metadata = {'trajectory_id': f"{parent['benchmark']}:{parent['task_id']}",
+        metadata = {'trajectory_id': task_hash(json.dumps([parent['benchmark'], parent['task_id']])),
                     'session_id': rid, 'benchmark': parent['benchmark'],
+                    'task_id': parent['task_id'],
                     'harness': parent.get('harness'), 'harness_version': parent.get('harness_version'),
                     'source': parent.get('source'), 'canary': parent.get('canary'),
                     'parent_reward': parent.get('reward'), 'parent_reward_status': parent.get('reward_status'),

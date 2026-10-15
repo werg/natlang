@@ -328,7 +328,7 @@ def test_right_fit_preserves_flat_calls_reasoning_children_and_parent_score(tmp_
                  'tool_calls': [{'id': 'c', 'name': 'Bash', 'arguments': '{"command":"pwd"}'}]},
                 {'role': 'tool', 'tool_call_id': 'c', 'content': 'Observed output'},
                 {'role': 'assistant', 'content': 'Original answer'}]
-    row = {'benchmark': 'benchmark', 'task_id': 'shared', 'model': 'teacher', 'harness': 'h',
+    row = {'benchmark': 'Terminal-Bench 4', 'task_id': 'shared', 'model': 'teacher', 'harness': 'h',
            'trajectory_available': True, 'reward_status': 'verified', 'reward': 1,
            'messages': messages, 'canary': 'source canary',
            'subagents': [{'session_id': 'child', 'parent': 'root', 'messages': messages}]}
@@ -340,6 +340,9 @@ def test_right_fit_preserves_flat_calls_reasoning_children_and_parent_score(tmp_
     assert len(trajectories) == 3 and len(list(agents.finding_right_fit(limit=1))) == 1
     parent, child, failed = trajectories
     assert parent.id != child.id and parent.split_groups == child.split_groups == failed.split_groups
+    assert not any(c.isspace() for c in parent.id)
+    assert parent.lineage['notes']['metadata']['benchmark'] == 'Terminal-Bench 4'
+    assert parent.lineage['notes']['metadata']['task_id'] == 'shared'
     assert parent.messages[1]['reasoning'] == 'Original reasoning'
     assert parent.messages[1]['tool_calls'][0]['function']['name'] == 'Bash'
     assert parent.messages[2]['content'] == 'Observed output'
