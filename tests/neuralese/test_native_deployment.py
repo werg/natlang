@@ -25,7 +25,8 @@ def test_terminal_trainer_required_before_transfer_of_optimizer_ownership(tmp_pa
     assert validate_ready(path,requirement)['model_id']=='lfm'
 
 
-def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_finishes(tmp_path):
+@pytest.mark.parametrize('routine_cadence', [0, 5000])
+def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_finishes(tmp_path, routine_cadence):
     runtime=tmp_path/'runtime';(runtime/'ts-host/dist/teacher').mkdir(parents=True)
     (runtime/'ts-host/dist/teacher/cli.js').write_text('// built collector fixture')
     train=tmp_path/'train';train.write_text('{}\n')
@@ -49,7 +50,7 @@ def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_fini
                 'requires':[],'inputs':{'native_graphs':'train','held_native_graphs':'held',
                     'foundation_native_graphs':'foundation'},
                 'parameters':{'epochs':1,'base':str(base),'communication_foundation':True,
-                    'task_eval':{'packet':binding(cases)},'task_eval_every':5000}}]}))
+                    'task_eval':{'packet':binding(cases)},'task_eval_every':routine_cadence}}]}))
         owner=tmp_path/role/'owner';owner.mkdir()
         (owner/'launch.json').write_text(json.dumps({'at':1,'argv':['python','--recipe',str(recipe)]}))
         records.append({'role':role,'recipe_path':str(recipe),'recipe_sha256':binding(recipe)['sha256'],

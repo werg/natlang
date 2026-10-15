@@ -55,8 +55,11 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
         stage = stages[0]
         inputs = resolve_stage_inputs(recipe, stage, {})
         parameters = effective_stage_parameters(stage, [], recipe)
-        if not parameters.get('task_eval') or not parameters.get('task_eval_every'):
-            raise ValueError('native deployment cannot omit actual task evaluation')
+        cadence = parameters.get('task_eval_every', 0)
+        if not parameters.get('task_eval') or type(cadence) is not int or cadence < 0:
+            raise ValueError('native deployment requires actual boundary task evaluation and nonnegative routine cadence')
+        # Zero disables routine synchronous pauses, while the native trainer
+        # still evaluates exact-current foundation/refresh/final weights.
         for key in ('native_graphs', 'held_native_graphs', 'foundation_native_graphs'):
             _bound(inputs[key])
         if (Path(inputs['foundation_native_graphs']['path']).resolve() != Path(record['foundation_manifest']['path']).resolve()
