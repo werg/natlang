@@ -474,9 +474,15 @@ def run_repair_cycle(campaigns):
             if not (worker / 'journal.jsonl').exists() and not active(f'natlang-pop-luna-repair-s{seed}-w{number:02d}.service'):
                 launch_worker(teacher, seed, number, repair=True)
         if not complete(teacher):
-            return True
+            # An old repair's slow final case must not strand five teacher
+            # slots. Offer them to the next closed repair window; if there is
+            # no such window, the caller may prepare a new broad campaign.
+            if active_luna_workers() >= WORKERS:
+                return True
+            continue
         finalize_repair_cycle(cycle)
-        return True
+        if active_luna_workers() >= WORKERS:
+            return True
     return False
 
 
