@@ -595,8 +595,9 @@ def restore_neuralese_projections(engine, state):
         raise ValueError('Neuralese serving requires the checkpoint writer projection')
     if engine.heads.read_markers or engine.heads.profile != 'raw-token-v1':
         raise ValueError('direct Neuralese serving requires raw-token-v1 heads')
-    if engine.heads.cutoff != engine.backbone.num_layers:
-        raise ValueError('direct Neuralese serving requires full-depth heads')
+    # cutoff captures an intermediate state; PortBackbone still runs every layer.
+    if getattr(engine.backbone, 'exit_layers', None) not in (None, engine.backbone.num_layers):
+        raise ValueError('direct Neuralese serving requires the complete active backbone')
     config = projection_config_from_state(saved)
     if (config['width'] != engine.backbone.config.hidden_size or
             config['embedding_width'] != engine.backbone.embedding_weight.shape[1]):

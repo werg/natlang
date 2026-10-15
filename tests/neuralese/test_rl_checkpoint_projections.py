@@ -22,7 +22,7 @@ def test_checkpoint_restores_writer_and_token_readout_exactly(family, tmp_path):
         tiny_mellum(tmp_path)
         model = load_maple(tmp_path, device='cpu', dtype=torch.float32, ternary_attention=False)
         backbone = MaplePortBackbone(model, ControlTokens(126, 127), fast=False)
-    heads = PortHeads(backbone, cutoff=backbone.num_layers, profile='raw-token-v1')
+    heads = PortHeads(backbone, cutoff=max(1, backbone.num_layers - 1), profile='raw-token-v1')
     engine = SimpleNamespace(backbone=backbone, heads=heads, device='cpu')
     projection = NeuraleseProjection(backbone.config.hidden_size, hidden=16).to(torch.bfloat16)
     choice = TokenChoiceProjection(backbone.config.hidden_size, blocks=2, hidden=16, kernel=4)
