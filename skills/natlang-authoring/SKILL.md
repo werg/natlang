@@ -228,3 +228,10 @@ When response scope depends on an original prompt, pass the actual prompt clause
 For a linguistic certificate, retain the actual stem/domain judgments and role contributions with nonempty original quoted support. Keep source-dependent elicitation order distinct from independent hypothesis order: a later contradiction cannot justify skipping its prerequisites retrospectively. Original correction IDs and adopted note versions remain separate from generated hypothesis/reading IDs. An exact certificate can validate declared fields and source joins; linguistic meanings and replacement wording still need semantic judgment. If feedback reports a missing original join, restore the actual returned child record and its original evidence rather than rewriting a preferred interpretation.
 
 When a named reader returns per-item semantic entries, retain its complete typed index in the parent source alongside the accepted projection. Append actual missing-premise and transport/type failure reasons through frontier, index and parent summary. Project only accepted entries of the declared meaning kind; context/unresolved/failed entries remain represented without donating an accepted meaning. If exact feedback reports a projection mismatch, return the actual child meaning and original identity unchanged rather than reconstructing a replacement table.
+
+Native positional-state artifacts are the existing typed `Neuralese<T>` values.
+Pass the returned value directly to a child or parent; keep its content address
+through captures and typed results. `neuralese-native-consumer-unavailable` means
+the target must explicitly declare state adaptation or text reencoding before
+consuming another model's native value. Preserve the source artifact and use a
+configured native reader; do not paste its text to bypass the typed boundary.

@@ -1,3 +1,4 @@
+import { nativeStateConsumerFromInfo } from '../native/neuralese.js';
 import { controlledProviderProfile, type ProviderRequestControls } from './provider-request-controls.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -897,11 +898,11 @@ export function nativeJobRunner(config: CollectorConfig): JobRunner {
       ...(config.apiKeyEnv ? { headers: { authorization: 'Bearer ' + process.env[config.apiKeyEnv] } } : {}),
     }).then(async response => {
       if (!response.ok) throw new Error('Neuralese server info: HTTP ' + response.status);
-      return await response.json() as { dialects?: string[] };
+      return await response.json() as Record<string, unknown> & { dialects?: string[] };
     }) : undefined;
     if (config.neuraleseServer && !nativeInfo?.dialects?.[0])
       throw new Error('Neuralese server must declare its value dialect');
-    const valueRuntime = nativeStore ? { store: nativeStore, dialect: nativeInfo!.dialects![0]! } : textNeuralese?.runtime;
+    const valueRuntime = nativeStore ? { store: nativeStore, dialect: nativeInfo!.dialects![0]!, nativeStateConsumer: nativeStateConsumerFromInfo(nativeInfo!) } : textNeuralese?.runtime;
     const session = config.provider ? createManagedModelSession(controlledProviderProfile(config.provider,
       config.modelId, config.piOptions, config.providerRequestControls)) : undefined;
     const judgeConfig = config.judgeModel;

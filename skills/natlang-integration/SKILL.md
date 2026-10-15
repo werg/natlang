@@ -210,3 +210,12 @@ Qualify a private linguistic certificate with original graph endpoint and effect
 Check named-reader provenance in the full typed source: one entry per original selected unit, immutable primary source, actual returned identity and quoted support, accepted-kind projection and blocker propagation. Normalize set-like row/value/witness ordering while preserving each actual interpretation across child, index and intake. A projection error should identify the reader kind and original unit in one sentence. A private authored index is a source/type witness, not evidence of a live call; inspect the measured trajectory before crediting child consumption or admission.
 
 For a measured original-source frontier, validate the actual scoped return shape and original ID before accepting the shorter state. The one-sentence recovery error should name the expected declared role array and exact source-witness domain; the current original ID stays pending while that call repairs its result. Distinguish a malformed child from a semantically unresolved source role. Downstream named readers must receive the completed typed original-role inventory, so a missing definition cannot be hidden by successful coverage of the remaining IDs. Live child consumption and training admission still require separate review.
+
+Native `nzs1_` artifacts use the same typed Neuralese reference and ownership
+lifecycle as other Neuralese values, with an exact multi-tensor codec. Configure
+a native-capable archive and bind the reader's checkpoint identities and actual
+consumption modes from `/v1/neuralese/info`. On
+`neuralese-native-archive-unavailable`, use a store implementing native-state
+persistence. On `neuralese-native-consumer-unavailable`, bind a reader declaring
+adaptation or reencoding. Named dialect types remain strict; a best-effort
+consumption receipt is not exact KV interchange or a learned semantic dialect.

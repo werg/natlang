@@ -23,8 +23,8 @@ export type NeuraleseRef = { readonly $neuralese: { readonly type: string; reado
 export type NeuraleseTextPart = { type: 'text'; text: string };
 export type NeuraleseContentPart = { type: 'neuralese'; id: string };
 export type NativeStateContentPart = { type: 'native_state'; id: string };
-export type ContentPart = NeuraleseTextPart | NeuraleseContentPart;
-export type RuntimeContentPart = ContentPart | NativeStateContentPart;
+export type ContentPart = NeuraleseTextPart | NeuraleseContentPart | NativeStateContentPart;
+export type RuntimeContentPart = ContentPart;
 
 const ID = /^nz1_[a-z2-7]{20,}$/;
 const SENTINEL_OPEN = '', SENTINEL_CLOSE = '';
@@ -76,7 +76,7 @@ export function nativeStateTextToParts(text: string): RuntimeContentPart[] {
   return parts;
 }
 
-export function isNeuraleseId(value: unknown): value is string { return typeof value === 'string' && ID.test(value); }
+export function isNeuraleseId(value: unknown): value is string { return typeof value === 'string' && (ID.test(value) || NATIVE_STATE_ID.test(value)); }
 
 export function neuraleseRef(type: string, id: string): NeuraleseRef {
   if (!isNeuraleseId(id)) throw new TypeError(`not a Neuralese block ID: ${JSON.stringify(id)}`);
@@ -95,40 +95,31 @@ export function isNeuraleseRef(value: unknown): value is NeuraleseRef {
 /** The conversation-text marker for a block. */
 export function neuraleseSentinel(id: string): string {
   if (!isNeuraleseId(id)) throw new TypeError(`not a Neuralese block ID: ${JSON.stringify(id)}`);
-  return `${SENTINEL_OPEN}${id}${SENTINEL_CLOSE}`;
+  return isNativeStateId(id) ? nativeStateSentinel(id) : `${SENTINEL_OPEN}${id}${SENTINEL_CLOSE}`;
 }
 
 /** The block a text consists of exactly, if it is one sentinel. */
 export function soleSentinel(text: string): string | undefined {
-  const match = /^(nz1_[a-z2-7]+)$/.exec(text);
-  return match?.[1];
+  const match = /^(?:(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52}))$/.exec(text);
+  return match?.[1] ?? match?.[2];
 }
 
-export const hasNeuraleseSentinel = (text: string): boolean => text.includes(SENTINEL_OPEN);
+export const hasNeuraleseSentinel = (text: string): boolean => text.includes(SENTINEL_OPEN) || text.includes(NATIVE_SENTINEL_OPEN);
 
 /** Block IDs a text refers to. */
-export function sentinelIds(text: string): string[] { return [...text.matchAll(SENTINEL)].map(match => match[1]!); }
+export function sentinelIds(text: string): string[] { return [...text.matchAll(/(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})/g)].map(match => match[1] ?? match[2]!); }
 
 /** Conversation text to content parts: text runs and Neuralese blocks. */
-export function textToParts(text: string): ContentPart[] {
-  const parts: ContentPart[] = [];
-  let last = 0;
-  for (const match of text.matchAll(SENTINEL)) {
-    if (match.index! > last) parts.push({ type: 'text', text: text.slice(last, match.index) });
-    parts.push({ type: 'neuralese', id: match[1]! });
-    last = match.index! + match[0].length;
-  }
-  if (last < text.length || !parts.length) parts.push({ type: 'text', text: text.slice(last) });
-  return parts;
-}
+export function textToParts(text: string): ContentPart[] { return runtimeTextToParts(text); }
 
 export const isContentParts = (value: unknown): value is ContentPart[] => Array.isArray(value) && value.length > 0 &&
   value.every(part => part && typeof part === 'object' && ((part.type === 'text' && typeof part.text === 'string') ||
-    (part.type === 'neuralese' && isNeuraleseId(part.id))));
+    (part.type === 'neuralese' && isNeuraleseId(part.id)) ||
+    (part.type === 'native_state' && isNativeStateId(part.id))));
 
 /** Content parts to conversation text. */
 export function partsToText(parts: readonly ContentPart[]): string {
-  return parts.map(part => part.type === 'text' ? part.text : neuraleseSentinel(part.id)).join('');
+  return runtimePartsToText(parts);
 }
 
 /**
@@ -136,8 +127,11 @@ export function partsToText(parts: readonly ContentPart[]): string {
  * that is exactly one block is a soft function body, ``nl.with({ … })`${__neuralese.body("nz1_…")}` ``.
  */
 export function sourceWithLiteralCalls(code: string): string {
-  return code.replace(new RegExp('`' + SENTINEL.source + '`', 'g'), (_, id: string) => `\`\${__neuralese.body(${JSON.stringify(id)})}\``)
-    .replace(SENTINEL, (_, id: string) => `__neuralese(${JSON.stringify(id)})`);
+  const pattern = /(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})/g;
+  const body = new RegExp('`(?:' + pattern.source + ')`', 'g');
+  return code.replace(body, (_, legacy: string, native: string) =>
+    `\`\${__neuralese.body(${JSON.stringify(legacy ?? native)})}\``)
+    .replace(pattern, (_, legacy: string, native: string) => `__neuralese(${JSON.stringify(legacy ?? native)})`);
 }
 
 /**
@@ -179,9 +173,29 @@ export class NeuraleseDialectError extends Error {
   constructor(detail: string) { super(`neuralese-dialect-mismatch: ${detail}`); this.name = 'NeuraleseDialectError'; }
 }
 
+/** A native reader's explicit, checkpoint-bound adaptation capabilities from /info. */
+export type NativeStateConsumer = { architecture: string; checkpoint_sha256: string;
+  tokenizer_fingerprint: string; embedding_weight_sha256: string; consumption_modes: string[] };
+
+export function nativeStateConsumerFromInfo(info: Record<string, unknown>): NativeStateConsumer | undefined {
+  const native = info.native_state as Record<string, unknown> | undefined;
+  if (native?.enabled !== true) return undefined;
+  if (typeof native.architecture !== 'string' || !native.architecture ||
+      ['checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256'].some(key =>
+        typeof native[key] !== 'string' || !/^[0-9a-f]{64}$/.test(native[key] as string)) ||
+      native.consumption_modes !== undefined && (!Array.isArray(native.consumption_modes) || native.consumption_modes.some(mode => typeof mode !== 'string')))
+    throw new NeuraleseUnsupportedError('native consumer must declare its model identity and actual state consumption modes');
+  if (!Array.isArray(native.consumption_modes)) return undefined;
+  return { architecture: native.architecture, checkpoint_sha256: native.checkpoint_sha256 as string,
+    tokenizer_fingerprint: native.tokenizer_fingerprint as string,
+    embedding_weight_sha256: native.embedding_weight_sha256 as string,
+    consumption_modes: [...native.consumption_modes] as string[] };
+}
+
 /** Runtime configuration for soft values. */
 export type NeuraleseRuntimeOptions = {
   store: NeuraleseStore;
+  nativeStateConsumer?: NativeStateConsumer;
   /** Writes blocks for literals a model returns as marker text (the stand-in port, or a writer in-process). */
   port?: NeuralesePort;
   /**
@@ -219,7 +233,13 @@ export function readerDialect(options: NeuraleseRuntimeOptions | undefined): str
 export function dialectBinding(options: NeuraleseRuntimeOptions | undefined): DialectBinding | undefined {
   if (!options) return undefined;
   const dialect = readerDialect(options), store = options.store;
-  return { dialect, blockDialect: id => store.peek?.(id)?.dialect ?? constantBlock(id)?.meta.dialect };
+  return { dialect, blockDialect: id => store.peek?.(id)?.dialect ?? constantBlock(id)?.meta.dialect,
+    nativeDefaultCompatible: (id, source, target) => {
+      const consumer = options.nativeStateConsumer;
+      return isNativeStateId(id) && source.startsWith('native-state/') &&
+        target === `native-state/${consumer?.architecture}` &&
+        !!consumer?.consumption_modes.some(mode => mode === 'best-effort-text-retokenization' || mode === 'learned-semantic-adaptation');
+    } };
 }
 
 /** A model driver that carries content parts. Transports mark themselves by setting `neuralese: true`. */
@@ -235,7 +255,7 @@ export function encodeMessages(messages: readonly unknown[]): { messages: unknow
   const encode = (text: string): string | ContentPart[] => {
     if (!hasNeuraleseSentinel(text)) return text;
     const parts = textToParts(text);
-    blocks += parts.filter(part => part.type === 'neuralese').length;
+    blocks += parts.filter(part => part.type !== 'text').length;
     return parts;
   };
   const out = messages.map(message => {

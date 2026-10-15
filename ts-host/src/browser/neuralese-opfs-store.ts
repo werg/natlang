@@ -14,7 +14,7 @@
  * file is replaced only when its write closes); a block another tab wrote is found on a lookup miss. Pins are this
  * store object's own, and `collect` deletes files for the whole origin: collect only with every runtime's references.
  */
-import { checkBlockShape, MemoryNeuraleseStore, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockInput, type NeuraleseBlockMeta,
+import { checkBlockShape, MemoryNeuraleseStore, neuraleseContentId, decodeNativeState, encodeNativeState, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlock, type NeuraleseBlockInput, type NeuraleseBlockMeta,
   type NeuraleseDtype, type NeuraleseStore } from '../native/neuralese-store.js';
 import { decodeBlockBody, encodeBlockBody } from '../model/neuralese-server.js';
 import { decodeNz, encodeNz, NZ_FORMAT, NzFileError, type NzBlockHeader, type NzHeader } from '../native/nz-file.js';
@@ -40,7 +40,7 @@ export type OpfsNeuraleseStoreOptions = {
 };
 
 const DIRECTORY = 'natlang-neuralese-blocks';
-const ID = /^nz1_[a-z2-7]{52}$/;
+const ID = /^(?:nz1|nzs1)_[a-z2-7]{52}$/;
 const DTYPE_TO_FILE: Record<NeuraleseDtype, NzBlockHeader['dtype']> = { f32: 'F32', f16: 'F16', bf16: 'BF16' };
 
 /** Whether this browser offers OPFS (`navigator.storage.getDirectory`). */
@@ -59,8 +59,10 @@ async function readMeta(file: Blob): Promise<NeuraleseBlockMeta> {
   if (8 + size > file.size) throw new Error('header length exceeds the file');
   const header = JSON.parse(new TextDecoder().decode(await bytesOf(file, 8, 8 + size))) as Record<string, any>;
   const meta = JSON.parse(String(header.__metadata__?.['natlang.block'] ?? 'null')) as NeuraleseBlockMeta | null;
-  if (!meta?.id) throw new Error('no natlang.block metadata');
-  return meta;
+  if (meta?.id) return meta;
+  const native = JSON.parse(String(header.__metadata__?.['natlang.native_state'] ?? 'null'));
+  if (!native?.id) throw new Error('no native or legacy block metadata');
+  return nativeStateBlockMeta({ id: native.id, metadata: native, tensors: header as never });
 }
 
 export class OpfsNeuraleseStore implements NeuraleseStore {
@@ -121,9 +123,13 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
   }
 
   private async writeFile(meta: NeuraleseBlockMeta, data: Uint8Array): Promise<void> {
-    const writable = await (await this.directory.getFileHandle(meta.id, { create: true })).createWritable();
+    return this.writeWire(meta.id, encodeBlockBody(meta, data));
+  }
+
+  private async writeWire(id: string, wire: Uint8Array): Promise<void> {
+    const writable = await (await this.directory.getFileHandle(id, { create: true })).createWritable();
     try {
-      await writable.write(encodeBlockBody(meta, data));
+      await writable.write(wire);
       await writable.close();
     } catch (error) {
       await writable.abort().catch(() => undefined);
@@ -187,6 +193,7 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
   }
 
   async get(id: string): Promise<NeuraleseBlock | undefined> {
+    if (id.startsWith('nzs1_')) return undefined; // Native state has its own exact multi-tensor codec.
     const meta = this.index.get(id) ?? await this.discover(id);
     if (!meta) return undefined;
     const cached = this.resident.get(id);
@@ -199,6 +206,41 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
     }
     this.remember(id, block.data);
     return { meta: { ...meta }, data: block.data.slice() };
+  }
+
+  async putNativeState(input: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
+    const wire = encodeNativeState(input), artifact = decodeNativeState(wire);
+    return this.serialized(artifact.id, async () => {
+      if (await this.has(artifact.id)) {
+        const found = await this.getNativeState(artifact.id);
+        if (found) return found;
+      }
+      await this.writeWire(artifact.id, wire);
+      this.index.set(artifact.id, nativeStateBlockMeta(artifact));
+      this.remember(artifact.id, wire);
+      return structuredClone(artifact);
+    });
+  }
+
+  async getNativeState(id: string): Promise<NativeStateArtifact | undefined> {
+    if (!/^nzs1_[a-z2-7]{52}$/.test(id) || !(await this.has(id))) return undefined;
+    let wire = this.resident.get(id);
+    if (!wire) try { wire = await bytesOf(await (await this.directory.getFileHandle(id)).getFile()); }
+    catch { this.forget(id); return undefined; }
+    try {
+      const artifact = decodeNativeState(wire);
+      if (artifact.id !== id) throw new Error('content address differs');
+      this.remember(id, wire);
+      return artifact;
+    } catch (error) {
+      this.forget(id);
+      await this.directory.removeEntry(id).catch(() => undefined);
+      throw new NzFileError('neuralese-block-integrity', `native state ${id}: ${String(error)}`);
+    }
+  }
+
+  async hasNativeState(id: string): Promise<boolean> {
+    return /^nzs1_[a-z2-7]{52}$/.test(id) && await this.has(id);
   }
 
   async meta(id: string): Promise<NeuraleseBlockMeta | undefined> {
@@ -244,12 +286,13 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
 
   /** Put every block of a `.nz` file (checked against its ID by the decoder). Returns the block IDs, in file order. */
   async importNz(bytes: Uint8Array): Promise<string[]> {
-    const { blocks } = decodeNz(bytes);
+    const { blocks, nativeStates } = decodeNz(bytes);
     for (const block of blocks.values()) {
       const { id: _, ...rest } = block.meta;
       await this.put({ ...rest, data: block.data });
     }
-    return [...blocks.keys()];
+    for (const { id: _, ...artifact } of nativeStates.values()) await this.putNativeState(artifact);
+    return [...blocks.keys(), ...nativeStates.keys()];
   }
 
   /**
@@ -259,7 +302,18 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
   async exportNz(ids: Iterable<string>, options: { dialect?: string; exports?: NzHeader['exports'];
     provenance?: Record<string, unknown> } = {}): Promise<Uint8Array> {
     const headers: Record<string, NzBlockHeader> = {}, data = new Map<string, Uint8Array>();
+    const nativeHeaders: Record<string, { bytes: number }> = {};
+    let nativeDialect: string | undefined;
     for (const id of new Set(ids)) {
+      if (id.startsWith('nzs1_')) {
+        const artifact = await this.getNativeState(id);
+        if (!artifact) throw new NzFileError('neuralese-unknown-block', `native state ${id} is not in the browser store`);
+        const wire = encodeNativeState(artifact);
+        nativeHeaders[id] = { bytes: wire.length };
+        data.set(id, wire);
+        nativeDialect ??= nativeStateBlockMeta(artifact).dialect;
+        continue;
+      }
       const block = await this.get(id);
       if (!block) throw new NzFileError('neuralese-unknown-block', `block ${id} is not in the browser store`);
       const { meta } = block;
@@ -267,9 +321,10 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
         ...(meta.producer ? { producer: meta.producer } : {}), ...(meta.truncated ? { truncated: true } : {}) };
       data.set(id, block.data);
     }
-    const dialect = options.dialect ?? Object.values(headers)[0]?.dialect;
+    const dialect = options.dialect ?? Object.values(headers)[0]?.dialect ?? nativeDialect;
     if (!dialect) throw new NzFileError('neuralese-file-format', 'an empty .nz export needs a dialect');
     return encodeNz({ format: NZ_FORMAT, dialect, exports: options.exports ?? {}, blocks: headers,
+      ...(Object.keys(nativeHeaders).length ? { native_states: nativeHeaders } : {}),
       ...(options.provenance ? { provenance: options.provenance } : {}) }, data);
   }
 }

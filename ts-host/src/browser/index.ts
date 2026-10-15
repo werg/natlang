@@ -67,7 +67,8 @@ export { OpfsNeuraleseStore, openBrowserNeuraleseStore, opfsAvailable, type Opfs
 export { encodeBlockBody, decodeBlockBody } from '../model/neuralese-server.js';
 export type { NeuraleseServerOptions } from '../model/neuralese-server.js';
 export { neuraleseServerInfo, checkNeuraleseReader, type NeuraleseServerInfo } from '../model/neuralese-info.js';
-export { supportsNeuralese, NeuraleseUnsupportedError, textToParts, hasNeuraleseSentinel } from '../native/neuralese.js';
+export { supportsNeuralese, NeuraleseUnsupportedError, textToParts, hasNeuraleseSentinel, nativeStateConsumerFromInfo,
+  type NativeStateConsumer } from '../native/neuralese.js';
 export { serverViewer, VIEW_TYPE, type Viewer, type ViewSite } from '../neuralese/view.js';
 // The standard library from and to bytes (Node's variants also take a path).
 export { COMBINATORS, buildStandardLibrary, loadStandardLibrary, createNeuraleseLibrary } from '../neuralese/combinators.js';

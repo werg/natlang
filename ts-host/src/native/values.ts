@@ -148,6 +148,12 @@ function checkBlockDialect(id: string, wanted: Extract<Type, { kind: 'neuralese'
   if (expected === DEFAULT_DIALECT) return;
   const stored = env.dialects?.blockDialect?.(id);
   if (stored === undefined || stored === expected) return;
+  if (wanted.dialect === DEFAULT_DIALECT && id.startsWith('nzs1_') && stored.startsWith('native-state/') &&
+      expected.startsWith('native-state/')) {
+    if (env.dialects?.nativeDefaultCompatible?.(id, stored, expected)) return;
+    return reject(path, 'neuralese-native-consumer-unavailable', formatType(wanted),
+      `native state from ${stored}; configure a native consumer that explicitly declares adaptation or text reencoding before passing it to ${expected}`);
+  }
   reject(path, 'neuralese-dialect-mismatch', `${formatType(wanted)} in dialect ${JSON.stringify(expected)}`,
     `block ${id}, written in dialect ${JSON.stringify(stored)}; a value is read only in the dialect it was written in, so ` +
     `write it again in ${JSON.stringify(expected)} (\`convert(value, ${JSON.stringify(expected)})\` from natlang:neuralese, or a model of that ` +

@@ -32,7 +32,8 @@ export const DEFAULT_DIALECT = 'DefaultDialect';
  * runtime's reader dialect, which `DefaultDialect` stands for; null for a text-only runtime, where `DefaultDialect`
  * stays unbound. `blockDialect` is the dialect a stored block was written in, when the store knows it without I/O.
  */
-export type DialectBinding = { readonly dialect: string | null; blockDialect?(id: string): string | undefined };
+export type DialectBinding = { readonly dialect: string | null; blockDialect?(id: string): string | undefined;
+  nativeDefaultCompatible?(id: string, source: string, target: string): boolean };
 
 /** `Adapter`: a weight adapter value (a stored coefficient block whose dialect is its spec; model/tiny_adapters.py).
  * It is a soft value of a marker element, so it fits `Adapter` and `Neuralese<unknown>` slots and no other. */

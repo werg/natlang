@@ -143,6 +143,6 @@
     }
   ],
   "$defs": {
-    "blockId": { "type": "string", "pattern": "^nz1_[a-z2-7]+$" }
+    "blockId": { "type": "string", "pattern": "^(?:nz1_[a-z2-7]+|nzs1_[a-z2-7]{52})$" }
   }
 }

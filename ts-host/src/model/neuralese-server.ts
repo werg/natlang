@@ -28,9 +28,9 @@ import { coalescingScorer, explicitBatchScoreMany } from './scoring.js';
 import type { DecisionScorer, DecisionScores, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { activeAdapters, activeRecorder, type AdapterBinding, type TurnRecorder } from '../neuralese/recording.js';
 import { serves } from './neuralese-info.js';
-import { isContentParts, nativeStateSentinel, nativeStateSentinelIds, nativeStateTextToParts,
-  isNativeStateId, partsToText, runtimePartsToText, type ContentPart, type RuntimeContentPart } from '../native/neuralese.js';
-import { constantBlock, decodeNativeState, encodeNativeState, nativeStateContentId, neuraleseContentId, type NeuraleseBlock,
+import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
+  isNativeStateId, partsToText, runtimePartsToText, runtimeTextToParts, type ContentPart, type RuntimeContentPart } from '../native/neuralese.js';
+import { constantBlock, decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta, neuraleseContentId, type NeuraleseBlock,
   type NeuraleseBlockMeta, type NeuraleseBlockInput, type NativeStateArtifact, type NeuraleseDtype, type NeuraleseStore } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;
@@ -162,6 +162,10 @@ export class HttpNeuraleseStore implements NeuraleseStore {
     return true;
   }
   async meta(id: string): Promise<NeuraleseBlockMeta | undefined> {
+    if (isNativeStateId(id)) {
+      const artifact = await this.getNativeState(id);
+      return artifact && nativeStateBlockMeta(artifact);
+    }
     const response = await this.request(`/blocks/${id}/meta`);
     if (response.status === 404) return undefined;
     if (!response.ok) throw new Error(`neuralese block metadata failed (${response.status})`);
@@ -260,12 +264,12 @@ function materializeNativeStateSentinels(value: unknown, key?: string): unknown 
     try { return JSON.stringify(materializeNativeStateSentinels(JSON.parse(value))); }
     catch { return value; } // preserve malformed input for the server's existing argument error path
   }
-  if (typeof value === 'string') return nativeStateSentinelIds(value).length ? nativeStateTextToParts(value) : value;
+  if (typeof value === 'string') return nativeStateSentinelIds(value).length ? runtimeTextToParts(value) : value;
   if (Array.isArray(value) && value.length && value.every(part => part && typeof part === 'object' &&
       (part.type === 'text' && typeof part.text === 'string' ||
        part.type === 'neuralese' && typeof part.id === 'string' ||
        part.type === 'native_state' && isNativeStateId(part.id))))
-    return value.flatMap(part => part.type === 'text' ? materializeNativeStateSentinels(part.text) : [part]);
+    return value.flatMap(part => part.type === 'text' ? runtimeTextToParts(part.text) : [part]);
   if (Array.isArray(value)) return value.map(item => materializeNativeStateSentinels(item));
   if (value && typeof value === 'object') {
     const part = value as { type?: unknown; id?: unknown };
@@ -374,6 +378,17 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   const blockIds = (messages: unknown[], adapters: readonly { id: string }[]) =>
     [...requestBlockIds(messages), ...adapters.map(item => item.id)];
   const transport: ChatTransport = async (body, signal, meta) => {
+    const capabilities = await serverInfo();
+    if (body.guidance && capabilities && !serves(capabilities, 'guidance.check'))
+      throw Object.assign(new Error('neuralese-guidance-unavailable: this model server does not implement the requested guidance; use a server with guidance support'), { code: 'neuralese-guidance-unavailable' });
+    if (body.neuralese_template && capabilities) {
+      const template = body.neuralese_template as Record<string, unknown>;
+      const required = ['template', ...(template.value_type ? ['template.value-type'] : []),
+        ...(template.argument_path ? ['template.argument-path'] : [])];
+      for (const capability of required) if (!serves(capabilities, capability))
+        throw Object.assign(new Error(`neuralese-${capability.replaceAll('.', '-')}-unavailable: use a server that implements this typed readout`),
+          { code: `neuralese-${capability.replaceAll('.', '-')}-unavailable` });
+    }
     const adapters = await adapterParts((body.x_natlang_adapters ?? []) as { id: string; scale: number }[]);
     const inner = (await serverInfo())?.stream === true ? streamed : whole;
     // A streamed reply is assembled here, where its body is post-processed; its deltas go to the turn's observer, and a
@@ -411,7 +426,9 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     }
     const nativeBlocks = ((reply.native_state as Json | undefined)?.blocks ?? []) as Array<{ id: string }>;
     for (const meta of nativeBlocks) {
-      if (!meta?.id || !store?.putNativeState || !store.getNativeState) continue;
+      if (!meta?.id || !store) continue;
+      if (!store.putNativeState || !store.getNativeState)
+        throw new Error('neuralese-native-archive-unavailable: configure a store that preserves native-state artifacts');
       if (await store.hasNativeState?.(meta.id)) continue;
       const artifact = await remote.getNativeState(meta.id);
       if (!artifact) throw new Error(`neuralese-unknown-native-state: server reported ${meta.id} but has no artifact`);

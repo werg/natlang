@@ -40,7 +40,8 @@ export type { ModelTurn, ModelTurnRequest, ModelTurnDelta, ModelTurnOptions, Mod
 export { neuraleseServerModelTurn, HttpNeuraleseStore, withRestoredBlocks, OWNER_HEADER } from './model/neuralese-server.js';
 export type { NeuraleseServerOptions } from './model/neuralese-server.js';
 export { neuraleseServerInfo, checkNeuraleseReader, type NeuraleseServerInfo } from './model/neuralese-info.js';
-export { supportsNeuralese, NeuraleseUnsupportedError, textToParts, hasNeuraleseSentinel } from './native/neuralese.js';
+export { supportsNeuralese, NeuraleseUnsupportedError, textToParts, hasNeuraleseSentinel, nativeStateConsumerFromInfo,
+  type NativeStateConsumer } from './native/neuralese.js';
 export type { NativeReviewOptions } from './native/agent.js';
 export { fetchModel, openAICompatibleModelTurn, chatCompletionModelTurn, httpChatTransport, assembleChatCompletion,
   modelTools, requestLimit, limitedTransport, createManagedModelSession, createResolvedModelSession, loadModelConfiguration,

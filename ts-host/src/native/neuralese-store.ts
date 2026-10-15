@@ -19,6 +19,8 @@ export type NeuraleseBlockMeta = {
   dtype: NeuraleseDtype;
   /** Invocation, file, combinator call or gradient step that produced the block. */
   producer?: Record<string, unknown>;
+  /** Present for exact multi-tensor state; this metadata is not a flat-vector payload. */
+  native_state?: NativeStateMetadata & { embedding_dtype: NativeStateDtype };
   /** Writing hit the runtime's hard maximum instead of stopping. */
   truncated?: boolean;
 };
@@ -32,6 +34,19 @@ export type NativeStateTensor = { dtype: NativeStateDtype; shape: number[]; data
 export type NativeStateMetadata = { schema: 'neuralese.native-state/1'; text: string; architecture: string;
   tokenizer_fingerprint: string; checkpoint_sha256: string; embedding_weight_sha256: string; layer_kinds: string[] };
 export type NativeStateArtifact = { id: string; metadata: NativeStateMetadata; tensors: Record<string, NativeStateTensor> };
+
+/** Existing typed-value metadata derived from a verified native artifact. */
+export function nativeStateBlockMeta(artifact: Pick<NativeStateArtifact, 'id' | 'metadata'> &
+    { tensors: Record<string, Pick<NativeStateTensor, 'dtype' | 'shape'>> }): NeuraleseBlockMeta {
+  const embeddings = artifact.tensors.embeddings!;
+  return { id: artifact.id, dialect: `native-state/${artifact.metadata.architecture}`,
+    length: artifact.tensors.token_ids!.shape[0]!, width: embeddings.shape[1]!,
+    dtype: embeddings.dtype === 'BF16' ? 'bf16' : embeddings.dtype === 'F16' ? 'f16' : 'f32',
+    native_state: { ...structuredClone(artifact.metadata), embedding_dtype: embeddings.dtype },
+    producer: { checkpoint_sha256: artifact.metadata.checkpoint_sha256,
+      tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
+      embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 } };
+}
 
 /** Client interface to a tensor store: in memory, on disk, or a model server's block endpoints. */
 export interface NeuraleseStore {
@@ -288,8 +303,8 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
     return found && { meta: { ...found.meta }, data: found.data.slice() };
   }
   async meta(id: string): Promise<NeuraleseBlockMeta | undefined> {
-    const found = this.blocks.get(id);
-    return found && { ...found.meta };
+    const found = this.peek(id);
+    return found && { ...found };
   }
   async has(id: string): Promise<boolean> { return this.blocks.has(id) || this.nativeStates.has(id); }
   async putNativeState(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
@@ -299,6 +314,7 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
     const found = this.nativeStates.get(id);
     if (found) return structuredClone(found);
     this.nativeStates.set(id, stored);
+    this.noted.delete(id);
     return structuredClone(stored);
   }
   async getNativeState(id: string): Promise<NativeStateArtifact | undefined> {
@@ -307,7 +323,8 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
   }
   async hasNativeState(id: string): Promise<boolean> { return this.nativeStates.has(id); }
   peek(id: string): NeuraleseBlockMeta | undefined {
-    const found = this.blocks.get(id)?.meta ?? this.noted.get(id);
+    const native = this.nativeStates.get(id);
+    const found = this.blocks.get(id)?.meta ?? (native && nativeStateBlockMeta(native)) ?? this.noted.get(id);
     return found && { ...found };
   }
   note(meta: NeuraleseBlockMeta): void {

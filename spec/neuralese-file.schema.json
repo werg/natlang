@@ -26,7 +26,7 @@
     },
     "blocks": {
       "type": "object",
-      "propertyNames": { "$ref": "#/$defs/blockId" },
+      "propertyNames": { "$ref": "#/$defs/legacyBlockId" },
       "additionalProperties": {
         "type": "object",
         "required": ["dialect", "length", "width", "dtype"],
@@ -40,6 +40,15 @@
           "truncated": { "type": "boolean" }
         }
       }
+    },
+    "native_states": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/nativeBlockId" },
+      "additionalProperties": {
+        "type": "object", "required": ["bytes"], "additionalProperties": false,
+        "properties": { "bytes": { "type": "integer", "minimum": 1 } }
+      },
+      "description": "Exact native-state safetensors bodies, each stored as one U8 tensor and verified against its nzs1 content address."
     },
     "skill": {
       "type": "object",
@@ -63,8 +72,10 @@
     "provenance": { "type": "object" }
   },
   "$defs": {
-    "dialect": { "type": "string", "pattern": "^nd:[a-z0-9-]+@[0-9]+$" },
-    "blockId": { "type": "string", "pattern": "^nz1_[a-z2-7]+$" },
+    "dialect": { "type": "string", "pattern": "^(?:nd:[a-z0-9-]+@[0-9]+|native-state/[A-Za-z0-9_.-]+)$" },
+    "blockId": { "type": "string", "pattern": "^(?:nz1_[a-z2-7]+|nzs1_[a-z2-7]{52})$" },
+    "legacyBlockId": { "type": "string", "pattern": "^nz1_[a-z2-7]+$" },
+    "nativeBlockId": { "type": "string", "pattern": "^nzs1_[a-z2-7]{52}$" },
     "softRef": {
       "type": "object",
       "required": ["$neuralese"],
