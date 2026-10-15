@@ -93449,6 +93449,31 @@
         }
       },
       "notes": ""
+    },
+    {
+      "id": "luna-held-shapes-s52097-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52097-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "decision-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "78 independently reviewed exact accepted roots; 456 approved native decisions out of 735 materialized from 90 exact parents; twelve whole-parent process/quality holds, one individual repeated-action hold, and 17 unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v25 source review, visible-feed semantic review, protected checks, six literal-string/regex child bypass holds, two missing inline NL holds, one missing iterateOn hold, three prolonged child/process detour holds, one individual repeated world.look hold, and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Twelve exact-success roots held whole; one identical successive world.look decision held individually while later successful route actions remain. One clean paired source sibling shares a held source group, so broad group quarantine must not be used. Nine rejected roots reviewed; three exact source identities held by v25 and verbose Hotpot answers are not DPO negatives.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins v25. Exact trajectory/decision holds override broad diagnostic source-group quarantine with one collateral clean sibling. Global union requires ticket-bypass v3 and seven-ID non-success hold list."
     }
   ],
   "coverage_backlog": [
