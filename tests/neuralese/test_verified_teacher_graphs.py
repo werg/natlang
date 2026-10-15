@@ -104,6 +104,10 @@ def test_historical_batches_are_bound_to_their_own_packet_not_future_queue(tmp_p
     put('transfer-receipt.json', transfer)
     args = SimpleNamespace(source=source, protection_manifest=tmp_path / 'current.json')
     assert converter.source_binding(args)['collections'][item['source']]['sha256'] == item['sha256']
+    duplicate = put('duplicate-copy/teacher-source.json', collection)
+    transfer['files'].append({**item, 'path': str(duplicate)})
+    put('transfer-receipt.json', transfer)
+    assert converter.source_binding(args)['collections'][item['source']]['sha256'] == item['sha256']
     collection['source_cases_sha256'] = 'e' * 64
     put('batch-bindings/batch-0000/teacher-source.json', collection)
     item.update(bytes=path.stat().st_size, sha256=converter.sha256_file(path))
@@ -132,3 +136,75 @@ def test_content_dedup_uses_actual_tokens_and_weights_not_execution_identity(tmp
     file.write_text(json.dumps(graph) + '\n')
     with pytest.raises(ValueError, match='train graphs'):
         converter.seed_content_fingerprints([file], 'tokenizer-a')
+
+
+def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setattr(converter, 'current_protection', lambda _: {
+        'held': set(), 'quality': set(), 'pending': set(), 'proof': {}})
+    monkeypatch.setattr(converter.source_review, 'pending_family_hold_reason', lambda _: None)
+    def put(name, value):
+        path = tmp_path/name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(value)+'\n')
+        return path
+    teacher = {'teacher_role': 'independent stronger open teacher; not either student/onpolicy'}
+    put('penny-server-binding.json', teacher)
+    put('evidence-source-v2.json', {'scope': 'mutable future queue is irrelevant'})
+    rows, files, batches = [], [], []
+    for index in range(2):
+        row = copy.deepcopy(_row())
+        row['id'] = f'execution-{index}'
+        program = row['task']['program_ir']
+        program.update(id=f'program-{index}', source_groups=[f'train-{index}'])
+        rows.append(row)
+        base = f'batches/{index}'
+        cases = put(base+'/selected-cases.jsonl', program)
+        selection = {'schema': 'natlang.native-teacher-task-selection/1', 'status': 'passed',
+            'output_sha256': converter.sha256_file(cases), 'selected_ids': [program['id']],
+            'train_groups': program['source_groups'], 'held_groups': []}
+        selected = put(base+'/selection-proof.json', selection)
+        protection = put(base+'/global-protection-join.json', {
+            'schema': 'natlang.native-teacher-global-protection-join/1', 'status': 'passed',
+            'selected_packet_sha256': selection['output_sha256'],
+            'held_group_intersections': [], 'quality_group_intersections': []})
+        collection_source = f'/work/generation/batch-{index:04d}/teacher-source.json'
+        collection = put(base+'/teacher-source.json', {
+            'schema': 'natlang.sandbox-strong-teacher-collection/1',
+            'source_cases_sha256': selection['output_sha256'], 'protected_selection': selection,
+            'teacher': teacher})
+        files.append({'path': str(collection), 'source': collection_source,
+            'bytes': collection.stat().st_size, 'sha256': converter.sha256_file(collection)})
+        response = put(base+'/response.jsonl', row)
+        files.append({'row_id': row['id'], 'path': str(response),
+            'source': f'/work/generation/batch-{index:04d}/results/program/response.jsonl',
+            'bytes': response.stat().st_size, 'sha256': converter.sha256_file(response)})
+        batches.append({'collection_source': collection_source, **{name: {
+            'path': str(path.relative_to(tmp_path)), 'sha256': converter.sha256_file(path)}
+            for name, path in [('selection', selected), ('selected_cases', cases),
+                               ('global_protection_join', protection)]}})
+    source = tmp_path/'native-trajectories.jsonl'
+    source.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+    put('transfer-receipt.json', {'schema': 'natlang.verified-teacher-trajectory-transfer/1',
+        'training_admission': False, 'files': files,
+        'combined': {'path': str(source), 'bytes': source.stat().st_size,
+                     'sha256': converter.sha256_file(source)}})
+    mapping = {'schema': 'natlang.teacher-batch-source-bindings/1', 'batches': batches}
+    put('batch-source-bindings.json', mapping)
+    args = SimpleNamespace(source=source, protection_manifest=tmp_path/'current.json')
+    binding = converter.source_binding(args)
+    for row in rows:
+        assert converter.validate_teacher_row(row, binding)[0] == row['task']['program_ir']
+    # Global membership in another admitted packet cannot retarget a response.
+    swapped = copy.deepcopy(rows[0])
+    swapped['task']['program_ir'] = rows[1]['task']['program_ir']
+    with pytest.raises(ValueError, match='actual batch selected packet'):
+        converter.validate_teacher_row(swapped, binding)
+    changed = copy.deepcopy(rows[0])
+    changed['task']['program_ir']['semantics'] = {'rewritten': True}
+    with pytest.raises(ValueError, match='actual batch selected packet'):
+        converter.validate_teacher_row(changed, binding)
+    batches[0]['selected_cases'] = batches[1]['selected_cases']
+    put('batch-source-bindings.json', mapping)
+    with pytest.raises(ValueError, match='selected task packet differs'):
+        converter.source_binding(args)

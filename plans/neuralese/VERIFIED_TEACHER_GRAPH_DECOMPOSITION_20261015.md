@@ -9,3 +9,10 @@ The natlang policy is: use complete successful stronger-teacher executions as or
 5. Publish exact conversion receipts; current corpus registry admission remains explicit, then use existing manifest append and row-credit scheduling for both students.
 
 Source snapshot hashes, original execution identities and current held/source review are independent witnesses. A passed historical source selection is insufficient when current protections changed. Exact duplicates can be omitted with an explicit consumer-bound ledger; distinct successful completions of the same program remain useful.
+
+A changing teacher queue uses `batch-source-bindings.json` with one exact packet,
+selection proof and protection join per immutable collection receipt. The same
+verifier checks legacy single-packet snapshots and multi-packet snapshots. Every
+trajectory's full program must equal its own batch's selected program, not merely
+share an ID or belong to another admitted packet. Receipts and graph provenance
+carry the actual batch proof SHAs; current global protections remain additional.
