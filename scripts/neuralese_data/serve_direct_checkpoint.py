@@ -31,6 +31,7 @@ def main() -> None:
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8097)
+    parser.add_argument('--neuralese', action='store_true', help='restore the mixed checkpoint writer/readout too')
     parser.add_argument('--threads', type=int, default=4)
     args = parser.parse_args()
 
@@ -50,12 +51,13 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix='natlang-direct-serve-') as temp:
         (Path(temp) / 'request.json').write_text(json.dumps({'weights': str(checkpoint)}))
         engine = restore_engine({'dir': temp, 'heads': str(heads), 'device': args.device,
-                                 'prompt_rendering': args.prompt_rendering})
+                                 'prompt_rendering': args.prompt_rendering, 'neuralese': args.neuralese})
         engine.start()
         server = serve(engine, args.host, args.port)
         print(json.dumps({'event': 'direct_training_checkpoint_serving',
                           'checkpoint_sha256': args.checkpoint_sha256,
                           'heads_sha256': args.heads_sha256,
+                          'neuralese_binding': getattr(engine, 'neuralese_checkpoint_binding', None),
                           'prompt_rendering': args.prompt_rendering,
                           'listening': f'http://{server.server_address[0]}:{server.server_address[1]}'}),
               flush=True)

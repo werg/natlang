@@ -582,6 +582,49 @@ def pending_requests(stage_out: Path) -> list[Path]:
     return sorted(p.parent for p in root.glob('step-*/request.json')) if root.is_dir() else []
 
 
+def restore_neuralese_projections(engine, state):
+    """Restore value writer/readout from the SAME full checkpoint as its backbone.
+
+    Explicit opt-in: ordinary SFT task evaluations retain their token-only path.
+    A mixed/value-channel consumer must never silently omit trained projections.
+    """
+    from ..model.neuralese_projection import (projection_config_from_state,
+                                             projection_from_config, TokenChoiceProjection)
+    saved = state.get('neuralese_projection')
+    if not isinstance(saved, dict):
+        raise ValueError('Neuralese serving requires the checkpoint writer projection')
+    if engine.heads.read_markers or engine.heads.profile != 'raw-token-v1':
+        raise ValueError('direct Neuralese serving requires raw-token-v1 heads')
+    if engine.heads.cutoff != engine.backbone.num_layers:
+        raise ValueError('direct Neuralese serving requires full-depth heads')
+    config = projection_config_from_state(saved)
+    if (config['width'] != engine.backbone.config.hidden_size or
+            config['embedding_width'] != engine.backbone.embedding_weight.shape[1]):
+        raise ValueError('checkpoint writer projection does not match backbone geometry')
+    projection = projection_from_config(config)
+    projection.load_state_dict(saved, strict=True, assign=True)
+    projection = projection.to(device=engine.device).eval()
+    for parameter in projection.parameters():
+        parameter.requires_grad_(False)
+    options = (state.get('identity') or {}).get('options') or {}
+    choice = None
+    if state.get('token_choice_projection') is not None:
+        choice = TokenChoiceProjection(config['width'],
+            blocks=options.get('projection_blocks', 2), hidden=options.get('projection_hidden') or None,
+            kernel=options.get('projection_kernel', 4))
+        choice.load_state_dict(state['token_choice_projection'], strict=True, assign=True)
+        choice = choice.to(device=engine.device).eval()
+        for parameter in choice.parameters():
+            parameter.requires_grad_(False)
+    elif options.get('token_choice_projection'):
+        raise ValueError('checkpoint declares a token-choice projection but does not contain it')
+    engine.neuralese_projection, engine.token_choice_projection = projection, choice
+    engine.neuralese_checkpoint_binding = {'step': state.get('step'),
+        'source': 'same-full-checkpoint-as-backbone', 'writer': config,
+        'token_choice': choice is not None}
+    return engine.neuralese_checkpoint_binding
+
+
 def restore_engine(request: dict, *, dtype=None):
     """The serving engine of a direct-stage eval snapshot: the stage's clean heads engine (as the trainer builds it)
     with the snapshot's backbone trainables copied in by their plain names (a BF16 serving model: no quantization
@@ -604,6 +647,8 @@ def restore_engine(request: dict, *, dtype=None):
     if missing:
         raise ValueError(f'eval snapshot names absent from the serving model: {missing[:5]}')
     copy_restored_values(targets, saved)
+    if request.get('neuralese'):
+        restore_neuralese_projections(engine, state)
     saved = state = None
     return engine
 
