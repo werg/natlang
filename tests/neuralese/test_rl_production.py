@@ -223,3 +223,41 @@ def test_configure_retains_declared_task_quality_cadence(tmp_path, monkeypatch):
     state['optimizer'] = None
     with pytest.raises(ValueError, match='optimizer state'):
         production.configure(args)
+
+
+@pytest.mark.parametrize('legacy_empty_snapshot', [False, True])
+def test_solved_tasks_wait_then_admit_new_task_on_resume(tmp_path, monkeypatch, legacy_empty_snapshot):
+    source = tmp_path / 'cases.jsonl'
+    source.write_text(json.dumps({'id': 'solved', 'split': 'train'}) + '\n')
+    parent = tmp_path / 'checkpoint.pt'; parent.write_bytes(b'parent')
+    out = tmp_path / 'out'
+    config = tmp_path / 'config.json'
+    config.write_text(json.dumps({'out': str(out), 'checkpoint': str(parent), 'cases': str(source),
+        'endpoints': ['unused'], 'after_update': ['publish']}))
+    collected = []
+    def collect(**kwargs):
+        task = json.loads(Path(kwargs['cases']).read_text())['id']
+        collected.append(task)
+        (kwargs['out'] / 'rollouts.jsonl').write_text('')
+        return {'scored': 2, 'successes': 2, 'groups': [
+            {'task_id': task, 'scored': 2, 'mean': 1.}]}
+    monkeypatch.setattr(production, 'collect', collect)
+    production.run(config, rounds=1)
+    assert production.run(config, rounds=1)['phase'] == 'await_new_train_tasks'
+    snapshot = out / 'round-000001-selection.json'
+    assert not snapshot.exists()
+    if legacy_empty_snapshot:
+        snapshot.write_text(json.dumps({'selection': [], 'cases': []}))
+    with source.open('a') as stream:
+        stream.write(json.dumps({'id': 'new', 'split': 'train'}) + '\n')
+    production.run(config, rounds=1)
+    assert collected == ['solved', 'new']
+
+
+def test_empty_source_waits_without_freezing_selection(tmp_path):
+    source = tmp_path / 'cases.jsonl'; source.write_text('')
+    config = tmp_path / 'config.json'; out = tmp_path / 'out'
+    config.write_text(json.dumps({'out': str(out), 'checkpoint': 'unused', 'cases': str(source),
+        'endpoints': ['unused'], 'after_update': ['publish']}))
+    assert production.run(config, rounds=1)['phase'] == 'await_new_train_tasks'
+    assert not list(out.glob('*selection.json'))

@@ -250,13 +250,19 @@ def run(config_path, *, rounds=None):
             if not config.get('after_update') and not config.get('actor_command'):
                 raise ValueError('configure after_update before learning: every endpoint needs new weights')
             cases = list(read_jsonl(config['cases']))
-            if not cases or any(r.get('split') != 'train' for r in cases):
+            if any(r.get('split') != 'train' for r in cases):
                 raise ValueError('RL source must contain only train-split tasks')
+            if not cases:
+                state.update(phase='await_new_train_tasks', reason='train task source is empty')
+                write_json_durable(state_path, state)
+                return state
             if state['offset'] >= len(cases):
                 state['offset'] = 0
             attempt = state.get('collection_attempt', 0)
             round_dir = out / (f"round-{state['round']:06d}" + (f'-attempt-{attempt}' if attempt else ''))
             selection_file = out / f"round-{state['round']:06d}-selection.json"
+            if selection_file.exists() and not json.loads(selection_file.read_text()).get('selection'):
+                selection_file.unlink()  # repair pre-fix empty snapshots; no active collection owns them
             if selection_file.exists():
                 snapshot = json.loads(selection_file.read_text())
                 selection, selected = snapshot['selection'], snapshot['cases']
@@ -265,8 +271,9 @@ def run(config_path, *, rounds=None):
                     {'rows': config.get('rows_per_round', 32), 'group': config.get('group', 4), 'offset': state['offset']},
                     command=config.get('select_tasks_command'))
                 selected = [cases[item['row']] for item in selection]
-                write_json_durable(selection_file, {'source_sha256': sha256_file_hex(Path(config['cases'])),
-                    'selection': selection, 'cases': selected})
+                if selection:
+                    write_json_durable(selection_file, {'source_sha256': sha256_file_hex(Path(config['cases'])),
+                        'selection': selection, 'cases': selected})
             if not selection:
                 state.update(phase='await_new_train_tasks', reason='current train tasks solved; continue production SFT/new task admission')
                 write_json_durable(state_path, state)
@@ -334,7 +341,7 @@ def run(config_path, *, rounds=None):
                 if any(d['split'] == 'train' for d in docs) and (config.get('held_text_data') or any(d['split'] == 'test' for d in docs)):
                     mode = 'rft'
                     from .stage import document_has_values
-                    kinds = {document_has_values(doc) for doc in docs}
+                    kinds = {document_has_values(doc) for doc in docs if doc['split'] == 'train'}
                     rft_stages = (['text', 'value'] if len(kinds) > 1 else ['value' if True in kinds else 'text'])
                     rft_file = round_dir / 'rft-rollouts.jsonl'
                     rft_file.write_text(''.join(json.dumps(r) + '\n' for r in merged))
