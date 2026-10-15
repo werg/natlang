@@ -686,9 +686,13 @@ def main():
     resume_mode = args.resume or (args.resume_if_present and state_path.is_file())
     input_identity = {'records': {'path': str(args.records.resolve()), 'sha256': args.records_sha256},
         'pieces': {'path': str(args.pieces.resolve()), 'sha256': pieces_digest.hexdigest()},
-        'edges': {'path': str(args.edges.resolve()), 'sha256': args.edges_sha256},
-        'repair_pair_omissions': ({'path': str(args.repair_pair_omissions.resolve()), 'sha256': repair_sha}
-                                  if pair_only else None)}
+        'edges': {'path': str(args.edges.resolve()), 'sha256': args.edges_sha256}}
+    # Keep the original normal-build input identity byte-for-byte compatible
+    # with resume manifests written before pair-repair support was added. A
+    # pair-only supplement still binds its exact omission receipt and source.
+    if pair_only:
+        input_identity['repair_pair_omissions'] = {
+            'path': str(args.repair_pair_omissions.resolve()), 'sha256': repair_sha}
     tokenizer_identity = {model: {'source': source_fps[model], 'expanded': expanded_fps[model],
         'role_ids': list(role_ids[model]), 'model_id': model_ids[model],
         'base_inventory_sha256': base_inventory_shas[model]} for model in tokenizers}
