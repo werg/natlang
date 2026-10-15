@@ -305,7 +305,8 @@ class SharedStateModel(nn.Module):
     calls PortHeads or NeuraleseProjection. The wrapped legacy port's two old
     marker overrides are bypassed even when their reserved rows are reused.
     """
-    def __init__(self, port, marker_ids, rank=8, token_override_ids=()):
+    def __init__(self, port, marker_ids, rank=8, token_override_ids=(), token_override_dtype=torch.float32,
+                 sparse_row_dtype=torch.float32):
         super().__init__()
         if len(marker_ids) != 4 or len(set(marker_ids)) != 4:
             raise ValueError('shared-state Neuralese requires four distinct marker IDs')
@@ -317,15 +318,16 @@ class SharedStateModel(nn.Module):
                 getattr(port, name).requires_grad_(False)
         self.marker_ids = tuple(marker_ids)
         weight = port.embedding_weight
-        self.input_rows = nn.Parameter(weight[list(marker_ids)].detach().clone())
+        self.input_rows = nn.Parameter(weight[list(marker_ids)].detach().to(dtype=sparse_row_dtype or weight.dtype).clone())
         self.tied = port.output_weight is weight
         if not self.tied:
-            self.output_rows = nn.Parameter(port.output_weight[list(marker_ids)].detach().clone())
+            self.output_rows = nn.Parameter(port.output_weight[list(marker_ids)].detach().to(
+                dtype=sparse_row_dtype or port.output_weight.dtype).clone())
         self.adapter = LowRankTokenEmbedding(weight.shape[1], rank, device=weight.device, dtype=torch.float32)
         self.token_override_ids = ()
-        self.add_token_overrides(token_override_ids)
+        self.add_token_overrides(token_override_ids, dtype=token_override_dtype)
 
-    def add_token_overrides(self, token_ids):
+    def add_token_overrides(self, token_ids, *, dtype=torch.float32):
         """Add separately named sparse rows initialized from the unchanged pinned base."""
         token_ids = tuple(token_ids)
         if token_ids == self.token_override_ids:
@@ -337,9 +339,11 @@ class SharedStateModel(nn.Module):
                        for token in token_ids)):
             raise ValueError('sparse token overrides require distinct actual non-role vocabulary IDs')
         if token_ids:
-            self.extra_input_rows = nn.Parameter(self.port.embedding_weight[list(token_ids)].detach().clone())
+            self.extra_input_rows = nn.Parameter(self.port.embedding_weight[list(token_ids)].detach().to(
+                dtype=dtype or self.port.embedding_weight.dtype).clone())
             if not self.tied:
-                self.extra_output_rows = nn.Parameter(self.port.output_weight[list(token_ids)].detach().clone())
+                self.extra_output_rows = nn.Parameter(self.port.output_weight[list(token_ids)].detach().to(
+                    dtype=dtype or self.port.output_weight.dtype).clone())
         self.token_override_ids = token_ids
         return bool(token_ids)
 
@@ -675,6 +679,7 @@ def channel_checkpoint(model):
     """Native channel state alongside the shared trainer's full backbone state."""
     result = {'format': 'neuralese.native-channel/2', 'marker_names': ROLE_MARKERS,
             'marker_ids': model.marker_ids, 'width': model.input_rows.shape[1],
+            'sparse_row_dtype': str(model.input_rows.dtype),
             'rank': model.adapter.down.out_features,
             'native_linear_precision': getattr(model, 'native_linear_precision', 'ieee'),
             'adapter_dtype': str(model.adapter.down.weight.dtype),
@@ -689,6 +694,7 @@ def channel_checkpoint(model):
             'adapter': {name: value.detach().clone() for name, value in model.adapter.state_dict().items()}}
     if model.token_override_ids:
         result.update(token_override_ids=model.token_override_ids,
+            token_override_dtype=str(model.extra_input_rows.dtype),
             extra_input_rows=model.extra_input_rows.detach().clone(),
             extra_output_rows=None if model.tied else model.extra_output_rows.detach().clone())
     return result
@@ -709,8 +715,21 @@ def restore_channel_checkpoint(model, state):
         raise ValueError('native channel checkpoint sparse token IDs differ')
     if model.token_override_ids and (state['extra_output_rows'] is None) != model.tied:
         raise ValueError('native sparse token checkpoint tied-head contract differs')
+    if model.token_override_ids:
+        if state.get('token_override_dtype', expected['token_override_dtype']) != expected['token_override_dtype']:
+            raise ValueError('native sparse token checkpoint declared dtype differs')
+        for name in ('extra_input_rows',) + (() if model.tied else ('extra_output_rows',)):
+            saved, target = state.get(name), getattr(model, name)
+            if not isinstance(saved, torch.Tensor) or saved.shape != target.shape or saved.dtype != target.dtype:
+                raise ValueError('native sparse token checkpoint shape/dtype differs: ' + name)
     if (state['output_rows'] is None) != model.tied:
         raise ValueError('native channel checkpoint tied-head contract differs')
+    if state.get('sparse_row_dtype', expected['sparse_row_dtype']) != expected['sparse_row_dtype']:
+        raise ValueError('native sparse role checkpoint declared dtype differs')
+    for name in ('input_rows',) + (() if model.tied else ('output_rows',)):
+        saved, target = state.get(name), getattr(model, name)
+        if not isinstance(saved, torch.Tensor) or saved.shape != target.shape or saved.dtype != target.dtype:
+            raise ValueError('native sparse role checkpoint shape/dtype differs: ' + name)
     with torch.no_grad():
         model.input_rows.copy_(state['input_rows'])
         if not model.tied:

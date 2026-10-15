@@ -264,7 +264,13 @@ separate reasoning input/readout rows initialized from the loaded pinned rows.
 The readout adds a zero-initialized correction against the frozen original row,
 so the upgrade initially preserves logits exactly even across GEMM shapes.
 
-All existing optimizer tensors are mapped by parameter name and preserved;
+All sparse learned rows use FP32 master parameters while input/readout casts
+retain the backbone activation dtype. At BF16 production LR 1e-5, independent
+Mellum probes found nonzero reasoning-readout gradients but no changed row
+elements after 16 updates. The explicit upgrade therefore also promotes old
+BF16/FP16 sparse role rows to FP32 with exact numerical values and records that
+narrow parameter-schema change. Existing optimizer tensors are mapped by
+parameter name and preserved (old sparse moments are exactly upcast);
 only the added groups have fresh history. Weights, RNG, row credits and pending
 mandatory stages continue. The checkpoint records the sparse IDs, learned row
 content and upgrade history. Native identity and portable composites cover the

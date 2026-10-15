@@ -56,6 +56,7 @@ acting on the owner's recorded answer, moves an entry to "Done" with the date an
 | 2026-10-09 | Self-feedback (AR) qualification criterion | Channel faithfulness on the model's own history (plans/neuralese/DECISIONS.md) |
 
 2026-10-15 pending: existing reasoning-boundary sparse-row repair and explicit
-new-row-only optimizer migration; decomposition in
+new-row addition and exact sparse-master precision promotion in the optimizer;
+decomposition in
 [REASONING_TOKEN_ROWS_DECOMPOSITION.md](neuralese/shared-state/REASONING_TOKEN_ROWS_DECOMPOSITION.md).
 Separate independent integrated review requested before production adoption.

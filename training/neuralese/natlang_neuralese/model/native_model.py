@@ -25,14 +25,36 @@ def reasoning_token_ids(tokenizer):
     return found
 
 
-def upgrade_reasoning_tokens(model, tokenizer, config):
+def upgrade_reasoning_tokens(model, tokenizer, config, *, dtype=torch.float32, sparse_row_dtype=torch.float32):
     """Explicit output-preserving sparse-row addition to an existing native parent."""
     ids = reasoning_token_ids(tokenizer)
-    changed = model.add_token_overrides(ids)
-    if changed:config['token_override_ids'] = list(ids)
+    promoted = {}
+    promotion_names = ('input_rows',) + (() if model.tied else ('output_rows',))
+    if model.token_override_ids:
+        promotion_names += ('extra_input_rows',) + (() if model.tied else ('extra_output_rows',))
+    for name in promotion_names:
+        parameter = getattr(model, name)
+        desired = dtype if name.startswith('extra_') else sparse_row_dtype
+        if desired is not None and parameter.dtype != desired:
+            if desired != torch.float32 or parameter.dtype not in (torch.bfloat16, torch.float16):
+                raise ValueError('explicit sparse role precision repair permits only exact FP32 promotion')
+            old_dtype = parameter.dtype
+            with torch.no_grad():parameter.data = parameter.detach().to(dtype=torch.float32)
+            promoted[name] = {'from':str(old_dtype), 'to':'torch.float32'}
+    if promoted:
+        config['sparse_row_dtype'] = str(model.input_rows.dtype)
+        if model.token_override_ids:config['token_override_dtype'] = str(model.extra_input_rows.dtype)
+    changed = model.add_token_overrides(ids, dtype=dtype)
+    if changed:
+        config['token_override_ids'] = list(ids)
+        config['token_override_dtype'] = str(model.extra_input_rows.dtype)
+    if changed or promoted:config['sparse_row_dtype'] = str(model.input_rows.dtype)
     event = {'schema':'natlang.native-token-row-upgrade/1','added':changed,'token_ids':list(ids),
              'initialization':'exact-pinned-base-rows','existing_parameters':'unchanged'}
-    if changed:model._native_token_row_upgrade = event
+    if promoted:
+        event['promoted_parameters'] = promoted
+        event['existing_parameters'] = 'exact-numeric-values; declared sparse-role dtype promotion only'
+    if changed or promoted:model._native_token_row_upgrade = event
     return event
 
 
@@ -57,6 +79,12 @@ def native_identity(model, config, *, checkpoint_sha256):
     mode = config.get('native_linear_precision', 'ieee')
     if mode != getattr(model, 'native_linear_precision', 'ieee'):
         raise ValueError('native identity arithmetic differs from the actual model')
+    for key, actual in (('sparse_row_dtype', str(model.input_rows.dtype)),
+                        ('token_override_ids', list(model.token_override_ids))):
+        if key in config and config[key] != actual:
+            raise ValueError('native identity sparse row configuration differs: ' + key)
+    if model.token_override_ids and 'token_override_dtype' in config and config['token_override_dtype'] != str(model.extra_input_rows.dtype):
+        raise ValueError('native identity sparse token dtype differs from the actual model')
     if mode != 'ieee':
         digest.update(canonical_json_bytes({'native_linear_precision': mode}))
     tensors = [('base_embedding', model.port.embedding_weight), ('role_input_rows', model.input_rows),
@@ -90,7 +118,7 @@ def base_inventory(base):
     return files
 
 
-def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", token_override_ids=None):
+def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", token_override_ids=None, token_override_dtype=torch.float32, sparse_row_dtype=torch.float32):
     """Return (SharedStateModel, tokenizer, RoleTokens, model_config).
 
     No PortHeads or projected communication module is created. Provision the
@@ -126,7 +154,8 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
     port = port_type(hf, ControlTokens(roles.produce_open, roles.produce_close), markers=False)
     if token_override_ids is None:
         token_override_ids = reasoning_token_ids(tokenizer)
-    model = SharedStateModel(port, marker_ids=roles.ids, rank=rank, token_override_ids=token_override_ids)
+    model = SharedStateModel(port, marker_ids=roles.ids, rank=rank, token_override_ids=token_override_ids,
+                             token_override_dtype=token_override_dtype, sparse_row_dtype=sparse_row_dtype)
     from .native_precision import set_native_linear_precision
     set_native_linear_precision(model, native_linear_precision)
     from ..data.text_corpus import tokenizer_fingerprint
@@ -136,7 +165,10 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
               'rank': rank, 'marker_ids': list(roles.ids), 'precision': precision,
               'native_linear_precision': native_linear_precision,
               'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer), 'dtype': str(dtype)}
-    if model.token_override_ids:config['token_override_ids'] = list(model.token_override_ids)
+    config['sparse_row_dtype'] = str(model.input_rows.dtype)
+    if model.token_override_ids:
+        config['token_override_ids'] = list(model.token_override_ids)
+        config['token_override_dtype'] = str(model.extra_input_rows.dtype)
     return model, tokenizer, roles, config
 
 
@@ -158,6 +190,8 @@ def _bind_backbone_revision(model, checkpoint_sha256):
         'parameters': tuple((name,id(parameter),parameter._version) for name,parameter in model.named_parameters())}
     model._native_backbone_binding = {
         'checkpoint_sha256': checkpoint_sha256, 'token_override_ids': model.token_override_ids,
+        'sparse_row_dtype': str(model.input_rows.dtype),
+        'token_override_dtype': str(model.extra_input_rows.dtype) if model.token_override_ids else None,
         'parameters': tuple((name, id(parameter), parameter._version)
                             for name, parameter in model.port.hf.named_parameters()),
     }
@@ -197,7 +231,15 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
     model, tokenizer, roles, config = load_native_model(base or saved['base'], rank=saved['rank'],
         device=device, dtype=requested_dtype, inventory=saved['base_inventory'],
         native_linear_precision=saved.get('native_linear_precision', 'ieee'),
-        token_override_ids=saved.get('token_override_ids', ()))
+        token_override_ids=saved.get('token_override_ids', ()),
+        token_override_dtype={'torch.float32':torch.float32,'torch.bfloat16':torch.bfloat16,
+            'torch.float16':torch.float16}[saved.get('token_override_dtype', saved['dtype'])],
+        sparse_row_dtype={'torch.float32':torch.float32,'torch.bfloat16':torch.bfloat16,
+            'torch.float16':torch.float16}[saved.get('sparse_row_dtype', saved['dtype'])])
+    if 'token_override_dtype' not in saved and str(requested_dtype) == saved['dtype']:
+        config.pop('token_override_dtype', None)  # exact pre-master-row configuration contract
+    if 'sparse_row_dtype' not in saved and str(requested_dtype) == saved['dtype']:
+        config.pop('sparse_row_dtype', None)
     for key in ('architecture', 'rank', 'marker_ids', 'tokenizer_fingerprint', 'base_inventory_sha256', 'precision'):
         if config[key] != saved.get(key):
             raise ValueError(f'native checkpoint {key} changed during restoration')

@@ -14,12 +14,22 @@ new token spelling, tokenizer change or separate training algorithm.
    upgrade is requested. Record that upgrade and preserve old tensors, moments,
    FP8/RNG and every exposure credit. Only newly added optimizer groups start
    without history. Reject removals, shape changes or unexplained parameters.
+   Sparse learned input/readout rows use FP32 master parameters with the existing
+   activation casts. The explicit upgrade promotes old BF16/FP16 role rows and
+   their optimizer histories by exact numerical upcast; this declared dtype
+   repair is the only permitted change to an existing parameter schema.
 4. Bind new row IDs/content in native identity, checkpoints, portable composite
    artifacts and inference restoration. Semantic and RL use the same model and
    optimizer mechanisms; there is no per-model fork or vocabulary-sized copy.
 5. Verify exact old-parent logits and unchanged old moments at upgrade, actual
    learned boundary-row updates for both ports, durable roundtrips and normal
    shared trainer resume. Record actual full-size outcome separately.
+
+Independent review found BF16 Mellum readout reasoning rows remained completely
+unchanged through 16 nonzero-gradient updates at production LR 1e-5; existing
+role rows also lost most small updates. FP32 sparse masters fix accumulation
+without changing backbone precision, optimizer algorithms or step-0 logits.
+Channel restore rejects wrong shape/dtype before mutating any channel tensor.
 
 The root's QAD proof bounds open-versus-close log-odds by 0.0079262778 for ANY
 backbone weights with the frozen final norm/rows. Backbone training cannot

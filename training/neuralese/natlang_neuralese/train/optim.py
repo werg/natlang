@@ -138,13 +138,16 @@ class PortMuonAdamW(torch.optim.Optimizer):
             state[self.latent_key] = self.latent.state_dict()
         return state
 
-    def load_state_dict(self, state_dict, *, allow_added_names=()):
-        if state_dict.get("format") == FORMAT and state_dict.get("schema") != self.schema and allow_added_names:
+    def load_state_dict(self, state_dict, *, allow_added_names=(), allow_promoted_names=()):
+        if state_dict.get("format") == FORMAT and state_dict.get("schema") != self.schema and (allow_added_names or allow_promoted_names):
             previous = {item['name']: item for item in state_dict['schema']}
             current = {item['name']: item for item in self.schema}
             added = current.keys() - previous.keys()
-            if (not added or not added <= set(allow_added_names) or not previous.keys() <= current.keys()
-                    or any(current[name] != item for name, item in previous.items())):
+            changed = {name for name,item in previous.items() if current.get(name) != item}
+            promoted_ok = all(name in allow_promoted_names and current.get(name) == {**previous[name], 'dtype':'torch.float32'}
+                              and previous[name]['dtype'] in ('torch.bfloat16','torch.float16') for name in changed)
+            if (not (added or changed) or not added <= set(allow_added_names) or not previous.keys() <= current.keys()
+                    or not promoted_ok):
                 raise ValueError('explicit native optimizer addition changes existing parameter contracts')
             expanded = {**state_dict, 'schema': self.schema}
             # Match by declared names, never by shifted serialized parameter

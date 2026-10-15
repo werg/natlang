@@ -118,7 +118,11 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
             if name in added_names:continue  # exact declared sparse-row addition, verified again at restore
             parent = parent_parameters[name]
             if name in names:
-                if value is parent or value.shape != parent.shape or value.dtype != parent.dtype:
+                promotion = (explicit_upgrade or {}).get('promoted_parameters', {}).get(name)
+                promoted_ok = (name in {'input_rows','output_rows','extra_input_rows','extra_output_rows'}
+                    and promotion == {'from':str(parent.dtype),'to':'torch.float32'}
+                    and parent.dtype in (torch.bfloat16,torch.float16) and value.dtype == torch.float32)
+                if value is parent or value.shape != parent.shape or value.dtype != parent.dtype and not promoted_ok:
                     raise ValueError('native updated parameters must be detached matching parent copies')
             elif value is not parent:
                 raise ValueError('native patch changed an undeclared model parameter: '+name)
@@ -170,12 +174,20 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
         'output_embedding_weight_sha256': output_embed_sha,
         'optimizer': optimizer or {}, 'update_provenance': update_provenance or {}}
     manifest['model_config']['native_linear_precision'] = model_config.get('native_linear_precision','ieee')
+    if 'sparse_row_dtype' in model_config:
+        manifest['model_config']['sparse_row_dtype'] = model_config['sparse_row_dtype']
     if model.token_override_ids:
         manifest['model_config']['token_override_ids'] = list(model.token_override_ids)
+        if 'token_override_dtype' in model_config:
+            manifest['model_config']['token_override_dtype'] = model_config['token_override_dtype']
     bound_tokens = tuple((getattr(model, '_native_backbone_binding', None) or {}).get('token_override_ids', ()))
-    if bound_tokens != model.token_override_ids:
+    bound_dtype = (getattr(model, '_native_backbone_binding', None) or {}).get('sparse_row_dtype', str(model.input_rows.dtype))
+    actual_extra_dtype = str(model.extra_input_rows.dtype) if model.token_override_ids else None
+    bound_extra_dtype = (getattr(model, '_native_backbone_binding', None) or {}).get('token_override_dtype', actual_extra_dtype)
+    if bound_tokens != model.token_override_ids or bound_dtype != str(model.input_rows.dtype) or bound_extra_dtype != actual_extra_dtype:
         upgrade = getattr(model, '_native_token_row_upgrade', None)
-        if bound_tokens or not upgrade or upgrade.get('token_ids') != list(model.token_override_ids):
+        if (bound_tokens != model.token_override_ids and bound_tokens or not upgrade
+                or upgrade.get('token_ids') != list(model.token_override_ids)):
             raise ValueError('native composite sparse-row addition requires its explicit parent upgrade')
         manifest['token_row_upgrade'] = upgrade
     payload = canonical_json_bytes(manifest) + b'\n'
@@ -287,10 +299,18 @@ def _apply_native_composite_checkpoint(path, restored):
     if manifest.get('token_row_upgrade'):
         from .native_model import upgrade_reasoning_tokens
         declared = manifest['token_row_upgrade']
-        if (model.token_override_ids or declared.get('schema') != 'natlang.native-token-row-upgrade/1'
-                or declared.get('added') is not True):
+        if (declared.get('schema') != 'natlang.native-token-row-upgrade/1'
+                or declared.get('added') is True and model.token_override_ids
+                or declared.get('added') is not True and not declared.get('promoted_parameters')):
             raise ValueError('native composite cannot replace an existing sparse-row contract')
-        actual = upgrade_reasoning_tokens(model, tokenizer, config)
+        actual = upgrade_reasoning_tokens(model, tokenizer, config,
+            dtype={'torch.float32':torch.float32,'torch.bfloat16':torch.bfloat16,
+                   'torch.float16':torch.float16}[manifest['model_config'].get('token_override_dtype',config['dtype'])],
+            sparse_row_dtype={'torch.float32':torch.float32,'torch.bfloat16':torch.bfloat16,
+                   'torch.float16':torch.float16}[manifest['model_config'].get('sparse_row_dtype',config['dtype'])])
+        if 'token_override_dtype' not in manifest['model_config']:
+            config.pop('token_override_dtype', None)
+        if 'sparse_row_dtype' not in manifest['model_config']:config.pop('sparse_row_dtype', None)
         if actual != declared or config.get('token_override_ids') != manifest['model_config'].get('token_override_ids'):
             raise ValueError('native composite reasoning-row upgrade differs from actual pinned tokenizer')
     scope = manifest.get('parameter_scope','native-interface')

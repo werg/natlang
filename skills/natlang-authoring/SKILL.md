@@ -333,7 +333,10 @@ these are separate from the four Neuralese role markers. Old parents retain
 exact behavior until the declared `--learn-reasoning-boundaries` upgrade. A
 sparse-token checkpoint mismatch requires the exact checkpoint's token-ID
 contract; do not rename markers or replace its tokenizer. An optimizer schema
-mismatch requires the explicit new-row-only migration, preserving all existing
-moments/RNG/exposure; never reset the optimizer to bypass it. Reload actors from
+mismatch requires the explicit sparse-row migration: added reasoning rows and
+exact BF16/FP16-to-FP32 promotion of existing sparse masters are the only
+permitted schema changes. Preserve moment values/RNG/exposure; never reset the
+optimizer to bypass it. Sparse row shape/dtype errors require the exact saved
+row contract, not broadcasting or silent casts. Reload actors from
 the new actual checkpoint and rebind/requalify semantic communication after
 updates. No new instruction text or reasoning-format workaround is needed.

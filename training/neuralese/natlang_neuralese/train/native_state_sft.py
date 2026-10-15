@@ -540,7 +540,7 @@ def main(argv=None):
     if args.learn_reasoning_boundaries:
         from ..model.native_model import upgrade_reasoning_tokens
         token_upgrade = upgrade_reasoning_tokens(model, tokenizer, config)
-        if token_upgrade['added']:
+        if token_upgrade['added'] or token_upgrade.get('promoted_parameters'):
             checkpoint_options['token_row_upgrade'] = token_upgrade
     from ..model.native_precision import set_native_linear_precision, resolve_native_training_precision
     previous_precision = config.get('native_linear_precision', 'ieee')
@@ -550,7 +550,7 @@ def main(argv=None):
     saved_training = resume or shared_resume or {}
     checkpoint_options['withdrawal_history']=list((saved_training.get('options') or {}).get('withdrawal_history') or [])
     token_history = list((saved_training.get('options') or {}).get('token_row_upgrade_history') or [])
-    if token_upgrade and token_upgrade['added']:
+    if token_upgrade and (token_upgrade['added'] or token_upgrade.get('promoted_parameters')):
         token_history.append({**token_upgrade, 'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
                               'weights_optimizer_rng_exposure': 'preserved'})
     checkpoint_options['token_row_upgrade_history'] = token_history
@@ -674,6 +674,10 @@ def main(argv=None):
         previous_config = previous.get('config') or {}
         if token_upgrade and token_upgrade['token_ids']:
             previous_config = {**previous_config, 'token_override_ids': config['token_override_ids']}
+            if 'token_override_dtype' in config:
+                previous_config['token_override_dtype'] = config['token_override_dtype']
+        if token_upgrade and (token_upgrade['added'] or token_upgrade.get('promoted_parameters')):
+            previous_config = {**previous_config, 'sparse_row_dtype':config['sparse_row_dtype']}
         if not same_source_precision_identity(previous_config, config):
             raise ValueError('native SFT continuation changes model identity beyond declared GEMM arithmetic')
         if previous.get('schedule') not in {'source-order-stream/1', 'row-visit-deficit/2'}:
@@ -747,9 +751,10 @@ def main(argv=None):
     metrics = {}
     exposure_counts = {key: 0 for key in source_row_bindings}
     if resume is not None:
-        if token_upgrade and token_upgrade['added']:
+        if token_upgrade and (token_upgrade['added'] or token_upgrade.get('promoted_parameters')):
             optimizer.load_state_dict(resume['optimizer'], allow_added_names=(
-                'interface.extra_input_rows', 'interface.extra_output_rows'))
+                'interface.extra_input_rows', 'interface.extra_output_rows'),
+                allow_promoted_names=tuple('interface.'+name for name in token_upgrade.get('promoted_parameters', {})))
         else:
             optimizer.load_state_dict(resume['optimizer'])
         # Adaptive production may tune the step size without discarding moments.

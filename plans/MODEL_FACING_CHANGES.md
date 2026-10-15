@@ -712,3 +712,10 @@ actual task outcomes and the live48-sample behavioral measurement remain debt
 for the next useful own-model CoreWeave training/teacher window. No task lift
 is inferred from tiny deterministic optimizer tests. Both integration skills
 record exact checkpoint/token/optimizer recovery.
+
+2026-10-15 independent sparse-row precision correction: actual BF16 Mellum
+reasoning readout rows stayed unchanged across 16 nonzero-gradient updates at
+LR 1e-5. All learned sparse rows now use FP32 masters; declared legacy upgrades
+exactly promote old sparse values/moments while preserving backbone arithmetic,
+initial logits, RNG and exposure. No prompt or token spelling changes. Live
+behavioral measurement remains the same pending training-window debt above.
