@@ -145,3 +145,30 @@ def load_engine(base: str | None = None, lora: str | None = None, heads_checkpoi
     engine.foundation = foundation if not heads.read_markers else None
     engine.base_dir = base  # the HF base, for exports (adapter LoRAs)
     return engine
+
+
+def load_native_engine(checkpoint: str, *, base: str | None = None, device: str = "cpu", dtype=None,
+                       prompt_rendering: str = "full"):
+    """Restore a native-state checkpoint through the shared model loader and serving engine."""
+    import torch
+
+    from ..common.hashing import sha256_file_hex_cached
+    from ..model.native_model import load_native_checkpoint, native_identity
+    from .engine import Engine
+    from .store import TensorStore
+
+    model, tokenizer, roles, config, _state = load_native_checkpoint(
+        checkpoint, base=base, device=device, dtype=dtype)
+    model.eval()
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
+    checkpoint_sha256 = sha256_file_hex_cached(checkpoint)
+    identity = native_identity(model, config, checkpoint_sha256=checkpoint_sha256)
+    engine = Engine(model.port, None, tokenizer, TensorStore(), f"native-state/{config['architecture']}",
+                    model_name=f"native-{config['architecture']}", device=device,
+                    prompt_rendering=prompt_rendering, shared_model=model, role_tokens=roles,
+                    model_config=config, checkpoint_sha256=identity['checkpoint_sha256'],
+                    embedding_weight_sha256=identity['embedding_weight_sha256'])
+    engine.native_identity = identity
+    engine.native_checkpoint = str(checkpoint)
+    return engine

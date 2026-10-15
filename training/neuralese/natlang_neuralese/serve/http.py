@@ -171,12 +171,25 @@ def make_handler(engine: Engine):
             if self.path == "/v1/neuralese/info":
                 from ..data.prompt_rendering import prompt_rendering_identity
                 prompt_identity = prompt_rendering_identity(engine.prompt_rendering)
-                return self._json(200, {"dialects": [engine.dialect], "width": engine.width, "dtype": "f32",
+                native_enabled = bool(getattr(engine, "native_state_enabled", False))
+                return self._json(200, {"dialects": [engine.dialect], "width": engine.width,
+                                        "dtype": (str(engine.backbone.embedding_weight.dtype).replace("torch.", "")
+                                                  if native_enabled else "f32"),
                                         "store": {"owners": True, "persistent": engine.store.directory is not None},
-                                        "max_block_length": engine.max_block, "context": engine.context, "grad": True, "grad_order": 2, "stream": True,
-                                        "cutoff": engine.heads.cutoff, "adapters": ["xs", "tiny"],
-                                        "projections": {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
-                                                        for name, p in engine.projections.items()},
+                                        "max_block_length": engine.max_block, "context": engine.context,
+                                        "grad": not native_enabled, "grad_order": 2 if not native_enabled else 0, "stream": True,
+                                        "cutoff": None if native_enabled else engine.heads.cutoff,
+                                        "adapters": [] if native_enabled else ["xs", "tiny"],
+                                        "projections": {} if native_enabled else
+                                            {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
+                                             for name, p in engine.projections.items()},
+                                        **({"native_state": {"enabled": True, "format": "neuralese.native-state/1",
+                                                              "architecture": engine.model_config.get("architecture"),
+                                                              "checkpoint_sha256": engine.checkpoint_sha256,
+                                                              "tokenizer_fingerprint": engine.model_config.get("tokenizer_fingerprint"),
+                                                              "embedding_weight_sha256": engine.embedding_weight_sha256,
+                                                              "role_marker_ids": list(engine.role_tokens.ids)}}
+                                           if native_enabled else {}),
                                         "server": "reference",
                                         **({"rl_policy_binding": engine.rl_policy_binding}
                                            if getattr(engine, "rl_policy_binding", None) else {}),
@@ -494,8 +507,13 @@ def make_handler(engine: Engine):
                         streamed += out
                         self._event(chunk({"content": out}))
                 else:
-                    self._event(chunk({"content": [{"type": "neuralese", "id": item["neuralese"]["id"]}]},
-                                      extra={"neuralese": {"block": item["neuralese"]}}))
+                    if "native_state" in item:
+                        block = item["native_state"]
+                        self._event(chunk({"content": [{"type": "native_state", "id": block["id"]}]},
+                                          extra={"native_state": {"block": block}}))
+                    else:
+                        self._event(chunk({"content": [{"type": "neuralese", "id": item["neuralese"]["id"]}]},
+                                          extra={"neuralese": {"block": item["neuralese"]}}))
             try:
                 response = future.result()
                 choice = response["choices"][0]
@@ -513,9 +531,12 @@ def make_handler(engine: Engine):
                                                                         c["function"]["arguments"], str) else arguments_text(
                                                                         c["function"]["arguments"])}}
                                                       for i, c in enumerate(calls)]}))
-                self._event(chunk({}, choice["finish_reason"], {"x_natlang_message": message,
-                                                                "usage": response["usage"],
-                                                                "neuralese": response["neuralese"],
+                extra = {"x_natlang_message": message, "usage": response["usage"]}
+                if "native_state" in response:
+                    extra["native_state"] = response["native_state"]
+                if "neuralese" in response:
+                    extra["neuralese"] = response["neuralese"]
+                self._event(chunk({}, choice["finish_reason"], {**extra,
                                                                 **({'x_natlang_rl_capture': response['x_natlang_rl_capture']}
                                                                    if 'x_natlang_rl_capture' in response else {}),
                                                                 **({"x_natlang_guidance": response["x_natlang_guidance"]}

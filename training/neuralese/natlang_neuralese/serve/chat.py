@@ -51,14 +51,15 @@ def placeholder(index: int) -> str:
 
 def _is_parts(value) -> bool:
     return isinstance(value, list) and value and all(
-        isinstance(p, dict) and p.get("type") in ("text", "neuralese") for p in value)
+        isinstance(p, dict) and p.get("type") in ("text", "neuralese", "native_state") for p in value)
 
 
 @dataclass
 class Rendered:
     segments: list  # str (template text) or int (index into `blocks`)
-    blocks: list[str]  # block IDs in order of appearance
+    blocks: list[str]  # legacy or native state IDs in order of appearance
     escape_nonce: str = ""
+    block_kinds: list[str] | None = None
 
 
 def escape_specials(text: str, specials, nonce: str = "") -> str:
@@ -141,13 +142,15 @@ def normalize_tool_call_arguments(messages: list[dict]) -> tuple[list[dict], lis
     return normalized, conversions
 
 
-def render_messages(messages: list[dict], tools: list | None, apply_template, specials=(), block_type=None) -> Rendered:
+def render_messages(messages: list[dict], tools: list | None, apply_template, specials=(), block_type=None,
+                    native_state: bool = False) -> Rendered:
     """Messages with block parts → template text cut into text runs and block references.
 
     `apply_template(messages, tools)` renders plain messages with the model's chat template and the generation prompt.
     `specials` are the tokenizer's special-token strings; occurrences inside content are escaped (spec §3.3).
     """
     blocks: list[str] = []
+    block_kinds: list[str] = []
     value_types, native_values = {}, set()
     # An input cannot manufacture our internal placeholders. Choose a nonce
     # absent from every supplied string; private-use characters remain ordinary text.
@@ -165,11 +168,16 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
                 out.append(escape_specials(part.get("text") or "", specials, nonce) if escape else (part.get("text") or ""))
             else:
                 block_id = part.get("id")
-                if not isinstance(block_id, str) or not block_id.startswith("nz1_"):
-                    raise RequestError("neuralese-bad-part", f"invalid block part {part!r}")
+                kind = part["type"]
+                prefix = "nzs1_" if kind == "native_state" else "nz1_"
+                if kind == "native_state" and not native_state:
+                    raise RequestError("neuralese-native-state-unavailable", "this server is not serving native shared state")
+                if not isinstance(block_id, str) or not block_id.startswith(prefix):
+                    raise RequestError("neuralese-bad-part", f"invalid {kind} part {part!r}")
                 out.append(f"{input_prefix}{len(blocks)}{_PH_CLOSE}")
-                value_types[len(blocks)] = part.get("value_type") or (block_type(block_id) if block_type else None)
+                value_types[len(blocks)] = part.get("value_type") or (block_type(block_id) if block_type and kind == "neuralese" else None)
                 blocks.append(block_id)
+                block_kinds.append(kind)
         return "".join(out)
 
     plain = []
@@ -191,7 +199,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
             def inline(value):
                 # An argument value that is a part list holding a block (as replies return a written value:
                 # `"value": [{"type": "neuralese", "id": …}]`) renders as that block inside the value's string.
-                if _is_parts(value) and any(part["type"] == "neuralese" for part in value):
+                if _is_parts(value) and any(part["type"] in ("neuralese", "native_state") for part in value):
                     value = flatten(value, escape=False)
                     marker = input_pattern.fullmatch(value)
                     if marker and value_types.get(int(marker.group(1))) == "unknown":
@@ -228,7 +236,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
     seen = sorted(s for s in segments if isinstance(s, int))
     if seen != list(range(len(blocks))):
         raise RequestError("neuralese-render", "the chat template dropped or duplicated a block")
-    return Rendered(segments, blocks, nonce)
+    return Rendered(segments, blocks, nonce, block_kinds)
 
 
 _VALUE = "natlangValue7f3a9c"  # printable, so no template escapes it; stands for a call argument's value while the template renders the call

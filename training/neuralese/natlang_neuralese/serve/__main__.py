@@ -8,7 +8,7 @@ import os
 import re
 import sys
 
-from . import load_engine
+from . import load_engine, load_native_engine
 from .http import serve
 
 
@@ -22,6 +22,8 @@ def main(argv=None):
     parser.add_argument("--base", default=None)
     parser.add_argument("--lora", default=None)
     parser.add_argument("--heads", default=None, help="S3 trainer checkpoint with port heads and control rows")
+    parser.add_argument("--native-checkpoint", default=None,
+                        help="complete native shared-state model checkpoint; restores without projected PortHeads")
     parser.add_argument("--recurrence-checkpoint", default=None,
                         help="complete learned recurrent checkpoint; requires its exact runtime qualification")
     parser.add_argument("--runtime-qualification", default=None,
@@ -58,6 +60,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.direct_base_snapshot and not args.direct_artifact:
         parser.error('--direct-base-snapshot requires --direct-artifact')
+    if args.native_checkpoint and (args.direct_artifact or args.recurrence_checkpoint or args.runtime_qualification or
+            args.lora or args.heads or args.cutoff is not None or args.max_block is not None or args.dialect or
+            args.projection or args.direct_base_snapshot):
+        parser.error('--native-checkpoint cannot be combined with legacy heads, projection, direct or recurrence inputs')
     if args.deterministic_gradients:
         os.environ["NATLANG_NEURALESE_DETERMINISTIC"] = "1"
         os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -72,7 +78,10 @@ def main(argv=None):
     if args.device == "auto":
         args.device = auto_device()
     cap_cuda_memory(args.device, args.memory_gb)
-    if args.recurrence_checkpoint:
+    if args.native_checkpoint:
+        engine = load_native_engine(args.native_checkpoint, base=args.base, device=args.device, dtype=model_dtype,
+                                    prompt_rendering=args.prompt_rendering or "full")
+    elif args.recurrence_checkpoint:
         if model_dtype is not None:
             parser.error('--dtype cannot override a recurrence checkpoint runtime qualification')
         if not args.runtime_qualification or any(value is not None for value in
@@ -143,7 +152,9 @@ def main(argv=None):
     server = serve(engine, args.host, args.port)
     from ..data.prompt_rendering import prompt_rendering_identity
     print(json.dumps({"listening": f"http://{server.server_address[0]}:{server.server_address[1]}",
-                      "dialect": engine.dialect, "cutoff": engine.heads.cutoff, "device": args.device,
+                      "dialect": engine.dialect, "cutoff": engine.heads.cutoff if engine.heads else None,
+                      "architecture": getattr(engine, "model_config", {}).get("architecture"),
+                      "native_checkpoint": getattr(engine, "native_checkpoint", None), "device": args.device,
                       "model_dtype": str(next(engine.backbone.parameters()).dtype),
                       "prompt_rendering": engine.prompt_rendering,
                       "prompt_rendering_identity_sha256":

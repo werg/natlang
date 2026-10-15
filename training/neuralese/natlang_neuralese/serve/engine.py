@@ -228,17 +228,34 @@ class Sequence:
     pending: list = field(default_factory=list)  # undecoded token IDs while streaming
     adapters: list = field(default_factory=list)  # resolved (spec, coefficients, scale) of the request's adapters
     started: float = field(default_factory=time.perf_counter)
+    native_capture_chunks: list = field(default_factory=list)
+    native_capture_ids: list[int] = field(default_factory=list)
+    native_capture_open: bool = False
+    native_imports: list = field(default_factory=list)
+    native_rl_prompt: list = field(default_factory=list)
+    native_rl_writes: list = field(default_factory=list)
+    native_write_start_sample: int | None = None
+    native_sampling_seed: int | None = None
 
 
 class Engine:
-    def __init__(self, backbone: PortBackbone, heads: PortHeads, tokenizer, store: TensorStore, dialect: str,
+    def __init__(self, backbone: PortBackbone, heads: PortHeads | None, tokenizer, store: TensorStore, dialect: str,
                  max_block: int = 64, model_name: str = "natlang-neuralese", device: str = "cpu",
                  prefill_tokens: int = 8192, prefill_padding: bool = False, context: int | None = None,
-                 prompt_rendering: str = "full"):
+                 prompt_rendering: str = "full", *, shared_model=None, role_tokens=None, model_config=None,
+                 checkpoint_sha256: str | None = None, embedding_weight_sha256: str | None = None):
         from .chat import bind_history_reasoning
         # Serving renders history as the backbone's training text does (its declared chat.BACKBONE_HISTORY_REASONING).
         tokenizer = bind_history_reasoning(tokenizer, model_type=getattr(getattr(backbone, "config", None), "model_type", None))
         self.backbone, self.heads, self.tokenizer, self.store = backbone, heads, tokenizer, store
+        self.shared_model, self.role_tokens = shared_model, role_tokens
+        self.model_config = dict(model_config or {})
+        self.native_state_enabled = shared_model is not None
+        self.checkpoint_sha256 = checkpoint_sha256
+        self.embedding_weight_sha256 = embedding_weight_sha256
+        if self.native_state_enabled:
+            if heads is not None or role_tokens is None or not checkpoint_sha256 or not embedding_weight_sha256:
+                raise ValueError("native serving requires role tokens and exact checkpoint/embedding identities, with no PortHeads")
         # Padded-token budget of one batched prefill (new requests that arrive in the same round).
         self.prefill_tokens = prefill_tokens
         # Equal-length prompts share positions. Different matrix batch shapes can
@@ -353,7 +370,8 @@ class Engine:
         messages, tools = apply_prompt_rendering(messages, tools, self.prompt_rendering,
                                                  keep_supplied_tools=True)
         return render_messages(messages, tools, template or self._template, self.specials,
-                               block_type=self.block_value_type)
+                               block_type=self.block_value_type,
+                               native_state=getattr(self, "native_state_enabled", False))
 
     def _tokens(self, text: str) -> list[int]:
         cache = getattr(self, '_token_cache', None)
@@ -463,8 +481,14 @@ class Engine:
     def _prompt_plan(self, messages, tools) -> list:
         """Render and tokenize on the caller's CPU thread; preserve segment boundaries."""
         rendered = self.render_request(messages, tools)
-        return [("tokens", self._template_tokens(segment, rendered.escape_nonce)) if isinstance(segment, str)
-                else ("block", rendered.blocks[segment]) for segment in rendered.segments]
+        plan = []
+        for segment in rendered.segments:
+            if isinstance(segment, str):
+                plan.append(("tokens", self._template_tokens(segment, rendered.escape_nonce)))
+            else:
+                kind = (rendered.block_kinds or ["neuralese"] * len(rendered.blocks))[segment]
+                plan.append(("native_state" if kind == "native_state" else "block", rendered.blocks[segment]))
+        return plan
 
     def prompt_positions(self, messages, tools) -> int:
         """Positions the rendered prompt takes in the cache (its `usage.prompt_tokens`), without running the model:
@@ -533,9 +557,211 @@ class Engine:
                 raise RequestError("forced-plan", f"unsupported forced item {item!r}")
         return plan
 
+    def _native_forward(self, ids, cache, *, producing=False):
+        from ..model.shared_state import native_step
+        token_ids = torch.tensor([ids], dtype=torch.long, device=self.backbone.embedding_weight.device)
+        return native_step(self.shared_model, token_ids, cache, producing=producing)
+
+    def _native_logits(self, hidden):
+        return self.shared_model.logits(hidden[:, -1])
+
+    def _native_consume(self, seq, block_id):
+        from ..model.shared_state import splice_block
+        record = self.store.get_native_state(block_id)
+        if record is None:
+            raise RequestError("neuralese-unknown-native-state", f"{block_id} is not in this server's store; PUT it first")
+        block = record.block
+        architecture = self.model_config.get("architecture") or self.backbone.config.model_type
+        layer_kinds = tuple("attention" if self.backbone.is_attention(index) else "finite_convolution"
+                             for index in range(self.backbone.num_layers))
+        try:
+            block.require_native(checkpoint_sha256=self.checkpoint_sha256,
+                                 tokenizer_fingerprint=self.model_config["tokenizer_fingerprint"],
+                                 embedding_weight_sha256=self.embedding_weight_sha256,
+                                 architecture=architecture, layer_kinds=layer_kinds)
+            exact = True
+        except ValueError:
+            exact = False
+        open_out = self._native_forward([self.role_tokens.consume_open], seq.cache)
+        seq.cache = open_out["cache"]
+        if seq.request.rl_capture:
+            seq.native_rl_prompt.append({"kind": "tokens", "token_ids": [self.role_tokens.consume_open],
+                                         "producing": [False]})
+        if exact:
+            seq.cache = splice_block(self.shared_model, seq.cache, block,
+                                     checkpoint_sha256=self.checkpoint_sha256,
+                                     tokenizer_fingerprint=self.model_config["tokenizer_fingerprint"],
+                                     embedding_weight_sha256=self.embedding_weight_sha256)
+            mode = "exact-native-state"
+            if seq.request.rl_capture:
+                seq.native_rl_prompt.append({"kind": "native_state", "id": block_id,
+                    "native_identity": self._native_block_identity(block)})
+        else:
+            # Until joint semantic adaptation is trained, foreign state is
+            # best-effort only: discard its tensors and rebuild target KV from text.
+            fallback_ids = self._tokens(block.text)
+            if not fallback_ids:
+                raise RequestError("neuralese-native-state-empty-text", f"{block_id} has no text for target reencoding")
+            output = self._native_forward(fallback_ids, seq.cache)
+            seq.cache = output["cache"]
+            mode = "best-effort-text-retokenization"
+            if seq.request.rl_capture:
+                seq.native_rl_prompt.append({"kind": "tokens", "token_ids": fallback_ids,
+                                             "producing": [False] * len(fallback_ids)})
+        close_out = self._native_forward([self.role_tokens.consume_close], seq.cache)
+        seq.cache = close_out["cache"]
+        if seq.request.rl_capture:
+            seq.native_rl_prompt.append({"kind": "tokens", "token_ids": [self.role_tokens.consume_close],
+                                         "producing": [False]})
+        seq.logits = self._native_logits(close_out["h_final"])
+        seq.native_imports.append({"id": block_id, "mode": mode})
+
+    @staticmethod
+    def _native_block_identity(block):
+        return {name: getattr(block, name) for name in
+                ("checkpoint_sha256", "tokenizer_fingerprint", "embedding_weight_sha256", "architecture")}
+
+    def _native_prefill(self, seq):
+        if seq.request.guidance is not None:
+            raise RequestError("native-guidance-unsupported", "native shared-state serving does not yet implement guided sampling")
+        if seq.request.adapters:
+            raise RequestError("native-adapters-unsupported", "native shared-state serving does not yet implement legacy block adapters")
+        if seq.request.template or seq.request.forced or seq.request.neuralese_length is not None or seq.request.neuralese_passes is not None:
+            raise RequestError("native-write-controls-unsupported", "native shared-state serving uses sampled role markers, not legacy forced writes")
+        if seq.request.neuralese_max_length is not None or seq.request.neuralese_temperature:
+            raise RequestError("native-write-controls-unsupported", "native shared-state spans have no legacy write length or temperature control")
+        if seq.request.rl_capture:
+            if seq.request.temperature <= 0:
+                raise RequestError("native-rl-sampling-law", "native rollout capture requires positive temperature")
+        seq.cache = None
+        seq.native_sampling_seed = (int(seq.request.seed) if seq.request.seed is not None else
+                                    derive_seed("native-chat", seq.request.request_id))
+        seq.rng = torch.Generator(device="cpu").manual_seed(seq.native_sampling_seed)
+        for kind, value in seq.prompt_plan or ():
+            if kind == "tokens":
+                if seq.request.rl_capture and value:
+                    seq.native_rl_prompt.append({"kind": "tokens", "token_ids": list(value),
+                                                 "producing": [False] * len(value)})
+                if value:
+                    output = self._native_forward(value, seq.cache)
+                    seq.cache = output["cache"]
+                    seq.logits = self._native_logits(output["h_final"])
+            elif kind == "native_state":
+                self._native_consume(seq, value)
+            else:
+                raise RequestError("neuralese-native-state-unavailable", "native serving accepts native_state parts, not projected blocks")
+        if seq.cache is None or seq.logits is None:
+            raise RequestError("empty-prompt", "native serving needs at least one prompt token")
+        seq.prompt_positions = seq.cache.lengths[0]
+        if seq.prompt_positions >= self.context:
+            raise RequestError("context-length", f"prompt uses {seq.prompt_positions} positions, context is {self.context}")
+        seq.phase = "text"
+
+    def _native_token(self, seq):
+        logits = seq.logits[0].float()
+        if seq.request.temperature and seq.request.temperature > 0:
+            log_probs = torch.log_softmax(logits / seq.request.temperature, -1)
+            token = int(torch.multinomial(log_probs.exp().cpu(), 1, generator=seq.rng))
+            return token, float(log_probs[token])
+        return int(logits.argmax()), None
+
+    def _native_finish_block(self, seq):
+        from ..model.state_block import NativeStateBlock
+        from ..model.shared_state import concatenate_captures
+        fields = concatenate_captures(seq.native_capture_chunks)
+        block = NativeStateBlock(text=self.tokenizer.decode(seq.native_capture_ids, skip_special_tokens=False),
+                                 tokenizer_fingerprint=self.model_config["tokenizer_fingerprint"],
+                                 checkpoint_sha256=self.checkpoint_sha256,
+                                 embedding_weight_sha256=self.embedding_weight_sha256,
+                                 architecture=self.model_config.get("architecture") or self.backbone.config.model_type,
+                                 **fields)
+        record = self.store.put_native_state(block)
+        seq.blocks.append(record)
+        seq.items.append(record)
+        seq.native_capture_chunks.clear()
+        seq.native_capture_ids.clear()
+        seq.native_capture_open = False
+        if seq.request.rl_capture:
+            if seq.native_write_start_sample is None:
+                raise RuntimeError("native RL write has no sampled opening marker")
+            end_sample = len(seq.rl_samples)
+            seq.native_rl_writes.append({"state_id": record.id,
+                "begin_sample": seq.native_write_start_sample, "end_sample": end_sample,
+                "payload_begin": seq.native_write_start_sample + 1, "payload_end": end_sample - 1,
+                "native_identity": self._native_block_identity(block)})
+            seq.native_write_start_sample = None
+        if seq.request.on_delta is not None:
+            seq.request.on_delta({"native_state": record.meta()})
+
+    def _native_round(self, sequences):
+        """Native marker-token generation through the same scheduler and TensorStore."""
+        for seq in sequences:
+            if seq.request.cancelled:
+                self._fail(seq, RequestError("cancelled", "the client went away"))
+                continue
+            if seq.phase == "done":
+                continue
+            try:
+                if seq.phase == "prefill":
+                    self._native_prefill(seq)
+                    continue
+                if seq.generated_positions >= seq.request.max_tokens:
+                    if seq.native_capture_open:
+                        raise RequestError("neuralese-native-state-open", "generation ended inside a produce span")
+                    self._finish(seq, "length")
+                    continue
+                token, sampled_logp = self._native_token(seq)
+                sample_index = len(seq.rl_samples)
+                terminal = token in self.stop_ids
+                producing_input = seq.native_capture_open and token not in (
+                    self.role_tokens.produce_open, self.role_tokens.produce_close)
+                if seq.request.rl_capture:
+                    seq.rl_samples.append({"index": sample_index, "token_id": token, "logp": sampled_logp,
+                                           "input_role": "produce" if producing_input else "ordinary",
+                                           "terminal": terminal})
+                if terminal:
+                    if seq.native_capture_open:
+                        raise RequestError("neuralese-native-state-open", "generation stopped inside a produce span")
+                    self._finish(seq, "stop")
+                    continue
+                marker = self.role_tokens
+                if token == marker.produce_close and not seq.native_capture_open:
+                    raise RequestError("neuralese-native-state-close", "generation emitted a produce end marker without an open span")
+                if token in (marker.consume_open, marker.consume_close):
+                    raise RequestError("neuralese-native-state-consume-marker",
+                                       "consume markers are inserted only around an imported native-state part")
+                if seq.native_capture_open and token == marker.produce_close:
+                    output = self._native_forward([token], seq.cache)
+                    seq.cache, seq.logits = output["cache"], self._native_logits(output["h_final"])
+                    seq.generated_positions += 1
+                    self._native_finish_block(seq)
+                    continue
+                producing = seq.native_capture_open and token != marker.produce_open
+                output = self._native_forward([token], seq.cache, producing=producing)
+                seq.cache, seq.logits = output["cache"], self._native_logits(output["h_final"])
+                seq.generated_positions += 1
+                if token == marker.produce_open:
+                    if seq.native_capture_open:
+                        raise RequestError("neuralese-native-state-nested", "produce spans cannot nest")
+                    seq.native_capture_chunks = []
+                    seq.native_capture_ids = []
+                    seq.native_capture_open = True
+                    if seq.request.rl_capture:
+                        seq.native_write_start_sample = sample_index
+                elif producing:
+                    seq.native_capture_chunks.append(output)
+                    seq.native_capture_ids.append(token)
+                else:
+                    seq.items.append(token)
+                    self._emit(seq, token=token)
+            except Exception as error:  # one malformed sequence must not stop other requests
+                self._fail(seq, error)
+
     # Decoding ------------------------------------------------------------------------------
     def _round(self, sequences: list[Sequence]):
         """One scheduler round: every sequence advances one position; text and sketch steps run batched."""
+        if self.native_state_enabled:
+            return self._native_round(sequences)
         for seq in sequences:
             if seq.request.cancelled:
                 self._fail(seq, RequestError("cancelled", "the client went away"))
@@ -937,6 +1163,8 @@ class Engine:
 
     # Output --------------------------------------------------------------------------------
     def _response(self, seq: Sequence) -> dict:
+        if self.native_state_enabled:
+            return self._native_response(seq)
         text, run, ids = [], [], []
         for item in seq.items:
             if isinstance(item, Block):
@@ -993,3 +1221,55 @@ class Engine:
             }} if seq.request.rl_capture else {}),
             **({"x_natlang_guidance": {"rejections": seq.guide.rejections}} if seq.guide is not None else {}),
         }
+
+    def _native_response(self, seq: Sequence) -> dict:
+        from .chat import arguments_text, build_message
+        text, run, block_ids = [], [], []
+        for item in seq.items:
+            if hasattr(item, "block") and hasattr(item, "meta"):
+                if run:
+                    text.append(self.tokenizer.decode(run, skip_special_tokens=False))
+                    run = []
+                text.append(placeholder(len(block_ids)))
+                block_ids.append(item.id)
+            else:
+                run.append(item)
+        if run:
+            text.append(self.tokenizer.decode(run, skip_special_tokens=False))
+        message = build_message("".join(text), block_ids, call_prefix=seq.request.request_id)
+
+        def native_parts(value):
+            if isinstance(value, list):
+                return [native_parts(item) for item in value]
+            if isinstance(value, dict):
+                if value.get("type") == "neuralese" and value.get("id", "").startswith("nzs1_"):
+                    return {"type": "native_state", "id": value["id"]}
+                return {key: native_parts(item) for key, item in value.items()}
+            return value
+
+        message = native_parts(message)
+        for call in message.get("tool_calls") or []:
+            try:
+                args = json.loads(call["function"]["arguments"])
+                call["function"]["arguments"] = arguments_text(native_parts(args))
+            except (KeyError, json.JSONDecodeError):
+                continue
+        records = [item for item in seq.items if hasattr(item, "block") and hasattr(item, "meta")]
+        response = {"id": seq.request.request_id, "object": "chat.completion", "created": int(time.time()),
+                "model": self.model_name,
+                "choices": [{"index": 0, "message": message, "finish_reason": seq.finish_reason}],
+                "usage": {"prompt_tokens": seq.prompt_positions, "completion_tokens": seq.generated_positions,
+                          "total_tokens": seq.prompt_positions + seq.generated_positions},
+                "native_state": {"blocks": [record.meta() for record in records], "imports": seq.native_imports}}
+        if seq.request.rl_capture:
+            response["x_natlang_rl_capture"] = {"schema": "natlang.native-rl-sampling/1",
+                "policy": {"checkpoint_sha256": self.checkpoint_sha256,
+                           "tokenizer_fingerprint": self.model_config["tokenizer_fingerprint"],
+                           "embedding_weight_sha256": self.embedding_weight_sha256,
+                           "architecture": self.model_config["architecture"]},
+                "prompt": seq.native_rl_prompt, "samples": seq.rl_samples, "writes": seq.native_rl_writes,
+                "finish_reason": seq.finish_reason,
+                "sample_range_convention": "half-open",
+                "sampling_law": {"temperature": seq.request.temperature, "seed": seq.native_sampling_seed,
+                                 "guidance": False, "probabilities": "post-processing-normalized"}}
+        return response
