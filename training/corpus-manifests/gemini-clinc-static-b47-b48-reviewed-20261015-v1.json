@@ -1,0 +1,795 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "gemini-clinc-static-b47-b48-reviewed-20261015-v1",
+  "owner": "pop",
+  "path": "runs/free-provider-generation-20261013-v1",
+  "files": [
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/cases.jsonl",
+      "bytes": 2646172,
+      "sha256": "3262f4e41a178719abce9705daf36d9e4d6778f66dd056a525af2a84b4f578ed",
+      "lines": 29
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/manifest.json",
+      "bytes": 26784,
+      "sha256": "fd6ae951b3ca141d23cabb6707dce8ece6f3c6547ff6c2028f1753e75f7fe34f"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/manifest.sha256",
+      "bytes": 80,
+      "sha256": "1384dbfdcbf20edf5271143138954cadd52c6f2352e44dabab5d1657d9e527b8"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/001-decision_task_contracts.json",
+      "bytes": 2114,
+      "sha256": "b941a04443d3a47768ef8bdf68730b4fae86a1959aa16abdc6db7b559767ec73"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/002-environment.js",
+      "bytes": 19178,
+      "sha256": "10177b5437c3f81ddb96112ddd4133d113995751392799086162696170a27274"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/003-agent.js",
+      "bytes": 101601,
+      "sha256": "ed72b68d087f63f46469efa7dd40e9f68ad06b7752eb4c4eecf7b4ec237e08f9"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/004-archive.js",
+      "bytes": 2677,
+      "sha256": "db4d9b3e88fc59cb04fe002aeb46769d75cd489a0a5b2f6f702c49e865e444b9"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/005-canonical-data.js",
+      "bytes": 834,
+      "sha256": "49fa4cb41a43fe30d83863409aa07fd1784f0dd8e00bde3b583c8056f15c7477"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/006-cutoff.js",
+      "bytes": 3476,
+      "sha256": "3647d049f4033ef211f87cdac4277ef240d93ec837e15e77d71576f0938fb875"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/007-data-layout.js",
+      "bytes": 10945,
+      "sha256": "8d358171a00a422574f8bcd5d3e3114e210b39addf8d5788a21e5c4179934cd3"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/008-decision-review.js",
+      "bytes": 2254,
+      "sha256": "1da820e1023c2cfc5ed17ee132216fc3c2f9f9ace94769b34d5edc758cdbeb5a"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/009-decision.js",
+      "bytes": 2846,
+      "sha256": "3d7bc8773a9dab098f374cdeca0ec9de2d812870953212fe9cf70606a3d90486"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/010-effects.js",
+      "bytes": 5420,
+      "sha256": "350777166ebc11ac55946ff1ff8c4c4876e610198173ef685e1fe7c9d7bde8c6"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/011-eval-types.js",
+      "bytes": 3805,
+      "sha256": "b53bc5bebd07a675f4ad1184149e6770cd29a11c1f3fb91dfed19957dd96f182"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/012-evaluator.js",
+      "bytes": 1159,
+      "sha256": "1d4a4569c9be2381dd07d6102fedb41a90cc0776a2a9413eeeb5de79dbe04da4"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/013-external.js",
+      "bytes": 2325,
+      "sha256": "08eaa7a7a6db062526ed001269e0ef1a78fe454a7834796b2be551a6521115c8"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/014-file-diff-preview.js",
+      "bytes": 2459,
+      "sha256": "0230fb319ee478d58e3a0a56531d32260a2283ea3a87790e0dc7edb1386d446e"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/015-folder-python.js",
+      "bytes": 8325,
+      "sha256": "9dc5f667adb98e4ef994263ca34fdc37407c7779cbd31c3f6f49b034ea6c8c1b"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/016-folder-shell.js",
+      "bytes": 16792,
+      "sha256": "3ee57b63eb633686bbda420ab49239b58d41a8ab7267b2a947acded8e93309aa"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/017-fusion-blocks.js",
+      "bytes": 1166,
+      "sha256": "a13ebc7006155a724aa79ee24f4148b0fb3d37f5ce0bc5d5c8b15b745c0eef2c"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/018-graph.js",
+      "bytes": 8439,
+      "sha256": "e4c039b04156e08f1762e5c87470c21238fcab390ed73fc3a54f1265d6a5b4ba"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/019-hash.js",
+      "bytes": 362,
+      "sha256": "4ee149d265d8a8a56009ada87c78ecf719a3e718d2363e492e2c1014cff3afe2"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/020-introspection.js",
+      "bytes": 1732,
+      "sha256": "157d5ceabc8e3cd1e4506dd3c6d9627fd80758db41bda4c9c4f765258a10930b"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/021-natlang-command.js",
+      "bytes": 3514,
+      "sha256": "53c9ae9e1cde203ab73d6f79340af48febdd56f77c24842dc6a5fddd0768e8f8"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/022-neuralese-preview.js",
+      "bytes": 5032,
+      "sha256": "fad0daa89baffe980c13ec893d4c09bc7f49ea98511e7b1c5c82bf4e18c5855c"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/023-neuralese-store.js",
+      "bytes": 6879,
+      "sha256": "0165d23034cbdd7ca71126fd1e6749495022717487d36e276e06059a3056f2d3"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/024-neuralese.js",
+      "bytes": 9825,
+      "sha256": "3678475e743d6a280f5a97c3298895c5091714a45b78c4e3c35bd07deb219d23"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/025-node-files.js",
+      "bytes": 5191,
+      "sha256": "5b57bb0061fefac5288212e988b98318eed3a60422f98046fc7016c9b6cbd5e1"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/026-nz-file.js",
+      "bytes": 20388,
+      "sha256": "e07cbfa9d03bee539e42586f7d3dc6b164842eabe00f4e1db6ed617e90d0ee1e"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/027-pages.js",
+      "bytes": 2861,
+      "sha256": "be5d7c29b7f94fafc4c7d1afd9d48443c1abe999665a9a08966a1bc14ff51150"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/028-prompt.js",
+      "bytes": 40315,
+      "sha256": "a60a723ce452b268852bdbea545f921ce4e19be79c8ac7424ff876b45c479411"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/029-pseudo-call.js",
+      "bytes": 3315,
+      "sha256": "bcea8ba1878ed0363ed1b5fa7f44d9c092a9aa830ea2082bd786023e2275336c"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/030-python-folderfs.js",
+      "bytes": 7782,
+      "sha256": "c0c20c81c88ddcfd14a99154984c4019279b65bbb7359c2d959e749f4c63e969"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/031-python-sources.js",
+      "bytes": 10148,
+      "sha256": "b63dc2b5d5bdc7f1f1648a0881a02a7501d5946f3c094defbd92fe710d3a8568"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/032-refinement-settings.js",
+      "bytes": 3922,
+      "sha256": "9570ecb362859d2e8c47421e1b14d3e31f23887f36fb66acabf0f890c3214cda"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/033-refinement.js",
+      "bytes": 15541,
+      "sha256": "965cdee33b033ce07785269438476a36e608859ad76117cea2783452fdee01be"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/034-representation.js",
+      "bytes": 3865,
+      "sha256": "f879a1aa89ddf9d084e030b346f7d65a04c727566e804a7b8753ec05d512d52c"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/035-return-errors.js",
+      "bytes": 1943,
+      "sha256": "be5b42951b7d2efec09e0aea58b8bbaec7dfb16312a25bbbd2bcdf27fe6339a0"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/036-runtime.js",
+      "bytes": 162733,
+      "sha256": "2054c2bccfaf8adbda01f5ffd3f19fd3ba46a5fb2c2635f40faaf61f81ea5ee1"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/037-scenario.js",
+      "bytes": 2525,
+      "sha256": "f8a9de34cbbd9bf6b478410570cacc2bbc498b10e5a928c9b4e22d9c5a823287"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/038-scoped-fs.js",
+      "bytes": 35998,
+      "sha256": "4e42d185d70f0912acecd3decdd17985fe188b21e8f22c67e5b4f29a692cafe9"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/039-system-prompts.js",
+      "bytes": 8903,
+      "sha256": "b47d67a1682bf8381f6453a2ac7ec5031b694346a831b769099a7006672f580f"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/040-tool-surface.js",
+      "bytes": 151,
+      "sha256": "49a3fbefcb171c20dae1e1fd4f1ea00df9a41784f80def6379f5531e81549538"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/041-trace.js",
+      "bytes": 5616,
+      "sha256": "5330ff72927cd20cb2fa2ed3da7b5dcdd0c782869c30a8d87df74d5f123c04e3"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/042-type-aliases.js",
+      "bytes": 944,
+      "sha256": "4daab72d6d1affb881c41fd10230270a820018449cdf0b5db6ed708472594a93"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/043-types.js",
+      "bytes": 29898,
+      "sha256": "999ed811d381ed7c4176e29891060cd284ddf24d5cd6e1e63f336f6eade1a8d7"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/044-untrusted.js",
+      "bytes": 5369,
+      "sha256": "f59f16b1fae0fd658eba067cf17d45eb693029b427777c7a51cc7470b712e3e2"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/045-values.js",
+      "bytes": 21305,
+      "sha256": "7910bedcb06ab68ad3038ef8d363f6b38f66fb37b9c52357af82a10a7c5d4ab7"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/046-scope-compiler.js",
+      "bytes": 82464,
+      "sha256": "999d2e7730f875e328bce42a70470122d777c030d02d785a335047ebbe363672"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/047-graded.js",
+      "bytes": 22094,
+      "sha256": "171f554c7f097c39d53f916a2bdd69a9d6543e2dcb4a31bd1629d2c4213d16a1"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/048-collector.js",
+      "bytes": 108206,
+      "sha256": "58ece177af1b95ac76729d9007f1683e39d7d8eb43fa1efdf9c3abfd03781488"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/049-curriculum.js",
+      "bytes": 31509,
+      "sha256": "784aca9926c907c125193852bdcf80f2489b8cc5c365715b869b6e49753bac27"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/050-native-materializer.js",
+      "bytes": 144535,
+      "sha256": "8049cea2124dd1ceed7ec4212a4d6197fe606b8dd180988ba81e957d47587513"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/051-program.js",
+      "bytes": 5664,
+      "sha256": "955871e9e69258b5d2e2bc48641325ca119a3dedbe2f4688cd9f884573a41005"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/052-advisory-file.mjs",
+      "bytes": 2235,
+      "sha256": "00cfe276b2f5fdf45614d1302e3428be386ad25f3d84ed11c4d8fa732708eba0"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/053-references.mjs",
+      "bytes": 8363,
+      "sha256": "a8822be36f50e7f55e8d502ed3f6fcc75a59c95d1a33eb68d34090b21f4fb1f0"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/054-common.mjs",
+      "bytes": 3818,
+      "sha256": "4cb48683a8d3284e04ca8521b648b2200b81a9d7a67f386af6a1c14738b30201"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/055-decision-task-contracts.mjs",
+      "bytes": 2637,
+      "sha256": "2c1fb0d096354ab7437bdf66d8ff3ff1c312bc95bf39fae9119f13ac749e26f1"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/056-decisions.mjs",
+      "bytes": 9753,
+      "sha256": "0372490865a747edf2b94a3d1697a4482c47e0f1115818ca083373915aac7c3e"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/057-execution-components.mjs",
+      "bytes": 7825,
+      "sha256": "6835a534c59aba289d51afff26a5534389e30e3e941c1b74569022bb090545ff"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/058-folder-decision-scaffold.mjs",
+      "bytes": 8335,
+      "sha256": "dc4b17427af275329a006e2c47b9e407d39d1ccc2a0b215c1a70ded8c6575cf3"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/059-teacher-decision-labels.mjs",
+      "bytes": 51152,
+      "sha256": "6d06f8ecd8e6bc875bb0d1112b1a70474a3c7ac5294084ee7c48aca5e3b9098e"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/execution-components/payload/060-graded.ts",
+      "bytes": 22460,
+      "sha256": "dd3737b68ad891845c8895146878b7db2b17f358271fd7298519c84d740a32f1"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/label-manifest.json",
+      "bytes": 410467,
+      "sha256": "a797ded66e6813fcb2a236b30eac5c1c29b90c6af1634f085b381cfc947879a7"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/native.held.jsonl.zst",
+      "bytes": 613491,
+      "sha256": "4c19e272ef7acae261fed9bedb4d2c2d86da7c6e13c02a7af855f9a837bb244a"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/rejections.jsonl",
+      "bytes": 12808,
+      "sha256": "8f8ca07ea458aa96de856c2873c64a46ee5e742353e4bcaf82933cc072045cdb",
+      "lines": 31
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/replay.results.jsonl.zst",
+      "bytes": 244071,
+      "sha256": "ae67559c120909c931055448431e47a1b93e668f285fc38ac02ed03b3535a227"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/scorer-manifest.json",
+      "bytes": 34939,
+      "sha256": "0c0f234ddc24483fa7bbe13f826f9055b2d228f65798cd670c40ecf96046fc4e"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/source-manifest.json",
+      "bytes": 37441,
+      "sha256": "ed12c1f773f229192746734594136a9c3239914609e7e65e8675912a0308c36c"
+    },
+    {
+      "path": "gemini-clinc-batch47-static-adapter-v2-full-replay/summary.json",
+      "bytes": 30498,
+      "sha256": "7c5cbec093b8861f0853c8b15585afad99775d4f656882f8afa2d616d22d065a"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/cases.jsonl",
+      "bytes": 2514213,
+      "sha256": "1b678311ea7878ea05e984df0237bf1332d85d18932f6f1f6938b799cc4bac21",
+      "lines": 27
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/manifest.json",
+      "bytes": 26784,
+      "sha256": "fd6ae951b3ca141d23cabb6707dce8ece6f3c6547ff6c2028f1753e75f7fe34f"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/manifest.sha256",
+      "bytes": 80,
+      "sha256": "1384dbfdcbf20edf5271143138954cadd52c6f2352e44dabab5d1657d9e527b8"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/001-decision_task_contracts.json",
+      "bytes": 2114,
+      "sha256": "b941a04443d3a47768ef8bdf68730b4fae86a1959aa16abdc6db7b559767ec73"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/002-environment.js",
+      "bytes": 19178,
+      "sha256": "10177b5437c3f81ddb96112ddd4133d113995751392799086162696170a27274"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/003-agent.js",
+      "bytes": 101601,
+      "sha256": "ed72b68d087f63f46469efa7dd40e9f68ad06b7752eb4c4eecf7b4ec237e08f9"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/004-archive.js",
+      "bytes": 2677,
+      "sha256": "db4d9b3e88fc59cb04fe002aeb46769d75cd489a0a5b2f6f702c49e865e444b9"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/005-canonical-data.js",
+      "bytes": 834,
+      "sha256": "49fa4cb41a43fe30d83863409aa07fd1784f0dd8e00bde3b583c8056f15c7477"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/006-cutoff.js",
+      "bytes": 3476,
+      "sha256": "3647d049f4033ef211f87cdac4277ef240d93ec837e15e77d71576f0938fb875"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/007-data-layout.js",
+      "bytes": 10945,
+      "sha256": "8d358171a00a422574f8bcd5d3e3114e210b39addf8d5788a21e5c4179934cd3"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/008-decision-review.js",
+      "bytes": 2254,
+      "sha256": "1da820e1023c2cfc5ed17ee132216fc3c2f9f9ace94769b34d5edc758cdbeb5a"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/009-decision.js",
+      "bytes": 2846,
+      "sha256": "3d7bc8773a9dab098f374cdeca0ec9de2d812870953212fe9cf70606a3d90486"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/010-effects.js",
+      "bytes": 5420,
+      "sha256": "350777166ebc11ac55946ff1ff8c4c4876e610198173ef685e1fe7c9d7bde8c6"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/011-eval-types.js",
+      "bytes": 3805,
+      "sha256": "b53bc5bebd07a675f4ad1184149e6770cd29a11c1f3fb91dfed19957dd96f182"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/012-evaluator.js",
+      "bytes": 1159,
+      "sha256": "1d4a4569c9be2381dd07d6102fedb41a90cc0776a2a9413eeeb5de79dbe04da4"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/013-external.js",
+      "bytes": 2325,
+      "sha256": "08eaa7a7a6db062526ed001269e0ef1a78fe454a7834796b2be551a6521115c8"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/014-file-diff-preview.js",
+      "bytes": 2459,
+      "sha256": "0230fb319ee478d58e3a0a56531d32260a2283ea3a87790e0dc7edb1386d446e"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/015-folder-python.js",
+      "bytes": 8325,
+      "sha256": "9dc5f667adb98e4ef994263ca34fdc37407c7779cbd31c3f6f49b034ea6c8c1b"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/016-folder-shell.js",
+      "bytes": 16792,
+      "sha256": "3ee57b63eb633686bbda420ab49239b58d41a8ab7267b2a947acded8e93309aa"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/017-fusion-blocks.js",
+      "bytes": 1166,
+      "sha256": "a13ebc7006155a724aa79ee24f4148b0fb3d37f5ce0bc5d5c8b15b745c0eef2c"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/018-graph.js",
+      "bytes": 8439,
+      "sha256": "e4c039b04156e08f1762e5c87470c21238fcab390ed73fc3a54f1265d6a5b4ba"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/019-hash.js",
+      "bytes": 362,
+      "sha256": "4ee149d265d8a8a56009ada87c78ecf719a3e718d2363e492e2c1014cff3afe2"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/020-introspection.js",
+      "bytes": 1732,
+      "sha256": "157d5ceabc8e3cd1e4506dd3c6d9627fd80758db41bda4c9c4f765258a10930b"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/021-natlang-command.js",
+      "bytes": 3514,
+      "sha256": "53c9ae9e1cde203ab73d6f79340af48febdd56f77c24842dc6a5fddd0768e8f8"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/022-neuralese-preview.js",
+      "bytes": 5032,
+      "sha256": "fad0daa89baffe980c13ec893d4c09bc7f49ea98511e7b1c5c82bf4e18c5855c"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/023-neuralese-store.js",
+      "bytes": 6879,
+      "sha256": "0165d23034cbdd7ca71126fd1e6749495022717487d36e276e06059a3056f2d3"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/024-neuralese.js",
+      "bytes": 9825,
+      "sha256": "3678475e743d6a280f5a97c3298895c5091714a45b78c4e3c35bd07deb219d23"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/025-node-files.js",
+      "bytes": 5191,
+      "sha256": "5b57bb0061fefac5288212e988b98318eed3a60422f98046fc7016c9b6cbd5e1"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/026-nz-file.js",
+      "bytes": 20388,
+      "sha256": "e07cbfa9d03bee539e42586f7d3dc6b164842eabe00f4e1db6ed617e90d0ee1e"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/027-pages.js",
+      "bytes": 2861,
+      "sha256": "be5d7c29b7f94fafc4c7d1afd9d48443c1abe999665a9a08966a1bc14ff51150"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/028-prompt.js",
+      "bytes": 40315,
+      "sha256": "a60a723ce452b268852bdbea545f921ce4e19be79c8ac7424ff876b45c479411"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/029-pseudo-call.js",
+      "bytes": 3315,
+      "sha256": "bcea8ba1878ed0363ed1b5fa7f44d9c092a9aa830ea2082bd786023e2275336c"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/030-python-folderfs.js",
+      "bytes": 7782,
+      "sha256": "c0c20c81c88ddcfd14a99154984c4019279b65bbb7359c2d959e749f4c63e969"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/031-python-sources.js",
+      "bytes": 10148,
+      "sha256": "b63dc2b5d5bdc7f1f1648a0881a02a7501d5946f3c094defbd92fe710d3a8568"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/032-refinement-settings.js",
+      "bytes": 3922,
+      "sha256": "9570ecb362859d2e8c47421e1b14d3e31f23887f36fb66acabf0f890c3214cda"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/033-refinement.js",
+      "bytes": 15541,
+      "sha256": "965cdee33b033ce07785269438476a36e608859ad76117cea2783452fdee01be"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/034-representation.js",
+      "bytes": 3865,
+      "sha256": "f879a1aa89ddf9d084e030b346f7d65a04c727566e804a7b8753ec05d512d52c"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/035-return-errors.js",
+      "bytes": 1943,
+      "sha256": "be5b42951b7d2efec09e0aea58b8bbaec7dfb16312a25bbbd2bcdf27fe6339a0"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/036-runtime.js",
+      "bytes": 162733,
+      "sha256": "2054c2bccfaf8adbda01f5ffd3f19fd3ba46a5fb2c2635f40faaf61f81ea5ee1"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/037-scenario.js",
+      "bytes": 2525,
+      "sha256": "f8a9de34cbbd9bf6b478410570cacc2bbc498b10e5a928c9b4e22d9c5a823287"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/038-scoped-fs.js",
+      "bytes": 35998,
+      "sha256": "4e42d185d70f0912acecd3decdd17985fe188b21e8f22c67e5b4f29a692cafe9"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/039-system-prompts.js",
+      "bytes": 8903,
+      "sha256": "b47d67a1682bf8381f6453a2ac7ec5031b694346a831b769099a7006672f580f"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/040-tool-surface.js",
+      "bytes": 151,
+      "sha256": "49a3fbefcb171c20dae1e1fd4f1ea00df9a41784f80def6379f5531e81549538"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/041-trace.js",
+      "bytes": 5616,
+      "sha256": "5330ff72927cd20cb2fa2ed3da7b5dcdd0c782869c30a8d87df74d5f123c04e3"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/042-type-aliases.js",
+      "bytes": 944,
+      "sha256": "4daab72d6d1affb881c41fd10230270a820018449cdf0b5db6ed708472594a93"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/043-types.js",
+      "bytes": 29898,
+      "sha256": "999ed811d381ed7c4176e29891060cd284ddf24d5cd6e1e63f336f6eade1a8d7"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/044-untrusted.js",
+      "bytes": 5369,
+      "sha256": "f59f16b1fae0fd658eba067cf17d45eb693029b427777c7a51cc7470b712e3e2"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/045-values.js",
+      "bytes": 21305,
+      "sha256": "7910bedcb06ab68ad3038ef8d363f6b38f66fb37b9c52357af82a10a7c5d4ab7"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/046-scope-compiler.js",
+      "bytes": 82464,
+      "sha256": "999d2e7730f875e328bce42a70470122d777c030d02d785a335047ebbe363672"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/047-graded.js",
+      "bytes": 22094,
+      "sha256": "171f554c7f097c39d53f916a2bdd69a9d6543e2dcb4a31bd1629d2c4213d16a1"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/048-collector.js",
+      "bytes": 108206,
+      "sha256": "58ece177af1b95ac76729d9007f1683e39d7d8eb43fa1efdf9c3abfd03781488"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/049-curriculum.js",
+      "bytes": 31509,
+      "sha256": "784aca9926c907c125193852bdcf80f2489b8cc5c365715b869b6e49753bac27"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/050-native-materializer.js",
+      "bytes": 144535,
+      "sha256": "8049cea2124dd1ceed7ec4212a4d6197fe606b8dd180988ba81e957d47587513"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/051-program.js",
+      "bytes": 5664,
+      "sha256": "955871e9e69258b5d2e2bc48641325ca119a3dedbe2f4688cd9f884573a41005"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/052-advisory-file.mjs",
+      "bytes": 2235,
+      "sha256": "00cfe276b2f5fdf45614d1302e3428be386ad25f3d84ed11c4d8fa732708eba0"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/053-references.mjs",
+      "bytes": 8363,
+      "sha256": "a8822be36f50e7f55e8d502ed3f6fcc75a59c95d1a33eb68d34090b21f4fb1f0"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/054-common.mjs",
+      "bytes": 3818,
+      "sha256": "4cb48683a8d3284e04ca8521b648b2200b81a9d7a67f386af6a1c14738b30201"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/055-decision-task-contracts.mjs",
+      "bytes": 2637,
+      "sha256": "2c1fb0d096354ab7437bdf66d8ff3ff1c312bc95bf39fae9119f13ac749e26f1"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/056-decisions.mjs",
+      "bytes": 9753,
+      "sha256": "0372490865a747edf2b94a3d1697a4482c47e0f1115818ca083373915aac7c3e"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/057-execution-components.mjs",
+      "bytes": 7825,
+      "sha256": "6835a534c59aba289d51afff26a5534389e30e3e941c1b74569022bb090545ff"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/058-folder-decision-scaffold.mjs",
+      "bytes": 8335,
+      "sha256": "dc4b17427af275329a006e2c47b9e407d39d1ccc2a0b215c1a70ded8c6575cf3"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/059-teacher-decision-labels.mjs",
+      "bytes": 51152,
+      "sha256": "6d06f8ecd8e6bc875bb0d1112b1a70474a3c7ac5294084ee7c48aca5e3b9098e"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/execution-components/payload/060-graded.ts",
+      "bytes": 22460,
+      "sha256": "dd3737b68ad891845c8895146878b7db2b17f358271fd7298519c84d740a32f1"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/label-manifest.json",
+      "bytes": 392306,
+      "sha256": "2f73e6f93d9de051fc8833db77e88e3e14b66e64701063ee11051ba73b734df8"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/native.held.jsonl.zst",
+      "bytes": 590382,
+      "sha256": "1b19aa6b3e946b597bc2b861431a58871f1cd72f33f5771f5a22581e14248dcc"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/rejections.jsonl",
+      "bytes": 17087,
+      "sha256": "6df6f813d8b49b14f8f1f1c5b19cecd6ea7d7c5d0b3c96fe85daf57676a8cf64",
+      "lines": 43
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/replay.failures.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/replay.results.jsonl.zst",
+      "bytes": 241234,
+      "sha256": "1b067357db3445faea941036e1b0be6a3bab337a45942a521675d6da11141c45"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/scorer-manifest.json",
+      "bytes": 33421,
+      "sha256": "48d48749f1fc305a43daf58fd9d3170cb4e02778872d860825e06a7fb03a6f99"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/source-manifest.json",
+      "bytes": 37441,
+      "sha256": "23aff0de0fb2cbbe5685d4201974fe2726e3ed7ba58fd8b08172d8db1731842a"
+    },
+    {
+      "path": "gemini-clinc-batch48-static-adapter-v2-full-replay/summary.json",
+      "bytes": 30498,
+      "sha256": "0609d16f63daa6cc33071890c94e210c47b324b6653a59a1e2a64641057adb84"
+    },
+    {
+      "path": "gemini-clinc-fresh-batch47/cases.jsonl",
+      "bytes": 921263,
+      "sha256": "bb235f5d81667b519ef70ad466ff652c0eb04f4ba1c700d3352610602673bd4f",
+      "lines": 256
+    },
+    {
+      "path": "gemini-clinc-fresh-batch47/labels.jsonl",
+      "bytes": 305704,
+      "sha256": "374697592caae47d5539290eb9700597c4b25c47e3205322c0d0dcb6e3b1bb00",
+      "lines": 256
+    },
+    {
+      "path": "gemini-clinc-fresh-batch47/labels.jsonl.manifest.json",
+      "bytes": 2616,
+      "sha256": "72088d307207e087e5f3881c5894d40475cb2cc50d441b0c5056bd8b65af5b45"
+    },
+    {
+      "path": "gemini-clinc-fresh-batch47/quality-summary.json",
+      "bytes": 8020,
+      "sha256": "f7096610b91c38ed1096c81fdfa17492f63ee5e2ddf7f64368890c44d5ccfcf3"
+    },
+    {
+      "path": "gemini-clinc-fresh-batch47/source-manifest.json",
+      "bytes": 575,
+      "sha256": "ee15488ccd9f00aaa62dae3a05a9a3f54e14d2828fb61cdfade37086b91c0190"
+    },
+    {
+      "path": "gemini-clinc-fresh-batch48/cases.jsonl",
+      "bytes": 920897,
+      "sha256": "407718f30498699f249795b007a64da2c160db7c8bd2cc597e8b6963e2ead7cd",
+      "lines": 256
+    },
+    {
+      "path": "gemini-clinc-fresh-batch48/labels.jsonl",
+      "bytes": 305797,
+      "sha256": "da37e97167932efea3d033ef646751212916f95bac0e38e6c58f148fb801a1c7",
+      "lines": 256
+    },
+    {
+      "path": "gemini-clinc-fresh-batch48/labels.jsonl.manifest.json",
+      "bytes": 2616,
+      "sha256": "3d88d5b82f897a95816614ce02c7fcc81be7e09bba4d0e7ed470564e505eab3e"
+    },
+    {
+      "path": "gemini-clinc-fresh-batch48/quality-summary.json",
+      "bytes": 7472,
+      "sha256": "f52ba603c02d29c26cc6982a3703d2e4aaf839471c322c96f0a68952a78f0cb2"
+    },
+    {
+      "path": "gemini-clinc-fresh-batch48/source-manifest.json",
+      "bytes": 575,
+      "sha256": "f9a5421e00ed4d69d70eb9fa342967165f4d19f2b5eccba0e9eab4490e3d0bce"
+    },
+    {
+      "path": "gemini-clinc-static-v2-freeze-b47-b48-20261015-v1/excluded-programs.jsonl",
+      "bytes": 262,
+      "sha256": "a61096371f3445fca30cf4f08ac4144259f7a596e40939beaca06e8f957af2bf",
+      "lines": 1
+    },
+    {
+      "path": "gemini-clinc-static-v2-freeze-b47-b48-20261015-v1/freeze-receipt.json",
+      "bytes": 9894,
+      "sha256": "876ea2cfe5b3b8bca5666ca0cdf94e58470fa4054c8d70964b6069d1424d668d"
+    },
+    {
+      "path": "gemini-clinc-static-v2-review-b47-b48-20261015-v1/semantic-review.json",
+      "bytes": 1179,
+      "sha256": "f1c532018c59f262d37a112a6ec0eafcb3a5b1e0f0f67b189c310bcef86c9635"
+    }
+  ],
+  "bytes": 12672911
+}
