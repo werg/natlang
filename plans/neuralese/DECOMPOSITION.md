@@ -312,3 +312,16 @@ Route the file named by the isolated runner's terminal status, including its
 lowercase `failed` and `timeout` forms. Crisp parsing extracts this evidence;
 it does not infer model failure from a server startup failure or certify a retry
 as an explanation of the original failure. Model-facing text does not change.
+
+## Exact child terminal-status admission — 2026-10-15
+
+The existing native trajectory policy admits successful child decisions and keeps unsuccessful proposals only in later recovery context. The materializer checked execution errors but missed a typed `return_result` whose terminal `status` was `blocked` or `failed` even when a later parent action produced the exact root answer. This is an implementation gap in the existing policy, not a new decision stage or model-facing change.
+
+| Part | Form | Reason |
+| --- | --- | --- |
+| Decide whether a blocked child answer is semantically warranted | Natural-language reviewer with an exact target-bound decision approval | A child might properly report missing context; only independent evidence can make it a positive target. |
+| Parse the terminal `return_result` status and require success or an exact reviewer approval | Crisp verifier in the shared native materializer | The status is an exact typed field. A non-success child outcome must not inherit a successful root's training approval. |
+| Carry the blocked child turn in subsequent context | Existing native materializer behavior | Recovery can be learned from the later corrective action without training the blocked answer itself. |
+| Exclude already-rendered affected programs in the next union | Exact cohort selection | Published source manifests remain immutable; an explicit union omission prevents prior mistaken targets from entering training. |
+
+The next text union takes an explicit hash-bound list of held native decision IDs. Its exact selector checks each rendered document's `source_record_ids`; a whole-trajectory document containing a held decision is omitted, while unrelated decisions from the same parent remain eligible. The source-record binding and tokenizer twin check are crisp; the decision to hold each ID is the reviewed quality verdict. No rendered member is mutated in place.

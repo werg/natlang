@@ -80,6 +80,21 @@ def test_removed_quality_reference_blocks_derivatives_in_both_splits():
     assert {o['reason'] for o in omitted.values()} == {'source_quality_quarantine'}
 
 
+def test_exact_decision_hold_drops_only_its_decision_and_containing_chain():
+    candidates = {'base': {tok: {
+        'bad-decision': {**identity('bad'), 'source_record_ids': ('decision:bad',)},
+        'containing-chain': {**identity('chain'), 'source_record_ids': ('decision:good', 'decision:bad')},
+        'good-decision': {**identity('good'), 'source_record_ids': ('decision:good',)},
+    } for tok in TOKENS}}
+    selected, omitted = plan_member_rows(['base'], candidates, {}, TOKENS, set(), set(),
+                                         held_decision_ids={'decision:bad'})
+    assert selected == {('base', 'good-decision')}
+    assert {key: item['reason'] for key, item in omitted.items()} == {
+        ('base', 'bad-decision'): 'held_native_decision',
+        ('base', 'containing-chain'): 'held_native_decision',
+    }
+
+
 def test_removed_member_held_group_still_blocks_a_train_derivative():
     candidates = {'remaining': {tok: {'r': identity('new text', groups=('removed-held-group',))}
                                 for tok in TOKENS}}

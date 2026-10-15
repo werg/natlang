@@ -1766,8 +1766,13 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const redundantSkillRead = calls.some(call => call.tool === 'read_code' &&
         (record(call.outcome, 'call outcome').diagnostics as unknown[] ?? []).includes('skill-unchanged-read'));
       const refusedAttempt = calls.some(call => call.tool === 'eval' && CHECKER_REFUSAL.test(resultOf(call)));
+      // A later successful root does not make this child's blocked/failed typed answer a good target.
+      // Keep it in context for recovery, but require exact independent approval to train that answer.
+      const nonSuccessTerminal = calls.some(call => call.source_tool === 'return_result' &&
+        typeof call.arguments === 'object' && call.arguments !== null &&
+        Object.hasOwn(call.arguments, 'status') && (call.arguments as Dict).status !== 'success');
       // A decision that failed: an action the runtime rejected, refused or that raised, or an attempt the checker refused.
-      const failedAction = refusedAttempt || calls.some(call =>
+      const failedAction = nonSuccessTerminal || refusedAttempt || calls.some(call =>
         ['rejected', 'refused', 'error'].includes(String(record(call.outcome, 'call outcome').status)));
       for (const call of calls) earlier.set(signature(call), resultOf(call));
       // An answer given without reasoning towards it (a scripted conclusion behind a one-line note) teaches a reasoning
@@ -1806,7 +1811,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
       const decisionApproved = !pendingDecisionCandidateRow && (!authoredRootAction || !!semanticApproval) && !sourceQualityActionReviewPending && !authoredGuidanceBlocked && !semanticHold && !afterChunkCutoff &&
         !invalidSourceLabelCorrectionApproval &&
         (row.outcome.accepted || !!semanticApproval) && !fromStudentPrefix && ranCleanly && !detour && !redundantSkillRead && !refusedAttempt &&
-        !heldDirect && !variantContext && !invalidStatusOnlySuccess;
+        !heldDirect && !variantContext && !invalidStatusOnlySuccess && (!nonSuccessTerminal || !!semanticApproval);
       const targetBindingAdapter = providerActionNormalizationAdapter(source, target, rowDigest, index);
       const expandedReadContexts = providerExpandedReadContexts(source, row, rowDigest, invocation, index, target,
         targetBindingAdapter);
@@ -1902,6 +1907,7 @@ export function materializeNativeRows(input: unknown[], options: { directAnswers
           ...(evidenceOracle ? { oracle_level: evidenceOracle } : {}),
           ...(decisionApproved ? {} : { reason: pendingDecisionCandidateRow ? 'candidate discovery only; the parent quality is pending and this child has no admission' : sourceQualityActionReviewPending ? 'source-quality clearance permits conversion only; this exact target awaits native decision approval' : authoredGuidanceBlocked ? 'authored-root-guided sample awaits separate root training approval' : semanticHold ? semanticHold.reason : invalidStatusOnlySuccess ? 'success return omitted value without an authenticated same-invocation staged typed result' : afterChunkCutoff ? 'beyond verified chunk-rewrite supervision cutoff' : variantContext ? 'context of a corrected variant' :
             heldDirect ? 'an answer given without reasoning towards it' :
+            nonSuccessTerminal ? 'blocked or failed child result requires exact independent approval' :
             (fromStudentPrefix ? 'student replay prefix is not a teacher correction' :
             calls.some(call => record(call.outcome, 'call outcome').status === 'not_recorded') ?
               'the outcome of a call in this decision was not recorded' :

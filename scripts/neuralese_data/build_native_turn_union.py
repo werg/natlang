@@ -125,6 +125,7 @@ def _row_identity(row: dict) -> dict:
     return {
         'split': row['split'],
         'source_groups': tuple(sorted(row['source_groups'])),
+        'source_record_ids': tuple(row.get('source_record_ids') or ()),
         'text_sha256': sha(row['text'].encode()),
         'source_identity_sha256': (sha(canonical(document_identity(row)).encode())
                                    if row.get('source_record_ids') else None),
@@ -157,7 +158,8 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
                      member_duplicates: dict | None = None,
                      member_duplicate_observations: dict | None = None,
                      source_review_groups: set[str] | None = None,
-                     quarantined_source_groups: set[str] | None = None) -> tuple[set, dict]:
+                     quarantined_source_groups: set[str] | None = None,
+                     held_decision_ids: set[str] | None = None) -> tuple[set, dict]:
     """Return (selected (member,id) pairs, omissions) after twin and source-safety checks.
 
     ``member_rows`` holds only row identities, not rendered text/token payloads. A candidate becomes eligible only
@@ -171,6 +173,7 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
     member_duplicate_observations = member_duplicate_observations or {}
     source_review_groups = source_review_groups or set()
     quarantined_source_groups = quarantined_source_groups or set()
+    held_decision_ids = held_decision_ids or set()
     member_rank = {name: index for index, name in enumerate(order)}
     for name in order:
         per_tok = member_rows[name]
@@ -200,6 +203,10 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
                 continue
             identity = {**signatures[0], 'twin_text_sha256': tuple(
                 (tok, per_tok[tok][rid]['text_sha256']) for tok in tokenizer_names)}
+            held_decisions = sorted(set(identity.get('source_record_ids', ())) & held_decision_ids)
+            if held_decisions:
+                _drop(drop, key, 'held_native_decision', decision_ids=held_decisions)
+                continue
             quarantined = sorted(set(identity['source_groups']) & quarantined_source_groups)
             if quarantined:
                 _drop(drop, key, 'source_quality_quarantine', source_groups=quarantined,
@@ -338,6 +345,8 @@ def main(argv=None):
                    help='excluded source snapshot whose test groups/texts remain protected')
     p.add_argument('--quarantine-reference', type=Path, action='append', default=[],
                    help='excluded source snapshot whose source-group derivatives are omitted in both splits')
+    p.add_argument('--decision-hold-ids', type=Path, action='append', default=[],
+                   help='reviewed JSONL {id, reason} native decisions; omit any document that supervises one')
     p.add_argument('--tokenizer', action='append', required=True, help='NAME=DIR')
     p.add_argument('--member', action='append', required=True, help='NAME:RENDERING:TOKENIZER=PATH')
     p.add_argument('--supersedes', action='append', default=[],
@@ -399,6 +408,15 @@ def main(argv=None):
                         held_texts.add(sha(row['text'].encode()))
     reference_bindings = []
     quarantined_groups = set()
+    held_decision_ids = set()
+    for path in a.decision_hold_ids:
+        reference_bindings.append({'kind': 'decision-hold', 'path': str(path), 'sha256': file_sha(path),
+                                   'bytes': path.stat().st_size})
+        for _, row in rows(path):
+            if (not isinstance(row.get('id'), str) or not row['id'] or
+                    not isinstance(row.get('reason'), str) or not row['reason']):
+                raise ValueError(f'invalid native decision hold in {path}')
+            held_decision_ids.add(row['id'])
     for kind, paths in [('held', a.held_reference), ('quarantine', a.quarantine_reference)]:
         for path in paths:
             reference_bindings.append({'kind': kind, 'path': str(path), 'sha256': file_sha(path),
@@ -422,6 +440,7 @@ def main(argv=None):
                     for rendering, by_name in members.items()}
     receipt = {'schema': SCHEMA, 'renderings': {}, 'held_groups': len(held_groups), 'held_texts': len(held_texts),
                'excluded_source_references': reference_bindings,
+               'held_native_decision_ids': len(held_decision_ids),
                'quarantined_source_groups': len(quarantined_groups),
                'source_review': {'holds_sha256': source_review_sha256,
                                  'pending_unpinned_source_groups': len(source_review_groups),
@@ -461,7 +480,8 @@ def main(argv=None):
                                           member_duplicates=member_duplicates,
                                           member_duplicate_observations=member_duplicate_observations,
                                           source_review_groups=source_review_groups,
-                                          quarantined_source_groups=quarantined_groups)
+                                          quarantined_source_groups=quarantined_groups,
+                                          held_decision_ids=held_decision_ids)
         if not selected:
             raise ValueError(f'{rendering}: no eligible tokenizer twins; cannot publish an empty training union')
         out = a.out_dir / rendering

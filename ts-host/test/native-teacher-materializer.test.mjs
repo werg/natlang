@@ -482,6 +482,23 @@ test('accepted native rows become linked template neutral decisions with their e
   }] });
 });
 
+test('a blocked child result stays as recovery context but is not a positive target', () => {
+  const row = nativeRow('blocked-child-in-successful-root');
+  const blocked = { status: 'blocked', reason: 'No fallback team was supplied.' };
+  row.outcome.action_ledger = [{ seq: 12, name: 'return_result', arguments: blocked,
+    outcome: 'completed', result_text: 'Blocked.' },
+    { seq: 17, name: 'mark_done', arguments: secondCall.arguments,
+      outcome: 'ok', result_text: 'marked line done' }];
+  row.trajectory[0].assistant.calls = [{ tool: 'return_result', source_tool: 'return_result',
+    arguments: blocked, call_id: null }];
+  const [blockedTurn, recoveryTurn] = materializeNativeRows([row]).turns;
+  assert.equal(blockedTurn.decision.failed_action, true);
+  assert.equal(blockedTurn.decision.training_approved, false);
+  assert.equal(blockedTurn.training_admission.approved, false);
+  assert.match(blockedTurn.training_admission.reason, /blocked or failed child result/);
+  assert.equal(recoveryTurn.decision.training_approved, true);
+});
+
 test('quality-pending parents expose only held child candidates and allow a reviewed exact sibling', () => {
   const row = nativeRow('pending-mixed-siblings', false);
   row.outcome.quality_pending = ['one sibling disagrees with its exact source target'];
