@@ -91988,6 +91988,30 @@
         "held_text": {}
       },
       "notes": "LFM/Mellum three-view render of seed52094 with v22 holds and child crisp-bypass filter applied"
+    },
+    {
+      "id": "luna-held-shapes-s52095-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52095-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "82 independently reviewed exact accepted roots; 522 approved native decisions out of 765 materialized from 93 exact parents; eleven whole-parent process/quality holds and 16 unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v23 source review, independent visible-feed semantic review, protected checks, seven exact child regex/keyword bypass holds, two missing iterateOn holds, two prolonged classifier detour holds, and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Eleven exact-success roots held whole: seven folder reducer child semantic crisp bypasses, two missing iterateOn, and two malformed/repeated-constant news classification detours. Six rejected roots reviewed; one AG News bridge identity held in v23 and two verbose evidence-equivalent Hotpot answers are not DPO negatives.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins v23. Structural source-group quarantine has no collateral but exact trajectory holds govern. Materialized with native status gate and child bypass audit af8ab8d7."
     }
   ],
   "coverage_backlog": [
