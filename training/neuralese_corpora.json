@@ -97687,6 +97687,30 @@
         }
       },
       "notes": "Adaptive production FULL ready now:50956train3155test documents pertokenizer. Completed full outputs+actualomissions; independently checkedALL366parent member/held/quality refs, current source review andboth exactdecisionholds. Originalv27buildpins retained; currentproofseparate. PH/WTremaininparentbuild and are NOT prerequisite tousingfull. No modelqualification orconsumptionclaim."
+    },
+    {
+      "id": "luna-held-shapes-s52106-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52106-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with oracle-accepted outcomes and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "90 independently reviewed oracle-accepted roots; 497 approved native decisions out of 669 materialized from 96 candidate parents; six whole-parent process holds and 18 unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v31 source review, protected-source check, two structural action-shape holds, four manual malformed/false-progress-divergence process holds, and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Six oracle-accepted roots held whole, no collateral. Three rejected roots reviewed; exact task conflict on three AGNews items now held by v31. False-positive iterateOn progress judgment in one exact root is held for runtime policy diagnosis. Rejected roots are not DPO negatives without separate semantic review.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Seed selection pins v31 after rerun, accepted source SHA unchanged. Exact trajectory holds govern. Global union requires current source-review, ticket-bypass and non-success hold checks."
     }
   ],
   "coverage_backlog": [
