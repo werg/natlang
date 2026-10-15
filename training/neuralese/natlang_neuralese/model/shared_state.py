@@ -77,8 +77,10 @@ class GraphPlan:
         return ((keys[None] >= starts[:, None]) & (keys[None] <= ends[:, None]))[None, None]
 
 
-def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, external_sizes=None) -> GraphPlan:
+def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, external_sizes=None, kv_block_alignment=128) -> GraphPlan:
     invocations = tuple(invocations)
+    if not isinstance(kv_block_alignment, int) or kv_block_alignment < 1:
+        raise ValueError('KV block alignment must be a positive integer')
     external_sizes = external_sizes or {}
     if any(not isinstance(size, int) or size < 1 for size in external_sizes.values()):
         raise ValueError('external state sizes must be positive integers')
@@ -139,6 +141,9 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
             if local < count:
                 own.append(len(logical))
                 logical.append(offset+local)
+        padding_slots = (-len(sources)) % kv_block_alignment
+        sources.extend([-1] * padding_slots)
+        positions.extend([0] * padding_slots)
         slot_offset = len(sources)
         slot_offsets.append(slot_offset)
         sources.extend(logical)
@@ -174,8 +179,8 @@ class LowRankTokenEmbedding(nn.Module):
         nn.init.zeros_(self.up.weight)
 
     def forward(self, embeddings, producing):
-        update = self.up(self.down(embeddings))
-        return embeddings + update * producing[..., None].to(update.dtype)
+        update = _linear(self.up, _linear(self.down, embeddings.to(self.down.weight.dtype)))
+        return embeddings + (update * producing[..., None].to(update.dtype)).to(embeddings.dtype)
 
 
 def _rotate(port, tensor, positions, layer):
@@ -191,25 +196,25 @@ def _rotate(port, tensor, positions, layer):
 def _layer_inputs(port, layer, h, attention):
     x = layer.input_layernorm(h) if hasattr(layer, 'input_layernorm') else layer.operator_norm(h)
     if not attention:
-        b, c, xx = layer.conv.in_proj(x).chunk(3, dim=-1)
-        return b * xx, c
+        b, c, xx = _linear(layer.conv.in_proj, x).chunk(3, dim=-1)
+        return (b * xx).float(), c
     attn = layer.self_attn
     batch, steps, _ = x.shape
     hd = attn.head_dim
     norm_q = getattr(attn, 'q_norm', None) or attn.q_layernorm
     norm_k = getattr(attn, 'k_norm', None) or attn.k_layernorm
-    q = norm_q(attn.q_proj(x).view(batch, steps, -1, hd)).transpose(1, 2)
-    k = norm_k(attn.k_proj(x).view(batch, steps, -1, hd)).transpose(1, 2)
-    v = attn.v_proj(x).view(batch, steps, -1, hd).transpose(1, 2)
-    return q, k, v
+    q = norm_q(_linear(attn.q_proj, x).view(batch, steps, -1, hd)).transpose(1, 2)
+    k = norm_k(_linear(attn.k_proj, x).view(batch, steps, -1, hd)).transpose(1, 2)
+    v = _linear(attn.v_proj, x).view(batch, steps, -1, hd).transpose(1, 2)
+    return q, k.float(), v.float()
 
 
 def _finish(port, layer, h, out, attention):
     if attention:
         projection = getattr(layer.self_attn, 'o_proj', None) or layer.self_attn.out_proj
-        h = h + projection(out.transpose(1, 2).reshape(h.shape[0], h.shape[1], -1))
+        h = h + _linear(projection, out.transpose(1, 2).reshape(h.shape[0], h.shape[1], -1))
     else:
-        h = h + layer.conv.out_proj(out)
+        h = h + _linear(layer.conv.out_proj, out)
     if hasattr(port, '_feed_forward'):
         return port._feed_forward(layer, h)
     from .lfm2_port import feed_forward_residual
@@ -223,10 +228,10 @@ def _convolve(layer, gated, c, plan, rows):
     index = torch.tensor(predecessor, device=gated.device)
     padded = torch.cat([gated, gated.new_zeros(1, 1, gated.shape[-1])], dim=1)
     gathered = padded[:, index]  # B,Q,W,C; -1 selects the explicit zero row
-    out = (gathered * kernel.weight[:, 0].T[None, None]).sum(2)
+    out = (gathered.float() * kernel.weight[:, 0].T.float()[None, None]).sum(2)
     if kernel.bias is not None:
-        out = out + kernel.bias
-    return c * out
+        out = out + kernel.bias.float()
+    return c * out.to(c.dtype)
 
 
 def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None = None, *, embeddings=None, external_blocks=None, external_identity=None, retain_states=True):
@@ -266,8 +271,8 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
                     v = torch.cat([v, *imported[1::2]], dim=2)
                 captured = (k, v)
                 q = _rotate(port, q, query_positions, index)
-                kr = _rotate(port, k[:, :, slots], key_positions, index)
-                out = graph_attention(q, kr, v[:, :, slots], plan, window,
+                kr = _rotate(port, k[:, :, slots].to(q.dtype), key_positions, index)
+                out = graph_attention(q, kr, v[:, :, slots].to(q.dtype), plan, window,
                                       layer.self_attn.scaling, prepared_mask=masks[window])
             else:
                 gated, c = values
@@ -294,8 +299,9 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
     """Slow invocation-major native-cache oracle, for correctness checks only.
 
     Each completed source retains raw layer states. Each consumer rotates only
-    its imported cache keys to its local positions. Query-wise attention and
-    conv1d are deliberately independent of the flattened mask/gather kernels.
+    its imported cache keys to its local positions. Per-invocation cache
+    construction and conv1d are independent of the flattened graph mask/gather;
+    attention uses the actual native serving kernel to preserve arithmetic.
     """
     device = port.embedding_weight.device
     if plan.token_count == 0:
@@ -322,17 +328,14 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                 source_k = torch.cat([entry[0] for entry in cache] + [k] + [item[i][0] for item in external], dim=2)
                 source_v = torch.cat([entry[1] for entry in cache] + [v] + [item[i][1] for item in external], dim=2)
                 cache.append((k, v))
-                parts = []
                 window = port.window(i) if hasattr(port, 'window') else None
-                for local in range(count):
-                    position = plan.own_positions[offset+local]
-                    start = 0 if window is None else max(0, position-window+1)
-                    indices = plan.tensor(remap(logical[start:position+1]), device)
-                    kr = _rotate(port, source_k[:, :, indices], torch.arange(start, position+1, device=device), i)
-                    qr = _rotate(port, q[:, :, local:local+1], plan.tensor([position], device), i)
-                    parts.append(F.scaled_dot_product_attention(qr, kr, source_v[:, :, indices],
-                                 scale=layer.self_attn.scaling, enable_gqa=True))
-                out = torch.cat(parts, dim=2)
+                indices = plan.tensor(remap(logical), device)
+                kr = _rotate(port, source_k[:, :, indices].to(q.dtype), torch.arange(len(logical), device=device), i)
+                query_positions = plan.own_positions[offset:offset+count]
+                qr = _rotate(port, q, plan.tensor(query_positions, device), i)
+                layout = AttentionLayout(query_positions, len(logical))
+                out = graph_attention(qr, kr, source_v[:, :, indices].to(q.dtype), layout, window, layer.self_attn.scaling)
+
             else:
                 gated, c = values
                 source = torch.cat([entry[0] for entry in cache] + [gated] + [item[i][0] for item in external], dim=1)
@@ -344,7 +347,7 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                     history = remap(plan.history(offset+local, width))
                     data = source[:, plan.tensor(history, device)].transpose(1, 2)
                     data = F.pad(data, (width-data.shape[-1], 0))
-                    conv = F.conv1d(data, kernel.weight, kernel.bias, groups=data.shape[1])
+                    conv = F.conv1d(data.to(c.dtype), kernel.weight, kernel.bias, groups=data.shape[1])
                     parts.append(conv.transpose(1, 2) * c[:, local:local+1])
                 out = torch.cat(parts, dim=1)
             h = _finish(port, layer, h, out, attention)
@@ -364,7 +367,7 @@ CONSUME_CLOSE = '<|/neuralese_consume|>'
 ROLE_MARKERS = (PRODUCE_OPEN, PRODUCE_CLOSE, CONSUME_OPEN, CONSUME_CLOSE)
 
 
-_flex = None
+_flex = {}
 
 
 def graph_block_mask(plan, device, window=None):
@@ -389,8 +392,8 @@ def graph_block_mask(plan, device, window=None):
                 torch.argsort(mask.to(torch.int8), dim=-1, descending=True, stable=True).to(torch.int32))
 
     def mask_mod(batch, head, q, kv):
-        valid = q < plan.token_count
-        safe_q = q.clamp(max=plan.token_count-1)
+        valid = q < starts.shape[0]
+        safe_q = q.clamp(max=starts.shape[0]-1)
         return valid & (kv >= starts[safe_q]) & (kv <= ends[safe_q])
 
     counts, indices = order(partial)
@@ -402,18 +405,21 @@ def graph_block_mask(plan, device, window=None):
 
 def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=None):
     global _flex
+    head_width = q.shape[-1]
+    if q.is_cuda and head_width < 16:
+        q, k, v = (F.pad(value, (0, 16-head_width)) for value in (q, k, v))
     if flex is None:
         flex = q.is_cuda
     if flex:
-        from torch.nn.attention.flex_attention import flex_attention
         from ..common.attention_backend import flex_kernel_options
-        if _flex is None:
-            _flex = torch.compile(flex_attention, dynamic=True)
-        return _flex(q, k, v, block_mask=prepared_mask if prepared_mask is not None else graph_block_mask(plan, q.device, window),
-                     scale=scale, enable_gqa=True,
-                     kernel_options={**flex_kernel_options(float32=q.dtype == torch.float32), 'BACKEND': 'TRITON'})
+        compiled = _compiled_flex(q, k, v, scale)
+        return compiled(q, k, v, block_mask=prepared_mask if prepared_mask is not None else graph_block_mask(plan, q.device, window),
+                     scale=scale,
+                     kernel_options={**flex_kernel_options(float32=q.dtype == torch.float32),
+                                     **({'FLOAT32_PRECISION': "'ieee'"} if q.dtype == torch.float32 else {}),
+                                     'BACKEND': 'TRITON'})[..., :head_width]
     return F.scaled_dot_product_attention(q, k, v, attn_mask=prepared_mask if prepared_mask is not None else plan.attention_mask(q.device, window),
-                                         scale=scale, enable_gqa=True)
+                                         scale=scale, enable_gqa=True)[..., :head_width]
 
 
 class SharedStateModel(nn.Module):
@@ -430,13 +436,16 @@ class SharedStateModel(nn.Module):
         if min(marker_ids) < 0 or max(marker_ids) >= port.embedding_weight.shape[0]:
             raise ValueError('role markers must have actual input and output vocabulary rows')
         self.port = port
+        for name in ('control_rows', 'control_head_rows'):
+            if hasattr(port, name):
+                getattr(port, name).requires_grad_(False)
         self.marker_ids = tuple(marker_ids)
         weight = port.embedding_weight
         self.input_rows = nn.Parameter(weight[list(marker_ids)].detach().clone())
         self.tied = port.output_weight is weight
         if not self.tied:
             self.output_rows = nn.Parameter(port.output_weight[list(marker_ids)].detach().clone())
-        self.adapter = LowRankTokenEmbedding(weight.shape[1], rank, device=weight.device, dtype=weight.dtype)
+        self.adapter = LowRankTokenEmbedding(weight.shape[1], rank, device=weight.device, dtype=torch.float32)
 
     def embed(self, ids):
         result = F.embedding(ids, self.port.embedding_weight)
@@ -447,10 +456,10 @@ class SharedStateModel(nn.Module):
     def logits(self, h):
         from .readout_storage import readout_weight
         normalized = self.port.final_norm(h)
-        logits = normalized @ readout_weight(self.port, self.port.output_weight, normalized.dtype).T
+        logits = _linear_weight(normalized, readout_weight(self.port, self.port.output_weight, normalized.dtype))
         rows = self.input_rows if self.tied else self.output_rows
         logits = logits.clone()
-        logits[..., list(self.marker_ids)] = normalized @ rows.to(normalized.dtype).T
+        logits[..., list(self.marker_ids)] = _linear_weight(normalized, rows.to(normalized.dtype))
         return logits
 
     def forward(self, plan, *, embeddings=None, reference=False, external_blocks=None, external_identity=None, retain_states=True):
@@ -599,6 +608,8 @@ def native_step(model, ids, cache=None, *, producing=False):
     mask = torch.full(ids.shape, producing, device=ids.device, dtype=torch.bool) if isinstance(producing, bool) else producing
     h = model.adapter(raw, mask)
     states, captures = [], []
+    masks = {}
+    layout = AttentionLayout(tuple(range(start, start+ids.shape[1])), start+ids.shape[1])
     for i, layer in enumerate(port.layers):
         attention = port.is_attention(i)
         values = _layer_inputs(port, layer, h, attention)
@@ -606,14 +617,14 @@ def native_step(model, ids, cache=None, *, producing=False):
         if attention:
             q, k, v = values
             captures.append({'kind': 'attention', 'raw_k': k[0].transpose(0, 1), 'v': v[0].transpose(0, 1)})
-            q, rotated_k = _rotate(port, q, positions, i), _rotate(port, k, positions, i)
-            state = append_kv(previous, rotated_k, v, static=not torch.is_grad_enabled())
+            q, rotated_k = _rotate(port, q, positions, i), _rotate(port, k.to(q.dtype), positions, i)
+            state = append_kv(previous, rotated_k, v.to(q.dtype), static=not torch.is_grad_enabled())
             window = port.window(i) if hasattr(port, 'window') else None
-            if window is not None and state.length > window:
-                from .hf_port import _attend_window
-                out = _attend_window(layer.self_attn, q, state.k, state.v, ids.shape[1], window)
-            else:
-                out = port._attend_fast(layer.self_attn, q, state.k, state.v, ids.shape[1], previous is None, None)
+            if window not in masks:
+                masks[window] = graph_block_mask(layout, ids.device, window) if ids.is_cuda else layout.attention_mask(ids.device, window)
+            out = graph_attention(q, state.k, state.v, layout, window, layer.self_attn.scaling,
+                                  prepared_mask=masks[window])
+
         else:
             gated, c = values
             captures.append({'kind': 'finite_convolution', 'gated_inputs': gated[0]})
@@ -621,7 +632,7 @@ def native_step(model, ids, cache=None, *, producing=False):
             prefix = (gated_channels.new_zeros(1, gated_channels.shape[1], port.conv_window)
                       if previous is None else previous.window)
             full = torch.cat([prefix, gated_channels], dim=2)
-            out = F.conv1d(full, layer.conv.conv.weight, layer.conv.conv.bias,
+            out = F.conv1d(full.to(c.dtype), layer.conv.conv.weight, layer.conv.conv.bias,
                            groups=gated_channels.shape[1]).transpose(1, 2) * c
             state = ConvState(full[:, :, -port.conv_window:])
         states.append(state)
@@ -665,7 +676,7 @@ def splice_block(model, cache, block, *, checkpoint_sha256, tokenizer_fingerprin
         else:
             if payload['kind'] != 'finite_convolution':
                 raise ValueError('native state attention/convolution layout disagrees with the consumer')
-            gated = payload['gated_inputs'].to(device=positions.device, dtype=port.embedding_weight.dtype).T[None]
+            gated = payload['gated_inputs'].to(device=positions.device, dtype=torch.float32).T[None]
             channels = port.layers[i].conv.conv.weight.shape[0]
             if gated.shape[1] != channels:
                 raise ValueError('native state convolution channels disagree with the consumer')
@@ -727,22 +738,25 @@ def _external_layers(port, plan, external_blocks, external_identity):
                 heads = attn.k_proj.out_features // attn.head_dim
                 if payload['raw_k'].shape[1:] != (heads, attn.head_dim):
                     raise ValueError('external state attention head layout disagrees with the target decoder')
-                layers.append(tuple(payload[key].to(port.embedding_weight).transpose(0, 1)[None] for key in ('raw_k', 'v')))
+                layers.append(tuple(payload[key].to(device=port.embedding_weight.device, dtype=torch.float32).transpose(0, 1)[None] for key in ('raw_k', 'v')))
             else:
                 if payload['kind'] != 'finite_convolution':
                     raise ValueError('external state layer kind disagrees with the decoder')
                 if payload['gated_inputs'].shape[1] != port.layers[i].conv.conv.weight.shape[0]:
                     raise ValueError('external state convolution channels disagree with the target decoder')
-                layers.append((payload['gated_inputs'].to(port.embedding_weight)[None],))
+                layers.append((payload['gated_inputs'].to(device=port.embedding_weight.device, dtype=torch.float32)[None],))
         result.append(tuple(layers))
     return tuple(result)
 
 
 def channel_checkpoint(model):
     """Native channel state alongside the shared trainer's full backbone state."""
-    return {'format': 'neuralese.native-channel/1', 'marker_names': ROLE_MARKERS,
+    return {'format': 'neuralese.native-channel/2', 'marker_names': ROLE_MARKERS,
             'marker_ids': model.marker_ids, 'width': model.input_rows.shape[1],
             'rank': model.adapter.down.out_features,
+            'adapter_dtype': str(model.adapter.down.weight.dtype),
+            'shared_state_dtype': 'torch.float32',
+            'kernel_contract': 'shared-state-fixed-native/1',
             'architecture': str(getattr(model.port.config, 'model_type', type(model.port).__name__)),
             'input_rows': model.input_rows.detach().clone(),
             'output_rows': None if model.tied else model.output_rows.detach().clone(),
@@ -752,7 +766,8 @@ def channel_checkpoint(model):
 def restore_channel_checkpoint(model, state):
     """Restore an exact native channel; legacy projections are never substituted."""
     expected = channel_checkpoint(model)
-    for key in ('format', 'marker_names', 'marker_ids', 'width', 'rank', 'architecture'):
+    for key in ('format', 'marker_names', 'marker_ids', 'width', 'rank', 'adapter_dtype',
+                'shared_state_dtype', 'kernel_contract', 'architecture'):
         actual = tuple(state[key]) if key in ('marker_names', 'marker_ids') else state[key]
         if actual != expected[key]:
             raise ValueError(f'native channel checkpoint {key} differs from this model')
@@ -764,3 +779,80 @@ def restore_channel_checkpoint(model, state):
             model.output_rows.copy_(state['output_rows'])
         model.adapter.load_state_dict(state['adapter'], strict=True)
     return model
+
+
+def _linear_weight(x, weight):
+    if x.is_cuda and x.dtype in (torch.float32, torch.bfloat16):
+        from ..maple.fused_moe import invariant_linear
+        shape = x.shape
+        return invariant_linear(x.reshape(-1, shape[-1]), weight).reshape(*shape[:-1], weight.shape[0])
+    return F.linear(x, weight)
+
+
+def _linear(module, x):
+    # Preserve custom adapter/quantization forwards rather than bypassing them.
+    if type(module) is not nn.Linear:
+        return module(x)
+    out = _linear_weight(x, module.weight)
+    return out if module.bias is None else out + module.bias
+
+
+@dataclass(frozen=True)
+class AttentionLayout:
+    query_positions: tuple[int, ...]
+    key_count: int
+
+    @property
+    def token_count(self):
+        return len(self.query_positions)
+
+    @property
+    def slot_sources(self):
+        return range(self.key_count)
+
+    def bounds(self, device, window=None):
+        ends = torch.tensor(self.query_positions, device=device)
+        starts = torch.zeros_like(ends)
+        if window is not None:
+            starts = (ends-window+1).clamp(min=0)
+        return starts, ends
+
+    def attention_mask(self, device, window=None):
+        starts, ends = self.bounds(device, window)
+        keys = torch.arange(self.key_count, device=device)
+        return ((keys[None] >= starts[:, None]) & (keys[None] <= ends[:, None]))[None, None]
+
+
+def _flex_entry(q, k, v, *, block_mask, scale, kernel_options):
+    from torch.nn.attention.flex_attention import flex_attention
+    return flex_attention(q, k, v, block_mask=block_mask, scale=scale,
+                          enable_gqa=True, kernel_options=kernel_options)
+
+
+def _compiled_flex(q, k, v, scale):
+    """Separate actual kernel contracts; never silently fall back to dense math.
+
+    Dynamo's per-code-object specialization limit otherwise mixes architectures,
+    precisions and cache layouts until an unfused O(T²) implementation replaces
+    native attention. Query/context lengths stay dynamic within each contract.
+    """
+    import hashlib
+    import types
+    def layout(tensor):
+        strides = tensor.stride()
+        order = tuple(sorted(range(tensor.ndim), key=lambda i: strides[i]))
+        # Native KV buffers have a fixed capacity larger than their current
+        # logical sequence. Distinguish allocations, not every decode length.
+        capacity_stride = (strides[1] if strides[2] == tensor.shape[-1]
+                           and strides[1] != tensor.shape[2]*tensor.shape[-1] else 0)
+        return order, capacity_stride
+    key = (q.dtype, k.dtype, v.dtype, q.shape[0], q.shape[1], k.shape[1], q.shape[-1], v.shape[-1],
+           scale, layout(q), layout(k), layout(v))
+    if key not in _flex:
+        name = 'native_flex_' + hashlib.sha256(repr(key).encode()).hexdigest()[:16]
+        # A fresh wrapper code object gives each real kernel contract its own
+        # dynamic-shape compiler cache; the inner Flex implementation is inlined.
+        code = _flex_entry.__code__.replace(co_name=name, co_qualname=name)
+        entry = types.FunctionType(code, globals(), name)
+        _flex[key] = torch.compile(entry, dynamic=True, fullgraph=True)
+    return _flex[key]

@@ -134,6 +134,8 @@ class QwenPortBackbone(PortBackbone):
         normed = self.final_norm(h_final)
         from .readout_storage import readout_weight
         logits = (normed @ readout_weight(self, self.output_weight, normed.dtype).t()).clone()
+        if not hasattr(self, 'control_rows'):
+            return logits
         rows = (self.control_rows if self.tied else self.control_head_rows).to(normed.dtype)
         logits[..., self.controls.open_id] = normed @ rows[0]
         logits[..., self.controls.close_id] = normed @ rows[1]

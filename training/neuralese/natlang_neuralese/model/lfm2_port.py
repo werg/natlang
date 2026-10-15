@@ -437,7 +437,7 @@ class PortBackbone(nn.Module):
     attention_checkpoint_prefixes = True
 
     def __init__(self, hf_model, controls: ControlTokens, noise: float = 0.02, seed: int = 0,
-                 fast: bool = True, conv_kernel=None):
+                 fast: bool = True, conv_kernel=None, markers: bool = True):
         super().__init__()
         self.fast = fast
         self.conv_kernel = conv_kernel
@@ -448,6 +448,8 @@ class PortBackbone(nn.Module):
         self.num_layers = self.config.num_hidden_layers
         self.layer_types = list(self.config.layer_types)
         self.conv_window = self.config.conv_L_cache - 1
+        if not markers:
+            return
         embed = self.embedding_weight
         generator = torch.Generator().manual_seed(seed)
         mean = embed.detach().float().mean(0).cpu()
@@ -502,6 +504,8 @@ class PortBackbone(nn.Module):
 
     def embed(self, ids: torch.Tensor) -> torch.Tensor:
         out = F.embedding(ids, self.embedding_weight)
+        if not hasattr(self, 'control_rows'):
+            return out
         rows = self.control_rows.to(out.dtype)
         out = torch.where((ids == self.controls.open_id)[..., None], rows[0], out)
         return torch.where((ids == self.controls.close_id)[..., None], rows[1], out)
@@ -513,6 +517,8 @@ class PortBackbone(nn.Module):
         """LM-head logits from the last residual (before the final norm)."""
         normed = self.final_norm(h_final)
         logits = normed @ readout_weight(self, self.embedding_weight, normed.dtype).t()
+        if not hasattr(self, 'control_rows'):
+            return logits
         rows = self.control_rows.to(normed.dtype)
         logits = logits.clone()
         logits[..., self.controls.open_id] = normed @ rows[0]

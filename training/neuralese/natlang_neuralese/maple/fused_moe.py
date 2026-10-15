@@ -516,7 +516,17 @@ class _InvariantLinear(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad):
         x, w = ctx.saved_tensors
-        return grad @ w, grad.T @ x
+        # The input adjoint is token-local too: cuBLAS chooses different BF16
+        # reductions for prefill/packed/one-token shapes unless it uses the
+        # same fixed tile as the forward. Weight gradients sum different rows
+        # by definition and keep the shared matrix-product path.
+        rows = grad.shape[0]
+        plan = SimpleNamespace(size=rows, blocks=triton.cdiv(rows, INVARIANT_BLOCK), block=INVARIANT_BLOCK,
+                               block_expert=torch.zeros(triton.cdiv(rows, INVARIANT_BLOCK), dtype=torch.int32,
+                                                        device=grad.device))
+        dx = _dense_mm(grad.contiguous(), None, w[None], plan, transpose=True) if ctx.needs_input_grad[0] else None
+        dw = grad.T @ x if ctx.needs_input_grad[1] else None
+        return dx, dw
 
 
 def invariant_linear(x: torch.Tensor, w: torch.Tensor) -> torch.Tensor:

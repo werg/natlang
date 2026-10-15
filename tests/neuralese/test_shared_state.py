@@ -234,7 +234,7 @@ def test_sparse_cuda_attention_matches_dense_forward_and_gradients():
     v = torch.randn_like(k, requires_grad=True)
     for window in (None, 61):
         actual = graph_attention(q, k, v, plan, window, 32**-0.5, flex=True)
-        expected = graph_attention(q, k, v, plan, window, 32**-0.5, flex=False)
+        expected = graph_attention(q.double(), k.double(), v.double(), plan, window, 32**-0.5, flex=False).float()
         torch.testing.assert_close(actual, expected, atol=5e-5, rtol=2e-4)
         weight = torch.randn_like(actual)
         a = torch.autograd.grad((actual*weight).sum(), (q, k, v))
@@ -406,11 +406,61 @@ def test_short_bf16_high_gqa_native_graph_uses_training_kernel(tokens):
     k = torch.randn(1, 4, tokens, 128, device='cuda', dtype=torch.bfloat16, requires_grad=True)
     v = torch.randn_like(k, requires_grad=True)
     actual = graph_attention(q, k, v, plan, None, 128**-0.5, flex=True)
-    expected = graph_attention(q, k, v, plan, None, 128**-0.5, flex=False)
+    expected = graph_attention(q.double(), k.double(), v.double(), plan, None, 128**-0.5, flex=False)
     # Compare FP32 accumulations of the same BF16 q/k/v, bounding only final
     # BF16 rounding; full-size model tests separately compare native behavior.
-    torch.testing.assert_close(actual, expected, atol=0.016, rtol=0.016)
-    a = torch.autograd.grad(actual.float().square().sum(), (q, k, v))
-    b = torch.autograd.grad(expected.float().square().sum(), (q, k, v))
+    torch.testing.assert_close(actual.double(), expected, atol=0.016, rtol=0.016)
+    upstream = torch.randn_like(actual)
+    a = torch.autograd.grad((actual*upstream).sum(), (q, k, v))
+    b = torch.autograd.grad((expected*upstream.double()).sum(), (q, k, v))
     for ga, gb in zip(a, b):
         torch.testing.assert_close(ga, gb, atol=0.125, rtol=0.032)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA unavailable')
+def test_native_fixed_linear_forward_and_input_adjoint_ignore_batch_shape():
+    from natlang_neuralese.maple.fused_moe import invariant_linear
+    torch.manual_seed(501)
+    x = torch.randn(73, 128, device='cuda', dtype=torch.bfloat16, requires_grad=True)
+    weight = torch.randn(256, 128, device='cuda', dtype=torch.bfloat16)
+    flat = invariant_linear(x, weight)
+    split = torch.cat([invariant_linear(x[:19], weight), invariant_linear(x[19:72], weight),
+                       invariant_linear(x[72:], weight)])
+    assert torch.equal(flat, split)
+    upstream = torch.randn_like(flat)
+    a = torch.autograd.grad((flat*upstream).sum(), x)[0]
+    b = torch.autograd.grad((split*upstream).sum(), x)[0]
+    assert torch.equal(a, b)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA unavailable')
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_native_bf16_graph_matches_cached_reference_with_fixed_arithmetic(family):
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    port = tiny(family).to(device='cuda', dtype=torch.bfloat16)
+    vocab = port.embedding_weight.shape[0]
+    model = SharedStateModel(port, tuple(range(vocab-4, vocab)), rank=4)
+    torch.nn.init.normal_(model.adapter.up.weight, std=0.03)
+    flat = model(graph())
+    reference = model(graph(), reference=True)
+    torch.testing.assert_close(flat['h_final'], reference['h_final'], atol=0, rtol=0)
+    labels = torch.tensor([2, 3], device='cuda')
+    actual_ce = torch.nn.functional.cross_entropy(model.logits(flat['h_final'][:, -2:])[0].float(), labels)
+    expected_ce = torch.nn.functional.cross_entropy(model.logits(reference['h_final'][:, -2:])[0].float(), labels)
+    actual = torch.autograd.grad(actual_ce, model.adapter.up.weight)[0]
+    expected = torch.autograd.grad(expected_ce, model.adapter.up.weight)[0]
+    torch.testing.assert_close(actual, expected, atol=2e-5, rtol=0.05)
+
+
+@pytest.mark.parametrize('family', ['lfm', 'qwen'])
+def test_marker_free_backbone_has_only_native_role_rows(family):
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    original = tiny(family)
+    port_type = PortBackbone if family == 'lfm' else QwenPortBackbone
+    port = port_type(original.hf, ControlTokens(60, 61), markers=False)
+    assert not hasattr(port, 'control_rows')
+    ids = torch.tensor([[2, 3, 4]])
+    torch.testing.assert_close(port.embed(ids), torch.nn.functional.embedding(ids, port.embedding_weight))
+    assert port.forward_ids(ids)['logits'].shape == (1, 3, port.embedding_weight.shape[0])
+    model = SharedStateModel(port, (60, 61, 62, 63), rank=4)
+    assert not any('control_rows' in name for name, _ in model.named_parameters())

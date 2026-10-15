@@ -91,3 +91,33 @@ TARGET state. It does not legitimize raw foreign-model KV.
   machinery, not task reward or model improvement.
 - Full Mellum, integrated serving/harness, corpus conversion and complete recipe
   execution remain required before the old diagnostic channel is retired.
+
+## Native arithmetic and gradient contract
+
+The native channel is `neuralese.native-channel/2`. Its low-rank embedding
+adapter is FP32; shared raw KV and finite-convolution inputs meet at FP32 adjoint
+junctions, then the executed attention/convolution receives the declared model
+activation dtype. This sums fanout gradients before the single cast back to the
+source layer. The native forward does not project states into a communication
+latent. Ordinary token-local linear operations reuse the existing fixed-tile
+`maple.fused_moe.invariant_linear`, including its input adjoint. Custom adapter or
+quantized modules keep their own forward implementations.
+
+Each invocation's KV slots begin on a 128-token block boundary. The same native
+Flex training kernel executes graph and cached attention, so cache imports do not
+change BF16 softmax tile boundaries. Padding creates no token queries and is
+always masked. The independently compiled kernel contracts distinguish actual
+architecture/dtype/cache layouts while leaving sequence lengths dynamic. A
+full-graph compiler contract forbids silent unfused dense attention: Dynamo's
+previous shared eight-specialization cache otherwise changed both arithmetic and
+memory behavior after another model or shape ran in the process.
+
+FP32 attention uses IEEE arithmetic and the kernel checks use an FP64 dense
+oracle with identical upstream gradients. Squared losses evaluated separately
+on two rounded outputs are not used as a test of the attention input adjoint.
+Destination startup additionally declares IEEE FP32 matrix/convolution precision;
+H100's NGC defaults otherwise enable TF32 in those FP32 qualification paths.
+Tiny LFM and Mellum BF16 graph/cached forward checks are bitwise equal and their
+actual consumer CE/embedding-adapter gradients pass the same tight checks in one
+process after mixed attention contracts. Full-size destination qualification is
+still recorded separately from unit correctness and task quality.
