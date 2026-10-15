@@ -338,7 +338,10 @@ def retry_transient(campaign, worker, seed, number, job, result, retry_dirs, *, 
                        'NATLANG_MODEL_REQUEST_BUDGET' in errors[-1].read_text())
     provider_error = any(phrase in message for phrase in
                          ('Codex error: An error occurred while processing your request',
-                          'rate limit', '429 Too Many Requests', 'Error: terminated'))
+                          'rate limit', '429 Too Many Requests', 'Error: terminated',
+                          'upstream connect error or disconnect/reset before headers',
+                          'ECONNRESET', '502 Bad Gateway', '503 Service Unavailable',
+                          '504 Gateway Timeout'))
     if not (resource_budget or provider_error or stream_overflow):
         return False
     attempt = len(own_retries) + 1
