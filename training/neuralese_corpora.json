@@ -84449,6 +84449,45 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "luna-held-shapes-s52077-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52077-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "88 exact accepted candidate roots; 84 admitted after four parent holds; 726 approved native decisions, all failed or unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Exact accepted roots, source-review and protected checks, independent dataset-workbench semantic audit, two contradictory-source research holds, one no-iterateOn research hold, native per-decision approval; only approved-turns.jsonl is training input",
+      "review_status": "Four of five dataset-workbench roots semantically approved; one mismatched positive-film label parent held; two adult/young-adult contradictory-source research roots and one no-iterateOn research root held",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Source and curation reviews bind immutable bytes; global union makes final cross-corpus decision. Source-review registry v4 records the contradictory HotpotQA question."
+    },
+    {
+      "id": "luna-dataset-workbench-s77-audit-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-dataset-workbench-s77-audit-20261015-v1",
+      "include": [
+        "review.json",
+        "REPORT.md"
+      ],
+      "source_class": "Independent source-bound item-level semantic audit of five Luna dataset-workbench exact roots",
+      "license": "Project-generated curriculum with specific source license facts in parent campaign",
+      "split": "train-only source parents; audit itself is review evidence only",
+      "admission": "Five roots reviewed; four semantically clear, one held; no direct training admission",
+      "training_admission": false,
+      "training_admission_reason": "Review and hold evidence, not training rows",
+      "review_status": "Complete independent audit with source hash and 34 item-level rationales",
+      "required_conversion": "None for audit; approved rows curated separately",
+      "notes": "Dataset19 M3 praises the film and should take the positive-film route, while the annotated route disagrees."
     }
   ],
   "coverage_backlog": [
