@@ -42,7 +42,7 @@ HANDLERS = {
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'seed', 'task_eval',
-                             'task_eval_every', 'forward_atol', 'gradient_atol', 'communication_foundation', 'refresh_at_checkpoint'}, 'result': 'checkpoint.pt'},
+                             'task_eval_every', 'forward_atol', 'gradient_atol', 'communication_foundation', 'refresh_at_checkpoint', 'learn_reasoning_boundaries'}, 'result': 'checkpoint.pt'},
     # Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md): plain target SFT from a base model with the
     # NeuraleseProjection; the TokenChoiceProjection is declared per stage (off in v1).
     # Its data is either prepared text (text_data, the shared declared input of neuralese-direct-v2) or records and
@@ -1324,7 +1324,7 @@ DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'coho
 def direct_windowing_handoffs(old_recipe, new_recipe, out):
     """Declared trainer-supported tuning, preserving each trainer's resume checks."""
     tuning = {'neuralese_direct': DIRECT_WINDOWING_PARAMETERS,
-              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation'),
+              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'learn_reasoning_boundaries'),
               'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs')}
     def parameters(recipe, stage):
         merged = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))

@@ -46,6 +46,23 @@ def test_compressed_recipe_input_checks_decoder_before_launch(monkeypatch):
     recipe.require_input_decoders(inputs)
 
 
+def test_explicit_reasoning_row_upgrade_is_a_supported_native_continuation(tmp_path):
+    from copy import deepcopy
+    from natlang_neuralese.train import recipe
+    before={'stages':[{'id':'full','kind':'native_state_sft',
+        'parameters':{'epochs':1,'communication_foundation':True}}]}
+    after=deepcopy(before)
+    after['stages'][0]['parameters']['learn_reasoning_boundaries']=True
+    changes,left,right=recipe.direct_windowing_handoffs(before,after,tmp_path)
+    assert changes=={'full':{'learn_reasoning_boundaries':[None,True]}}
+    assert left==right
+    assert 'learn_reasoning_boundaries' in recipe.HANDLERS['native_state_sft']['parameters']
+    assert '--learn-reasoning-boundaries' in recipe.stage_parameter_args(after['stages'][0]['parameters'])
+    (tmp_path/'full-report.json').write_text('{}')
+    with pytest.raises(ValueError,match='finished stage'):
+        recipe.direct_windowing_handoffs(before,after,tmp_path)
+
+
 def test_native_shared_controller_is_a_headless_recipe_stage(tmp_path):
     from natlang_neuralese.train.recipe import (HANDLERS, HEADLESS_NATIVE_KINDS,
         NATIVE_IDENTITY_QUALIFICATION, SHARED_NATIVE_KINDS, stage_input_args,
