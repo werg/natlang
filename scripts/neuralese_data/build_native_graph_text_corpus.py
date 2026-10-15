@@ -16,7 +16,7 @@ import tempfile
 from transformers import AutoTokenizer
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256
 
-from natlang_neuralese.data.native_graph_conversion import text_row_graph
+from natlang_neuralese.data.native_graph_conversion import text_row_graph, whole_trajectory_text_row_graph
 from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
 from natlang_neuralese.model.shared_state import ROLE_MARKERS
 
@@ -118,9 +118,12 @@ def main():
             split = row.get('split')
             if split not in {'train', 'test'}:
                 raise ValueError(f'admitted row has invalid split {split!r}')
-            graph = text_row_graph(row, source_tokenizer_fingerprint=source_fingerprint,
+            convert = (whole_trajectory_text_row_graph
+                       if row.get('supervision') == 'whole-trajectory' else text_row_graph)
+            graph = convert(row, source_tokenizer_fingerprint=source_fingerprint,
                 tokenizer=tokenizer, expanded_tokenizer_fingerprint=expanded_fingerprint,
-                context_weight=args.context_weight)
+                **({'feedback_weight': 0.25} if convert is whole_trajectory_text_row_graph
+                   else {'context_weight': args.context_weight}))
             writer = writers[split]
             groups = train_groups if split == 'train' else held_groups
             groups.update(graph['source_groups'])
@@ -140,7 +143,7 @@ def main():
         'expanded_tokenizer_fingerprint': expanded_fingerprint,
         'role_token_ids': list(role_ids), 'context_weight': args.context_weight,
         'outputs': summaries,
-        'conversion': 'static ordinary-text one-node graphs; no inferred native edges'}
+        'conversion': 'static one-node graphs; declared whole-trajectory rows reuse role-weighted all-position supervision; no inferred native edges'}
     args.output.mkdir(parents=True, exist_ok=True)
     temp_receipt = args.output / '.receipt.json.tmp'
     temp_receipt.write_text(json.dumps(receipt, indent=2) + '\n')

@@ -86,6 +86,93 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
     }
 
 
+def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
+                                   tokenizer, expanded_tokenizer_fingerprint: str,
+                                   feedback_weight: float = 0.25) -> dict:
+    """Convert an admitted whole-chat trajectory using the shared role policy.
+
+    Whole-trajectory renderings intentionally have no assistant-suffix boundary:
+    their existing trainer policy supervises all positions, with tool feedback
+    downweighted. Reuse the trainer's exact role parser and weight helper rather
+    than inventing a suffix or treating tool output as assistant output.
+    """
+    import torch
+    from ..train.text_supervision import ROLE_CODES, balanced_position_weights, chat_roles
+
+    if row.get('supervision') != 'whole-trajectory':
+        raise ValueError('role-weighted whole-trajectory conversion requires its declared supervision policy')
+    if row.get('tokenizer_sha256') != source_tokenizer_fingerprint:
+        raise ValueError('text row tokenizer differs from its pinned source tokenizer')
+    ids, text = row.get('token_ids'), row.get('text')
+    if (not isinstance(ids, list) or not ids or any(type(token) is not int or token < 0 for token in ids)
+            or not isinstance(text, str) or tokenizer.decode(ids, skip_special_tokens=False) != text):
+        raise ValueError('whole-trajectory source IDs do not decode to their exact text')
+    if row.get('split') not in {'train', 'test'}:
+        raise ValueError('whole-trajectory row needs an explicit train/test split')
+    groups = row.get('source_groups')
+    if (not isinstance(groups, list) or not groups
+            or any(not isinstance(group, str) or not group for group in groups)):
+        raise ValueError('whole-trajectory row needs explicit source groups')
+    identifier = row.get('id')
+    if not isinstance(identifier, str) or not identifier:
+        raise ValueError('whole-trajectory row needs its source identity')
+    if not math.isfinite(feedback_weight) or not 0 <= feedback_weight <= 1:
+        raise ValueError('tool feedback weight must be finite and between zero and one')
+    if not isinstance(expanded_tokenizer_fingerprint, str) or len(expanded_tokenizer_fingerprint) != 64:
+        raise ValueError('the expanded role-token tokenizer fingerprint must be pinned')
+
+    def token_id(value):
+        try:
+            token = tokenizer.convert_tokens_to_ids(value)
+            if isinstance(token, int) and token != getattr(tokenizer, 'unk_token_id', None):
+                return token
+        except Exception:
+            pass
+        return None
+
+    start_id = token_id('<|im_start|>')
+    role_ids = {token_id(role): role for role in ('system', 'user', 'assistant', 'tool')
+                if token_id(role) is not None}
+    if (start_id is None or len(role_ids) != 4 or len(set(role_ids.values())) != 4
+            or any(marker not in text for marker in ('<|im_start|>',))):
+        raise ValueError('whole-trajectory ChatML requires four distinct role IDs and an actual start marker')
+    think_open, think_close = token_id('<think>'), token_id('</think>')
+    prefixes = tuple(tuple(tokenizer(prefix, add_special_tokens=False)['input_ids']) for prefix in
+                     ('\n<tool_response>', '\n\n<tool_response>'))
+    labels = chat_roles(ids, start_id=start_id, role_ids=role_ids,
+                        think_open=think_open, think_close=think_close,
+                        tool_response_prefixes=prefixes)
+    roles = torch.tensor([list(labels)], dtype=torch.long)
+    span = torch.ones((1, len(ids)), dtype=torch.float32)
+    weights = balanced_position_weights(span, [None], roles=roles,
+                                        context_weight=1.0, feedback_weight=feedback_weight)[0].tolist()
+    # Native graph CE predicts from token 0 onward; the schema also requires
+    # the first own token to be explicitly non-target.
+    weights[0] = 0.0
+    source_records = row.get('source_record_ids') or [identifier]
+    if not isinstance(source_records, list) or not source_records:
+        raise ValueError('whole-trajectory provenance needs source record identities')
+    twin = row.get('source_twin_id') or source_records
+    twin_id = canonical_json_sha256_hex(sorted(str(value) for value in twin))
+    role_policy = {'name': 'role-weighted-all-positions', 'feedback_weight': feedback_weight,
+                   'reasoning_weight': 1.0, 'other_role_weight': 1.0,
+                   'source_trainer_policy': 'natlang_neuralese.train.text_supervision.balanced_position_weights'}
+    return {
+        'schema': SCHEMA,
+        'id': 'text:' + identifier,
+        'split': row['split'],
+        'source_groups': sorted(set(groups)),
+        'tokenizer_fingerprint': expanded_tokenizer_fingerprint,
+        'nodes': [{'name': 'text', 'token_ids': ids, 'target_weights': weights}],
+        'conversion': {'kind': 'static-transformation', 'role_interpretation': 'whole-trajectory-chat-roles',
+            'source_row_id': identifier, 'source_record_ids': sorted(set(str(value) for value in source_records)),
+            'source_twin_id': twin_id, 'source_tokenizer_fingerprint': source_tokenizer_fingerprint,
+            'source_text_sha256': _sha_text(text), 'supervision_policy': role_policy,
+            'runtime_opening_assistant_turns': row.get('runtime_opening_assistant_turns', 0),
+            'context_attestations': row.get('neuralese_context_attestations', [])},
+    }
+
+
 def _wrap_span(ids: list[int], weights: list[float], span: Mapping[str, Any], *,
                open_id: int, close_id: int, role: str, source_tokenizer,
                required_body_sha256: str | None = None):

@@ -1,6 +1,6 @@
 from natlang_neuralese.data.native_graph import parse_graph
 from natlang_neuralese.data.native_graph_conversion import (
-    locate_attested_role_span, text_row_graph, witnessed_pair_graph,
+    locate_attested_role_span, text_row_graph, whole_trajectory_text_row_graph, witnessed_pair_graph,
 )
 
 
@@ -132,6 +132,72 @@ def test_text_row_conversion_preserves_full_tokens_and_exact_target_boundary():
     assert list(example.target_weights) == [.0] + [.05] * (boundary-1) + [1.] * (len(ids)-boundary)
     assert graph['conversion']['kind'] == 'static-transformation'
     assert graph['conversion']['source_record_ids'] == ['ordinary']
+
+
+class ChatRoleAsciiTokenizer(AsciiTokenizer):
+    special = ('<|im_start|>', '<|im_sep|>', '<|im_end|>', '<tool_response>', '</tool_response>',
+               '<think>', '</think>', 'system', 'user', 'assistant', 'tool')
+    token_ids = {value: 2000 + index for index, value in enumerate(special)}
+    unk_token_id = -1
+
+    def __call__(self, text, *, add_special_tokens=False, return_offsets_mapping=False):
+        ids, offsets, position = [], [], 0
+        while position < len(text):
+            match = next((value for value in self.special if text.startswith(value, position)), None)
+            if match is None:
+                ids.append(ord(text[position])); offsets.append((position, position + 1)); position += 1
+            else:
+                ids.append(self.token_ids[match]); offsets.append((position, position + len(match)))
+                position += len(match)
+        result = {'input_ids': ids}
+        if return_offsets_mapping:
+            result['offset_mapping'] = offsets
+        return result
+
+    def decode(self, ids, skip_special_tokens=False):
+        reverse = {value: key for key, value in self.token_ids.items()}
+        return ''.join(reverse.get(value, chr(value)) for value in ids)
+
+    def convert_tokens_to_ids(self, value):
+        return self.token_ids.get(value, self.unk_token_id)
+
+
+def test_whole_trajectory_conversion_reuses_exact_role_weight_policy():
+    import pytest
+    from natlang_neuralese.data.native_graph import parse_graph
+    from natlang_neuralese.train.text_supervision import ROLE_CODES, balanced_position_weights, chat_roles
+    import torch
+
+    tokenizer = ChatRoleAsciiTokenizer()
+    text = ('<|im_start|>user\n<tool_response>tool output</tool_response><|im_end|>'
+            '<|im_start|>assistant<|im_sep|><think>reasoning</think>answer<|im_end|>')
+    ids = tokenizer(text)['input_ids']
+    source = {'id': 'whole-trajectory:example', 'text': text, 'token_ids': ids,
+        'tokenizer_sha256': 'a' * 64, 'split': 'train', 'source_groups': ['group:trajectory'],
+        'supervision': 'whole-trajectory', 'source_record_ids': ['record:1', 'record:2']}
+    graph = whole_trajectory_text_row_graph(source, source_tokenizer_fingerprint='a' * 64,
+        tokenizer=tokenizer, expanded_tokenizer_fingerprint='b' * 64)
+    example = parse_graph(graph, tokenizer_fingerprint='b' * 64)
+    role_ids = {tokenizer.convert_tokens_to_ids(name): name for name in ('system', 'user', 'assistant', 'tool')}
+    prefixes = tuple(tuple(tokenizer(prefix)['input_ids']) for prefix in ('\n<tool_response>', '\n\n<tool_response>'))
+    labels = chat_roles(ids, start_id=tokenizer.convert_tokens_to_ids('<|im_start|>'), role_ids=role_ids,
+        think_open=tokenizer.convert_tokens_to_ids('<think>'), think_close=tokenizer.convert_tokens_to_ids('</think>'),
+        tool_response_prefixes=prefixes)
+    expected = balanced_position_weights(torch.ones((1, len(ids))), [None],
+        roles=torch.tensor([list(labels)]), context_weight=1., feedback_weight=.25)[0].tolist()
+    expected[0] = 0.
+    assert list(example.plan.invocations[0].token_ids) == ids
+    assert list(example.target_weights) == pytest.approx(expected)
+    assert graph['conversion']['supervision_policy']['name'] == 'role-weighted-all-positions'
+    tool_positions = [i for i, role in enumerate(labels) if role == ROLE_CODES.index('tool')]
+    assistant_positions = [i for i, role in enumerate(labels) if role == ROLE_CODES.index('assistant_reply')]
+    assert tool_positions and assistant_positions
+    assert all(expected[i] == pytest.approx(expected[assistant_positions[0]] * .25) for i in tool_positions)
+    assert expected[0] == 0.
+    source.pop('supervision')
+    with pytest.raises(ValueError, match='declared supervision'):
+        whole_trajectory_text_row_graph(source, source_tokenizer_fingerprint='a' * 64,
+            tokenizer=tokenizer, expanded_tokenizer_fingerprint='b' * 64)
 
 
 def test_marker_looking_text_stays_complete_ordinary_text_without_attested_role():
