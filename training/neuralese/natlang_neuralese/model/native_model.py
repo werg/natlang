@@ -142,9 +142,12 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
         if participant not in state['participants']:
             raise ValueError('shared native checkpoint requires an explicit existing participant')
         entry = state['participants'][participant]
+        shared_training = {'optimizer': entry.get('optimizer'), 'fp8': entry.get('fp8'),
+            'rng': state['training'].get('rng'), 'step': state['training']['step'],
+            'options': (state['training'].get('config_history') or [{}])[-1].get('config', {})}
         state = {'schema': CHECKPOINT_SCHEMA, 'model_config': entry['model_config'],
                  **entry['model_state'], 'shared_participant': participant,
-                 'shared_step': state['training']['step']}
+                 'shared_step': state['training']['step'], 'shared_training': shared_training}
     elif participant is not None:
         raise ValueError('participant selection requires a shared native checkpoint')
     if state.get('schema') != CHECKPOINT_SCHEMA:

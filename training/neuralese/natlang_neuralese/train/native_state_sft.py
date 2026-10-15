@@ -81,7 +81,8 @@ class NativeGraphSource:
                 raise ValueError(f'{self.path}: duplicate example id {example.id!r}')
             binding = _row_bindings([example])[example.id]
             visits = {'id': example.id, 'groups': example.source_groups, 'binding': binding,
-                      'supervised_tokens': sum(weight > 0 for weight in example.target_weights)}
+                      'supervised_tokens': sum(weight > 0 for weight in example.target_weights),
+                      'forward_tokens': example.plan.token_count}
             self.entries.append(visits)
             self.bindings[example.id] = binding
             self.groups.update(example.source_groups)
@@ -138,6 +139,22 @@ class NativeGraphSource:
 
     def ordered_ids(self):
         return [entry['id'] for entry in self.entries]
+
+
+def batch_boundaries(entries, *, batch_graphs=1, batch_tokens=0):
+    """Sequential whole-graph batches; a long graph remains one intact batch."""
+    if batch_graphs < 1 or batch_tokens < 0:
+        raise ValueError('native batching requires positive graph count and nonnegative token budget')
+    boundaries, start, tokens = [], 0, 0
+    for index, entry in enumerate(entries):
+        size = entry['forward_tokens']
+        if index > start and ((batch_tokens and tokens + size > batch_tokens)
+                              or (not batch_tokens and index-start >= batch_graphs)):
+            boundaries.append((start, index)); start, tokens = index, 0
+        tokens += size
+    if start < len(entries):
+        boundaries.append((start, len(entries)))
+    return boundaries
 
 
 def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in_backward=True):
@@ -384,10 +401,17 @@ def build_parser():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--base', type=Path)
     parser.add_argument('--continue-from', type=Path)
+    parser.add_argument('--native-participant')
+    parser.add_argument('--objective-continuation', action='store_true',
+        help='explicit new source/objective stage; preserve full optimizer/RNG and start local exposure at zero')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--rank', type=int, default=8)
     parser.add_argument('--epochs', type=float, default=1.)
     parser.add_argument('--batch-graphs', type=int, default=1)
+    parser.add_argument('--batch-tokens', type=int, default=0,
+        help='pack whole sequential graphs to this token volume instead of graph-count batching')
+    parser.add_argument('--dtype', choices=('float32', 'bfloat16', 'float16'), default=None,
+        help='fresh backbone precision; required for a new lineage, resumes retain exact checkpoint dtype')
     parser.add_argument('--learning-rate', type=float, default=3e-6)
     parser.add_argument('--weight-decay', type=float, default=.1)
     parser.add_argument('--latent-ns', choices=('quintic', 'cubic5'), default='quintic')
@@ -415,7 +439,7 @@ def main(argv=None):
     checkpoint_options = {key: str(value) if isinstance(value, Path) else value
                           for key, value in vars(args).items()}
     if not (math.isfinite(args.epochs) and args.epochs > 0) or min(args.batch_graphs, args.eval_every,
-            args.chunk_tokens, args.rank) < 1 or args.checkpoint_every < 0:
+            args.chunk_tokens, args.rank) < 1 or min(args.checkpoint_every, args.batch_tokens) < 0:
         raise ValueError('native SFT requires positive epochs/batch/eval/chunk/rank and nonnegative checkpoint cadence')
     if args.checkpoint_every and args.checkpoint_every % args.eval_every:
         raise ValueError('checkpoint cadence must be an evaluation cadence multiple')
@@ -429,11 +453,16 @@ def main(argv=None):
     policy.install_signal_handlers()
     resume = None
     parent_continuation = False
-    if args.continue_from:
+    shared_resume = None
+    if args.continue_from and not policy.slot.exists():
         model, tokenizer, roles, config, parent_state = load_native_checkpoint(args.continue_from, base=args.base,
-                                                                          device=args.device)
+                                                                          device=args.device, participant=args.native_participant)
+        shared_resume = parent_state.get('shared_training')
         resume = parent_state.get('training')
-        if not isinstance(resume, dict) or resume.get('schema') != TRAINING_SCHEMA:
+        if shared_resume is not None:
+            if not args.objective_continuation or not shared_resume.get('optimizer') or not shared_resume.get('rng'):
+                raise ValueError('shared native parent requires declared objective continuation and full optimizer/RNG')
+        elif not isinstance(resume, dict) or resume.get('schema') != TRAINING_SCHEMA:
             raise ValueError('native SFT continuation lacks exact optimizer/schedule/RNG state')
         parent_continuation = not policy.slot.exists()
         if parent_continuation:
@@ -447,8 +476,12 @@ def main(argv=None):
     else:
         if args.base is None:
             raise ValueError('fresh native SFT needs --base')
+        if args.dtype is None:
+            raise ValueError('fresh native SFT requires explicit --dtype (QAD LFM float32; Mellum bfloat16)')
         model, tokenizer, roles, config = load_native_model(args.base, rank=args.rank,
-                                                             device=args.device, dtype=torch.bfloat16)
+            device=args.device, dtype=getattr(torch, args.dtype))
+    if args.dtype is not None and config['dtype'] != str(getattr(torch, args.dtype)):
+        raise ValueError('declared dtype differs from the exact restored native checkpoint')
     if config['rank'] != args.rank and not args.continue_from and not policy.slot.exists():
         raise ValueError('native rank differs from declared stage rank')
     from ..data.text_corpus import tokenizer_fingerprint
@@ -483,27 +516,39 @@ def main(argv=None):
                 'held_sha256': source_receipts[1]['sha256'], 'optimizer': 'shared-muon-sr-in-backward-v1',
                 'optimizer_options': {'lr': args.learning_rate, 'weight_decay': args.weight_decay,
                                       'latent_ns': args.latent_ns},
-                'batch_graphs': args.batch_graphs, 'seed': args.seed, 'rank': config['rank'],
+                'batch_graphs': args.batch_graphs, 'batch_tokens': args.batch_tokens, 'seed': args.seed, 'rank': config['rank'],
                 'fp8': {'kind': args.fp8_training, 'recipe': args.fp8_recipe,
                         'amax_history_len': args.fp8_amax_history_len},
                 'objective': objective_binding}
     appended_ids = set()
+    if shared_resume is not None:
+        old_options = shared_resume['options']
+        old_optimizer = {'weight_decay': old_options.get('weight_decay', .1),
+                         'latent_ns': old_options.get('latent_ns', 'quintic')}
+        resume = {'identity': {**training_identity, 'optimizer_options': old_optimizer},
+            'optimizer': shared_resume['optimizer'], 'rng': shared_resume['rng'],
+            'fp8': shared_resume.get('fp8'), 'step': 0, 'global_step': shared_resume['step']}
     if resume is not None:
         previous = resume.get('identity') or {}
-        stable = ('schema', 'config', 'schedule', 'optimizer', 'batch_graphs', 'seed', 'rank', 'fp8', 'objective')
-        if any(previous.get(key) != training_identity.get(key) for key in stable):
+        stable = ('schema', 'config', 'schedule', 'optimizer', 'batch_graphs', 'batch_tokens', 'seed', 'rank', 'fp8', 'objective')
+        if parent_continuation and args.objective_continuation:
+            stable = tuple(key for key in stable if key not in {'objective', 'batch_graphs', 'batch_tokens'})
+        if any(previous.get(key, 0 if key == 'batch_tokens' else None) != training_identity.get(key) for key in stable):
             raise ValueError('native SFT continuation changes model/held/optimizer/schedule identity')
         old_optimizer_options = previous.get('optimizer_options') or {}
         if (old_optimizer_options.get('weight_decay') != args.weight_decay or
                 old_optimizer_options.get('latent_ns') != args.latent_ns):
             raise ValueError('native SFT continuation changes optimizer state semantics; only the learning rate may be tuned')
-        prior_bindings = resume.get('source_row_bindings') or {}
-        appended_ids = append_only_rows(prior_bindings, source_row_bindings, label='training-source')
-        prior_order = resume.get('source_row_order') or []
-        if source_order[:len(prior_order)] != prior_order:
-            raise ValueError('native SFT continuation reordered prior training rows; exact cursor cannot be resumed')
-        prior_held = resume.get('held_row_bindings') or {}
-        append_only_rows(prior_held, held_row_bindings, label='held-source')
+        if not (parent_continuation and args.objective_continuation):
+            prior_bindings = resume.get('source_row_bindings') or {}
+            appended_ids = append_only_rows(prior_bindings, source_row_bindings, label='training-source')
+            prior_order = resume.get('source_row_order') or []
+            if source_order[:len(prior_order)] != prior_order:
+                raise ValueError('native SFT continuation reordered prior training rows; exact cursor cannot be resumed')
+            prior_held = resume.get('held_row_bindings') or {}
+            append_only_rows(prior_held, held_row_bindings, label='held-source')
+        elif shared_resume is None:
+            append_only_rows(resume.get('held_row_bindings') or {}, held_row_bindings, label='held-source')
         if appended_ids:
             print(json.dumps({'event': 'native_data_append', 'prior_rows': len(prior_bindings),
                               'new_rows': len(appended_ids), 'optimizer_state': 'restored',
@@ -513,6 +558,9 @@ def main(argv=None):
             'weight_decay': args.weight_decay, 'latent_ns': args.latent_ns,
             'continued_from': previous.get('optimizer_options')}
         training_identity['prior_source_hash'] = previous.get('train_source_hash')
+    if parent_continuation:
+        checkpoint_options['continuation'] = {'checkpoint_sha256': sha256_file_hex_cached(args.continue_from),
+            'participant': args.native_participant, 'objective_transition': bool(args.objective_continuation)}
     if args.fp8_training != 'off':
         arch = config['architecture']
         expected = 'triton-experts' if arch in {'mellum', 'maple'} else 'te-fp8'
@@ -587,9 +635,11 @@ def main(argv=None):
     whole_epochs = int(args.epochs)
     fractional_rows = math.ceil((args.epochs - whole_epochs) * len(train))
     target_rows = whole_epochs * len(train) + fractional_rows
-    total_updates = whole_epochs * math.ceil(len(train) / args.batch_graphs)
+    epoch_batches = batch_boundaries(train.entries, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens)
+    total_updates = whole_epochs * len(epoch_batches)
     if fractional_rows:
-        total_updates += math.ceil(fractional_rows / args.batch_graphs)
+        total_updates += len(batch_boundaries(train.entries[:fractional_rows],
+            batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens))
     total_end = total_updates
     if parent_continuation:
         step = 0
@@ -603,12 +653,18 @@ def main(argv=None):
     while step < total_end and not policy.signaled:
         batch = []
         limit = fractional_rows if epoch == whole_epochs and fractional_rows else len(train)
-        while len(batch) < args.batch_graphs and epoch < math.ceil(args.epochs) and cursor < limit:
+        batch_tokens = 0
+        while epoch < math.ceil(args.epochs) and cursor < limit:
+            next_tokens = train.entries[cursor]['forward_tokens']
+            if batch and ((args.batch_tokens and batch_tokens + next_tokens > args.batch_tokens)
+                          or (not args.batch_tokens and len(batch) >= args.batch_graphs)):
+                break
             try:
                 batch.append(next(source_iter))
             except StopIteration as error:
                 raise ValueError('native graph source ended before its validated row count') from error
             cursor += 1
+            batch_tokens += next_tokens
         if cursor >= limit:
             epoch += 1
             cursor = 0

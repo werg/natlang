@@ -39,7 +39,7 @@ HANDLERS = {
     'native_state_sft': {'module': 'natlang_neuralese.train.native_state_sft',
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
                          'optional_inputs': {'continue_from'},
-                         'parameters': {'base', 'rank', 'epochs', 'batch_graphs', 'learning_rate', 'weight_decay',
+                         'parameters': {'base', 'rank', 'dtype', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'checkpoint_every', 'checkpoint_layers', 'chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'seed', 'task_eval',
                              'task_eval_every', 'forward_atol', 'gradient_atol'}, 'result': 'checkpoint.pt'},

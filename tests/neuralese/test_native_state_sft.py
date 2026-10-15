@@ -84,7 +84,7 @@ def test_packed_graph_batch_matches_mean_independent_graph_losses_and_gradients(
             self.readout = nn.Linear(5, 8, bias=False)
             self.port = SimpleNamespace(checkpoint_layers=True)
 
-        def forward(self, plan, retain_states=False):
+        def forward(self, plan, retain_states=False, **kwargs):
             ids = [token for node in plan.invocations for token in node.token_ids]
             return {'h_final': self.embedding(torch.tensor(ids))[None], 'plan': plan}
 
@@ -179,7 +179,7 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
         argv = ['--native-graphs', str(train_path), '--held-native-graphs', str(held_path),
             '--out', str(out), '--base', str(base), '--device', 'cpu', '--rank', '2',
             '--epochs', str(epochs), '--eval-every', '1', '--batch-graphs', '1',
-            '--learning-rate', '1e-3', '--weight-decay', '0', '--forward-atol', '1e-4',
+            '--dtype', 'float32', '--learning-rate', '1e-3', '--weight-decay', '0', '--forward-atol', '1e-4',
             '--gradient-atol', '1e-5', '--seed', '23']
         if continue_from is not None:
             argv += ['--continue-from', str(continue_from)]
@@ -213,3 +213,11 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
         equal_state(resumed[section], continuous[section])
     equal_state(resumed['training']['optimizer'], continuous['training']['optimizer'])
     equal_state(resumed['training']['rng'], continuous['training']['rng'])
+
+
+def test_token_volume_batches_preserve_every_graph_and_long_graph():
+    from natlang_neuralese.train.native_state_sft import batch_boundaries
+    entries = [{'forward_tokens': count} for count in (3, 4, 20, 2, 5)]
+    assert batch_boundaries(entries, batch_tokens=8) == [(0, 2), (2, 3), (3, 5)]
+    assert batch_boundaries(entries, batch_graphs=2) == [(0, 2), (2, 4), (4, 5)]
+    assert batch_boundaries([], batch_tokens=8) == []
