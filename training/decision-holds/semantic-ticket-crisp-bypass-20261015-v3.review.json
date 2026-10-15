@@ -1,8 +1,7 @@
 {
   "schema": "natlang.semantic-ticket-crisp-bypass-holds/1",
   "training_admission": false,
-  "supersedes": "training/decision-holds/semantic-ticket-crisp-bypass-20261015-v1.jsonl",
-  "pattern": "child invocation in curriculum_folder_criteria_reducer uses a JS regex literal, RegExp constructor, or includes/startsWith/endsWith on resolved/fixed/customer/confirmed ticket language",
+  "pattern": "child invocation in curriculum_folder_criteria_reducer uses regex, RegExp or literal string includes/startsWith/endsWith/indexOf rather than semantic judgment",
   "source_approved_turns_sha256": {
     "runs/luna-held-shapes-native-turns-20261013-v1/approved-turns.jsonl": "ac42829b1856881ce03dcb6f9905a2b4fbcf52f7f19e5a81b54635c21df2b18e",
     "runs/luna-folder-recovery-native-turns-20261013-v1/approved-turns.jsonl": "45114f8a7346cf006f4566e0b0cdb6bcd5ba655e69c64066af423b871675faf6",
@@ -48,13 +47,14 @@
     "runs/luna-s52091-parent-review-20261015-v1/approved-turns.jsonl": "4a38015d2ab7b3f0331997d2abced3508713718f87692d8fd10fb53a3b82ef24",
     "runs/luna-s52092-parent-review-20261015-v1/approved-turns.jsonl": "ba8d75b3f006a505b3786239d809ee21292d04ae41afc4665f045313d498c47e",
     "runs/luna-s52093-parent-review-20261015-v1/approved-turns.jsonl": "6ec72ed693f3fd66c1f5a2286e4972254376f9066d9da0b241fbaed8c3cad800",
-    "runs/luna-s52094-parent-review-20261015-v1/approved-turns.jsonl": "5dae74c21c5f62636c744802e5779cc1087829209e51a0e79a9e8f150f597431"
+    "runs/luna-s52094-parent-review-20261015-v1/approved-turns.jsonl": "5dae74c21c5f62636c744802e5779cc1087829209e51a0e79a9e8f150f597431",
+    "runs/luna-s52095-parent-review-20261015-v1/approved-turns.jsonl": "6d887c45b1ccbc0670d5bb1a044577b81e547b1f577068d3b4a16669009c1eb3"
   },
-  "affected_parents": 227,
-  "held_decisions": 4574,
-  "witness_decisions": 347,
+  "affected_parents": 228,
+  "held_decisions": 4589,
+  "witness_decisions": 353,
   "witness_by_corpus": {
-    "luna-folder-recovery-native-turns-20261013-v1": 7,
+    "luna-folder-recovery-native-turns-20261013-v1": 8,
     "luna-held-shapes-closed-backlog-v5-native-turns-20261014-v1": 39,
     "luna-held-shapes-followon-native-turns-20261013-v1": 9,
     "luna-held-shapes-s52012-s52017-native-turns-20261013-v1": 25,
@@ -64,7 +64,7 @@
     "luna-held-shapes-s52070-curated-20261015-v1": 9,
     "luna-held-shapes-s52071-curated-20261015-v1": 10,
     "luna-held-shapes-s52072-curated-20261015-v1": 8,
-    "luna-held-shapes-s52073-curated-20261015-v1": 12,
+    "luna-held-shapes-s52073-curated-20261015-v1": 13,
     "luna-held-shapes-s52074-curated-20261015-v1": 10,
     "luna-held-shapes-s52075-curated-20261015-v1": 11,
     "luna-held-shapes-s52076-curated-20261015-v1": 9,
@@ -75,17 +75,19 @@
     "luna-held-shapes-s52081-curated-20261015-v1": 10,
     "luna-held-shapes-s52082-curated-20261015-v1": 10,
     "luna-held-shapes-s52083-curated-20261015-v1": 17,
-    "luna-held-shapes-s52084-curated-20261015-v1": 7,
+    "luna-held-shapes-s52084-curated-20261015-v1": 8,
     "luna-held-shapes-s52085-curated-20261015-v3": 8,
     "luna-held-shapes-s52086-curated-20261015-v1": 10,
     "luna-held-shapes-s52087-curated-20261015-v1": 3,
     "luna-held-shapes-s52088-curated-20261015-v1": 8,
     "luna-held-shapes-s52089-curated-20261015-v1": 17,
-    "luna-held-shapes-s52090-curated-20261015-v1": 17,
+    "luna-held-shapes-s52090-curated-20261015-v1": 18,
     "luna-held-shapes-s52091-curated-20261015-v1": 9,
-    "luna-held-shapes-s52092-curated-20261015-v1": 7,
+    "luna-held-shapes-s52092-curated-20261015-v1": 9,
     "luna-held-shapes-s52093-curated-20261015-v1": 7
   },
-  "held_ids_sha256": "acd87a33573ccfcea10ab94b84aa427bb67b5a4e65e6ee57dc7b45be45ca003c",
-  "decision": "Exclude every approved decision and whole-trajectory chain of each affected parent from native SFT unions. Source/render files remain reproducible, but do not confer admission without this filter."
+  "held_ids_sha256": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9",
+  "new_decisions_since_v2": 15,
+  "decision": "Exclude every approved decision and whole-trajectory chain of each affected parent from native SFT unions. Source/render files remain reproducible, but do not confer admission without this filter.",
+  "supersedes_commit": "92f9faeb (obsolete v2 exact hold set)"
 }

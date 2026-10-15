@@ -25,8 +25,11 @@ from natlang_neuralese.common.jsonio import open_jsonl_text
 NL_CALL = re.compile(r'\bnl\s*(?:<|\.|`|\()')
 SEMANTIC_TICKET_WORD = re.compile(r'\b(?:resolv\w*|fix\w*|customer|confirm\w*)\b', re.I)
 JS_REGEX_LITERAL = re.compile(r'/(?:\\.|[^/\\\n]){1,300}/[gimsuy]*')
-JS_KEYWORD_TEST = re.compile(r'\.(?:includes|startsWith|endsWith)\s*\(\s*[\'\"](?:resolv\w*|fix\w*|customer|confirm\w*)', re.I)
-JS_REGEX_CONSTRUCTOR = re.compile(r'\bnew\s+RegExp\s*\(\s*[\'\"][^\'\"]*(?:resolv\w*|fix\w*|customer|confirm\w*)', re.I)
+# The child receives a ticket and is itself the semantic judgment boundary.
+# Literal substring checks are a bypass regardless of which template phrase
+# they test ("Status: resolved" escaped the earlier narrow word list).
+JS_KEYWORD_TEST = re.compile(r'\.(?:includes|startsWith|endsWith|indexOf)\s*\(\s*[\'\"][^\'\"]+[\'\"]', re.I)
+JS_REGEX_CONSTRUCTOR = re.compile(r'\bnew\s+RegExp\s*\(\s*[\'\"][^\'\"]+', re.I)
 
 
 def digest(path: Path) -> str:
