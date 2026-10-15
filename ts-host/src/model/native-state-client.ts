@@ -108,10 +108,11 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
 /** The existing write-port interface, backed by actual native producer execution. */
 export async function nativeStateWritePort(options: NativeClientOptions): Promise<NeuralesePort> {
   const info = options.info ?? await neuraleseServerInfo(options.endpoint, { headers: options.headers });
-  const native = info.native_state as { enabled?: boolean; architecture?: string } | undefined;
+  const native = info.native_state as { enabled?: boolean; architecture?: string; semantic_adapter_sha256?: string } | undefined;
   if (!native?.enabled || !native.architecture || !serves(info, 'native.text-write'))
     return failure('neuralese-native-text-write-unavailable', 'configure a native server with forced text producer support');
-  return { dialect: `native-state/${native.architecture}`, async write(text, extra = {}) {
+  const dialect = native.semantic_adapter_sha256 ? `semantic-state/${native.semantic_adapter_sha256}` : `native-state/${native.architecture}`;
+  return { dialect, async write(text, extra = {}) {
     return (await nativeTextOperation({ ...options, info }, 'write-text', { text, ...extra })).meta;
   } };
 }

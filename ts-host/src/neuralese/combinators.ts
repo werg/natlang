@@ -18,7 +18,7 @@ import { parseType } from '../native/types.js';
  * write.
  */
 import { nativeStateConsumerFromInfo, dialectBinding } from '../native/neuralese.js';
-import { nativeStateWritePort } from './native-state-client.js';
+import { nativeStateWritePort } from '../model/native-state-client.js';
 import { currentFrame } from '../runtime/context.js';
 import { softFunction } from '../runtime/contexts.js';
 import { graphNode, traceFor, valueInputs } from '../native/graph.js';

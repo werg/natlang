@@ -104,3 +104,18 @@ def test_unrelated_shape_compatible_source_cannot_use_trained_semantic_adapter()
     block.checkpoint_sha256 = 'f' * 64
     with pytest.raises(ValueError, match='exactly bound'):
         channel.encode(block)
+
+
+def test_retained_offsets_preserve_sampled_byte_fragments_and_decoded_text_alignment():
+    from natlang_neuralese.model.semantic_message import retained_source_offsets
+    class ByteTokenizer:
+        def __call__(self, text, **kwargs):
+            return {'input_ids': [99], 'offset_mapping': [[0, len(text)]]}
+        def decode(self, ids, **kwargs):
+            return {(): '', (1,): '\ufffd', (1, 2): 'é', (1, 2, 3): 'éX'}[tuple(ids)]
+    offsets, policy = retained_source_offsets(ByteTokenizer(), 'éX', [1, 2, 3])
+    assert offsets == [[0, 0], [0, 1], [1, 2]]
+    assert policy == 'actual-token-decoder-alignment'
+    offsets, policy = retained_source_offsets(ByteTokenizer(), 'é X', [1, 2, 3])
+    assert len(offsets) == 3 and offsets[0] == [0, 0] and offsets[-1][-1] == 3
+    assert policy == 'actual-token-decoder-text-alignment'

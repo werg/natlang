@@ -21,12 +21,13 @@ const tensors = {
 
 test('compact semantic wire matches Python and survives persistent archive lifecycle', async () => {
   const meta = { ...metadata, schema: 'neuralese.semantic-state/1', layer_kinds: [],
-    source_model: 'source', adapter_sha256: 'a'.repeat(64), offsets: [[0, 2], [2, 5]], posterior: 'mean' };
+    source_model: 'source', adapter_sha256: 'a'.repeat(64), offsets: [[0, 2], [2, 5]], posterior: 'mean',
+    offset_policy: 'exact-tokenizer-offsets' };
   const payload = { token_ids: tensors.token_ids, positions: tensors.positions,
     embeddings: { dtype: 'F32', shape: [2, 2], data: bytes('0000803f000000400000404000008040') },
     code: { dtype: 'F32', shape: [2, 2], data: bytes('0000803e0000003f0000403f0000803f') } };
   const artifact = { metadata: meta, tensors: payload };
-  const id = 'nzs1_xofmfyndloaqeocvcncwznmmkbg3ncxnc2va6hxk6srtn3p44xuq';
+  const id = 'nzs1_bikhs4occmwcfx4qrbuvpki4j54i5arlozwt3ysrp7tb3amxdytq';
   assert.equal(nativeStateContentId(meta, payload), id);
   const wire = encodeNativeState(artifact);
   assert.equal(decodeNativeState(wire).id, id);

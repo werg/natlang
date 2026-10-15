@@ -15,7 +15,7 @@
  */
 import { chatCompletionModelTurn, fetchModel } from '../model/chat-completion.js';
 import { neuraleseServerInfo } from '../model/neuralese-info.js';
-import { nativeTextOperation, type NativeSourceCapture } from './native-state-client.js';
+import { nativeTextOperation, type NativeSourceCapture } from '../model/native-state-client.js';
 import type { NeuraleseStore } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;

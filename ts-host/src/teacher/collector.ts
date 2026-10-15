@@ -1,4 +1,4 @@
-import { nativeStateWritePort } from '../neuralese/native-state-client.js';
+import { nativeStateWritePort } from '../model/native-state-client.js';
 import { serves } from '../model/neuralese-info.js';
 import { nativeStateConsumerFromInfo } from '../native/neuralese.js';
 import { controlledProviderProfile, type ProviderRequestControls } from './provider-request-controls.js';

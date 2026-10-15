@@ -22,7 +22,7 @@ import { neuraleseServerInfo, serves } from '../model/neuralese-info.js';
 import { requestNativeStateIds } from '../model/neuralese-server.js';
 import { currentFrame } from '../runtime/context.js';
 import { graphNode, traceFor, blockInput } from '../native/graph.js';
-import { archiveNativeState, restoreNativeInputs } from './native-state-client.js';
+import { archiveNativeState, restoreNativeInputs } from '../model/native-state-client.js';
 import { HttpNeuraleseStore, withRestoredBlocks } from '../model/neuralese-server.js';
 
 /** The type of a written view: the Neuralese instance of view's result. */

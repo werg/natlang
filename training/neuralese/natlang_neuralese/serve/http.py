@@ -190,9 +190,14 @@ def make_handler(engine: Engine):
                                         "projections": {} if native_enabled else
                                             {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
                                              for name, p in engine.projections.items()},
-                                        **({"native_state": {"enabled": True, "format": "neuralese.native-state/1",
+                                        **({"native_state": {"enabled": True, "format":
+                                                              ('neuralese.semantic-state/1' if getattr(engine, 'semantic_channel', None)
+                                                               else 'neuralese.native-state/1'),
+                                                              **({'semantic_adapter_sha256': engine.semantic_channel.adapter_sha256}
+                                                                 if getattr(engine, 'semantic_channel', None) else {}),
                                                               "consumption_modes": ["exact-native-state",
-                                                                                     "best-effort-text-retokenization"],
+                                                                                     "best-effort-text-retokenization"] +
+                                                              (['learned-semantic-state-deltas'] if getattr(engine, 'semantic_channel', None) else []),
                                                               "architecture": engine.model_config.get("architecture"),
                                                               "checkpoint_sha256": engine.checkpoint_sha256,
                                                               "tokenizer_fingerprint": engine.model_config.get("tokenizer_fingerprint"),

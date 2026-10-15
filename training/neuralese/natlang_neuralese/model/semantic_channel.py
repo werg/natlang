@@ -82,12 +82,10 @@ class SemanticChannel:
                       'posterior': 'mean', 'source_native_identity': self.bindings[name]}
 
     def message(self, block):
-        from .semantic_message import SemanticStateMessage
+        from .semantic_message import SemanticStateMessage, retained_source_offsets
         source_name = self.model_name(block)
         source_tokenizer = self.tokenizers[source_name]
-        source_tokens = source_tokenizer(block.text, add_special_tokens=False, return_offsets_mapping=True)
-        if list(source_tokens['input_ids']) != block.token_ids.detach().cpu().tolist():
-            raise ValueError('semantic source payload tokens need an explicit retained-offset alignment repair')
+        offsets, policy = retained_source_offsets(source_tokenizer, block.text, block.token_ids.detach().cpu().tolist())
         device = next(self.vae.parameters()).device
         from .state_block import NativeStateBlock
         local = NativeStateBlock.from_tensors(block.metadata(), {name: value.to(device)
@@ -97,21 +95,21 @@ class SemanticChannel:
             positions=local.positions, embeddings=local.embeddings, layers=(),
             **{key: getattr(block, key) for key in ('architecture', 'tokenizer_fingerprint',
                 'checkpoint_sha256', 'embedding_weight_sha256')},
-            code=code, offsets=[list(pair) for pair in source_tokens['offset_mapping']],
+            code=code, offsets=offsets, offset_policy=policy,
             source_model=source_name, adapter_sha256=self.adapter_sha256).validate()
 
     def adapt(self, block, *, target_name, target_model, target_tokenizer, target_identity,
               allow_nearest=False):
-        from .semantic_message import SemanticStateMessage
+        from .semantic_message import SemanticStateMessage, retained_source_offsets
         self.require_target(target_name, target_identity)
         message = block if isinstance(block, SemanticStateMessage) else self.message(block)
         message.validate()
         source_name = self.model_name(message)
         if message.adapter_sha256 != self.adapter_sha256 or message.source_model != source_name:
             raise ValueError('semantic message requires the exact trained adapter and source model')
-        source_tokens = self.tokenizers[source_name](message.text, add_special_tokens=False, return_offsets_mapping=True)
-        if (source_tokens['input_ids'] != message.token_ids.detach().cpu().tolist()
-                or [list(pair) for pair in source_tokens['offset_mapping']] != message.offsets):
+        offsets, policy = retained_source_offsets(self.tokenizers[source_name], message.text,
+                                                 message.token_ids.detach().cpu().tolist())
+        if offsets != message.offsets or policy != message.offset_policy:
             raise ValueError('semantic message source token IDs/offsets differ from its bound tokenizer')
         if message.code.shape[1] != self.vae.latent_width:
             raise ValueError('semantic message code width differs from its trained adapter')
@@ -122,11 +120,13 @@ class SemanticChannel:
         baseline = capture_block(target_model(plan), '__semantic_payload', 1, 1+len(ids),
                                  text=block.text, **target_identity)
         device = next(self.vae.parameters()).device
-        code = message.code.to(device)
+        code = message.code.to(device=device, dtype=next(self.vae.parameters()).dtype)
         receipt = {'source_model': source_name, 'adapter_sha256': self.adapter_sha256,
-                   'posterior': 'mean', 'source_native_identity': self.bindings[source_name]}
+                   'posterior': 'mean', 'source_native_identity': self.bindings[source_name],
+                   'source_offset_policy': message.offset_policy}
         alignment, matching = alignment_weights(message.offsets, target_tokens['offset_mapping'],
             device=device, allow_nearest=allow_nearest)
+        matching['best_effort'] = matching['best_effort'] or message.offset_policy != 'exact-tokenizer-offsets'
         if baseline.embeddings.device != device:
             raise ValueError('semantic adapter and target model must use the declared serving device')
         decoded = self.vae.decode(target_name, code, baseline, alignment=alignment)

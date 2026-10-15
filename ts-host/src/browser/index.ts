@@ -114,4 +114,4 @@ export * from '../adaptation/index.js';
 
 export type { FolderProposal } from '../native/scoped-fs.js';
 
-export { nativeStateWritePort, nativeTextOperation, type NativeClientOptions, type NativeSourceCapture, type NativeTextResult } from '../neuralese/native-state-client.js';
+export { nativeStateWritePort, nativeTextOperation, type NativeClientOptions, type NativeSourceCapture, type NativeTextResult } from '../model/native-state-client.js';

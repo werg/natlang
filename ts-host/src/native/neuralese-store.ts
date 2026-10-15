@@ -36,7 +36,8 @@ export type NativeStateTensor = { dtype: NativeStateDtype; shape: number[]; data
 export type NativeStateMetadata = { text: string; architecture: string;
   tokenizer_fingerprint: string; checkpoint_sha256: string; embedding_weight_sha256: string; layer_kinds: string[] } &
   ({ schema: 'neuralese.native-state/1' } | { schema: 'neuralese.semantic-state/1';
-    source_model: string; adapter_sha256: string; offsets: number[][]; posterior: 'mean' });
+    source_model: string; adapter_sha256: string; offsets: number[][]; posterior: 'mean';
+    offset_policy: 'exact-tokenizer-offsets' | 'actual-token-decoder-alignment' | 'actual-token-decoder-text-alignment' });
 export type NativeStateArtifact = { id: string; metadata: NativeStateMetadata; tensors: Record<string, NativeStateTensor> };
 export type NativeTensorDtype = 'F16' | 'BF16' | 'F32' | 'F64';
 export type NativeTensorValue = { dtype: NativeTensorDtype; shape: number[]; data: Uint8Array };
@@ -191,6 +192,7 @@ function validateNativeState(metadata: NativeStateMetadata, tensors: Record<stri
   if (metadata.schema === 'neuralese.semantic-state/1') {
     if (metadata.layer_kinds.length || typeof metadata.source_model !== 'string' || !metadata.source_model ||
         !SHA256.test(metadata.adapter_sha256) || metadata.posterior !== 'mean' ||
+        !['exact-tokenizer-offsets', 'actual-token-decoder-alignment', 'actual-token-decoder-text-alignment'].includes(metadata.offset_policy) ||
         !Array.isArray(metadata.offsets) || metadata.offsets.length !== tokenShape[0] ||
         metadata.offsets.some(pair => !Array.isArray(pair) || pair.length !== 2 ||
           pair.some(value => !Number.isSafeInteger(value)) || pair[0]! < 0 || pair[1]! < pair[0]! || pair[1]! > [...metadata.text].length))
