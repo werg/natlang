@@ -892,9 +892,43 @@ def text_engine(heads):
 
 def stage_data(engine, a, text_data):
     """(train windows, target-bearing windows, held windows, held selection, mask receipt, rows) of one data file."""
+    if text_data is not None:
+        from . import prepared_windows
+        from .text_warmup import select_held_document_windows
+        spec = prepared_windows.cache_spec(engine, a, text_data)
+        path = prepared_windows.cache_path(spec)
+        with prepared_windows.locked(path) as lock_acquired:
+            if not lock_acquired:
+                return _stage_text_data(engine, a, text_data, None, None, None)
+            cached = prepared_windows.load(path, spec)
+            if cached is not None:
+                windows, _, _, expected_held_selection = cached
+                _, held_selection = select_held_document_windows(windows['test'], a.held_documents)
+                if held_selection != expected_held_selection:
+                    cached = None
+            if cached is None and path is not None and path.exists():
+                # The per-key lock makes removal safe: no concurrent reader or
+                # writer can publish/use this entry while it is replaced.
+                import shutil
+                shutil.rmtree(path, ignore_errors=True)
+            return _stage_text_data(engine, a, text_data, spec, path, cached)
+    return _stage_text_data(engine, a, text_data, None, None, None)
+
+
+def _stage_text_data(engine, a, text_data, cache_spec, cache_path, cached):
+    """Prepare text windows, reusing a validated persistent cache when available."""
     from .text_warmup import (WindowBackingSpool, load_text_rows, prepare_text_windows,
                               select_held_document_windows)
     if text_data is not None:
+        from . import prepared_windows
+        if cached is not None:
+            windows, rows_meta, receipt, _ = cached
+            held, held_selection = select_held_document_windows(windows['test'], a.held_documents)
+            targets = [w for w in windows['train'] if target_bearing(w)]
+            print(json.dumps({'event': 'prepared_window_cache', 'status': 'hit',
+                              'train_windows': len(windows['train']), 'test_windows': len(windows['test']),
+                              'target_windows': len(targets)}), flush=True)
+            return windows['train'], targets, held, held_selection, receipt, rows_meta
         # Keep only the token windows needed by training. Holding the raw JSON
         # rows beside their token windows duplicates a multi-gigabyte corpus
         # during every checkpoint resume on a small host. Merged decision chains
@@ -930,6 +964,10 @@ def stage_data(engine, a, text_data):
             raise ValueError('text data contains no train or held documents')
         held, held_selection = select_held_document_windows(windows['test'], a.held_documents)
         targets = [w for w in windows['train'] if target_bearing(w)]
+        saved = prepared_windows.save(cache_path, cache_spec, windows, rows_meta, receipt, held_selection)
+        print(json.dumps({'event': 'prepared_window_cache', 'status': 'built' if saved else 'unavailable',
+                          'train_windows': len(windows['train']), 'test_windows': len(windows['test']),
+                          'target_windows': len(targets)}), flush=True)
         return windows['train'], targets, held, held_selection, receipt, rows_meta
     rows, _ = load_text_rows(a.records, a.pieces, text_data, tokenizer=engine.tokenizer)
     merge = None

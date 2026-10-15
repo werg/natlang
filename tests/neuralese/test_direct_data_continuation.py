@@ -296,6 +296,90 @@ def test_a_second_pass_over_the_same_text_file_skips_what_the_first_decided(tmp_
     assert len(list(trainer.stream_text_rows(data, tokenizer))) == len(cold) + 1  # another file hash: no stale entry
 
 
+def test_prepared_window_cache_restores_roles_invalidates_and_rebuilds_corruption(tmp_path, monkeypatch):
+    """A warm direct resume restores exact windows and role masks without tokenizing rows again."""
+    from natlang_neuralese.train import prepared_windows
+    from natlang_neuralese.train.text_warmup import prepare_text_windows
+
+    class RoleTokenizer(_FingerprintTokenizer):
+        unk_token_id = -1
+        special = {'<|im_start|>': 99, 'system': 10, 'user': 11, 'assistant': 12,
+                   'tool': 13, '<think>': 14, '</think>': 15}
+
+        def convert_tokens_to_ids(self, token):
+            return self.special.get(token, self.unk_token_id)
+
+    tokenizer = RoleTokenizer()
+    engine = SimpleNamespace(tokenizer=tokenizer, backbone=SimpleNamespace(controls=SimpleNamespace(open_id=1,
+                                                                                                    close_id=2)),
+                             _tokens=lambda text: [40, 41])
+    monkeypatch.setenv('NATLANG_PREPARED_WINDOW_CACHE', str(tmp_path / 'prepared-cache'))
+    data = tmp_path / 'text.jsonl'
+    rows = [
+        {'id': 'train', 'text': '<|im_start|>system hello <|im_start|>user question <|im_start|>assistant answer',
+         'token_ids': [99, 10, 30, 31, 99, 11, 32, 99, 12, 33, 34, 35, 36],
+         'split': 'train', 'source_groups': ['train-group'], 'supervised_suffix_start': 9},
+        {'id': 'held', 'text': '<|im_start|>system hello <|im_start|>user prompt <|im_start|>assistant held',
+         'token_ids': [99, 10, 30, 31, 99, 11, 32, 99, 12, 33, 34, 35, 36],
+         'split': 'test', 'source_groups': ['held-group'], 'supervised_suffix_start': 9},
+    ]
+    from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
+    for row in rows:
+        row['tokenizer_sha256'] = tokenizer_fingerprint(tokenizer)
+    data.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    a = SimpleNamespace(records=None, pieces=None, text_data=data, tokens=10, prefix_tokens=3,
+                        target_tokens=4, train_target_tokens=4, train_min_context_tokens=2,
+                        held_documents=1, merge_prefix_rows=False, recovery_selection=None, e2e_mix=None,
+                        out=tmp_path)
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return prepare_text_windows(*args, **kwargs)
+
+    monkeypatch.setattr('natlang_neuralese.train.text_warmup.prepare_text_windows', counted)
+    cold = trainer.stage_data(engine, a, data)
+    cold_calls = len(calls)
+    assert cold_calls == len(rows)
+    warm = trainer.stage_data(engine, a, data)
+    assert len(calls) == cold_calls
+
+    def shape(result):
+        train, targets, held, selection, receipt, row_meta = result
+        return (
+            [[(list(w['ids']), list(w['roles']), {k: v for k, v in w.items() if k not in ('ids', 'roles')})
+              for w in train],
+             [list(w['ids']) for w in targets],
+             [(list(w['ids']), list(w['roles'])) for w in held], selection, receipt, row_meta]
+        )
+
+    assert shape(warm) == shape(cold)
+
+    spec = prepared_windows.cache_spec(engine, a, data)
+    entry = prepared_windows.cache_path(spec)
+    token_shard = next(entry.glob('tokens-*.bin'))
+    damaged = bytearray(token_shard.read_bytes())
+    damaged[-1] ^= 0xFF
+    token_shard.write_bytes(damaged)
+    rebuilt = trainer.stage_data(engine, a, data)
+    assert len(calls) == cold_calls + len(rows)
+    assert shape(rebuilt) == shape(cold)
+    trainer.stage_data(engine, a, data)
+    assert len(calls) == cold_calls + len(rows)
+
+    a.target_tokens = 3
+    trainer.stage_data(engine, a, data)
+    assert len(calls) == cold_calls + len(rows) * 2
+
+    rows.append({'id': 'new', 'text': '<|im_start|>system hello <|im_start|>user new <|im_start|>assistant reply',
+                 'token_ids': [99, 10, 30, 31, 99, 11, 32, 99, 12, 33, 34, 35, 36],
+                 'split': 'train', 'source_groups': ['new-group'], 'supervised_suffix_start': 9,
+                 'tokenizer_sha256': tokenizer_fingerprint(tokenizer)})
+    data.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    trainer.stage_data(engine, a, data)
+    assert len(calls) == cold_calls + 2 * (len(rows) - 1) + len(rows)
+
+
 def test_compressed_text_matches_plain_eager_and_cached_streams(tmp_path, monkeypatch):
     import subprocess
     from natlang_neuralese.train.text_warmup import load_text_rows
