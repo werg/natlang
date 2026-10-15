@@ -266,3 +266,9 @@ applied identity-bound checkpoint rather than sending an ignored adapter value.
 For `neuralese-native-gradient-binding` or `neuralese-native-update-binding`,
 restore the exact current checkpoint's gradient/update/optimizer artifacts and
 retry; never change identity metadata to make unrelated tensors appear compatible.
+Move native learned actors with `python -m natlang_neuralese.model.native_bundle
+export --checkpoint CHECKPOINT --out BUNDLE` and optional `--semantic-adapter` for
+its exact shared export; verify with the same module's `verify --bundle BUNDLE`.
+Use the returned checkpoint/semantic-adapter paths and an explicit identical HF
+base location when relocated. Missing/changed/escaped dependency errors require
+restoring the complete verified bundle, never changing its identity declarations.

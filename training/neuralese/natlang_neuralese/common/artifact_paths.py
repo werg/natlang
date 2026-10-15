@@ -18,7 +18,7 @@ from __future__ import annotations
 import posixpath
 from pathlib import Path
 
-from .hashing import sha256_file_hex
+from .hashing import sha256_file_hex_cached
 
 
 # Roles that are always files: when one cannot be bound, loading stops instead of falling back to the typed path.
@@ -58,13 +58,13 @@ def _tail(option):
 
 
 class ArtifactResolver:
-    def __init__(self, identity, refs=None, *, overrides=None, verify=True):
+    def __init__(self, identity, refs=None, *, overrides=None, verify=True, content_root=None):
         self.options = dict((identity or {}).get('options') or {})
         self.files = dict((identity or {}).get('files') or (identity or {}).get('inputs') or {})
         self.refs = dict(refs or {})
         self.overrides = {role: Path(path) for role, path in (overrides or {}).items()}
         self.verify = verify
-        self._digests = {}
+        self.content_root = Path(content_root).resolve() if content_root is not None else None
 
     @classmethod
     def from_state(cls, state, *, overrides=None, verify=True):
@@ -72,10 +72,9 @@ class ArtifactResolver:
         return cls(state.get('identity'), state.get('artifact_refs'), overrides=overrides, verify=verify)
 
     def _digest(self, path):
-        key = str(path)
-        if key not in self._digests:
-            self._digests[key] = sha256_file_hex(path)
-        return self._digests[key]
+        # Reuse the shared stat-bound cache: a resolver instance must not hide
+        # changed bytes merely because it verified this path on an earlier call.
+        return sha256_file_hex_cached(path)
 
     def _pinned(self, role):
         """The digest the checkpoint pinned for this role (recorded, or its one legacy match), if any."""
@@ -114,6 +113,16 @@ class ArtifactResolver:
             override = self.overrides[role]
             return self._accept(role, override, self._pinned(role) or self.files.get(str(override.resolve())),
                                 how='override')
+        expected = self._pinned(role)
+        if self.content_root is not None and expected is not None:
+            import re
+            if not isinstance(expected,str) or not re.fullmatch(r'[0-9a-f]{64}',expected):
+                raise ArtifactResolutionError(f'{role}: content-addressed resolution requires an exact SHA-256')
+            candidate = self.content_root/expected
+            if candidate.exists():
+                if candidate.resolve().parent != self.content_root:
+                    raise ArtifactResolutionError(f'{role}: content object escaped its explicit root')
+                return self._accept(role,candidate,expected,how='content-addressed object')
         ref = self.refs.get(role)
         option = self.options.get(role)
         if ref and ref.get('resolved') and Path(ref['resolved']).is_file():

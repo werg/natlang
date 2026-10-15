@@ -148,3 +148,20 @@ def test_load_engine_refuses_a_relative_student_path_it_cannot_bind(tmp_path):
                 'backbone': {'student_lora': 'students/x.pt', 'student_lora_sha256': '0' * 64}}, heads)
     with pytest.raises(ValueError, match="relative path 'students/x.pt'"):
         load_engine(heads_checkpoint=str(heads))
+
+
+def test_explicit_content_root_resolves_only_exact_pinned_bytes(tmp_path):
+    from natlang_neuralese.common.artifact_paths import ArtifactResolver,ArtifactResolutionError
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    original=tmp_path/'original.pt';original.write_bytes(b'exact checkpoint')
+    digest=sha256_file_hex(original)
+    root=tmp_path/'objects';root.mkdir();(root/digest).write_bytes(original.read_bytes())
+    resolver=ArtifactResolver({}, {'parent':{'logical':str(original),'resolved':str(original),'sha256':digest}},content_root=root)
+    assert resolver.path('parent')==str(root/digest)
+    # A corrupt supplied object cannot silently fall back to an old valid path.
+    (root/digest).write_bytes(b'wrong checkpoint')
+    with pytest.raises(ArtifactResolutionError,match='changed'):
+        resolver.path('parent')
+    (root/digest).unlink();(root/digest).symlink_to(original)
+    with pytest.raises(ArtifactResolutionError,match='escaped'):
+        resolver.path('parent')

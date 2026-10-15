@@ -662,3 +662,9 @@ SGD momentum option and explicit recovery for unsupported second-order/adapter
 gradient requests. Both authoring/integration skills updated. Live model-facing
 48-sample validation remains debt for the next own-model teacher window; focused
 numerical/service tests validate mechanisms, not prompt adoption.
+
+2026-10-15 portable native learned-actor bundles: shared content-root resolution,
+complete parameter/optimizer/RNG/optional semantic-tokenizer closure and recovery
+instructions added to both skills. Missing/changed/escaped dependency errors
+require restoring the exact complete bundle. Live model-facing measurement is
+pending the next own-model teacher window; artifact/numerical checks are separate.

@@ -249,3 +249,31 @@ latest optimizer state stay resident, rather than retaining every ancestor's
 optimizer tensors. Quick checks passed under native-review-fullupdates-quickb-
 20261015; the first larger quick reservation was refused before execution, then
 rerun with the measured sub-1-GiB quick-check footprint and a 2-GiB claim.
+
+Portable learned-actor follow-up:
+
+- Native composite bundles preserve original manifest bytes and exact artifact
+  IDs while carrying every parent, parameter, optimizer and RNG dependency.
+  The shared ArtifactResolver now supports explicit digest-named content roots;
+  native and semantic loaders and RL actor attestation use the same resolver.
+  Corrupt supplied objects cannot fall back silently to an old source path.
+- Optional semantic exports include the exact adapter receipt and all bound
+  participant tokenizer files, with a complete verified inventory. Actual
+  relocated shared actor writes retain the same compact message ID.
+- Actual LFM/Mellum SGD/Adam tests delete original checkpoint/sidecar paths, move
+  the HF source directory, reload identical identities/weights from the bundle
+  and perform the next optimizer step. Inference request generator state yields
+  the same next sample after reload. Deterministic service updates preserve
+  training RNG; chat uses per-request RNG and does not advance that stream.
+- ArtifactResolver's previous per-instance digest cache could hide later file
+  mutation; it now uses the shared stat-bound hash cache. Tests reject altered
+  and escaping content objects as well as corrupted RNG dependencies.
+
+Validation: native-review-portable-updatesb-20261015 passed 16 focused checks;
+with semantic export and deletion of original paths, native-review-portable-
+semantic-20261015 passed 30. Final shared-resolver/relocated RL actor attestation
+checks passed 3 under native-review-portable-final-20261015, and quick checks
+passed under native-review-portable-quick-20261015. The first probe supplied an
+incorrect test-file path and ran no tests; its corrected successor provided the
+evidence above. Portability is actual checkpoint application, not a claim that
+legacy direct adapter values, higher-order or guided native generation are done.

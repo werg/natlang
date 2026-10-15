@@ -93,6 +93,48 @@ def test_actual_backbone_update_reload_and_sparse_target_resume(tmp_path,family,
         assert state['step.'+backbone].item()==2 and state['step.adapter.up.weight'].item()==1
     else:
         assert 'momentum.'+backbone in state and 'momentum.adapter.up.weight' in state
+    # Actual remote placement: no original checkpoint/sidecar/base path survives.
+    import shutil
+    from types import SimpleNamespace
+    from natlang_neuralese.model.native_bundle import export_bundle,verify_bundle
+    from natlang_neuralese.model.native_composite import resolve_composite_artifact
+    bundle = export_bundle(updated['checkpoint']['path'],tmp_path/'bundle')
+    shuffled = tmp_path/'relocated-bundle'
+    (tmp_path/'bundle').rename(shuffled)
+    shutil.rmtree(tmp_path/'native-updates')
+    parent.unlink()
+    (tmp_path/'base').rename(tmp_path/'relocated-base')
+    bundle = verify_bundle(shuffled)
+    relocated = load_native_engine(bundle['checkpoint']['resolved'],base=str(tmp_path/'relocated-base'),dtype=dtype)
+    assert relocated.native_identity==engine.native_identity
+    assert all(torch.equal(value,dict(relocated.shared_model.named_parameters())[name])
+               for name,value in engine.shared_model.named_parameters())
+    # Native chat uses an invocation-local generator. Check the next sample
+    # after an intervening draw and reconstructed actor, with identical RNG state.
+    req = SimpleNamespace(temperature=.8)
+    logits = engine._native_logits(engine._native_forward([4,5],None)['h_final'])
+    first = SimpleNamespace(request=req,logits=logits,rng=torch.Generator().manual_seed(73))
+    engine._native_token(first)
+    saved_request_rng = first.rng.get_state().clone()
+    second = SimpleNamespace(request=req,logits=relocated._native_logits(relocated._native_forward([4,5],None)['h_final']),
+                             rng=torch.Generator().set_state(saved_request_rng))
+    assert engine._native_token(first)==relocated._native_token(second)
+    assert torch.equal(first.rng.get_state(),second.rng.get_state())
+    manifest_path = Path(bundle['checkpoint']['resolved'])
+    relocated_manifest = json.loads(manifest_path.read_text())
+    artifact_path = resolve_composite_artifact(relocated_manifest['optimizer_state_artifact'],manifest_path,sibling=True)
+    relocated.store.put_native_tensor_artifact(decode_native_tensor_artifact(artifact_path.read_bytes())[0])
+    actual_gradient = native_graph_gradient(relocated,{'schema':'natlang.native-gradient-request/1','graph':row,
+        'native_identity':relocated.native_identity,'target':{'kind':'model-parameters','names':[backbone]}},None)
+    continued = native_optimizer_step(relocated,{'schema':'natlang.native-optimizer-request/1',
+        'native_identity':relocated.native_identity,'gradient_id':actual_gradient['gradient']['id'],
+        'optimizer_state_id':state_id,'optimizer':options},None)
+    assert continued['step']==4
+    # Export inventory is fail-closed even if another old source path exists.
+    item = next(value for value in bundle['files'] if value['sha256']==relocated_manifest['training_state']['sha256'])
+    (shuffled/item['path']).write_bytes(b'corrupt RNG sidecar')
+    with pytest.raises(ValueError):verify_bundle(shuffled)
+    relocated.store.close()
     engine.store.close()
 
 

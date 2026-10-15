@@ -29,7 +29,8 @@ class SemanticChannel:
         receipt = json.loads(path.read_text())
         if receipt.get('schema') != 'natlang.native-semantic-adapter/1':
             raise ValueError('unsupported shared semantic adapter export')
-        checkpoint = Path(receipt['checkpoint']['path']).resolve(strict=True)
+        from .native_composite import resolve_composite_artifact
+        checkpoint = resolve_composite_artifact(receipt['checkpoint'],path)
         if sha256_file_hex_cached(checkpoint) != receipt['checkpoint']['sha256']:
             raise ValueError('semantic adapter checkpoint bytes changed')
         state = CheckpointPolicy.load(checkpoint)

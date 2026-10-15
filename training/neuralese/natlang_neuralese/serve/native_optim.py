@@ -136,7 +136,8 @@ def native_optimizer_step(engine, body, owner):
         prior_training = getattr(engine,'native_training_state',{})
         rng = prior_training.get('rng') or capture_training_rng_state(device)
         training = {**{key:value for key,value in prior_training.items() if key.startswith('service_')},
-                    'rng':rng, 'service_optimizer_step':step,
+                    'rng':rng, 'service_rng_policy':'training-stream-unchanged; chat-stream-per-request',
+                    'service_optimizer_step':step,
                     'service_parent_checkpoint_sha256':identity['checkpoint_sha256']}
         receipt = write_native_composite_checkpoint(engine.native_checkpoint,
             native_update_directory(engine.native_checkpoint), updated_model,

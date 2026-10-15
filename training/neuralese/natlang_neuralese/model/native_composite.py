@@ -168,6 +168,21 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
             'parameter_artifact_id': artifact_id}
 
 
+def resolve_composite_artifact(binding, manifest_path, *, sibling=False):
+    """Resolve a pinned role through the shared exact artifact resolver."""
+    from ..common.artifact_paths import ArtifactResolver
+    manifest_path = Path(manifest_path).resolve(strict=True)
+    value = Path(binding['path'])
+    if sibling and (value.is_absolute() or len(value.parts) != 1):
+        raise ValueError('native composite tensor/training artifact must stay beside its manifest')
+    directory = manifest_path.parent
+    resolved = value if value.is_absolute() else directory/value
+    objects = directory if directory.name == 'objects' else directory/'objects'
+    resolver = ArtifactResolver({}, {'native-composite-artifact': {
+        'logical': str(value), 'resolved': str(resolved), 'sha256':binding['sha256']}},content_root=objects)
+    return Path(resolver.path('native-composite-artifact',required=True)).resolve(strict=True)
+
+
 def native_update_directory(checkpoint):
     """Use one stable directory across arbitrarily many immutable updates."""
     current = Path(checkpoint).resolve(strict=True)
@@ -181,7 +196,7 @@ def native_update_directory(checkpoint):
         if manifest.get('schema') != SCHEMA:
             return current.parent/'native-updates'
         parent = manifest['base_checkpoint']
-        current = Path(parent['path']).resolve(strict=True)
+        current = resolve_composite_artifact(parent,current)
         if sha256_file_hex_cached(current) != parent['sha256']:
             raise ValueError('native composite update ancestor bytes changed')
     raise ValueError('native composite checkpoint ancestry contains a cycle')
@@ -206,7 +221,7 @@ def load_native_composite_checkpoint(path, *, base=None, device='cpu', dtype=Non
             break
         chain.append(current)
         parent = manifest['base_checkpoint']
-        current = Path(parent['path']).resolve(strict=True)
+        current = resolve_composite_artifact(parent,current)
         if sha256_file_hex_cached(current) != parent['sha256']:
             raise ValueError('native composite parent checkpoint bytes changed')
         participant = parent.get('participant')
@@ -231,16 +246,14 @@ def _apply_native_composite_checkpoint(path, restored):
     parent = manifest['base_checkpoint']
     # `base` is the HF source directory override understood by the shared
     # loader. The immutable parent checkpoint remains the manifest's file.
-    base_path = Path(parent['path']).resolve(strict=True)
+    base_path = resolve_composite_artifact(parent,manifest_path)
     if sha256_file_hex_cached(base_path) != parent['sha256']:
         raise ValueError('native composite parent checkpoint bytes changed')
     from .native_model import native_identity
     model, tokenizer, roles, config, parent_state = restored
     parent_identity = native_identity(model, config, checkpoint_sha256=parent['sha256'])
     artifact_binding = manifest['parameter_artifact']
-    artifact_path = (manifest_path.parent / artifact_binding['path']).resolve(strict=True)
-    if artifact_path.parent != manifest_path.parent:
-        raise ValueError('native composite tensor patch must stay beside its immutable manifest')
+    artifact_path = resolve_composite_artifact(artifact_binding,manifest_path,sibling=True)
     if sha256_file_hex_cached(artifact_path) != artifact_binding['sha256']:
         raise ValueError('native composite tensor patch bytes changed')
     artifact, artifact_id = decode_native_tensor_artifact(artifact_path.read_bytes())
@@ -278,8 +291,8 @@ def _apply_native_composite_checkpoint(path, restored):
     optimizer_binding = manifest.get('optimizer_state_artifact')
     optimizer_artifact = None
     if optimizer_binding is not None:
-        optimizer_path = (manifest_path.parent / optimizer_binding['path']).resolve(strict=True)
-        if optimizer_path.parent != manifest_path.parent or sha256_file_hex_cached(optimizer_path) != optimizer_binding['sha256']:
+        optimizer_path = resolve_composite_artifact(optimizer_binding,manifest_path,sibling=True)
+        if sha256_file_hex_cached(optimizer_path) != optimizer_binding['sha256']:
             raise ValueError('native composite optimizer-state artifact changed or escaped its manifest directory')
         optimizer_artifact, optimizer_id = decode_native_tensor_artifact(optimizer_path.read_bytes())
         if (optimizer_id != optimizer_binding['id'] or optimizer_artifact.kind != 'optimizer-state'
@@ -296,10 +309,11 @@ def _apply_native_composite_checkpoint(path, restored):
     training = {}
     if manifest.get('training_state') is not None:
         binding = manifest['training_state']
-        path = (manifest_path.parent/binding['path']).resolve(strict=True)
-        if path.parent != manifest_path.parent or sha256_file_hex_cached(path) != binding['sha256']:
+        path = resolve_composite_artifact(binding,manifest_path,sibling=True)
+        if sha256_file_hex_cached(path) != binding['sha256']:
             raise ValueError('native composite training state changed or escaped its manifest directory')
-        training = torch.load(path,map_location='cpu',weights_only=False)
+        from ..train.checkpoint_policy import CheckpointPolicy
+        training = CheckpointPolicy.load(path)
         if not isinstance(training,dict):
             raise ValueError('native composite training state must be a dictionary')
     # Preserve the original full trainer parent once; retaining every ancestor's

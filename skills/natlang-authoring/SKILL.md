@@ -271,3 +271,7 @@ identity-bound checkpoint before requesting native graph gradients.
 If a native gradient/update binding error occurs, restore the artifacts for the
 exact current checkpoint and repeat the request; never relabel tensors or reuse
 an adapter against changed weights.
+Portable native checkpoints preserve manifest identities and all parameter,
+optimizer and training-state dependencies. If bundle verification reports missing,
+changed or escaped artifacts, restore the complete verified bundle and the pinned
+base model files; do not rewrite identity metadata or substitute another adapter.

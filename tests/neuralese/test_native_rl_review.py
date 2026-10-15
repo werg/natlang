@@ -163,6 +163,23 @@ def test_actual_shared_actor_attests_loaded_participant_and_adapter(tmp_path):
     with pytest.raises(ValueError, match='requested shared participant'):
         validate_actor_receipts({'actual-engine': engine.rl_policy_binding}, policy_id=digest,
             neuralese_server=True, expected_native=expected_native_actor(adapter, 'peer', digest))
+    from natlang_neuralese.model.native_bundle import export_bundle,verify_bundle
+    import shutil
+    original_write = engine.native_write_text('t4')
+    exported = export_bundle(checkpoint,tmp_path/'bundle',semantic_adapter=adapter)
+    moved = tmp_path/'remote'
+    (tmp_path/'bundle').rename(moved)
+    checkpoint.unlink();adapter.unlink();shutil.rmtree(tokenizers)
+    base.rename(tmp_path/'remote-base')
+    portable = verify_bundle(moved)
+    assert exported['checkpoint']['sha256']==portable['checkpoint']['sha256']==digest
+    assert portable['semantic_adapter']['sha256']==expected['semantic_adapter_sha256']
+    relocated = load_native_engine(portable['checkpoint']['resolved'],participant='student',
+        semantic_adapter=portable['semantic_adapter']['resolved'],base=str(tmp_path/'remote-base'),dtype=torch.float32)
+    assert relocated.rl_policy_binding==engine.rl_policy_binding
+    assert expected_native_actor(portable['semantic_adapter']['resolved'],'student',digest)==expected
+    assert relocated.native_write_text('t4')['id']==original_write['id']
+    relocated.store.close()
     engine.store.close()
 
 

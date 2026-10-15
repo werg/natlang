@@ -84,3 +84,37 @@ request targets different parameters. RNG and continuation metadata use the
 existing full training-state capture and durable immutable sidecar. Changed
 weights invalidate prior semantic adapters; clients must refresh the adapter
 against the resulting checkpoint before semantic promotion.
+
+## Portable parameter/checkpoint application
+
+1. S7 chooses the exact updated actor/participant to deploy; transport never
+   chooses a replacement model or relabels an adapter.
+2. A crisp exporter walks the composite's exact dependency chain and gathers
+   each parent checkpoint, named parameter patch, optimizer artifact and training
+   RNG sidecar. It verifies every declared SHA before streaming immutable copies
+   into a portable content-addressed objects directory.
+3. Keep original composite manifest bytes intact. Extend the existing shared
+   ArtifactResolver with an explicit content root: a role pinned by SHA may use
+   only that digest-named object, or its already verified original path. Never
+   guess by filename suffix, shape, model family or a stale artifact identity.
+4. The normal native checkpoint loader applies the same manifests from that
+   bundle, using the separately pinned HF base files (an explicit location
+   override may supply those identical files). Typed parameter/optimizer values
+   retain their original content identities and stores can restore them normally.
+5. Verify relocated load, next real gradient/update and per-request sampling
+   against the original actor. Chat's explicit request generator is invocation
+   state and does not advance inherited training RNG; deterministic SGD/Adam
+   preserve that training boundary. Do not restore process-global RNG on actor
+   startup or claim a model checkpoint resumes an unfinished chat invocation.
+
+This supports portable native parameter checkpoint application. Legacy adapter
+creation/direct application, higher-order graphs and guided generation remain
+separate open paths; the bundle does not advertise those capabilities.
+
+The bundle may also include the exact semantic adapter receipt and every bound
+participant tokenizer. The shared semantic loader uses the same role resolver
+for its checkpoint, keeping adapter SHA, participant identities and tokenizers
+unchanged after relocation. No semantic adapter is applied to changed weights
+merely because its tensors fit. Streaming export and content addressing retain
+one large full-checkpoint copy, and verification checks the complete declared
+native plus semantic dependency inventory before deployment.

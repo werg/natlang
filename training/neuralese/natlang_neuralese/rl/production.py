@@ -312,13 +312,13 @@ def trained_counts(directory, progress):
 
 def expected_native_actor(adapter_path, participant, policy_id):
     """Bind the actual immutable adapter's named participant, not only shared file SHA."""
-    from ..train.native_readiness import _bound
+    from ..model.native_composite import resolve_composite_artifact
     from ..common.hashing import sha256_file_hex_cached
     adapter_path = Path(adapter_path)
     export = json.loads(adapter_path.read_text())
     if export.get('schema') != 'natlang.native-semantic-adapter/1' or participant not in export.get('models', {}):
         raise ValueError('native RL actor needs its actual exported shared participant')
-    _bound(export['checkpoint'])
+    resolve_composite_artifact(export['checkpoint'],adapter_path)
     model = export['models'][participant]
     if (export['checkpoint']['sha256'] != policy_id or model['native_identity']['checkpoint_sha256'] != policy_id
             or model['checkpoint'].get('participant') != participant or model['checkpoint']['sha256'] != policy_id):
