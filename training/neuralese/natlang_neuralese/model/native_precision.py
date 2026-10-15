@@ -37,3 +37,12 @@ def same_source_precision_identity(previous, current):
     """Only runtime GEMM arithmetic may change in an ordinary continuation."""
     return ({k: v for k, v in previous.items() if k != 'native_linear_precision'} ==
             {k: v for k, v in current.items() if k != 'native_linear_precision'})
+
+
+def resolve_native_training_precision(previous, requested=None):
+    """Diagnostic checkpoint arithmetic needs an explicit production transition."""
+    selected = previous if requested is None else requested
+    if selected not in PRODUCTION_NATIVE_LINEAR_PRECISIONS:
+        raise ValueError('native production training requires ieee or bf16x6 arithmetic; '
+                         'explicitly transition a diagnostic checkpoint before training')
+    return selected

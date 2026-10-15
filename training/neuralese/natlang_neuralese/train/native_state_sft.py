@@ -815,9 +815,9 @@ def main(argv=None):
             raise ValueError('fresh native SFT requires explicit --dtype (QAD LFM float32; Mellum bfloat16)')
         model, tokenizer, roles, config = load_native_model(args.base, rank=args.rank,
             device=args.device, dtype=getattr(torch, args.dtype))
-    from ..model.native_precision import set_native_linear_precision
+    from ..model.native_precision import set_native_linear_precision, resolve_native_training_precision
     previous_precision = config.get('native_linear_precision', 'ieee')
-    requested_precision = args.native_linear_precision or previous_precision
+    requested_precision = resolve_native_training_precision(previous_precision, args.native_linear_precision)
     set_native_linear_precision(model, requested_precision)
     config['native_linear_precision'] = requested_precision
     saved_training = resume or shared_resume or {}

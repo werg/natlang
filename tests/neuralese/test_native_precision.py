@@ -113,6 +113,16 @@ def test_real_training_precision_transition_restores_optimizer_rng_and_row_credi
     monkeypatch.setattr(trainer.CheckpointPolicy, 'due', stop)
     assert trainer.main(argv) == 0
     before = torch.load(out/'checkpoint.pt', weights_only=False)
+    # Saved diagnostic modes must not evade production argparse choices through
+    # an omitted option. Restoration is real, but no update may execute.
+    for diagnostic_mode in ('tf32', 'tf32x3', 'bf16'):
+        diagnostic = copy.deepcopy(before)
+        diagnostic['model_config']['native_linear_precision'] = diagnostic_mode
+        diagnostic['interface_state']['native_linear_precision'] = diagnostic_mode
+        diagnostic['training']['identity']['config']['native_linear_precision'] = diagnostic_mode
+        torch.save(diagnostic, out/'checkpoint.pt')
+        with pytest.raises(ValueError, match='explicitly transition'):
+            trainer.main(argv)
     optimizer_loads, rng_restores = [], []
     actual_make, actual_restore = trainer.make_native_optimizer, trainer.restore_training_rng_state
     def make(*args, **kwargs):
@@ -144,4 +154,4 @@ def test_real_training_precision_transition_restores_optimizer_rng_and_row_credi
     assert after['model_config']['dtype'] == 'torch.float32'
     assert after['model_config']['base_inventory_sha256'] == before['model_config']['base_inventory_sha256']
     assert after['model_config']['native_linear_precision'] == 'bf16x6'
-    assert after['training']['options']['native_precision_transition']['from'] == 'ieee'
+    assert after['training']['options']['native_precision_transition']['from'] == 'bf16'
