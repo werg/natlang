@@ -24,6 +24,23 @@ def test_safe_completed_stage_can_continue_training_without_false_qualification(
             require_gate({**report, **bad}, 'neuralese_direct', training_progress=True)
 
 
+@pytest.mark.parametrize('qualified', [False, True])
+def test_precision_failure_allows_safe_repair_training_but_never_strict_acceptance(qualified):
+    from natlang_neuralese.train.recipe import require_gate
+    report = {'qualified': qualified, 'completed': True, 'identity_check': {'passed': True},
+              'ce_delta': 0.2, 'final_task_eval': {'eligible': True},
+              'quantization': {'precisions_qualified': False,
+                               'precisions_required': ['bf16', 'fp8'], 'precisions_passed': ['bf16']}}
+    require_gate(report, 'neuralese_direct', training_progress=True)
+    with pytest.raises(ValueError, match='required precision'):
+        require_gate(report, 'neuralese_direct')
+    for bad in [{'completed': False}, {'identity_check': {'passed': False}},
+                {'ce_delta': float('nan')}, {'final_task_eval': {'eligible': False}}]:
+        with pytest.raises(ValueError, match='required precision'):
+            require_gate({**report, **bad}, 'neuralese_direct', training_progress=True)
+    assert report['quantization']['precisions_qualified'] is False
+
+
 def test_flash_backend_is_shared_with_evaluators_and_is_operational(monkeypatch):
     from natlang_neuralese.common.attention_backend import configure_sdpa_backend
     from natlang_neuralese.train.direct_sft import OPERATIONAL, same_resume_identity

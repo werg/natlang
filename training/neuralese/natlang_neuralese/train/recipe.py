@@ -1029,8 +1029,16 @@ def stage_quantization(recipe, stage, parameters, reports, init_mix=None):
 
 
 def require_gate(report, kind, *, training_progress=False):
+    delta = report.get('ce_delta')
+    safe_training_continuation = (
+        training_progress and kind in ('neuralese_direct', 'neuralese_rl')
+        and report.get('completed') is True
+        and (report.get('identity_check') or {}).get('passed') is True
+        and type(delta) in (int, float) and math.isfinite(delta)
+        and (report.get('final_task_eval') or {}).get('eligible') is True)
     quantization = report.get('quantization') if isinstance(report, dict) else None
-    if isinstance(quantization, dict) and quantization.get('precisions_qualified') is False:
+    precision_failed = isinstance(quantization, dict) and quantization.get('precisions_qualified') is False
+    if precision_failed and not safe_training_continuation:
         raise ValueError('stage did not pass every required precision: ' +
                          ', '.join(sorted(set(quantization.get('precisions_required', [])) -
                                           set(quantization.get('precisions_passed', [])))))
@@ -1060,17 +1068,14 @@ def require_gate(report, kind, *, training_progress=False):
     elif kind=='core_text_warmup':
         if report.get('qualified') is not True:raise ValueError('text warm-up alignment goal not met')
     elif kind in ('neuralese_direct', 'neuralese_rl'):
-        if report.get('qualified') is not True:
+        if report.get('qualified') is not True or precision_failed:
             # Task/held regression is evidence for the supervisor, not an
             # automatic ban on learning through the next production stage.
-            delta = report.get('ce_delta')
-            if (training_progress and report.get('completed') is True
-                    and (report.get('identity_check') or {}).get('passed') is True
-                    and isinstance(delta, (int, float)) and math.isfinite(delta)
-                    and (report.get('final_task_eval') or {}).get('eligible') is True):
+            if safe_training_continuation:
                 print(json.dumps({'event': 'continuing_unqualified_training_stage',
                                   'kind': kind, 'qualified': False, 'ce_delta': delta,
                                   'task_gate': report.get('task_gate'),
+                                  'precisions_qualified': not precision_failed,
                                   'scope': 'Owner20261015 adaptive production; qualification remains false'}), flush=True)
                 return
             raise ValueError('Neuralese direct stage not qualified (held CE below base, final task '
@@ -2130,10 +2135,12 @@ def main(argv=None):
                 stage_report = json.loads(Path(report['artifact']).read_text())
                 identity = stage_report.get('identity_check') or {}
                 certificate = {'schema': 'natlang.neuralese-direct-certificate/1',
-                               'qualified': bool(stage_report.get('qualified')) and identity.get('passed') is True,
+                               'qualified': (bool(stage_report.get('qualified')) and identity.get('passed') is True
+                                             and (stage_report.get('quantization') or {}).get(
+                                                 'precisions_qualified') is not False),
+                               'quantization': stage_report.get('quantization'),
                                'identity_qualification': {'kind': DIRECT_IDENTITY_QUALIFICATION, **identity},
-                               # Owner decision 2026-10-12: qualification is task success plus drift; the 48-probe
-                               # behaviour gate is reported, not required.
+                               # Base drift and the 48-probe behaviour gate are telemetry (owner 2026-10-15).
                                'task_gate': stage_report.get('task_gate'),
                                'drift_stopped': stage_report.get('drift_stopped'),
                                'behaviour_gate_report_only': True,
