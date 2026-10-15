@@ -1,6 +1,6 @@
 """Exact built task runtime, npm and protection-file identity shared by providers and eval."""
 from pathlib import Path
-from .hashing import sha256_file_hex_cached
+from .hashing import sha256_file_hex
 
 
 def task_runtime_inventory(path):
@@ -13,9 +13,11 @@ def task_runtime_inventory(path):
                 *(path/name for name in names)]
     if not all(item.is_file() for item in required):
         raise ValueError('provider task runtime needs built CLI and pinned npm manifests')
-    result = {str(p.relative_to(path)): sha256_file_hex_cached(p)
+    # Small built files are cheaper to hash than repeatedly scanning the shared
+    # append-only cache intended for multi-gigabyte checkpoint artifacts.
+    result = {str(p.relative_to(path)): sha256_file_hex(p)
               for p in sorted((path/'dist').rglob('*')) if p.is_file()}
-    result.update({name: sha256_file_hex_cached(path/name)
+    result.update({name: sha256_file_hex(path/name)
                    for name in names})
     return result
 

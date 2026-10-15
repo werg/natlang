@@ -57,3 +57,19 @@ download restart safety, infrastructure null results, and no cancellation when
 newer exports arrive. Fixture scoring is not production task success. Actual
 full-size restoration evidence is recorded separately under
 `/home/werg/data/dgxops/native-async-eval-validation-20261015/`.
+
+Actual full-size check, 2026-10-15: the existing private ferry downloaded and
+verified LF2750 (2,053,480,587 bytes, SHA
+`c2396948f084a7ca28f6fdbdad3c0ba1c7600cf5a986a9c55c8572ff9b3d7e66`)
+in 349.8 seconds. The new sealed-request native branch then restored it on the
+DGX CUDA device and produced finite `[1,12,65536]` logits in 34 seconds, with
+3.8 GiB process memory peak. Its saved FP32/IEEE arithmetic and legacy sparse-row
+configuration remained unchanged; this historical pre-repair checkpoint was not
+upgraded. The exact proof is `actual-restore-proof.json` in the validation root.
+No held task collection or model-lift claim follows from that forward check.
+
+The first attempt exposed an unrelated shared inventory startup cost: cached
+hash lookups scanned a 33MB append-only global cache for every small runtime
+file. The shared runtime inventory now streams those small files directly using
+the existing SHA helper, retaining exactly the same inventory keys and digests.
+Large model/checkpoint hashing still uses the existing cache.
