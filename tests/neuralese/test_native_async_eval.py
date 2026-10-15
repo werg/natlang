@@ -167,6 +167,11 @@ def test_exhausted_dispatch_is_native_unscored(tmp_path,monkeypatch):
     active=seal_request(checkpoint,identity=export['receipt']['identity'],step=7,spec=spec,
         out=tmp_path/'eval',base=base,queue=tmp_path/'queue',device='cpu')
     request=Path(active['request']);(request/'dispatch.json').write_text(json.dumps({'attempts':3}))
+    assert dispatcher.budget_gb(request)==16.
+    request_path=request/'request.json';binding=json.loads(request_path.read_text())
+    binding['native_state']=False;request_path.write_text(json.dumps(binding))
+    assert dispatcher.budget_gb(request)<16.
+    binding['native_state']=True;request_path.write_text(json.dumps(binding))
     monkeypatch.setattr(dispatcher,'unit_state',lambda unit:'none')
     events=dispatcher.dispatch(tmp_path/'queue')
     assert events[0]['event']=='failed' and not request.exists()

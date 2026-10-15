@@ -88,7 +88,14 @@ def budget_gb(request_dir: Path) -> float | None:
         if full.exists() and time.time() - full.stat().st_mtime < 1800:
             return None  # the trainer's pruning child is still writing weights.pt
         return None if not full.exists() else full.stat().st_size / 2**30 / 2 * 1.3 + 8
-    return round(weights.stat().st_size / 2**30 * 1.3 + 8, 1)
+    estimate = round(weights.stat().st_size / 2**30 * 1.3 + 8, 1)
+    try:
+        native = json.loads((request_dir / 'request.json').read_text()).get('native_state', False)
+    except (OSError, ValueError):
+        native = False
+    # Actual LF2750 native held collection reached 11.4 GiB on DGX. Reserve
+    # measured collector/KV growth as well as the original full snapshot.
+    return max(16., estimate) if native else estimate
 
 
 def launch(request_dir: Path, request: dict, unit: str, budget: float, dry_run: bool) -> dict:
