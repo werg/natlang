@@ -96,7 +96,7 @@ def parse_pair(row, participants, *, required_split=None):
         if not isinstance(offsets, list) or bool(offsets) != bool(export['text']):
             raise ValueError('semantic export must retain exact token character offsets')
         if any(len(pair) != 2 or any(type(x) is not int for x in pair)
-               or not 0 <= pair[0] < pair[1] <= len(export['text']) for pair in offsets):
+               or not 0 <= pair[0] <= pair[1] <= len(export['text']) for pair in offsets):
             raise ValueError('semantic token offsets must address the retained payload text')
         # State and exact payload tokenization are checked against the actual
         # graph result below, including imported aliases in logical exports.

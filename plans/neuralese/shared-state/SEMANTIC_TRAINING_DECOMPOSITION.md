@@ -48,3 +48,17 @@ all declared phases covered their full admitted input; a configured short step
 limit is an interruption, not a completion receipt. The serving adaptation and
 semantic artifact lifecycle must be independently integrated and reviewed
 before this is called an end-to-end shared dialect.
+
+Full-model execution proof (2026-10-15): the actual pinned QAD FP32 LFM and
+BF16 Mellum completed the joint objective on an authenticated REST27 pair
+(6,989 and 7,070 graph tokens). Producer/control and adapted consumer losses,
+VAE reconstruction and alignment backpropagated before deferred MuonSR updates
+to both backbones and native adapters. Mellum used the production shared
+triton-experts backend and activation checkpointing. The ledgered diagnostic
+finished in 197.75 seconds, with 77,394,900,992 bytes peak CUDA allocation and
+6,288,605,184 bytes peak process RSS. One real zero-width tokenizer offset used
+the explicitly reported nearest alignment fallback. The exact source/pair and
+gradient/update evidence is in
+`/home/werg/data/dgxops/native-real-joint-update-20261015.json`.
+This establishes execution and placement for that trajectory, not task lift,
+complete recipe exposure, full checkpoint restore or production readiness.

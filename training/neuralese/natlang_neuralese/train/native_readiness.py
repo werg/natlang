@@ -43,7 +43,14 @@ def validate_ready(path, requirement):
     if checkpoint.get('schema') != CHECKPOINT_SCHEMA or checkpoint['sha256'] != identity['checkpoint_sha256']:
         raise ValueError('native readiness checkpoint format/identity differs')
     _bound(checkpoint)
-    _bound(receipt['recipe'])
+    recipe_binding = receipt['recipe']
+    if recipe_binding.get('file_sha256'):
+        recipe_path = _bound({'path': recipe_binding['path'], 'sha256': recipe_binding['file_sha256']})
+        from .recipe import recipe_identity_sha256
+        if recipe_identity_sha256(recipe_path) != recipe_binding['sha256']:
+            raise ValueError('native production recipe inheritance changed after training')
+    else:
+        _bound(recipe_binding)
     if receipt['recipe']['sha256'] != requirement['recipe_sha256']:
         raise ValueError('native readiness did not finish the declared production recipe')
     required = set(requirement['stage_ids'])

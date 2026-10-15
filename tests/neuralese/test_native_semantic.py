@@ -86,6 +86,20 @@ def test_joint_control_and_consumer_update_both_models_without_producer_replay()
         hook.remove()
 
 
+def test_actual_zero_width_token_offsets_require_explicit_alignment_fallback():
+    participants, row, vae = setup_pair()
+    offsets = [(0, 1), (1, 1), (1, 4)]
+    participants['mellum'].tokenizer.offsets = offsets
+    row['models']['mellum']['export']['offsets'] = offsets
+    parse_pair(row, participants, required_split='train')
+    with pytest.raises(ValueError):
+        joint_loss(vae, participants, row)
+    loss, stats = joint_loss(vae, participants, row, options={'allow_nearest': True})
+    loss.backward()
+    assert torch.isfinite(loss)
+    assert participants['mellum'].model.adapter.up.weight.grad.norm() > 0
+
+
 def test_vae_phase_has_no_model_gradient_and_distillation_trains_own_state():
     participants, row, vae = setup_pair()
     loss, _ = joint_loss(vae, participants, row, phase='vae')

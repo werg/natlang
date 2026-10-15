@@ -24,6 +24,9 @@ from ..common.hashing import sha256_file_hex_cached as sha  # cached by (realpat
 
 
 HANDLERS = {
+    'native_semantic_training': {'module': 'natlang_neuralese.train.native_semantic_stage',
+        'required_inputs': {'semantic_config', 'native_participants'}, 'optional_inputs': {'resume'},
+        'parameters': set(), 'result': 'checkpoint.pt'},
     # Native positional-KV/hybrid-state training (shared-state migration,
     # plans/neuralese/NATIVE_STATE_SFT_DECOMPOSITION_20261015.md). The input
     # graph files are already admitted and carry explicit split provenance.
@@ -273,6 +276,14 @@ DIRECT_PHASE_CONTINUATION = {'continue_from': 'checkpoint.pt', 'continue_identit
 # Stage kinds that train the direct checkpoint with the direct trainer and so continue phase to phase (S7 RL included).
 DIRECT_TRAINING_KINDS = frozenset({'neuralese_direct', 'neuralese_rl'})
 NATIVE_TRAINING_KINDS = frozenset({'native_state_sft'})
+SHARED_NATIVE_KINDS = frozenset({'native_semantic_training'})
+HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | SHARED_NATIVE_KINDS
+NATIVE_IDENTITY_QUALIFICATION = 'native_state_runtime_qualified'
+
+
+def native_lineage(recipe):
+    stages = recipe.get('stages') or []
+    return bool(stages) and all(stage.get('kind') in HEADLESS_NATIVE_KINDS for stage in stages)
 
 
 def direct_phase_predecessor(recipe, stage):
@@ -387,6 +398,9 @@ def stage_input_args(resolved, kind):
     args = []
     supported = HANDLERS[kind]['required_inputs'] | HANDLERS[kind]['optional_inputs']
     resolved = _staged_inputs(resolved)
+    for role, flag in (('semantic_config', '--config'), ('native_participants', '--participants'), ('resume', '--resume')):
+        if role in resolved and role in supported:
+            args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'native_graphs',
                  'held_native_graphs', 'continue_from', 'continue_identity',
                  'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
@@ -705,7 +719,12 @@ def load_recipe(path):
     if e2e_lineage and recipe.get('identity_qualification') != DIRECT_E2E_QUALIFICATION:
         raise ValueError('an end-to-end lineage (direct export runtime qualification + direct-artifact recurrence) '
                          'must declare identity_qualification ' + repr(DIRECT_E2E_QUALIFICATION))
-    if not direct_lineage and not e2e_lineage and (not identity_stages or
+    native = native_lineage(recipe)
+    if any(stage['kind'] in HEADLESS_NATIVE_KINDS for stage in recipe['stages']) and not native:
+        raise ValueError('native-state recipes cannot include legacy projected training stages')
+    if native and recipe.get('identity_qualification') != NATIVE_IDENTITY_QUALIFICATION:
+        raise ValueError('native-state recipe requires identity_qualification ' + NATIVE_IDENTITY_QUALIFICATION)
+    if not direct_lineage and not e2e_lineage and not native and (not identity_stages or
                                not any(s['kind'] == 'causal_embedding_distillation' for s in recipe['stages'])):
         raise ValueError('neuralese recipe must declare identity and embedding distillation stages')
     if 'e2e_acceptance' in recipe:
@@ -1107,6 +1126,10 @@ def require_gate(report, kind, *, training_progress=False):
             raise ValueError('native-state SFT has not completed its declared graph exposure')
         if report.get('numerics_ok') is not True:
             raise ValueError('native-state SFT reported a numerical failure')
+    elif kind in SHARED_NATIVE_KINDS:
+        if (report.get('schema') != 'natlang.native-shared-stage-completion/1'
+                or report.get('completed') is not True or report.get('production_ready') is not True):
+            raise ValueError('shared native semantic curriculum has not completed actual exposure/runtime/task checks')
     elif kind=='text_warmup_runtime':
         if report.get('runtime_qualified') is not True or report.get('output_reference_qualified') is not True:
             raise ValueError('adapted warm-up runtime/output reference gate failed')
@@ -2001,10 +2024,13 @@ def main(argv=None):
             parser.error('direct-stage execution requires --launch-metadata')
         return run_declared_direct_stage(recipe, args.recipe, args.out, args.launch_metadata, args.device, args.handoff)
     e2e_lineage = direct_e2e_lineage(recipe)
-    if args.heads is None and not e2e_lineage:
+    native = native_lineage(recipe)
+    if args.heads is None and not e2e_lineage and not native:
         parser.error('multi-stage training recipes require --heads')
     if args.heads is not None and e2e_lineage:
         parser.error('an end-to-end lineage starts from its declared direct export, not from --heads')
+    if args.heads is not None and native:
+        parser.error('native-state recipes use their native models/checkpoints, not legacy --heads')
     if args.until and args.until not in {stage['id'] for stage in recipe['stages']}:
         parser.error('unknown stopping stage')
     if args.inspect:
@@ -2168,7 +2194,7 @@ def main(argv=None):
                         predecessor=next(r for r in reversed(reports) if r['id'] in stage['requires'] and r['kind']==predecessor_kind)
                         stage_heads=predecessor['artifact']
                 command = [sys.executable, '-m', HANDLERS[kind]['module']]
-                if not direct_artifact_stage and kind not in NATIVE_TRAINING_KINDS:
+                if not direct_artifact_stage and kind not in HEADLESS_NATIVE_KINDS:
                     command += ['--heads', hdd_guard.input_path('heads', stage_heads)]
                 command += stage_input_args(stage_inputs[stage['id']], kind) + ['--out',
                            str(output if kind == 'token_identity' else directory), '--device', args.device]
@@ -2229,7 +2255,8 @@ def main(argv=None):
                         prerequisites.append({'id': prior['id'], 'completed': receipt.get('completed') is True,
                             'exposure_receipt': {'path': str(receipt_path.resolve()),
                                                  'sha256': sha(receipt_path)}})
-                    recipe_binding = {'path': str(args.recipe.resolve()), 'sha256': plan['recipe_sha256']}
+                    recipe_binding = {'path': str(args.recipe.resolve()), 'sha256': plan['recipe_sha256'],
+                                      'file_sha256': sha(args.recipe)}
                     command += ['--recipe-binding', json.dumps(recipe_binding, sort_keys=True,
                                                                separators=(',', ':')),
                                 '--stage-id', stage['id'], '--prerequisite-stages',
@@ -2273,6 +2300,8 @@ def main(argv=None):
                     gate=json.loads((directory/'report.json').read_text())
                 elif kind in ('core_text_warmup','neuralese_direct','native_state_sft'):
                     gate=json.loads((directory/'report.json').read_text())
+                elif kind in SHARED_NATIVE_KINDS:
+                    gate=json.loads((directory/'shared-stage-completion.json').read_text())
                 elif kind == 'direct_runtime_qualification':
                     gate = json.loads((directory / 'report.json').read_text())
                     if gate.get('artifact_manifest_sha256') != stage_inputs[stage['id']]['direct_artifact_manifest']['sha256']:

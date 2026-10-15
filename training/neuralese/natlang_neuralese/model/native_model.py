@@ -116,6 +116,15 @@ def restore_model_state(model, state):
     restore_channel_checkpoint(model, state['interface_state'])
 
 
+def _bind_backbone_revision(model, checkpoint_sha256):
+    """Remember the exact immutable parent whose backbone is currently loaded."""
+    model._native_backbone_binding = {
+        'checkpoint_sha256': checkpoint_sha256,
+        'parameters': tuple((name, id(parameter), parameter._version)
+                            for name, parameter in model.port.hf.named_parameters()),
+    }
+
+
 def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, participant=None):
     """Return (model, tokenizer, roles, model_config, full_checkpoint_state)."""
     from pathlib import Path
@@ -149,4 +158,5 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
         if config[key] != saved.get(key):
             raise ValueError(f'native checkpoint {key} changed during restoration')
     restore_model_state(model, state)
+    _bind_backbone_revision(model, sha256_file_hex_cached(path))
     return model, tokenizer, roles, config, state
