@@ -137,7 +137,9 @@ def next_source_can_prebuild(campaign):
                 finished.update(event['key'] for event in rows(journal) if event.get('event') == 'finish')
     available_kib = next(int(line.split()[1]) for line in Path('/proc/meminfo').read_text().splitlines()
                          if line.startswith('MemAvailable:'))
-    return len(finished) >= max(0, selected - 30) and available_kib >= 4 * 1024 * 1024
+    # The source replay takes roughly two minutes; prepare at the halfway point
+    # so uneven worker completion does not strand slots before the next queues exist.
+    return len(finished) * 2 >= selected and available_kib >= 4 * 1024 * 1024
 
 
 def luna_unit_prefix(campaign, seed, *, repair=False):
