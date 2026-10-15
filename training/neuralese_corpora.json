@@ -94285,6 +94285,145 @@
         "held_text": {}
       },
       "notes": "Seed 52100: 84 reviewed roots and 429 native decisions; current source review v27, five exact parent holds, protected split clean."
+    },
+    {
+      "id": "external-expansion-rightfit-native-20261015-v2-render",
+      "owner": "dgx",
+      "path": "runs/external-expansion-rightfit-native-20261015-v2-render",
+      "include": [
+        "receipt.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "parts/*/receipt.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+      "admission": "renders of external-expansion-rightfit-native-20261015-v2 in parts (scripts/neuralese_data/render_parts.py): program-header and whole-trajectory for every program, full only for the 5% warm-up sample (zstd); LFM2.5 and Mellum2.1 twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+      "derived_from": [
+        "external-expansion-rightfit-native-20261015-v2"
+      ],
+      "license": "facts from the source rows",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "documents": 870,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 870,
+                "supervised_tokens": 437047,
+                "tokens": 12600167,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 53411,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "dcc119d41a35bd55f694c1d60a994b64d460fe708586f5022544aa7c9750f039",
+            "decoded_text_data_sha256": "3111517ed839ae242a20136dc30cbbb6147e2eac01f048a055caa58a32c288f4",
+            "decoded_text_data_bytes": 108752409
+          },
+          "mellum21": {
+            "documents": 870,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 870,
+                "supervised_tokens": 390202,
+                "tokens": 12149348,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 53777,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "77f6409bc6e8668fda9e2ffa0f84a2e622cecf7b89975225c38b4b52f1953e80",
+            "decoded_text_data_sha256": "62ac8fc9a8e739b6dc1d4a78809c2788880adf3f9be9506ad8bde4dacf6a4ecd",
+            "decoded_text_data_bytes": 100551057
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "documents": 17330,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 17330,
+                "supervised_tokens": 9610884,
+                "tokens": 176480144,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 56466,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "205ee4ef257e53f3020050599b8336c3c88c4efc12259cf6929bf8f2cdf264d6",
+            "decoded_text_data_sha256": "19a97f26fe50c8083e820ecd2acb467b1f963bc52694bc0d27281866de887b3c",
+            "decoded_text_data_bytes": 1452916714
+          },
+          "mellum21": {
+            "documents": 17330,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 17330,
+                "supervised_tokens": 8730703,
+                "tokens": 167159756,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 62264,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "105253306ee17f978acb38dd292478513c8c6a6ccf2e4714e45bef5173a9687d",
+            "decoded_text_data_sha256": "a085a3eef6e1e299d25a5d4fddd113ee2a867f689347053b3fcb0557b8e4c38b",
+            "decoded_text_data_bytes": 1312103924
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "documents": 8288,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 10849158,
+                "documents": 8288,
+                "opening_tokens": 1168800,
+                "supervised_tokens": 9680358,
+                "tokens": 103277097,
+                "tool_tokens": 90153835
+              }
+            },
+            "max_document_tokens": 56457,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "50598456e3d8812b834c5aef4d0259ff3f58099f33508923fbd1e5aaa34a42a3",
+            "decoded_text_data_sha256": "a06bb8f020aec899e162177176874b62da33ff7953f2a1de45771c595bd087d3",
+            "decoded_text_data_bytes": 848806419
+          },
+          "mellum21": {
+            "documents": 8288,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 10310145,
+                "documents": 8288,
+                "opening_tokens": 1298076,
+                "supervised_tokens": 9012069,
+                "tokens": 97349306,
+                "tool_tokens": 84738533
+              }
+            },
+            "max_document_tokens": 62270,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "031eeac411e7586774a52a5bf49c16c1ecfd4a954c7330ad9f193480a27a300d",
+            "decoded_text_data_sha256": "2d2ca52db4dc6653621c050e98c77445511c043c432bc6e7944bc3472c1416f9",
+            "decoded_text_data_bytes": 765461121
+          }
+        }
+      }
     }
   ],
   "coverage_backlog": [
