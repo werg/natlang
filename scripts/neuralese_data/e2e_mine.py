@@ -30,7 +30,7 @@ from source_review import pending_unpinned_source_groups, registry_sha256  # noq
 from neuralese_data.decision_holds import load_decision_holds  # noqa: E402
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex  # noqa: E402
 from natlang_neuralese.common.paths import resolve_str  # noqa: E402
-from natlang_neuralese.common.jsonio import open_jsonl_text  # noqa: E402
+from natlang_neuralese.common.jsonio import open_jsonl_text, iter_jsonl_rows  # noqa: E402
 
 TS_HOST = Path(os.environ.get('E2E_MINE_TS_HOST', ROOT / 'ts-host'))
 LFM_TOKENIZER = resolve_str('repo', 'models/hf/hub/models--LiquidAI--LFM2.5-350M/snapshots/9e6c6ccf47cd318696e137d381a7ded8fe4df09f')
@@ -59,12 +59,8 @@ def held_union_groups(work, union):
             return set(saved['groups']), bindings
     groups = set()
     for path in paths:
-        for line in open_lines(path):
-            if '"test"' not in line:
-                continue
-            row = json.loads(line)
-            if row.get('split') == 'test':
-                groups.update(row.get('source_groups') or [])
+        for _, row in iter_jsonl_rows(path, split='test'):
+            groups.update(row.get('source_groups') or [])
     after = [{'path': str(path.absolute()), 'sha256': sha256_file_hex(path)} for path in paths]
     if after != bindings:
         raise ValueError('held union changed during protection snapshot')

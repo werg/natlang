@@ -7,6 +7,7 @@ trailing newline, ASCII escaping) are deliberately NOT provided here.
 from __future__ import annotations
 
 import json
+import re
 import os
 import io
 import subprocess
@@ -108,6 +109,35 @@ def open_jsonl_text(path: str | Path):
             errors.seek(0)
             detail = errors.read(4096).decode('utf-8', errors='replace')
             raise RuntimeError(f'zstd failed on {path} (exit {result}): {detail}')
+
+
+def iter_jsonl_rows(path: str | Path, *, split: str | None = None):
+    """Yield literal lines and decoded rows, optionally selecting an admitted split.
+
+    Unselected rows are not schema-validated. This lets held-reference scans
+    avoid decoding large training token arrays. Split values are decoded
+    exactly, including Unicode escapes; escaped split keys are recognized too.
+    Nested split fields may pass the prefilter; the decoded top-level field
+    determines selection.
+    """
+    pattern = re.compile(r'"split"\s*:\s*') if split is not None else None
+    escaped_key = re.compile(r'"(?:s|\\u0073)(?:p|\\u0070)(?:l|\\u006[cC])(?:i|\\u0069)(?:t|\\u0074)"\s*:\s*')
+    decoder = json.JSONDecoder()
+    with open_jsonl_text(path) as stream:
+        for line in stream:
+            if not line.strip():
+                continue
+            if pattern is not None:
+                matches = pattern.finditer(line)
+                candidate = any(decoder.raw_decode(line, match.end())[0] == split for match in matches)
+                if not candidate and ('\\u006' in line or '\\u007' in line):
+                    candidate = any(decoder.raw_decode(line, match.end())[0] == split
+                                    for match in escaped_key.finditer(line))
+                if not candidate:
+                    continue
+            row = json.loads(line)
+            if split is None or row.get('split') == split:
+                yield line, row
 
 
 def read_jsonl(path: str | Path) -> list[dict[str, Any]]:

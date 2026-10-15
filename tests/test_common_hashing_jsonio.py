@@ -129,3 +129,26 @@ def test_zstd_partial_reader_closes_without_masking_consumer_errors(tmp_path):
         with open_jsonl_text(path) as stream:
             stream.readline()
             raise LookupError('consumer')
+def test_split_scan_preserves_escaped_json_and_avoids_unselected_token_arrays(tmp_path, monkeypatch):
+    import json
+    from natlang_neuralese.common import jsonio
+    payload = '\n'.join([
+        json.dumps({'split': 'train', 'token_ids': list(range(10000))}),
+        '{"split":"test","id":"plain","text":"literal\u2028separator"}',
+        r'{"sp\u006cit":"te\u0073t","id":"escaped"}',
+        '{"split":"train","metadata":{"split":"test"}}',
+        json.dumps({'split': 'train', 'text': 'quoted "split": "test"'}),
+    ]) + '\n'
+    path = tmp_path / 'rows.jsonl'; path.write_text(payload)
+    loads = jsonio.json.loads
+    decoded = []
+    def track(line):
+        decoded.append(line)
+        return loads(line)
+    monkeypatch.setattr(jsonio.json, 'loads', track)
+    retained = list(jsonio.iter_jsonl_rows(path, split='test'))
+    assert [row['id'] for _, row in retained] == ['plain', 'escaped']
+    assert retained[0][1]['text'] == 'literal\u2028separator'
+    assert len(decoded) == 3  # actual tests plus the conservative nested-field candidate
+    assert all('token_ids' not in line for line in decoded)
+

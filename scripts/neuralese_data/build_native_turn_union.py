@@ -113,13 +113,10 @@ def union_text_writer(path, compressed=False, reuse_existing=False):
             raise ValueError('compressed union decoded identity mismatch')
 
 
-def rows(path: Path):
+def rows(path: Path, *, split=None):
     """Exact literal-LF rows, plain or compressed through the shared text opener."""
-    from natlang_neuralese.common.jsonio import open_jsonl_text
-    with open_jsonl_text(path) as stream:
-        for line in stream:
-            if line.strip():
-                yield line, json.loads(line)
+    from natlang_neuralese.common.jsonio import iter_jsonl_rows
+    yield from iter_jsonl_rows(path, split=split)
 
 
 def _row_identity(row: dict) -> dict:
@@ -403,17 +400,16 @@ def main(argv=None):
     for rendering, by_name in members.items():
         for name, paths in by_name.items():
             for tok, path in paths.items():
-                for _, row in rows(path):
-                    if row['split'] == 'test':
-                        held_groups.update(row['source_groups'])
-                        held_texts.add(sha(row['text'].encode()))
+                for _, row in rows(path, split='test'):
+                    held_groups.update(row['source_groups'])
+                    held_texts.add(sha(row['text'].encode()))
     held_decision_ids, reference_bindings = load_decision_holds(a.decision_hold_ids)
     quarantined_groups = set()
     for kind, paths in [('held', a.held_reference), ('quarantine', a.quarantine_reference)]:
         for path in paths:
             reference_bindings.append({'kind': kind, 'path': str(path), 'sha256': file_sha(path),
                                        'bytes': path.stat().st_size})
-            for _, row in rows(path):
+            for _, row in rows(path, split='test' if kind == 'held' else None):
                 if row['split'] == 'test':
                     held_groups.update(row['source_groups'])
                     held_texts.add(sha(row['text'].encode()))
@@ -449,6 +445,7 @@ def main(argv=None):
                    Path(__file__).resolve(), ROOT / 'scripts/neuralese_data/render_native_turn_corpus.py',
                    ROOT / 'scripts/neuralese_data/text_tokenizer_twin.py',
                    ROOT / 'scripts/neuralese_data/decision_holds.py',
+                   ROOT / 'training/neuralese/natlang_neuralese/common/jsonio.py',
                    ROOT / 'scripts/source_review.py')}}
     for rendering in members:
         # Pass 2: index compact row identities in both tokenizer files before resolving any duplicate. This prevents

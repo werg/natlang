@@ -237,3 +237,13 @@ including context records that are not edge endpoints. If any such record
 shares a held source group, exclude the whole train chain and report every
 excluded record. Endpoint-only filtering is insufficient for whole-trajectory
 training; held evaluation chains remain available.
+
+Held-split scans of already admitted JSONL skip decoding unselected token
+arrays. The shared JSONL reader decodes split values exactly, recognizes
+escaped split keys, and confirms the decoded top-level split before yielding.
+This is exact I/O plumbing: output identities, provenance, held selection and
+training admission decisions remain the existing verifier's responsibility.
+On the actual R8 full/Mellum file, the selected 2,758 held rows have identical
+literal-byte SHA with both readers. The measured scan fell from 14.84 to 5.07
+seconds after localizing and removing an overbroad fallback in the first
+attempt. This measures that scan, not an entire union build.
