@@ -202,6 +202,76 @@ def test_content_dedup_uses_actual_tokens_and_weights_not_execution_identity(tmp
         converter.seed_content_fingerprints([file], 'tokenizer-a')
 
 
+def test_unresolved_state_turn_is_explicitly_omitted_without_placeholder(monkeypatch):
+    block = {'type': 'neuralese', 'id': 'nz1_exact-source-state'}
+    def render(_tokenizer, _context, target, _tools, **_kwargs):
+        error = ('ordinary gold text target contains unresolved neuralese blocks'
+                 if list(converter.unresolved_neuralese_references(target)) else
+                 'ordinary gold text prompt contains unresolved neuralese blocks')
+        raise ValueError(error)
+    monkeypatch.setattr(converter, 'native_gold_packet', render)
+    packet, omission = converter.render_teacher_packet(None,
+        [{'role': 'user', 'content': [{'type': 'text', 'text': 'Read this: '}, block]}],
+        {'role': 'assistant', 'content': 'answer'}, [])
+    assert packet is None
+    assert omission == {
+        'reason': 'full ordinary-text conversion requires unresolved typed Neuralese payloads; '
+                  'retain this action for source-bound native graph conversion',
+        'unresolved_scope': 'prompt', 'unresolved_block_ids': ['nz1_exact-source-state']}
+    target_packet, target_omission = converter.render_teacher_packet(None, [],
+        {'role': 'assistant', 'content': [block]}, [])
+    assert target_packet is None
+    assert target_omission['unresolved_scope'] == 'target'
+    assert target_omission['unresolved_block_ids'] == ['nz1_exact-source-state']
+    monkeypatch.setattr(converter, 'native_gold_packet', lambda *args, **kwargs: (_ for _ in ()).throw(
+        ValueError('assistant target does not continue the serving generation prompt')))
+    with pytest.raises(ValueError, match='does not continue'):
+        converter.render_teacher_packet(None, [], {'role': 'assistant', 'content': 'answer'}, [])
+
+
+def test_authenticated_text_emulation_restores_exact_provider_input_and_read_tool():
+    import hashlib
+    body = 'change_ai_name'
+    block_id = 'nz1_exact-source-state'
+    block = {'id': block_id, 'type': 'Neuralese<string>', 'body': body,
+        'body_sha256': hashlib.sha256(body.encode()).hexdigest(), 'learned_vectors': False}
+    label = (f'[[Neuralese text block id={block_id} type=Neuralese<string>; '
+             f'exact JSON string body={json.dumps(body, ensure_ascii=False, separators=(",", ":"))}]]')
+    context = [{'role': 'user', 'content': [{'type': 'text', 'text': 'Read: '},
+        {'type': 'neuralese', 'id': block_id}]}]
+    rendered = [{'role': 'system', 'content': 'captured read instruction'},
+        {'role': 'user', 'content': 'Read: ' + label}]
+    tools = [{'type': 'function', 'function': {'name': 'return_result'}},
+        {'type': 'function', 'function': {'name': 'eval'}}]
+    transport = {'version': 'text-marker-standin/2', 'learned_vectors': False,
+        'qualification_certificate': False, 'training_admission': False,
+        'raw_request_sha256': 'a' * 64, 'rendered_request_sha256': 'b' * 64,
+        'rendered_messages': rendered, 'expanded_input_blocks': [block]}
+    turn = {'model_response': {'transport_provenance': transport}}
+    messages, actual_tools, proof, omission = converter.captured_text_emulation_context(turn, context, tools)
+    assert omission is None and messages == rendered and actual_tools == tools
+    assert proof['schema'] == 'natlang.captured-text-neuralese-input/1'
+    assert proof['expanded_blocks'] == [{'id': block_id, 'type': block['type'],
+        'body_sha256': block['body_sha256'], 'occurrences': 1}]
+    read_body = {'id': 'nz1_read-source', 'type': 'Neuralese<(v: Neuralese<unknown>) => unknown>',
+        'body': 'read implementation', 'body_sha256': hashlib.sha256(b'read implementation').hexdigest(),
+        'learned_vectors': False}
+    read_template = {'schema': 'natlang.text-template-readout/1', 'call': 'return_result',
+        'value': 'decode', 'read_body_id': read_body['id'], 'read_source_sha256': read_body['body_sha256'],
+        'learned_vectors': False, 'qualification_certificate': False, 'training_admission': False}
+    template_transport = {**transport, 'expanded_input_blocks': [block, read_body],
+        'text_template_readout': read_template}
+    read_turn = {'model_response': {'transport_provenance': template_transport}}
+    messages, actual_tools, proof, omission = converter.captured_text_emulation_context(
+        read_turn, context, tools)
+    assert omission is None and messages == rendered
+    assert actual_tools == tools[:1]
+    damaged = {**template_transport, 'expanded_input_blocks': [{**block, 'body_sha256': '0' * 64}, read_body]}
+    _, _, _, omission = converter.captured_text_emulation_context(
+        {'model_response': {'transport_provenance': damaged}}, context, tools)
+    assert omission is not None and 'digest mismatch' in omission['reason']
+
+
 @pytest.mark.parametrize('code_selection', [False, 'list', 'count'])
 def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypatch, code_selection):
     from types import SimpleNamespace

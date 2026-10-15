@@ -361,6 +361,138 @@ def graph_content_sha256(graph):
                                      'nodes': graph['nodes']})
 
 
+def unresolved_neuralese_references(value):
+    """Return exact typed block IDs in a captured prompt/target, preserving nested content."""
+    if isinstance(value, dict):
+        if value.get('type') == 'neuralese' and isinstance(value.get('id'), str):
+            yield value['id']
+        for child in value.values():
+            yield from unresolved_neuralese_references(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from unresolved_neuralese_references(child)
+
+
+def unresolved_gold_error(error):
+    """Classify only the two explicit unresolved-state failures from native_gold_packet."""
+    message = str(error)
+    if message == 'ordinary gold text prompt contains unresolved neuralese blocks':
+        return 'prompt'
+    if message == 'ordinary gold text target contains unresolved neuralese blocks':
+        return 'target'
+    return None
+
+
+def _count_value(value, needle):
+    if isinstance(value, str):
+        return value.count(needle)
+    if isinstance(value, dict):
+        return sum(_count_value(child, needle) for child in value.values())
+    if isinstance(value, list):
+        return sum(_count_value(child, needle) for child in value)
+    return 0
+
+
+def captured_text_emulation_context(turn, context, tools):
+    """Recover the exact provider-visible text context for authenticated text-emulated blocks."""
+    references = list(unresolved_neuralese_references(context))
+    if not references:
+        return context, tools, None, None
+    response = turn.get('model_response') or {}
+    transport = response.get('transport_provenance') or {}
+    omissions = {'unresolved_scope': 'prompt', 'unresolved_block_ids': sorted(set(references))}
+    if (transport.get('version') != 'text-marker-standin/2' or transport.get('learned_vectors') is not False
+            or transport.get('qualification_certificate') is not False or transport.get('training_admission') is not False
+            or any(not isinstance(transport.get(name), str) or len(transport[name]) != 64
+                   or any(ch not in '0123456789abcdef' for ch in transport[name])
+                   for name in ('raw_request_sha256', 'rendered_request_sha256'))):
+        return None, None, None, {**omissions,
+            'reason': 'typed prompt blocks lack authenticated non-learned text-emulation transport evidence'}
+    expanded = transport.get('expanded_input_blocks')
+    if not isinstance(expanded, list):
+        return None, None, None, {**omissions,
+            'reason': 'typed prompt blocks lack captured expanded text-emulation bodies'}
+    by_id = {}
+    for block in expanded:
+        if (not isinstance(block, dict) or not isinstance(block.get('id'), str)
+                or block['id'] in by_id or not isinstance(block.get('type'), str)
+                or not block['type'].startswith('Neuralese<') or not isinstance(block.get('body'), str)
+                or block.get('learned_vectors') is not False):
+            return None, None, None, {**omissions,
+                'reason': 'captured text-emulation block metadata is incomplete or ambiguous'}
+        body_sha = hashlib.sha256(block['body'].encode('utf-8')).hexdigest()
+        if block.get('body_sha256') != body_sha:
+            return None, None, None, {**omissions,
+                'reason': 'captured text-emulation block body digest mismatch'}
+        by_id[block['id']] = block
+    if not set(references) <= set(by_id):
+        return None, None, None, {**omissions,
+            'reason': 'captured text-emulation bodies do not cover every typed context reference'}
+    rendered = transport.get('rendered_messages')
+    if not isinstance(rendered, list) or list(unresolved_neuralese_references(rendered)):
+        return None, None, None, {**omissions,
+            'reason': 'captured provider-visible messages are missing or still contain unresolved blocks'}
+    for block_id in set(references):
+        block = by_id[block_id]
+        label = (f'[[Neuralese text block id={block_id} type={block["type"]}; exact JSON string body='
+                 f'{json.dumps(block["body"], ensure_ascii=False, separators=(",", ":"))}]]')
+        if _count_value(rendered, label) < references.count(block_id):
+            return None, None, None, {**omissions,
+                'reason': 'captured provider-visible messages do not contain the exact authenticated block expansion'}
+    chosen_tools = tools
+    template = transport.get('text_template_readout')
+    if template is not None:
+        if (not isinstance(template, dict) or template.get('schema') != 'natlang.text-template-readout/1'
+                or template.get('learned_vectors') is not False
+                or template.get('qualification_certificate') is not False
+                or template.get('training_admission') is not False
+                or template.get('call') != 'return_result' or template.get('value') != 'decode'):
+            return None, None, None, {**omissions,
+                'reason': 'captured typed-read template is not the declared non-learned text-emulation contract'}
+        read_block = by_id.get(template.get('read_body_id'))
+        if (read_block is None or read_block.get('body_sha256') != template.get('read_source_sha256')
+                or read_block.get('type') != 'Neuralese<(v: Neuralese<unknown>) => unknown>'):
+            return None, None, None, {**omissions,
+                'reason': 'captured text-read instruction is not bound to its exact declared read body'}
+        matches = [tool for tool in tools if (tool.get('function') or {}).get('name') == 'return_result']
+        if len(matches) != 1:
+            return None, None, None, {**omissions,
+                'reason': 'typed text-read request lacks one exact return_result tool schema'}
+        chosen_tools = matches
+    proof = {'schema': 'natlang.captured-text-neuralese-input/1',
+        'source': 'provider-captured-text-marker-standin', 'learned_vectors': False,
+        'qualification_certificate': False, 'training_admission': False,
+        'raw_request_sha256': transport['raw_request_sha256'],
+        'rendered_request_sha256': transport['rendered_request_sha256'],
+        'expanded_blocks': [{'id': block_id, 'type': by_id[block_id]['type'],
+            'body_sha256': by_id[block_id]['body_sha256'], 'occurrences': references.count(block_id)}
+            for block_id in sorted(set(references))]}
+    return rendered, chosen_tools, proof, None
+
+
+def render_teacher_packet(tokenizer, context, target, tools, turn=None):
+    """Render one action or return an explicit omission when its exact state payload is unavailable."""
+    emulation_proof = None
+    if turn is not None:
+        context, tools, emulation_proof, omission = captured_text_emulation_context(turn, context, tools)
+        if omission is not None:
+            return None, omission
+    try:
+        packet = native_gold_packet(tokenizer, context, target, tools, prompt_rendering='full')
+        return (packet, emulation_proof), None
+    except ValueError as error:
+        scope = unresolved_gold_error(error)
+        if scope is None:
+            raise
+        omitted_value = context if scope == 'prompt' else target
+        block_ids = sorted(set(unresolved_neuralese_references(omitted_value)))
+        if not block_ids:
+            raise ValueError('unresolved neuralese error had no exact source block IDs') from error
+        return None, {'reason': 'full ordinary-text conversion requires unresolved typed Neuralese payloads; '
+                              'retain this action for source-bound native graph conversion',
+                      'unresolved_scope': scope, 'unresolved_block_ids': block_ids}
+
+
 def seed_content_fingerprints(paths, fingerprint):
     seen, inputs = {}, []
     for path in paths:
@@ -439,8 +571,12 @@ def main():
                           "tool_calls": raw_calls}
                 if isinstance(assistant.get("reasoning"), str) and assistant["reasoning"]:
                     target["reasoning_content"] = assistant["reasoning"]
-                text, token_ids, boundary = native_gold_packet(tokenizer, context, target, tools,
-                                                               prompt_rendering="full")
+                packet, omission = render_teacher_packet(tokenizer, context, target, tools, turn)
+                if omission is not None:
+                    action_omissions.append({'source_row_id': row['id'], 'teacher_turn_index': index,
+                        **omission, 'decision': decision})
+                    continue
+                (text, token_ids, boundary), emulation_proof = packet
                 identifier = f"{row['id']}:action:{index:04d}"
                 if identifier in seen_ids:
                     raise ValueError(f"duplicate derived teacher turn identity: {identifier}")
@@ -472,6 +608,7 @@ def main():
                     "teacher_run_id": row.get("execution_identity", {}).get("execution_run_id"),
                     "teacher_turn_index": index, "teacher_invocation_id": turn.get("invocation_id"),
                     'decision_admission': decision,
+                    **({'captured_text_emulation_input': emulation_proof} if emulation_proof else {}),
                     'decision_materialization_receipt_sha256': decision_proof['sha256'],
                     "request_sha256": turn.get("request_sha256"),
                     "raw_response_sha256": turn.get("raw_response_sha256"),
