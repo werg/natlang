@@ -96,6 +96,68 @@ export function neuraleseContentId(block: Pick<NeuraleseBlockInput, 'dialect' | 
 }
 
 const NATIVE_DTYPE_BYTES: Record<NativeStateDtype, number> = { F16: 2, BF16: 2, F32: 4, F64: 8, I64: 8 };
+const SHA256 = /^[0-9a-f]{64}$/;
+function validateNativeState(metadata: NativeStateMetadata, tensors: Record<string, NativeStateTensor>): void {
+  if (!metadata || metadata.schema !== 'neuralese.native-state/1' || typeof metadata.text !== 'string' ||
+      typeof metadata.architecture !== 'string' || !metadata.architecture ||
+      !SHA256.test(metadata.tokenizer_fingerprint) || !SHA256.test(metadata.checkpoint_sha256) ||
+      !SHA256.test(metadata.embedding_weight_sha256) || !Array.isArray(metadata.layer_kinds) || !metadata.layer_kinds.length)
+    throw new RangeError('invalid native-state metadata');
+  const expected = new Set(['token_ids', 'positions', 'embeddings']);
+  const count = (name: string, rank: number): number[] => {
+    const tensor = tensors[name];
+    if (!tensor || tensor.shape.length !== rank || tensor.shape.some(size => !Number.isSafeInteger(size) || size <= 0) ||
+        !Number.isSafeInteger(tensor.shape.reduce((n, size) => n * size, 1)) ||
+        tensor.data.length !== tensor.shape.reduce((n, size) => n * size, 1) * NATIVE_DTYPE_BYTES[tensor.dtype])
+      throw new RangeError(`invalid native-state tensor ${name}`);
+    return tensor.shape;
+  };
+  const ids = tensors.token_ids, positions = tensors.positions;
+  const tokenShape = count('token_ids', 1), positionShape = count('positions', 1), embeddingShape = count('embeddings', 2);
+  if (ids!.dtype !== 'I64' || positions!.dtype !== 'I64' || tokenShape[0] !== positionShape[0] ||
+      embeddingShape[0] !== tokenShape[0] || tokenShape[0]! <= 0)
+    throw new RangeError('native-state token axes or integer tensor types differ');
+  const i64 = (tensor: NativeStateTensor) => new DataView(tensor.data.buffer, tensor.data.byteOffset, tensor.data.byteLength);
+  const iv = i64(ids!), pv = i64(positions!);
+  for (let i = 0; i < tokenShape[0]!; i++) {
+    const token = iv.getBigInt64(i * 8, true), position = pv.getBigInt64(i * 8, true);
+    if (token < 0n || position < 0n || (i && position !== pv.getBigInt64((i - 1) * 8, true) + 1n))
+      throw new RangeError('native-state token IDs or positions are invalid');
+  }
+  const finite = (name: string, tensor: NativeStateTensor) => {
+    if (tensor.dtype === 'I64') throw new RangeError(`native-state ${name} must be floating point`);
+    const view = new DataView(tensor.data.buffer, tensor.data.byteOffset, tensor.data.byteLength);
+    for (let at = 0; at < tensor.data.length; at += NATIVE_DTYPE_BYTES[tensor.dtype]) {
+      let value: number;
+      if (tensor.dtype === 'F16') {
+        const h = view.getUint16(at, true), sign = h & 0x8000 ? -1 : 1, exponent = (h >> 10) & 31, mantissa = h & 1023;
+        value = exponent === 31 ? Number.NaN : sign * (exponent === 0 ? mantissa * 2 ** -24 : (1 + mantissa / 1024) * 2 ** (exponent - 15));
+      } else if (tensor.dtype === 'BF16') {
+        const bits = view.getUint16(at, true) << 16;
+        const word = new ArrayBuffer(4), wordView = new DataView(word);
+        wordView.setUint32(0, bits, true);
+        value = wordView.getFloat32(0, true);
+      } else value = tensor.dtype === 'F32' ? view.getFloat32(at, true) : view.getFloat64(at, true);
+      if (!Number.isFinite(value)) throw new RangeError(`native-state ${name} contains non-finite values`);
+    }
+  };
+  finite('embeddings', tensors.embeddings!);
+  for (let index = 0; index < metadata.layer_kinds.length; index++) {
+    const kind = metadata.layer_kinds[index], prefix = `layers.${index}.`;
+    if (kind === 'attention') {
+      const k = count(`${prefix}raw_k`, 3), v = count(`${prefix}v`, 3), kt = tensors[`${prefix}raw_k`]!, vt = tensors[`${prefix}v`]!;
+      if (k[0] !== tokenShape[0] || v.some((size, axis) => size !== k[axis]) || kt.dtype !== vt.dtype)
+        throw new RangeError(`invalid native-state attention layer ${index}`);
+      expected.add(`${prefix}raw_k`); expected.add(`${prefix}v`); finite(`${prefix}raw_k`, kt); finite(`${prefix}v`, vt);
+    } else if (kind === 'finite_convolution') {
+      const name = `${prefix}gated_inputs`, shape = count(name, 2), tensor = tensors[name]!;
+      if (shape[0] !== tokenShape[0]) throw new RangeError(`invalid native-state convolution layer ${index}`);
+      expected.add(name); finite(name, tensor);
+    } else throw new RangeError(`unsupported native-state layer kind ${String(kind)}`);
+  }
+  if (Object.keys(tensors).length !== expected.size || Object.keys(tensors).some(name => !expected.has(name)))
+    throw new RangeError('native-state tensor inventory differs from its layer layout');
+}
 function u32(value: number): Uint8Array { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, value, true); return b; }
 function u64(value: number): Uint8Array { const b = new Uint8Array(8); new DataView(b.buffer).setBigUint64(0, BigInt(value), true); return b; }
 function joinBytes(parts: readonly Uint8Array[]): Uint8Array {
@@ -111,6 +173,7 @@ function nativeCanonicalJson(value: unknown): string {
 
 /** Versioned ID shared byte-for-byte with `serve.store.native_state_id` (Python). */
 export function nativeStateContentId(metadata: NativeStateMetadata, tensors: Record<string, NativeStateTensor>): string {
+  validateNativeState(metadata, tensors);
   const metaBytes = new TextEncoder().encode(nativeCanonicalJson(metadata));
   const parts: Uint8Array[] = [new TextEncoder().encode('natlang.native-state/1\0'), u64(metaBytes.length), metaBytes];
   for (const name of Object.keys(tensors).sort()) {

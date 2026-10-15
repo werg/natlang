@@ -26,3 +26,38 @@ test('native-state identity and safetensors wire match Python', () => {
   wire[wire.length - 1] ^= 1;
   assert.throws(() => decodeNativeState(wire), /content ID mismatch/);
 });
+
+test('native-state contract rejects invalid identity, tensor inventory, positions, and non-finite state', () => {
+  const clone = () => structuredClone({ metadata, tensors });
+  let artifact = clone(); artifact.metadata.checkpoint_sha256 = 'bad';
+  assert.throws(() => encodeNativeState(artifact), /metadata/);
+  artifact = clone(); delete artifact.tensors['layers.0.v'];
+  assert.throws(() => encodeNativeState(artifact), /invalid native-state tensor|attention layer/);
+  artifact = clone(); artifact.tensors.positions.data = bytes('07000000000000000900000000000000');
+  assert.throws(() => encodeNativeState(artifact), /positions/);
+  artifact = clone(); artifact.tensors.embeddings.data = bytes('807f4d3e9a3ecd3e');
+  assert.throws(() => encodeNativeState(artifact), /non-finite/);
+});
+
+test('decoder applies the same semantic checks even when a malformed body has a matching ID', () => {
+  const artifact = structuredClone({ metadata, tensors });
+  artifact.tensors.positions.data = bytes('07000000000000000900000000000000');
+  const id = nativeStateContentId(metadata, tensors);
+  const entries = {};
+  let offset = 0;
+  for (const name of Object.keys(artifact.tensors).sort()) {
+    const tensor = artifact.tensors[name];
+    entries[name] = { dtype: tensor.dtype, shape: tensor.shape, data_offsets: [offset, offset + tensor.data.length] };
+    offset += tensor.data.length;
+  }
+  entries.__metadata__ = { 'natlang.native_state': JSON.stringify({ id, ...artifact.metadata }) };
+  const encoder = new TextEncoder();
+  const header = encoder.encode(JSON.stringify(Object.fromEntries(Object.entries(entries).sort(([a], [b]) => a.localeCompare(b)))));
+  const aligned = new Uint8Array(Math.ceil(header.length / 8) * 8).fill(0x20); aligned.set(header);
+  const payload = new Uint8Array(Object.keys(artifact.tensors).sort().reduce((n, name) => n + artifact.tensors[name].data.length, 0));
+  let at = 0;
+  for (const name of Object.keys(artifact.tensors).sort()) { payload.set(artifact.tensors[name].data, at); at += artifact.tensors[name].data.length; }
+  const wire = new Uint8Array(8 + aligned.length + payload.length);
+  new DataView(wire.buffer).setBigUint64(0, BigInt(aligned.length), true); wire.set(aligned, 8); wire.set(payload, 8 + aligned.length);
+  assert.throws(() => decodeNativeState(wire), /positions/);
+});

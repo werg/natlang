@@ -93,6 +93,8 @@ def decode_native_state(body: bytes):
         if header_size > len(body) - 8:
             raise ValueError("header exceeds the body")
         header = json.loads(body[8:8 + header_size])
+        if not isinstance(header, dict):
+            raise ValueError("native state header must be an object")
         metadata = json.loads(header.get("__metadata__", {}).get("natlang.native_state", "{}"))
         if not isinstance(metadata, dict):
             raise ValueError("native state metadata must be an object")
@@ -129,7 +131,7 @@ def decode_native_state(body: bytes):
         if metadata.get("id") != actual:
             raise ValueError(f"native state ID does not match its content ({actual})")
         return block, actual
-    except (KeyError, TypeError, IndexError, OverflowError, json.JSONDecodeError) as error:
+    except (KeyError, TypeError, IndexError, OverflowError, AttributeError, json.JSONDecodeError) as error:
         raise ValueError(f"malformed native state: {error}") from error
 
 
@@ -320,8 +322,19 @@ class TensorStore:
         path = self._path(block.id)
         path.parent.mkdir(exist_ok=True)
         partial = path.with_suffix(f".{os.getpid()}.partial")
-        partial.write_bytes(encode_native_state(block.block) if isinstance(block, NativeStateRecord) else encode_block(block))
+        payload = encode_native_state(block.block) if isinstance(block, NativeStateRecord) else encode_block(block)
+        with partial.open("wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
         os.replace(partial, path)
+        # The immutable payload must reach durable storage before its SQLite row
+        # is published. Persist the rename itself as well as the file contents.
+        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
 
     @staticmethod
     def _size(block) -> int:

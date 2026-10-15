@@ -3,6 +3,7 @@ import pytest
 
 from natlang_neuralese.model.state_block import NativeStateBlock
 from natlang_neuralese.serve.store import TensorStore, decode_native_state, encode_native_state, native_state_id
+from natlang_neuralese.serve.chat import RequestError, render_messages
 
 
 def _block():
@@ -47,7 +48,6 @@ def test_native_state_uses_shared_store_holds_and_survives_restart(tmp_path):
     assert store.get_native_state(record.id).meta() == record.meta()
     assert store.collect(set(), "owner-a") == []
     store.close()
-
     store = TensorStore(tmp_path, resident_bytes=1)
     restored = store.get_native_state(record.id)
     assert restored is not None and restored.id == record.id
@@ -57,3 +57,16 @@ def test_native_state_uses_shared_store_holds_and_survives_restart(tmp_path):
     assert store.collect(set(), "owner-b") == [record.id]
     assert not list((tmp_path / "blocks").glob(f"*/{record.id}.safetensors"))
     store.close()
+
+
+def test_native_state_parts_remain_structured_and_cannot_enter_legacy_renderer():
+    messages = [{"role": "user", "content": [{"type": "text", "text": "read "},
+                                                  {"type": "native_state", "id": "nzs1_" + "a" * 52}]}]
+    apply = lambda rows, tools: rows[0]["content"]
+    with pytest.raises(RequestError, match="native-state-unavailable"):
+        render_messages(messages, None, apply)
+    rendered = render_messages(messages, None, apply, native_state=True)
+    assert rendered.blocks == ["nzs1_" + "a" * 52]
+    assert rendered.block_kinds == ["native_state"]
+    assert len(rendered.segments) == 2 and rendered.segments[1] == 0
+
