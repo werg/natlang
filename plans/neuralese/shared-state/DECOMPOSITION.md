@@ -49,3 +49,45 @@ forward and gradient reference parity; typed state storage; four role markers;
 native runtime import/export; corpus graph conversion; shared trainer and RL
 integration; full recipes; real harness samples; both cloud restarts. Each item
 must have actual evidence before declaring the replacement deployed.
+
+## Exact span and inference boundary contract
+
+`producing=(start, stop)` and an ordinary `ImportSpan` use own-token
+BOUNDARIES: imports inserted at `start` belong to the exported span, and imports
+inserted at `stop` do not. `GraphPlan.boundaries` records positions before the
+imports at each own-token index. Thus nested exports contain every intervening
+native state alias. A `logical_producing` declaration and `ImportSpan(logical=True)`
+can explicitly export a logical state range; an imported-only invocation needs
+no own tokens and forwards its existing state without running the LLM. A graph
+consisting entirely of forwarding performs zero token queries.
+
+Producer begin/end marker tokens are actual trained vocabulary rows. Execute the
+begin marker normally, capture payload tokens with the embedding adapter active,
+then execute the end marker. The stored payload excludes those marker tokens.
+Consumer begin is a normal query; splice the raw payload KV at the next logical
+positions without executing alias queries; consumer end is a fresh normal query
+and therefore sees the imported state. Ordinary target tokens follow that query.
+Never use the source's last hidden state as if it were a consumer-close query or
+train the consumer's forced close token from a source-owned logit.
+
+Incremental `native_step` and `splice_block` use the same projections, raw-state
+contract, RoPE and finite-convolution continuation as the layer-major training
+path. Native imports require the exact checkpoint, expanded tokenizer, embedding
+identity, architecture and state layout. Graph external state requires explicit
+`external_identity`; this is also how a future semantic decoder declares its
+TARGET state. It does not legitimize raw foreign-model KV.
+
+## Evidence so far (not production qualification)
+
+- Tiny LFM hybrid, native Mellum with per-layer YaRN/sliding windows, and Qwen:
+  ordinary port parity; multi-level/fanout graph forward and adjoint parity;
+  incremental capture/import versus graph parity; native channel save/restore.
+- CUDA sparse block geometry matches dense attention forward and all Q/K/V
+  adjoints for global and sliding attention. Production plans store linear token
+  and alias metadata, not token-squared visibility/history lists.
+- Actual full 350M QAD LFM, 16 layers and width 1024, FP32 CUDA: graph versus
+  invocation reference max residual error 5.07e-7, embedding-adapter adjoint error
+  2.28e-6, incremental native splice error 4.47e-7. This tests state/gradient
+  machinery, not task reward or model improvement.
+- Full Mellum, integrated serving/harness, corpus conversion and complete recipe
+  execution remain required before the old diagnostic channel is retired.

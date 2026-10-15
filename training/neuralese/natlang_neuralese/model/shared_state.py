@@ -18,6 +18,7 @@ class ImportSpan:
     source: str
     start: int
     stop: int
+    logical: bool = False
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class Invocation:
     token_ids: tuple[int, ...]
     imports: tuple[ImportSpan, ...] = ()
     producing: tuple[tuple[int, int], ...] = ()
+    logical_producing: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,7 @@ class GraphPlan:
     producing: tuple[bool, ...]
     external_names: tuple[str, ...] = ()
     external_sizes: tuple[int, ...] = ()
+    boundaries: tuple[tuple[int, ...], ...] = ()
 
     @property
     def token_count(self):
@@ -84,12 +87,12 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
     for name, size in external_sizes.items():
         external_offsets[name] = next_external
         next_external += size
-    known, offsets, sequences = {}, [], []
+    known, offsets, sequences, boundaries = {}, [], [], []
     own_positions, sources, positions, node_ids, slot_offsets, producing = [], [], [], [], [], []
     physical_count = 0
     for node in invocations:
-        if node.name in known or node.name in external_sizes or not node.token_ids:
-            raise ValueError('invocations need unique names and at least one token')
+        if node.name in known or node.name in external_sizes:
+            raise ValueError('invocations need unique names distinct from external state names')
         offset = physical_count
         offsets.append(offset)
         count = len(node.token_ids)
@@ -110,19 +113,27 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
             else:
                 if edge.source not in known:
                     raise ValueError('imports require an earlier source or declared external state')
-                source_node, source_offset = known[edge.source]
-                if not 0 <= edge.start < edge.stop <= len(source_node.token_ids):
-                    raise ValueError('import span is outside source tokens')
-                if not any(a <= edge.start and edge.stop <= b for a, b in source_node.producing):
+                source_node, source_offset, source_index = known[edge.source]
+                if edge.logical:
+                    lo, hi = edge.start, edge.stop
+                    declared = source_node.logical_producing
+                else:
+                    if not 0 <= edge.start < edge.stop <= len(source_node.token_ids):
+                        raise ValueError('import span is outside source tokens')
+                    lo, hi = boundaries[source_index][edge.start], boundaries[source_index][edge.stop]
+                    declared = tuple((boundaries[source_index][a], boundaries[source_index][b])
+                                     for a, b in source_node.producing)
+                if not 0 <= lo < hi <= len(sequences[source_index]):
+                    raise ValueError('import span is outside the source logical state')
+                if not any(a <= lo and hi <= b for a, b in declared):
                     raise ValueError('imports must reference an explicitly producing span')
-                source_index = offsets.index(source_offset)
-                lo = own_positions[source_offset+edge.start]
-                hi = own_positions[source_offset+edge.stop-1]+1
                 imported = sequences[source_index][lo:hi]
             edges.setdefault(edge.at, []).append(imported)
         logical = []
         own = []
+        boundary = []
         for local in range(count+1):
+            boundary.append(len(logical))
             for imported in edges.get(local, ()):
                 logical.extend(imported)
             if local < count:
@@ -135,15 +146,21 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
         for pos in own:
             own_positions.append(pos)
             node_ids.append(len(sequences))
+        for start, stop in node.logical_producing:
+            if not 0 <= start < stop <= len(logical):
+                raise ValueError('logical producing span is outside invocation state')
+        if not logical:
+            raise ValueError('an invocation must contain tokens or imported state')
         producing.extend(producer)
         sequences.append(tuple(logical))
-        known[node.name] = node, offset
+        boundaries.append(tuple(boundary))
+        known[node.name] = node, offset, len(sequences)-1
         physical_count += count
     if not invocations:
         raise ValueError('graph cannot be empty')
     return GraphPlan(invocations, tuple(offsets), tuple(sequences), tuple(own_positions),
                      tuple(sources), tuple(positions), tuple(node_ids), tuple(slot_offsets), tuple(producing),
-                     tuple(external_sizes), tuple(external_sizes.values()))
+                     tuple(external_sizes), tuple(external_sizes.values()), tuple(boundaries))
 
 
 class LowRankTokenEmbedding(nn.Module):
@@ -225,6 +242,10 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
     key_positions = plan.tensor(plan.slot_positions, device)
     query_positions = plan.tensor(plan.own_positions, device)
     external = _external_layers(port, plan, external_blocks, external_identity)
+    if plan.token_count == 0:
+        state = tuple(tuple(torch.cat([item[i][j] for item in external], dim=2 if port.is_attention(i) else 1)
+                            for j in range(2 if port.is_attention(i) else 1)) for i in range(port.num_layers))
+        return {'h_final': h, 'states': state if retain_states else (), 'plan': plan}
     state = []
     masks = {}
     checkpointed = bool(getattr(port, 'checkpoint_layers', False)) and torch.is_grad_enabled()
@@ -277,11 +298,15 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
     conv1d are deliberately independent of the flattened mask/gather kernels.
     """
     device = port.embedding_weight.device
+    if plan.token_count == 0:
+        return forward_graph(port, plan, adapter, embeddings=embeddings, external_blocks=external_blocks, external_identity=external_identity)
     external = _external_layers(port, plan, external_blocks, external_identity)
     layer_cache = [[] for _ in port.layers]
     outputs = []
     for node, offset, logical in zip(plan.invocations, plan.offsets, plan.sequences):
         count = len(node.token_ids)
+        if count == 0:
+            continue
         def remap(rows):
             return tuple(row if row < plan.token_count else row-plan.token_count+offset+count for row in rows)
         h = (port.embed(plan.tensor(node.token_ids, device)[None]) if embeddings is None
@@ -479,8 +504,21 @@ def capture_invocation_span(result, invocation, start, stop):
     if not any(a <= start and stop <= b for a, b in node.producing):
         raise ValueError('capture requires an explicitly producing span')
     offset = plan.offsets[index]
-    lo, hi = plan.own_positions[offset+start], plan.own_positions[offset+stop-1]+1
-    sources = plan.sequences[index][lo:hi]
+    lo, hi = plan.boundaries[index][start], plan.boundaries[index][stop]
+    return _capture_logical(result, index, lo, hi)
+
+
+def capture_logical_span(result, invocation, start, stop):
+    plan = result['plan']
+    index = next((i for i, node in enumerate(plan.invocations) if node.name == invocation), None)
+    if index is None or not any(a <= start < stop <= b for a, b in plan.invocations[index].logical_producing):
+        raise ValueError('capture requires an explicitly declared logical producing span')
+    return _capture_logical(result, index, start, stop)
+
+
+def _capture_logical(result, index, start, stop):
+    plan = result['plan']
+    sources = plan.sequences[index][start:stop]
     device = result['h_final'].device
     rows = plan.tensor(sources, device)
     layers = []
@@ -490,7 +528,7 @@ def capture_invocation_span(result, invocation, start, stop):
                            'v': values[1][0, :, rows].transpose(0, 1)})
         else:
             layers.append({'kind': 'finite_convolution', 'gated_inputs': values[0][0, rows]})
-    return {'positions': torch.arange(lo, hi, device=device), 'layers': tuple(layers),
+    return {'positions': torch.arange(start, stop, device=device), 'layers': tuple(layers),
             'token_ids': result['token_ids'][rows], 'embeddings': result['embeddings'][0, rows]}
 
 

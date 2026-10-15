@@ -348,3 +348,51 @@ def test_marker_provisioning_with_installed_transformers_tokenizer_api():
     assert controls.ids == (64, 65, 66, 67)
     assert tokenizer(list(ROLE_MARKERS), add_special_tokens=False).input_ids == [[i] for i in controls.ids]
     assert all(token in tokenizer.all_special_tokens for token in ROLE_MARKERS)
+
+
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_token_boundaries_include_start_import_and_exclude_stop_import(family):
+    from natlang_neuralese.model.shared_state import SharedStateModel, capture_invocation_span
+    port = tiny(family)
+    vocab = port.embedding_weight.shape[0]
+    model = SharedStateModel(port, tuple(range(vocab-4, vocab)), rank=4)
+    plan = compile_graph([
+        Invocation('a', (2, 3), producing=((0, 2),)),
+        Invocation('b', (4, 5, 6), imports=(ImportSpan(1, 'a', 0, 2), ImportSpan(2, 'a', 0, 1)), producing=((1, 2),)),
+        Invocation('c', (7, 8), imports=(ImportSpan(1, 'b', 1, 2),)),
+    ])
+    result = model(plan)
+    fields = capture_invocation_span(result, 'b', 1, 2)
+    assert fields['token_ids'].tolist() == [2, 3, 5]
+    assert fields['positions'].tolist() == [1, 2, 3]
+    assert plan.sequences[2] == (5, 0, 1, 3, 6)
+    reference = model(plan, reference=True)
+    torch.testing.assert_close(result['h_final'], reference['h_final'], atol=4e-6, rtol=3e-5)
+
+
+def test_imported_only_forwarding_preserves_state_without_executing_tokens():
+    from natlang_neuralese.model.shared_state import SharedStateModel, capture_block, capture_logical_span
+    from natlang_neuralese.model.state_block import NativeStateBlock
+    model = SharedStateModel(tiny('lfm'), (60, 61, 62, 63), rank=4)
+    source = model(compile_graph([Invocation('source', (2, 3), producing=((0, 2),))]))
+    identity = dict(checkpoint_sha256='a'*64, tokenizer_fingerprint='b'*64,
+                    embedding_weight_sha256='c'*64, architecture=model.port.config.model_type)
+    block = capture_block(source, 'source', 0, 2, text='source', **identity)
+    plan = compile_graph([
+        Invocation('forwarded', (), imports=(ImportSpan(0, 'external', 0, 2),), logical_producing=((0, 2),)),
+        Invocation('consumer', (4, 5), imports=(ImportSpan(1, 'forwarded', 0, 2, logical=True),)),
+    ], external_sizes={'external': 2})
+    result = model(plan, external_blocks={'external': block}, external_identity=identity)
+    forwarded = capture_logical_span(result, 'forwarded', 0, 2)
+    assert torch.equal(forwarded['token_ids'], block.token_ids)
+    for original, copied in zip(block.layers, forwarded['layers']):
+        for key in original:
+            if key != 'kind':
+                assert torch.equal(copied[key], original[key])
+    pure = compile_graph([Invocation('forward', (), imports=(ImportSpan(0, 'external', 0, 2),),
+                                             logical_producing=((0, 2),))], external_sizes={'external': 2})
+    with torch.no_grad():
+        pure_result = model(pure, external_blocks={'external': block}, external_identity=identity)
+    assert pure_result['h_final'].shape == (1, 0, 32)
+    assert pure.token_count == 0
+    assert capture_logical_span(pure_result, 'forward', 0, 2)['token_ids'].tolist() == [2, 3]
