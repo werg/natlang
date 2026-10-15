@@ -694,3 +694,11 @@ last qualified publication and advances partial semantic cycles without RL
 bootstrap. Both skills document exact parent/checkpoint and command-placeholder
 recovery. Live 48-sample measurement is pending the next own-model teacher
 window; controller/state tests do not establish learned task quality.
+
+2026-10-15 paired role-span authentication: original writer/reader provider and
+capture receipts now authenticate original bytes before an explicitly bound
+static derivation. Whole-trajectory context-only writer evidence supports exact
+typed content and tool-argument references; ordinary CE targets and admission
+remain unchanged. Both skills document strict source/receipt recovery. Actual
+two-tokenizer/source tests prove conversion mechanisms; live48-sample measurement
+remains debt for the next own-model CoreWeave teacher window, not a lift claim.

@@ -23,7 +23,8 @@ from transformers import AutoTokenizer
 from natlang_neuralese.common.hashing import sha256_hex as sha256_bytes, sha256_file_hex as sha256_file
 
 from natlang_neuralese.data.native_graph_conversion import text_row_graph, witnessed_pair_graph
-from natlang_neuralese.data.text_corpus import gold_text_rows, tokenizer_fingerprint
+from natlang_neuralese.data.text_corpus import (gold_text_rows, tokenizer_fingerprint,
+    authenticated_context_writer_sources, authenticated_crisp_context_messages)
 from natlang_neuralese.model.shared_state import ROLE_MARKERS
 
 PAIR_SCHEMA = 'natlang.native-semantic-pair/1'
@@ -349,9 +350,10 @@ def source_occurrences(writer_record, reader_record, write_name, body, expected_
         write = value.get('$write') if isinstance(value, dict) else None
         if isinstance(write, dict) and write.get('name') == write_name and write.get('source') == body:
             writers.append(pointer + '/$write')
+    block_id=write_name.removeprefix('soft-state:') if write_name.startswith('soft-state:') else None
     for pointer, value in _walk_paths(reader_record.get('messages') or [], '/messages'):
-        if (isinstance(value, dict) and value.get('type') == 'read'
-                and value.get('name') == write_name and value.get('source') == body):
+        if ((value.get('type')=='read' and value.get('name')==write_name and value.get('source')==body)
+                or (block_id and value.get('type')=='neuralese' and value.get('id')==block_id)):
             readers.append(pointer)
     if len(writers) != 1 or not readers or sha256_bytes(body.encode()) != expected_sha:
         raise ValueError(f'communication occurrence is ambiguous or disagrees with payload SHA: writes={len(writers)} reads={len(readers)}')
@@ -361,9 +363,10 @@ def source_occurrences(writer_record, reader_record, write_name, body, expected_
 
 
 def reader_has_payload(record, write_name, body, expected_sha):
+    block_id=write_name.removeprefix('soft-state:') if write_name.startswith('soft-state:') else None
     matches = [value for value in _walk(record.get('messages') or [])
-               if value.get('type') == 'read' and value.get('name') == write_name
-               and value.get('source') == body]
+               if (value.get('type')=='read' and value.get('name')==write_name and value.get('source')==body)
+               or (block_id and value.get('type')=='neuralese' and value.get('id')==block_id)]
     return bool(matches) and sha256_bytes(body.encode()) == expected_sha
 
 
@@ -525,44 +528,43 @@ def materialize_role_markers(row, *, role_markers, role_ids, payload, side):
     return row
 
 
-def _replace_pointer(root, pointer, replacement):
-    if not pointer.startswith('/') or '<json>' in pointer:
-        raise ValueError('typed read occurrence is not a structured message path')
-    parts = [part.replace('~1', '/').replace('~0', '~') for part in pointer.split('/')[1:]]
-    parent = root
-    for part in parts[:-1]:
-        parent = parent[int(part)] if isinstance(parent, list) else parent[part]
-    key = int(parts[-1]) if isinstance(parent, list) else parts[-1]
-    parent[key] = replacement
-
-
 def normalized_pair_rows(writer_record, reader_record, pieces, *, tokenizer, payload,
-                         occurrence, role_markers, tokenizer_sha256):
-    """Render full source turns with the unique typed source value role-bounded."""
-    writer, reader = copy.deepcopy(writer_record), copy.deepcopy(reader_record)
-    # The unchanged full-turn graph also enters native SFT. This paired view
-    # statically exposes the exact typed writer result and replaces precisely
-    # its authenticated reader object by a marker-bounded context span.
-    writer['target'] = {'role': 'assistant',
-                        'content': role_markers[0] + payload + role_markers[1]}
-    for pointer in occurrence['reader_json_pointers']:
-        _replace_pointer(reader, pointer, {'type': 'text',
-            'text': role_markers[2] + payload + role_markers[3]})
-    writer_rows, _, writer_omitted, _ = gold_text_rows([writer], pieces, tokenizer=tokenizer,
-        require_independent_splits=False, target_reasoning=False, include_token_offsets=True,
-        tokenizer_sha256=tokenizer_sha256)
-    reader_rows, _, reader_omitted, _ = gold_text_rows([reader], pieces, tokenizer=tokenizer,
-        require_independent_splits=False, target_reasoning=True, include_token_offsets=True,
-        tokenizer_sha256=tokenizer_sha256)
-    if len(writer_rows) != 1 or writer_omitted or len(reader_rows) != 1 or reader_omitted:
-        raise ValueError('normalized full producer/consumer turns did not render uniquely: ' +
-            json.dumps({'writer_rows': len(writer_rows), 'reader_rows': len(reader_rows),
-                        'writer_omissions': writer_omitted, 'reader_omissions': reader_omitted},
-                       ensure_ascii=False, sort_keys=True))
-    return (materialize_role_markers(writer_rows[0], role_markers=role_markers,
-                role_ids=tuple(tokenizer.convert_tokens_to_ids(marker) for marker in role_markers), payload=payload, side='writer'),
-            materialize_role_markers(reader_rows[0], role_markers=role_markers,
-                role_ids=tuple(tokenizer.convert_tokens_to_ids(marker) for marker in role_markers), payload=payload, side='reader'))
+                         occurrence, role_markers, tokenizer_sha256, source_records=None):
+    """Authenticate original endpoints, then derive explicit native role spans."""
+    records=[writer_record,reader_record]
+    if writer_record['id']==reader_record['id']:
+        raise ValueError('a communication edge needs distinct original writer and reader turns')
+    context_records=source_records if source_records is not None else records
+    _,writer_sources=authenticated_context_writer_sources(context_records)
+    piece_map=(dict(pieces) if isinstance(pieces,dict) else {row['name']:row['text'] for row in pieces})
+    # Original capture/provider receipts bind these ORIGINAL bytes, never the
+    # normalized target or selected reader replacements. Both endpoints pass
+    # before any deterministic derivation is rendered.
+    for record in records:authenticated_crisp_context_messages(record,piece_map,writer_sources)
+    digest=lambda value:sha256_bytes(json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode())
+    source_values=dict(_walk_paths(reader_record))
+    replacements=[{'pointer':pointer,'source_value_sha256':digest(source_values[pointer]),
+        'payload_sha256':sha256_bytes(payload.encode()),'writer_source':{'record_id':writer_record['id'],
+            'record_sha256':digest(writer_record),'write_name':source_values[pointer].get('name') or
+                'soft-state:'+source_values[pointer]['id']},'replacement':{'type':'text',
+            'text':role_markers[2]+payload+role_markers[3]}} for pointer in occurrence['reader_json_pointers']]
+    derivations={writer_record['id']:{'schema':'natlang.native-pair-static-derivation/1',
+        'source_record_sha256':digest(writer_record),'source_target_sha256':digest(writer_record['target']),
+        'target':{'role':'assistant','content':role_markers[0]+payload+role_markers[1]}},
+        reader_record['id']:{'schema':'natlang.native-pair-static-derivation/1',
+            'source_record_sha256':digest(reader_record),'context_replacements':replacements}}
+    rows,_,omitted,_=gold_text_rows(records,pieces,tokenizer=tokenizer,
+        require_independent_splits=False,target_reasoning=True,include_token_offsets=True,
+        tokenizer_sha256=tokenizer_sha256,static_derivations=derivations,writer_context_records=context_records)
+    by_id={row['id']:row for row in rows}
+    if len(rows)!=2 or omitted or set(by_id)!=set(derivations):
+        raise ValueError('normalized full producer/consumer turns did not render uniquely: '+
+            json.dumps({'rows':len(rows),'omissions':omitted},ensure_ascii=False,sort_keys=True))
+    ids=tuple(tokenizer.convert_tokens_to_ids(marker) for marker in role_markers)
+    return (materialize_role_markers(by_id[writer_record['id']],role_markers=role_markers,
+                role_ids=ids,payload=payload,side='writer'),
+            materialize_role_markers(by_id[reader_record['id']],role_markers=role_markers,
+                role_ids=ids,payload=payload,side='reader'))
 
 
 def model_view(edge, writer_row, reader_row, writer_record, reader_record,
@@ -579,6 +581,8 @@ def model_view(edge, writer_row, reader_row, writer_record, reader_record,
         writer_span=writer_span, reader_span=reader_span,
         payload_sha256=edge['body_sha256'], source_span_id=edge['write_name'],
         edge_id=edge_identity, chain_id=chain_id, context_weight=.05)
+    graph['source_pairing']['authenticated_static_derivations']={
+        'writer':writer_row.get('static_derivations',[]),'reader':reader_row.get('static_derivations',[])}
     producer = graph['nodes'][0]
     start, stop = producer['producing'][0]
     payload = tokenizer(body, add_special_tokens=False, return_offsets_mapping=True)
@@ -694,7 +698,7 @@ def _render_trajectory(task):
             for model in tokenizers:
                 writer_row, reader_row = normalized_pair_rows(writer_record, reader_record, pieces,
                     tokenizer=tokenizers[model], payload=body, occurrence=occurrence,
-                    role_markers=ROLE_MARKERS, tokenizer_sha256=expanded_fps[model])
+                    role_markers=ROLE_MARKERS, tokenizer_sha256=expanded_fps[model],source_records=records)
                 writer_span = exact_marked_span(writer_row, tokenizers[model], body,
                     open_marker=ROLE_MARKERS[0], close_marker=ROLE_MARKERS[1],
                     expected_sha256=edge['body_sha256'])

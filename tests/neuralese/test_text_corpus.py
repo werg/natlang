@@ -497,6 +497,86 @@ def test_provider_expanded_context_only_read_hydrates_without_selected_writer_ta
                for item in rejected)
 
 
+    # A paired static view authenticates the ORIGINAL typed context before
+    # replacing its exact occurrence. Old receipts are kept as original-only
+    # evidence and never rewritten to pretend they describe derived bytes.
+    def derivation(record, *, payload_hash=body_sha):
+        value=record["messages"][0]["content"][1]
+        return {record["id"]:{"schema":"natlang.native-pair-static-derivation/1",
+            "source_record_sha256":_sha(_canonical(record)),"context_replacements":[{
+                "pointer":"/messages/0/content/1","source_value_sha256":_sha(_canonical(value)),
+                "payload_sha256":payload_hash,"replacement":{"type":"text","text":"<consume>"+body+"</consume>"}}]}}
+    original=json.loads(json.dumps(typed_input))
+    derived_rows,_,derived_omitted,derived_provenance=gold_text_rows([typed_input],[],tokenizer=_Tokenizer(),
+        require_independent_splits=False,static_derivations=derivation(typed_input))
+    assert not derived_omitted and len(derived_rows)==1 and typed_input==original
+    assert "<consume>"+body+"</consume>" in derived_rows[0]["text"]
+    evidence=derived_rows[0]["static_derivations"][0]
+    assert evidence["binding_scope"]=="original-authenticated-source-to-explicit-derived-render"
+    assert evidence["context"]["original_messages_sha256"]!=evidence["context"]["derived_messages_sha256"]
+    assert evidence["original_context_attestations"] and not derived_rows[0]["neuralese_context_attestations"]
+    assert evidence==derived_provenance[0]["static_derivations"][0]
+    _,_,bad_body,_=gold_text_rows([typed_input],[],tokenizer=_Tokenizer(),require_independent_splits=False,
+        static_derivations=derivation(typed_input,payload_hash="f"*64))
+    assert bad_body and "authenticated payload" in bad_body[0]["detail"]
+    for forged in (wrong_typed_id,wrong_typed_body,wrong_v2_count,forged_v2,corrupt):
+        # Binding the transformation to fresh forged bytes cannot bypass the
+        # original context/provider proof validation.
+        _,_,rejected,_=gold_text_rows([forged],[],tokenizer=_Tokenizer(),require_independent_splits=False,
+            static_derivations=derivation(forged))
+        assert rejected
+    denied=json.loads(json.dumps(typed_input));denied["training_admission"]["approved"]=False
+    _,_,denied_omissions,_=gold_text_rows([denied],[],tokenizer=_Tokenizer(),require_independent_splits=False,
+        static_derivations=derivation(denied))
+    assert denied_omissions[0]["reason"]=="not_approved_sft_record"
+    stale=derivation(typed_input);changed=json.loads(json.dumps(typed_input));changed["target"]["content"]="forged selected action"
+    _,_,stale_omissions,_=gold_text_rows([changed],[],tokenizer=_Tokenizer(),require_independent_splits=False,static_derivations=stale)
+    assert stale_omissions and "exact original source record" in stale_omissions[0]["detail"]
+
+
+    # Explicit paired admission may provide a literal original $write even
+    # when it is not a legacy runtime writer-index candidate. Bind its exact
+    # approved row, name and target descriptor, never body text alone.
+    writer={**common,"id":"static-approved-writer","messages":[{"role":"user","content":"write note"}],
+        "target":{"role":"assistant","tool_calls":[{"id":"write","type":"function",
+            "function":{"name":"return_result","arguments":json.dumps({"value":{"$write":{
+                "name":"soft-state:"+block_id,"source":body,"type":"Neuralese<string>"}}})}}]}}
+    def paired_derivation(source_writer):
+        plan=derivation(typed_input)
+        plan[typed_input["id"]]["context_replacements"][0]["writer_source"]={
+            "record_id":source_writer["id"],"record_sha256":_sha(_canonical(source_writer)),
+            "write_name":"soft-state:"+block_id}
+        plan[source_writer["id"]]={"schema":"natlang.native-pair-static-derivation/1",
+            "source_record_sha256":_sha(_canonical(source_writer)),
+            "source_target_sha256":_sha(_canonical(source_writer["target"])),
+            "target":{"role":"assistant","content":"<produce>"+body+"</produce>"}}
+        return plan
+    pair_rows,_,pair_omissions,_=gold_text_rows([writer,typed_input],[],tokenizer=_Tokenizer(),
+        require_independent_splits=False,static_derivations=paired_derivation(writer))
+    assert not pair_omissions and len(pair_rows)==2
+    reader_plan={typed_input["id"]:paired_derivation(writer)[typed_input["id"]]}
+    context_rows,_,context_omissions,_=gold_text_rows([typed_input],[],tokenizer=_Tokenizer(),
+        require_independent_splits=False,static_derivations=reader_plan,writer_context_records=[writer])
+    assert not context_omissions and [value["id"] for value in context_rows]==[typed_input["id"]]
+    import pytest
+    conflicting=json.loads(json.dumps(typed_input));conflicting["target"]["content"]="not the original target"
+    with pytest.raises(ValueError,match="disagree on exact original"):
+        gold_text_rows([typed_input],[],tokenizer=_Tokenizer(),require_independent_splits=False,
+            writer_context_records=[conflicting])
+    writer_before=json.loads(json.dumps(writer))
+    for key in ("record_sha256","write_name","record_id"):
+        plan=paired_derivation(writer)
+        plan[typed_input["id"]]["context_replacements"][0]["writer_source"][key]="forged"
+        _,_,failures,_=gold_text_rows([writer,typed_input],[],tokenizer=_Tokenizer(),
+            require_independent_splits=False,static_derivations=plan)
+        assert any(value["id"]==typed_input["id"] for value in failures)
+    denied_writer=json.loads(json.dumps(writer));denied_writer["training_admission"]={"approved":False}
+    _,_,failures,_=gold_text_rows([denied_writer,typed_input],[],tokenizer=_Tokenizer(),
+        require_independent_splits=False,static_derivations=paired_derivation(denied_writer))
+    assert any(value["id"]==typed_input["id"] for value in failures)
+    assert writer==writer_before
+
+
 def test_protected_target_sidecar_equivalence_is_exact_and_narrow():
     from natlang_neuralese.data.text_corpus import _canonical, _protected_target_sidecar_equivalence, _sha
 
@@ -878,3 +958,21 @@ def test_program_header_rendering_keeps_only_program_specific_system_paragraphs(
         assert "unknown prompt_rendering" in str(exc)
     else:
         raise AssertionError("an undeclared prompt rendering must be refused")
+
+
+def test_static_pair_writer_cannot_join_unrelated_groups_through_empty_row_hashes():
+    import pytest
+    from natlang_neuralese.data.text_corpus import _static_context_replacements
+    block='nz1_'+'a'*52;body='exact body';name='soft-state:'+block
+    part={'type':'neuralese','id':block}
+    reader={'split':'train','source_groups':['reader-group'],'source_ref':{'source_row_sha256':''},
+        'messages':[{'role':'user','content':[part]}]}
+    writer={'id':'writer','split':'train','source_groups':['unrelated-writer-group'],
+        'source_ref':{'source_row_sha256':''},'training_admission':{'approved':True},
+        'target':{'tool_calls':[{'function':{'name':'return_result','arguments':json.dumps({'value':{
+            '$write':{'name':name,'source':body}}})}}]}}
+    replacement={'pointer':'/messages/0/content/0','source_value_sha256':_sha(_canonical(part)),
+        'payload_sha256':_sha(body),'replacement':{'type':'text','text':'derived'},
+        'writer_source':{'record_id':'writer','record_sha256':_sha(_canonical(writer)),'write_name':name}}
+    with pytest.raises(ValueError,match='same-split source binding'):
+        _static_context_replacements(reader,[replacement],{block:body},{},{'writer':writer})

@@ -318,3 +318,12 @@ shared-stage command so each new cycle keeps its successful parent intact.
 A parent change during an active cycle requires checkpointing and resuming with
 the new declared parent. An exposure-counter underflow requires investigating
 row quotas against the last valid checkpoint; never clear credits to bypass it.
+
+Native pair conversion authenticates original provider/capture context and
+selected targets before static role-span derivation. Missing earlier writer
+evidence requires the complete original trajectory as context-only writer
+input; it must not create extra targets. A source/value/writer binding error
+requires the exact approved original record, typed block/name and payload hash.
+Never edit old runtime receipts to match normalized markers, promote an
+unapproved endpoint, or use a preview renderer to bypass those checks. Derived
+receipts distinguish original source evidence from changed rendered bytes.

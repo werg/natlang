@@ -81,3 +81,47 @@ can produce different, equally valid BPE IDs. The exact verifier preserves the
 original IDs, checks full decoding, offset geometry, marker identity, payload
 hash and each witnessed read occurrence. Rows without renderer offsets retain
 the canonical-tokenization check. No payload, target or admission rule changes.
+
+## Authenticate original pair endpoints before static role normalization
+
+The admitted communication edge selects an exact writer result and every exact
+structured reader occurrence. Its policy is to keep the full source turn while
+replacing that selected communication by native producer/consumer role spans.
+Original runtime capture receipts authenticate original bytes; they cannot be
+reused as receipts for a rewritten target or message.
+
+1. Validate original admission, split/groups, writer source and provider/capture
+   receipts through the existing gold-text authentication path, before rewriting
+   either endpoint. Invalid originals remain omissions, including forged target,
+   body, context counts and selected-action witnesses.
+2. Preserve an authenticated context rendering input plus the original target,
+   with exact original-record/message/target hashes and source attestations.
+   A shared crisp rendering helper applies explicit structured replacements only
+   after authenticating that original input. It is a deterministic derivation,
+   not a new admission or a preview route.
+3. Derive only the declared writer target and exact authenticated reader paths.
+   Bind each old/new value and resulting context/target to a static-transform
+   receipt. Original source receipts remain labeled original-source evidence;
+   never claim they authenticate changed bytes. Untouched target/context,
+   capture augmentations and protected split/source membership stay intact.
+4. Use the same native gold packet renderer, escaping, token offsets and role
+   marker materialization as ordinary CE. Preserve ordinary CE targets and
+   source records; only the separate paired view is transformed.
+5. Verify forgery rejection and both actual tokenizers on previous omissions.
+   Final pair admission still requires existing exact occurrence/graph/token
+   checks and current protection; successful rendering grants no admission.
+
+Policy is this declared source-to-pair derivation. Authentication, exact value
+replacement, rendering and hash/offset receipts are crisp mechanisms shared
+with ordinary text conversion; there is no separate relaxed renderer.
+
+The whole original trajectory supplies `writer_context_records` to the shared
+authenticated writer index; only the chosen endpoints become target rows. A
+reader may need an earlier approved writer beyond the selected edge endpoints.
+Exact duplicate source IDs must agree byte-for-byte; same-split/source eligibility
+uses the existing writer rules. For new paired-source literal writes outside the
+legacy runtime index, bind the exact approved writer record SHA and unique named
+`extract_write_sites` descriptor. Typed block IDs and raw authenticated body hashes
+must match that writer; body text alone never joins an edge. Keep raw source
+bodies distinct from legacy display wrappers. The unchanged original source
+receipts are nested as original-only evidence in the derived graph provenance.

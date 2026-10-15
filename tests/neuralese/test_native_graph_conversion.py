@@ -497,3 +497,22 @@ def test_pair_worker_commit_removes_only_reported_edges_from_chain_frontier():
     assert frontier == {'same-chain': [edges[0], edges[2]]}
     module._remove_completed_edges(frontier, 'same-chain', {identity(edges[0]), identity(edges[2])})
     assert frontier == {}
+
+
+def test_e2e_pair_candidates_include_only_exact_typed_block_identity():
+    import importlib.util
+    from pathlib import Path
+    import pytest
+    script=Path(__file__).parents[2]/'scripts/neuralese_data/build_native_semantic_pairs_e2e.py'
+    spec=importlib.util.spec_from_file_location('typed_pair_occurrences',script)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    body='one exact writer body';block='nz1_'+'a'*52;name='soft-state:'+block
+    writer={'target':{'$write':{'name':name,'source':body}}}
+    reader={'messages':[{'role':'user','content':[{'type':'neuralese','id':block}]},
+        {'role':'assistant','tool_calls':[{'function':{'arguments':[{'type':'neuralese','id':block}]}}]}]}
+    occurrence=module.source_occurrences(writer,reader,name,body,module.sha256_bytes(body.encode()))
+    assert occurrence['reader_json_pointers']==['/messages/0/content/0','/messages/1/tool_calls/0/function/arguments/0']
+    reader['messages'][0]['content'][0]['id']='nz1_'+'b'*52
+    reader['messages'][1]['tool_calls'][0]['function']['arguments'][0]['id']='nz1_'+'b'*52
+    with pytest.raises(ValueError,match='reads=0'):
+        module.source_occurrences(writer,reader,name,body,module.sha256_bytes(body.encode()))

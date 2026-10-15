@@ -720,7 +720,7 @@ def authenticated_context_writer_sources(records, *, preview_only=False,
 
 
 def _attested_neuralese_message_bodies(record, writer_sources=None, *, split, source_groups,
-                                       authenticated_context_bodies=None):
+                                       authenticated_context_bodies=None, raw_bodies=None):
     """Map exact message blocks to hash-bound writer or creation source text."""
     messages = record.get("messages") or []
     message_block_ids = list(_message_neuralese_ids(messages))
@@ -755,6 +755,7 @@ def _attested_neuralese_message_bodies(record, writer_sources=None, *, split, so
                 "body": context["body"], "source_kind": "provider_expanded_context_only_input"}
         else:
             raise ValueError(f"message neuralese body has no unique same-split, same-source hash-bound source: {block_id}")
+        if raw_bodies is not None:raw_bodies[block_id]=attestation["body"]
         bodies[block_id] = f"<|neuralese|>{attestation['body']}<|/neuralese|>"
         attestations.append({key: value for key, value in attestation.items() if key != "body"}
                             | {"block_id": block_id})
@@ -1252,7 +1253,7 @@ def _attested_provider_expanded_reads(record, writer_sources=None, *, split, sou
               metadata_context_occurrences != receipt_context_occurrences or
               actual_context_occurrences != receipt_context_occurrences):
             raise ValueError("provider-expanded context occurrence count does not match exact typed references")
-        attestations.append({"block_id": block_id, "reader_record_id": record.get("id"),
+        attestations.append({"block_id": block_id, "write_name":expected_read_name,"reader_record_id": record.get("id"),
             "writer_record_id": None, "writer_source_row_sha256": reader_source_row,
             "writer_invocation_id": write.get("call_id"), "writer_write_node": write.get("node"),
             "writer_target_selected": False, "read_node": item["read_node"],
@@ -1383,7 +1384,66 @@ def _hydrate_tool_argument_blocks(messages, bodies, read_bodies=None):
     return hydrated, sorted(set(used))
 
 
-def authenticated_crisp_context_messages(record, piece_map, writer_sources):
+def _static_context_replacements(record, replacements, bodies, read_bodies, source_records):
+    """Apply explicit exact typed-value replacements after original authentication."""
+    root={"messages":copy.deepcopy(record.get("messages") or [])}
+    evidence=[];seen=set()
+    for item in replacements:
+        pointer=item["pointer"]
+        if (not isinstance(pointer,str) or not pointer.startswith("/messages/")
+                or "<json>" in pointer or pointer in seen):
+            raise ValueError("static context derivation needs distinct exact structured message paths")
+        seen.add(pointer)
+        parts=[part.replace("~1","/").replace("~0","~") for part in pointer.split("/")[1:]]
+        parent=root
+        for part in parts[:-1]:parent=parent[int(part)] if isinstance(parent,list) else parent[part]
+        key=int(parts[-1]) if isinstance(parent,list) else parts[-1]
+        old=parent[key]
+        if not isinstance(old,dict) or _sha(_canonical(old).encode())!=item["source_value_sha256"]:
+            raise ValueError("static context derivation source value changed")
+        writer_binding=item.get("writer_source")
+        writer_body=None
+        if writer_binding is not None:
+            from ..train.write_sites import extract_write_sites
+            writer=(source_records or {}).get(writer_binding.get("record_id"))
+            if (not isinstance(writer,dict) or (writer.get("training_admission") or {}).get("approved") is not True
+                    or _sha(_canonical(writer).encode())!=writer_binding.get("record_sha256")
+                    or writer.get("split")!=record.get("split")
+                    or not (set(writer.get("source_groups") or [])&set(record.get("source_groups") or [])
+                        or (isinstance((writer.get("source_ref") or {}).get("source_row_sha256"),str)
+                            and (writer.get("source_ref") or {}).get("source_row_sha256")
+                            and (writer.get("source_ref") or {}).get("source_row_sha256")==
+                                (record.get("source_ref") or {}).get("source_row_sha256")))):
+                raise ValueError("static read derivation writer lacks exact approved same-split source binding")
+            sites=[site for site in extract_write_sites(writer) if site.name==writer_binding.get("write_name")]
+            if len(sites)!=1:raise ValueError("static read derivation needs one exact named original writer")
+            site=sites[0];writer_body=site.source
+            if ((old.get("type")=="read" and old.get("name")!=site.name)
+                    or (old.get("type")=="neuralese" and (not site.name.startswith("soft-state:")
+                        or old.get("id")!=site.name.removeprefix("soft-state:")))
+                    or _sha(writer_body.encode())!=item["payload_sha256"]):
+                raise ValueError("static read derivation writer identity/body differs from exact typed reference")
+        if old.get("type")=="neuralese":
+            body=bodies.get(old.get("id"))
+        elif old.get("type")=="read":
+            body=old.get("source")
+            if body not in read_bodies.get(old.get("name"),set()) and body!=writer_body:
+                raise ValueError("static read derivation lacks an authenticated exact writer body")
+        else:raise ValueError("static context derivation requires an authenticated typed read")
+        if not isinstance(body,str) or _sha(body.encode())!=item["payload_sha256"]:
+            raise ValueError("static context derivation body differs from authenticated payload")
+        replacement=item["replacement"]
+        if (not isinstance(replacement,dict) or set(replacement)!={"type","text"}
+                or replacement["type"]!="text" or not isinstance(replacement["text"],str)):
+            raise ValueError("static context derivation replacement must be explicit text")
+        parent[key]=copy.deepcopy(replacement)
+        evidence.append({"pointer":pointer,"source_value_sha256":item["source_value_sha256"],
+            "payload_sha256":item["payload_sha256"],"derived_value_sha256":_sha(_canonical(replacement).encode()),
+            **({"writer_source":copy.deepcopy(writer_binding)} if writer_binding is not None else {})})
+    return root["messages"],evidence
+
+
+def authenticated_crisp_context_messages(record, piece_map, writer_sources, *, static_replacements=None, transformation_evidence=None, static_sources=None):
     """Render one native context using the same authenticated hydration as ordinary gold text."""
     from ..train.trajectories import (authenticated_capture_context_augmentation, crisp_messages,
                                       handover_notes, write_sites)
@@ -1397,13 +1457,15 @@ def authenticated_crisp_context_messages(record, piece_map, writer_sources):
         record, writer_sources, split=split, source_groups=groups)
     provider_bodies = {item["block_id"]: item for item in provider_attestations
                        if isinstance(item.get("body"), str)}
+    neuralese_source_bodies={}
     neuralese_bodies, context_attestations = _attested_neuralese_message_bodies(
         record, writer_sources, split=split, source_groups=groups,
-        authenticated_context_bodies=provider_bodies)
+        authenticated_context_bodies=provider_bodies,raw_bodies=neuralese_source_bodies)
     provider_ids = {item.get("block_id") for item in provider_attestations}
     context_attestations = [item for item in context_attestations
                             if not (item.get("source_kind") == "provider_expanded_context_only_input"
                                     and item.get("block_id") in provider_ids)]
+    provider_read_bodies=[(item.get("write_name"),item.get("body")) for item in provider_attestations]
     for item in provider_attestations:
         item.pop("body", None)
     context_attestations.extend(provider_attestations)
@@ -1412,9 +1474,9 @@ def authenticated_crisp_context_messages(record, piece_map, writer_sources):
         for candidate in candidates:
             if candidate.get("writer_split") == split and isinstance(candidate.get("body"), str):
                 read_bodies.setdefault(candidate.get("write_name"), set()).add(candidate["body"])
-    for item in provider_attestations:
-        if isinstance(item.get("write_name"), str) and isinstance(item.get("body"), str):
-            read_bodies.setdefault(item["write_name"], set()).add(item["body"])
+    for name,body in provider_read_bodies:
+        if isinstance(name,str) and isinstance(body,str):
+            read_bodies.setdefault(name,set()).add(body)
     message_inputs, _ = _hydrate_tool_argument_blocks(record.get("messages") or [], neuralese_bodies,
                                                        read_bodies=read_bodies)
     messages = crisp_messages(message_inputs, piece_map, notes, neuralese_bodies=neuralese_bodies)
@@ -1443,6 +1505,22 @@ def authenticated_crisp_context_messages(record, piece_map, writer_sources):
         {"writer_names": item["writer_names"], "augmentation_sha256": digest,
          "message_sha256": item["message_sha256"]}
         for digest, item in by_digest.items()]
+    if transformation_evidence is not None:
+        transformation_evidence.update(original_messages_sha256=_sha(_canonical(record.get("messages") or []).encode()),
+            original_authenticated_context_sha256=_sha(_canonical(messages).encode()),
+            derived_messages_sha256=_sha(_canonical(record.get("messages") or []).encode()),
+            derived_authenticated_context_sha256=_sha(_canonical(messages).encode()),replacements=[])
+    if static_replacements:
+        original_context=copy.deepcopy(messages)
+        derived_inputs,replacements=_static_context_replacements(record,static_replacements,neuralese_source_bodies,read_bodies,static_sources)
+        hydrated,_=_hydrate_tool_argument_blocks(derived_inputs,neuralese_bodies,read_bodies=read_bodies)
+        messages=crisp_messages(hydrated,piece_map,notes,neuralese_bodies=neuralese_bodies)
+        messages.extend(copy.deepcopy(item["message"]) for item in by_digest.values())
+        if transformation_evidence is not None:
+            transformation_evidence.update(original_messages_sha256=_sha(_canonical(record.get("messages") or []).encode()),
+                original_authenticated_context_sha256=_sha(_canonical(original_context).encode()),
+                derived_messages_sha256=_sha(_canonical(derived_inputs).encode()),
+                derived_authenticated_context_sha256=_sha(_canonical(messages).encode()),replacements=replacements)
     return messages, context_attestations, augmentation_attestations
 
 
@@ -1613,7 +1691,9 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                    ordinary_text_admission_receipt: Mapping[str, Any] | None = None,
                    ordinary_text_admission_receipt_sha256: str | None = None,
                    prompt_rendering: str = "full", target_reasoning: bool = False,
-                   include_token_offsets: bool = False, tokenizer_sha256: str | None = None):
+                   include_token_offsets: bool = False, tokenizer_sha256: str | None = None,
+                   static_derivations: Mapping[str, Any] | None = None,
+                   writer_context_records: Iterable[Mapping[str, Any]] | None = None):
     """Return ``(rows, receipt, omissions, provenance)`` for renderer-qualified records.
 
     Each row has the shared ``text_warmup.load_text_rows`` schema. Text is a
@@ -1621,14 +1701,20 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
     preserving roles and tool schemas/calls. Pretokenized IDs preserve the
     serving distinction between template structure and quoted content markers. Tool
     calls are never executed. Pieces resolve soft references; only explicit
-    handover/read source values resolve handovers.
+    handover/read source values resolve handovers. ``writer_context_records``
+    supplies original context-only writer evidence without adding target rows.
+    Explicit ``static_derivations`` bind exact original source records, whose
+    context/capture receipts are checked before deriving separate normalized
+    views; their receipts distinguish original and derived bytes. Neither
+    option grants new source, trajectory or graph admission.
     """
     return _gold_text_rows(records, pieces, tokenizer=tokenizer, preview_only=False,
                            require_independent_splits=require_independent_splits,
                            ordinary_text_admission_receipt=ordinary_text_admission_receipt,
                            ordinary_text_admission_receipt_sha256=ordinary_text_admission_receipt_sha256,
                            prompt_rendering=prompt_rendering, target_reasoning=target_reasoning,
-                           include_token_offsets=include_token_offsets, tokenizer_sha256=tokenizer_sha256)
+                           include_token_offsets=include_token_offsets, tokenizer_sha256=tokenizer_sha256,
+                           static_derivations=static_derivations,writer_context_records=writer_context_records)
 
 
 def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer):
@@ -1725,7 +1811,7 @@ def bind_ordinary_text_admission(records, receipt, receipt_sha256):
 def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_independent_splits=True,
                     ordinary_text_admission_receipt=None,
                     ordinary_text_admission_receipt_sha256=None, prompt_rendering="full",
-                    target_reasoning=False, include_token_offsets=False, tokenizer_sha256=None):
+                    target_reasoning=False, include_token_offsets=False, tokenizer_sha256=None, static_derivations=None, writer_context_records=None):
     from ..train.trajectories import crisp_messages, handover_notes
     from .prompt_rendering import PROMPT_RENDERINGS
     if prompt_rendering not in PROMPT_RENDERINGS:
@@ -1738,6 +1824,10 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
     # The backbone's declared history-reasoning policy (chat.BACKBONE_HISTORY_REASONING), asserted by a probe.
     history_reasoning = dict(bind_history_reasoning(tokenizer).natlang_history_reasoning)
     record_rows = list(records)
+    static_derivations=dict(static_derivations or {})
+    if preview_only and static_derivations:raise ValueError("static training derivations cannot use preview admission")
+    if set(static_derivations)-{record.get("id") for record in record_rows}:
+        raise ValueError("static derivation names a record absent from the authenticated input")
     text_admitted = (bind_ordinary_text_admission(
         record_rows, ordinary_text_admission_receipt, ordinary_text_admission_receipt_sha256)
         if not preview_only else {})
@@ -1745,8 +1835,14 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                  {p["name"]: p["text"] for p in pieces
                   if isinstance(p.get("name"), str) and isinstance(p.get("text"), str)})
     prepared, omitted = [], []
+    context_rows={}
+    for value in [*(writer_context_records or []),*record_rows]:
+        rid=value.get("id","")
+        if rid in context_rows and _canonical(context_rows[rid])!=_canonical(value):
+            raise ValueError("writer context and target disagree on exact original source record: "+rid)
+        context_rows[rid]=value
     source_hashes, writer_sources = authenticated_context_writer_sources(
-        record_rows, preview_only=preview_only, ordinary_text_admitted_ids=set(text_admitted))
+        context_rows.values(), preview_only=preview_only, ordinary_text_admitted_ids=set(text_admitted))
     for record in record_rows:
         rid = record.get("id", "")
         admitted = (not preview_only
@@ -1778,12 +1874,39 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
         if not groups:
             omitted.append({"id": rid, "reason": "missing_factual_source_groups"})
             continue
+        transformation=None
         try:
+            derivation=static_derivations.get(rid)
+            context_evidence={}
+            if derivation is not None:
+                if (derivation.get("schema")!="natlang.native-pair-static-derivation/1"
+                        or derivation.get("source_record_sha256")!=_sha(_canonical(dict(record)).encode())):
+                    raise ValueError("static derivation does not bind the exact original source record")
             messages, context_attestations, capture_augmentation_attestations = (
-                authenticated_crisp_context_messages(record, piece_map, writer_sources))
+                authenticated_crisp_context_messages(record, piece_map, writer_sources,
+                    static_replacements=(derivation or {}).get("context_replacements"),
+                    transformation_evidence=context_evidence if derivation is not None else None,
+                    static_sources=context_rows if derivation is not None else None))
             notes = handover_notes(record)
             gold = target_with_teacher_reasoning(record) if target_reasoning else record["target"]
             target = crisp_messages([gold], piece_map, notes)[0]
+            if derivation is not None:
+                original_target=copy.deepcopy(target)
+                if "target" in derivation:
+                    if derivation.get("source_target_sha256")!=_sha(_canonical(record["target"]).encode()):
+                        raise ValueError("static target derivation source target changed")
+                    target=crisp_messages([derivation["target"]],piece_map,notes)[0]
+                transformation={"schema":"natlang.native-pair-static-derivation-receipt/1",
+                    "binding_scope":"original-authenticated-source-to-explicit-derived-render",
+                    "source_record_id":rid,"source_record_sha256":derivation["source_record_sha256"],
+                    "original_target_sha256":_sha(_canonical(record["target"]).encode()),
+                    "original_render_target_sha256":_sha(_canonical(original_target).encode()),
+                    "derived_render_target_sha256":_sha(_canonical(target).encode()),
+                    "original_context_attestations":copy.deepcopy(context_attestations),
+                    "original_capture_augmentation_attestations":copy.deepcopy(capture_augmentation_attestations),
+                    "context":context_evidence}
+                # These attest the original source, not the transformed bytes.
+                context_attestations=[]
         except (KeyError, TypeError, ValueError, IndexError) as exc:
             omitted.append({"id": rid, "reason": "unresolved_or_malformed_crisp_reference", "detail": str(exc)[:240]})
             continue
@@ -1809,6 +1932,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                          "neuralese_context_attestations": [dict(item, reader_record_id=rid)
                                                             for item in context_attestations],
                          "capture_context_augmentation_attestations": capture_augmentation_attestations})
+        if transformation is not None:
+            prepared[-1]["static_derivations"]=[transformation]
         if include_token_offsets:
             if not isinstance(token_offsets, list) or len(token_offsets) != len(token_ids):
                 raise ValueError(f"native rendering did not return one character offset per token: {rid}")
@@ -1841,6 +1966,7 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
             representative["neuralese_context_attestations"].extend(row["neuralese_context_attestations"])
             representative["capture_context_augmentation_attestations"].extend(
                 row["capture_context_augmentation_attestations"])
+            representative.setdefault("static_derivations",[]).extend(row.get("static_derivations",[]))
             representative.setdefault("ordinary_text_admission_bindings", []).extend(
                 row.get("ordinary_text_admission_bindings", []))
     rows = list(dedup.values())
@@ -1856,6 +1982,7 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
                    "text_sha256": _sha(row["text"].encode("utf-8")),
                    "token_ids_sha256": _sha(_canonical(row["token_ids"]).encode("utf-8")),
                    "tokenizer_sha256": fingerprint,
+                   **({"static_derivations":row["static_derivations"]} if row.get("static_derivations") else {}),
                    **({"source_action_provenance": row["source_action_provenance"]}
                       if row["source_action_provenance"] else {}),
                    "neuralese_context_attestations": row["neuralese_context_attestations"],
@@ -1883,6 +2010,7 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
         "supervision": "serving generation prompt is context-only; loss begins at the exact token length of that prompt and covers the assistant_reply-rendered target; no historical tool outputs or prior assistant turns are target tokens",
         "ordinary_text_stage_only": True, "task_or_trajectory_admission_granted": False,
         "training_admission_granted": False,
+        "static_derived_documents":sum(bool(row.get("static_derivations")) for row in rows),
         "documents": len(rows), "train_documents": sum(row["split"] == "train" for row in rows),
         "test_documents": sum(row["split"] == "test" for row in rows),
         "omitted_records": len(omitted), "excluded_train_exact_held_complete_documents": excluded_train_held,
