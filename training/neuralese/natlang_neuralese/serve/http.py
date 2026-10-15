@@ -9,6 +9,7 @@
 | `GET /v1/neuralese/blocks/{id}` | Fetch a block (safetensors body). |
 | `GET /v1/neuralese/blocks/{id}/meta` | Block metadata as JSON. |
 | `POST /v1/neuralese/blocks/{id}/pin`, `…/unpin` | Keep or release a block through every collection (pins count per owner). |
+| `PUT`, `GET /v1/neuralese/native-states/{nzs1_id}`, `GET …/meta`, `POST …/pin`, `…/unpin` | Versioned multi-tensor NativeStateBlock safetensors artifact; the ID binds provenance, tensor inventory, dtypes, shapes and bytes. Uses the same durable store and owner holds as legacy blocks. |
 | `POST /v1/neuralese/collect` | `{"referenced": […]}`: with an owner, the owner now holds exactly the referenced blocks (and its pinned ones); blocks it released are dropped unless another owner holds or pins them. Without an owner, drops the blocks no owner holds or pins that are not referenced. Answers `{"removed": […]}`. |
 | `POST /v1/neuralese/grad` | Gradient replay session (`grad.GradSession`): loss, per-term losses, gradient block IDs. |
 | `POST /v1/neuralese/decide` | Decision readout: `{"messages", "options", "tools"?, "adapters"?}` → `{"log_probs", "tokens"}`, each option scored as the whole assistant reply after one prompt pass. |
@@ -56,10 +57,11 @@ from .chat import RequestError, arguments_text
 from .engine import Engine, GenerationRequest
 from .guidance import Settings
 from .grad import GradSession, decide, decide_many, embed_text, encode_text, new_adapter, optim_step
-from .store import decode_block, encode_block
+from .store import decode_block, encode_block, decode_native_state, encode_native_state
 
 _BLOCK = re.compile(r"^/v1/neuralese/blocks/(nz1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
-_BLOCK_ID = re.compile(r"^nz1_[a-z2-7]+$")
+_NATIVE_STATE = re.compile(r"^/v1/neuralese/native-states/(nzs1_[a-z2-7]+)(/meta|/pin|/unpin)?$")
+_BLOCK_ID = re.compile(r"^(?:nz1_|nzs1_)[a-z2-7]+$")
 OWNER_HEADER = "x-natlang-owner"
 
 
@@ -79,7 +81,7 @@ _LORA = re.compile(r"^/v1/neuralese/adapters/(nz1_[a-z2-7]+)/lora$")
 CAPABILITIES = sorted([
     "adapters.create", "adapters.direct", "adapters.lora-export", "adapters.projection", "chat", "chat.stream",
     "decide", "embed", "encode", "grad", "grad.order2", "guidance.check", "init-body", "optim", "parts.value-type",
-    "render", "score", "store", "store.owners", "template", "template.argument-path", "template.value-type", "view", "write"])
+    "render", "score", "store", "store.owners", "store.native-state", "template", "template.argument-path", "template.value-type", "view", "write"])
 
 
 def unavailable_code(capability: str) -> str:
@@ -198,6 +200,18 @@ def make_handler(engine: Engine):
                     return self._json(200, block.meta())
                 self._hold(block.id)
                 return self._send(200, encode_block(block), "application/octet-stream")
+            native = _NATIVE_STATE.match(self.path)
+            if native and native.group(2) in (None, "/meta"):
+                try:
+                    record = engine.store.get_native_state(native.group(1))
+                except ValueError as error:
+                    return self._error(409, "neuralese-native-state-kind", str(error))
+                if record is None:
+                    return self._error(404, "neuralese-unknown-native-state", native.group(1))
+                if native.group(2) == "/meta":
+                    return self._json(200, record.meta())
+                self._hold(record.id)
+                return self._send(200, encode_native_state(record.block), "application/octet-stream")
             self._error(404, "not-found", self.path)
 
         def _unavailable(self, capability: str):
@@ -226,6 +240,9 @@ def make_handler(engine: Engine):
             if _LORA.match(self.path):
                 # Adapters apply directly here; loading a LoRA is the fork's way of applying them.
                 return self._unavailable("adapters.lora-load")
+            native = _NATIVE_STATE.match(self.path)
+            if native and native.group(2) is None:
+                return self._put_native_state(native.group(1))
             match = _BLOCK.match(self.path)
             if not match or match.group(2):
                 return self._error(404, "not-found", self.path)
@@ -236,7 +253,17 @@ def make_handler(engine: Engine):
             if block.id != match.group(1):
                 return self._error(400, "neuralese-id-mismatch", f"content hashes to {block.id}")
             stored = engine.store.put(block, self._owner)
-            self._json(201, stored.meta())
+            return self._json(201, stored.meta())
+
+        def _put_native_state(self, expected_id):
+            try:
+                block, actual_id = decode_native_state(self._body())
+            except ValueError as error:
+                return self._error(400, "neuralese-bad-native-state", str(error))
+            if actual_id != expected_id:
+                return self._error(400, "neuralese-id-mismatch", f"content hashes to {actual_id}")
+            stored = engine.store.put_native_state(block, self._owner)
+            return self._json(201, stored.meta())
 
         def do_POST(self):
             try:
@@ -353,11 +380,13 @@ def make_handler(engine: Engine):
                         block = encode_text(engine, body.get("text") or "", body.get("type"), body.get("context"))
                     return self._json(201, block.meta())
                 match = _BLOCK.match(self.path)
-                if match and match.group(2) in ("/pin", "/unpin"):
-                    if match.group(2) == "/pin":
-                        engine.store.pin(match.group(1), self._owner)
+                native = _NATIVE_STATE.match(self.path)
+                pin_match = match or native
+                if pin_match and pin_match.group(2) in ("/pin", "/unpin"):
+                    if pin_match.group(2) == "/pin":
+                        engine.store.pin(pin_match.group(1), self._owner)
                     else:
-                        engine.store.unpin(match.group(1), self._owner)
+                        engine.store.unpin(pin_match.group(1), self._owner)
                     return self._json(200, {"ok": True})
                 self._error(404, "not-found", self.path)
             except KeyError as error:

@@ -12,6 +12,8 @@ import pytest
 import torch
 
 from natlang_neuralese.serve.store import TensorStore, encode_block, make_block
+from natlang_neuralese.model.state_block import NativeStateBlock
+from natlang_neuralese.serve.store import encode_native_state
 
 DIALECT = "nd:natlang@1"
 
@@ -141,6 +143,7 @@ def server():
         except urllib.error.HTTPError as error:
             return error.code, json.loads(error.read())
 
+    call.base = base
     yield engine, call
     httpd.shutdown()
     httpd.server_close()
@@ -173,3 +176,28 @@ def test_http_collect_without_owner_keeps_owned_blocks(server):
     call("PUT", f"/v1/neuralese/blocks/{anonymous.id}", encode_block(anonymous))
     assert call("POST", "/v1/neuralese/collect", {"referenced": []})[1] == {"removed": [anonymous.id]}
     assert engine.store.get(owned.id) is not None
+
+
+def test_http_native_state_uses_versioned_route_and_shared_lifecycle(server):
+    engine, call = server
+    block = NativeStateBlock(
+        text="shared", token_ids=torch.tensor([1], dtype=torch.int64), tokenizer_fingerprint="1" * 64,
+        checkpoint_sha256="2" * 64, embedding_weight_sha256="3" * 64,
+        embeddings=torch.ones((1, 4)), positions=torch.tensor([0]),
+        layers=({"kind": "attention", "raw_k": torch.ones((1, 1, 2)), "v": torch.zeros((1, 1, 2))},),
+        architecture="fixture")
+    from natlang_neuralese.serve.store import native_state_id
+    block_id = native_state_id(block)
+    body = encode_native_state(block)
+    assert block_id.startswith("nzs1_")
+    status, meta = call("PUT", f"/v1/neuralese/native-states/{block_id}", body, "native-owner")
+    assert status == 201 and meta["schema"] == "neuralese.native-state/1"
+    assert call("GET", f"/v1/neuralese/native-states/{block_id}/meta")[1]["id"] == block_id
+    request = urllib.request.Request(f"{call.base}/v1/neuralese/native-states/{block_id}")
+    with urllib.request.urlopen(request) as response:
+        assert response.status == 200 and response.read() == body
+    assert engine.store.holders(block_id) == {"native-owner"}
+    assert call("POST", f"/v1/neuralese/native-states/{block_id}/pin", None, "native-owner")[0] == 200
+    assert call("POST", "/v1/neuralese/collect", {"referenced": []}, "native-owner")[1] == {"removed": []}
+    assert call("POST", f"/v1/neuralese/native-states/{block_id}/unpin", None, "native-owner")[0] == 200
+    assert call("POST", "/v1/neuralese/collect", {"referenced": []}, "native-owner")[1] == {"removed": [block_id]}

@@ -29,6 +29,109 @@ HEADER = "natlang.neuralese-block/1"
 _DTYPES = {"f32": (torch.float32, "F32", 4), "f16": (torch.float16, "F16", 2), "bf16": (torch.bfloat16, "BF16", 2)}
 _FROM_SAFETENSORS = {"F32": "f32", "F16": "f16", "BF16": "bf16"}
 
+# Native state has a disjoint identifier and hash domain from legacy projected
+# blocks.  The exact tensor inventory comes from NativeStateBlock.tensors().
+NATIVE_HEADER = "natlang.native-state/1"
+_NATIVE_DTYPES = {torch.float16: ("F16", 2), torch.bfloat16: ("BF16", 2),
+                  torch.float32: ("F32", 4), torch.float64: ("F64", 8), torch.int64: ("I64", 8)}
+_NATIVE_FROM_SAFE = {value[0]: (key, value[1]) for key, value in _NATIVE_DTYPES.items()}
+
+
+def _native_tensor_bytes(tensor: torch.Tensor) -> bytes:
+    data = tensor.detach().contiguous().cpu()
+    if data.dtype == torch.bfloat16:
+        return data.view(torch.int16).numpy().tobytes()
+    return data.numpy().tobytes()
+
+
+def native_state_id(block) -> str:
+    """Cross-language ID over canonical provenance, ordered descriptors and every tensor byte."""
+    metadata = json.dumps(block.metadata(), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    digest = hashlib.sha256()
+    digest.update(NATIVE_HEADER.encode() + b"\0" + struct.pack("<Q", len(metadata)) + metadata)
+    for name, tensor in sorted(block.tensors().items()):
+        dtype = _NATIVE_DTYPES.get(tensor.dtype)
+        if dtype is None:
+            raise ValueError(f"unsupported native state dtype {tensor.dtype}")
+        encoded_name = name.encode()
+        raw = _native_tensor_bytes(tensor)
+        descriptor = json.dumps({"dtype": dtype[0], "shape": list(tensor.shape)}, separators=(",", ":")).encode()
+        digest.update(struct.pack("<I", len(encoded_name)) + encoded_name)
+        digest.update(struct.pack("<I", len(descriptor)) + descriptor)
+        digest.update(struct.pack("<Q", len(raw)) + raw)
+    return "nzs1_" + base64.b32encode(digest.digest()).decode().rstrip("=").lower()
+
+
+def encode_native_state(block) -> bytes:
+    """Encode a validated NativeStateBlock as deterministic multi-tensor safetensors."""
+    from ..model.state_block import NativeStateBlock
+    if not isinstance(block, NativeStateBlock):
+        raise TypeError("expected NativeStateBlock")
+    block.validate()
+    block_id = native_state_id(block)
+    entries, payloads, offset = {}, [], 0
+    for name, tensor in sorted(block.tensors().items()):
+        safe_dtype, _ = _NATIVE_DTYPES[tensor.dtype]
+        raw = _native_tensor_bytes(tensor)
+        entries[name] = {"dtype": safe_dtype, "shape": list(tensor.shape), "data_offsets": [offset, offset + len(raw)]}
+        payloads.append(raw)
+        offset += len(raw)
+    metadata = {"id": block_id, **block.metadata()}
+    entries["__metadata__"] = {"natlang.native_state": json.dumps(metadata, ensure_ascii=False, sort_keys=True, separators=(",", ":"))}
+    header = json.dumps(entries, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    header += b" " * ((8 - len(header) % 8) % 8)
+    return struct.pack("<Q", len(header)) + header + b"".join(payloads)
+
+
+def decode_native_state(body: bytes):
+    """Decode and verify a native state artifact; reject gaps, overlaps, unknown tensors and false IDs."""
+    from ..model.state_block import NativeStateBlock
+    try:
+        if len(body) < 8:
+            raise ValueError("not a safetensors body")
+        (header_size,) = struct.unpack("<Q", body[:8])
+        if header_size > len(body) - 8:
+            raise ValueError("header exceeds the body")
+        header = json.loads(body[8:8 + header_size])
+        metadata = json.loads(header.get("__metadata__", {}).get("natlang.native_state", "{}"))
+        if not isinstance(metadata, dict):
+            raise ValueError("native state metadata must be an object")
+        tensors, spans = {}, []
+        payload = body[8 + header_size:]
+        for name, entry in header.items():
+            if name == "__metadata__":
+                continue
+            dtype_info = _NATIVE_FROM_SAFE.get(entry["dtype"])
+            if dtype_info is None:
+                raise ValueError(f"unsupported native state dtype {entry['dtype']}")
+            dtype, itemsize = dtype_info
+            shape, offsets = entry["shape"], entry["data_offsets"]
+            if (not isinstance(shape, list) or not shape or any(type(dim) is not int or dim <= 0 for dim in shape)
+                    or not isinstance(offsets, list) or len(offsets) != 2 or any(type(x) is not int for x in offsets)):
+                raise ValueError(f"invalid native tensor descriptor: {name}")
+            start, end = offsets
+            count = 1
+            for dim in shape:
+                count *= dim
+            if start < 0 or end < start or end > len(payload) or end - start != count * itemsize:
+                raise ValueError(f"invalid native tensor byte range: {name}")
+            spans.append((start, end, name))
+            raw = payload[start:end]
+            torch_dtype = dtype
+            tensor = (torch.frombuffer(bytearray(raw), dtype=torch.int16).view(torch.bfloat16) if dtype == torch.bfloat16
+                      else torch.frombuffer(bytearray(raw), dtype=dtype))
+            tensors[name] = tensor.reshape(shape).clone()
+        spans.sort()
+        if not spans or spans[0][0] != 0 or spans[-1][1] != len(payload) or any(a[1] != b[0] for a, b in zip(spans, spans[1:])):
+            raise ValueError("native state tensor payload has gaps or overlaps")
+        block = NativeStateBlock.from_tensors(metadata, tensors)
+        actual = native_state_id(block)
+        if metadata.get("id") != actual:
+            raise ValueError(f"native state ID does not match its content ({actual})")
+        return block, actual
+    except (KeyError, TypeError, IndexError, OverflowError, json.JSONDecodeError) as error:
+        raise ValueError(f"malformed native state: {error}") from error
+
 
 def _bytes(tensor: torch.Tensor) -> bytes:
     data = tensor.detach().contiguous().cpu()
@@ -71,6 +174,16 @@ class Block:
         if self.truncated:
             meta["truncated"] = True
         return meta
+
+
+@dataclass
+class NativeStateRecord:
+    """Native state in the same durable/owner-scoped store as legacy blocks."""
+    id: str
+    block: object
+
+    def meta(self) -> dict:
+        return {"id": self.id, **self.block.metadata()}
 
 
 def make_block(payload: torch.Tensor, dialect: str, type: str | None = None, producer: dict | None = None,
@@ -200,20 +313,23 @@ class TensorStore:
 
     # Files and residency ------------------------------------------------------------------------------
     def _path(self, block_id: str) -> Path:
-        return self.directory / "blocks" / block_id[4:6] / f"{block_id}.safetensors"
+        digest_prefix = block_id.split("_", 1)[1]
+        return self.directory / "blocks" / digest_prefix[:2] / f"{block_id}.safetensors"
 
-    def _write(self, block: Block) -> None:
+    def _write(self, block) -> None:
         path = self._path(block.id)
         path.parent.mkdir(exist_ok=True)
         partial = path.with_suffix(f".{os.getpid()}.partial")
-        partial.write_bytes(encode_block(block))
+        partial.write_bytes(encode_native_state(block.block) if isinstance(block, NativeStateRecord) else encode_block(block))
         os.replace(partial, path)
 
     @staticmethod
-    def _size(block: Block) -> int:
+    def _size(block) -> int:
+        if isinstance(block, NativeStateRecord):
+            return sum(tensor.numel() * tensor.element_size() for tensor in block.block.tensors().values())
         return block.payload.numel() * block.payload.element_size() + len(block.wire_payload or b"")
 
-    def _keep(self, block: Block) -> None:
+    def _keep(self, block) -> None:
         self._resident[block.id] = block
         self._resident_size += self._size(block)
         if self.directory is None or self.resident_bytes is None:
@@ -230,7 +346,7 @@ class TensorStore:
     def _known(self, block_id: str) -> bool:
         return self._db.execute("SELECT 1 FROM blocks WHERE id = ?", (block_id,)).fetchone() is not None
 
-    def _load(self, block_id: str) -> Block | None:
+    def _load(self, block_id: str):
         found = self._resident.get(block_id)
         if found is not None:
             self._resident.move_to_end(block_id)
@@ -238,7 +354,12 @@ class TensorStore:
         if self.directory is None or not self._known(block_id):
             return None
         try:
-            block = decode_block(self._path(block_id).read_bytes())
+            body = self._path(block_id).read_bytes()
+            if block_id.startswith("nzs1_"):
+                native, actual = decode_native_state(body)
+                block = NativeStateRecord(actual, native)
+            else:
+                block = decode_block(body)
         except FileNotFoundError:
             self._db.execute("DELETE FROM blocks WHERE id = ?", (block_id,))
             return None
@@ -271,6 +392,38 @@ class TensorStore:
     def get(self, block_id: str) -> Block | None:
         with self._lock:
             return self._load(block_id)
+
+    def put_native_state(self, block, owner: str | None = None) -> NativeStateRecord:
+        """Store NativeStateBlock through the same immutable file, holds, pins and collection lifecycle."""
+        from ..model.state_block import NativeStateBlock
+        block.validate()
+        cpu_tensors = {name: tensor.detach().to("cpu").contiguous().clone() for name, tensor in block.tensors().items()}
+        stored_block = NativeStateBlock.from_tensors(block.metadata(), cpu_tensors)
+        record = NativeStateRecord(native_state_id(stored_block), stored_block)
+        with self._lock:
+            found = self._load(record.id)
+            if found is not None:
+                if not isinstance(found, NativeStateRecord) or encode_native_state(found.block) != encode_native_state(block):
+                    raise ValueError("native state content ID collision")
+                stored = found
+            else:
+                if self.directory is not None:
+                    self._write(record)
+                self._db.execute("INSERT INTO blocks (id, bytes) VALUES (?, ?)", (record.id, self._size(record)))
+                self._keep(record)
+                stored = record
+            if owner is not None:
+                self._db.execute("INSERT OR IGNORE INTO holds (id, owner) VALUES (?, ?)", (record.id, owner))
+            return stored
+
+    def get_native_state(self, block_id: str) -> NativeStateRecord | None:
+        with self._lock:
+            block = self._load(block_id)
+            if block is None:
+                return None
+            if not isinstance(block, NativeStateRecord):
+                raise ValueError(f"{block_id} is a legacy projected block, not native shared state")
+            return block
 
     # Holds, pins, collection ---------------------------------------------------------------------------
     def hold(self, owner: str, block_ids) -> None:
