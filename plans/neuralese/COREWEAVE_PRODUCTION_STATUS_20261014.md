@@ -1,3 +1,54 @@
+# Current supervision update, 2026-10-15 07:05 UTC
+
+Mellum is training on held replacement `5ffa592c-5f88-4b4f-b3cc-1507ab94a5dc`
+(RTX PRO 6000 96 GB, sm120), exact optimizer/RNG resume1700 under the approved
+held-v2 cadence1200 recipe. Latest observed update2200 completed in2.68seconds
+for20,272forward tokens, with no OOM or trainer errors. Its first replacement
+full checkpoint1870 is privately durable:46,821,490,903bytes, SHA
+`aa10dfefa2efdd0209f9a2f4d65cf675bf214fc7f410b70c71665018f0eeb023`.
+Scoped private PUT455seconds plus independent full GET/SHA254seconds passed.
+Periodic exports follow the replacement ID. Last task1600 was4/16 versus
+inherited base13; this remains unqualified. No production inputs were changed.
+
+LFM stopped at15300 on responseKL1.5195159223, preserving the failed gate.
+Final private state SHA
+`af52732e404cc657e67b77d7067a6dbb6cec41b63e80b1abbe53e810672f6783`
+is1,149,839,963bytes. The last below-threshold evaluated step15000 had
+responseKL1.3316278644; preceding privately durable full state14960 has SHA
+`8b6e2d40b0b9851daaa0aba3412489ad8ac53eaeb38ec6eeb71ada2627c3fb58`.
+Standalone final15300 task/probe forensics retain the exact stopped weights,
+frozen full prompts, temperature0.6, seeds, four workers and original limits;
+no optimizer is constructed. The48-probe report was15/48, report-only.
+The first task attempt reached three terminal cases but its serving process
+RSS grew beyond55GB, predominantly anonymous128MiB mappings. Actual served
+prompt/output evidence and all terminal/active artifacts survived to DGX before
+an exact-process-tree shutdown. A fresh allocator control now uses
+`MALLOC_ARENA_MAX=2`, safe periodic `malloc_trim(0)` telemetry and one-frame
+tracemalloc; all model/evaluator controls remain unchanged. No completed final
+15300 task score or cause of the memory growth is yet established. The original
+failed report/certificate are hash-guarded. H100 kernel build is isolated from
+this frozen inference runtime; no unqualified wheel has been installed there.
+
+Search/OWL native replay finished40,818/40,818cases and658,396/658,396decisions.
+Complete closed handoffs, graph/IR/native output and provenance are being sealed
+with the shared `scripts/coreweave/source_archive.py` exact TAR+zstd protocol,
+independent decoded-member SHA verification, and scoped private PUT/fullGETSHA.
+The provenance archive already passed private readback; closed/native archives
+remain in progress. Registration/training admission is separate and pending.
+Dolci/Cognitive protected closure produced643,106train records from644,471
+candidates with1,365exact duplicate omissions and zero protection/closure errors;
+its isolated one-worker native replay is running on the reserved spare CPU.
+
+Owner-host private export also passed for the547,812,322-byte port-record-s3-v1
+archive,38,312-byte clef-new archive and198,360,345-byte port-record-view-ask-v3
+archive, including their exact receipt/roundtrip-proof objects. Full independent
+GET/SHA passed for every object, without storing a second archive locally or
+sending account credentials to a sandbox. All remain archive-only, unadmitted.
+Raw-source survival remains16/16 acquired archives durable; four access-blocked
+sources and all conversion/admission omissions remain explicit.
+
+Earlier entries below are historical execution evidence.
+
 # CoreWeave production state, 2026-10-14 19:05 UTC
 
 Two owner-authorized full-weight shared production recipes were released at
