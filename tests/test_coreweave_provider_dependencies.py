@@ -94,3 +94,13 @@ def test_mmap_checkpoint_declares_exact_public_base_preflight(tmp_path):
     (base/'model.safetensors').write_text('different source')
     with pytest.raises(ValueError,match='pinned base inventory changed'):
         deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+
+def test_refresh_update_includes_consumed_readiness_and_report(tmp_path):
+    checkpoint=write(tmp_path/'update/checkpoint.pt','closed-updated-state')
+    report=write(tmp_path/'update/report.json',{'completed':True,'numerics_ok':True})
+    receipt=write(tmp_path/'update/native-training-receipt.json',{'training_receipt':report})
+    closure=deps.dependency_closure({'updates':{'student':checkpoint}},namespace=str(tmp_path))
+    assert {row['path'] for row in closure['files']}=={row['path'] for row in [checkpoint,report,receipt]}
+    Path(receipt['path']).unlink()
+    with pytest.raises(FileNotFoundError):
+        deps.dependency_closure({'updates':{'student':checkpoint}},namespace=str(tmp_path))
