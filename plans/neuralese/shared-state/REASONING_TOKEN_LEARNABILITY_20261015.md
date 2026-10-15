@@ -105,3 +105,33 @@ Private evidence and ledger logs live under
 `prompt-boundary-reference-diagnosis.json`. The source scripts and failed initial
 probe attempts are retained there for this active investigation; failed probe
 setup is not a production model failure.
+
+An isolated follow-up compared eight production-optimizer updates from the same
+LF2000 parent, restored moments and RNG, on one complete admitted training pair
+plus one V5 training graph. The initial measured targets were identical. Sparse
+role/reasoning tables were in the torch Muon child at an effective rate of
+3e-6; current cloud LFM3000/Mellum2750 metadata confirms the same partition and
+rate on both models. A configured rate alone is not evidence of the restored
+optimizer's effective rates.
+
+Changing only those sparse-table rates to .003 improved the ordinary example's
+thinking-close probability after eight updates from .000545 to .86757, and its
+thinking-open probability from .000527 to .14878. Producer-open improved from
+.000162 to .64471; producer-close improved from 1.63e-9 to 1.41e-6 and remains
+weak. Whole-batch loss was .51987 at the baseline rate and .48115 at the higher
+rate. These are fresh hidden-state measurements, not fixed old-query margins.
+
+This demonstrates a useful local learning-rate direction, not generalized
+quality or admission of that rate into production. Two repeated training
+examples cannot establish a safe deployment rate; no held rows were trained on,
+no production rate changed, and no diagnostic checkpoint was saved. The baseline
+was intentionally stopped after its update-8 measurement (10 updates recorded),
+rather than completing the initially requested 32; comparisons use update 8.
+Exact source, script, migration, rate-group and per-target evidence is under
+`/home/werg/data/dgxops/native-sparse-row-rate-20261015/`.
+
+Any production implementation must extend the existing named
+`optim_restore.set_learning_rates` mechanism, preserve full optimizer state
+through changed group layouts, and carry declared rates through SFT, semantic,
+RL, serving checkpoints and distributed continuation. Do not introduce a second
+optimizer or enable a rate that disappears on a later resume.
