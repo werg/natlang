@@ -527,7 +527,7 @@ def build_parser():
     parser.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--chunk-tokens', type=int, default=128)
     parser.add_argument('--fp8-training', choices=('off', 'te-fp8', 'triton-experts'), default='off')
-    parser.add_argument('--fp8-recipe', choices=('delayed', 'current'), default='delayed')
+    parser.add_argument('--fp8-recipe', choices=('delayed', 'current', 'current-bf16-dx'), default='delayed')
     parser.add_argument('--fp8-amax-history-len', type=int, default=16)
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--task-eval', default=None)
@@ -729,6 +729,14 @@ def main(argv=None):
         checkpoint_options['source_predecessors'] = predecessors
         previous = resume.get('identity') or {}
         stable = ('schema', 'optimizer', 'seed', 'rank', 'fp8', 'objective')
+        from .fp8_backend import expert_precision_transition
+        backend_transition = expert_precision_transition(previous.get('fp8'), training_identity['fp8'])
+        if backend_transition is not None:
+            if not getattr(args, 'qualify_training_backend', False):
+                raise ValueError('expert adjoint precision transition requires --qualify-training-backend on the restored model')
+            checkpoint_options['backend_precision_transition'] = backend_transition
+            training_identity['backend_precision_transition'] = backend_transition
+            stable = tuple(key for key in stable if key != 'fp8')
         from ..model.native_precision import same_source_precision_identity
         previous_config = previous.get('config') or {}
         if token_upgrade and token_upgrade['token_ids']:

@@ -7,8 +7,10 @@ host sync), E4M3 operands with per-row scales applied in the epilogue, FP32 accu
 - forward: activations quantized per row once (the gate/up projection quantizes the [tokens, d] input before the
   routing gather and gathers FP8 rows inside the kernel: 8x less quantization than the routed rows), weights per output
   row;
-- input gradient: incoming gradient per row, weights per input column (``columnwise_quant_t``), the routed-row result
+- input gradient (default): incoming gradient per row, weights per input column (``columnwise_quant_t``), the routed-row result
   summed back per token by the scatter-free glue (maple/moe_glue.py);
+- optional ``current-bf16-dx`` input gradient: unquantized BF16 adjoints and tile-dequantized forward FP8 weights,
+  BF16 tensor-core products with FP32 accumulation (no full dequantized weight copy);
 - weight gradient: BF16 grouped GEMM straight into the parameter layout.
 
 Selected by ``maple.model.DENSE_MOE["fp8"] = "grouped"``, which the shared FP8 backend (train/fp8_backend.py,
@@ -33,7 +35,7 @@ BM, BN, BK, WARPS, STAGES = 128, 128, 64, 4, 3
 @triton.jit
 def _grouped_fp8_mm(a_ptr, rows_ptr, sa_ptr, b_ptr, sb_ptr, c_ptr, block_expert_ptr, block_row_ptr, end_ptr,
                     N, R, stride_am, stride_be, stride_bn, stride_br, stride_sbe, stride_cm,
-                    HAS_ROWS: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
+                    HAS_ROWS: tl.constexpr, ADJOINT_BF16: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
     """C[m, n] = sa[src(m)] * sb[e, n] * sum_r A[src(m), r] * B[e, n, r] for the rows m of block b (expert e)."""
     pid = tl.program_id(0)
     tiles_n = tl.cdiv(N, BN)
@@ -60,12 +62,22 @@ def _grouped_fp8_mm(a_ptr, rows_ptr, sa_ptr, b_ptr, sb_ptr, c_ptr, block_expert_
         k_mask = (k0 + offs_k) < R
         a = tl.load(a_p, mask=m_mask[:, None] & k_mask[None, :], other=0.0)
         b = tl.load(b_p, mask=k_mask[:, None] & n_mask[None, :], other=0.0)
+        if ADJOINT_BF16:
+            # Backward uses W's forward row scales along the reduction axis.
+            # Dequantize only this tile; incoming adjoints retain BF16 precision.
+            scales = tl.load(sb_ptr + expert * stride_sbe + k0 + offs_k,
+                             mask=k_mask, other=0.0)
+            b = (b.to(tl.float32) * scales[:, None]).to(tl.bfloat16)
+            a = a.to(tl.bfloat16)
         acc = tl.dot(a, b, acc)
         a_p += BK
         b_p += BK * stride_br
-    sa = tl.load(sa_ptr + src, mask=m_mask, other=0.0)
-    sb = tl.load(sb_ptr + expert * stride_sbe + offs_n, mask=n_mask, other=0.0)
-    out = acc * sa[:, None] * sb[None, :]
+    if ADJOINT_BF16:
+        out = acc
+    else:
+        sa = tl.load(sa_ptr + src, mask=m_mask, other=0.0)
+        sb = tl.load(sb_ptr + expert * stride_sbe + offs_n, mask=n_mask, other=0.0)
+        out = acc * sa[:, None] * sb[None, :]
     tl.store(c_ptr + offs_m[:, None].to(tl.int64) * stride_cm + offs_n[None, :], out.to(c_ptr.dtype.element_ty),
              mask=m_mask[:, None] & n_mask[None, :])
 
@@ -127,16 +139,19 @@ class BlockTable:
         self.ends = ends.to(torch.int32).contiguous()
 
 
-def grouped_fp8(aq, sa, rows, bq, sb, table: BlockTable, out_rows: int) -> torch.Tensor:
+def grouped_fp8(aq, sa, rows, bq, sb, table: BlockTable, out_rows: int, *, adjoint_bf16: bool = False) -> torch.Tensor:
     """[out_rows, N] BF16: routed row m = (aq[rows[m]] * sa[rows[m]]) @ (bq[e] * sb[e])ᵀ, ``bq`` [E, N, R] E4M3 (any
-    strides: the input gradient passes the forward's [E, N, K] weights transposed), ``sb`` [E, N] (or ones)."""
+    strides: the input gradient passes the forward's [E, N, K] weights transposed), ``sb`` [E, N] (or ones).
+    ``adjoint_bf16`` instead accepts unquantized BF16 incoming adjoints and forward weight row scales
+    ``sb`` [E, R], dequantizes the FP8 weight tile into BF16, and accumulates the input adjoint in FP32."""
     E, N, R = bq.shape
     out = torch.empty(out_rows, N, device=aq.device, dtype=torch.bfloat16)
     if out_rows:
         grid = (table.size * triton.cdiv(N, BN),)
         _grouped_fp8_mm[grid](aq, rows if rows is not None else aq, sa, bq, sb, out, table.block_expert,
                               table.block_row, table.ends, N, R, aq.stride(0), bq.stride(0), bq.stride(1),
-                              bq.stride(2), sb.stride(0), out.stride(0), HAS_ROWS=rows is not None, BM=BM, BN=BN, BK=BK,
+                              bq.stride(2), sb.stride(0), out.stride(0), HAS_ROWS=rows is not None,
+                              ADJOINT_BF16=adjoint_bf16, BM=BM, BN=BN, BK=BK,
                               num_warps=WARPS, num_stages=STAGES)
     return out
 
@@ -174,12 +189,24 @@ class Fp8ExpertProjection(torch.autograd.Function):
         wq, sw = wq.view(E, N, K), sw.view(E, N)
         if hand is not None:
             hand.col_scale, hand.ends = sw, table.ends
+        from .model import DENSE_MOE
+        ctx.input_gradient_precision = DENSE_MOE.get('fp8_input_gradient_precision', 'fp8')
+        if ctx.input_gradient_precision not in {'fp8', 'bf16'}:
+            raise ValueError('expert input-gradient precision must be fp8 or bf16')
         ctx.hand = hand
         out_rows = rows.numel() if rows is not None else a.shape[0]
         # The input gradient reuses these FP8 weights (half the bytes of the BF16 latent, kept for one layer).
         ctx.save_for_backward(a, rows, slot_of, weight, offsets, wq, sw)
         ctx.table, ctx.top_k = table, top_k
-        return grouped_fp8(aq, sa, rows, wq, sw, table, out_rows)
+        result = grouped_fp8(aq, sa, rows, wq, sw, table, out_rows)
+        # Count executed projections, not configured modules or entered scopes.
+        # The captured mutable dictionary also follows checkpoint recomputation.
+        from .model import DENSE_MOE
+        stats = DENSE_MOE.get('fp8_stats')
+        if stats is not None:
+            stats['calls'] += 1
+            stats['rows'] += out_rows
+        return result
 
     @staticmethod
     def backward(ctx, grad):
@@ -188,10 +215,14 @@ class Fp8ExpertProjection(torch.autograd.Function):
         grad_a = grad_weight = None
         if ctx.needs_input_grad[0]:
             # grad @ W_e = (grad * sw[e]) @ wq[e]: the forward's row scales fold into the gradient's quantization.
-            given = ctx.hand.take(grad) if ctx.hand is not None else None
-            gq, sg = given if given is not None else scaled_rowwise_quant(grad, sw, ctx.table.ends)
-            ones = torch.ones(1, wq.shape[2], device=wq.device, dtype=torch.float32).expand(wq.shape[0], -1)
-            grad_rows = grouped_fp8(gq, sg, None, wq.transpose(1, 2), ones, ctx.table, grad.shape[0])
+            if ctx.input_gradient_precision == 'bf16':
+                grad_rows = grouped_fp8(grad, sw, None, wq.transpose(1, 2), sw, ctx.table,
+                                        grad.shape[0], adjoint_bf16=True)
+            else:
+                given = ctx.hand.take(grad) if ctx.hand is not None else None
+                gq, sg = given if given is not None else scaled_rowwise_quant(grad, sw, ctx.table.ends)
+                ones = torch.ones(1, wq.shape[2], device=wq.device, dtype=torch.float32).expand(wq.shape[0], -1)
+                grad_rows = grouped_fp8(gq, sg, None, wq.transpose(1, 2), ones, ctx.table, grad.shape[0])
             if rows is None:
                 grad_a = grad_rows
             else:
@@ -220,7 +251,9 @@ def fp8_dense_experts(x, index, weights, gate_up, down, clamp):
     source = (order // top_k).contiguous()
     fused = clamp is None and os.environ.get('NATLANG_FUSED_SWIGLU', '1') != '0'
     # The output gradients' FP8 quantization fused into the kernels that write them (``GradQuant``).
-    handoff = fused and os.environ.get('NATLANG_FUSED_GRAD_QUANT', '1') != '0'
+    from .model import DENSE_MOE
+    handoff = (fused and os.environ.get('NATLANG_FUSED_GRAD_QUANT', '1') != '0'
+               and DENSE_MOE.get('fp8_input_gradient_precision', 'fp8') == 'fp8')
     hand_up, hand_down = (GradQuant(), GradQuant()) if handoff else (None, None)
     hidden = Fp8ExpertProjection.apply(x.contiguous(), source, slot_of, top_k, gate_up, table, offsets, hand_up)
     if fused:

@@ -235,6 +235,29 @@ EXPERT_SCHEMA = 'natlang.neuralese-fp8-experts-training/1'
 EXPERT_BACKEND_VERSION = 'triton-grouped-experts-v1'
 
 
+def expert_input_gradient_precision(recipe: str) -> str:
+    if recipe not in {'delayed', 'current', 'current-bf16-dx'}:
+        raise ValueError('expert FP8 recipe must be delayed, current or current-bf16-dx')
+    return 'bf16' if recipe == 'current-bf16-dx' else 'fp8'
+
+
+def expert_precision_transition(previous, requested):
+    """Recognize only an explicit stateless expert input-adjoint transition."""
+    if previous == requested:
+        return None
+    if not isinstance(previous, dict) or not isinstance(requested, dict):
+        return None
+    if previous.get('kind') != 'triton-experts' or requested.get('kind') != 'triton-experts':
+        return None
+    if {k:v for k,v in previous.items() if k != 'recipe'} != {k:v for k,v in requested.items() if k != 'recipe'}:
+        return None
+    if requested.get('recipe', 'delayed') == 'delayed':
+        return None  # generic default inherits state; it is not an explicit mode change
+    old = expert_input_gradient_precision(previous.get('recipe', 'delayed'))
+    new = expert_input_gradient_precision(requested.get('recipe', 'delayed'))
+    return {'from':old, 'to':new, 'previous':previous, 'requested':requested, 'stateless':True}
+
+
 class FP8ExpertAdapter:
     """The MoE-expert path of the FP8 backend (``--fp8-training triton-experts``; Maple family: Mellum): the dense
     experts' grouped projections run as one Triton FP8 launch each (maple/expert_gemm.py: E4M3 operands with per-row
@@ -243,12 +266,18 @@ class FP8ExpertAdapter:
     BF16 under ``native_modules()`` (evaluation). Current scaling keeps no state, so the checkpoint envelope holds only
     the configuration. Composes with the QAT precision points: FP8 computes the already fake-quantized weights."""
 
-    def __init__(self, model: nn.Module, *, device: str | torch.device):
+    def __init__(self, model: nn.Module, *, device: str | torch.device, input_gradient_precision: str = 'fp8',
+                 precision_explicit: bool = True):
         from ..maple.model import DenseExperts
         if getattr(getattr(model, 'config', None), 'model_type', None) not in {'mellum', 'maple'}:
             raise ValueError('the FP8 expert backend supports Maple-family (Mellum) dense experts only')
         if not torch.cuda.is_available() or torch.device(device).type != 'cuda':
             raise RuntimeError('FP8 expert training requires CUDA')
+        if input_gradient_precision not in {'fp8', 'bf16'}:
+            raise ValueError('expert input-gradient precision must be fp8 or bf16')
+        self.input_gradient_precision = input_gradient_precision
+        self.precision_explicit = precision_explicit
+        self.precision_transition = None
         self.model = model
         self.experts = [name for name, module in model.named_modules() if isinstance(module, DenseExperts)]
         if not self.experts:
@@ -264,58 +293,81 @@ class FP8ExpertAdapter:
     @contextlib.contextmanager
     def autocast(self):
         from ..maple.model import DENSE_MOE
-        previous = DENSE_MOE.get('fp8')
-        DENSE_MOE['fp8'] = 'grouped'
+        previous = {key: DENSE_MOE.get(key) for key in ('kernel', 'fp8', 'fp8_stats', 'fp8_input_gradient_precision')}
+        if not hasattr(self, 'row_counts'):
+            self.reset_row_counts()
+        # Selecting an FP8 operand format alone leaves the default invariant
+        # expert dispatcher active. Bind both dispatch and precision, including
+        # activation replay, rather than relying on an unrelated CLI setting.
+        DENSE_MOE.update(kernel='grouped', fp8='grouped', fp8_stats=self.row_counts,
+                         fp8_input_gradient_precision=getattr(self, 'input_gradient_precision', 'fp8'))
         try:
             yield
         finally:
-            DENSE_MOE['fp8'] = previous
-        self.has_executed = True
+            DENSE_MOE.update(previous)
+            self.has_executed = getattr(self, 'has_executed', False) or self.row_counts['calls'] > 0
 
     def checkpoint(self, function, *args, **kwargs):
         from torch.utils.checkpoint import checkpoint
         from ..maple.model import DENSE_MOE
         if kwargs.pop('use_reentrant', False):
             raise ValueError('expert precision replay requires nonreentrant checkpointing')
-        mode = DENSE_MOE.get('fp8')
+        mode = {key: DENSE_MOE.get(key) for key in ('kernel', 'fp8', 'fp8_stats', 'fp8_input_gradient_precision')}
         @contextlib.contextmanager
         def precision():
-            previous = DENSE_MOE.get('fp8')
-            DENSE_MOE['fp8'] = mode
+            previous = {key: DENSE_MOE.get(key) for key in mode}
+            DENSE_MOE.update(mode)
             try:
                 yield
             finally:
-                DENSE_MOE['fp8'] = previous
+                DENSE_MOE.update(previous)
         return checkpoint(function, *args, use_reentrant=False,
                           context_fn=lambda: (precision(), precision()), **kwargs)
 
     @contextlib.contextmanager
     def native_modules(self):
         from ..maple.model import DENSE_MOE
-        previous = DENSE_MOE.get('fp8')
-        DENSE_MOE['fp8'] = None
+        previous = {key: DENSE_MOE.get(key) for key in ('fp8', 'fp8_stats')}
+        DENSE_MOE.update(fp8=None, fp8_stats=None)
         try:
             yield
         finally:
-            DENSE_MOE['fp8'] = previous
+            DENSE_MOE.update(previous)
 
     def reset_row_counts(self):
-        pass
+        self.row_counts = {'calls': 0, 'rows': 0, 'padded_rows': 0}
 
     def collect_row_counts(self) -> dict[str, int]:
+        self.has_executed = getattr(self, 'has_executed', False) or self.row_counts['calls'] > 0
         return dict(self.row_counts)
 
     def extra_state(self) -> dict[str, Any]:
-        return {'schema': EXPERT_SCHEMA, 'backend': EXPERT_BACKEND_VERSION, 'module_paths': sorted(self.experts)}
+        return {'schema': EXPERT_SCHEMA, 'backend': EXPERT_BACKEND_VERSION, 'module_paths': sorted(self.experts),
+                'input_gradient_precision': getattr(self, 'input_gradient_precision', 'fp8'),
+                'precision_transition': getattr(self, 'precision_transition', None)}
 
     def restore_extra_state(self, state: dict[str, Any]):
         if not isinstance(state, dict) or state.get('schema') != EXPERT_SCHEMA or \
-                state.get('module_paths') != sorted(self.experts):
+                state.get('module_paths') != sorted(self.experts) or state.get('backend') != EXPERT_BACKEND_VERSION:
             raise ValueError('checkpoint has no matching FP8 expert training state')
+        previous = state.get('input_gradient_precision', 'fp8')
+        if previous not in {'fp8', 'bf16'}:
+            raise ValueError('checkpoint has an unknown expert input-gradient precision')
+        if not getattr(self, 'precision_explicit', True):
+            self.input_gradient_precision = previous
+        requested = getattr(self, 'input_gradient_precision', 'fp8')
+        # Rowwise current scaling carries no dynamic scale state. Keep the
+        # declared new mode, record the transition, and retain all model and
+        # optimizer tensors untouched. SFT separately requires qualification.
+        self.precision_transition = ({'from': previous, 'to': requested, 'stateless': True}
+                                     if previous != requested else state.get('precision_transition'))
 
     def inventory(self) -> dict[str, Any]:
         return {'schema': EXPERT_SCHEMA, 'runtime': self.runtime, 'recipe': 'current-rowwise',
-                'expert_modules': len(self.experts)}
+                'input_gradient_precision': getattr(self, 'input_gradient_precision', 'fp8'),
+                'precision_transition': getattr(self, 'precision_transition', None),
+                'expert_modules': len(self.experts), 'row_counts': self.collect_row_counts(),
+                'has_executed': self.has_executed}
 
     def cached_weight_bytes_estimate(self) -> int:
         return 0  # FP8 weights live only within one layer's projection (saved for its backward)
@@ -342,6 +394,7 @@ class FP8ExpertAdapter:
 
     def configuration(self) -> dict[str, Any]:
         return {'enabled': True, 'backend': EXPERT_BACKEND_VERSION, 'recipe': 'current-rowwise',
+                'input_gradient_precision': getattr(self, 'input_gradient_precision', 'fp8'),
                 'runtime': self.runtime, 'expert_modules': sorted(self.experts)}
 
 
@@ -351,7 +404,8 @@ def make_backend(kind: str, model: nn.Module, *, device, recipe: str = 'delayed'
     if kind == 'te-fp8':
         return FP8LinearAdapter(model, device=device, recipe=recipe, amax_history_len=amax_history_len)
     if kind == 'triton-experts':
-        return FP8ExpertAdapter(model, device=device)
+        return FP8ExpertAdapter(model, device=device,
+            input_gradient_precision=expert_input_gradient_precision(recipe), precision_explicit=recipe != 'delayed')
     raise ValueError(f'unknown FP8 training backend {kind!r}')
 
 

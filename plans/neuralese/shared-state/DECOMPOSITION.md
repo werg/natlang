@@ -34,6 +34,16 @@ is the policy input; this adds no model-facing text or independent scheduler.
 
 ## Exact mechanisms and interfaces
 
+The existing selected expert-backend policy owns both precision and dispatch:
+an FP8 training scope selects grouped expert execution, and replay restores that
+same selection after the outer scope exits. Native evaluation disables FP8.
+Only successful FP8 projection calls count as executed work; configured module
+counts and entering a precision scope do not attest execution. These scoped
+settings, restoration and counters are crisp backend plumbing, shared by SFT,
+semantic adaptation and RL rather than implemented separately in each trainer.
+Dense CUDA expert routing retains its fixed-row FP32 router independently of
+expert dispatch, so selecting grouped FP8 does not also change top-k arithmetic.
+
 - `model/shared_state.py`: immutable invocation/import specifications compile
   into unique physical token rows, logical KV alias slots, causal visibility,
   query positions and finite convolution predecessor gathers. Crisp because
@@ -211,3 +221,54 @@ claim of lift on the other student.
 Rate selection is the supervisor's measured adaptive policy. Slot identities,
 state migration, group splitting, validation and recipe plumbing are crisp
 mechanisms; they do not select a new training policy or discard old history.
+Equivalent cached and graph executions must visit each query's visible KV
+blocks in the same chronological order. FlexAttention processes partial blocks
+before full blocks; moving a KV block between those lists changes FP32 online
+softmax accumulation and can cross BF16 routing boundaries. Dummy-query ranges
+and query-tile origins change that classification even when every actual query
+sees identical keys. The first Mellum layer reproduced this with bitwise equal
+Q/K/V, and an all-masked chronological sparse traversal restored bitwise output.
+
+1. Keep the existing exact per-query visibility bounds and sparse overlap census.
+2. List every overlapping KV block once, in ascending position, in the masked
+   traversal. Do not separately reorder fully visible blocks.
+3. Execute the existing native sparse tensor-core forward/backward and fixed
+   per-row delta; discard all attention-only dummy outputs as before.
+4. Qualify full graph, cached and import-gap outputs/gradients for both ports,
+   including actual FP8 execution, and measure the mask-fast-path tradeoff.
+
+This is exact numerical mechanism, not data or promotion policy. No causal key,
+loss target, row normalization, learned role or exposure credit changes. Full
+block fast-path restoration requires an ordered kernel implementation with the
+same numerical contract; changing a tolerance is not a repair.
+
+### Explicit expert input-adjoint precision
+
+The supervisor may trade training throughput for a more accurate adjoint after
+measuring actual gradients, updates and task behavior. This is training policy,
+not a reason to silently change an existing production backend. The current
+FP8 input-gradient default remains unchanged. A declared `current-bf16-dx`
+recipe selects the same grouped FP8 forward and BF16 weight-gradient mechanism,
+with a BF16 tensor-core input adjoint through the forward's dequantized weights.
+
+1. Bind the requested input-adjoint precision to backend configuration,
+   checkpoints, inventory and activation recomputation.
+2. Reuse the expert block table and chronological reduction over incoming
+   gradient coordinates. Load the original BF16 incoming gradient; dequantize
+   the saved forward FP8 weights into BF16 tiles; accumulate dot products in
+   FP32 and return the existing BF16 adjoint shape. Do not quantize incoming
+   gradients to E4M3 for this recipe or retain a full dequantized weight copy.
+3. Keep forward routing, forward operands, weight gradients, parameters,
+   optimizer moments, RNG and source-exposure obligations unchanged.
+4. A declared stateless precision transition records its previous/requested
+   modes. SFT continuation requires actual restored-model backend qualification;
+   it cannot pass by changing checkpoint metadata alone.
+5. Compare the exact FP64 dequantized-weight adjoint, executed kernel cost,
+   checkpoint replay and actual optimizer updates before selecting a new
+   production mode. Report BF16 fan-in and output rounding separately from the
+   additional FP8 incoming-gradient surrogate.
+
+The grouped multiply, state verifier and CLI binding are crisp numerical and
+durability mechanisms. Recipe choice and adoption remain the supervisor's
+adaptive training policy. Both students use the shared backend interface;
+this option applies only to the architecture with grouped dense experts.
