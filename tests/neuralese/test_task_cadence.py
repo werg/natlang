@@ -275,3 +275,38 @@ def test_pending_requests_are_capped_and_a_full_mirror_skips_without_failing(tmp
     last = json.loads((tmp_path / 'task-eval.jsonl').read_text().splitlines()[-1])
     assert last['step'] == 300 and last['skipped'] is True and 'floor' in last['error']
     assert evaluator.consecutive_failures() == 0
+
+
+def test_partial_diagnostic_preserves_runtime_counter_and_unqualified_score(tmp_path):
+    import json
+    from natlang_neuralese.eval.task_cadence import TaskEval, partial_runtime_diagnostic
+    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': list(range(16)),
+                            'reference_successes': 0, 'max_consecutive_failures': 1,
+                            'runtime_failure_policy': 'diagnostic-partial'})
+    evaluator = _light_evaluator(spec, tmp_path)
+    partial = {'step': 28000, 'task_successes': 1, 'cases': 16, 'eligible': False,
+               'packet_sha256': 's', 'case_indices': list(range(16)), 'regressed': False,
+               'outcome_counts': {'task_success': 1, 'semantic_mismatch': 14,
+                                  'infrastructure_error': 0, 'unresolved': 1}}
+    def execute(step):
+        row = {**partial, 'step': step}
+        with (tmp_path / 'task-eval.jsonl').open('a') as f:
+            f.write(json.dumps(row) + '\n')
+        return row
+    evaluator.run = execute
+    assert evaluator.cadence(28000)['eligible'] is False
+    assert evaluator.cadence(32000)['eligible'] is False
+    assert evaluator.consecutive_failures() == 2  # never reset or relabeled model failure
+    assert task_gate(partial, spec)['passed'] is False
+    assert partial_runtime_diagnostic(partial, spec)
+    assert not partial_runtime_diagnostic(partial, {**spec, 'reference_successes': 2})
+    assert not partial_runtime_diagnostic({**partial, 'regressed': True}, spec)
+    assert not partial_runtime_diagnostic({**partial, 'error': 'collector missing'}, spec)
+    assert not partial_runtime_diagnostic({**partial, 'outcome_counts':
+        {'task_success': 0, 'semantic_mismatch': 0, 'infrastructure_error': 16, 'unresolved': 0}}, spec)
+    assert not partial_runtime_diagnostic({**partial, 'outcome_counts':
+        {'task_success': 1, 'semantic_mismatch': 6, 'infrastructure_error': 9, 'unresolved': 0}}, spec)
+    with pytest.raises(RuntimeError, match='times in a row'):
+        evaluator.cadence(36000, final=True)  # final remains bounded and cannot certify a partial result
+    with pytest.raises(ValueError, match='runtime_failure_policy'):
+        parse_task_eval({**spec, 'runtime_failure_policy': 'ignore-everything'})

@@ -12,3 +12,13 @@ def test_decode_tiles_divide_shared_sparse_blocks_and_preserve_precision():
     changed = flex_kernel_options()
     changed['fwd_BLOCK_M'] = 1024
     assert flex_kernel_options()['fwd_BLOCK_M'] == 32
+
+
+def test_short_query_initial_decode_tiles_are_valid_before_prefixed_override():
+    for queries in [2, 28, 33, 127]:
+        options = flex_kernel_options(query_tokens=queries)
+        assert options['BLOCK_M'] == options['fwd_BLOCK_M'] == 32
+        assert options['BLOCK_N'] == options['fwd_BLOCK_N'] == 64
+    for queries in [128, 32768]:
+        options = flex_kernel_options(query_tokens=queries)
+        assert 'BLOCK_M' not in options and 'BLOCK_N' not in options
