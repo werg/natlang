@@ -57,8 +57,12 @@ def withdraw_ordinary_rows(training, proof_path, *, current_bindings, model_id, 
     result=dict(training)
     result['options']=copy.deepcopy(training.get('options') or {})
     history=list(result['options'].get('withdrawal_history') or [])
+    historical_frames=collect_sft_progress(training)
     history.append({'proof_sha256':proof_sha,'evidence':proof['evidence'],
-        'rows':[{**row,'consumed_visits':int((training.get('exposure_counts') or {}).get(key,0))}
+        'rows':[{**row,'consumed_visits':int((training.get('exposure_counts') or {}).get(key,0)),
+                 'consumed_visits_by_stage':{stage:int((frame.get('exposure_counts') or {}).get(key,0))
+                    for stage,frame in historical_frames.items()
+                    if key in (frame.get('source_row_bindings') or {})}}
                 for key,row in selected.items()],
         'at_global_step':training.get('global_step',training.get('step',0)),
         'prior_updates_undone':False})

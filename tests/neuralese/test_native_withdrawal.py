@@ -27,15 +27,18 @@ def state():
 
 def test_exact_withdrawal_preserves_optimizer_rng_good_credits_and_carried_obligations(tmp_path):
     old=state();old['sft_progress']=collect_sft_progress(old)
+    older=copy.deepcopy(old['sft_progress']['full']);older['exposure_counts']['bad']=5
+    old['sft_progress']['earlier']=older
     path=proof(tmp_path,[{'id':'bad','binding':'b','source_sha256':'physical','reason':'unexecuted'}])
     new=withdraw_ordinary_rows(old,path,current_bindings={'good':'g','comm':'c','extra':'e'},
         model_id='model:pin',source_origins={'bad':'physical'})
     assert new['optimizer'] is old['optimizer'] and new['rng'] is old['rng']
     assert new['step']==7 and new['global_step']==11 and old['exposure_counts']['bad']==2
     assert new['source_row_order']==['good','comm'] and new['exposure_counts']=={'good':1,'comm':0}
-    assert progress_obligations(new['sft_progress'])['remaining_graph_visits']==1
+    assert progress_obligations(new['sft_progress'])['remaining_graph_visits']==2
     history=new['options']['withdrawal_history'][0]
     assert history['rows'][0]['consumed_visits']==2 and not history['prior_updates_undone']
+    assert history['rows'][0]['consumed_visits_by_stage']=={'full':2,'earlier':5}
     assert withdraw_ordinary_rows(new,path,current_bindings={'good':'g','comm':'c'},model_id='model:pin') is new
 
 
