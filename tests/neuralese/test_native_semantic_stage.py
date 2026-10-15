@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import torch
+import pytest
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
 from natlang_neuralese.train import native_semantic_stage as stage
@@ -103,3 +104,51 @@ def test_appended_data_and_larger_epochs_are_not_mistaken_for_finished(tmp_path,
     assert report['completed'] and report['step'] == 8
     for counts in report['exposure']['vae'].values():
         assert counts[stage.pair_key('lfm', 'mellum')] == 2
+
+
+@pytest.mark.parametrize('changed_count', [1, 2])
+def test_refresh_keeps_rl_participant_and_retrains_all_semantic_phases(tmp_path, monkeypatch, changed_count):
+    path, manifest, _, _ = _fixture(tmp_path, monkeypatch)
+    original = stage.run(path, manifest, tmp_path/'original', device='cpu')
+    parent = tmp_path/'original/checkpoint.pt'
+    parent_sha = sha256_file_hex(parent)
+    original_load = stage.load_participant
+    bindings = json.loads(manifest.read_text())
+    changed_names = {value['model_id'] for value in bindings['models'][:changed_count]}
+    for binding in bindings['models'][:changed_count]:
+        update = tmp_path/(binding['model_id'] + '-rl-update.pt')
+        torch.save({'training': {'options': {'continuation': {'checkpoint_sha256': parent_sha,
+            'participant': binding['model_id'], 'objective_transition': True}}}}, update)
+        binding['checkpoint'] = {'path': str(update), 'sha256': sha256_file_hex(update)}
+        binding['native_identity']['checkpoint_sha256'] = sha256_file_hex(update)
+    bindings['signature'] = canonical_json_sha256_hex(bindings['models'])
+    manifest.write_text(json.dumps(bindings))
+    loaded_values = {}
+    def updated_load(name, binding, config, device):
+        participant = original_load(name, binding, config, device)
+        participant.identity = binding['native_identity']
+        if name in changed_names:
+            participant.continuation_proof = {'checkpoint_sha256': parent_sha,
+                'participant': name, 'objective_transition': True}
+            with torch.no_grad():
+                participant.model.input_rows.add_(.125)
+            loaded_values[name] = participant.model.input_rows.detach().clone()
+        return participant
+    monkeypatch.setattr(stage, 'load_participant', updated_load)
+    # A normal resume must reject a replaced lineage; refresh is explicit.
+    import pytest
+    with pytest.raises(ValueError, match='changed the declared model lineage'):
+        stage.run(path, manifest, tmp_path/'refreshed', resume=parent, device='cpu')
+    refreshed = stage.run(path, manifest, tmp_path/'refreshed', resume=parent,
+        refresh_participants=True, device='cpu')
+    assert refreshed['completed'] and refreshed['step'] == original['step'] + 3
+    state = CheckpointPolicy.load(tmp_path/'refreshed/checkpoint.pt')
+    assert state['training']['participant_refreshes'][-1]['changed_models'] == sorted(changed_names)
+    for binding in bindings['models'][:changed_count]:
+        assert state['participants'][binding['model_id']]['source_identity'] == binding['native_identity']
+    # The updated interface survives; old semantic weights were not restored.
+    for name in changed_names:
+        torch.testing.assert_close(state['participants'][name]['model_state']['interface_state']['input_rows'],
+                                   loaded_values[name], atol=.01, rtol=.01)
+    assert all(counts[stage.pair_key('lfm', 'mellum')] == 1
+               for values in state['training']['exposure'].values() for counts in values.values())

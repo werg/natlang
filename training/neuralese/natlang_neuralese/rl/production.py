@@ -242,6 +242,8 @@ def trained_counts(directory, progress):
     resume. Keep the last record per committed update/cursor, not log duplicates.
     """
     log = Path(directory) / 'train.jsonl'
+    if progress.get('train_exposure'):
+        return progress['train_exposure']
     if not log.is_file():
         return {key: (progress.get('this_run') or {}).get(key, 0)
                 for key in ('supervised_tokens', 'target_tokens')}
@@ -253,7 +255,7 @@ def trained_counts(directory, progress):
             for key in ('supervised_tokens', 'target_tokens')}
 
 
-def run(config_path, *, rounds=None):
+def run(config_path, *, rounds=None, defer_native_refresh=False):
     """Hot-reload configuration at round boundaries; preserve actual state/exposure."""
     from ..common.hashing import sha256_file_hex
     config_path = Path(config_path)
@@ -315,6 +317,12 @@ def run(config_path, *, rounds=None):
                       'continue_identity': str(Path(state['checkpoint']).parent / 'identity-check.json'),
                       'continue_monitor_reference': str(Path(state['checkpoint']).parent / 'monitor-reference.pt')}
             from ..train.recipe import stage_parameter_args
+            if config.get('native_state'):
+                values['semantic_adapter'] = state.get('semantic_adapter', config['semantic_adapter'])
+                values['semantic_adapter_sha256'] = sha256_file_hex(Path(values['semantic_adapter']))
+                export = json.loads(Path(values['semantic_adapter']).read_text())
+                values['rl_tokenizer'] = str(Path(values['semantic_adapter']).parent /
+                    export['tokenizers'][config['native_participant']]['path'])
             values['trainer_args'] = stage_parameter_args(config.get('trainer_parameters', {}))
             if config.get('heads'):
                 values['heads_sha256'] = sha256_file_hex(Path(config['heads']))
@@ -356,28 +364,36 @@ def run(config_path, *, rounds=None):
             if report['groups_with_spread']:
                 mode = 'grpo'
             else:
-                # Reuse existing verified successful teachers when the student
-                # has no spread; never convert infrastructure failures to zero.
-                from .stage import select_rft_documents
-                seeds = [r for path in config.get('teacher_rollouts', []) for r in read_jsonl(path)]
-                if any(r.get('split') != 'train' for r in seeds):
-                    raise ValueError('production RFT seeds must explicitly bind a train split')
-                merged = rows + seeds
-                docs, _ = select_rft_documents(merged, max_success_rate=.99, held_fraction=0. if config.get('held_text_data') else .125)
-                if any(d['split'] == 'train' for d in docs) and (config.get('held_text_data') or any(d['split'] == 'test' for d in docs)):
-                    mode = 'rft'
-                    from .stage import document_has_values
-                    kinds = {document_has_values(doc) for doc in docs if doc['split'] == 'train'}
-                    rft_stages = (['text', 'value'] if len(kinds) > 1 else ['value' if True in kinds else 'text'])
-                    rft_file = round_dir / 'rft-rollouts.jsonl'
-                    rft_file.write_text(''.join(json.dumps(r) + '\n' for r in merged))
-                    values['rollouts'] = str(rft_file)
-                elif config.get('seed_command'):
-                    mode = 'seed'
+                if config.get('native_state'):
+                    if any((row.get('reward') or {}).get('quality') == 1 for row in rows):
+                        mode = 'rft'
+                    elif config.get('seed_command'):
+                        mode = 'seed'
+                    else:
+                        raise RuntimeError('native RL flat failures require the declared verified whole-graph seed source')
                 else:
-                    state.update(phase='needs_verified_seed_data', reason='no usable policy-gradient spread or RFT successes')
-                    write_json_durable(state_path, state)
-                    raise RuntimeError('RL needs verified successful seed trajectories; continue declared SFT seed stage')
+                    # Reuse existing verified successful teachers when the student
+                    # has no spread; never convert infrastructure failures to zero.
+                    from .stage import select_rft_documents
+                    seeds = [r for path in config.get('teacher_rollouts', []) for r in read_jsonl(path)]
+                    if any(r.get('split') != 'train' for r in seeds):
+                        raise ValueError('production RFT seeds must explicitly bind a train split')
+                    merged = rows + seeds
+                    docs, _ = select_rft_documents(merged, max_success_rate=.99, held_fraction=0. if config.get('held_text_data') else .125)
+                    if any(d['split'] == 'train' for d in docs) and (config.get('held_text_data') or any(d['split'] == 'test' for d in docs)):
+                        mode = 'rft'
+                        from .stage import document_has_values
+                        kinds = {document_has_values(doc) for doc in docs if doc['split'] == 'train'}
+                        rft_stages = (['text', 'value'] if len(kinds) > 1 else ['value' if True in kinds else 'text'])
+                        rft_file = round_dir / 'rft-rollouts.jsonl'
+                        rft_file.write_text(''.join(json.dumps(r) + '\n' for r in merged))
+                        values['rollouts'] = str(rft_file)
+                    elif config.get('seed_command'):
+                        mode = 'seed'
+                    else:
+                        state.update(phase='needs_verified_seed_data', reason='no usable policy-gradient spread or RFT successes')
+                        write_json_durable(state_path, state)
+                        raise RuntimeError('RL needs verified successful seed trajectories; continue declared SFT seed stage')
             if state.get('active_update_round') == str(round_dir):
                 mode = state['update_mode']
                 values['rollouts'] = state['update_rollouts']
@@ -417,7 +433,7 @@ def run(config_path, *, rounds=None):
                 data_path = stage_out / 'rl-objective.json'
                 if mode == 'grpo' and data_path.exists():
                     trained_ids.update(d['task_id'] for d in json.loads(data_path.read_text())['documents'] if d['split'] == 'train')
-                if mode == 'rft':
+                if mode == 'rft' or (config.get('native_state') and mode == 'grpo'):
                     receipt = json.loads((stage_out / 'rl-data-receipt.json').read_text())
                     trained_ids.update(d['task_id'] for d in receipt['tasks_selected'] if d['split'] == 'train')
                 accounted = set(state.get('accounted_stages', []))
@@ -431,6 +447,22 @@ def run(config_path, *, rounds=None):
                               continue_monitor_reference=str(stage_out / 'monitor-reference.pt'))
             if pending:
                 continue
+            if config.get('native_state'):
+                state.update(phase='awaiting_semantic_refresh', pending_native_checkpoint=str(checkpoint),
+                             pending_native_round_dir=str(round_dir))
+                write_json_durable(state_path, state)
+                if defer_native_refresh:
+                    return state
+                from .native_refresh import refresh
+                deployment = refresh(adapter=values['semantic_adapter'],
+                    updates={config['native_participant']: str(checkpoint)},
+                    config=config['semantic_refresh_config'], out=round_dir/'semantic-refresh',
+                    device=config.get('refresh_device', 'cuda'))
+                checkpoint = Path(deployment['checkpoint']['path'])
+                state['semantic_adapter'] = deployment['semantic_adapter']['path']
+                values.update(semantic_adapter=state['semantic_adapter'],
+                    semantic_adapter_sha256=deployment['semantic_adapter']['sha256'],
+                    deployment=str(round_dir/'semantic-refresh/deployment.json'))
             # Publishing weights is a required boundary, not optional fake
             # success: collection must not silently keep using the old policy.
             values['checkpoint'] = str(checkpoint)
@@ -446,11 +478,71 @@ def run(config_path, *, rounds=None):
                          trained_rounds=state['trained_rounds'] + 1, phase='collect',
                          production_complete=False, collection_attempt=0, group_stats=[])
             write_json_durable(state_path, state)
+            state.pop('pending_native_checkpoint', None)
+            state.pop('pending_native_round_dir', None)
+            write_json_durable(state_path, state)
             completed += 1
         return state
 
 
+def configure_native(args):
+    """Declare both cloud/local native learners using the same trainer and refresh."""
+    from ..train.recipe import resolve_recipe_data, effective_stage_parameters, HANDLERS
+    from ..common.hashing import sha256_file_hex
+    for name in ('native_participant', 'semantic_adapter', 'semantic_refresh_config',
+                 'seed_native_graphs', 'held_native_graphs'):
+        if getattr(args, name, None) is None:
+            raise ValueError('native RL configure requires --' + name.replace('_', '-'))
+    adapter = json.loads(args.semantic_adapter.read_text())
+    if (adapter.get('schema') != 'natlang.native-semantic-adapter/1'
+            or adapter['checkpoint']['sha256'] != sha256_file_hex(args.checkpoint)
+            or args.native_participant not in adapter['models']):
+        raise ValueError('native RL parent participant and semantic adapter must bind the same actual shared checkpoint')
+    recipe = resolve_recipe_data(args.production_recipe)
+    stages = [stage for stage in recipe['stages'] if stage['id'] == args.production_stage]
+    if len(stages) != 1 or stages[0]['kind'] not in {'native_state_sft', 'native_state_rl'}:
+        raise ValueError('native RL configure requires the actual declared native production stage')
+    parameters = effective_stage_parameters(stages[0], [], recipe)
+    parameters = {key: value for key, value in parameters.items()
+                  if key in HANDLERS['native_state_sft']['parameters'] and value is not None}
+    parameters.update(base=str(args.base.resolve()))
+    parameters.setdefault('epochs', 1)
+    if not parameters.get('task_eval') or not parameters.get('task_eval_every'):
+        raise ValueError('native production must retain real task evaluation and its cadence')
+    repo, python = str(root('repo')), sys.executable
+    endpoint = 'http://127.0.0.1:' + str(args.port)
+    common = ['--continue-from', '{checkpoint}', '--native-participant', '{native_participant}',
+              '--held-native-graphs', '{held_native_graphs}', '--out', '{learner_out}', '{trainer_args}']
+    config = {'schema': 'natlang.rl-production-config/1', 'id': 'native-rl-' + args.model,
+        'native_state': True, 'model': args.model, 'out': str(args.out.resolve()),
+        'checkpoint': str(args.checkpoint.resolve()), 'native_participant': args.native_participant,
+        'semantic_adapter': str(args.semantic_adapter.resolve()),
+        'semantic_refresh_config': str(args.semantic_refresh_config.resolve()),
+        'seed_native_graphs': str(args.seed_native_graphs.resolve()),
+        'held_native_graphs': str(args.held_native_graphs.resolve()), 'base': str(args.base.resolve()),
+        'cases': str(args.cases.resolve()), 'runtime': str(args.runtime.resolve()),
+        'endpoints': [endpoint], 'rows_per_round': 32, 'group': 4, 'workers': 4,
+        'neuralese_server': True, 'trainer_parameters': parameters,
+        'production_recipe': str(args.production_recipe.resolve()), 'production_stage': args.production_stage,
+        'actor_command': [python, repo + '/scripts/neuralese_data/serve_direct_checkpoint.py',
+            '--native-state', '--checkpoint', '{checkpoint}', '--checkpoint-sha256', '{policy_id}',
+            '--native-participant', '{native_participant}', '--base', '{base}',
+            '--semantic-adapter', '{semantic_adapter}', '--semantic-adapter-sha256', '{semantic_adapter_sha256}',
+            '--port', str(args.port)],
+        'learner_command': [python, '-m', 'natlang_neuralese.rl.native_stage',
+            '--rollouts', '{rollouts}', '--rl-tokenizer', '{rl_tokenizer}', '--rl-mode', '{mode}',
+            '--rl-block-bundle', '{block_bundle}', *common],
+        'seed_command': [python, '-m', 'natlang_neuralese.train.native_state_sft',
+            '--native-graphs', '{seed_native_graphs}', '--objective-continuation', *common]}
+    write_json_durable(args.config, config)
+    return config
+
+
 def configure(args):
+    if getattr(args, 'native_state', False):
+        return configure_native(args)
+    if args.heads is None or args.held_text_data is None:
+        raise ValueError('legacy projected configuration requires --heads; new production uses --native-state')
     """Inherit actual production trainer options, never invent a new optimizer."""
     from ..train.checkpoint_policy import CheckpointPolicy
     from ..common.hashing import sha256_file_hex
@@ -541,8 +633,14 @@ def main(argv=None):
     c.add_argument('--runtime', type=Path)
     g = sub.add_parser('configure', help='bind shared local/CoreWeave loop to an exact mixed production checkpoint')
     g.add_argument('--model', choices=['lfm', 'mellum'], required=True)
-    for key in ('checkpoint', 'heads', 'base', 'cases', 'held-text-data', 'runtime', 'out', 'config'):
+    for key in ('checkpoint', 'base', 'cases', 'runtime', 'out', 'config'):
         g.add_argument('--' + key, type=Path, required=True)
+    g.add_argument('--held-text-data', type=Path)
+    g.add_argument('--heads', type=Path)
+    g.add_argument('--native-state', action='store_true')
+    g.add_argument('--native-participant')
+    for key in ('semantic-adapter', 'semantic-refresh-config', 'seed-native-graphs', 'held-native-graphs'):
+        g.add_argument('--' + key, type=Path)
     g.add_argument('--production-recipe', type=Path, required=True)
     g.add_argument('--production-stage', required=True)
     g.add_argument('--port', type=int, default=8097)

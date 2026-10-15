@@ -131,6 +131,11 @@ def parse(argv=None) -> tuple[argparse.Namespace, list[str]]:
 
 
 def main(argv=None) -> None:
+    import sys
+    native_args = list(sys.argv[1:] if argv is None else argv)
+    if '--native-state' in native_args:
+        from .native_stage import main as native_main
+        return native_main([arg for arg in native_args if arg != '--native-state'])
     a, rest = parse(argv)
     a.out.mkdir(parents=True, exist_ok=True)
     rollouts = [row for path in a.rollouts for row in read_jsonl(path)]

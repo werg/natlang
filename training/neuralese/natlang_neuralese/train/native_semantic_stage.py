@@ -78,6 +78,10 @@ class PairedSource:
 def validate_config(config):
     if config.get('schema') != CONFIG_SCHEMA:
         raise ValueError('unsupported native semantic training configuration')
+    config.setdefault('checkpoint_seconds', 3600.)
+    if (type(config['checkpoint_seconds']) not in (int, float)
+            or not math.isfinite(config['checkpoint_seconds']) or config['checkpoint_seconds'] < 0):
+        raise ValueError('semantic checkpoint_seconds must be finite and nonnegative')
     phases = config.get('phases') or []
     if (not phases or len({phase['id'] for phase in phases}) != len(phases)
             or any(phase.get('kind') not in {'vae', 'joint', 'distill'}
@@ -144,7 +148,7 @@ def load_participant(name, binding, config, device):
         raise ValueError('native Mellum semantic training requires the shared triton-experts memory path')
     optimizer, _ = make_native_optimizer(model, lr=config['backbone_lr'],
         weight_decay=config.get('weight_decay', .1), latent_ns=config.get('latent_ns', 'quintic'), in_backward=False)
-    inherited = state.get('training', {})
+    inherited = state.get('training') or state.get('shared_training') or {}
     if inherited.get('optimizer') and config.get('inherit_optimizer', True):
         optimizer.load_state_dict(inherited['optimizer'])
     if backend is not None and inherited.get('fp8') is not None:
@@ -152,7 +156,9 @@ def load_participant(name, binding, config, device):
     _adjust_lr(optimizer, config['backbone_lr'])
     model.port.checkpoint_layers = True
     model.train()
-    return SemanticParticipant(model, tokenizer, model_config, identity, optimizer, backend)
+    result = SemanticParticipant(model, tokenizer, model_config, identity, optimizer, backend)
+    result.continuation_proof = (inherited.get('options') or {}).get('continuation') or {}
+    return result
 
 
 class ExternalArtifacts:
@@ -349,7 +355,7 @@ def measure_tasks(participants, export, config, out, step, device):
     return results
 
 
-def run(config_path, participants_path, out, *, resume=None, max_updates=None, device='cuda'):
+def run(config_path, participants_path, out, *, resume=None, max_updates=None, device='cuda', refresh_participants=False):
     """Run the actual curriculum; max_updates is an explicit incomplete pause."""
     config_path, out = Path(config_path), Path(out)
     config = validate_config(json.loads(config_path.read_text()))
@@ -361,18 +367,44 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     train, held = _sources(config, training.get('source_bindings'))
     resolver = ExternalArtifacts(config)
     participants = {name: load_participant(name, binding, config, device) for name, binding in bindings.items()}
+    changed_models = set()
     if prior:
+        prior_sha = sha256_file_hex_cached(resume)
         if set(prior['participants']) - set(participants):
             raise ValueError('semantic continuation cannot silently remove existing ready models')
         for name, saved in prior['participants'].items():
             participant = participants[name]
-            if participant.config != saved['model_config'] or participant.identity != saved['source_identity']:
-                raise ValueError('semantic continuation changed the declared model lineage: ' + name)
-            with _native_modules({name: participant}):
-                restore_model_state(participant.model, saved['model_state'])
-            participant.optimizer.load_state_dict(saved['optimizer'])
-            if participant.backend is not None:
-                participant.backend.restore_extra_state(saved['fp8'])
+            if participant.config != saved['model_config']:
+                raise ValueError('semantic continuation changed model geometry: ' + name)
+            same_source = participant.identity == saved['source_identity']
+            same_export = (bindings[name]['checkpoint']['sha256'] == prior_sha
+                           and bindings[name]['checkpoint'].get('participant') == name)
+            if not same_source and not same_export:
+                if not refresh_participants:
+                    raise ValueError('semantic continuation changed the declared model lineage: ' + name)
+                proof = getattr(participant, 'continuation_proof', {})
+                if (proof.get('checkpoint_sha256') != prior_sha or proof.get('participant') != name
+                        or not proof.get('objective_transition')):
+                    raise ValueError('semantic refresh requires an exact optimizer-preserving update from this shared parent: ' + name)
+                changed_models.add(name)
+                # Current participant weights, optimizer and FP8 were loaded
+                # from its actual RL update. NEVER replace them with old state.
+            else:
+                with _native_modules({name: participant}):
+                    restore_model_state(participant.model, saved['model_state'])
+                participant.optimizer.load_state_dict(saved['optimizer'])
+                if participant.backend is not None:
+                    participant.backend.restore_extra_state(saved['fp8'])
+        if changed_models:
+            for phase_counts in training.get('exposure', {}).values():
+                for row_counts in phase_counts.values():
+                    for key in list(row_counts):
+                        if changed_models.intersection(json.loads(key)):
+                            del row_counts[key]
+            training.setdefault('participant_refreshes', []).append({
+                'step': training['step'], 'parent_sha256': prior_sha,
+                'changed_models': sorted(changed_models), 'participants': bindings,
+                'required_phases': [phase['id'] for phase in config['phases']]})
         vae = SemanticStateVAE.from_specification(prior['vae_specification']).to(device)
         vae.load_state_dict(prior['vae_state'], strict=True)
         optimizer = _vae_optimizer(vae, config, prior['vae_optimizer'])
@@ -382,7 +414,8 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         vae = SemanticStateVAE({name: _layout(train, participants, name, resolver) for name in participants},
             latent_width=config.get('latent_width', 128), hidden_width=config.get('hidden_width', 512)).to(device)
         optimizer = _vae_optimizer(vae, config)
-    policy = CheckpointPolicy(out, every_steps=config['checkpoint_every'], prune_best=False).install_signal_handlers()
+    policy = CheckpointPolicy(out, every_steps=config['checkpoint_every'],
+        every_seconds=config['checkpoint_seconds'], prune_best=False).install_signal_handlers()
     started_step, started = training['step'], time.time()
     trainable = {name: {key for key, value in entry.model.named_parameters() if value.requires_grad}
                  for name, entry in participants.items()}
@@ -581,6 +614,7 @@ def main(argv=None):
     parser.add_argument('--participants', required=True)
     parser.add_argument('--out', required=True)
     parser.add_argument('--resume')
+    parser.add_argument('--refresh-participants', action='store_true')
     parser.add_argument('--max-updates', type=int)
     parser.add_argument('--device', default='cuda')
     args = parser.parse_args(argv)
@@ -594,7 +628,7 @@ def main(argv=None):
         resume = str(Path(args.out)/'checkpoint.pt')
         print(json.dumps({'event': 'native_semantic_continue', 'checkpoint': resume}), flush=True)
     report = run(args.config, args.participants, args.out, resume=resume,
-                 max_updates=args.max_updates, device=args.device)
+                 max_updates=args.max_updates, device=args.device, refresh_participants=args.refresh_participants)
     print(json.dumps({'completed': report['completed'], 'step': report['step'],
                       'checkpoint': report['checkpoint']}), flush=True)
     return 0 if report['production_ready'] else 75

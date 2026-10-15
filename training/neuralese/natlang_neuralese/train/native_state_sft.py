@@ -417,6 +417,7 @@ def build_parser():
     parser.add_argument('--latent-ns', choices=('quintic', 'cubic5'), default='quintic')
     parser.add_argument('--eval-every', type=int, default=100)
     parser.add_argument('--checkpoint-every', type=int, default=0)
+    parser.add_argument('--checkpoint-seconds', type=float, default=3600.)
     parser.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--chunk-tokens', type=int, default=128)
     parser.add_argument('--fp8-training', choices=('off', 'te-fp8', 'triton-experts'), default='off')
@@ -441,6 +442,8 @@ def main(argv=None):
     if not (math.isfinite(args.epochs) and args.epochs > 0) or min(args.batch_graphs, args.eval_every,
             args.chunk_tokens, args.rank) < 1 or min(args.checkpoint_every, args.batch_tokens) < 0:
         raise ValueError('native SFT requires positive epochs/batch/eval/chunk/rank and nonnegative checkpoint cadence')
+    if not math.isfinite(args.checkpoint_seconds) or args.checkpoint_seconds < 0:
+        raise ValueError('checkpoint-seconds must be finite and nonnegative')
     if args.checkpoint_every and args.checkpoint_every % args.eval_every:
         raise ValueError('checkpoint cadence must be an evaluation cadence multiple')
     tolerances = [value for value in (args.forward_atol, args.gradient_atol) if value is not None]
@@ -449,7 +452,8 @@ def main(argv=None):
     args.out.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(args.seed)
     random.seed(args.seed)
-    policy = CheckpointPolicy(args.out, every_steps=args.checkpoint_every, prune_best=False)
+    policy = CheckpointPolicy(args.out, every_steps=args.checkpoint_every,
+                              every_seconds=args.checkpoint_seconds, prune_best=False)
     policy.install_signal_handlers()
     resume = None
     parent_continuation = False
@@ -511,6 +515,10 @@ def main(argv=None):
             raise ValueError('native replay objective spec must declare natlang.native-policy-objective/1 kind native-policy')
         from ..rl.native_replay import NativePolicyObjective
         objective = NativePolicyObjective(args.objective_spec)
+        if parent_continuation:
+            actual = native_identity(model, config, checkpoint_sha256=sha256_file_hex_cached(args.continue_from))
+            if objective.identity != actual:
+                raise ValueError('native policy objective differs from the actual loaded actor embedding/checkpoint identity')
     training_identity = {'schema': TRAINING_SCHEMA, 'config': config, 'train_source_hash': source_hash,
                 'schedule': 'source-order-stream/1',
                 'held_sha256': source_receipts[1]['sha256'], 'optimizer': 'shared-muon-sr-in-backward-v1',
@@ -530,15 +538,14 @@ def main(argv=None):
             'fp8': shared_resume.get('fp8'), 'step': 0, 'global_step': shared_resume['step']}
     if resume is not None:
         previous = resume.get('identity') or {}
-        stable = ('schema', 'config', 'schedule', 'optimizer', 'batch_graphs', 'batch_tokens', 'seed', 'rank', 'fp8', 'objective')
+        stable = ('schema', 'config', 'schedule', 'optimizer', 'seed', 'rank', 'fp8', 'objective')
         if parent_continuation and args.objective_continuation:
             stable = tuple(key for key in stable if key not in {'objective', 'batch_graphs', 'batch_tokens'})
         if any(previous.get(key, 0 if key == 'batch_tokens' else None) != training_identity.get(key) for key in stable):
             raise ValueError('native SFT continuation changes model/held/optimizer/schedule identity')
         old_optimizer_options = previous.get('optimizer_options') or {}
-        if (old_optimizer_options.get('weight_decay') != args.weight_decay or
-                old_optimizer_options.get('latent_ns') != args.latent_ns):
-            raise ValueError('native SFT continuation changes optimizer state semantics; only the learning rate may be tuned')
+        if old_optimizer_options.get('latent_ns') != args.latent_ns:
+            raise ValueError('native SFT continuation changes Muon update algebra; declare an optimizer migration')
         if not (parent_continuation and args.objective_continuation):
             prior_bindings = resume.get('source_row_bindings') or {}
             appended_ids = append_only_rows(prior_bindings, source_row_bindings, label='training-source')
@@ -558,6 +565,8 @@ def main(argv=None):
             'weight_decay': args.weight_decay, 'latent_ns': args.latent_ns,
             'continued_from': previous.get('optimizer_options')}
         training_identity['prior_source_hash'] = previous.get('train_source_hash')
+    if resume is not None and not parent_continuation and (resume.get('options') or {}).get('continuation'):
+        checkpoint_options['continuation'] = resume['options']['continuation']
     if parent_continuation:
         checkpoint_options['continuation'] = {'checkpoint_sha256': sha256_file_hex_cached(args.continue_from),
             'participant': args.native_participant, 'objective_transition': bool(args.objective_continuation)}
@@ -606,6 +615,11 @@ def main(argv=None):
         # The new value is recorded in optimizer_options while moments/RNG stay exact.
         for group in optimizer.param_groups:
             group['lr'] = args.learning_rate
+            if 'qat_latent_lr' in group:
+                group['qat_latent_lr'] = args.learning_rate
+        if optimizer.latent is not None:
+            for group in optimizer.latent.param_groups:
+                group['weight_decay'] = args.weight_decay
         if backend is not None:
             if resume.get('fp8') is None:
                 raise ValueError('native SFT checkpoint lacks the declared FP8 state')
@@ -635,14 +649,17 @@ def main(argv=None):
     whole_epochs = int(args.epochs)
     fractional_rows = math.ceil((args.epochs - whole_epochs) * len(train))
     target_rows = whole_epochs * len(train) + fractional_rows
-    epoch_batches = batch_boundaries(train.entries, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens)
-    total_updates = whole_epochs * len(epoch_batches)
-    if fractional_rows:
-        total_updates += len(batch_boundaries(train.entries[:fractional_rows],
-            batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens))
-    total_end = total_updates
+    # Cursor/exposure is the durable schedule, not the old batch partition.
+    # Adapt packing after a safe stop without replaying or skipping any row.
     if parent_continuation:
         step = 0
+    remaining_updates = 0
+    for pending_epoch in range(epoch, math.ceil(args.epochs)):
+        limit = fractional_rows if pending_epoch == whole_epochs and fractional_rows else len(train)
+        start = cursor if pending_epoch == epoch else 0
+        remaining_updates += len(batch_boundaries(train.entries[start:limit],
+            batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens))
+    total_end = step + remaining_updates
     if step > total_end:
         raise ValueError('native checkpoint update is beyond the declared epoch exposure')
     resumed_step = step
@@ -866,8 +883,10 @@ def main(argv=None):
     report = {'schema': 'natlang.neuralese-native-sft-report/1', 'completed': completed,
               'numerics_ok': runtime_report.get('passed') is True, 'qualified': False,
               'quality_status': 'measured-for-supervisor',
+              'train_exposure': {key: sum(exposure_counts[entry['id']] * entry['supervised_tokens']
+                  for entry in train.entries) for key in ('target_tokens', 'supervised_tokens')},
               'step': step, 'epoch': epoch, 'cursor': cursor, 'training_seconds': time.time() - started,
-              'model_config': config, 'train_source': source_receipts[0], 'held_source': source_receipts[1],
+              'model_config': config, 'continuation': checkpoint_options.get('continuation'), 'train_source': source_receipts[0], 'held_source': source_receipts[1],
               'source_hash': source_hash, 'metrics': metrics, 'checkpoint': str(policy.slot),
               'checkpoint_sha256': checkpoint_sha, 'task_eval': task_summary,
               'runtime_certificate': {'path': str(runtime_path.resolve()),
@@ -881,7 +900,7 @@ def main(argv=None):
         'stage_id': args.stage_id or args.out.name,
         'checkpoint': {'path': str(policy.slot.resolve()), 'sha256': report['checkpoint_sha256'],
                        'schema': CHECKPOINT_SCHEMA},
-        'native_identity': model_identity,
+        'native_identity': model_identity, 'continuation': checkpoint_options.get('continuation'),
         'runtime_certificate': {'path': str(runtime_path.resolve()),
                                 'sha256': sha256_file_hex_cached(runtime_path),
                                 'passed': runtime_report.get('passed') is True},

@@ -175,11 +175,11 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
     train_path.write_text(json.dumps(row_train) + '\n')
     held_path.write_text(json.dumps(row_held) + '\n')
 
-    def run(out, epochs, continue_from=None):
+    def run(out, epochs, continue_from=None, batch_tokens=0, weight_decay=0):
         argv = ['--native-graphs', str(train_path), '--held-native-graphs', str(held_path),
             '--out', str(out), '--base', str(base), '--device', 'cpu', '--rank', '2',
             '--epochs', str(epochs), '--eval-every', '1', '--batch-graphs', '1',
-            '--dtype', 'float32', '--learning-rate', '1e-3', '--weight-decay', '0', '--forward-atol', '1e-4',
+            '--dtype', 'float32', '--learning-rate', '1e-3', '--weight-decay', str(weight_decay), '--batch-tokens', str(batch_tokens), '--forward-atol', '1e-4',
             '--gradient-atol', '1e-5', '--seed', '23']
         if continue_from is not None:
             argv += ['--continue-from', str(continue_from)]
@@ -213,6 +213,12 @@ def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):
         equal_state(resumed[section], continuous[section])
     equal_state(resumed['training']['optimizer'], continuous['training']['optimizer'])
     equal_state(resumed['training']['rng'], continuous['training']['rng'])
+    run(split_out, 3, slot, batch_tokens=8, weight_decay=.001)
+    adapted = torch.load(slot, map_location='cpu', weights_only=False)
+    assert adapted['training']['global_step'] == 3
+    assert adapted['training']['identity']['batch_tokens'] == 8
+    assert any(group.get('weight_decay') == .001 for section in adapted['training']['optimizer'].values()
+               if isinstance(section, dict) for group in section.get('param_groups', []))
 
 
 def test_token_volume_batches_preserve_every_graph_and_long_graph():

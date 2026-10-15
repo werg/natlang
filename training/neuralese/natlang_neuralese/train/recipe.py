@@ -40,7 +40,7 @@ HANDLERS = {
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
                          'optional_inputs': {'continue_from'},
                          'parameters': {'base', 'rank', 'dtype', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
-                             'latent_ns', 'eval_every', 'checkpoint_every', 'checkpoint_layers', 'chunk_tokens',
+                             'latent_ns', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'seed', 'task_eval',
                              'task_eval_every', 'forward_atol', 'gradient_atol'}, 'result': 'checkpoint.pt'},
     # Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md): plain target SFT from a base model with the
@@ -281,7 +281,15 @@ DIRECT_PHASE_CONTINUATION = {'continue_from': 'checkpoint.pt', 'continue_identit
 
 # Stage kinds that train the direct checkpoint with the direct trainer and so continue phase to phase (S7 RL included).
 DIRECT_TRAINING_KINDS = frozenset({'neuralese_direct', 'neuralese_rl'})
-NATIVE_TRAINING_KINDS = frozenset({'native_state_sft'})
+HANDLERS['native_state_rl'] = {
+    'module': 'natlang_neuralese.rl.native_stage',
+    'required_inputs': {'rollouts', 'held_native_graphs', 'continue_from'},
+    'optional_inputs': {'rl_block_bundle'},
+    'parameters': set(HANDLERS['native_state_sft']['parameters']) |
+        {'rl_tokenizer', 'rl_mode', 'native_participant'},
+    'result': 'checkpoint.pt'}
+
+NATIVE_TRAINING_KINDS = frozenset({'native_state_sft', 'native_state_rl'})
 SHARED_NATIVE_KINDS = frozenset({'native_semantic_training', 'native_shared_stage_controller'})
 HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | SHARED_NATIVE_KINDS
 NATIVE_IDENTITY_QUALIFICATION = 'native_state_runtime_qualified'
@@ -409,7 +417,7 @@ def stage_input_args(resolved, kind):
         if role in resolved and role in supported:
             args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'native_graphs',
-                 'held_native_graphs', 'continue_from', 'continue_identity',
+                 'held_native_graphs', 'rl_block_bundle', 'continue_from', 'continue_identity',
                  'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',
                  'direct_parent_proof', 'aligned_projection'):
@@ -2320,7 +2328,7 @@ def main(argv=None):
                     gate = json.loads((directory / ('runtime-report.json' if kind=='raw_runtime_qualification' else 'report.json')).read_text())
                 elif kind=='verified_heads_handoff':
                     gate=json.loads((directory/'report.json').read_text())
-                elif kind in ('core_text_warmup','neuralese_direct','native_state_sft'):
+                elif kind in ('core_text_warmup','neuralese_direct') or kind in NATIVE_TRAINING_KINDS:
                     gate=json.loads((directory/'report.json').read_text())
                 elif kind in SHARED_NATIVE_KINDS:
                     gate=json.loads((directory/'shared-stage-completion.json').read_text())
