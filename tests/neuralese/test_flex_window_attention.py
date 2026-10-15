@@ -34,8 +34,10 @@ def test_flex_window_matches_the_banded_blocks(monkeypatch, steps):
         assert float((a - b).norm() / b.norm()) < 1e-2, name
 
 
-@pytest.mark.parametrize('steps,total', [(2, 1031), (129, 1158)])
-def test_cached_window_readback_runs_with_flash_only_and_has_exact_prefix_offsets(monkeypatch, steps, total):
+@pytest.mark.parametrize('steps,total,heads,groups,dim', [(2, 1031, 4, 2, 64), (129, 1158, 4, 2, 64),
+                                                           (2, 1031, 32, 4, 128)])
+def test_cached_window_readback_runs_with_flash_only_and_has_exact_prefix_offsets(
+        monkeypatch, steps, total, heads, groups, dim):
     """A value-block readback has several queries and a long cached prefix.
 
     Its band mask is unsupported by Flash SDPA: use the existing sparse kernel,
@@ -43,8 +45,8 @@ def test_cached_window_readback_runs_with_flash_only_and_has_exact_prefix_offset
     """
     from torch.nn.attention import SDPBackend, sdpa_kernel
     torch.manual_seed(42)
-    q = torch.randn(1, 4, steps, 64, device='cuda', dtype=torch.bfloat16)
-    k = torch.randn(1, 2, total, 64, device='cuda', dtype=torch.bfloat16)
+    q = torch.randn(1, heads, steps, dim, device='cuda', dtype=torch.bfloat16)
+    k = torch.randn(1, groups, total, dim, device='cuda', dtype=torch.bfloat16)
     v = torch.randn_like(k)
     g = torch.randn_like(q)
     with sdpa_kernel(SDPBackend.MATH):
