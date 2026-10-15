@@ -1,0 +1,44 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "clef-pools-20261015-v1",
+  "owner": "dgx",
+  "path": "data/neuralese/corpora/clef-pools-20261015-v1",
+  "files": [
+    {
+      "path": "clef-pools-20261015.answers.jsonl",
+      "bytes": 871402,
+      "sha256": "8501e5afc76d14b152522b5fbe059af82b8e01f9e463baa780257550353b59b1",
+      "lines": 3188
+    },
+    {
+      "path": "clef-pools-20261015.ir.jsonl",
+      "bytes": 1749693,
+      "sha256": "071d43a56c0bfd73f8fc9d548b864268cbbb6efa38e3bb2265ffbe0d5e8ec944",
+      "lines": 438
+    },
+    {
+      "path": "clef-pools-20261015.rows.jsonl",
+      "bytes": 64471106,
+      "sha256": "4d069c5603fa5828914d584809b805e41710af9cffd942fdb52c63c3927cea43",
+      "lines": 438
+    },
+    {
+      "path": "clef-pools-20261015.skeletons.jsonl",
+      "bytes": 2506070,
+      "sha256": "75507988b4ceaa465d2021f5b84b7446cb286528cae49a690f2636b0e4d7b50e",
+      "lines": 700
+    },
+    {
+      "path": "clef-pools-20261015.turns.jsonl",
+      "bytes": 123726399,
+      "sha256": "79b13c4ee2dc1a33772b1a83e659cbc5ae384f530f61189f1d5164ef614f9184",
+      "lines": 2827
+    },
+    {
+      "path": "summary.json",
+      "bytes": 705,
+      "sha256": "d0ab8cd2358160b8f1e3a230d2c3a0c252e360680d66fec6a5604765766e06bc"
+    }
+  ],
+  "bytes": 193325375
+}
