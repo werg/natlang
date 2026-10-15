@@ -15,6 +15,14 @@ PROGRESS_SCHEMA='natlang.native-sft-progress/1'
 _TRANSIENT={'optimizer','rng','fp8','sft_progress'}
 
 
+def reject_withdrawn_targets(training,current_bindings):
+    """A later CE/objective switch cannot silently reintroduce rejected targets."""
+    for item in (training.get('options') or {}).get('withdrawal_history') or []:
+        for row in item['rows']:
+            if current_bindings.get(row['id'])==row['binding']:
+                raise ValueError('native source reintroduced a previously withdrawn target: '+row['id'])
+
+
 def withdraw_ordinary_rows(training, proof_path, *, current_bindings, model_id, source_origins=None):
     """Verify exact rejected targets, keeping current moments/RNG and good credits."""
     path=Path(proof_path)

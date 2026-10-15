@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from natlang_neuralese.common.hashing import sha256_file_hex_cached as sha
-from natlang_neuralese.train.native_continuation import withdraw_ordinary_rows, collect_sft_progress, progress_obligations
+from natlang_neuralese.train.native_continuation import withdraw_ordinary_rows, collect_sft_progress, progress_obligations, reject_withdrawn_targets
 
 
 def proof(tmp_path, rows):
@@ -40,6 +40,9 @@ def test_exact_withdrawal_preserves_optimizer_rng_good_credits_and_carried_oblig
     assert history['rows'][0]['consumed_visits']==2 and not history['prior_updates_undone']
     assert history['rows'][0]['consumed_visits_by_stage']=={'full':2,'earlier':5}
     assert withdraw_ordinary_rows(new,path,current_bindings={'good':'g','comm':'c'},model_id='model:pin') is new
+    with pytest.raises(ValueError,match='reintroduced'):
+        reject_withdrawn_targets(new,{'bad':'b'})
+    reject_withdrawn_targets(new,{'good':'g'})
 
 
 @pytest.mark.parametrize('change',[

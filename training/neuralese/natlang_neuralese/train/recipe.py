@@ -425,6 +425,7 @@ def _bind_native_source_dependencies(inputs):
             raise ValueError('native withdrawal input has an unsupported schema')
         evidence=value['evidence'];path=Path(evidence['path'])
         if not path.is_absolute():path=proof.parent/path
+        path=path.resolve(strict=True)
         if sha(path)!=evidence['sha256']:
             raise ValueError('native withdrawal evidence content hash mismatch')
         inputs['withdrawn_native_graphs']['dependencies']=[{'path':str(path),'sha256':evidence['sha256']}]

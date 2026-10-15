@@ -569,6 +569,8 @@ def main(argv=None):
         raise ValueError('native train/held source groups overlap: ' + ', '.join(sorted(train_groups & held_groups)[:8]))
     source_receipts = [train.receipt(), held.receipt()]
     source_row_bindings = train.bindings
+    from .native_continuation import reject_withdrawn_targets
+    reject_withdrawn_targets(saved_training,source_row_bindings)
     held_row_bindings = held.bindings
     source_hash = hashlib.sha256(json.dumps(
         [source_receipts[0]['sha256'], source_receipts[1]['sha256'],

@@ -24,6 +24,15 @@ def test_mandatory_sft_seed_closure_contains_nested_ordinary_and_raw_pairs(tmp_p
     with pytest.raises(ValueError,match='hash mismatch'):
         deps.dependency_closure({'config':config},namespace=str(tmp_path))
 
+
+def test_withdrawal_relative_evidence_stays_in_exact_provider_closure(tmp_path):
+    evidence=write(tmp_path/'receipt.json',{'audit':'rejected targets'})
+    proof=write(tmp_path/'model/withdrawal.json',{'schema':'natlang.native-graph-withdrawal/1',
+        'evidence':{'path':'../receipt.json','sha256':evidence['sha256']},'rows':[]})
+    config=write(tmp_path/'config.json',{'withdrawn_native_graphs':proof})
+    closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
+    assert {x['path'] for x in closure['files']}=={x['path'] for x in [evidence,proof,config]}
+
 def test_asset_preflight_verifies_content_not_directory_existence(tmp_path):
     task=tmp_path/'ts-host';write(task/'dist/teacher/cli.js','actual compiled runtime')
     write(task/'package.json',{'name':'task-runtime'});write(tmp_path/'package.json',{'name':'root'});write(tmp_path/'package-lock.json',{'lockfileVersion':3})
@@ -98,6 +107,25 @@ def test_mmap_checkpoint_declares_exact_public_base_preflight(tmp_path):
     (base/'model.safetensors').write_text('different source')
     with pytest.raises(ValueError,match='pinned base inventory changed'):
         deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+
+
+def test_explicit_participant_base_relocation_verifies_saved_inventory_not_old_path(tmp_path):
+    import torch
+    from natlang_neuralese.model.native_model import base_inventory
+    base=tmp_path/'relocated-base'
+    write(base/'config.json',{'model_type':'lfm2'})
+    write(base/'model.safetensors','actual-pinned-base')
+    expected=base_inventory(base)
+    checkpoint=tmp_path/'shared.pt'
+    torch.save({'participants':{'student':{'model_config':{'base':str(tmp_path/'old-absent-base'),
+        'base_inventory':expected}}}},checkpoint)
+    binding={'path':str(checkpoint),'sha256':deps.sha256_file_hex_cached(checkpoint),'bytes':checkpoint.stat().st_size}
+    config=write(tmp_path/'semantic.json',{'models':{'student':{'base':str(base)}}})
+    closure=deps.dependency_closure({'semantic_config':config,'parent_checkpoint':binding},namespace=str(tmp_path))
+    assert [item['path'] for item in closure['assets']]==[str(base)]
+    (base/'model.safetensors').write_text('wrong-alias-weights')
+    with pytest.raises(ValueError,match='pinned base inventory changed'):
+        deps.dependency_closure({'semantic_config':config,'parent_checkpoint':binding},namespace=str(tmp_path))
 
 def test_refresh_update_includes_consumed_readiness_and_report(tmp_path):
     checkpoint=write(tmp_path/'update/checkpoint.pt','closed-updated-state')

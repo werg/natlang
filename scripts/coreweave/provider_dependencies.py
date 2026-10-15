@@ -31,7 +31,7 @@ def task_runtime_inventory(path):
 
 
 def dependency_closure(request, *, namespace='/work/native-production'):
-    files, assets, active_configs = {}, {}, set()
+    files, assets, active_configs, relocations = {}, {}, set(), {}
     root = Path(namespace).absolute()
 
     def add(path, expected=None):
@@ -86,11 +86,13 @@ def dependency_closure(request, *, namespace='/work/native-production'):
                 training_inputs(state.get('shared_training'))
                 for participant in state.get('participants', {}).values():
                     training_inputs(participant)
-                configs = [state.get('model_config')]
-                configs.extend(item.get('model_config') for item in state.get('participants', {}).values())
-                for declaration in configs:
+                selected=request.get('native_participant') if request.get('kind')=='round' else None
+                configs = [(selected,state.get('model_config'))]
+                configs.extend((name,item.get('model_config')) for name,item in state.get('participants', {}).items()
+                               if selected is None or name==selected)
+                for name,declaration in configs:
                     if declaration is not None:
-                        asset(declaration['base'], base=True, expected=declaration['base_inventory'])
+                        asset(relocations.get(name,declaration['base']), base=True, expected=declaration['base_inventory'])
                 del state
 
     def graphs(path):
@@ -118,6 +120,11 @@ def dependency_closure(request, *, namespace='/work/native-production'):
         if marker in active_configs:
             raise ValueError("provider consumed configuration contains a cycle")
         active_configs.add(marker)
+        if value.get('base') and value.get('native_participant'):
+            relocations.setdefault(value['native_participant'],value['base'])
+        for name,declaration in value.get('models',{}).items():
+            if declaration.get('base'):
+                relocations.setdefault(name,declaration['base'])
         # Exact fields consumed by production.run/native semantic refresh.
         for key in ('seed_native_graphs', 'held_native_graphs', 'foundation_native_graphs'):
             if value.get(key):
@@ -130,6 +137,7 @@ def dependency_closure(request, *, namespace='/work/native-production'):
                 raise ValueError('provider withdrawal declaration schema differs')
             evidence=declaration['evidence'];path=Path(evidence['path'])
             if not path.is_absolute():path=proof.parent/path
+            path=path.resolve(strict=True)
             bound({**evidence,'path':str(path)})
         specifications = [value.get('task_eval'), (value.get('trainer_parameters') or {}).get('task_eval')]
         for specification in specifications:
@@ -162,6 +170,7 @@ def dependency_closure(request, *, namespace='/work/native-production'):
                     raise ValueError('provider semantic block escaped its bound bundle')
                 bound({**entry, 'path': str(child)})
         for declaration in value.get('models', {}).values():
+            if declaration.get('base'):asset(declaration['base'],base=True)
             if declaration.get('checkpoint'): checkpoint(declaration['checkpoint'])
         active_configs.remove(marker)
         return value
@@ -169,6 +178,10 @@ def dependency_closure(request, *, namespace='/work/native-production'):
     def config(path):
         return config_value(json.loads(path.read_text()), str(path))
 
+    # Resolve explicitly consumed relocations before checking saved checkpoint
+    # inventories. Saved paths may name a different model on the coordinator.
+    for key in ('config', 'semantic_config'):
+        if request.get(key): config(bound(request[key]))
     for key in ('parent_checkpoint',):
         if request.get(key): checkpoint(request[key])
     for value in request.get('updates', {}).values():
@@ -177,8 +190,6 @@ def dependency_closure(request, *, namespace='/work/native-production'):
         receipt_path = add(update_path.parent/'native-training-receipt.json')
         receipt = json.loads(receipt_path.read_text())
         bound(receipt['training_receipt'])
-    for key in ('config', 'semantic_config'):
-        if request.get(key): config(bound(request[key]))
     if request.get('state'):
         state = json.loads(bound(request['state']).read_text())
         for key in ('checkpoint', 'pending_native_checkpoint'):
