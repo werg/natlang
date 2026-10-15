@@ -11,6 +11,9 @@ import argparse
 import fcntl
 import json
 import math
+import os
+import signal
+import uuid
 from pathlib import Path
 import subprocess
 import sys
@@ -174,7 +177,148 @@ def rl_bootstrap_command(config, completion, proof):
     return argv, signature
 
 
-def run(config_path, *, once=False):
+_CHILD_OWNER_ENV = 'NATLANG_NATIVE_CONTROLLER_LAUNCH'
+
+
+def _owned_process_identity(pid, launch, *, root=True):
+    """Exact local process identity; a recycled PID is never an owned child."""
+    proc = Path('/proc') / str(pid)
+    try:
+        fields = (proc/'stat').read_text().rsplit(')', 1)[1].split()
+        if fields[0] in {'Z', 'X'} or proc.stat().st_uid != os.getuid():
+            return None
+        argv = [part.decode() for part in (proc/'cmdline').read_bytes().split(b'\0') if part]
+        environment = (proc/'environ').read_bytes().split(b'\0')
+        cwd = str(Path(proc/'cwd').resolve())
+        if ((root and (argv != launch['argv'] or cwd != launch['cwd'])) or
+                (_CHILD_OWNER_ENV + '=' + launch['token']).encode() not in environment):
+            return None
+        return {'pid': int(pid), 'boot_id': Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                'start_ticks': fields[19], 'argv': argv, 'cwd': cwd}
+    except (OSError, ValueError, UnicodeError):
+        return None
+
+
+def _owned_tree(launch):
+    result = []
+    for proc in Path('/proc').iterdir():
+        if proc.name.isdigit():
+            identity = _owned_process_identity(int(proc.name), launch, root=False)
+            if identity is not None:
+                result.append(identity)
+    return result
+
+
+def _terminate_owned(launch, identity):
+    try:
+        descriptor = os.pidfd_open(identity['pid'])
+    except ProcessLookupError:
+        return
+    try:
+        if _owned_process_identity(identity['pid'], launch, root=False) == identity:
+            signal.pidfd_send_signal(descriptor, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    finally:
+        os.close(descriptor)
+
+
+class _RecoveredChild:
+    """Drain an exact surviving launch tree; disappearance requires resume."""
+    def __init__(self, launch, identity, survivors):
+        self.launch, self.identity = launch, identity
+        self.pid = identity['pid'] if identity is not None else survivors[0]['pid']
+        self.returncode, self.forwarded = None, set()
+
+    def _drain(self, survivors):
+        for identity in survivors:
+            key = (identity['boot_id'], identity['pid'], identity['start_ticks'])
+            if key not in self.forwarded:
+                _terminate_owned(self.launch, identity)
+                self.forwarded.add(key)
+
+    def poll(self):
+        survivors = _owned_tree(self.launch)
+        if self.identity is not None and self.identity in survivors:
+            return None
+        # The original supervisor vanished. Its descendants still own artifacts
+        # and may hold learner state: checkpoint/drain them before any retry.
+        self._drain(survivors)
+        if not survivors:
+            # waitpid is unavailable after reparenting. Never invent success.
+            self.returncode = 1
+        return self.returncode
+
+    def terminate(self):
+        if self.identity is not None and _owned_process_identity(self.identity['pid'], self.launch) == self.identity:
+            _terminate_owned(self.launch, self.identity)
+        else:
+            self._drain(_owned_tree(self.launch))
+
+
+def _recover_child(launch):
+    if not launch or launch.get('status') not in {'launching', 'running'}:
+        return None
+    survivors = _owned_tree(launch)
+    matches = [identity for identity in survivors
+               if identity['argv'] == launch['argv'] and identity['cwd'] == launch['cwd']]
+    saved = launch.get('identity')
+    if saved is not None:
+        # A fork may briefly retain its parent's argv before exec. The saved
+        # boot/start identity identifies the original root among descendants.
+        identity = next((entry for entry in matches if entry == saved), None)
+        if identity is None and any(entry['pid'] == saved['pid'] for entry in matches):
+            raise RuntimeError('native controller child process identity changed')
+    else:
+        # For a crash before the initial PID receipt, identify the unique root
+        # of matching processes, rather than a just-forked pre-exec child.
+        pids = {entry['pid'] for entry in matches}
+        roots = []
+        for entry in matches:
+            try:
+                parent = int((Path('/proc')/str(entry['pid'])/'stat').read_text().rsplit(')', 1)[1].split()[1])
+            except (OSError, ValueError):
+                continue
+            if parent not in pids:
+                roots.append(entry)
+        if len(roots) > 1:
+            raise RuntimeError('multiple processes claim the exact native controller launch; resolve ownership')
+        identity = roots[0] if roots else None
+    return _RecoveredChild(launch, identity, survivors) if survivors else None
+
+
+def _launch_child(argv, kind, config, out, signature, rl_signature):
+    # Persist the unique launch before spawning, so a supervisor killed between
+    # Popen and its next state write can rediscover the exact child safely.
+    launch = {'schema': 'natlang.native-controller-child/1', 'status': 'launching',
+        'token': uuid.uuid4().hex, 'argv': argv, 'cwd': str(Path(config.get('workdir') or '.').resolve()),
+        'out': str(out), 'child_kind': kind, 'execution_signature': signature,
+        'rl_signature': rl_signature}
+    path = out/'child-launch.json'
+    write_json_durable(path, launch)
+    try:
+        child = subprocess.Popen(argv, cwd=config.get('workdir'), start_new_session=False,
+                                 env={**os.environ, _CHILD_OWNER_ENV: launch['token']})
+    except OSError:
+        write_json_durable(path, {**launch, 'status': 'launch-failed'})
+        raise
+    launch.update(status='running', identity=_owned_process_identity(child.pid, launch))
+    write_json_durable(path, launch)
+    return child, launch
+
+
+def _retry_failure(previous, kind, signature, interval, *, exit_code=None, error=None):
+    """Persist recoverable execution failure without inventing stage completion."""
+    now = time.time()
+    return {'child_kind': kind, 'exit_code': exit_code,
+        'attempts': (previous.get('attempts', 0) if previous else 0) + 1,
+        'last_failed_at': now, 'next_retry_at': now + interval,
+        'reason': (f'{kind} launch failed: {error}' if error is not None else
+                   f'{kind} child failed; retry the preserved state after repair'),
+        'execution_signature': signature}
+
+
+def _run(config_path, *, once=False, stop):
     config = json.loads(Path(config_path).read_text())
     if config.get('schema') != 'natlang.native-shared-stage-controller/1':
         raise ValueError('unsupported shared-stage controller configuration')
@@ -191,17 +335,33 @@ def run(config_path, *, once=False):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         child, child_kind, last_success, rl_last_success, active_rl_signature = None, None, None, None, None
         published = {}
-        from .loop import StopSignal
-        stop = StopSignal()
-        if not once:
-            stop.install()
         forwarded = False
         pair_cache = None
+        retry = None
         state_path = out/'controller.json'
         if state_path.exists():
             previous_state = json.loads(state_path.read_text())
             last_success = previous_state.get('last_successful_participants')
             rl_last_success = previous_state.get('last_successful_rl_bootstrap')
+            retry = previous_state.get('retry')
+        launch_path = out/'child-launch.json'
+        launch = json.loads(launch_path.read_text()) if launch_path.exists() else None
+        if not once and launch and launch.get('status') in {'launching', 'running'}:
+            if launch.get('out') != str(out):
+                raise ValueError('native controller child belongs to another output owner')
+            child = _recover_child(launch)
+            if child is not None:
+                child_kind = launch['child_kind']
+                active_rl_signature = launch.get('rl_signature')
+            else:
+                retry = _retry_failure(retry, launch['child_kind'], launch['execution_signature'], interval,
+                                       error='previous owned child ended while controller was absent')
+                write_json_durable(launch_path, {**launch, 'status': 'ended-unobserved'})
+        elif not once and launch is None and state_path.exists() and previous_state.get('child_pid'):
+            # Historical states lack ownership evidence: do not signal or replay
+            # over a possibly surviving worker using a bare PID.
+            if Path('/proc', str(previous_state['child_pid'])).exists():
+                raise RuntimeError('historical native controller child lacks exact ownership; drain it before restarting')
         while True:
             updated = json.loads(Path(config_path).read_text())
             if updated.get('schema') != config['schema'] or Path(updated['out']).resolve() != out:
@@ -240,6 +400,7 @@ def run(config_path, *, once=False):
             execution_signature = canonical_json_sha256_hex({'controller': config,
                 'participants': signature, 'curriculum': curriculum_signature})
             participants = out/'participants.json'
+            retry_ready = retry is None or time.time() >= retry['next_retry_at']
             if len(ready) >= 2:
                 manifest = {'schema': 'natlang.native-shared-participants/1', 'models': ready,
                             'signature': signature}
@@ -251,38 +412,60 @@ def run(config_path, *, once=False):
                     'execution_signature': execution_signature, 'models': [item['model_id'] for item in ready]}
                 completion = out/'shared-stage-completion.json'
                 if (child is None and config.get('rl_bootstrap') and completion.is_file()
-                        and not once and not stop.requested):
+                        and not once and not stop.requested and retry_ready):
                     candidate = json.loads(completion.read_text())
                     candidate_key = (candidate.get('participants_signature'), candidate.get('curriculum_signature'))
                     if candidate_key == (signature, curriculum_signature):
                         proof, last_success = validate_completion(completion, published)
                         argv, active_rl_signature = rl_bootstrap_command(config, completion, proof)
                         if active_rl_signature != rl_last_success:
-                            child = subprocess.Popen(argv, cwd=config.get('workdir'), start_new_session=False)
-                            child_kind = 'native-rl'
-                if child is None and execution_signature != last_success and not once and not stop.requested:
+                            try:
+                                child, launch = _launch_child(argv, 'native-rl', config, out, execution_signature, active_rl_signature)
+                                child_kind = 'native-rl'
+                            except OSError as error:
+                                retry = _retry_failure(retry, 'native-rl', execution_signature, interval, error=error)
+                                retry_ready = False
+                if child is None and execution_signature != last_success and not once and not stop.requested and retry_ready:
                     argv = [arg.replace('{participants}', str(participants)).replace('{out}', str(out)) for arg in command]
-                    child = subprocess.Popen(argv, cwd=config.get('workdir'), start_new_session=False)
-                    child_kind = 'native-semantic'
+                    try:
+                        child, launch = _launch_child(argv, 'native-semantic', config, out, execution_signature, None)
+                        child_kind = 'native-semantic'
+                    except OSError as error:
+                        retry = _retry_failure(retry, 'native-semantic', execution_signature, interval, error=error)
             state = {'schema': 'natlang.native-shared-controller-state/1', 'ready_models': len(ready),
                      'pending': pending, 'participants': str(participants) if len(ready) >= 2 else None,
                      'child_pid': child.pid if child else None, 'child_kind': child_kind,
+                     'child_ownership': launch if child else None,
                      'last_successful_participants': last_success,
                      'last_successful_rl_bootstrap': rl_last_success,
-                     'execution_signature': execution_signature, 'curriculum_signature': curriculum_signature}
+                     'execution_signature': execution_signature, 'curriculum_signature': curriculum_signature,
+                     'retry': retry, 'status': 'running' if child else 'retry_wait' if retry else 'monitoring'}
             if child is not None and stop.requested and not forwarded:
                 child.terminate()
                 forwarded = True
+            if child is not None and child.poll() is not None and not isinstance(child, _RecoveredChild):
+                survivors = _recover_child(launch)
+                if survivors is not None:
+                    child = survivors
+                    state['child_pid'] = child.pid
             if child is not None and child.poll() is not None:
                 state['exit_code'] = child.returncode
+                write_json_durable(launch_path, {**launch, 'status': 'exited', 'exit_code': child.returncode})
                 if stop.requested:
                     state['child_pid'] = None
                     state['status'] = 'stopped-after-checkpoint-request'
                     write_json_durable(state_path, state)
                     return state
                 if child.returncode != 0:
+                    retry = _retry_failure(retry, child_kind, execution_signature, interval, exit_code=child.returncode)
+                    state.update(retry=retry, status='retry_wait', child_pid=None, child_kind=None)
+                    child, child_kind = None, None
+                    forwarded = False
                     write_json_durable(state_path, state)
-                    raise RuntimeError(str(child_kind) + ' command failed; resume its preserved checkpoint')
+                    time.sleep(interval)
+                    continue
+                retry = None
+                state['retry'] = None
                 if child_kind == 'native-rl':
                     rl_last_success = active_rl_signature
                     state['last_successful_rl_bootstrap'] = rl_last_success
@@ -295,12 +478,26 @@ def run(config_path, *, once=False):
                 state['child_pid'] = None
                 state['child_kind'] = None
                 child, child_kind = None, None
+            if stop.requested and child is None:
+                state['status'] = 'stopped-after-checkpoint-request'
             write_json_durable(state_path, state)
             if once:
                 return state
             if stop.requested and child is None:
                 return state
             time.sleep(interval)
+
+
+def run(config_path, *, once=False):
+    from .loop import StopSignal
+    stop = StopSignal()
+    if not once:
+        stop.install()
+    try:
+        return _run(config_path, once=once, stop=stop)
+    finally:
+        if not once:
+            stop.restore()
 
 
 def main():

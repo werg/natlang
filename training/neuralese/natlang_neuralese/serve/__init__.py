@@ -182,5 +182,7 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
         engine.dialect = 'semantic-state/' + engine.semantic_channel.adapter_sha256
     engine.rl_policy_binding = {'schema': 'natlang.rl-policy-binding/2',
         'checkpoint_sha256': checkpoint_sha256, 'communication': 'native-state',
-        'native_identity': dict(identity)}
+        'native_identity': dict(identity),
+        **({'native_participant': participant} if participant is not None else {}),
+        **({'semantic_adapter_sha256': engine.semantic_channel.adapter_sha256} if semantic_adapter else {})}
     return engine

@@ -119,6 +119,8 @@ def test_optional_rl_launch_waits_for_shared_validation_and_uses_same_child_supe
         requested = False
         def install(self):
             pass
+        def restore(self):
+            pass
     stop = Stop()
     monkeypatch.setattr(loop, 'StopSignal', lambda: stop)
     launched, validated = [], []

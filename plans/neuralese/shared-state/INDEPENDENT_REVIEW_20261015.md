@@ -123,3 +123,39 @@ Adaptive adapter lifecycle remains OPEN: a later SFT/RL checkpoint update change
 participant identity. Explicit shared-adapter continuation/retraining and bound
 export must accompany that change; a stale adapter must not be silently relabeled
 or leave the next actor startup permanently blocked.
+
+Native RL production independent follow-up:
+
+- The shared-parent/two-learner merge and semantic refresh are now executable:
+  updated native participants enter the existing shared VAE/joint/distill
+  trainer, reset changed-identity exposure and export a newly bound adapter.
+  Idempotent publication retains sibling updates and prevents duplicate update
+  accounting. This resolves the earlier *implementation* gap in adaptive adapter
+  lifecycle; actual provider execution and task-quality qualification remain open.
+- Found and repaired actor admission that compared only the shared checkpoint
+  SHA. Collection now attests the exact named participant, native identity and
+  semantic adapter SHA both before and after sampling, and seals these expected
+  bindings with the collection. A real persisted shared-model/VAE loader fixture
+  verifies its receipt and rejects the wrong participant from the same file.
+- Found and repaired readiness abort-on-child-failure. Semantic and RL failures,
+  including missing executables, retain actual completion state and retry after
+  a durable, adjustable poll delay (at most 60 seconds). Successful semantic work
+  is not repeated merely because the later RL process failed.
+- Found and repaired controller-restart duplicate work: ownership is written
+  before spawn, recovered by unique launch token, argv/cwd/output and Linux
+  boot/start identities. A surviving original process is monitored; orphaned
+  descendants are checkpointed/drained before any new launch. Signals use pidfds.
+  Exit status unavailable after reparenting is not guessed successful.
+
+The focused actual-model/control regressions do not qualify a cloud worker or
+learned task quality. The independent overall cutover review remains OPEN until
+provider execution, both complete production recipes and runtime/quality receipts
+are actually demonstrated.
+
+Validation: `native-review-rl-actor-final-20261015` passed 39 focused
+production/readiness/actual actor tests. After descendant-drain and signal
+restoration changes, `native-review-rl-treecheck-20261015` passed 14 focused
+review/readiness tests, including a real surviving subprocess tree. Quick checks
+passed under `native-review-rl-quick-20261015`. The supervisor's single standing
+full check remains the integrated full-suite authority; this review did not
+launch a competing full suite.

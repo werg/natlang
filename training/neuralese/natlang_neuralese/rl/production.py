@@ -20,7 +20,7 @@ from ..common.paths import root
 from .task_rollouts import prepare, score
 
 
-def validate_actor_receipts(receipts, *, policy_id, neuralese_server):
+def validate_actor_receipts(receipts, *, policy_id, neuralese_server, expected_native=None):
     """Attest native and legacy actors explicitly, without projected-head aliases."""
     import re
     if not receipts or any(not receipt or receipt.get('checkpoint_sha256') != policy_id
@@ -46,6 +46,12 @@ def validate_actor_receipts(receipts, *, policy_id, neuralese_server):
         identities = [receipt['native_identity'] for receipt in receipts.values()]
         if any(identity != identities[0] for identity in identities[1:]):
             raise ValueError('native RL replicas disagree on their exact policy identity')
+    if expected_native is not None:
+        if modes != {'native-state'} or any(receipt.get('native_identity') != expected_native['native_identity'] or
+                receipt.get('native_participant') != expected_native['native_participant'] or
+                receipt.get('semantic_adapter_sha256') != expected_native['semantic_adapter_sha256']
+                for receipt in receipts.values()):
+            raise ValueError('native RL actor differs from the requested shared participant or semantic adapter')
     return receipts
 
 
@@ -72,7 +78,7 @@ class RunControl:
 
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
-            case_seconds=600, max_model_requests=128, max_turns=160, control=None):
+            case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None):
     """Bounded subprocess fanout; existing collector and exact task verifier."""
     if control is not None and control.stop.requested:
         raise InterruptedError('collection stop requested')
@@ -90,7 +96,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         'endpoints': endpoints, 'neuralese_server': neuralese_server,
         'runtime': {str(p.relative_to(runtime)): sha256_file_hex(p)
                     for p in sorted((runtime / 'dist').rglob('*.js'))},
-        'collector_sha256': sha256_file_hex(root('repo') / 'scripts/run_bonsai_queue.py')}
+        'collector_sha256': sha256_file_hex(root('repo') / 'scripts/run_bonsai_queue.py'),
+        **({'expected_native_actor': expected_native} if expected_native is not None else {})}
     receipt = out / 'collection-binding.json'
     if receipt.exists():
         if json.loads(receipt.read_text()) != binding:
@@ -107,7 +114,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     def actor_receipts():
         receipts = {url: json.loads(Server(url).get_bytes('/v1/neuralese/info'))
                     .get('rl_policy_binding') for url in endpoints}
-        return validate_actor_receipts(receipts, policy_id=policy_id, neuralese_server=neuralese_server)
+        return validate_actor_receipts(receipts, policy_id=policy_id, neuralese_server=neuralese_server, expected_native=expected_native)
     actors = actor_receipts()
     preparation = prepare(SimpleNamespace(cases=Path(cases), out=out, rows=rows, offset=offset,
         group=group, temperature=1., case_seconds=case_seconds,
@@ -303,6 +310,23 @@ def trained_counts(directory, progress):
             for key in ('supervised_tokens', 'target_tokens')}
 
 
+def expected_native_actor(adapter_path, participant, policy_id):
+    """Bind the actual immutable adapter's named participant, not only shared file SHA."""
+    from ..train.native_readiness import _bound
+    from ..common.hashing import sha256_file_hex_cached
+    adapter_path = Path(adapter_path)
+    export = json.loads(adapter_path.read_text())
+    if export.get('schema') != 'natlang.native-semantic-adapter/1' or participant not in export.get('models', {}):
+        raise ValueError('native RL actor needs its actual exported shared participant')
+    _bound(export['checkpoint'])
+    model = export['models'][participant]
+    if (export['checkpoint']['sha256'] != policy_id or model['native_identity']['checkpoint_sha256'] != policy_id
+            or model['checkpoint'].get('participant') != participant or model['checkpoint']['sha256'] != policy_id):
+        raise ValueError('native RL actor adapter and participant differ from the current shared policy')
+    return {'native_participant': participant, 'native_identity': model['native_identity'],
+            'semantic_adapter_sha256': sha256_file_hex_cached(adapter_path)}
+
+
 def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
     """Hot-reload configuration at round boundaries; preserve actual state/exposure."""
     from ..common.hashing import sha256_file_hex
@@ -373,10 +397,12 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
             if control is not None:
                 values['_run_control'] = control
             from ..train.recipe import stage_parameter_args
+            expected_native = None
             if config.get('native_state'):
                 values['semantic_adapter'] = state.get('semantic_adapter', config['semantic_adapter'])
                 values['semantic_adapter_sha256'] = sha256_file_hex(Path(values['semantic_adapter']))
                 export = json.loads(Path(values['semantic_adapter']).read_text())
+                expected_native = expected_native_actor(values['semantic_adapter'], config['native_participant'], policy)
                 values['rl_tokenizer'] = str(Path(values['semantic_adapter']).parent /
                     export['tokenizers'][config['native_participant']]['path'])
             values['trainer_args'] = stage_parameter_args(config.get('trainer_parameters', {}))
@@ -394,7 +420,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     neuralese_server=config.get('neuralese_server', True),
                     case_seconds=config.get('case_seconds', 600),
                     max_model_requests=config.get('max_model_requests', 128),
-                    max_turns=config.get('max_turns', 160), control=control)
+                    max_turns=config.get('max_turns', 160), control=control, expected_native=expected_native)
             except InterruptedError:
                 state['phase'] = 'requested_stop'
                 write_json_durable(state_path, state)

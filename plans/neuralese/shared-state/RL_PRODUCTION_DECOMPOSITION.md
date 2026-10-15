@@ -44,3 +44,26 @@ the host bridge forwards TERM to its exact remote worker and continues draining
 checkpoint/result artifacts. The worker forwards TERM to its exact local
 children and waits. Publication waits for all learner and semantic refresh
 receipts. A bridge exit code alone proves nothing about completed training.
+
+## Exact actor admission and recoverable controller ownership
+
+S7 continues to decide tasks, training and repairs. Crisp collection admission
+checks bind the actual requested participant's four-field native identity and
+semantic adapter bytes before and after each sealed collection. A shared
+checkpoint file hash alone cannot distinguish its participants. These expected
+bindings are part of the immutable collection receipt.
+
+The readiness service retries an exited or unlaunchable child from its preserved
+state, with a durable reason and next check no later than 60 seconds; it never
+turns failure into successful completion. Completion remains verified by actual
+stage/learner receipts, so replaying the controller does not repeat completed
+updates. There is no retry-count limit.
+
+Before spawning, the service durably records a unique child ownership token,
+explicit argv, working directory and output owner. The token propagates through
+its subprocess tree. Restart monitors the exact live process using Linux boot
+and process start identity; pidfd signaling prevents recycled-PID mistakes. If
+its root disappeared, surviving owned descendants receive checkpoint requests
+and are drained before retry. An unobserved exit is resumable failure, never an
+inferred success. Historical live PID-only records need explicit draining because
+they lack the evidence needed to attach safely.
