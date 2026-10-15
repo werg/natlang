@@ -14,6 +14,19 @@ from .shared_state import SharedStateModel, provision_role_tokens
 CHECKPOINT_SCHEMA = 'natlang.neuralese-native-checkpoint/1'
 
 
+def configure_native_precision():
+    """Keep FP32 operations IEEE on training and serving destination GPUs.
+
+    NGC enables TF32 by default, which changed real LFM graph/reference CE and
+    gradients on H100. This contract affects FP32 operations; native BF16
+    tensor-core computation retains its declared dtype.
+    """
+    torch.set_float32_matmul_precision('highest')
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    return {'float32_matmul': 'highest', 'cuda_matmul_tf32': False, 'cudnn_tf32': False}
+
+
 def native_identity(model, config, *, checkpoint_sha256):
     """Fingerprint the actual restored embedding path once per served checkpoint."""
     from ..common.jsonio import canonical_json_bytes
@@ -52,6 +65,7 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
     four actual role tokens before constructing the shared backbone adapter;
     no legacy marker names or reserved rows are needed.
     """
+    precision = configure_native_precision()
     base = Path(base).resolve(strict=True)
     actual = base_inventory(base)
     if inventory is not None and actual != inventory:
@@ -83,7 +97,7 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
     config = {'base': str(base), 'base_inventory': actual,
               'base_inventory_sha256': canonical_json_sha256_hex(actual),
               'architecture': str(port.config.model_type), 'source_architecture': architecture,
-              'rank': rank, 'marker_ids': list(roles.ids),
+              'rank': rank, 'marker_ids': list(roles.ids), 'precision': precision,
               'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer), 'dtype': str(dtype)}
     return model, tokenizer, roles, config
 
@@ -111,8 +125,8 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None):
                                 'torch.float16': torch.float16}[saved['dtype']]
     model, tokenizer, roles, config = load_native_model(base or saved['base'], rank=saved['rank'],
         device=device, dtype=requested_dtype, inventory=saved['base_inventory'])
-    for key in ('architecture', 'rank', 'marker_ids', 'tokenizer_fingerprint', 'base_inventory_sha256'):
-        if config[key] != saved[key]:
+    for key in ('architecture', 'rank', 'marker_ids', 'tokenizer_fingerprint', 'base_inventory_sha256', 'precision'):
+        if config[key] != saved.get(key):
             raise ValueError(f'native checkpoint {key} changed during restoration')
     restore_model_state(model, state)
     return model, tokenizer, roles, config, state

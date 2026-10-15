@@ -27,6 +27,10 @@ def test_native_checkpoint_restores_role_rows_adapter_and_backbone_exactly(tmp_p
     base = tmp_path / 'base'
     tiny_source(base)
     model, tokenizer, roles, config = load_native_model(base, dtype=torch.float32, rank=4)
+    assert config['precision'] == {'float32_matmul': 'highest', 'cuda_matmul_tf32': False, 'cudnn_tf32': False}
+    assert torch.get_float32_matmul_precision() == 'highest'
+    assert not torch.backends.cuda.matmul.allow_tf32
+    assert not torch.backends.cudnn.allow_tf32
     assert min(roles.ids) == 64  # no reserved legacy marker names exist in this tokenizer
     assert model.port.embedding_weight.shape[0] == 68
     with torch.no_grad():
