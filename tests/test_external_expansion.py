@@ -316,3 +316,36 @@ def test_native_replay_disambiguates_reused_upstream_ids(tmp_path):
     assert len({case['id'] for case in separate})==2
     assert separate[0]['source_ids']==separate[1]['source_ids']
 
+
+
+def test_agentsynth_uses_primary_view_and_preserves_mock_source_facts(tmp_path, monkeypatch):
+    import json
+    from neuralese_data import agents
+    from neuralese_data.records import group_key
+    root = tmp_path / 'D11'; root.mkdir()
+    (root / 'acquisition.json').write_text(json.dumps({'repo': 'fixture/agentsynth', 'revision': 'pinned'}))
+    rows = [{'id': rid, 'query': 'Solve the shared task.', 'mode': 'multi_agent', 'generator_model': 'mock',
+             'success': True, 'verification': {'verified': True, 'score': 1.0},
+             'metadata': {'synthetic': True, 'generator': 'mock'},
+             'messages': [{'role': 'user', 'content': 'Solve the shared task.'},
+                          {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'c', 'function': {'name': 'delegate', 'arguments': '{"task":"subtask"}'}}]},
+                          {'role': 'tool', 'tool_call_id': 'c', 'content': 'Original observation'},
+                          {'role': 'assistant', 'content': 'Original answer'}],
+             'tools': [{'type': 'function', 'function': {'name': 'delegate'}}]} for rid in ('one', 'two')]
+    (root / 'train.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    (root / 'sharegpt.json').write_text('alternate representation must not be read')
+    monkeypatch.setattr(agents, 'EXPANSION_ROOT', tmp_path)
+    trajectories = [t for _, t in agents.agentsynth()]
+    assert len(trajectories) == 2 and len(list(agents.agentsynth(limit=1))) == 1
+    left, right = trajectories
+    assert left.id != right.id
+    assert set(left.split_groups) & set(right.split_groups) == {group_key('task', agents.task_hash('Solve the shared task.'))}
+    assert left.messages[2]['content'] == 'Original observation'
+    assert left.messages[1]['tool_calls'][0]['function']['name'] == 'delegate'
+    assert left.tools == rows[0]['tools']
+    assert left.lineage['teacher']['model'] == 'mock'
+    notes = left.lineage['notes']
+    assert notes['metadata']['synthetic'] is True
+    assert notes['metadata']['source_reported_verification']['verified'] is True
+    assert notes['verification_is_upstream_report_only'] is True
+    assert notes['native_execution_verified'] is False

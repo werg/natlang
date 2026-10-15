@@ -152,3 +152,15 @@ Native replay must distinguish repeated upstream record identifiers within one i
 Storage compression is exact transport plumbing: stream zstd while writing native-render shards and merged text, read existing plain and compressed completed shards on resume, and bind compressed plus decoded hashes. Selection, ordering, token IDs and loss masks remain byte-identical after decoding. The prior post-part compression allowed multiple raw shard copies to exhaust local storage; extend the shared renderer rather than another training path.
 
 Whole parent identities must bind complete normalized input records, not only upstream ID strings: D40 reused IDs across distinct sessions, producing42 colliding parent IDs. Add content hashes to the existing case bundle digest. Preserve and repair both source variants, filter only the colliding original parent identities from the replacement native corpus, and replay their unique content-bound parents. Verify all surviving rows and source groups unchanged; this recovers data without rerunning unaffected parents.
+
+### Agentsynth primary mock transcript release (D11, 2026-10-15)
+
+Normalize the pinned `train.jsonl` as the primary session view; `sharegpt.json`
+is an alternate representation. Preserve its original row IDs, messages, tools,
+reported mode, generator and verification facts. The acquired release has 318
+rows and declares `generator_model: mock`; these are synthetic examples, not
+real-model reasoning or independently executed external tool certificates.
+Keep original task text groups across repeated sessions. Reuse typed history
+handoffs and the existing static native replay/render/protected-union stages.
+JSON field mapping is crisp source plumbing; eligibility remains the explicit
+source review and whole-trajectory protection policy above.

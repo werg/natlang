@@ -712,6 +712,33 @@ def cognitive_kernel(limit=None):
         yield rid, _initial_request_background(trajectory)
 
 
+def agentsynth(limit=None):
+    """Primary D11 transcripts; mock generation and verification remain source facts."""
+    root = EXPANSION_ROOT / 'D11'
+    receipt = json.loads((root / 'acquisition.json').read_text())
+
+    def rows():
+        with (root / 'train.jsonl').open() as stream:
+            for index, line in enumerate(stream):
+                if line.strip():
+                    yield index, json.loads(line)
+
+    for index, row in _limited(rows(), limit):
+        rid = str(row.get('id') or f'train.jsonl:{index}')
+        metadata = {**(row.get('metadata') or {}), 'trajectory_id': rid, 'session_id': rid,
+                    'source_mode': row.get('mode'), 'generator_model': row.get('generator_model'),
+                    'source_reported_success': row.get('success'),
+                    'source_reported_verification': row.get('verification')}
+        trajectory = expansion_trajectory('D11', receipt, f'train.jsonl:{index}',
+                                          {**row, 'metadata': metadata})
+        trajectory.lineage['teacher'] = _teacher(row.get('generator_model'))
+        trajectory.lineage['notes']['primary_source'] = 'train.jsonl'
+        trajectory.lineage['notes']['verification_is_upstream_report_only'] = True
+        if row.get('success') is False:
+            trajectory.outcome['label'] = 'failed'
+        yield index, _initial_request_background(trajectory)
+
+
 def agentic_coding_sessions(limit=None):
     """D40's serialized coding sessions, retaining reported outcomes and SWE grouping."""
     root = EXPANSION_ROOT / 'D40'
@@ -789,4 +816,5 @@ CORPORA.update({'gatc-sessions': (gatc_sessions, 4), "wideseek": (wideseek, 4), 
                 'evidence-subagent': (evidence_subagent, 4), 'openthoughts-agent': (openthoughts_agent, 4),
                 'terminaltraj': (terminaltraj, 4), 'dolci-tool-use': (dolci_tool_use, 4),
                 'cognitive-kernel': (cognitive_kernel, 4),
+                'agentsynth': (agentsynth, 4),
                 'agentic-coding-sessions': (agentic_coding_sessions, 4)})
