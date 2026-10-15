@@ -52,3 +52,13 @@ def test_explicit_wrong_blocked_return_is_scored_semantic_failure():
                                              "arguments": {"status": "blocked", "reason": "sample not delivered"}}]}}
     finish = {"status": "complete", "resource_limit_reason": None}
     assert classify_case(result, finish) == "semantic_mismatch"
+
+
+def test_missing_result_with_explicit_transport_accounting_is_unscored_infrastructure():
+    finish = {'status': 'incomplete', 'completion_tokens': 8192, 'output_accounting': {'job_states': [
+        {'state': 'transport_failed', 'terminal_error': {'error': 'TypeError: terminated', 'sha256': 'a' * 64}}
+    ]}}
+    assert classify_case(None, finish) == 'infrastructure_error'
+    finish['output_accounting']['job_states'][0]['state'] = 'failed'
+    assert classify_case(None, finish) == 'unresolved'
+    assert classify_case(None, {'status': 'incomplete', 'completion_tokens': 8192}) == 'unresolved'

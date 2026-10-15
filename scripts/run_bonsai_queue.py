@@ -193,6 +193,7 @@ def output_accounting(entry, runtime=None):
     candidate_result_rows = []
     for job in jobs:
         resource_limit_reason = None
+        terminal_error = None
         result_path = root / f"{job['key']}.result.json"
         partial_path = root / f"{job['key']}.partial.json"
         error_path = root / f"{job['index']:06d}.error.json"
@@ -219,8 +220,10 @@ def output_accounting(entry, runtime=None):
             elif error and error.get('index') == job['index'] and error.get('program_id') == job['program_id']:
                 if error.get('code') == 'NATLANG_MODEL_REQUEST_BUDGET':
                     resource_limit_reason = 'model_request_budget'
-                message = str(error.get('error', '')).lower()
-                state = 'transport_failed' if any(term in message for term in
+                terminal_error = {'error': str(error.get('error', '')), 'path': str(error_path),
+                                  'sha256': sha256_file(error_path)}
+                message = terminal_error['error'].lower()
+                state = 'transport_failed' if message.strip() == 'typeerror: terminated' or any(term in message for term in
                     ('transport', 'rate limit', 'timed out', 'timeout', 'socket', 'connection', 'fetch failed')) else 'failed'
             elif partial_path.is_file():
                 partial = read_json(partial_path)
@@ -231,7 +234,8 @@ def output_accounting(entry, runtime=None):
                 state = 'missing_terminal_result'
         states.append({'index': job['index'], 'program_id': job['program_id'],
                        'digest': job['digest'], 'state': state,
-                       **({'resource_limit_reason': resource_limit_reason} if resource_limit_reason else {})})
+                       **({'resource_limit_reason': resource_limit_reason} if resource_limit_reason else {}),
+                       **({'terminal_error': terminal_error} if terminal_error else {})})
 
     embedded_records = [row.get('task', {}).get('program_ir') for _, row, _ in candidate_result_rows]
     try:

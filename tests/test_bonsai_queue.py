@@ -498,3 +498,21 @@ def test_invalid_provider_controls_fail_before_attempt_start(tmp_path, monkeypat
         run_queue(queue, journal, TS_HOST, provider='openrouter', provider_request_config=config)
     assert not commands
     assert not journal.exists()
+
+
+def test_exact_terminated_transport_error_is_sha_bound_in_output_accounting(tmp_path, monkeypatch):
+    entry = queue_entry(tmp_path)
+    jobs = Path(entry['jobs']); jobs.mkdir()
+    job = {'key': '000000-fixture', 'index': 0, 'program_id': 'case-0', 'digest': 'a' * 64}
+    monkeypatch.setattr(queue_module, 'resolve_entry_jobs', lambda *args: [job])
+    monkeypatch.setattr(queue_module, 'frozen_record_digests', lambda *args: [])
+    error = jobs / '000000.error.json'
+    error.write_text(json.dumps({'index': 0, 'program_id': 'case-0', 'error': 'TypeError: terminated'}))
+    accounting = queue_module.output_accounting(entry)
+    state = accounting['job_states'][0]
+    assert state['state'] == 'transport_failed'
+    assert state['terminal_error'] == {'error': 'TypeError: terminated', 'path': str(error),
+                                       'sha256': hashlib.sha256(error.read_bytes()).hexdigest()}
+    # An unrelated model/runtime failure is not declared infrastructure by this exact transport case.
+    error.write_text(json.dumps({'index': 0, 'program_id': 'case-0', 'error': 'unknown action terminated_work'}))
+    assert queue_module.output_accounting(entry)['job_states'][0]['state'] == 'failed'

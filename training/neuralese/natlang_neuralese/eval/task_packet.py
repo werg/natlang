@@ -34,6 +34,10 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
     if finish and finish.get('status') == 'repetition' and finish.get('resource_limit_reason') == 'identical_turn_limit':
         return 'repetition'
     if result is None:
+        accounting = (finish or {}).get('output_accounting') or {}
+        states = accounting.get('job_states') or []
+        if any(isinstance(state, dict) and state.get('state') == 'transport_failed' for state in states):
+            return 'infrastructure_error'
         if finish and finish.get("resource_limit_reason") in {"case_wall_budget", "model_request_budget"}:
             return "budget_exhaustion"
         if finish and finish.get("status") in {"timeout", "no_observation_limit"}:
