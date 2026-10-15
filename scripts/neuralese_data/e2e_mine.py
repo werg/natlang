@@ -356,6 +356,10 @@ def cmd_assemble(a):
             raise ValueError(f'quality quarantine changed during snapshot: {path}')
         quality_bindings.append({'path': str(path), 'sha256': before})
     work = Path(a.work)
+    archived = sorted({*work.glob('*/archived-source.json'), *work.glob('archived-source.json')})
+    if archived:
+        raise ValueError('Restore archived mined sources and verify every recorded member before assembly: '
+                         + ', '.join(str(path) for path in archived))
     out = Path(a.out_dir) / a.id if a.out_dir else Path(resolve_str('data_nvme', 'natlang-corpora', a.id))
     staged = out.with_name(out.name + '.building'); staged.mkdir(parents=True, exist_ok=True)
     held_groups, held_bindings = held_union_groups(work, a.held_union)

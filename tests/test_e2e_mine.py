@@ -6,6 +6,17 @@ from pathlib import Path
 import pytest
 
 
+def test_assemble_requires_restoration_of_archived_sources_before_creating_output(tmp_path):
+    from types import SimpleNamespace
+    spec = importlib.util.spec_from_file_location('e2e_archived_source', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    work = tmp_path / 'work'; source = work / 'large-source'; source.mkdir(parents=True)
+    (source / 'archived-source.json').write_text(json.dumps({'archive': '/external/source.tar.zst'}))
+    with pytest.raises(ValueError, match='Restore archived mined sources'):
+        module.cmd_assemble(SimpleNamespace(work=str(work)))
+    assert not (tmp_path / 'out').exists()
+
+
 def test_review_filter_preserves_good_and_held_graphs_and_omits_dependent_train_context(tmp_path, monkeypatch):
     from types import SimpleNamespace
     spec = importlib.util.spec_from_file_location('e2e_review_filter', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
