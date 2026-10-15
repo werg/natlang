@@ -788,6 +788,200 @@ def cmd_partition(a):
     print(json.dumps({'id': a.id, 'parts': len(info), **receipt['totals']}, indent=1))
 
 
+def cmd_extract_chains(a):
+    """Extract explicitly assigned complete source chains without rewriting their source rows.
+
+    This is the bounded ferry path for work split across machines. The selection
+    names exact (source, trajectory) identities from chains.jsonl; every record
+    in each chain and every edge in that chain is copied byte-for-byte, in source
+    order. The receipt binds the parent cohort receipt/files and hashes each
+    copied source row, so a compact shard never claims to be a new conversion.
+    """
+    src, out, selection_path = Path(a.source), Path(a.out), Path(a.selection)
+    if out.exists() or out.with_name(out.name + '.building').exists():
+        raise SystemExit(f'{out} or its staging path exists; extracted cohorts are immutable')
+    selection = json.loads(selection_path.read_text())
+    if selection.get('schema') != 'natlang.e2e-chain-selection/1':
+        raise ValueError('chain selection must use natlang.e2e-chain-selection/1')
+    requested = selection.get('chains')
+    if not isinstance(requested, list) or not requested:
+        raise ValueError('chain selection must contain a nonempty chains list')
+    wanted = set()
+    for item in requested:
+        if not isinstance(item, dict) or not isinstance(item.get('source'), str) or not item['source'] or \
+                not isinstance(item.get('trajectory'), str) or not item['trajectory']:
+            raise ValueError('each selected chain must bind nonempty source and trajectory strings')
+        key = (item['source'], item['trajectory'])
+        if key in wanted:
+            raise ValueError(f'duplicate selected chain identity {key}')
+        wanted.add(key)
+
+    parent_receipt_path = src / 'receipt.json'
+    parent_receipt = json.loads(parent_receipt_path.read_text())
+    parent_files = parent_receipt.get('files')
+    if not isinstance(parent_files, dict):
+        raise ValueError('parent receipt does not bind source file hashes')
+    required = ('records.jsonl', 'edges.jsonl', 'chains.jsonl', 'pieces.jsonl')
+    for name in required:
+        bound = parent_files.get(name)
+        path = src / name
+        if not isinstance(bound, dict) or not isinstance(bound.get('sha256'), str) or len(bound['sha256']) != 64:
+            raise ValueError(f'parent receipt has no SHA-256 binding for {name}')
+        if not path.is_file() or path.stat().st_size != bound.get('bytes'):
+            raise ValueError(f'parent file size differs from its receipt: {name}')
+
+    selected = {}
+    chains_bytes = {}
+    chain_hasher = hashlib.sha256()
+    chain_bytes_seen = 0
+    for line_no, raw in enumerate((src / 'chains.jsonl').open('rb'), 1):
+        chain_hasher.update(raw); chain_bytes_seen += len(raw)
+        if not raw.strip():
+            continue
+        chain = json.loads(raw)
+        key = (chain.get('source'), chain.get('trajectory'))
+        if key not in wanted:
+            continue
+        if key in selected:
+            raise ValueError(f'duplicate parent chain identity at chains.jsonl:{line_no}: {key}')
+        ids = chain.get('records')
+        if not isinstance(ids, list) or not ids or len(ids) != len(set(ids)):
+            raise ValueError(f'invalid record membership in selected chain {key}')
+        if chain.get('split') not in ('train', 'test') or not isinstance(chain.get('edges'), int) or chain['edges'] < 0:
+            raise ValueError(f'invalid split/edge count in selected chain {key}')
+        selected[key] = chain
+        chains_bytes[key] = raw
+    if set(selected) != wanted:
+        raise ValueError(f'selected chain identities missing from parent: {len(wanted - set(selected))}')
+    bound = parent_files['chains.jsonl']
+    if chain_bytes_seen != bound['bytes'] or chain_hasher.hexdigest() != bound['sha256']:
+        raise ValueError('parent chains.jsonl differs from its receipt SHA-256')
+
+    membership = {}
+    for key, chain in selected.items():
+        for rid in chain['records']:
+            if rid in membership:
+                raise ValueError(f'record belongs to multiple selected chains: {rid}')
+            membership[rid] = key
+    staged = out.with_name(out.name + '.building')
+    staged.mkdir(parents=True)
+    records_seen, record_members, source_groups = set(), [], collections.defaultdict(set)
+    record_path = src / 'records.jsonl'
+    records_hasher = hashlib.sha256(); records_bytes_seen = 0
+    with record_path.open('rb') as source, (staged / 'records.jsonl').open('wb') as target:
+        for line_no, raw in enumerate(source, 1):
+            records_hasher.update(raw); records_bytes_seen += len(raw)
+            if not raw.strip():
+                continue
+            row = json.loads(raw)
+            rid = row.get('id')
+            key = membership.get(rid)
+            if key is None:
+                continue
+            if rid in records_seen:
+                raise ValueError(f'duplicate selected record in parent at records.jsonl:{line_no}: {rid}')
+            chain = selected[key]
+            trajectory = row.get('teacher_trajectory_id') or (row.get('source_ref') or {}).get('trajectory_id')
+            if trajectory != key[1] or row.get('split') != chain['split']:
+                raise ValueError(f'selected record chain/split mismatch: {rid}')
+            records_seen.add(rid)
+            groups = row.get('source_groups') or []
+            if not isinstance(groups, list) or any(not isinstance(g, str) or not g for g in groups):
+                raise ValueError(f'invalid source_groups on selected record {rid}')
+            source_groups[chain['split']].update(groups)
+            record_members.append({'id': rid, 'source': key[0], 'trajectory': key[1],
+                                   'line_sha256': hashlib.sha256(raw).hexdigest()})
+            target.write(raw)
+    if records_seen != set(membership):
+        raise ValueError(f'selected chain records absent from parent records.jsonl: {len(set(membership)-records_seen)}')
+    bound = parent_files['records.jsonl']
+    if records_bytes_seen != bound['bytes'] or records_hasher.hexdigest() != bound['sha256']:
+        raise ValueError('parent records.jsonl differs from its receipt SHA-256')
+
+    edge_counts = collections.Counter()
+    edge_members = []
+    edges_hasher = hashlib.sha256(); edges_bytes_seen = 0
+    with (src / 'edges.jsonl').open('rb') as source, (staged / 'edges.jsonl').open('wb') as target:
+        for line_no, raw in enumerate(source, 1):
+            edges_hasher.update(raw); edges_bytes_seen += len(raw)
+            if not raw.strip():
+                continue
+            edge = json.loads(raw)
+            key = (edge.get('source'), edge.get('trajectory'))
+            if key not in selected:
+                continue
+            chain = selected[key]
+            writer, reader = edge.get('writer_record_id'), edge.get('reader_record_id')
+            if membership.get(writer) != key or membership.get(reader) != key or \
+                    edge.get('split') != chain['split'] or edge.get('writer_split') != chain['split']:
+                raise ValueError(f'selected edge leaves its complete source chain at edges.jsonl:{line_no}')
+            edge_counts[key] += 1
+            edge_members.append({'source': key[0], 'trajectory': key[1],
+                                 'edge_id': edge.get('id') or canonical_json_sha256_hex(edge),
+                                 'line_sha256': hashlib.sha256(raw).hexdigest()})
+            target.write(raw)
+    for key, chain in selected.items():
+        if edge_counts[key] != chain['edges']:
+            raise ValueError(f'selected chain edge count differs from parent certificate: {key}')
+    bound = parent_files['edges.jsonl']
+    if edges_bytes_seen != bound['bytes'] or edges_hasher.hexdigest() != bound['sha256']:
+        raise ValueError('parent edges.jsonl differs from its receipt SHA-256')
+    with (staged / 'chains.jsonl').open('wb') as target:
+        for raw in chains_bytes.values():
+            target.write(raw)
+    # Small identity tables are copied as exact parent bytes. They are shared
+    # source vocabularies, not newly authored subset artifacts.
+    import shutil
+    shutil.copyfile(src / 'pieces.jsonl', staged / 'pieces.jsonl')
+    bound = parent_files['pieces.jsonl']
+    if sha256_file_hex(staged / 'pieces.jsonl') != bound['sha256']:
+        raise ValueError('parent pieces.jsonl differs from its receipt SHA-256')
+    if (src / 'omissions.jsonl').exists():
+        selected_omissions = []
+        with (src / 'omissions.jsonl').open('rb') as source:
+            for raw in source:
+                if not raw.strip():
+                    continue
+                row = json.loads(raw)
+                key = (row.get('source'), row.get('trajectory') or row.get('source_ref', {}).get('trajectory_id'))
+                if key in wanted:
+                    selected_omissions.append(raw)
+        (staged / 'omissions.jsonl').write_bytes(b''.join(selected_omissions))
+
+    split_counts = {split: {'chains': sum(c['split'] == split for c in selected.values()),
+                            'records': sum(1 for rid in records_seen if selected[membership[rid]]['split'] == split),
+                            'edges': sum(edge_counts[key] for key in selected if selected[key]['split'] == split),
+                            'source_group_count': len(source_groups[split])}
+                    for split in ('train', 'test')}
+    overlap = sorted(source_groups['train'] & source_groups['test'])
+    if overlap:
+        raise ValueError(f'train/test source groups overlap in selected whole-chain batch: {overlap[:5]}')
+    output_names = [p.name for p in staged.iterdir() if p.is_file()]
+    files = {name: {'bytes': (staged / name).stat().st_size,
+                    'sha256': sha256_file_hex(staged / name)} for name in sorted(output_names)}
+    receipt = {'schema': 'natlang.e2e-chain-extract/1', 'id': a.id,
+               'parent': {'id': parent_receipt.get('id'), 'path': str(src.resolve()),
+                          'receipt_sha256': sha256_file_hex(parent_receipt_path),
+                          'files': {name: parent_files[name] for name in required}},
+               'selection': {'path': str(selection_path.resolve()), 'sha256': sha256_file_hex(selection_path),
+                             'schema': selection['schema'], 'chain_keys': [
+                                 {'source': s, 'trajectory': t} for s, t in sorted(wanted)]},
+               'totals': {'chains': len(selected), 'records': len(records_seen), 'edges': sum(edge_counts.values()),
+                          'by_split': split_counts},
+               'source_groups_by_split': {s: sorted(source_groups[s]) for s in ('train', 'test')},
+               'membership': {'chains': [{'source': key[0], 'trajectory': key[1], 'split': chain['split'],
+                                          'parent_chain_line_sha256': hashlib.sha256(chains_bytes[key]).hexdigest(),
+                                          'record_ids': chain['records'], 'edge_count': chain['edges']}
+                                         for key, chain in sorted(selected.items())],
+                              'records': record_members, 'edges': edge_members},
+               'files': files}
+    (staged / 'extract-receipt.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+    if out.exists():
+        raise SystemExit(f'{out} appeared during extraction; staged output retained at {staged}')
+    staged.rename(out)
+    print(json.dumps({'id': a.id, **receipt['totals'], 'out': str(out)}, sort_keys=True), flush=True)
+
+
 def _soft_names(row):
     out = set()
 
@@ -817,6 +1011,11 @@ def main():
     review.add_argument('--out', required=True); review.add_argument('--id', required=True)
     pa = sub.add_parser('partition'); pa.add_argument('--source', required=True); pa.add_argument('--id', required=True)
     pa.add_argument('--records', type=int, default=8000); pa.add_argument('--out-dir')
+    ex = sub.add_parser('extract-chains', help='extract explicitly assigned complete source chains, preserving raw rows')
+    ex.add_argument('--source', required=True, help='assembled cohort containing records/edges/chains/pieces/receipt JSONL files')
+    ex.add_argument('--selection', required=True, help='JSON schema natlang.e2e-chain-selection/1 with exact source+trajectory keys')
+    ex.add_argument('--out', required=True, help='new immutable output path')
+    ex.add_argument('--id', required=True, help='extraction receipt identity')
     r = sub.add_parser('redo-failed'); r.add_argument('name'); r.add_argument('--work', required=True)
     m = sub.add_parser('assemble'); m.add_argument('--work', required=True); m.add_argument('--id', required=True)
     m.add_argument('--out-dir', help='parent directory of the corpus (default: data_nvme natlang-corpora); bulk corpora go to the HDD')
@@ -826,7 +1025,7 @@ def main():
     m.add_argument('--decision-hold-ids', action='append', type=Path, default=[],
                    help='reviewed exact native decision IDs; exclude whole affected train chains, preserve held')
     a = ap.parse_args()
-    {'shard': cmd_shard, 'convert': cmd_convert, 'assemble': cmd_assemble, 'redo-failed': cmd_redo_failed, 'slice': cmd_slice, 'partition': cmd_partition, 'review-filter': cmd_review_filter}[a.cmd](a)
+    {'shard': cmd_shard, 'convert': cmd_convert, 'assemble': cmd_assemble, 'redo-failed': cmd_redo_failed, 'slice': cmd_slice, 'partition': cmd_partition, 'review-filter': cmd_review_filter, 'extract-chains': cmd_extract_chains}[a.cmd](a)
 
 
 if __name__ == '__main__':

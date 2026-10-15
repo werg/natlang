@@ -154,6 +154,121 @@ def test_held_union_cache_tracks_compressed_relocated_views_and_exact_bytes(tmp_
         module.held_union_groups(work, tmp_path / 'missing-union')
 
 
+def test_extract_chains_preserves_exact_complete_source_rows_and_proves_membership(tmp_path):
+    import hashlib
+    from types import SimpleNamespace
+    path = Path(__file__).resolve().parents[1] / 'scripts/neuralese_data/e2e_mine.py'
+    spec = importlib.util.spec_from_file_location('e2e_extract_chains_test', path)
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    source, out = tmp_path / 'source', tmp_path / 'slice'; source.mkdir()
+    chains = [
+        {'source': 'fixture-a', 'trajectory': 'train-a', 'family': 'fixture', 'split': 'train',
+         'records': ['a:0', 'a:1', 'a:2'], 'edges': 2},
+        {'source': 'fixture-b', 'trajectory': 'held-b', 'family': 'fixture', 'split': 'test',
+         'records': ['b:0', 'b:1'], 'edges': 1},
+        {'source': 'fixture-c', 'trajectory': 'unused', 'family': 'fixture', 'split': 'train',
+         'records': ['c:0', 'c:1'], 'edges': 1},
+    ]
+    records = []
+    for chain in chains:
+        for index, rid in enumerate(chain['records']):
+            row = {'id': rid, 'split': chain['split'], 'source_groups': [chain['trajectory']],
+                   'source_ref': {'trajectory_id': chain['trajectory']},
+                   'messages': [{'role': 'user', 'content': 'keep\u2028exact'}],
+                   'target': {'role': 'assistant', 'content': f'answer {index}'} }
+            records.append(json.dumps(row, ensure_ascii=False).encode() + b'\r\n')
+    edge_rows = []
+    for chain in chains:
+        ids = chain['records']
+        for left, right in zip(ids, ids[1:]):
+            edge_rows.append(json.dumps({'id': f'{left}->{right}', 'source': chain['source'],
+                'trajectory': chain['trajectory'], 'split': chain['split'], 'writer_split': chain['split'],
+                'writer_record_id': left, 'reader_record_id': right}).encode() + b'\n')
+    (source / 'records.jsonl').write_bytes(b''.join(records))
+    (source / 'edges.jsonl').write_bytes(b''.join(edge_rows))
+    chain_bytes = [json.dumps(c).encode() + b'\n' for c in chains]
+    (source / 'chains.jsonl').write_bytes(b''.join(chain_bytes))
+    (source / 'pieces.jsonl').write_bytes(b'{"name":"p","text":"shared"}\r\n')
+    (source / 'omissions.jsonl').write_bytes(
+        b'{"source":"fixture-a","trajectory":"train-a","reason":"retained provenance"}\n'
+        b'{"source":"fixture-c","trajectory":"unused","reason":"outside selection"}\n')
+    required = ('records.jsonl', 'edges.jsonl', 'chains.jsonl', 'pieces.jsonl')
+    receipt = {'id': 'parent-fixture', 'files': {name: {'sha256': hashlib.sha256((source/name).read_bytes()).hexdigest(),
+                 'bytes': (source/name).stat().st_size} for name in required}}
+    (source / 'receipt.json').write_text(json.dumps(receipt) + '\n')
+    selection = tmp_path / 'selection.json'
+    selection.write_text(json.dumps({'schema': 'natlang.e2e-chain-selection/1', 'chains': [
+        {'source': 'fixture-a', 'trajectory': 'train-a'},
+        {'source': 'fixture-b', 'trajectory': 'held-b'}]}) + '\n')
+    module.cmd_extract_chains(SimpleNamespace(source=str(source), out=str(out), selection=str(selection), id='slice'))
+    expected_records = b''.join(records[:5])
+    expected_edges = b''.join(edge_rows[:3])
+    assert (out / 'records.jsonl').read_bytes() == expected_records
+    assert (out / 'edges.jsonl').read_bytes() == expected_edges
+    assert (out / 'chains.jsonl').read_bytes() == b''.join(chain_bytes[:2])
+    assert (out / 'pieces.jsonl').read_bytes() == (source / 'pieces.jsonl').read_bytes()
+    assert (out / 'omissions.jsonl').read_bytes().startswith(b'{"source":"fixture-a"')
+    extracted = json.loads((out / 'extract-receipt.json').read_text())
+    assert extracted['parent']['id'] == 'parent-fixture'
+    assert extracted['totals'] == {'chains': 2, 'records': 5, 'edges': 3,
+        'by_split': {'train': {'chains': 1, 'records': 3, 'edges': 2, 'source_group_count': 1},
+                     'test': {'chains': 1, 'records': 2, 'edges': 1, 'source_group_count': 1}}}
+    assert len(extracted['membership']['records']) == 5
+    assert len(extracted['membership']['edges']) == 3
+    with pytest.raises(SystemExit, match='immutable'):
+        module.cmd_extract_chains(SimpleNamespace(source=str(source), out=str(out), selection=str(selection), id='slice'))
+
+
+def test_extract_chains_rejects_incomplete_chain_membership_and_split_leaks(tmp_path):
+    import hashlib
+    from types import SimpleNamespace
+    path = Path(__file__).resolve().parents[1] / 'scripts/neuralese_data/e2e_mine.py'
+    spec = importlib.util.spec_from_file_location('e2e_extract_chains_bad_test', path)
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    source = tmp_path / 'source'; source.mkdir()
+    (source / 'chains.jsonl').write_text(json.dumps({'source':'s','trajectory':'t','split':'train','records':['r0','r1'],'edges':1})+'\n')
+    (source / 'records.jsonl').write_text(json.dumps({'id':'r0','split':'train','source_groups':['g'],'source_ref':{'trajectory_id':'t'}})+'\n')
+    (source / 'edges.jsonl').write_text('')
+    (source / 'pieces.jsonl').write_text('')
+    required=('records.jsonl','edges.jsonl','chains.jsonl','pieces.jsonl')
+    (source / 'receipt.json').write_text(json.dumps({'id':'parent','files':{
+        name:{'sha256':hashlib.sha256((source/name).read_bytes()).hexdigest(),'bytes':(source/name).stat().st_size}
+        for name in required}}))
+    selection=tmp_path/'selection.json'; selection.write_text(json.dumps({'schema':'natlang.e2e-chain-selection/1','chains':[{'source':'s','trajectory':'t'}]}))
+    with pytest.raises(ValueError,match='records absent'):
+        module.cmd_extract_chains(SimpleNamespace(source=str(source),out=str(tmp_path/'bad'),selection=str(selection),id='bad'))
+    assert not (tmp_path/'bad').exists()
+
+
+def test_extract_chains_verifies_parent_hash_even_when_file_size_is_unchanged(tmp_path):
+    import hashlib
+    from types import SimpleNamespace
+    path = Path(__file__).resolve().parents[1] / 'scripts/neuralese_data/e2e_mine.py'
+    spec = importlib.util.spec_from_file_location('e2e_extract_chains_hash_test', path)
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    source = tmp_path / 'source'; source.mkdir()
+    payloads = {
+        'records.jsonl': b'{"id":"r","split":"train","source_groups":["g"],"source_ref":{"trajectory_id":"t"}}\n',
+        'edges.jsonl': b'',
+        'chains.jsonl': b'{"source":"s","trajectory":"t","split":"train","records":["r"],"edges":0}\n',
+        'pieces.jsonl': b'',
+    }
+    for name, payload in payloads.items():
+        (source / name).write_bytes(payload)
+    required = tuple(payloads)
+    (source / 'receipt.json').write_text(json.dumps({'id':'parent','files':{
+        name:{'sha256':hashlib.sha256(payload).hexdigest(),'bytes':len(payload)}
+        for name,payload in payloads.items()}}))
+    selection = tmp_path / 'selection.json'
+    selection.write_text(json.dumps({'schema':'natlang.e2e-chain-selection/1','chains':[{'source':'s','trajectory':'t'}]}))
+    changed = payloads['records.jsonl'].replace(b'"g"', b'"x"')
+    assert len(changed) == len(payloads['records.jsonl'])
+    (source / 'records.jsonl').write_bytes(changed)
+    with pytest.raises(ValueError, match='records.jsonl differs'):
+        module.cmd_extract_chains(SimpleNamespace(source=str(source),out=str(tmp_path/'bad'),selection=str(selection),id='bad'))
+    assert not (tmp_path/'bad').exists()
+
+
 @pytest.mark.parametrize('hold_kind', ['quality', 'decision', 'held-group', 'authentication'])
 def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_path, monkeypatch, hold_kind):
     from types import SimpleNamespace
