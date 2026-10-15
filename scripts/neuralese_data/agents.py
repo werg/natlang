@@ -712,6 +712,40 @@ def cognitive_kernel(limit=None):
         yield rid, _initial_request_background(trajectory)
 
 
+def deepnlp_orchestration(limit=None):
+    """Distinct recorded histories of alternative sessions, without invented edges."""
+    root = EXPANSION_ROOT / 'D07'
+    receipt = json.loads((root / 'acquisition.json').read_text())
+
+    def rows():
+        with (root / 'example_deepnlp_multi_agents_202601.json').open() as stream:
+            for line_index, line in enumerate(stream):
+                if not line.strip():
+                    continue
+                for task, sessions in json.loads(line).items():
+                    for session, value in sessions.items():
+                        histories = {}
+                        for snapshot_index, snapshot in enumerate(value['function_calls']):
+                            key = json.dumps({'messages': snapshot['messages'], 'tools': snapshot['tools']},
+                                             sort_keys=True, separators=(',', ':'))
+                            histories.setdefault(key, []).append(snapshot_index)
+                        for history_index, (key, indexes) in enumerate(histories.items()):
+                            row = json.loads(key)
+                            row['metadata'] = {'trajectory_id': str(task),
+                                               'session_id': f'{session}:{history_index}',
+                                               'source_session_id': value.get('session_id'),
+                                               'trace_id': value.get('trace_id'),
+                                               'snapshot_indexes': indexes,
+                                               'selected_calls': [value['function_calls'][i].get('tool_calls') for i in indexes]}
+                            yield f'{line_index}:{task}:{session}:{history_index}', row, value.get('model')
+
+    for rid, row, model in _limited(rows(), limit):
+        trajectory = expansion_trajectory('D07', receipt, rid, row)
+        trajectory.lineage['teacher'] = _teacher(model)
+        trajectory.lineage['notes']['communication'] = 'alternative-session-history'
+        yield rid, _initial_request_background(trajectory)
+
+
 def agentsynth(limit=None):
     """Primary D11 transcripts; mock generation and verification remain source facts."""
     root = EXPANSION_ROOT / 'D11'
@@ -817,4 +851,5 @@ CORPORA.update({'gatc-sessions': (gatc_sessions, 4), "wideseek": (wideseek, 4), 
                 'terminaltraj': (terminaltraj, 4), 'dolci-tool-use': (dolci_tool_use, 4),
                 'cognitive-kernel': (cognitive_kernel, 4),
                 'agentsynth': (agentsynth, 4),
+                'deepnlp-orchestration': (deepnlp_orchestration, 4),
                 'agentic-coding-sessions': (agentic_coding_sessions, 4)})

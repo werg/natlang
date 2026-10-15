@@ -318,6 +318,32 @@ def test_native_replay_disambiguates_reused_upstream_ids(tmp_path):
 
 
 
+def test_deepnlp_deduplicates_complete_histories_without_appending_selected_calls(tmp_path, monkeypatch):
+    import json
+    from neuralese_data import agents
+    root = tmp_path / 'D07'; root.mkdir()
+    (root / 'acquisition.json').write_text(json.dumps({'repo': 'fixture/deepnlp', 'revision': 'pinned'}))
+    messages = [{'role': 'user', 'content': 'Find the route.'},
+                {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'c', 'function': {'name': 'maps', 'arguments': '{}'}}]},
+                {'role': 'tool', 'content': 'Original observed route', 'tool_call_id': 'c'}]
+    snapshot = {'messages': messages, 'tools': [], 'tool_calls': {'id': 'already-in-history'}}
+    sessions = {name: {'session_id': 'task', 'trace_id': name, 'model': 'source-model',
+                       'function_calls': [snapshot, {**snapshot, 'tool_calls': {'id': 'alternate-annotation'}}]}
+                for name in ['one', 'two']}
+    (root / 'example_deepnlp_multi_agents_202601.json').write_text(json.dumps({'task': sessions}) + '\n')
+    monkeypatch.setattr(agents, 'EXPANSION_ROOT', tmp_path)
+    trajectories = [t for _, t in agents.deepnlp_orchestration()]
+    assert len(trajectories) == 2 and len(list(agents.deepnlp_orchestration(limit=1))) == 1
+    left, right = trajectories
+    assert left.id != right.id and left.split_groups == right.split_groups
+    assert len(left.messages) == 3 and left.messages[-1]['content'] == 'Original observed route'
+    assert left.messages[1]['tool_calls'][0]['id'] == 'c'
+    assert left.lineage['notes']['metadata']['snapshot_indexes'] == [0, 1]
+    assert left.lineage['notes']['communication'] == 'alternative-session-history'
+    assert left.lineage['teacher']['model'] == 'source-model'
+    assert left.outcome['checked'] is None
+
+
 def test_agentsynth_uses_primary_view_and_preserves_mock_source_facts(tmp_path, monkeypatch):
     import json
     from neuralese_data import agents

@@ -164,3 +164,15 @@ Keep original task text groups across repeated sessions. Reuse typed history
 handoffs and the existing static native replay/render/protected-union stages.
 JSON field mapping is crisp source plumbing; eligibility remains the explicit
 source review and whole-trajectory protection policy above.
+
+### DeepNLP parallel orchestration snapshots (D07, 2026-10-15)
+
+Read the pinned JSON-lines release as task folders containing alternative model
+sessions. Each call entry repeats a complete message history and tool schema:
+normalize each distinct history once per session, retaining task grouping,
+model, session and trace identities. Reuse the existing trajectory windows so
+targets see only their causal prefixes. Out-of-band selected-call annotations
+are provenance, not extra actions appended after their own observations. Do
+not invent producer-consumer edges between alternative sessions. Nested JSON
+mapping and exact duplicate-history detection are crisp source plumbing; native
+replay, protected closure and reviewed admission remain shared stages.
