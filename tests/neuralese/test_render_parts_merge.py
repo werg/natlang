@@ -1,12 +1,78 @@
 """render_parts.merge_parts keeps global split decontamination across parts (Pop 2026-10-12)."""
 import json
 import hashlib
+import subprocess
 import sys
 import pytest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts' / 'neuralese_data'))
 import render_parts  # noqa: E402
+
+
+def _turn(program: str, decision: int) -> bytes:
+    return (json.dumps({'source_ref': {'program_ir_id': program}, 'decision': decision},
+                       separators=(',', ':')) + '\n').encode()
+
+
+def test_stream_parts_renders_closed_compressed_parts_before_source_finishes(tmp_path, monkeypatch):
+    rows = [_turn('a', 0), _turn('a', 1), _turn('b', 0), _turn('c', 0), _turn('c', 1)]
+    consumed = 0
+
+    def source(_sources):
+        nonlocal consumed
+        for row in rows:
+            consumed += 1
+            yield row
+
+    monkeypatch.setattr(render_parts, 'stream', source)
+    observed = []
+
+    def on_part(k, start, stop):
+        observed.append((k, start, stop, consumed))
+        path = tmp_path / f'.p{k:02d}.turns.jsonl.zst'
+        assert path.is_file()
+        decoded = subprocess.check_output(['zstd', '-dcq', str(path)])
+        assert decoded == b''.join(rows[start:stop])
+
+    cuts = render_parts.stream_parts([], tmp_path, 3, on_part)
+    assert cuts == [0, 3, 5]
+    assert observed == [(0, 0, 3, 4), (1, 3, 5, 5)]
+
+
+def test_stream_parts_resume_skips_receipted_chunk_and_rebuilds_missing(tmp_path, monkeypatch):
+    (tmp_path / 'parts' / 'p00').mkdir(parents=True)
+    (tmp_path / 'parts' / 'p00' / 'receipt.json').write_text('{}')
+    rows = [_turn('a', 0), _turn('b', 0), _turn('c', 0)]
+    monkeypatch.setattr(render_parts, 'stream', lambda _sources: iter(rows))
+    observed = []
+    cuts = render_parts.stream_parts([], tmp_path, 1, lambda *args: observed.append(args))
+    assert cuts == [0, 1, 2, 3]
+    assert observed == [(0, 0, 1), (1, 1, 2), (2, 2, 3)]
+    assert not (tmp_path / '.p00.turns.jsonl.zst').exists()
+
+
+def test_stream_render_resume_aggregates_receipts_from_every_part(tmp_path, monkeypatch):
+    monkeypatch.setattr(render_parts, 'render_binding', lambda *_args: {'fixture': 'same-input-policy'})
+    source_path = tmp_path / 'source.turns.jsonl.zst'
+    source_path.write_bytes(b'identity only')
+    rows = [_turn('a', 0), _turn('b', 0)]
+    monkeypatch.setattr(render_parts, 'stream', lambda _sources: iter(rows))
+    monkeypatch.setattr(render_parts, 'compress_part_views', lambda _part: None)
+
+    def render_part(_sources, out, k, *_args, **_kwargs):
+        receipt_path = out / 'parts' / f'p{k:02d}' / 'receipt.json'
+        if not receipt_path.exists():
+            receipt_path.parent.mkdir(parents=True, exist_ok=True)
+            receipt_path.write_text(json.dumps({'renders': {'program-header/lfm25': {
+                'documents': 1, 'by_split': {'train': {'documents': 1}}, 'max_document_tokens': 1}}}))
+
+    monkeypatch.setattr(render_parts, 'render_part', render_part)
+    monkeypatch.setattr(render_parts, 'merge_parts', lambda *_args, **_kwargs: {})
+    receipt = render_parts.render([source_path], tmp_path / 'out', 'fixture', 'fixture', part_decisions=1,
+                                  compress_all=True, stream_source_parts=True)
+    assert receipt['parts'] == 2
+    assert receipt['renders']['program-header/lfm25']['documents'] == 2
 
 
 def write(root, part, tok, rows):

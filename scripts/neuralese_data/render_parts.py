@@ -156,6 +156,88 @@ def plan(sources: list[Path], out: Path, part_decisions: int = PART_DECISIONS) -
     return load(path)['cuts']
 
 
+def stream_parts(sources: list[Path], out: Path, part_decisions: int, on_part) -> list[int]:
+    """Partition and consume the ordered source stream in one pass.
+
+    Each closed part is atomically spooled as zstd JSONL and handed to
+    ``on_part`` immediately, so production starts before the corpus scan ends.
+    Existing spools are retained for the normal resumable render_part path;
+    completed receipts are skipped while cuts are still recomputed from source.
+    """
+    out.mkdir(parents=True, exist_ok=True)
+    cuts, n, last, k = [0], 0, None, 0
+    target = None
+    compressor = None
+    raw = None
+
+    def begin(index: int):
+        nonlocal target, compressor, raw
+        target = out / f'.p{index:02d}.turns.jsonl.zst'
+        if (out / 'parts' / f'p{index:02d}' / 'receipt.json').exists() or target.exists():
+            return
+        tmp = target.with_name(target.name + '.tmp')
+        raw = open(tmp, 'wb')
+        compressor = subprocess.Popen(['zstd', '-q', '-3', '--long=27', '-T2', '-c'],
+                                       stdin=subprocess.PIPE, stdout=raw)
+
+    def finish(stop: int):
+        nonlocal compressor, raw, target, k
+        if target is not None and compressor is not None:
+            compressor.stdin.close()
+            code = compressor.wait()
+            raw.close()
+            if code:
+                target.with_name(target.name + '.tmp').unlink(missing_ok=True)
+                raise RuntimeError(f'zstd failed while spooling part {k}')
+            target.with_name(target.name + '.tmp').replace(target)
+            compressor = raw = None
+        if stop > cuts[-1]:
+            cuts.append(stop)
+        start = cuts[-2] if len(cuts) > 1 else 0
+        if stop > start:
+            # render_part validates the binding and cheaply returns on a receipt;
+            # still collect its receipt so corpus aggregation includes every part.
+            on_part(k, start, stop)
+            if (out / 'parts' / f'p{k:02d}' / 'receipt.json').exists():
+                (out / f'.p{k:02d}.turns.jsonl.zst').unlink(missing_ok=True)
+        compressor = raw = target = None
+        k += 1
+
+    begin(k)
+    try:
+        for line in stream(sources):
+            program = program_of(line)
+            if n - cuts[-1] >= part_decisions and program != last:
+                finish(n)
+                begin(k)
+            if compressor is not None:
+                compressor.stdin.write(line)
+            last, n = program, n + 1
+        if n > cuts[-1]:
+            finish(n)
+        elif compressor is not None:
+            compressor.stdin.close()
+            compressor.wait()
+            raw.close()
+            target.with_name(target.name + '.tmp').unlink(missing_ok=True)
+            compressor = raw = target = None
+    except BaseException:
+        if compressor is not None:
+            try:
+                compressor.stdin.close()
+            except (BrokenPipeError, OSError):
+                pass
+            if compressor.poll() is None:
+                compressor.terminate()
+            compressor.wait()
+        if raw is not None and not raw.closed:
+            raw.close()
+        if target is not None:
+            target.with_name(target.name + '.tmp').unlink(missing_ok=True)
+        raise
+    return cuts
+
+
 def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, corpus_id: str, unit_prefix: str,
                 cpus: int, budget_gb: int, docker_gb: int, *, compress_all: bool = False,
                 protected: Path | None = None, reserved: Path | None = None,
@@ -395,7 +477,7 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
            docker_gb: int = 8, part_decisions: int = PART_DECISIONS, *, compress_all: bool = False,
            protected: Path | None = None, reserved: Path | None = None,
            held_text: list[Path] | None = None, decision_exclude_ids: list[Path] | None = None,
-           exclude_programs: list[Path] | None = None) -> dict:
+           exclude_programs: list[Path] | None = None, stream_source_parts: bool = False) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     custom_policy_requested = any(value is not None for value in
                                    (protected, reserved, held_text, decision_exclude_ids, exclude_programs))
@@ -428,9 +510,8 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
         if binding_sha256 is not None and receipt.get('render_policy_binding_sha256') != binding_sha256:
             raise RuntimeError(f'render receipt lacks matching policy binding: {out / "receipt.json"}')
         return receipt
-    cuts = plan(sources, out, part_decisions)
     receipts = []
-    for k, (start, stop) in enumerate(zip(cuts, cuts[1:])):
+    def consume_part(k: int, start: int, stop: int) -> None:
         render_part(sources, out, k, start, stop, corpus_id, unit_prefix, cpus, budget_gb, docker_gb,
                     compress_all=compress_all, protected=protected, reserved=reserved,
                     held_text=held_text, decision_exclude_ids=decision_exclude_ids,
@@ -438,6 +519,16 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
         if compress_all:
             compress_part_views(out / 'parts' / f'p{k:02d}')
         receipts.append(load(out / 'parts' / f'p{k:02d}' / 'receipt.json'))
+    if stream_source_parts:
+        if not compress_all:
+            raise ValueError('--stream-source-parts requires --compress-all')
+        cuts = stream_parts(sources, out, part_decisions, consume_part)
+        save(out / 'parts.json', {'cuts': cuts, 'part_decisions': part_decisions,
+                                  'sources': [str(s) for s in sources]})
+    else:
+        cuts = plan(sources, out, part_decisions)
+        for k, (start, stop) in enumerate(zip(cuts, cuts[1:])):
+            consume_part(k, start, stop)
     merged = load(out / 'merge.json') if (out / 'merge.json').exists() else None
     if merged is None:
         merged = merge_parts(out, compress_all=compress_all)
@@ -512,6 +603,8 @@ def main() -> None:
     p.add_argument('--docker-gb', type=int, default=8)
     p.add_argument('--compress-all', action='store_true',
                    help='compress completed parts and every merged view; decoded rows and selection are unchanged')
+    p.add_argument('--stream-source-parts', action='store_true',
+                   help='partition and render each compressed part during one source scan (requires --compress-all)')
     p.add_argument('--register', type=Path, metavar='REL_PATH',
                    help='register the render (repo-relative path of OUT) through register_corpora.py')
     p.add_argument('--protected', type=Path, help='protected benchmark index (default: existing shared index)')
@@ -528,7 +621,8 @@ def main() -> None:
     receipt = render(args.source, args.out, args.corpus_id, args.unit_prefix or f'render-{args.corpus_id}'[:60],
                      args.cpus, args.budget_gb, args.docker_gb, compress_all=args.compress_all,
                      protected=args.protected, reserved=args.reserved, held_text=args.held_text,
-                     decision_exclude_ids=args.decision_exclude_ids, exclude_programs=args.exclude_programs)
+                     decision_exclude_ids=args.decision_exclude_ids, exclude_programs=args.exclude_programs,
+                     stream_source_parts=args.stream_source_parts)
     print(json.dumps({'rendered': args.corpus_id, 'parts': receipt['parts']}), flush=True)
     if args.register:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
