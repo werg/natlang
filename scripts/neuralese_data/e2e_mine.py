@@ -231,18 +231,7 @@ def derive(stem, records, pieces, conversion, omissions, tokenizer):
     for e in review['excluded']:
         omissions.append({'id': e.get('id'), 'stage': 'authenticate', 'reason': e.get('reason')})
     by_id = {r['id']: r for r in records}
-    edges, seen = [], set()
-    for d in review['decisions']:
-        for ref in d.get('references') or []:
-            key = (ref.get('writer_record_id'), d['id'], ref.get('name'), ref.get('body_sha256'))
-            if ref.get('gradient_edge') and key not in seen:
-                seen.add(key)
-                w = by_id.get(ref.get('writer_record_id'))
-                edges.append({'writer_record_id': ref.get('writer_record_id'), 'reader_record_id': d['id'],
-                              'write_name': ref.get('name'), 'body_sha256': ref.get('body_sha256'),
-                              'kind': (ref.get('name') or '').split(':')[0], 'trajectory': trajectory_of(by_id[d['id']]),
-                              'family': family_of(by_id[d['id']]), 'split': by_id[d['id']].get('split'),
-                              'writer_split': (w or {}).get('split')})
+    edges = edges_from_authenticated_decisions(records, review['decisions'])
     chains = {e['trajectory'] for e in edges}
     kept = [r for r in records if trajectory_of(r) in chains]
     without_edges = set(groups) - chains
@@ -341,6 +330,65 @@ def content_key(row):
     return canonical_json_sha256_hex({k: v for k, v in row.items() if k != 'id'})
 
 
+def edges_from_authenticated_decisions(records, decisions):
+    """One exact edge schema for authenticated read and Neuralese references."""
+    by_id = {row['id']: row for row in records}
+    edges, seen = [], set()
+    for decision in decisions:
+        for ref in decision.get('references') or []:
+            if not ref.get('gradient_edge'):
+                continue
+            name = ref.get('name') or ref.get('writer_name')
+            body = ref.get('body_sha256') or ref.get('source_sha256')
+            writer, reader = ref.get('writer_record_id'), decision['id']
+            if (writer not in by_id or reader not in by_id or not isinstance(name, str)
+                    or not name or not isinstance(body, str) or len(body) != 64):
+                raise ValueError('authenticated gradient edge lacks exact local writer/name/body identity')
+            key = (writer, reader, name, body)
+            if key in seen:
+                continue
+            seen.add(key)
+            edges.append({'writer_record_id': writer, 'reader_record_id': reader,
+                          'write_name': name, 'body_sha256': body, 'kind': name.split(':')[0],
+                          'trajectory': trajectory_of(by_id[reader]), 'family': family_of(by_id[reader]),
+                          'split': by_id[reader].get('split'), 'writer_split': by_id[writer].get('split')})
+    return edges
+
+
+def repair_legacy_edge_metadata(records, pieces, edges):
+    """Reconstruct incomplete sidecars from unchanged, independently authenticated native records."""
+    affected = {edge['trajectory'] for edge in edges
+                if not edge.get('write_name') or not edge.get('body_sha256')}
+    if not affected:
+        return edges, None
+    from natlang_neuralese.train.trajectories import authenticated_recurrence_context_view
+    groups = collections.defaultdict(list)
+    for row in records:
+        if trajectory_of(row) in affected:
+            groups[trajectory_of(row)].append(row)
+    repaired = [edge for edge in edges if edge['trajectory'] not in affected]
+    old_count = 0
+    for trajectory in sorted(affected):
+        rows = groups[trajectory]
+        _, review = authenticated_recurrence_context_view(rows, pieces)
+        if review['excluded']:
+            raise ValueError('legacy edge reconstruction failed native authentication: ' + trajectory)
+        fresh = edges_from_authenticated_decisions(rows, review['decisions'])
+        prior = [edge for edge in edges if edge['trajectory'] == trajectory]
+        old_count += len(prior)
+        actual = {(e['writer_record_id'], e['reader_record_id'], e['write_name'], e['body_sha256']) for e in fresh}
+        pairs = {(e[0], e[1]) for e in actual}
+        for edge in prior:
+            pair = (edge['writer_record_id'], edge['reader_record_id'])
+            if (pair not in pairs or (edge.get('write_name') and edge.get('body_sha256') and
+                    (*pair, edge['write_name'], edge['body_sha256']) not in actual)):
+                raise ValueError('legacy edge reconstruction contradicts prior sidecar: ' + trajectory)
+        repaired.extend(fresh)
+    return repaired, {'trajectories': len(affected), 'prior_edges': old_count,
+                      'reconstructed_edges': len(repaired) - (len(edges) - old_count),
+                      'verification': 'whole-trajectory native reauthentication; concrete edges and endpoint pairs preserved'}
+
+
 def cmd_assemble(a):
     review_groups = pending_unpinned_source_groups()
     review_sha = registry_sha256()
@@ -374,6 +422,7 @@ def cmd_assemble(a):
     rec_out, edge_out = open(staged / 'records.jsonl', 'w'), open(staged / 'edges.jsonl', 'w')
     chains_out = open(staged / 'chains.jsonl', 'w')
     totals = collections.Counter()
+    legacy_edge_repairs = {}
     fam = collections.defaultdict(collections.Counter)
     fam_kinds = collections.defaultdict(collections.Counter)
     by_source = collections.defaultdict(collections.Counter)
@@ -385,6 +434,9 @@ def cmd_assemble(a):
         for line in read_lines(f'{stem}.records.jsonl'):
             r = json.loads(line); records[r['id']] = r
         edges = [json.loads(l) for l in read_lines(f'{stem}.edges.jsonl')]
+        edges, repair = repair_legacy_edge_metadata(list(records.values()), pieces, edges)
+        if repair:
+            legacy_edge_repairs[str(stem.relative_to(work))] = repair
         reviewed = reviewed_trajectories(records.values(), review_groups)
         quarantined = reviewed_trajectories(records.values(), quality_groups)
         protected = reviewed_trajectories(records.values(), held_groups)
@@ -473,6 +525,7 @@ def cmd_assemble(a):
         'source_quality_quarantine_bindings': quality_bindings,
         'source_quality_quarantine_groups': len(quality_groups),
         'totals': totals, 'by_source': by_source,
+        'legacy_edge_metadata_repairs': legacy_edge_repairs,
         'by_family': {f: {**fam[f], 'edge_kinds': fam_kinds[f], 'supervised_tokens_lfm25_shard_kept': tokens[f]} for f in sorted(fam)},
         'sources': {d.name: {**json.load(open(d / 'sharded.json')), 'shards_done': len(glob.glob(str(d / 'shard-*.stats.json')))}
                     for d in sorted(work.iterdir()) if (d / 'sharded.json').exists()},
