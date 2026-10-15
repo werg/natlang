@@ -134,4 +134,6 @@ def graph_loss(model, example, *, checkpoint_layers=True, chunk_tokens=128):
     return total / denominator, {'supervised_tokens': len(queries), 'weight': float(denominator.detach()),
                                  'accuracy': float((correct / denominator).detach()),
                                  'physical_tokens': example.plan.token_count,
-                                 'logical_slots': len(example.plan.slot_sources)}
+                                 'logical_slots': sum(len(sequence) for sequence in example.plan.sequences),
+                                 'allocated_kv_slots': len(example.plan.slot_sources),
+                                 'kv_padding_slots': sum(source < 0 for source in example.plan.slot_sources)}

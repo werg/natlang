@@ -33,6 +33,7 @@ def test_native_checkpoint_restores_role_rows_adapter_and_backbone_exactly(tmp_p
     assert not torch.backends.cudnn.allow_tf32
     assert min(roles.ids) == 64  # no reserved legacy marker names exist in this tokenizer
     assert model.port.embedding_weight.shape[0] == 68
+    assert not any('control_rows' in name for name, _ in model.named_parameters())
     with torch.no_grad():
         model.input_rows.add_(0.2)
         model.adapter.up.weight.add_(0.1)

@@ -34,6 +34,7 @@ def test_graph_loss_matches_manual_own_predecessors_and_keeps_source_gradient(fa
     torch.testing.assert_close(loss, expected)
     assert receipt['supervised_tokens'] == 3
     assert receipt['physical_tokens'] == 6 and receipt['logical_slots'] == 8
+    assert receipt['allocated_kv_slots'] == receipt['logical_slots'] + receipt['kv_padding_slots']
     loss.backward()
     assert model.adapter.up.weight.grad is not None
     assert torch.isfinite(model.adapter.up.weight.grad).all()

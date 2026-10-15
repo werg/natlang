@@ -91,7 +91,7 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
     roles = provision_role_tokens(SimpleNamespace(hf=hf, config=hf.config,
                                   embedding_weight=hf.get_input_embeddings().weight), tokenizer)
     from .lfm2_port import ControlTokens
-    port = port_type(hf, ControlTokens(roles.produce_open, roles.produce_close))
+    port = port_type(hf, ControlTokens(roles.produce_open, roles.produce_close), markers=False)
     model = SharedStateModel(port, marker_ids=roles.ids, rank=rank)
     from ..data.text_corpus import tokenizer_fingerprint
     config = {'base': str(base), 'base_inventory': actual,
