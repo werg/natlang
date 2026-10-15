@@ -4,6 +4,33 @@ from natlang_neuralese.data.native_graph_conversion import (
 )
 
 
+def test_external_chain_assignment_preserves_exact_disjoint_resume_frontier(tmp_path):
+    import pytest
+    from scripts.neuralese_data.build_native_semantic_pairs_e2e import _workload_exclusions
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    path = tmp_path / 'assigned.txt'
+    path.write_text('future-b\nfuture-a\n')
+    source = {'done', 'future-a', 'future-b', 'future-c'}
+    assignment = _workload_exclusions(path, source, ['done'])
+    assert assignment['chain_ids'] == ['future-a', 'future-b']
+    assert assignment['sha256'] == sha256_file_hex(path)
+    assert _workload_exclusions(path, source, ['done'], assignment) == assignment
+    with pytest.raises(ValueError, match='requires its excluded'):
+        _workload_exclusions(None, source, ['done'], assignment)
+    path.write_text('future-a\n')
+    with pytest.raises(ValueError, match='cannot reclaim'):
+        _workload_exclusions(path, source, ['done'], assignment)
+    path.write_text('done\n')
+    with pytest.raises(ValueError, match='already completed'):
+        _workload_exclusions(path, source, ['done'])
+    path.write_text('outside\n')
+    with pytest.raises(ValueError, match='exact source'):
+        _workload_exclusions(path, source)
+    path.write_text('future-a\nfuture-a\n')
+    with pytest.raises(ValueError, match='unique exact'):
+        _workload_exclusions(path, source)
+
+
 def test_pair_source_corpus_repair_rebinds_all_witnesses_without_changing_model_graphs():
     import copy
     import pytest

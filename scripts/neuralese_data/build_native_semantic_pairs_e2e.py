@@ -199,6 +199,26 @@ def _remaining_edges_by_chain(edges_by_chain, completed_edge_ids):
     return remaining
 
 
+def _workload_exclusions(path, source_chains, completed_chains=(), previous=None):
+    """Bind explicit whole-chain assignments to another worker, never omissions."""
+    previous_ids = set((previous or {}).get('chain_ids', []))
+    if path is None:
+        if previous_ids:
+            raise ValueError('resuming a partitioned workload requires its excluded chain assignment')
+        return None
+    rows = [line.strip() for line in Path(path).read_text().splitlines() if line.strip()]
+    chosen = set(rows)
+    if not chosen or len(rows) != len(chosen) or not chosen <= set(source_chains):
+        raise ValueError('excluded chains must be unique exact source trajectory identities')
+    if not previous_ids <= chosen:
+        raise ValueError('cannot reclaim a chain already assigned to another worker')
+    if chosen & set(completed_chains):
+        raise ValueError('cannot assign an already completed cloud chain to another worker')
+    return {'path': str(Path(path).resolve()), 'sha256': sha256_file(path),
+            'chain_ids': sorted(chosen), 'count': len(chosen),
+            'meaning': 'explicit external-worker assignment; not converted or omitted here'}
+
+
 def _remove_completed_edges(edges_by_chain, chain, completed_edge_ids):
     """Advance a pair-only source frontier by the exact edges a worker handled."""
     if chain not in edges_by_chain:
@@ -805,6 +825,8 @@ def main():
                         help='trajectory count between durable output frontiers')
     parser.add_argument('--workers', type=int, default=8,
                         help='independent complete-trajectory render workers')
+    parser.add_argument('--excluded-chain-ids', type=Path, default=None,
+                        help='exact whole-chain identities assigned to another worker; resumable, never counted as converted')
     parser.add_argument('--repair-pair-omissions', type=Path, default=None,
                         help='convert exactly the omitted edges listed by a prior complete build into a pair-only supplement')
     parser.add_argument('--rebuild-all-pairs', action='store_true',
@@ -831,6 +853,8 @@ def main():
         parser.error('--pair-split requires --rebuild-all-pairs')
     if args.selected_edge_ids is not None and not args.rebuild_all_pairs:
         parser.error('--selected-edge-ids requires --rebuild-all-pairs')
+    if args.excluded_chain_ids is not None and (args.rebuild_all_pairs or args.repair_pair_omissions):
+        parser.error('--excluded-chain-ids partitions ordinary-plus-pair builds, not pair repair targets')
     tokenizers, source_fps, expanded_fps, role_ids = {}, {}, {}, {}
     model_ids, base_inventory_shas = {}, {}
     from natlang_neuralese.model.native_model import base_inventory
@@ -964,12 +988,15 @@ def main():
     # workers load their own tokenizers. Releasing the parent copies avoids
     # multiplying several GiB of tokenizer memory across the process pool.
     del tokenizers, tok
+    source_chain_ids = set(edges_by_chain)
     chunks, totals, completed_chains, completed_edge_ids, resume_offset = [], defaultdict(int), [], set(), 0
+    previous_assignment = None
     expanded_edge_target = False
     if resume_mode:
         if not state_path.is_file():
             raise ValueError('--resume requires a durable resume-manifest.json')
         previous = json.loads(state_path.read_text())
+        previous_assignment = previous.get('external_chain_assignment')
         compatible_inputs = previous.get('inputs') == input_identity
         if pair_only:
             compatible_inputs = _pair_resume_base(previous.get('inputs') or {}) == _pair_resume_base(input_identity)
@@ -1060,6 +1087,10 @@ def main():
         for path in leftovers: path.unlink()
         chunks_root.rmdir()
     args.out.mkdir(parents=True, exist_ok=True)
+    external_assignment = _workload_exclusions(args.excluded_chain_ids, source_chain_ids,
+                                              completed_chains, previous_assignment)
+    for chain in (external_assignment or {}).get('chain_ids', []):
+        edges_by_chain.pop(chain, None)
     seen_chains = set(completed_chains)
     chunk_start_count = len(completed_chains)
     writers, pair_writers, omissions, render_omissions_writer = {}, {}, None, None
@@ -1105,6 +1136,7 @@ def main():
             'completed_trajectories': len(completed_chains), 'completed_chain_ids': completed_chains,
             'completed_edge_ids': sorted(completed_edge_ids), 'resume_offset': next_offset,
             'requested_edge_selection': requested_edge_selection,
+            'external_chain_assignment': external_assignment,
             'totals': dict(totals), 'chunks': chunks, 'complete': False}
         atomic_json(state_path, manifest)
         chunk_start_count = len(completed_chains)
@@ -1215,7 +1247,7 @@ def main():
                         break
                 last_offset = line_stop
             else:
-                if current is not None and (not pair_only or current in edges_by_chain):
+                if current is not None and current in edges_by_chain:
                     end_offset = Path(args.records).stat().st_size
                     pending.append((current, chain_start, end_offset, end_offset))
                 flush_pending(executor)
@@ -1267,9 +1299,12 @@ def main():
     render_omission_output = merge_parts(render_omission_parts, render_omissions_path)
     final_manifest = json.loads(state_path.read_text())
     final_manifest['complete'] = args.max_trajectories is None
+    final_manifest['whole_source_complete'] = args.max_trajectories is None and external_assignment is None
     final_manifest['outputs'] = {'graphs': graph_outputs, 'pairs': pair_outputs}
     atomic_json(state_path, final_manifest)
     receipt = {'schema': BUILD_SCHEMA,
+        'external_chain_assignment': external_assignment,
+        'whole_source_complete': args.max_trajectories is None and external_assignment is None,
         'source': {'records': {'path': str(args.records), 'sha256': args.records_sha256},
                    'pieces': {'path': str(args.pieces), 'sha256': pieces_digest.hexdigest()},
                    'edges': {'path': str(args.edges), 'sha256': args.edges_sha256}},

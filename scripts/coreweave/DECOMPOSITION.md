@@ -21,6 +21,14 @@ remains the default for existing jobs. Root storage has no reserved size or
 snapshot guarantee; the declared size is a planning estimate, and existing
 verified output collection remains necessary before stopping the sandbox.
 
+Whole-chain CPU placement uses an explicit declared assignment of original
+trajectory IDs. The existing native pair builder verifies that excluded chains
+belong to the pinned source, have not already completed locally, and cannot be
+silently reclaimed on resume. Its receipt keeps these external assignments
+separate from converted rows and omissions; finishing a partition is not whole
+source completion. Exact raw-chain extraction and the existing source archive
+provide the remote worker's bytes and parent-membership evidence.
+
 ## Native participant bridge (2026-10-15)
 
 The existing native recipe and `rl/native_rounds.py` decide which participant
