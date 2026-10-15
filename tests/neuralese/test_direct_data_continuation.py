@@ -387,7 +387,13 @@ def test_prepared_window_cache_restores_roles_invalidates_and_rebuilds_corruptio
         {'id': 'train', 'text': '<|im_start|>system hello <|im_start|>user question <|im_start|>assistant answer',
          'token_ids': [99, 10, 30, 31, 99, 11, 32, 99, 12, 33, 34, 35, 36],
          'split': 'train', 'source_groups': ['train-group'], 'supervised_suffix_start': 9,
-         'context_only_spans': [[9, 10]], 'token_choice_detached_spans': [[10, 11]]},
+         'sampling_group': 'annotated-a', 'context_only_spans': [[9, 10]],
+         'token_choice_detached_spans': [[10, 11]]},
+        {'id': 'train-twin', 'text': '<|im_start|>system hello <|im_start|>user question <|im_start|>assistant answer',
+         'token_ids': [99, 10, 30, 31, 99, 11, 32, 99, 12, 33, 34, 35, 36],
+         'split': 'train', 'source_groups': ['train-group-twin'], 'supervised_suffix_start': 10,
+         'sampling_group': 'annotated-b', 'context_only_spans': [[11, 12]],
+         'token_choice_detached_spans': [[12, 13]]},
         {'id': 'held', 'text': '<|im_start|>system hello <|im_start|>user prompt <|im_start|>assistant held',
          'token_ids': [99, 10, 30, 31, 99, 11, 32, 99, 12, 33, 34, 35, 36],
          'split': 'test', 'source_groups': ['held-group'], 'supervised_suffix_start': 9},
@@ -447,6 +453,19 @@ def test_prepared_window_cache_restores_roles_invalidates_and_rebuilds_corruptio
     assert all('role_mask_sha256' in window and 'roles' not in window for window in cached_plan[0])
     assert any(window.get('context_only_spans') for window in cached_plan[0])
     assert any(window.get('token_choice_detached_spans') for window in cached_plan[0])
+    expected_masks = {
+        'annotated-a': ([[9, 10]], [[10, 11]]),
+        'annotated-b': ([[11, 12]], [[12, 13]]),
+    }
+    for source_windows in (cold[0], warm[0], streamed_plan[0], cached_plan[0]):
+        observed = {}
+        for window in source_windows:
+            group = window.get('sampling_group')
+            if group in expected_masks:
+                masks = (window.get('context_only_spans'), window.get('token_choice_detached_spans'))
+                assert masks == expected_masks[group]
+                observed[group] = masks
+        assert observed == expected_masks
     assert trainer.held_documents(cached_plan[1]) == trainer.held_documents(streamed_plan[1])
 
     spec = prepared_windows.cache_spec(engine, a, data)

@@ -27,7 +27,10 @@ from .text_warmup import _TokenWindow
 
 
 CACHE_SCHEMA = "natlang.prepared-direct-windows/1"
-PREPARATION_POLICY = "direct-text-windows/1"
+# Per-window supervision descriptors are part of the cached row identity. Older
+# entries can contain only token/role windows, so they cannot safely recover
+# masks when identical text has multiple differently annotated rows.
+PREPARATION_POLICY = "direct-text-windows/2"
 SHARD_BYTES = 32 << 20
 TOKEN_BYTES = array("I").itemsize
 

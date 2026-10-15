@@ -731,12 +731,16 @@ def attach_supervision_descriptor(window, row=None):
 
 
 def attach_cached_supervision(windows, rows_meta):
-    """Rehydrate row-level masks from prepared-cache metadata, then fingerprint restored role windows."""
-    by_document = {hashlib.sha256(meta['text'].encode()).hexdigest(): meta
-                   for meta in rows_meta if meta.get('text') is not None}
+    """Fingerprint cached role windows; masks are stored on each window.
+
+    Do not rehydrate masks by document text: distinct source rows may share
+    text while carrying different suffixes, masks, or sampling groups.
+    PREPARATION_POLICY v2 invalidates entries made before descriptors were
+    retained per window.
+    """
     for split_windows in windows.values():
         for window in split_windows:
-            attach_supervision_descriptor(window, by_document.get(window['document']))
+            attach_supervision_descriptor(window)
     return windows
 
 
