@@ -9,6 +9,30 @@ coord = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(coord)
 
 
+def test_suspended_peer_retains_queued_mail_and_resumes_delivery(tmp_path, monkeypatch):
+    monkeypatch.setenv('COORD_MACHINE', 'dgx')
+    store = coord.Store(tmp_path)
+    (store.root / 'peers.json').write_text(json.dumps({'pop': None}))
+    store = coord.Store(tmp_path)
+    def forbidden(*args, **kwargs):
+        raise AssertionError('suspended transport must not launch SSH')
+    monkeypatch.setattr(coord.subprocess, 'run', forbidden)
+    message = coord.make_message(store, 'dgx-supervisor', ['pop'], 'decision', 'Machine closed', 'Keep queued')
+    assert store.deliver(message) == ['pop']
+    queued = store.outbox / (message['id'] + '.json')
+    assert queued.is_file()
+    store.flush()
+    assert json.loads(queued.read_text())['_pending'] == ['pop']
+    (store.root / 'peers.json').write_text(json.dumps({'pop': 'test-peer'}))
+    resumed = coord.Store(tmp_path)
+    calls = []
+    monkeypatch.setattr(coord.subprocess, 'run', lambda argv, **kwargs:
+        calls.append(argv) or type('Result', (), {'returncode': 0})())
+    resumed.flush()
+    assert not queued.exists() and len(calls) == 1
+    assert 'test-peer' in calls[0]
+
+
 def test_legacy_utc_inbox_import_preserves_messages_and_original(tmp_path, monkeypatch):
     monkeypatch.setenv('COORD_MACHINE', 'pop')
     store = coord.Store(tmp_path)

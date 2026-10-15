@@ -33,6 +33,12 @@ How it works:
   a plain file write, so delivery does not depend on the peer's checkout.
   Undelivered copies wait in `.coordination/outbox/`, and every later command
   retries them.
+- A closed machine can have its transport suspended with a `null` alias in
+  `.coordination/peers.json`, for example `{"pop": null}`. Policy is the
+  owner's machine-closure decision; crisp transport reads that explicit setting,
+  skips SSH, and keeps messages queued. Local inbox/status operations continue.
+  Restore the alias or remove its override to resume delivery. This prevents a
+  retired machine's repeated connection timeouts from blocking supervision.
 - Every reader has its own cursor (`.coordination/cursors/`). A Claude session
   reads as `<machine>-claude-<session>`, Codex as `<machine>-codex-<thread>`
   when `CODEX_THREAD_ID` is available (otherwise `<machine>-codex`). `--as` or

@@ -91,6 +91,8 @@ class Store:
         if machine not in self.peers:
             print(f'coord: no SSH alias for machine {machine!r} (add it to .coordination/peers.json)', file=sys.stderr)
             return False
+        if self.peers[machine] is None:
+            return False  # Explicitly suspended transport; keep mail queued.
         name = name or f"{message['id']}.json"
         remote = f'/home/werg/natlang/.coordination/{folder}'
         payload = {key: value for key, value in message.items() if key != '_pending'}
