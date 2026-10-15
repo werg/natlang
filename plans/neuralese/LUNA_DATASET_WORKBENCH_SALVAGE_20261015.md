@@ -28,22 +28,28 @@ remains the DGX owner's next admission step.
 
 ## Continuing audits
 
-Seeds 52073–52077 each received an independent, source-hash-bound item review
-before their accepted teacher parents were curated. The audits approved 11/12
-dataset-workbench parents across 52073–74, 4/5 in 52075, 6/7 in 52076, and
-4/5 in 52077. The held items cover ambiguous film sentiment, card status,
-technology-news topic boundaries, and a concrete positive-film comment whose
-expected route disagrees with the visible criterion. Exact success was not
-enough for admission. The per-item reviews are in the registered combined
-seed73–74 audit and separate seed75, seed76 and seed77 audit corpora;
-seed52077's audit manifest is `bfcda2c4`.
+Seeds 52073–52078 each received an independent, source-hash-bound item review
+before their accepted teacher parents were curated. The corrected audits
+approved 11/12 dataset-workbench parents across 52073–74, 4/5 in 52075, 6/7
+in 52076, 5/5 in 52077, and 4/5 in 52078. Held items cover ambiguous film
+sentiment, card status, technology-news topics and the scope of “international
+politics or world events.” Exact success alone was insufficient for admission.
 
-The seed52077 source and LFM/Mellum twin render are registered and verified on
-DGX as `luna-held-shapes-s52077-curated-20261015-v1` and
-`luna-held-shapes-s52077-curated-render-20261015-v1`. The curation keeps 84
-exact parents and 726 approved native decisions after four whole-parent holds.
-Its render has no unexpected omissions. The held parents are the misrouted
-dataset item, two variants of a contradictory HotpotQA adult/young-adult
-question, and one research trajectory that skipped required `iterateOn`.
-The contradictory HotpotQA source is pending in the shared source-review
-registry; protected union admission remains the DGX owner's decision.
+The seed52077 v1 audit contained a false hold: it said M3's expected and
+observed route was `cards`, while both exact source values say `trust`, which
+fits the positive-film criterion. The corrected v2 audit, manifest `4a2d6788`,
+checks exact source text, day, expected and observed values. Its corrected
+source and LFM/Mellum twin render are DGX-verified as
+`luna-held-shapes-s52077-curated-20261015-v2` and
+`luna-held-shapes-s52077-curated-render-20261015-v2`: 85 parents and 744
+approved native decisions, with no render omissions. The v1 registry entries,
+manifests and redundant copies were retired. The remaining three whole-parent
+holds are two variants of a contradictory HotpotQA adult/young-adult question
+and one research trajectory that skipped required `iterateOn`.
+
+Seed52078's first audit also falsely claimed a Bush–Kerry item was on day18;
+the exact source says day4, before the task's day11 cutoff. Corrected audit v2
+approves that parent and holds only the ambiguous world-events scan. The
+corrected source is DGX-verified with 89 parents and 663 approved decisions;
+its twin render is in progress. Protected union admission remains the DGX
+owner's decision.
