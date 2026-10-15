@@ -1092,21 +1092,10 @@ def main(argv=None):
     task_receipt_path = None
     if task_summary:
         task_receipt_path = args.out / 'native-task-execution-receipt.json'
-        task_checkpoint_sha = metrics.get('task_checkpoint_sha256')
         task_identity = metrics.get('task_native_identity')
-        score_path = Path(task_summary['run']) / 'task-score.json' if task_summary.get('run') else None
-        task_receipt = {'schema': 'natlang.native-task-execution-receipt/1',
-            'checkpoint_sha256': task_checkpoint_sha, 'native_identity': task_identity,
-            'packet_sha256': task_summary.get('packet_sha256'),
-            'case_indices': task_summary.get('case_indices'), 'cases': task_summary.get('cases'),
-            'complete': task_summary.get('complete'), 'eligible': task_summary.get('eligible'),
-            'task_successes': task_summary.get('task_successes'),
-            'task_successes_are_qualification_barrier': False,
-            'score_path': str(score_path.resolve()) if score_path and score_path.is_file() else None,
-            'score_sha256': sha256_file_hex_cached(score_path) if score_path and score_path.is_file() else None}
-        task_receipt['passed'] = bool(task_checkpoint_sha == checkpoint_sha and task_identity and
-                                      task_receipt['complete'] and task_receipt['eligible'] and
-                                      task_receipt['score_sha256'])
+        from ..eval.native_state import task_execution_receipt
+        task_receipt = task_execution_receipt(task_summary, task_identity,
+                                               checkpoint_sha256=checkpoint_sha)
         write_json(task_receipt_path, task_receipt)
     runtime_path = args.out / 'native-runtime-certificate.json'
     if policy.signaled or (not completed and not foundation_boundary and not refresh_boundary):

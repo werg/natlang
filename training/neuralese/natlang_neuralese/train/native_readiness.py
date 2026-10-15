@@ -131,9 +131,8 @@ def validate_ready(path, requirement):
                 or not 0 <= value <= tolerance <= maximum):
             raise ValueError('native runtime exceeds the qualified numerical contract: ' + name)
     task = json.loads(_bound(receipt['task_execution_receipt']).read_text())
-    if (task.get('schema') != 'natlang.native-task-execution-receipt/1' or task.get('passed') is not True
-            or task.get('native_identity') != identity or task.get('complete') is not True
-            or task.get('eligible') is not True):
+    from ..eval.native_state import validate_task_execution_receipt
+    if not validate_task_execution_receipt(task, identity):
         raise ValueError('native task execution proof is incomplete or bound to different weights')
     # Task-success counts remain telemetry. The owner wants capable models,
     # adaptive improvements and complete exposure, not a base-relative barrier.
@@ -207,8 +206,8 @@ def validate_completion(path, published):
                 or certificate.get('backbone_optimizer_updates', 0) <= 0):
             raise ValueError('shared final model lacks exact trained-state runtime qualification')
         task = json.loads(_bound(proof['task_execution_receipts'][name]).read_text())
-        if (task.get('passed') is not True or task.get('complete') is not True
-                or task.get('eligible') is not True or task.get('native_identity') != identity
+        from ..eval.native_state import validate_task_execution_receipt
+        if (not validate_task_execution_receipt(task, identity)
                 or task.get('semantic_adapter_sha256')!=proof['adapter']['sha256']):
             raise ValueError('shared final model lacks actual bound natlang task execution')
         if not task.get('score_path') or sha256_file_hex_cached(Path(task['score_path'])) != task.get('score_sha256'):
