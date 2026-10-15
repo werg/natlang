@@ -123,3 +123,32 @@ def test_rollout_plain_text_interpreted_as_call_stays_plain_text_for_replay():
         "assistant": {"content": text, "calls": [{"tool": "return_result", "arguments": {"value": 3}}]},
         "model_response": {"raw_calls": []}}]})[0]
     assert turn["target"] == {"role": "assistant", "content": text}
+
+
+def test_native_sampling_receipt_and_native_tool_parts_survive_rollout_emission():
+    from natlang_neuralese.rl.task_rollouts import rollout_turns
+    state_id = "nzs1_" + "a" * 52
+    receipt = {"schema": "natlang.native-rl-sampling/1",
+        "policy": {"checkpoint_sha256": "1" * 64, "tokenizer_fingerprint": "2" * 64,
+                   "embedding_weight_sha256": "3" * 64, "architecture": "lfm2"},
+        "prompt": [{"kind": "tokens", "token_ids": [7], "producing": [False]},
+                   {"kind": "native_state", "id": state_id,
+                    "native_identity": {"checkpoint_sha256": "1" * 64}}],
+        "samples": [{"index": 0, "token_id": 4, "logp": -0.1, "input_role": "ordinary", "terminal": False},
+                    {"index": 1, "token_id": 9, "logp": -0.25, "input_role": "produce", "terminal": False},
+                    {"index": 2, "token_id": 5, "logp": -0.15, "input_role": "ordinary", "terminal": False},
+                    {"index": 3, "token_id": 2, "logp": -0.2, "input_role": "ordinary", "terminal": True}],
+        "writes": [{"state_id": state_id, "begin_sample": 0, "end_sample": 3,
+                    "payload_begin": 1, "payload_end": 2,
+                    "native_identity": {"checkpoint_sha256": "1" * 64}}],
+        "sampling_law": {"temperature": 1.0, "seed": 14, "guidance": False,
+                         "probabilities": "post-processing-normalized"}}
+    raw_call = {"id": "call_1", "type": "function", "function": {"name": "consume",
+        "arguments": json.dumps({"value": [{"type": "native_state", "id": state_id}]})}}
+    result = {"trajectory": [{"phase": "action", "context": [{"role": "user", "content": "q"}],
+        "assistant": {"content": "state: " + "\uE002" + state_id + "\uE003", "calls": []},
+        "model_response": {"raw_calls": [raw_call], "rl_sampling": receipt}}]}
+    turn = rollout_turns(result)[0]
+    assert turn["sampling"] == receipt
+    assert turn["target"]["content"] == result["trajectory"][0]["assistant"]["content"]
+    assert turn["target"]["tool_calls"] == [raw_call]
