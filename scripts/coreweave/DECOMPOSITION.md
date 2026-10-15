@@ -20,3 +20,34 @@ the existing work path on the sandbox's ephemeral root filesystem. `volume`
 remains the default for existing jobs. Root storage has no reserved size or
 snapshot guarantee; the declared size is a planning estimate, and existing
 verified output collection remains necessary before stopping the sandbox.
+
+## Native participant bridge (2026-10-15)
+
+The existing native recipe and `rl/native_rounds.py` decide which participant
+trains and when the joint semantic refresh runs. They publish exact requests;
+this service does not decide training policy or allocate resources.
+
+| Unit | Representation | Reason |
+| --- | --- | --- |
+| Participant/refresh scheduling | Existing native recipe and rounds controller | Training policy remains in the declared shared pipeline. |
+| Queue envelope and request/result binding | Existing `rl/native_bridge.py` | One exact file protocol, including bound stop requests. |
+| Provider execution | Crisp CoreWeave provider bridge | External SDK, detached process ownership and exact-PID signal forwarding. |
+| Cross-sandbox artifacts | Existing private scoped artifact transport | Credentials remain on DGX; source and target bytes must match the declared SHA/size, with results exposed last. |
+| Recovery | Durable per-request provider receipts | Reattach to the same owned process; never duplicate a model worker after a controller interruption. |
+
+The provider validates the declared resource against an explicit existing-ID
+allowlist, stages bound inputs at their unchanged absolute namespaces, starts
+one detached worker, and records its PID plus process start time. A stop request
+for that exact request sends TERM to that exact worker and continues collecting
+its checkpoint/result. The bridge fetches all inventoried artifacts and verifies
+their hashes before exposing the final result to the coordinator. No account
+credential, allocation decision or model-generation policy is sent to a sandbox.
+
+Consumed input closure is a crisp verifier (`provider_dependencies.py`). It
+reuses the native recipe source-manifest resolver and native checkpoint bundle
+resolver, including optimizer and RNG sidecars. It follows the actual complete
+mandatory-SFT seed manifest and its raw pair inputs. Public base inventories and
+built task-runtime inventories are compared on the destination before launch;
+existence alone is insufficient. A portable resolved production recipe avoids
+silently missing inherited configuration files. Failure leaves the request
+unlaunched for repair, rather than falling back to top-level inputs only.
