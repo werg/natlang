@@ -108468,6 +108468,37 @@
           }
         }
       }
+    },
+    {
+      "id": "native-state-semantic-active-cohort-20261015-v1",
+      "owner": "dgx",
+      "path": "runs/native-state-semantic-active-cohort-20261015-v1",
+      "include": [
+        "train-pairs.jsonl.zst",
+        "test-pairs.jsonl.zst",
+        "composition-receipt.json"
+      ],
+      "source_class": "ordered-union-of-individually-admitted-native-semantic-pair-cohorts",
+      "split": "Inherited source-level train/test split; train and held source groups were checked across the complete concatenated union against the current protection closure.",
+      "admission": "Finite current semantic-refresh cohort: 46,899 train pairs and 10,369 held pairs. The exact previously admitted 26,312 train and 9,896 held prefix is preserved byte-for-byte; newly admitted typed-read, REST repair, reviewed-source, and Big2 first-100 cohorts follow it in order. This snapshot does not claim remaining REST27 or Big2 conversion is complete.",
+      "training_admission": true,
+      "training_admission_reason": "Every source file was SHA-checked against its immutable admitted corpus manifest. The union is exact concatenation of the source zstd frames; current protection/decision/source-review closure, cross-split group disjointness, pair IDs, per-model graph IDs, exact model IDs and tokenizer fingerprints were checked over the combined rows. Geometry is inherited from each individually admitted source cohort without modifying rows.",
+      "derived_from": [
+        "native-state-rest27-semantic-pairs-partial-20261015-v3",
+        "native-state-rest27-typed-read-seven-20261015-v1",
+        "native-state-rest27-semantic-pairs-repair-tail-20261015-v1",
+        "native-state-rest27-reviewed-pair-source-114-train-20261015-v1",
+        "native-state-rest27-reviewed-pair-remaining21-20261015-v1",
+        "native-state-big2-first100-native-graphs-20261015-v1"
+      ],
+      "license": "Inherited unchanged from each admitted source cohort; owner accepts all licenses.",
+      "source_bindings": {
+        "train_sha256": "8af08561acebd405ea143d837d237a45cd750644cfee6bb71efc992dab0f66b7",
+        "held_sha256": "c7aad05e14c0d31871a1d11f4acdd7ed87d7614dbfb53c46a2a29232b85e3d1d",
+        "composition_receipt_sha256": "6e6a85b9982d2610c40626470a20e2a25080749a51017934e3c5fd36721435c6",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "current_source_review_registry_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593"
+      }
     }
   ],
   "coverage_backlog": [

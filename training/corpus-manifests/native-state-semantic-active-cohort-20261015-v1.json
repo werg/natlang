@@ -1,0 +1,24 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "native-state-semantic-active-cohort-20261015-v1",
+  "owner": "dgx",
+  "path": "runs/native-state-semantic-active-cohort-20261015-v1",
+  "files": [
+    {
+      "path": "composition-receipt.json",
+      "bytes": 2221411,
+      "sha256": "6e6a85b9982d2610c40626470a20e2a25080749a51017934e3c5fd36721435c6"
+    },
+    {
+      "path": "test-pairs.jsonl.zst",
+      "bytes": 34312686,
+      "sha256": "c7aad05e14c0d31871a1d11f4acdd7ed87d7614dbfb53c46a2a29232b85e3d1d"
+    },
+    {
+      "path": "train-pairs.jsonl.zst",
+      "bytes": 236826802,
+      "sha256": "8af08561acebd405ea143d837d237a45cd750644cfee6bb71efc992dab0f66b7"
+    }
+  ],
+  "bytes": 273360899
+}
