@@ -62,6 +62,48 @@ def save(path: Path, value) -> None:
     tmp.replace(path)
 
 
+def file_identity(path: Path) -> dict:
+    resolved = path.resolve(strict=True)
+    return {'path': str(path), 'resolved_path': str(resolved), 'bytes': resolved.stat().st_size,
+            'sha256': sha256_file_hex(resolved)}
+
+
+def render_binding(sources: list[Path], corpus_id: str, cpus: int, budget_gb: int, docker_gb: int,
+                   part_decisions: int, compress_all: bool, protected: Path | None, reserved: Path | None,
+                   held_text: list[Path] | None, decision_exclude_ids: list[Path] | None,
+                   exclude_programs: list[Path] | None) -> dict:
+    """Identity of every semantic input/control used by a resumable render output."""
+    effective_protected = protected or REPO / PROTECTED
+    effective_reserved = reserved or REPO / 'training/source-split-reservations.json'
+    effective_held = [REPO / p for p in HELD_TEXT] + (held_text or [])
+    controls = [{'kind': kind, **file_identity(path)} for kind, paths in (
+        ('protected', [effective_protected]), ('reserved', [effective_reserved]),
+        ('held-text', effective_held), ('decision-exclude-ids', decision_exclude_ids or []),
+        ('exclude-programs', exclude_programs or [])) for path in paths]
+    code = [REPO / 'scripts/neuralese_data/render_parts.py',
+            REPO / 'scripts/neuralese_data/render_native_turn_corpus.py',
+            REPO / 'scripts/neuralese_data/render_native_turn_corpus.sh']
+    return {'schema': 'natlang.render-parts-policy-binding/1', 'corpus_id': corpus_id,
+            'sources': [file_identity(path) for path in sources], 'controls': controls,
+            'renderer_code': [file_identity(path) for path in code],
+            'options': {'part_decisions': part_decisions, 'compress_all': compress_all,
+                        'full_sample': 0.05, 'shards': 32, 'program_header_as_full': False,
+                        'cpus': cpus, 'budget_gb': budget_gb, 'docker_gb': docker_gb}}
+
+
+def validate_binding(path: Path, expected: dict, *, legacy_description: str) -> str:
+    digest = hashlib.sha256(json.dumps(expected, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    if path.exists():
+        actual = load(path)
+        if actual.get('sha256') != digest or actual.get('binding') != expected:
+            raise RuntimeError(f'{legacy_description} exists with a different render policy/input identity: {path}')
+        return digest
+    if (path.parent / 'receipt.json').exists():
+        raise RuntimeError(f'{legacy_description} has no policy binding; use a fresh output or explicitly re-filter it at union: {path.parent}')
+    save(path, {'schema': 'natlang.render-parts-policy-binding-file/1', 'sha256': digest, 'binding': expected})
+    return digest
+
+
 def wait_for_disk(path: Path) -> None:
     """Pause while the NVMe has less than DISK_MIN_GB free or a trainer is writing a checkpoint (io-quiet marker);
     same rule as scripts/disk_guard.sh."""
@@ -110,12 +152,21 @@ def plan(sources: list[Path], out: Path, part_decisions: int = PART_DECISIONS) -
 
 
 def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, corpus_id: str, unit_prefix: str,
-                cpus: int, budget_gb: int, docker_gb: int, *, compress_all: bool = False) -> None:
+                cpus: int, budget_gb: int, docker_gb: int, *, compress_all: bool = False,
+                protected: Path | None = None, reserved: Path | None = None,
+                held_text: list[Path] | None = None, decision_exclude_ids: list[Path] | None = None,
+                exclude_programs: list[Path] | None = None, policy_binding_sha256: str | None = None) -> None:
     part = out / 'parts' / f'p{k:02d}'
     if (part / 'receipt.json').exists():
+        if policy_binding_sha256 is not None:
+            validate_binding(part / 'render-policy-binding.json', {'sha256': policy_binding_sha256},
+                             legacy_description='completed render part')
         return
     wait_for_disk(out)
-    part.parent.mkdir(parents=True, exist_ok=True)
+    part.mkdir(parents=True, exist_ok=True)
+    if policy_binding_sha256 is not None:
+        validate_binding(part / 'render-policy-binding.json', {'sha256': policy_binding_sha256},
+                         legacy_description='render part')
     # A part unit left from an interrupted run (preempted and requeued by the ledger) is waited for, not duplicated.
     prefix = f'{unit_prefix}-p{k:02d}-'
     # Its decompressed input is kept until the part has a receipt (a requeued unit reads it when relaunched), and a
@@ -142,15 +193,25 @@ def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, c
         for attempt in range(5):
             unit = f'{prefix}{int(time.time()) % 100000}'
             container = f'render-{part.name}-{hashlib.sha1(str(part.resolve()).encode()).hexdigest()[:10]}'
+            protected = protected or REPO / PROTECTED
+            reserved = reserved or REPO / 'training/source-split-reservations.json'
+            # Caller-supplied held groups supplement the established shared references; a new global index must not
+            # silently replace the baseline held sources.
+            held_text = [REPO / p for p in HELD_TEXT] + (held_text or [])
+            decision_exclude_ids = decision_exclude_ids or []
+            exclude_programs = exclude_programs or []
             cmd = ['python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb',
                    str(budget_gb), '--priority', 'low', '--resumable', '--wait', '86400', '--workdir', str(REPO),
                    '--container', container, '--stop-seconds', '90', '--',
                    'env', f'MEM={docker_gb}g', f'CPUS={cpus}', 'nice', '-n', '10',
                    'scripts/neuralese_data/render_native_turn_corpus.sh', str(part), '--corpus-id', corpus_id,
                    '--source', str(plain), '--workers', str(cpus), '--shards', '32', '--full-sample', '0.05',
-                   '--protected', str(REPO / PROTECTED),
-                   '--reserved', str(REPO / 'training/source-split-reservations.json'),
-                   '--held-text', *[str(REPO / p) for p in HELD_TEXT]]
+                   '--protected', str(protected), '--reserved', str(reserved),
+                   '--held-text', *[str(p) for p in held_text]]
+            if decision_exclude_ids:
+                cmd.extend(['--decision-exclude-ids', *[str(p) for p in decision_exclude_ids]])
+            if exclude_programs:
+                cmd.extend(['--exclude-programs', *[str(p) for p in exclude_programs]])
             if compress_all:
                 cmd.append('--compress-text')
             if subprocess.run(cmd).returncode == 0:
@@ -326,13 +387,49 @@ def merge_receipts(receipts: list[dict], cuts: list[int], merged: dict | None = 
 
 
 def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpus: int = 6, budget_gb: int = 6,
-           docker_gb: int = 8, part_decisions: int = PART_DECISIONS, *, compress_all: bool = False) -> dict:
+           docker_gb: int = 8, part_decisions: int = PART_DECISIONS, *, compress_all: bool = False,
+           protected: Path | None = None, reserved: Path | None = None,
+           held_text: list[Path] | None = None, decision_exclude_ids: list[Path] | None = None,
+           exclude_programs: list[Path] | None = None) -> dict:
+    out.mkdir(parents=True, exist_ok=True)
+    custom_policy_requested = any(value is not None for value in
+                                   (protected, reserved, held_text, decision_exclude_ids, exclude_programs))
+    binding_path = out / 'render-policy-binding.json'
+    has_unbound_output = (not binding_path.exists() and
+                          ((out / 'receipt.json').exists() or (out / 'parts.json').exists() or
+                           any((out / 'parts').glob('p*/receipt.json'))))
+    if has_unbound_output:
+        if custom_policy_requested:
+            raise RuntimeError('legacy render output has no binding for requested protection controls; use a fresh '
+                               'output or let the union re-filter and label their historical coverage')
+        if (out / 'receipt.json').exists():
+            receipt = load(out / 'receipt.json')
+            if receipt.get('render_policy_binding_sha256'):
+                raise RuntimeError('receipt claims a render binding but its binding file is missing')
+            receipt['legacy_policy_unbound'] = True
+            receipt['legacy_policy_note'] = 'historical default inputs; current protections must be rechecked at union'
+            return receipt
+        legacy_resume = True
+    else:
+        legacy_resume = False
+    if legacy_resume:
+        binding_sha256 = None
+    else:
+        binding = render_binding(sources, corpus_id, cpus, budget_gb, docker_gb, part_decisions, compress_all,
+                                 protected, reserved, held_text, decision_exclude_ids, exclude_programs)
+        binding_sha256 = validate_binding(binding_path, binding, legacy_description='render output')
     if (out / 'receipt.json').exists():
-        return load(out / 'receipt.json')
+        receipt = load(out / 'receipt.json')
+        if binding_sha256 is not None and receipt.get('render_policy_binding_sha256') != binding_sha256:
+            raise RuntimeError(f'render receipt lacks matching policy binding: {out / "receipt.json"}')
+        return receipt
     cuts = plan(sources, out, part_decisions)
     receipts = []
     for k, (start, stop) in enumerate(zip(cuts, cuts[1:])):
-        render_part(sources, out, k, start, stop, corpus_id, unit_prefix, cpus, budget_gb, docker_gb, compress_all=compress_all)
+        render_part(sources, out, k, start, stop, corpus_id, unit_prefix, cpus, budget_gb, docker_gb,
+                    compress_all=compress_all, protected=protected, reserved=reserved,
+                    held_text=held_text, decision_exclude_ids=decision_exclude_ids,
+                    exclude_programs=exclude_programs, policy_binding_sha256=binding_sha256)
         if compress_all:
             compress_part_views(out / 'parts' / f'p{k:02d}')
         receipts.append(load(out / 'parts' / f'p{k:02d}' / 'receipt.json'))
@@ -341,11 +438,24 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
         merged = merge_parts(out, compress_all=compress_all)
         save(out / 'merge.json', merged)
     receipt = merge_receipts(receipts, cuts, merged)
+    if binding_sha256 is None:
+        receipt['legacy_policy_unbound'] = True
+        receipt['legacy_policy_note'] = 'historical default inputs; current protections must be rechecked at union'
+    else:
+        completed_binding = render_binding(sources, corpus_id, cpus, budget_gb, docker_gb, part_decisions,
+                                           compress_all, protected, reserved, held_text,
+                                           decision_exclude_ids, exclude_programs)
+        completed_sha = hashlib.sha256(json.dumps(completed_binding, sort_keys=True,
+                                                   separators=(',', ':')).encode()).hexdigest()
+        if completed_sha != binding_sha256:
+            raise RuntimeError('render source, control, option, or renderer identity changed during production')
+        receipt['render_policy_binding_sha256'] = binding_sha256
     save(out / 'receipt.json', receipt)
     return receipt
 
 
-INCLUDE = ['receipt.json', 'parts.json', 'merge.json', '*/*/text-data.jsonl', '*/*/text-data.jsonl.zst',
+INCLUDE = ['receipt.json', 'parts.json', 'merge.json', 'render-policy-binding.json',
+           'parts/*/render-policy-binding.json', '*/*/text-data.jsonl', '*/*/text-data.jsonl.zst',
            '*/*/omissions.jsonl', 'parts/*/receipt.json', 'parts/*/*.jsonl', 'parts/*/*/*/omissions.jsonl',
            'parts/*/*/*/omissions.jsonl.zst', 'parts/*/render-omissions/*/omissions.jsonl']
 
@@ -376,6 +486,9 @@ def render_entry(source_id: str, rel_path: str, receipt: dict, **extra) -> dict:
         'training_admission': True,
         'training_admission_reason': 'owner 2026-10-11: maximize data; renders of a training-admitted corpus',
         'derived_from': [source_id], 'license': 'facts from the source rows', 'renders': render_summary(receipt),
+        'render_policy_binding_sha256': receipt.get('render_policy_binding_sha256'),
+        'legacy_policy_unbound': receipt.get('legacy_policy_unbound', False),
+        'legacy_policy_note': receipt.get('legacy_policy_note'),
     }
     entry.update(extra)
     return entry
@@ -396,11 +509,21 @@ def main() -> None:
                    help='compress completed parts and every merged view; decoded rows and selection are unchanged')
     p.add_argument('--register', type=Path, metavar='REL_PATH',
                    help='register the render (repo-relative path of OUT) through register_corpora.py')
+    p.add_argument('--protected', type=Path, help='protected benchmark index (default: existing shared index)')
+    p.add_argument('--reserved', type=Path, help='test reservation index (default: existing shared index)')
+    p.add_argument('--held-text', type=Path, action='append',
+                   help='additional rendered held-text member supplying source groups; repeatable (shared held corpora always apply)')
+    p.add_argument('--decision-exclude-ids', type=Path, action='append',
+                   help='reviewed JSONL {id} decision exclusions, also truncating whole-trajectory chains; repeatable')
+    p.add_argument('--exclude-programs', type=Path, action='append',
+                   help='reviewed JSONL {id, reason_code?} whole-program exclusions; repeatable')
     p.add_argument('--link', action='store_true',
                    help='with --register: create the REL_PATH symlink to OUT in the shared checkout')
     args = ap.parse_args()
     receipt = render(args.source, args.out, args.corpus_id, args.unit_prefix or f'render-{args.corpus_id}'[:60],
-                     args.cpus, args.budget_gb, args.docker_gb, compress_all=args.compress_all)
+                     args.cpus, args.budget_gb, args.docker_gb, compress_all=args.compress_all,
+                     protected=args.protected, reserved=args.reserved, held_text=args.held_text,
+                     decision_exclude_ids=args.decision_exclude_ids, exclude_programs=args.exclude_programs)
     print(json.dumps({'rendered': args.corpus_id, 'parts': receipt['parts']}), flush=True)
     if args.register:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
