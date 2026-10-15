@@ -288,7 +288,8 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
             'vae_specification': vae.specification(), 'vae_state': vae.state_dict(),
             'vae_optimizer': {'state': optimizer.state_dict(), 'parameter_groups': _optimizer_names(vae, optimizer)},
             'training': {**training, 'rng': capture_training_rng_state(device)}}
-        policy.save(state)
+        from ..model.native_shared_checkpoint import save_shared_checkpoint
+        save_shared_checkpoint(policy, state)
     checkpoint_sha = sha256_file_hex_cached(policy.slot)
     # Final durable bytes bind all participants, rather than publishing
     # shape-only adapters usable against arbitrary unrelated checkpoints.

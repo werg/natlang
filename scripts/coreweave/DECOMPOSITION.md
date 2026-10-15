@@ -119,3 +119,16 @@ requires the monolithic parent, `SemanticChannel.load` opens that same full file
 for VAE tensors, and adapter/refresh checks bind both models to its SHA. All
 three must consume the same new storage form together. Loader changes are
 coordinated with the reasoning-row repair owner before implementation.
+
+
+Shared storage pins use the existing native bundle inventory and verifier. A
+file lock serializes atomic shared commits with full-closure inode pins; only
+committed global manifests and immutable SHA-named payloads are hardlinked.
+The rolling/best/final manifests retain their payloads, while explicit live
+pins retain every consumed payload inode in their own portable object root.
+After a successful save, superseded object paths are pruned; active pins remain
+recoverable even after those original paths disappear. Releasing a pin belongs
+to the existing export/ferry owner after verified consumption. Failure before
+the global commit cleans only newly written, uncommitted objects; failure after
+the atomic commit preserves its complete recoverable closure. A manifest-only
+inode export is insufficient and must not be used for this storage form.

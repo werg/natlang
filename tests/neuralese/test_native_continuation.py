@@ -144,7 +144,8 @@ def test_actual_joint_curriculum_preserves_ce_deficits_and_monotonic_model_steps
     assert not report['completed']
     checkpoint=tmp_path/'joint/checkpoint.pt'
     stage.run(path,manifest,tmp_path/'joint',resume=checkpoint,device='cpu')
-    saved=torch.load(checkpoint,weights_only=False)
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    saved=CheckpointPolicy.load(checkpoint)
     for entry in saved['participants'].values():
         assert entry['sft_progress']==frames
         assert progress_obligations(entry['sft_progress'])['remaining_graph_visits']==1

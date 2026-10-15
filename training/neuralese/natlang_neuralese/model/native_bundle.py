@@ -19,7 +19,7 @@ from .native_composite import SCHEMA, resolve_composite_artifact
 BUNDLE_SCHEMA = 'natlang.native-checkpoint-bundle/1'
 
 
-def composite_dependencies(checkpoint):
+def composite_dependencies(checkpoint, *, participant=None, semantic_only=False):
     """Verify every parent/parameter/optimizer/training role without loading weights."""
     current = Path(checkpoint).resolve(strict=True)
     result, seen = {}, set()
@@ -30,6 +30,12 @@ def composite_dependencies(checkpoint):
         with current.open('rb') as stream:
             prefix = stream.read(1)
         if prefix != b'{':
+            from .native_shared_checkpoint import shared_manifest, shared_dependencies
+            manifest = shared_manifest(current)
+            if manifest is not None:
+                for source in shared_dependencies(manifest, current, participant=participant,
+                                                  semantic_only=semantic_only).values():
+                    result[sha256_file_hex_cached(source)] = source
             return result
         manifest = json.loads(current.read_text())
         if manifest.get('schema') != SCHEMA:
@@ -39,6 +45,11 @@ def composite_dependencies(checkpoint):
             if binding is not None:
                 artifact = resolve_composite_artifact(binding,current,sibling=True)
                 result[binding['sha256']] = artifact
+        selected = manifest['base_checkpoint'].get('participant')
+        if selected is not None:
+            if participant is not None and participant != selected:
+                raise ValueError('native composite selected participant differs from requested worker')
+            participant = selected
         current = resolve_composite_artifact(manifest['base_checkpoint'],current)
     raise ValueError('native bundle checkpoint ancestry contains a cycle')
 
@@ -93,9 +104,9 @@ def _semantic_dependencies(adapter,checkpoint_sha256):
     return result
 
 
-def export_bundle(checkpoint,out,*,semantic_adapter=None):
+def export_bundle(checkpoint,out,*,semantic_adapter=None,participant=None):
     checkpoint,out = Path(checkpoint).resolve(strict=True),Path(out).resolve()
-    dependencies = composite_dependencies(checkpoint)
+    dependencies = composite_dependencies(checkpoint, participant=participant)
     digest = sha256_file_hex_cached(checkpoint)
     out.mkdir(parents=True,exist_ok=True)
     with checkpoint.open('rb') as stream:
@@ -118,6 +129,7 @@ def export_bundle(checkpoint,out,*,semantic_adapter=None):
         _copy_immutable(adapter,out/'semantic-adapter.json',adapter_sha)
         semantic_binding = {'path':'semantic-adapter.json','sha256':adapter_sha}
     receipt = {'schema':BUNDLE_SCHEMA,'semantic_adapter':semantic_binding,'semantic_files':semantic_files,
+        'participant':participant,
         'checkpoint':{'path':filename,'sha256':digest},
         'files':files,'hf_base':'separately pinned; standard loader --base may relocate identical files',
         'identity_rewritten':False}
@@ -144,7 +156,7 @@ def verify_bundle(path):
     checkpoint = root/receipt['checkpoint']['path']
     # Verify declared closure uses supplied objects even if original absolute
     # paths happen to remain available on this machine.
-    actual = composite_dependencies(checkpoint)
+    actual = composite_dependencies(checkpoint, participant=receipt.get('participant'))
     declared = {value['sha256'] for value in native_entries}
     if set(actual) != declared:
         raise ValueError('native bundle inventory differs from complete checkpoint dependency closure')
@@ -164,10 +176,10 @@ def verify_bundle(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='action',required=True)
-    export = commands.add_parser('export');export.add_argument('--checkpoint',required=True);export.add_argument('--out',required=True);export.add_argument('--semantic-adapter')
+    export = commands.add_parser('export');export.add_argument('--checkpoint',required=True);export.add_argument('--out',required=True);export.add_argument('--semantic-adapter');export.add_argument('--participant')
     verify = commands.add_parser('verify');verify.add_argument('--bundle',required=True)
     args = parser.parse_args()
-    print(json.dumps(export_bundle(args.checkpoint,args.out,semantic_adapter=args.semantic_adapter) if args.action=='export' else verify_bundle(args.bundle),sort_keys=True))
+    print(json.dumps(export_bundle(args.checkpoint,args.out,semantic_adapter=args.semantic_adapter,participant=args.participant) if args.action=='export' else verify_bundle(args.bundle),sort_keys=True))
 
 
 if __name__ == '__main__':

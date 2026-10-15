@@ -52,9 +52,12 @@ def dependency_closure(request, *, namespace='/work/native-production'):
             for source in frame.get('source_receipts', []):
                 graphs(bound(source))
 
-    def checkpoint(value):
+    def checkpoint(value, *, semantic_only=False):
         path = bound(value) if isinstance(value, dict) else add(value)
-        for digest, child in composite_dependencies(path).items():
+        selected=request.get('native_participant') if request.get('kind')=='round' else None
+        if selected is None and isinstance(value,dict):selected=value.get('participant')
+        for digest, child in composite_dependencies(path, participant=selected,
+                semantic_only=semantic_only).items():
             # Bundle resolver may resolve an offload symlink outside the root.
             # Such a dependency needs an explicit portable bundle before use.
             add(child, digest)
@@ -63,15 +66,14 @@ def dependency_closure(request, *, namespace='/work/native-production'):
             if binary:
                 # Trusted hash-bound native Torch checkpoints use mmap; tensor
                 # payloads stay on disk and are never restored into a model.
-                import torch
-                state = torch.load(child, map_location='cpu', weights_only=False, mmap=True)
+                from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+                state = CheckpointPolicy.load(child, expand_shared=False)
                 training_inputs(state)
                 training_inputs(state.get('training'))
                 training_inputs(state.get('shared_training'))
                 for participant in state.get('participants', {}).values():
                     training_inputs(participant)
-                selected=request.get('native_participant') if request.get('kind')=='round' else None
-                configs = [(selected,state.get('model_config'))]
+                configs = [(state.get('participant',selected),state.get('model_config'))]
                 configs.extend((name,item.get('model_config')) for name,item in state.get('participants', {}).items()
                                if selected is None or name==selected)
                 for name,declaration in configs:
@@ -186,7 +188,7 @@ def dependency_closure(request, *, namespace='/work/native-production'):
             if canonical_json_sha256_hex(curriculum['config']) != curriculum['sha256']:
                 raise ValueError('provider qualified semantic curriculum hash changed')
             config_value(curriculum['config'], 'qualified-curriculum:'+curriculum['sha256'])
-        checkpoint(value['checkpoint'])
+        checkpoint(value['checkpoint'], semantic_only=True)
         for child, digest in _semantic_dependencies(path, value['checkpoint']['sha256']).values():
             add(child, digest)
     return {'files': list(files.values()), 'assets': list(assets.values())}

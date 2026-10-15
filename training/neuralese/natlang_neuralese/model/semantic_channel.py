@@ -33,7 +33,7 @@ class SemanticChannel:
         checkpoint = resolve_composite_artifact(receipt['checkpoint'],path)
         if sha256_file_hex_cached(checkpoint) != receipt['checkpoint']['sha256']:
             raise ValueError('semantic adapter checkpoint bytes changed')
-        state = CheckpointPolicy.load(checkpoint)
+        state = CheckpointPolicy.load(checkpoint, semantic_only=True)
         if state.get('schema') != SHARED_CHECKPOINT_SCHEMA:
             raise ValueError('semantic adapter requires its complete shared-training checkpoint')
         spec = state['vae_specification']

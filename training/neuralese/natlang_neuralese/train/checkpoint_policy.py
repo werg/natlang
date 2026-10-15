@@ -161,9 +161,16 @@ class CheckpointPolicy:
         return event
 
     @staticmethod
-    def load(path, map_location="cpu") -> dict:
+    def load(path, map_location="cpu", *, shared_participant=None, semantic_only=False,
+             expand_shared=True) -> dict:
         """Load a full training state while allowlisting TE's version metadata only."""
         from torch.torch_version import TorchVersion
 
         with torch.serialization.safe_globals([TorchVersion]):
-            return torch.load(path, map_location=map_location, mmap=True, weights_only=True)
+            state = torch.load(path, map_location=map_location, mmap=True, weights_only=True)
+        if expand_shared:
+            from ..model.native_shared_checkpoint import SHARDED_SCHEMA, expand_shared as expand
+            if state.get('schema') == SHARDED_SCHEMA:
+                return expand(state, path, participant=shared_participant,
+                              semantic_only=semantic_only, map_location=map_location)
+        return state
