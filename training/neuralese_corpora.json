@@ -81057,6 +81057,295 @@
       "review_status": "Approved static reference SFT subject to renderer global protected/source-quality filters and exclusion of one ambiguous program; zero source-mismatch labels admitted",
       "required_conversion": "Render native.held.jsonl.zst via registry-admits-reason scripted source reference requires independent semantic and training review; pass excluded-programs.jsonl; train-only and global protected/source reservations; render LFM/Mellum twins",
       "notes": "Authored static scaffold and scripted exact child-result reference, not provider-authored trajectory. Freeze receipt pins all source/label/provenance/replay manifests. Local source hash and row coordinate are pinned; upstream dataset revision and license provenance explicitly unknown."
+    },
+    {
+      "id": "neuralese-e2e-static-s7k-protected-20261015-v1",
+      "owner": "dgx",
+      "path": "runs/neuralese-e2e-static-s7k-protected-20261015-v1",
+      "include": [
+        "records.jsonl",
+        "pieces.jsonl",
+        "edges.jsonl",
+        "chains.jsonl",
+        "omissions.jsonl",
+        "receipt.json",
+        "independent-graph-audit.json",
+        "source-id-admission-audit.json",
+        "assembly-plan.json",
+        "admission-review.json"
+      ],
+      "source_class": "native-e2e-producer-consumer-records",
+      "training_admission": true,
+      "training_admission_reason": "Owner-authorized static natlang producer/consumer reference training. Every retained source ID matches the curated admitted native source; whole train chains affected by canonical process/semantic quality or held groups excluded. All1212 retained chains independently reauthenticated against current shared exact verifier.",
+      "split": "Original source train/test preserved;2857 train edges/17 held edges. R9 all six held views and nine canonical quality references SHA-bound; whole affected train chains removed with explicit omissions.",
+      "admission": "Static reference data only; stock action notes remain untrained. No model transport/gradient replay/neuralese lift certificate. No frozen cloud recipe change.",
+      "derived_from": [
+        "static-s7k-curated-native-20261015-v1"
+      ],
+      "license": "Per-source facts retained in original static source IR; all licenses accepted.",
+      "counts": {
+        "totals": {
+          "chains": 1212,
+          "edges": 2874,
+          "edges_dropped_endpoint": 40,
+          "edges_test": 17,
+          "edges_train": 2857,
+          "omitted_assemble_source_quality_quarantine_chain": 120,
+          "omitted_select_edge": 1871,
+          "records": 9837
+        },
+        "by_source": {
+          "static-curriculum-s7k": {
+            "chains": 1212,
+            "edges": 2874,
+            "records": 9837
+          }
+        },
+        "by_family": {
+          "curriculum_actor_greenhouse": {
+            "chains": 80,
+            "edge_kinds": {
+              "result": 80
+            },
+            "edges": 80,
+            "records": 240,
+            "supervised_tokens_lfm25_shard_kept": 23272
+          },
+          "curriculum_child_sufficiency": {
+            "chains": 120,
+            "edge_kinds": {
+              "result": 240
+            },
+            "edges": 240,
+            "records": 520,
+            "supervised_tokens_lfm25_shard_kept": 17441
+          },
+          "curriculum_citance_summary": {
+            "chains": 40,
+            "edge_kinds": {
+              "result": 40
+            },
+            "edges": 40,
+            "records": 120,
+            "supervised_tokens_lfm25_shard_kept": 14134
+          },
+          "curriculum_commaqa_numeric": {
+            "chains": 49,
+            "edge_kinds": {
+              "result": 85
+            },
+            "edges": 85,
+            "records": 344,
+            "supervised_tokens_lfm25_shard_kept": 19342
+          },
+          "curriculum_composed_helpers": {
+            "chains": 4,
+            "edge_kinds": {
+              "result": 5
+            },
+            "edges": 5,
+            "records": 22,
+            "supervised_tokens_lfm25_shard_kept": 1164
+          },
+          "curriculum_decision_extract_chain": {
+            "chains": 40,
+            "edge_kinds": {
+              "result": 100
+            },
+            "edges": 100,
+            "records": 544,
+            "supervised_tokens_lfm25_shard_kept": 32013
+          },
+          "curriculum_decision_skill_catalog": {
+            "chains": 40,
+            "edge_kinds": {
+              "result": 67
+            },
+            "edges": 67,
+            "records": 227,
+            "supervised_tokens_lfm25_shard_kept": 10189
+          },
+          "curriculum_decision_source_cards": {
+            "chains": 40,
+            "edge_kinds": {
+              "result": 80
+            },
+            "edges": 80,
+            "records": 400,
+            "supervised_tokens_lfm25_shard_kept": 38632
+          },
+          "curriculum_digest_desk": {
+            "chains": 80,
+            "edge_kinds": {
+              "result": 222
+            },
+            "edges": 222,
+            "records": 479,
+            "supervised_tokens_lfm25_shard_kept": 122835
+          },
+          "curriculum_edit_stream": {
+            "chains": 80,
+            "edge_kinds": {
+              "result": 318
+            },
+            "edges": 318,
+            "records": 485,
+            "supervised_tokens_lfm25_shard_kept": 88074
+          },
+          "curriculum_folder_index": {
+            "chains": 1,
+            "edge_kinds": {
+              "result": 1
+            },
+            "edges": 1,
+            "records": 58,
+            "supervised_tokens_lfm25_shard_kept": 1391
+          },
+          "curriculum_folder_index_inline": {
+            "chains": 4,
+            "edge_kinds": {
+              "result": 4
+            },
+            "edges": 4,
+            "records": 90,
+            "supervised_tokens_lfm25_shard_kept": 2699
+          },
+          "curriculum_inline_structured_extract": {
+            "chains": 80,
+            "edge_kinds": {
+              "result": 240
+            },
+            "edges": 240,
+            "records": 480,
+            "supervised_tokens_lfm25_shard_kept": 27048
+          },
+          "curriculum_inline_union_target": {
+            "chains": 80,
+            "edge_kinds": {
+              "result": 247
+            },
+            "edges": 247,
+            "records": 560,
+            "supervised_tokens_lfm25_shard_kept": 28918
+          },
+          "curriculum_knowledge_evidence": {
+            "chains": 80,
+            "edge_kinds": {
+              "result": 200
+            },
+            "edges": 200,
+            "records": 2980,
+            "supervised_tokens_lfm25_shard_kept": 78914
+          },
+          "curriculum_knowledge_research": {
+            "chains": 41,
+            "edge_kinds": {
+              "result": 47
+            },
+            "edges": 47,
+            "records": 164,
+            "supervised_tokens_lfm25_shard_kept": 20414
+          },
+          "curriculum_labeled_judgments": {
+            "chains": 7,
+            "edge_kinds": {
+              "result": 8
+            },
+            "edges": 8,
+            "records": 64,
+            "supervised_tokens_lfm25_shard_kept": 2021
+          },
+          "curriculum_memory_answer": {
+            "chains": 56,
+            "edge_kinds": {
+              "result": 56
+            },
+            "edges": 56,
+            "records": 168,
+            "supervised_tokens_lfm25_shard_kept": 6476
+          },
+          "curriculum_recurrence_graphs": {
+            "chains": 50,
+            "edge_kinds": {
+              "result": 50
+            },
+            "edges": 50,
+            "records": 384,
+            "supervised_tokens_lfm25_shard_kept": 12222
+          },
+          "curriculum_recurrence_inline_graphs": {
+            "chains": 80,
+            "edge_kinds": {
+              "result": 444
+            },
+            "edges": 444,
+            "records": 836,
+            "supervised_tokens_lfm25_shard_kept": 41315
+          },
+          "curriculum_repo_answer": {
+            "chains": 80,
+            "edge_kinds": {
+              "result": 148
+            },
+            "edges": 148,
+            "records": 320,
+            "supervised_tokens_lfm25_shard_kept": 23659
+          },
+          "curriculum_story_answer": {
+            "chains": 25,
+            "edge_kinds": {
+              "result": 25
+            },
+            "edges": 25,
+            "records": 75,
+            "supervised_tokens_lfm25_shard_kept": 2448
+          },
+          "curriculum_translation_desk": {
+            "chains": 40,
+            "edge_kinds": {
+              "result": 152
+            },
+            "edges": 152,
+            "records": 232,
+            "supervised_tokens_lfm25_shard_kept": 36364
+          },
+          "curriculum_web_research": {
+            "chains": 15,
+            "edge_kinds": {
+              "result": 15
+            },
+            "edges": 15,
+            "records": 45,
+            "supervised_tokens_lfm25_shard_kept": 3759
+          }
+        }
+      },
+      "build": {
+        "script": "scripts/neuralese_data/e2e_mine.py",
+        "receipt": "runs/neuralese-e2e-static-s7k-protected-20261015-v1/receipt.json",
+        "files": {
+          "chains.jsonl": {
+            "bytes": 743172,
+            "sha256": "9c6f02ba244dac68bf4c993686fcf6f4b34105bb3d2866a3cb5a62170ec973af"
+          },
+          "edges.jsonl": {
+            "bytes": 1326768,
+            "sha256": "e76ee60732a360c1a9b55535b3cf8ac8e1163155b9d78b249b70230837cdede4"
+          },
+          "omissions.jsonl": {
+            "bytes": 486670,
+            "sha256": "c663492dc3c30500583ca4c8147edeaaac02ea4ad56a5aabd37a2c5a55c59629"
+          },
+          "pieces.jsonl": {
+            "bytes": 54509,
+            "sha256": "c2b5301e3a8e452095ff383976a3279d187e957adc209922dcc6a207a6ce61aa"
+          },
+          "records.jsonl": {
+            "bytes": 525964504,
+            "sha256": "cafbf5394f2de90c1c7a9c300c25f9234e24a37d6a73a0e8e1da914adb998cbe"
+          }
+        }
+      }
     }
   ],
   "coverage_backlog": [
