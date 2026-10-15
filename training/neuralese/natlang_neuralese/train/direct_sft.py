@@ -1226,6 +1226,20 @@ def plan_only(a):
     return 0 if resumable else 2
 
 
+def final_evaluations(step, *, finished, drift_stopped_here, task_eval, monitor, task_summary=None):
+    """Collect terminal evidence after completion or a guard stop, never a handoff signal.
+
+    The checkpoint is saved before this call. TaskEval reuses an eligible
+    exact-step result, and the monitor reuses its exact-step behaviour report.
+    Collecting evidence does not make a stopped lineage qualified.
+    """
+    if not (finished or drift_stopped_here):
+        return task_summary, None
+    if task_eval is not None and task_summary is None:
+        task_summary = task_eval.final_at(step)
+    return task_summary, monitor.final_gate(step)
+
+
 def main(argv=None):
     raw_argv = list(sys.argv[1:] if argv is None else argv)
     a = parse(raw_argv)
@@ -1524,6 +1538,7 @@ def main(argv=None):
     task_eval = (TaskEval(task_eval_spec, a.out, engine, prompt_rendering='full')  # the spec's own setting wins (default full)
                  if task_eval_spec is not None else None)
     final_task_summary = None
+    drift_stopped_here = False
 
     def failed(window):
         """The window's slice of its document's context-only mask (computed once per document): assistant turns
@@ -2567,6 +2582,7 @@ def main(argv=None):
             history.append({k: report[k] for k in ('step', 'ce', 'ce_delta')})
             improved = best is None or report['ce'] < best['ce']
             if (report.get('behaviour_drift') or {}).get('guard') == 'stop':
+                drift_stopped_here = True
                 report['stopped_by'] = 'behaviour_drift'
                 print(json.dumps({'event': 'behaviour_drift_stop', 'step': step}), flush=True)
                 stop.request()
@@ -2607,6 +2623,7 @@ def main(argv=None):
                 log('drift.jsonl', {'step': step, 'held_ce_subset': drift_ce(), 'base_held_ce_subset':
                                     base_eval.get('drift_ce') if base_eval else None, 'behaviour_drift': drift})
             if drift['guard'] == 'stop':
+                drift_stopped_here = True
                 print(json.dumps({'event': 'behaviour_drift_stop', 'step': step}), flush=True)
                 stop.request()
         if (policy.due(step) or stop.requested) and saved_step != step:  # never a second write of one step:
@@ -2620,12 +2637,9 @@ def main(argv=None):
     if archive is not None:
         archive.wait()
     finished = step >= end
-    if finished and task_eval is not None and final_task_summary is None:
-        # An exact resume at the final optimizer step has no train-loop body.
-        # The checkpoint is sound even if the collector failed afterwards;
-        # recover its task gate without repeating the 414 optimizer updates.
-        final_task_summary = task_eval.final_at(step)
-    gate = monitor.final_gate(step) if finished else None
+    final_task_summary, gate = final_evaluations(
+        step, finished=finished, drift_stopped_here=drift_stopped_here,
+        task_eval=task_eval, monitor=monitor, task_summary=final_task_summary)
     final = json.loads((a.out / 'report.json').read_text()) if (a.out / 'report.json').exists() else {}
     if finished and 'ce_delta' not in final:
         # A post-update collector may fail before the normal report write. An
@@ -2658,6 +2672,7 @@ def main(argv=None):
                  stopped_at=timed_prefix_step or a.stop_at or None, best=best,
                  training_seconds=training_seconds, training_time_limit_seconds=a.stop_after_training_seconds,
                  behaviour_gate=gate, behaviour_gate_report_only=True, task_gate=task_gate,
+                 final_task_eval=final_task_summary,
                  qualification='held CE below base, no drift stop, final task successes at least the base and '
                                'not below the previous evaluation minus noise (owner/coordinator 2026-10-12)', drift_stopped=drift_stopped, qualified=qualified,
                  seconds=time.time() - started, budget=budget, data_continuation=continuation_summary(continuation),

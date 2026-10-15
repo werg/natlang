@@ -10,6 +10,38 @@ ROOT = Path(__file__).resolve().parents[2]
 RECIPES = ROOT / 'training/neuralese/recipes'
 
 
+@pytest.mark.parametrize('finished,drift_stopped_here,expected',
+                         [(False, True, True), (True, False, True), (False, False, False)])
+def test_terminal_evaluations_include_off_cadence_guard_stops_but_not_handoffs(
+        finished, drift_stopped_here, expected):
+    from unittest.mock import Mock
+    from natlang_neuralese.train.direct_sft import final_evaluations
+    task = Mock()
+    monitor = Mock()
+    summary, gate = final_evaluations(15300, finished=finished, drift_stopped_here=drift_stopped_here,
+                                      task_eval=task, monitor=monitor)
+    if expected:
+        task.final_at.assert_called_once_with(15300)
+        monitor.final_gate.assert_called_once_with(15300)
+        assert summary is task.final_at.return_value and gate is monitor.final_gate.return_value
+    else:
+        task.final_at.assert_not_called()
+        monitor.final_gate.assert_not_called()
+        assert summary is None and gate is None
+
+
+def test_terminal_evaluations_reuse_the_completed_task_summary():
+    from unittest.mock import Mock
+    from natlang_neuralese.train.direct_sft import final_evaluations
+    task, monitor = Mock(), Mock()
+    prior = {'step': 15300, 'eligible': True, 'task_successes': 0}
+    summary, _ = final_evaluations(15300, finished=False, drift_stopped_here=True,
+                                  task_eval=task, monitor=monitor, task_summary=prior)
+    assert summary is prior
+    task.final_at.assert_not_called()
+    monitor.final_gate.assert_called_once_with(15300)
+
+
 def _trained(module):
     """Give every zero-initialised output projection nonzero weights (a trained stack)."""
     torch.manual_seed(1)
