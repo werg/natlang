@@ -62,6 +62,10 @@ def main(argv=None):
     parser.add_argument('--continue-from', type=Path, required=True)
     parser.add_argument('--held-native-graphs', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
+    # These describe the parent's supervised schedule, not sampled policy rows.
+    # Mandatory CE/foundation credits remain in its carried continuation frame.
+    parser.add_argument('--communication-foundation', action='store_true')
+    parser.add_argument('--foundation-native-graphs', type=Path)
     args, trainer = parser.parse_known_args(argv)
     from ..common.jsonio import iter_jsonl_rows
     rows = [row for path in args.rollouts for _, row in iter_jsonl_rows(path)]

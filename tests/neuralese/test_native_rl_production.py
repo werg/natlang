@@ -142,13 +142,15 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path):
     argv = ['--rollouts', str(source), '--rl-tokenizer', str(saved_tokenizer), '--rl-mode', 'rft',
         '--continue-from', str(parent), '--native-participant', 'lfm', '--held-native-graphs', str(held),
         '--out', str(tmp_path/'learner'), '--device', 'cpu', '--epochs', '1', '--rank', '4',
-        '--learning-rate', '1e-3', '--weight-decay', '0', '--eval-every', '1']
+        '--learning-rate', '1e-3', '--weight-decay', '0', '--eval-every', '1',
+        '--communication-foundation', '--foundation-native-graphs', str(tmp_path/'parent-only-source')]
     assert main(argv) == 0
     slot = tmp_path/'learner/checkpoint.pt'
     state = torch.load(slot, map_location='cpu', weights_only=False)
     assert state['training']['step'] == 1 and state['training']['global_step'] == 2
     assert state['training']['options']['continuation']['checkpoint_sha256'] == sha256_file_hex(parent)
     assert state['training']['optimizer']
+    assert not state['training']['options']['communication_foundation']
     prior_sha = sha256_file_hex(slot)
     assert main(argv) == 0
     assert sha256_file_hex(slot) == prior_sha  # no repeated update/checkpoint rewrite
