@@ -107831,6 +107831,36 @@
       "trace_admission": false,
       "training_admission": true,
       "training_admission_reason": "512 original clean decisions:506 exact accepted-parent actions and6 exact scoped successful child actions from failed parents. Existing shared renderer, source-context witnesses, current protection closure, both actual tokenizer schemas and exact active-prefix content deduplication passed. Full contexts at0.05weight; actual assistant targets at1.0. No fabricated communication credit."
+    },
+    {
+      "id": "native-state-rest27-semantic-pairs-partial-20261015-v3",
+      "owner": "dgx",
+      "path": "runs/native-state-rest27-pairs-admitted-partial-20261015-v3",
+      "include": [
+        "train-pairs.jsonl.zst",
+        "test-pairs.jsonl.zst",
+        "train-new-pairs.jsonl.zst",
+        "test-new-pairs.jsonl.zst",
+        "rebase-proof.json",
+        "admission-proof.json",
+        "train-validation-receipt.json",
+        "test-validation-receipt.json"
+      ],
+      "source_class": "source-bound-static-native-semantic-pairs-from-admitted-REST27-trajectories",
+      "split": "Inherited train/test source split with group-level separation rechecked against the current held, quality and explicit source-review protections.",
+      "admission": "Partial admitted cohort only: 36,208 paired edges, including the exact 37-row trained prefix and 26,275 appended train rows; 9,896 held pairs are separate. Additional completed repairs are being independently validated for a later append. This entry does not claim the full REST27 pair source is complete.",
+      "training_admission": true,
+      "training_admission_reason": "Both exact model graph views pass parse_pair, tokenizer fingerprint and native consume/import geometry; deterministic graph-ID rebasing preserves all source payload and communication provenance; strict row-level source equality, current protection closure and cross-split identity/group checks are bound by admission-proof.json and both per-split validation receipts.",
+      "derived_from": [
+        "neuralese-e2e-cloud-rest27-protected-20261015-v2"
+      ],
+      "license": "Inherited unchanged from the admitted REST27 source corpus; owner accepts all licenses.",
+      "source_bindings": {
+        "admission_proof_sha256": "6bc32acc08219f811f794d8cc14b71d542c318cf12a5eb00aac22233499161af",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "train_sha256": "6ec7db27f849afdaf43f45fed23871eac8be87b9873c76e42a640b711d0f20e4",
+        "held_sha256": "ddec24c6036b18db393ccd76f4dd772a3208a587449597eefd3f29c07f1afeea"
+      }
     }
   ],
   "coverage_backlog": [

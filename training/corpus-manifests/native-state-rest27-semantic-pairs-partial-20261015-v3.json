@@ -1,0 +1,49 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "native-state-rest27-semantic-pairs-partial-20261015-v3",
+  "owner": "dgx",
+  "path": "runs/native-state-rest27-pairs-admitted-partial-20261015-v3",
+  "files": [
+    {
+      "path": "admission-proof.json",
+      "bytes": 18059394,
+      "sha256": "6bc32acc08219f811f794d8cc14b71d542c318cf12a5eb00aac22233499161af"
+    },
+    {
+      "path": "rebase-proof.json",
+      "bytes": 8413,
+      "sha256": "c7eb5b1ef2690852f0531a68cb5a471121f416fd1db61971bcb3cc11725caa3b"
+    },
+    {
+      "path": "test-new-pairs.jsonl.zst",
+      "bytes": 33106101,
+      "sha256": "ddec24c6036b18db393ccd76f4dd772a3208a587449597eefd3f29c07f1afeea"
+    },
+    {
+      "path": "test-pairs.jsonl.zst",
+      "bytes": 33106101,
+      "sha256": "ddec24c6036b18db393ccd76f4dd772a3208a587449597eefd3f29c07f1afeea"
+    },
+    {
+      "path": "test-validation-receipt.json",
+      "bytes": 1449,
+      "sha256": "43c5f59bcfe6ec7af309ab38a1aa1c603c556a00ff6514c22921211a9300f452"
+    },
+    {
+      "path": "train-new-pairs.jsonl.zst",
+      "bytes": 197513553,
+      "sha256": "b9e08e3c0bb2327e33edf227a7dc3dcdf7b48c33f9a45b270dda394871a3d58b"
+    },
+    {
+      "path": "train-pairs.jsonl.zst",
+      "bytes": 197963729,
+      "sha256": "6ec7db27f849afdaf43f45fed23871eac8be87b9873c76e42a640b711d0f20e4"
+    },
+    {
+      "path": "train-validation-receipt.json",
+      "bytes": 1463,
+      "sha256": "dcd4b4ac531c8f962e66c74b6f74585b03267112606c41607470e2fe77870b14"
+    }
+  ],
+  "bytes": 479760203
+}
