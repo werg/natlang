@@ -92,3 +92,33 @@ one-worker native pipeline under the renewed host-headroom check. The local
 result or training admission. Preserve source license cards, split groups,
 closure omissions and exact native receipts. The supervisor registers successful
 source/native outputs and admits rendering/union inputs separately.
+
+## Closed source and resumed native replay, 2026-10-15 00:13UTC
+
+Protected finalization completed170,272train records with no exact duplicates,
+invalid records, protected hits or closure violations; all-pass input hashes and
+stat bindings matched. Native build committed163,270items in40,818cases/
+164shards. It explicitly retains7,002omission IDs with reason
+`evidence-over-cap-needs-paged-program`; these need a later paged-program
+conversion, rather than being lost or counted as native training decisions.
+
+The supervisor approved two replayers on the same already reserved affinity7,8,
+nice19 and zero CUDA. A driver-only TERM was deferred by Bash while its
+foreground child ran; the exact stop verifier refused premature relaunch. After
+verifying CPU-only PGID41120 and the separate trainer PGID35661, scoped group
+TERM completed the existing cleanup. Committed summary shards00000–00002,
+all164IRshards and frozen runtime/page bindings were retained. The resumable
+native driver restarted at00:12:25 with WORKERS2, runner46765/driver46769.
+Concrete argv and verified frontier are in dgxops
+`coreweave-search-owl-cpu-spec-20261014.json` and
+`coreweave-search-owl-two-worker-resume-frontier-20261015.json`.
+
+Only the existing native driver reruns; source conversion/finalization do not.
+Both phase launcher and driver have separate sessions so the shell's EXIT
+cleanup cannot destroy the outer terminal receipt. Polling checks actual family
+build manifests and completed shard summaries; a zero/zero shell exit does not
+establish native output success. At00:13, LFM still trained31,743forward tokens
+in0.905seconds with33,482supervised tokens/second; anon9.23GB and OOM0.
+Monitor matched update throughput and anon pressure, reducing back to one
+replayer if measured competition appears. D30/D34 waits until this entire native
+pipeline is terminal and its artifacts survive; no second converter runs beside it.

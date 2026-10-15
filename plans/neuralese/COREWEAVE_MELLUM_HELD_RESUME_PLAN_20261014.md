@@ -223,3 +223,30 @@ and exact rolling optimizer/RNG state is saved; report its exact parent and
 resolved diff before relaunch. Mellum uses its variant at the planned safe
 replacement only after raw-survival and newest-parent availability review.
 R9 data continuation remains separately admitted; these variants add no data.
+
+## Atomic export pin and survival update, 2026-10-15 00:13UTC
+
+The latest verified parent is1360,46,821,481,303bytes, SHA
+`fd794e83e23c44246e6d04b4f3716d21be38c504924c584dd2982fbde6d643b4`.
+1600 is being exported while its task evaluation runs; it is not yet durable.
+Raw survival is15/16sources,238,901,096,935raw bytes; D36 remains in progress.
+No replacement allocation or SDK stop occurred. Refresh the latest exact full
+state, final task metadata and all16raw receipts immediately before availability
+review; preserve pending evaluation rather than suppressing it for migration.
+
+Periodic snapshot preparation now reuses the shared checkpoint writer's immutable
+committed-inode pin pattern. `trajectory_state._atomic_checkpoint` writes/fsyncs a
+pending file then atomically replaces the slot; it never modifies the committed
+inode. Existing checkpoint-policy tests prove a hard-linked state survives later
+slot replacement and a failed pending write preserves the old slot. Both tests
+passed under the ledger. This is not permitted for files written in place.
+
+The in-flight1360 physical copy and private readback finished before restarting
+only the serialized exporter. Actual1600 snapshot preparation pinned the committed
+46,821,481,943byte inode in0.00178seconds, same inode verified, avoiding another
+47GBcopy/root write. Its trusted full-state header and full SHA, then independent
+private object readback, remain mandatory. A cross-filesystem link failure falls
+back to the existing immutable copy. The pin's temporary name is removed only
+after its concrete private durability consumer succeeds; the active rolling slot
+and best checkpoint remain intact. E2E07e3effd changes no trainer package files,
+so the previously approved held-v2 package inventory remains exact.
