@@ -90,13 +90,25 @@ function shapes(review, id) {
   return out;
 }
 
+function explicitGroupExtension(record) {
+  const groups = Array.isArray(record.source_groups) ? record.source_groups : [];
+  return groups.some(group => SOURCE_REVIEWS.some(review => review.status === 'pending' &&
+    (review.sourceGroups?.includes(group) || [review.id, ...review.aliases].some(id =>
+      group === `${review.dataset}:${id}`))));
+}
+
 test('differential: the data-driven functions equal the frozen old functions on every identity and record shape', () => {
   let compared = 0;
   for (const review of legacyPrefix()) for (const id of [review.id, ...review.aliases, `${review.id}-unknown`]) {
     assert.equal(pendingSourceReview(review.dataset, id)?.id, legacyPendingSourceReview(review.dataset, id)?.id);
     assert.equal(pendingSourceReview('sms_spam', id)?.id, legacyPendingSourceReview('sms_spam', id)?.id);
     for (const record of shapes(review, id)) {
-      assert.equal(sourceReviewReason(record), legacySourceReviewReason(record), JSON.stringify(record).slice(0, 200));
+      const current = sourceReviewReason(record), legacy = legacySourceReviewReason(record);
+      if (current !== legacy) {
+        assert.equal(current, 'source_review_pending', JSON.stringify(record).slice(0, 200));
+        assert.equal(legacy, undefined);
+        assert.ok(explicitGroupExtension(record), 'only an exact source-group hold may broaden the legacy result');
+      } else assert.equal(current, legacy);
       const recordDataset = record.dataset ?? review.dataset;
       assert.equal(pendingSourceReview(recordDataset, id, record)?.id, legacyPendingSourceReview(recordDataset, id, record)?.id);
       compared++;
@@ -118,7 +130,14 @@ test('differential: the family holds, the display name, the family inference and
       for (const shape of [undefined, 'story337', 'train_33143', 'LEAP_7_10338', 'story999'])
         cases.push({ dataset, curriculum: { family, shape }, dataset_records: ['x'], source_groups: ['folio:story:337'], source_ids: ['story337'] });
   cases.push({}, { curriculum: null }, { source: null }, { dataset: 'folio', curriculum: 'text' });
-  for (const record of cases) assert.equal(sourceReviewReason(record), legacySourceReviewReason(record), JSON.stringify(record));
+  for (const record of cases) {
+    const current = sourceReviewReason(record), legacy = legacySourceReviewReason(record);
+    if (current !== legacy) {
+      assert.equal(current, 'source_review_pending', JSON.stringify(record));
+      assert.equal(legacy, undefined);
+      assert.ok(explicitGroupExtension(record), 'only an exact source-group hold may broaden the legacy result');
+    } else assert.equal(current, legacy);
+  }
   assert.equal(anliReviewText({ beginning: 'a', ending: 'b', a: 'c', b: 'd' }), legacyAnliReviewText({ beginning: 'a', ending: 'b', a: 'c', b: 'd' }));
   assert.equal(anliReviewText({ beginning: 'a' }), undefined);
   assert.equal(cases.filter(record => sourceReviewReason(record) === 'source_review_pending').length > 10, true);

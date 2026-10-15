@@ -325,3 +325,7 @@ The existing native trajectory policy admits successful child decisions and keep
 | Exclude already-rendered affected programs in the next union | Exact cohort selection | Published source manifests remain immutable; an explicit union omission prevents prior mistaken targets from entering training. |
 
 The next text union takes an explicit hash-bound list of held native decision IDs. Its exact selector checks each rendered document's `source_record_ids`; a whole-trajectory document containing a held decision is omitted, while unrelated decisions from the same parent remain eligible. The source-record binding and tokenizer twin check are crisp; the decision to hold each ID is the reviewed quality verdict. No rendered member is mutated in place.
+
+## Source-review migration differential scope — 2026-10-15
+
+The frozen pre-migration comparator covers the old item identities and family rules. Current source review also holds exact `dataset:id` and explicit `sourceGroups` across mixed-source programs, which the old function did not. The differential test retains byte-for-byte legacy registry checks; when current and legacy verdicts differ, it permits only a current pending hold witnessed by one exact explicit source group. This is a crisp test of the declared registry semantics, not a new review policy or model-facing message.
