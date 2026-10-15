@@ -173,17 +173,26 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
     engine.native_identity = identity
     engine.native_checkpoint = str(checkpoint)
     engine.native_training_state = (_state.get('training') or _state.get('shared_training') or {})
-    if semantic_adapter:
-        from ..model.semantic_channel import SemanticChannel
-        engine.semantic_channel = SemanticChannel.load(semantic_adapter, device=device)
-        if participant is None:
-            raise ValueError('semantic serving requires its explicit shared checkpoint participant')
-        engine.semantic_channel.require_target(participant, identity)
-        engine.semantic_participant = participant
-        engine.dialect = 'semantic-state/' + engine.semantic_channel.adapter_sha256
     engine.rl_policy_binding = {'schema': 'natlang.rl-policy-binding/2',
         'checkpoint_sha256': checkpoint_sha256, 'communication': 'native-state',
         'native_identity': dict(identity),
-        **({'native_participant': participant} if participant is not None else {}),
-        **({'semantic_adapter_sha256': engine.semantic_channel.adapter_sha256} if semantic_adapter else {})}
+        **({'native_participant': participant} if participant is not None else {})}
+    if semantic_adapter:
+        from ..model.semantic_channel import SemanticChannel
+        bind_native_semantic_channel(engine, SemanticChannel.load(semantic_adapter,device=device), participant)
+    return engine
+
+
+def bind_native_semantic_channel(engine,channel,participant):
+    """Bind the same exact learned channel in persisted and live-model serving."""
+    if participant is None:
+        raise ValueError('semantic serving requires its explicit shared checkpoint participant')
+    channel.require_target(participant,engine.native_identity)
+    engine.semantic_channel=channel
+    engine.semantic_participant=participant
+    engine.dialect='semantic-state/'+channel.adapter_sha256
+    engine.rl_policy_binding={'schema':'natlang.rl-policy-binding/2',
+        'checkpoint_sha256':engine.native_identity['checkpoint_sha256'],'communication':'native-state',
+        'native_identity':dict(engine.native_identity),'native_participant':participant,
+        'semantic_adapter_sha256':channel.adapter_sha256}
     return engine
