@@ -38,3 +38,23 @@ measured discrepancy; attention execution remains the numerical boundary.
 It does not establish a cause for the task regression or qualify a production
 kernel change. The probe completed with exit zero; its exact result is
 `dgxops/mellum292-attention-boundary-proof.json` on DGX.
+
+The matched three-case trajectories provide another lead: the base passed all
+three with 53,378 reasoning characters across 14 turns; step 292 failed all
+three with no reported reasoning across its 14 turns. The frozen R8 Mellum
+full training view has 21,763 targets without a thinking block and 8,018 with
+nonempty reasoning. These are observations, not a causal attribution or a
+decision to add reasoning to native child judgments.
+
+Diagnostic unit `diag-mellum292-reasoning-intervention-v2-2454` forced only an
+opening thinking delimiter and delayed its closing token until 128 generated
+tokens, retaining the same prompts, seeds, temperature and weights. It did
+not complete: the memory ledger stopped it at 113,086,226,432 measured bytes
+under memory pressure. Two cases finished (one accepted, one rejected); the
+third reached request 71. Both finished replies emitted tool calls before
+closing the thinking block, leaving the delimiter in content and reported
+reasoning empty. This is not a clean test of restored reasoning, a completed
+comparison or qualification. Preserve the partial evidence while diagnosing
+the native-memory growth; do not repeat the same expensive intervention.
+The audit is `dgxops/mellum-task400-diagnostic/`
+`reasoning-intervention-v2-partial-audit.json` (unit 2466, exit zero).
