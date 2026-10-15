@@ -226,12 +226,12 @@ def exact_replay_windows(engine, spec_path, train_windows, held_windows):
         result, seen = [], set()
         for window in windows:
             key = window['document']
+            if key not in docs:
+                result.append(window)  # preserve EVERY ordinary held window
+                continue
             if key in seen:
                 continue
             seen.add(key)
-            if key not in docs:
-                result.append(window)  # ordinary registered production held CE
-                continue
             row = docs[key]
             prompt, target, _ = capture_items(row['sampling'])
             def coordinates(items):

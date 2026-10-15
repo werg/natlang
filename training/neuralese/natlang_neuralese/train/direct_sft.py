@@ -281,6 +281,8 @@ def parse(argv=None):
                         'only their logs and report')
     p.add_argument('--seed', type=int, default=0)
     a = p.parse_args(argv)
+    if a.rl_objective is not None and a.family is not None:
+        p.error('full-policy RL does not yet implement family-member teacher distillation; use its full-model stage')
     if a.e2e_mix is not None:
         mix = a.e2e_mix = json.loads(a.e2e_mix) if isinstance(a.e2e_mix, str) else a.e2e_mix
         if not isinstance(mix, dict) or not 0 < float(mix.get('fraction', 0)) < 1 or not mix.get('records') \

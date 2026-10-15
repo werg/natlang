@@ -161,3 +161,21 @@ def test_replay_geometry_keeps_whole_context_and_one_signed_sample(tmp_path):
     assert len(train) == len(targets) == 2 and not held
     assert all(len(w['ids']) == 23 for w in train)
     assert [w['document'] for w in train] == ['positive', 'negative']
+
+
+def test_ordinary_production_held_windows_are_never_deduplicated(tmp_path):
+    from natlang_neuralese.rl.full_policy import exact_replay_windows
+    spec = tmp_path / 'empty.json'
+    spec.write_text(json.dumps({'documents': []}))
+    first = {'document': 'ordinary-held', 'offset': 0}
+    second = {'document': 'ordinary-held', 'offset': 1024}
+    train, targets, held = exact_replay_windows(object(), spec, [], [first, second])
+    assert held == [first, second] and held[0] is first and held[1] is second
+    assert not train and not targets
+
+
+def test_rl_never_silently_ignores_family_distillation(tmp_path):
+    from natlang_neuralese.train.direct_sft import parse
+    with pytest.raises(SystemExit):
+        parse(['--heads', 'heads.pt', '--out', str(tmp_path), '--records', 'r.jsonl',
+               '--rl-objective', 'rl.json', '--family', '{}'])
