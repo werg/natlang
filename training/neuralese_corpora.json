@@ -89733,6 +89733,31 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "luna-held-shapes-s52089-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52089-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "decision-holds.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "86 independently reviewed exact accepted roots; 673 approved native decisions out of 743 materialized; 32 unapproved, 36 from five process-violating parents and two redundant route looks excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v17 source review, independent visible-feed semantic review, protected checks, generic declared-process shape audit and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Three missing-inline and two missing-iterateOn parents held; two exact repeated world.look decisions held. One clean hinted Hotpot sibling sharing source groups is retained. Rejected source ambiguities entered in v16/v17.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Do not pass action-shape-quarantine.jsonl as a blanket group-level union reference: it would erase a valid hinted Hotpot sibling. Exact parent and decision holds are authoritative; global source review v17 remains required."
     }
   ],
   "coverage_backlog": [
