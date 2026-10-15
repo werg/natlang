@@ -154,21 +154,23 @@ def test_held_union_cache_tracks_compressed_relocated_views_and_exact_bytes(tmp_
         module.held_union_groups(work, tmp_path / 'missing-union')
 
 
-@pytest.mark.parametrize('hold_kind', ['quality', 'decision'])
+@pytest.mark.parametrize('hold_kind', ['quality', 'decision', 'held-group'])
 def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_path, monkeypatch, hold_kind):
     from types import SimpleNamespace
     spec = importlib.util.spec_from_file_location('e2e_assemble_quality_test', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     monkeypatch.setattr(module, 'pending_unpinned_source_groups', lambda: set())
     monkeypatch.setattr(module, 'registry_sha256', lambda: 'a' * 64)
-    monkeypatch.setattr(module, 'held_union_groups', lambda *args: (set(), [{'sha256': 'b' * 64}]))
+    monkeypatch.setattr(module, 'held_union_groups', lambda *args:
+                        ({'quality:bad'} if hold_kind == 'held-group' else set(), [{'sha256': 'b' * 64}]))
     work = tmp_path / 'work'; source = work / 'fixture'; source.mkdir(parents=True)
     records, edges = [], []
     for name, split in [('bad', 'train'), ('good', 'train'), ('held', 'test')]:
-        ids = [name + ':0', name + ':1']
+        ids = [name + ':0', name + ':1', name + ':2']
         for i, rid in enumerate(ids):
             records.append({'id': rid, 'split': split, 'source_ref': {'trajectory_id': name},
-                            'source_groups': ['quality:bad'] if name != 'good' and i == 0 else [name],
+                            # Only a non-endpoint context record carries the held source.
+                            'source_groups': ['quality:bad'] if name != 'good' and i == 2 else [name],
                             'target': {'role': 'assistant', 'content': rid}, 'family': 'fixture'})
         edges.append({'trajectory': name, 'split': split, 'writer_split': split,
                       'writer_record_id': ids[0], 'reader_record_id': ids[1],
@@ -187,16 +189,18 @@ def test_assemble_quarantine_removes_whole_train_chain_and_preserves_held(tmp_pa
                                        quarantine_reference=[witness] if hold_kind == 'quality' else [],
                                        decision_hold_ids=[decision_witness] if hold_kind == 'decision' else []))
     out = tmp_path / 'assembled'
-    assert {json.loads(l)['id'] for l in (out / 'records.jsonl').open()} == {'good:0', 'good:1', 'held:0', 'held:1'}
+    assert {json.loads(l)['id'] for l in (out / 'records.jsonl').open()} == {
+        'good:0', 'good:1', 'good:2', 'held:0', 'held:1', 'held:2'}
     omissions = [json.loads(l) for l in (out / 'omissions.jsonl').open()]
-    assert {r['id'] for r in omissions} == {'bad:0', 'bad:1'}
-    reason = 'source_quality_quarantine_chain' if hold_kind == 'quality' else 'native_decision_hold_chain'
+    assert {r['id'] for r in omissions} == {'bad:0', 'bad:1', 'bad:2'}
+    reason = {'quality': 'source_quality_quarantine_chain', 'decision': 'native_decision_hold_chain',
+              'held-group': 'train_trajectory_shares_held_source_group'}[hold_kind]
     assert all(r['reason'] == reason for r in omissions)
     receipt = json.loads((out / 'receipt.json').read_text())
     assert receipt['totals']['edges'] == 2
     if hold_kind == 'quality':
         assert receipt['source_quality_quarantine_bindings'][0]['sha256'] == module.sha256_file_hex(witness)
-    else:
+    elif hold_kind == 'decision':
         assert all(r['decision_ids'] == ['bad:0'] for r in omissions)
         assert receipt['native_decision_hold_bindings'][0]['sha256'] == module.sha256_file_hex(decision_witness)
         assert receipt['held_native_decision_flags'] == [{'id': 'held:0', 'source': 'fixture', 'split': 'test'}]

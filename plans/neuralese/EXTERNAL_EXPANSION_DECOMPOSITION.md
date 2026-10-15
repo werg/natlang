@@ -231,3 +231,9 @@ to every actual output file, current review and decision-hold hashes, and zero
 protected-source/decision intersections. Preserve the original build receipt;
 never rewrite its historical input bindings to appear current. This guard is
 crisp verification of the declared admission policy, not a semantic reviewer.
+
+Held-source protection covers every record of a whole training trajectory,
+including context records that are not edge endpoints. If any such record
+shares a held source group, exclude the whole train chain and report every
+excluded record. Endpoint-only filtering is insufficient for whole-trajectory
+training; held evaluation chains remain available.

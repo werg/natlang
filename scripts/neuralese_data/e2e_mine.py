@@ -391,6 +391,7 @@ def cmd_assemble(a):
         edges = [json.loads(l) for l in read_lines(f'{stem}.edges.jsonl')]
         reviewed = reviewed_trajectories(records.values(), review_groups)
         quarantined = reviewed_trajectories(records.values(), quality_groups)
+        protected = reviewed_trajectories(records.values(), held_groups)
         decision_held = collections.defaultdict(set)
         for rid, record in records.items():
             if rid not in held_decisions:
@@ -401,6 +402,8 @@ def cmd_assemble(a):
                 held_decision_flags.append({'id': rid, 'source': source, 'split': record.get('split')})
         keep_ids, drop = set(), {}
         for rid, r in records.items():
+            if r.get('split') == 'train' and trajectory_of(r) in protected:
+                drop[rid] = 'train_trajectory_shares_held_source_group'; continue
             if r.get('split') == 'train' and trajectory_of(r) in decision_held:
                 drop[rid] = 'native_decision_hold_chain'; continue
             if r.get('split') == 'train' and trajectory_of(r) in quarantined:
@@ -430,7 +433,8 @@ def cmd_assemble(a):
         for e in kept_edges: chains[e['trajectory']].append(e)
         for rid, why in drop.items():
             groups = (quarantined if why == 'source_quality_quarantine_chain' else
-                      reviewed if why == 'source_review_pending_chain' else None)
+                      reviewed if why == 'source_review_pending_chain' else
+                      protected if why == 'train_trajectory_shares_held_source_group' else None)
             detail = {'source_groups': sorted(groups[trajectory_of(records[rid])])} if groups is not None else {}
             if why == 'native_decision_hold_chain':
                 detail['decision_ids'] = sorted(decision_held[trajectory_of(records[rid])])
