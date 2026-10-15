@@ -55,6 +55,25 @@ class _Tokenizer:
         return {"input_ids": [ord(char) for char in text]}
 
 
+def test_gold_text_accepts_precomputed_exact_tokenizer_fingerprint(monkeypatch):
+    from natlang_neuralese.data import text_corpus
+    records = [
+        {"id": "train", "split": "train", "source_groups": ["group:train"],
+         "training_admission": {"approved": True}, "messages": [{"role": "user", "content": "q"}],
+         "target": {"role": "assistant", "content": "a"}},
+        {"id": "held", "split": "test", "source_groups": ["group:held"],
+         "training_admission": {"approved": True}, "messages": [{"role": "user", "content": "h"}],
+         "target": {"role": "assistant", "content": "b"}},
+    ]
+    tokenizer = _Tokenizer()
+    fingerprint = text_corpus.tokenizer_fingerprint(tokenizer)
+    expected = gold_text_rows(records, [], tokenizer=tokenizer)
+    monkeypatch.setattr(text_corpus, "tokenizer_fingerprint",
+        lambda _tokenizer: (_ for _ in ()).throw(AssertionError("recomputed tokenizer fingerprint")))
+    actual = gold_text_rows(records, [], tokenizer=tokenizer, tokenizer_sha256=fingerprint)
+    assert actual == expected
+
+
 def _sha(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 

@@ -1612,7 +1612,7 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                    ordinary_text_admission_receipt: Mapping[str, Any] | None = None,
                    ordinary_text_admission_receipt_sha256: str | None = None,
                    prompt_rendering: str = "full", target_reasoning: bool = False,
-                   include_token_offsets: bool = False):
+                   include_token_offsets: bool = False, tokenizer_sha256: str | None = None):
     """Return ``(rows, receipt, omissions, provenance)`` for renderer-qualified records.
 
     Each row has the shared ``text_warmup.load_text_rows`` schema. Text is a
@@ -1627,7 +1627,7 @@ def gold_text_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, st
                            ordinary_text_admission_receipt=ordinary_text_admission_receipt,
                            ordinary_text_admission_receipt_sha256=ordinary_text_admission_receipt_sha256,
                            prompt_rendering=prompt_rendering, target_reasoning=target_reasoning,
-                           include_token_offsets=include_token_offsets)
+                           include_token_offsets=include_token_offsets, tokenizer_sha256=tokenizer_sha256)
 
 
 def gold_text_preview_rows(records: Iterable[Mapping[str, Any]], pieces: Mapping[str, str] | Iterable[Mapping[str, Any]], *, tokenizer):
@@ -1724,14 +1724,16 @@ def bind_ordinary_text_admission(records, receipt, receipt_sha256):
 def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_independent_splits=True,
                     ordinary_text_admission_receipt=None,
                     ordinary_text_admission_receipt_sha256=None, prompt_rendering="full",
-                    target_reasoning=False, include_token_offsets=False):
+                    target_reasoning=False, include_token_offsets=False, tokenizer_sha256=None):
     from ..train.trajectories import crisp_messages, handover_notes
     from .prompt_rendering import PROMPT_RENDERINGS
     if prompt_rendering not in PROMPT_RENDERINGS:
         raise ValueError(f"unknown prompt_rendering {prompt_rendering!r} (declared: {PROMPT_RENDERINGS})")
 
     from ..serve.chat import bind_history_reasoning
-    fingerprint = tokenizer_fingerprint(tokenizer)
+    fingerprint = tokenizer_sha256 or tokenizer_fingerprint(tokenizer)
+    if not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+        raise ValueError("precomputed tokenizer fingerprint must be a lowercase SHA-256")
     # The backbone's declared history-reasoning policy (chat.BACKBONE_HISTORY_REASONING), asserted by a probe.
     history_reasoning = dict(bind_history_reasoning(tokenizer).natlang_history_reasoning)
     record_rows = list(records)
