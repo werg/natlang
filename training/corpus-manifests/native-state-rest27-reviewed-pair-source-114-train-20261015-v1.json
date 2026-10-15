@@ -1,0 +1,77 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "native-state-rest27-reviewed-pair-source-114-train-20261015-v1",
+  "owner": "dgx",
+  "path": "runs/native-state-rest27-reviewed-pair-source-20261015-v1",
+  "files": [
+    {
+      "path": "DECOMPOSITION.md",
+      "bytes": 1072,
+      "sha256": "19c6b73cdd6c689f1e72ac6a656eabba97dbf5c414a1ced542c2d901eddacf26"
+    },
+    {
+      "path": "admission-proof-114-train.json",
+      "bytes": 1483,
+      "sha256": "bb865ca912a495f6c873be2ce7616d258246a0173ac1f287242b4ca987619898"
+    },
+    {
+      "path": "admission-summary-114-train.json",
+      "bytes": 1332,
+      "sha256": "b0f368c3b0371a35d288d213d3cefc38cd9463e222449fd51e337a91901ee2c1"
+    },
+    {
+      "path": "build/pair-omissions.jsonl",
+      "bytes": 20214,
+      "sha256": "3c05f126c395a0b11365fe79db757c7e42857b23e4867042fdbb065a436e2a8d",
+      "lines": 21
+    },
+    {
+      "path": "build/pairs/test/semantic-pairs.jsonl.zst",
+      "bytes": 65,
+      "sha256": "08204e7448af34600f99056e7bf9ad35a48283bf4b505557e6d57f79d204163e"
+    },
+    {
+      "path": "build/pairs/train/semantic-pairs.jsonl.zst",
+      "bytes": 525203,
+      "sha256": "74179f3cae476a91d8005fe8f93d9f3afe273a2a6fa4cf5d0782eb03fc70e079"
+    },
+    {
+      "path": "build/receipt.json",
+      "bytes": 3298,
+      "sha256": "ceed3b87c72fcf53520d768086e90a02b777de10df83b3c2a4fe2f7abcf0dcc3"
+    },
+    {
+      "path": "build/resume-manifest.json",
+      "bytes": 30857,
+      "sha256": "2a3e66763a66e6aeaacfa4aedb45b09ad30657f1a0af5bf627bd721deb78bd78"
+    },
+    {
+      "path": "edges.jsonl",
+      "bytes": 64313,
+      "sha256": "52049fc2fca06379bf7adee546e7ad426f444f5b14ced8392276208ec704df63",
+      "lines": 135
+    },
+    {
+      "path": "original-edge-source-proof.json",
+      "bytes": 10665,
+      "sha256": "dcb2fc43e9cc22818daf8af0e855bfe3ee87d7f5c2068ae0563cf636da44149b"
+    },
+    {
+      "path": "pair-source-admission.json",
+      "bytes": 176381,
+      "sha256": "f482cbcf154e378fb2dea457b1e0caee101ca390b31e5859936f4bd34c80afb1"
+    },
+    {
+      "path": "records.jsonl",
+      "bytes": 18711880,
+      "sha256": "309250cef108b426044a209d42eb1928d85fcba9b6c840dc279b53f9822e4012",
+      "lines": 161
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 584,
+      "sha256": "1f16f6d554b11f6eaf2acbe78227c5a67a4013c49aab1d485a42292a4e06ff0e"
+    }
+  ],
+  "bytes": 19547347
+}

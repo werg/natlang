@@ -107938,6 +107938,43 @@
         "pair_train_sha256": "6a9b8b5398709be503502ce5256c9c78eef69e0b0e54d6fc9d281d1a1ccddc3a",
         "pair_held_sha256": "5c7a693d1ea8cb12a36bdb6f8dbc767ab866d9345a787902c6201967f443f706"
       }
+    },
+    {
+      "id": "native-state-rest27-reviewed-pair-source-114-train-20261015-v1",
+      "owner": "dgx",
+      "path": "runs/native-state-rest27-reviewed-pair-source-20261015-v1",
+      "include": [
+        "records.jsonl",
+        "edges.jsonl",
+        "source-manifest.json",
+        "DECOMPOSITION.md",
+        "pair-source-admission.json",
+        "original-edge-source-proof.json",
+        "build/receipt.json",
+        "build/resume-manifest.json",
+        "build/pairs/train/semantic-pairs.jsonl.zst",
+        "build/pairs/test/semantic-pairs.jsonl.zst",
+        "build/pair-omissions.jsonl",
+        "admission-proof-114-train.json",
+        "admission-summary-114-train.json"
+      ],
+      "source_class": "source-bound-static-native-semantic-pairs-from-reviewed-REST27-endpoints",
+      "split": "Train-only partial cohort. No held/test pair rows are asserted; source edge splits were independently checked.",
+      "admission": "114 source-bound semantic training pairs from 135 enumerated approved candidate edges. 21 exact selected edges remain explicit render omissions or guards. This is a partial source admission, not completion of the REST27 pair corpus.",
+      "training_admission": true,
+      "training_admission_reason": "Both actual expanded-tokenizer model views pass the shared parse_pair and native consume/import geometry checks; exact original edge membership, communication witnesses, source IDs, and current held/quality/pending review closure are bound by admission-proof-114-train.json.",
+      "derived_from": [
+        "neuralese-e2e-cloud-rest27-protected-20261015-v2"
+      ],
+      "license": "Inherited unchanged from the admitted REST27 source corpus; owner accepts all licenses.",
+      "source_bindings": {
+        "source_admission_sha256": "f482cbcf154e378fb2dea457b1e0caee101ca390b31e5859936f4bd34c80afb1",
+        "original_edge_source_proof_sha256": "dcb2fc43e9cc22818daf8af0e855bfe3ee87d7f5c2068ae0563cf636da44149b",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "train_sha256": "74179f3cae476a91d8005fe8f93d9f3afe273a2a6fa4cf5d0782eb03fc70e079",
+        "held_file_sha256": "08204e7448af34600f99056e7bf9ad35a48283bf4b505557e6d57f79d204163e",
+        "training_validation_sha256": "bb865ca912a495f6c873be2ce7616d258246a0173ac1f287242b4ca987619898"
+      }
     }
   ],
   "coverage_backlog": [
