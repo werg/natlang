@@ -108210,6 +108210,40 @@
         "lfm_receipt_sha256": "60f0de245a549a0a774cf67f96ba29fcded048ebcf064d55ae7da88376e6bf27",
         "mellum_receipt_sha256": "00718eb2358a93464ad25dd015ba675c5cc5ef4432f8c1270be21fa9664350d9"
       }
+    },
+    {
+      "id": "native-state-rest27-reviewed-pair-remaining21-20261015-v1",
+      "owner": "dgx",
+      "path": "runs/native-state-rest27-reviewed-pair-remaining21-20261015-v1/build",
+      "include": [
+        "pairs/train/semantic-pairs.jsonl.zst",
+        "pairs/test/semantic-pairs.jsonl.zst",
+        "pair-omissions.jsonl",
+        "render-omissions.jsonl",
+        "receipt.json",
+        "resume-manifest.json",
+        "selected-edge-ids.txt",
+        "validation-proof.json"
+      ],
+      "source_class": "source-bound-static-native-semantic-pair-repair-tail-from-reviewed-REST27-endpoints",
+      "split": "Train-only; all 21 selected source edges were inherited as train and rechecked against current held, quality, source-review and decision protections. No held/test pairs are claimed.",
+      "admission": "Verified 21 previously unpaired reviewed REST27 edges as an additional immutable train-only tail. This covers the selected 21-edge reviewed subset only; other REST27 source families and repairs remain separately tracked.",
+      "training_admission": true,
+      "training_admission_reason": "Exact selected-edge membership is bound to the immutable 135-edge source. Both model views pass shared parse_pair, actual model tokenizer fingerprints, native graph geometry and source-witness validation. IDs are disjoint from the existing 26,312 admitted pair rows. All 10 source groups have zero intersection with current held, quality, source-review and decision-hold protections. The prior 114-row artifact and 26,312-pair foundation remain unchanged.",
+      "derived_from": [
+        "native-state-rest27-reviewed-pair-source-114-train-20261015-v1",
+        "neuralese-e2e-cloud-rest27-protected-20261015-v2"
+      ],
+      "license": "Inherited unchanged from the admitted REST27 source corpus; owner accepts all licenses.",
+      "source_bindings": {
+        "validation_proof_sha256": "6de638de852b72f4ffbef76ff4b098bf8ec09b701faa2973969a93c9cff39b5f",
+        "train_sha256": "a52ef4a459b43ab0fed57b543355c06fac27ff44249b8808306260a9c7b2d73f",
+        "held_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+        "source_records_sha256": "309250cef108b426044a209d42eb1928d85fcba9b6c840dc279b53f9822e4012",
+        "source_edges_sha256": "52049fc2fca06379bf7adee546e7ad426f444f5b14ced8392276208ec704df63",
+        "selected_edge_ids_sha256": "1d94201b6944b0904e4b463ff9b65b23d97b6fd763219eec5a90a2ade2029a49",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563"
+      }
     }
   ],
   "coverage_backlog": [
