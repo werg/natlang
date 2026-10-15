@@ -72,3 +72,14 @@ are remembered after adoption, allowing subsequent restarts with the same
 continuation declaration. An exact known previous ordinary-index policy may be
 reused only with unchanged parser/compiler hashes and verified metadata; every
 streamed graph is rechecked against its immutable row binding before training.
+
+Verified integration: 86 focused source/trainer/recipe checks pass, including
+actual hybrid LFM and Mellum one-flat-forward consumer-only gradients into the
+producer adapter, independently cached capture/splice parity, exact requested
+stream ordering, stop/append/priority/repack/resume and unchanged completed-run
+RNG state. The first admitted corrected REST shard passes strict extraction for
+both actual model IDs: 37 positive communication graphs/model; this validation
+records zero training visits and does not claim full REST coverage. Empty
+source-authenticated payloads remain trainable structural examples and receive
+no genuine communication credit. Cadence checks preserve complete long held
+graphs and always require a full held-source pass before completion.

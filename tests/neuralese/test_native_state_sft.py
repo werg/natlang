@@ -623,3 +623,26 @@ def test_exact_previous_ordinary_index_migration_never_admits_changed_source_or_
     path.write_text(json.dumps(row)+'\n')
     changed=NativeGraphSource(path,'tokenizer-sha',required_split='train')
     assert changed.bindings['a'] != entry['binding']
+
+
+def test_empty_authenticated_payload_is_useful_structural_data_without_communication_credit(tmp_path):
+    from natlang_neuralese.common.hashing import sha256_hex
+    row=authenticated_pair('empty')
+    row['payload_sha256']=sha256_hex(b'')
+    for view in row['models'].values():
+        producer=view['graph']['nodes'][0]
+        producer.update(token_ids=[1,58,59],target_weights=[0,1,1],producing=[[2,2]])
+        view['graph']['nodes'][1]['imports'][0]['stop']=2
+        view['export'].update(stop=2,text='',offsets=[])
+        view['witness']['payload_sha256']=row['payload_sha256']
+        occurrence=view['graph']['source_pairing']['consumed_occurrences'][0]
+        occurrence.update(wrapped_token_stop=2,payload_sha256=row['payload_sha256'])
+    ordinary=[dict(graph('ordinary'),tokenizer_fingerprint='1'*64)]
+    source=NativeGraphSource(source_manifest(tmp_path,ordinary,[row]),'1'*64,
+                             required_split='train',role_ids=(58,59,60,61))
+    assert len(source)==2 and [item.id for item in source]==['ordinary','lfm:empty']
+    assert source.receipt()['communication_graphs']==0
+    from natlang_neuralese.train.native_state_sft import pending_exposure_batches,communication_exposure
+    quotas,batches=pending_exposure_batches(source.entries,{},epochs=1)
+    assert sum(len(indices) for _,indices,_ in batches)==2
+    assert communication_exposure(source.entries,{'lfm:empty':1},quotas)['complete'] is False

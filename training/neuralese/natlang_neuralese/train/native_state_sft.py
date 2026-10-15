@@ -134,7 +134,8 @@ class NativeGraphSource:
             visits = {'id': example.id, 'groups': example.source_groups, 'binding': binding,
                       'supervised_tokens': sum(weight > 0 for weight in example.target_weights),
                       'forward_tokens': example.plan.token_count,
-                      'communication': self.kind == 'semantic-pairs'}
+                      'communication': self.kind == 'semantic-pairs' and
+                          row['models'][self.pair_model]['export']['stop'] > row['models'][self.pair_model]['export']['start']}
             self.entries.append(visits)
             self.bindings[example.id] = binding
             self.groups.update(example.source_groups)
@@ -215,7 +216,7 @@ class NativeGraphSource:
         for occurrence in occurrences:
             start, stop = occurrence.get('wrapped_token_start'), occurrence.get('wrapped_token_stop')
             at = occurrence.get('consumer_import_at')
-            if (type(start) is not int or type(stop) is not int or not 0 <= start < stop
+            if (type(start) is not int or type(stop) is not int or not 0 <= start <= stop
                     or type(at) is not int or at < 0
                     or occurrence.get('source_row_id') != provenance['consumer_source_row_id']
                     or occurrence.get('payload_sha256') != row['payload_sha256']):
@@ -308,13 +309,13 @@ def _require_communication_graph(example, view, role_ids):
     exported = view['export']
     producer = nodes[exported['node']]
     declared = producer.logical_producing if exported.get('logical', False) else producer.producing
-    if not any(start <= exported['start'] < exported['stop'] <= stop for start, stop in declared):
+    if not any(start <= exported['start'] <= exported['stop'] <= stop for start, stop in declared):
         raise ValueError('paired SFT export must address an actually declared producing span')
     producing = False
     consumed = set()
     for node, offset in zip(plan.invocations, plan.offsets):
         for start, stop in node.producing:
-            if not (0 < start < stop < len(node.token_ids)
+            if not (0 < start <= stop < len(node.token_ids)
                     and node.token_ids[start-1] == produce_open and node.token_ids[stop] == produce_close):
                 raise ValueError('paired SFT producer span needs actual producing boundary tokens')
             producing = True
