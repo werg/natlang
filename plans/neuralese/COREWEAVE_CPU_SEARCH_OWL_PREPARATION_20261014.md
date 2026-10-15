@@ -134,3 +134,34 @@ quality nor training admission. Account credentials remain on the owner host;
 artifact availability and admission remain separate. No second account route
 or cloud converter is introduced. Keep the original archive until its assigned
 durable-readback consumer completes.
+
+### BuildAndVerifyConvolution(source, imageABI, device, referenceInputs)
+
+The supervisor chooses the exact registered source and architecture.
+1. Read the pinned source commit and existing Pop patch/build manifest.
+2. Build the corresponding sm90 wheel against the active Torch2.14/CUDA13.4
+   image in an isolated CPU-only build directory, using available spare CPU.
+3. Keep the frozen forensic runtime unchanged. After its GPU evaluation ends,
+   reuse the matched forward/backward and throughput harness against the exact
+   reference inputs on the same H100.
+4. Record source, patches, wheel/build hashes, numeric differences and timing.
+   The supervisor admits an architecture mapping only after those verifiers
+   pass; building a wheel alone does not qualify it.
+
+Crisp work is public Git/source transport, compiler invocation, ABI/device
+identity, hashing and exact numerical/throughput measurements. It neither
+chooses a model policy nor changes training or evaluation controls.
+
+### PackClosedNativeForDurability(closed, native, receipts)
+
+The owner selects the completed Search/OWL trees. Preserve every closed handoff,
+all native IR/graph/turn outputs, omissions and conversion/replay receipts.
+Package closed and native independently with the existing mined-source archive
+protocol, verify every decoded member against its original byte hash, then use
+the existing private scoped exporter and independent full-object readback.
+Availability grants no training admission; source/held/quality checks remain
+explicit. The shared `scripts/coreweave/source_archive.py` promotes the existing
+operator pack/verify implementation with explicit source/spool/name arguments.
+Crisp code is exact byte transport, atomic commit and verifiers. It makes no
+source-selection, conversion or promotion decision. Legacy local wrappers should
+call that shared implementation rather than retaining another copy.
