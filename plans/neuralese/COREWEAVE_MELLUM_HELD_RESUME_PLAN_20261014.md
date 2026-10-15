@@ -250,3 +250,67 @@ back to the existing immutable copy. The pin's temporary name is removed only
 after its concrete private durability consumer succeeds; the active rolling slot
 and best checkpoint remain intact. E2E07e3effd changes no trainer package files,
 so the previously approved held-v2 package inventory remains exact.
+
+## Complete raw survival and scoped restore, 2026-10-15 00:46UTC
+
+All16acquired sources completed independent private archive SHA readback and
+per-file/full-LFS verification:311,675,771,864raw bytes in311,738,757,120archive
+bytes. The original raw-survival worker ended terminal0 and removed only its
+verified temporary archive copies. D36's final archive is72,779,008,000bytes,
+SHA `6e9480509678dc691bd6be01953aa6ce7943c5fa0221a4f0ee927f1c2c83e835`.
+Four catalog access blocks remain explicit; none of this grants training admission.
+
+Scoped GET capabilities have approximately one-hour lifetimes. Raw restore
+therefore reuses existing bundle fetch with a fresh owner-side scoped URL for
+each selected source immediately before transfer, not one static capability
+set for a long311GBrestore. Account credentials remain on DGX. Full archive
+SHA verification precedes safe extraction, and the repaired existing acquisition
+presence/full-file-SHA/LFS guard verifies actual files before canonical acquired
+markers are reused or committed. Select sources for restoration from assigned
+conversion demand; full311GBrestoration is not a training startup prerequisite.
+
+The supervisor authorized prompt held-v2 training from the exact full cut state
+once task1600is terminal and its metadata survives. Preserve that in-flight task,
+then gracefully signal the exact trainer PID and await atomic full-state commit
+and independent private export before releasing the old allocation. Stage the
+same approved held-v2 inventory, original runtime/input/control bindings and
+original frozen runtime from Git; no thirdGPU. Refresh capabilities before fetch.
+The completed1600state is already private-SHA verified; choose the actual final
+cut state rather than silently discarding subsequent completed updates.
+
+## Old-PID1-safe operational cut
+
+The old recipe owns namespace PID1. Ending its trainer can end the namespace
+before its new checkpoint is privately exported, and PID1 ignored SIGSTOP in
+the earlier verified probe. The supervisor therefore authorized this exact
+external-signal/durability procedure: after task1600is terminal, observe the
+next atomic full-checkpoint rename, stop only the ordinary trainer immediately,
+verify State=T and live PID1, fsync the checkpoint directory and inspect the
+complete trusted header. Preserve the actual committed step, optimizer/RNG and
+post-evaluation history. The existing serialized exporter pins and independently
+verifies that state; collect terminal metadata before SDK-stop. The replacement
+held bootstrap then restores that exact state. This avoids a TERM/PID1 exit race,
+changes no live source and allocates no additional GPU.
+
+The natural-language supervisor selects and authorizes the cut. Crisp code is
+limited to Linux inotify, explicit PID signalling, header/state and process-state
+verification, exact durability and the existing private exporter. If the watcher
+or state check fails, do not report a successful freeze/export or stop the SDK.
+
+### Verified operational cut (2026-10-15 01:01 UTC)
+
+The watcher completed with exit zero. Task1600 was terminal at 4/16 successes
+(2 invalid actions, 5 repetitions, 5 semantic mismatches; zero infrastructure or
+unresolved outcomes). The next atomic replacement committed step1700. Ordinary
+trainer PID5860 is stopped in state `T`; recipe PID1 remains alive. The committed
+checkpoint is46,821,482,007 bytes, with student parameters, AdamW/Muon/MuonSR
+optimizer state and Python/Torch/CUDA RNG. This is an operational handoff, not a
+qualification. The independent private full-SHA readback is still required before
+SDK stop; latest already verified private parent is1600.
+
+The replacement namespace init stays a shell holder and launches bootstrap as
+an ordinary child, retaining the allocation even after the child exits. The
+existing bundle fetch restores exact full state and the original194-file runtime
+from its Git archive at the same output path. Historical acquisition markers are
+retained in the metadata archive, but are not activated at canonical raw paths.
+Raw restore uses freshly scoped per-source capabilities on demand.
