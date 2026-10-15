@@ -1,0 +1,124 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "qwen-positive-clean-actions-20261015-v1",
+  "owner": "dgx",
+  "path": "runs/qwen-positive-clean-actions-20261015-v1",
+  "files": [
+    {
+      "path": "lfm25/train-sources.json",
+      "bytes": 775,
+      "sha256": "7e677ab6a419ce84805e63e6eee8676353e675ab3cc558e15670b3ca699bb81c"
+    },
+    {
+      "path": "lfm25/v1/receipt.json",
+      "bytes": 1518,
+      "sha256": "8fe7c3bf4c9be01fa86551e7dbd2822b68eab142c6af1bff2d67fa0a05521bc2"
+    },
+    {
+      "path": "lfm25/v1/train/native-graphs.jsonl.zst",
+      "bytes": 29894,
+      "sha256": "d27590e38c66821969e51e90613f933cc6ced9a533467523f183cdb83850a83e"
+    },
+    {
+      "path": "lfm25/v2/receipt.json",
+      "bytes": 1710,
+      "sha256": "a24f96d0d2ae82a76b1ff756f40e35bb196112ab0e0c94eae9eb1f9bf39a2eeb"
+    },
+    {
+      "path": "lfm25/v2/train/native-graphs.jsonl.zst",
+      "bytes": 276418,
+      "sha256": "c5ae62906e443a747dc307b913f5f4eaedd1f9662e4ebf439ad602f2a914b2a3"
+    },
+    {
+      "path": "lfm25/v3/receipt.json",
+      "bytes": 2003,
+      "sha256": "7c3aa4dd8027b3655d519b9e7c188eae24bec4462b0a7496e42d2e0e8ed72166"
+    },
+    {
+      "path": "lfm25/v3/train/native-graphs.jsonl.zst",
+      "bytes": 1149099,
+      "sha256": "47221789aa6488734d97a4b44aa3012fbf9a71831a6b123ca6942f71b25ff928"
+    },
+    {
+      "path": "lfm25/v4/receipt.json",
+      "bytes": 6422,
+      "sha256": "8bb67fce686f24e5162c2ea96d3e42e91a27fcbba033a60a3fcf3e1742bde036"
+    },
+    {
+      "path": "lfm25/v4/train/native-graphs.jsonl.zst",
+      "bytes": 1436921,
+      "sha256": "e9d0f1868a5e24ec27c5d81d900896e1839b3af94433586623941b29857e9a63"
+    },
+    {
+      "path": "lfm25/withdrawal-candidates.json",
+      "bytes": 1034922,
+      "sha256": "42384ae2ab367d0f3f3110ec4d3281be5ea11de5131673662417d5948d133842"
+    },
+    {
+      "path": "lfm25/withdrawal-proof.json",
+      "bytes": 186814,
+      "sha256": "1734b26b662bc0031b662dd64b310242eb2244d0a341babd914ee4fd888808a9"
+    },
+    {
+      "path": "mellum21/train-sources.json",
+      "bytes": 775,
+      "sha256": "991d82ae288f058c3198694e714eb282344ef5da730021b7968b9da0dc8f8fdf"
+    },
+    {
+      "path": "mellum21/v1/receipt.json",
+      "bytes": 1524,
+      "sha256": "12155227054e71160acd36ef472b6782ee8cb090af1956b52be2f18cef405a13"
+    },
+    {
+      "path": "mellum21/v1/train/native-graphs.jsonl.zst",
+      "bytes": 28760,
+      "sha256": "51d665146a09c3d73963753fe83f20a67b7fdf4a8233e6df587cd23f3d63a491"
+    },
+    {
+      "path": "mellum21/v2/receipt.json",
+      "bytes": 1716,
+      "sha256": "02f039b4950c0886e575e02d07b1a358fed8bbfbe09882a4349bd5a141a1f83b"
+    },
+    {
+      "path": "mellum21/v2/train/native-graphs.jsonl.zst",
+      "bytes": 268267,
+      "sha256": "c45644d07bd777ce881d0cc0359c5b3dabdeac1c99fdfe3c9a9b85a8926cc10a"
+    },
+    {
+      "path": "mellum21/v3/receipt.json",
+      "bytes": 2009,
+      "sha256": "007860b56cf5f0688e7d540bb1011e5e032f48f85798e29ef609a19955df4f46"
+    },
+    {
+      "path": "mellum21/v3/train/native-graphs.jsonl.zst",
+      "bytes": 1144887,
+      "sha256": "139ecfb1314c4eda69a0e6032fbffbd9efb60cb5051196c09db0dd99f20d43ed"
+    },
+    {
+      "path": "mellum21/v4/receipt.json",
+      "bytes": 6428,
+      "sha256": "ff841fbc43bb8a01454e9976163e38ded031199c6c0165870d125360116131a3"
+    },
+    {
+      "path": "mellum21/v4/train/native-graphs.jsonl.zst",
+      "bytes": 1403392,
+      "sha256": "60261e21268440f1506f45e5894c3b3de04cafd1cab05057925de030713b530e"
+    },
+    {
+      "path": "mellum21/withdrawal-candidates.json",
+      "bytes": 1036638,
+      "sha256": "1e8e30c047f9196d10996ce7e7fad5635e22f04f94d98600754f7edd406bdf43"
+    },
+    {
+      "path": "mellum21/withdrawal-proof.json",
+      "bytes": 186816,
+      "sha256": "eece85fc253cd85ec5c1b4c8e6e44fe535445be347d256d5f2195655329348da"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 2250022,
+      "sha256": "8414245fda5bfcfd7396c2ed238dc7371007972f7fe91feb536a7b7523eb734b"
+    }
+  ],
+  "bytes": 10457730
+}

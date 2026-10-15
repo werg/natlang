@@ -107975,6 +107975,182 @@
         "held_file_sha256": "08204e7448af34600f99056e7bf9ad35a48283bf4b505557e6d57f79d204163e",
         "training_validation_sha256": "bb865ca912a495f6c873be2ce7616d258246a0173ac1f287242b4ca987619898"
       }
+    },
+    {
+      "derived_from": [
+        "qwen-verified-positive-native-graphs-20261015-v1-v2",
+        "qwen-verified-positive-native-graphs-20261015-v3",
+        "qwen-verified-positive-native-graphs-20261015-v4"
+      ],
+      "id": "qwen-positive-clean-actions-20261015-v1",
+      "include": [
+        "lfm25/train-sources.json",
+        "lfm25/v1/receipt.json",
+        "lfm25/v1/train/native-graphs.jsonl.zst",
+        "lfm25/v2/receipt.json",
+        "lfm25/v2/train/native-graphs.jsonl.zst",
+        "lfm25/v3/receipt.json",
+        "lfm25/v3/train/native-graphs.jsonl.zst",
+        "lfm25/v4/receipt.json",
+        "lfm25/v4/train/native-graphs.jsonl.zst",
+        "lfm25/withdrawal-candidates.json",
+        "lfm25/withdrawal-proof.json",
+        "mellum21/train-sources.json",
+        "mellum21/v1/receipt.json",
+        "mellum21/v1/train/native-graphs.jsonl.zst",
+        "mellum21/v2/receipt.json",
+        "mellum21/v2/train/native-graphs.jsonl.zst",
+        "mellum21/v3/receipt.json",
+        "mellum21/v3/train/native-graphs.jsonl.zst",
+        "mellum21/v4/receipt.json",
+        "mellum21/v4/train/native-graphs.jsonl.zst",
+        "mellum21/withdrawal-candidates.json",
+        "mellum21/withdrawal-proof.json",
+        "receipt.json"
+      ],
+      "license_provenance": "Original Qwen strong teacher model/runtime and project trajectory licenses preserved; no new generation or license exclusions.",
+      "note": "Production replaces each affected original leaf in place to preserve global remaining-good row order; the aggregate clean-Qwen manifest is a diagnostic view, not permission to reorder intervening REST or communication sources. Original bad actions remain available as context/assigned recovery evidence, not positive targets.",
+      "owner": "dgx",
+      "path": "runs/qwen-positive-clean-actions-20261015-v1",
+      "source_binding": {
+        "audit_receipt": {
+          "path": "/home/werg/natlang/runs/qwen-positive-clean-actions-20261015-v1/receipt.json",
+          "sha256": "8414245fda5bfcfd7396c2ed238dc7371007972f7fe91feb536a7b7523eb734b"
+        },
+        "models": {
+          "lfm25": {
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "retained_rows": 5908,
+            "source_replacements": [
+              {
+                "new": {
+                  "bytes": 29894,
+                  "path": "/home/werg/natlang/runs/qwen-positive-clean-actions-20261015-v1/lfm25/v1/train/native-graphs.jsonl.zst",
+                  "rows": 42,
+                  "sha256": "d27590e38c66821969e51e90613f933cc6ced9a533467523f183cdb83850a83e"
+                },
+                "old": {
+                  "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v1-v2-admitted/v1/lfm25/train/native-graphs.jsonl.zst",
+                  "rows": 43,
+                  "sha256": "3e90027c0455849f26c1e9423cd99e595eb566f025357546f8cf05efa3adf7f2"
+                }
+              },
+              {
+                "new": {
+                  "bytes": 276418,
+                  "path": "/home/werg/natlang/runs/qwen-positive-clean-actions-20261015-v1/lfm25/v2/train/native-graphs.jsonl.zst",
+                  "rows": 518,
+                  "sha256": "c5ae62906e443a747dc307b913f5f4eaedd1f9662e4ebf439ad602f2a914b2a3"
+                },
+                "old": {
+                  "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v1-v2-admitted/v2/lfm25/train/native-graphs.jsonl.zst",
+                  "rows": 581,
+                  "sha256": "d0cc595bf7069514cbab1c6d1b74ad661a9d593f173c784c95b9bd3456d5d952"
+                }
+              },
+              {
+                "new": {
+                  "bytes": 1149099,
+                  "path": "/home/werg/natlang/runs/qwen-positive-clean-actions-20261015-v1/lfm25/v3/train/native-graphs.jsonl.zst",
+                  "rows": 2190,
+                  "sha256": "47221789aa6488734d97a4b44aa3012fbf9a71831a6b123ca6942f71b25ff928"
+                },
+                "old": {
+                  "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v3-deduplicated/lfm25/train/native-graphs.jsonl.zst",
+                  "rows": 2451,
+                  "sha256": "8c5ebe1956d5888435220279453a8154e15a014f4e1a06104c54514a58863a68"
+                }
+              },
+              {
+                "new": {
+                  "bytes": 1436921,
+                  "path": "/home/werg/natlang/runs/qwen-positive-clean-actions-20261015-v1/lfm25/v4/train/native-graphs.jsonl.zst",
+                  "rows": 3158,
+                  "sha256": "e9d0f1868a5e24ec27c5d81d900896e1839b3af94433586623941b29857e9a63"
+                },
+                "old": {
+                  "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v4/lfm25/train/native-graphs.jsonl.zst",
+                  "rows": 3404,
+                  "sha256": "09be842ed6928704df62e857c7448533693480da8790cf17ceac5e7690e44f86"
+                }
+              }
+            ],
+            "withdrawal": {
+              "path": "/home/werg/natlang/runs/qwen-positive-clean-actions-20261015-v1/lfm25/withdrawal-proof.json",
+              "sha256": "1734b26b662bc0031b662dd64b310242eb2244d0a341babd914ee4fd888808a9"
+            },
+            "withdrawn_rows": 571
+          },
+          "mellum21": {
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "retained_rows": 5908,
+            "source_replacements": [
+              {
+                "new": {
+                  "bytes": 28760,
+                  "path": "/home/werg/natlang/runs/qwen-positive-clean-actions-20261015-v1/mellum21/v1/train/native-graphs.jsonl.zst",
+                  "rows": 42,
+                  "sha256": "51d665146a09c3d73963753fe83f20a67b7fdf4a8233e6df587cd23f3d63a491"
+                },
+                "old": {
+                  "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v1-v2-admitted/v1/mellum21/train/native-graphs.jsonl.zst",
+                  "rows": 43,
+                  "sha256": "eef27087723869403ecc4e7d0f3ea09c96c5c21f2351217ee987b74d6c1aeb23"
+                }
+              },
+              {
+                "new": {
+                  "bytes": 268267,
+                  "path": "/home/werg/natlang/runs/qwen-positive-clean-actions-20261015-v1/mellum21/v2/train/native-graphs.jsonl.zst",
+                  "rows": 518,
+                  "sha256": "c45644d07bd777ce881d0cc0359c5b3dabdeac1c99fdfe3c9a9b85a8926cc10a"
+                },
+                "old": {
+                  "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v1-v2-admitted/v2/mellum21/train/native-graphs.jsonl.zst",
+                  "rows": 581,
+                  "sha256": "138f22b3004d0f0fff711f1ba6522d81f40124e0493ef58ad87a6fc4ebed6256"
+                }
+              },
+              {
+                "new": {
+                  "bytes": 1144887,
+                  "path": "/home/werg/natlang/runs/qwen-positive-clean-actions-20261015-v1/mellum21/v3/train/native-graphs.jsonl.zst",
+                  "rows": 2190,
+                  "sha256": "139ecfb1314c4eda69a0e6032fbffbd9efb60cb5051196c09db0dd99f20d43ed"
+                },
+                "old": {
+                  "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v3-deduplicated/mellum21/train/native-graphs.jsonl.zst",
+                  "rows": 2451,
+                  "sha256": "683c31ffe162b7d8ce6baf478e4a283f46a165a68b4616197508edad6dffab47"
+                }
+              },
+              {
+                "new": {
+                  "bytes": 1403392,
+                  "path": "/home/werg/natlang/runs/qwen-positive-clean-actions-20261015-v1/mellum21/v4/train/native-graphs.jsonl.zst",
+                  "rows": 3158,
+                  "sha256": "60261e21268440f1506f45e5894c3b3de04cafd1cab05057925de030713b530e"
+                },
+                "old": {
+                  "path": "/home/werg/natlang/runs/qwen-verified-positive-native-graphs-20261015-v4/mellum21/train/native-graphs.jsonl.zst",
+                  "rows": 3404,
+                  "sha256": "a6e01ee8a030616e3a588f6681b2928a2436ea0ff945a092226ceaf9fde44e44"
+                }
+              }
+            ],
+            "withdrawal": {
+              "path": "/home/werg/natlang/runs/qwen-positive-clean-actions-20261015-v1/mellum21/withdrawal-proof.json",
+              "sha256": "eece85fc253cd85ec5c1b4c8e6e44fe535445be347d256d5f2195655329348da"
+            },
+            "withdrawn_rows": 571
+          }
+        }
+      },
+      "source_class": "exact-repair-of-verified-strong-teacher-positive-action-admission",
+      "split": "Train only. Existing current held, quality and pending group protections verified; no held evaluation input is changed.",
+      "trace_admission": false,
+      "training_admission": true,
+      "training_admission_reason": "5908 unchanged good graphs/model retained;571 exact source-bound unqualified targets withdrawn using the existing native materializer: failed/unexecuted proposals, failed child results, unauthenticated success return or absent original response. Complete original captured contexts remain in retained graphs. All retained graphs parsed and bad ID sets are disjoint. This does not erase consumed exposure or reset optimizer/RNG."
     }
   ],
   "coverage_backlog": [
