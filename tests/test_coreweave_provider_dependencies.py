@@ -26,6 +26,7 @@ def test_mandatory_sft_seed_closure_contains_nested_ordinary_and_raw_pairs(tmp_p
 
 def test_asset_preflight_verifies_content_not_directory_existence(tmp_path):
     task=tmp_path/'ts-host';write(task/'dist/teacher/cli.js','actual compiled runtime')
+    write(task/'package.json',{'name':'task-runtime'});write(tmp_path/'package.json',{'name':'root'});write(tmp_path/'package-lock.json',{'lockfileVersion':3})
     config=write(tmp_path/'config.json',{'runtime':str(task)})
     closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
     deps.verify_assets(closure['assets'])
@@ -104,3 +105,25 @@ def test_refresh_update_includes_consumed_readiness_and_report(tmp_path):
     Path(receipt['path']).unlink()
     with pytest.raises(FileNotFoundError):
         deps.dependency_closure({'updates':{'student':checkpoint}},namespace=str(tmp_path))
+
+def test_carried_remaining_ce_frames_include_complete_old_sources(tmp_path):
+    import torch
+    old=write(tmp_path/'old-train.jsonl','old untouched training span')
+    held=write(tmp_path/'held.jsonl','held span')
+    frame={'required_visits':{'untouched':1},'exposure_counts':{},'source_receipts':[old,held]}
+    state=tmp_path/'training.pt';torch.save({'sft_progress':{'prior-ce':frame}},state)
+    binding={'path':str(state),'sha256':deps.sha256_file_hex_cached(state),'bytes':state.stat().st_size}
+    closure=deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+    assert {str(state),old['path'],held['path']}=={row['path'] for row in closure['files']}
+    # A fully consumed old cohort is metadata, not a mandatory live file dependency.
+    frame['exposure_counts']['untouched']=1
+    torch.save({'sft_progress':{'prior-ce':frame}},state)
+    Path(old['path']).unlink();binding.update(sha256=deps.sha256_file_hex_cached(state),bytes=state.stat().st_size)
+    assert [row['path'] for row in deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))['files']]==[str(state)]
+
+def test_actual_task_packet_and_foundation_manifest_are_consumed_inputs(tmp_path):
+    packet=write(tmp_path/'tasks.jsonl','protected task control')
+    graph=write(tmp_path/'foundation.jsonl','raw communication graph')
+    config=write(tmp_path/'config.json',{'foundation_native_graphs':graph,'trainer_parameters':{'task_eval':json.dumps({'packet':packet})}})
+    closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
+    assert {row['path'] for row in closure['files']}=={row['path'] for row in [packet,graph,config]}

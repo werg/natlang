@@ -13,6 +13,19 @@ from natlang_neuralese.model.native_bundle import composite_dependencies, _seman
 from natlang_neuralese.train.recipe import native_source_dependencies
 
 
+def task_runtime_inventory(path):
+    path = Path(path)
+    required = [path/'dist/teacher/cli.js', path/'package.json',
+                path.parent/'package.json', path.parent/'package-lock.json']
+    if not all(item.is_file() for item in required):
+        raise ValueError('provider task runtime needs built CLI and pinned npm manifests')
+    result = {str(p.relative_to(path)): sha256_file_hex_cached(p)
+              for p in sorted((path/'dist').rglob('*')) if p.is_file()}
+    result.update({name: sha256_file_hex_cached(path/name)
+                   for name in ['package.json', '../package.json', '../package-lock.json']})
+    return result
+
+
 def dependency_closure(request, *, namespace='/work/native-production'):
     files, assets, active_configs = {}, {}, set()
     root = Path(namespace).absolute()
@@ -37,6 +50,20 @@ def dependency_closure(request, *, namespace='/work/native-production'):
             raise ValueError('provider consumed dependency size changed')
         return path
 
+    def training_inputs(training):
+        if not isinstance(training, dict):
+            return
+        if not training.get('sft_progress') and training.get('schema') != 'natlang.neuralese-native-sft-training/1':
+            return
+        from natlang_neuralese.train.native_continuation import collect_sft_progress, progress_obligations
+        progress = collect_sft_progress(training)
+        obligations = progress_obligations(progress)['stages']
+        for name, frame in progress.items():
+            if obligations[name]['complete']:
+                continue  # Completed historical source files are not read by mandatory SFT.
+            for source in frame.get('source_receipts', []):
+                graphs(bound(source))
+
     def checkpoint(value):
         path = bound(value) if isinstance(value, dict) else add(value)
         for digest, child in composite_dependencies(path).items():
@@ -50,6 +77,11 @@ def dependency_closure(request, *, namespace='/work/native-production'):
                 # payloads stay on disk and are never restored into a model.
                 import torch
                 state = torch.load(child, map_location='cpu', weights_only=False, mmap=True)
+                training_inputs(state)
+                training_inputs(state.get('training'))
+                training_inputs(state.get('shared_training'))
+                for participant in state.get('participants', {}).values():
+                    training_inputs(participant)
                 configs = [state.get('model_config')]
                 configs.extend(item.get('model_config') for item in state.get('participants', {}).values())
                 for declaration in configs:
@@ -68,15 +100,12 @@ def dependency_closure(request, *, namespace='/work/native-production'):
             from natlang_neuralese.model.native_model import base_inventory
             inventory = base_inventory(path)
         else:
-            # Only the task runtime is an asset here; exclude package caches.
-            # Its entire built dist is content-bound.
-            required = path/'dist'
-            if not (required/'teacher'/'cli.js').is_file():
-                raise ValueError('provider task runtime has not been built')
-            inventory = {str(p.relative_to(path)): sha256_file_hex_cached(p)
-                         for p in sorted(required.rglob('*')) if p.is_file()}
+            inventory = task_runtime_inventory(path)
         if expected is not None and inventory != expected:
             raise ValueError('provider checkpoint pinned base inventory changed')
+        if base and root in path.parents:
+            for name, digest in inventory.items():
+                add(path/name, digest)
         assets[str(path)] = {'path': str(path), 'kind': 'base' if base else 'task-runtime',
                              'inventory': inventory,
                              'sha256': canonical_json_sha256_hex(inventory)}
@@ -86,8 +115,17 @@ def dependency_closure(request, *, namespace='/work/native-production'):
             raise ValueError("provider consumed configuration contains a cycle")
         active_configs.add(marker)
         # Exact fields consumed by production.run/native semantic refresh.
-        for key in ('seed_native_graphs', 'held_native_graphs'):
-            if value.get(key): graphs(value[key])
+        for key in ('seed_native_graphs', 'held_native_graphs', 'foundation_native_graphs'):
+            if value.get(key):
+                graphs(bound(value[key]) if isinstance(value[key], dict) else value[key])
+        specifications = [value.get('task_eval'), (value.get('trainer_parameters') or {}).get('task_eval')]
+        for specification in specifications:
+            if isinstance(specification, str):
+                specification = json.loads(specification)
+            if specification:
+                bound(specification['packet'])
+                if specification.get('runtime'):
+                    asset(specification['runtime'])
         for key in ('cases', 'production_recipe'):
             if value.get(key):
                 consumed = add(value[key])
@@ -154,8 +192,7 @@ def verify_assets(assets):
             from natlang_neuralese.model.native_model import base_inventory
             actual = base_inventory(path)
         elif item['kind'] == 'task-runtime':
-            actual = {str(p.relative_to(path)): sha256_file_hex_cached(p)
-                      for p in sorted((path/'dist').rglob('*')) if p.is_file()}
+            actual = task_runtime_inventory(path)
         else:
             raise ValueError('unknown provider pre-staged asset kind')
         if actual != item['inventory'] or canonical_json_sha256_hex(actual) != item['sha256']:

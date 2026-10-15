@@ -51,3 +51,10 @@ built task-runtime inventories are compared on the destination before launch;
 existence alone is insufficient. A portable resolved production recipe avoids
 silently missing inherited configuration files. Failure leaves the request
 unlaunched for repair, rather than falling back to top-level inputs only.
+
+The same closure also follows incomplete carried CE-stage source receipts,
+foundation manifests and real task packets. The old qualified semantic cohort
+and every bound external native-state block survive a pending new cohort.
+Built task runtimes bind their dist plus npm manifests and run the actual CLI
+import preflight. A provider never replaces a published runtime file through
+its alias: matching code must already be deployed through the Git archive path.

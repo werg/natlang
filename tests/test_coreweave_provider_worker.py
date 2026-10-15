@@ -116,3 +116,10 @@ def test_once_drains_initial_request_after_queue_timeout_without_launching_arriv
     assert worker.main(['--config',str(config),'--once'])==0
     assert calls==['initial','initial'] and io.polls==3
     assert io.receipt('queue-poll-provider-error')['last_provider_error']['type']=='TimeoutError'
+
+def test_provider_never_ferries_over_a_published_runtime_alias():
+    io=worker.SDKIO.__new__(worker.SDKIO)
+    io.config={'sandboxes':{'target':{'runtime':'/published/runtime'}}}
+    io.remote=lambda *args,**kwargs:False
+    with pytest.raises(ValueError,match='cannot overwrite published runtime'):
+        io.mirror('source','target',{'path':'/work/native-production/runtime/training/neuralese/recipes/live.json','bytes':1,'sha256':'a'*64})

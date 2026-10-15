@@ -118,7 +118,13 @@ class SDKIO:
                            'print(json.dumps(dependency_closure('+repr(request)+')))', timeout=900)
 
     def verify_assets(self, sid, assets):
-        self.remote(sid, self.dependency_code(sid)+'verify_assets('+repr(assets)+')', timeout=900)
+        code = self.dependency_code(sid)+'verify_assets('+repr(assets)+');'
+        code += ('import subprocess,os;os.environ.update('+repr(self.config['sandboxes'][sid].get('env', {}))+');')
+        code += '\nfor asset in '+repr(assets)+':\n'
+        code += (' if asset["kind"]=="task-runtime":\n'
+                 '  result=subprocess.run(["node",asset["path"]+"/dist/teacher/cli.js","--help"],capture_output=True,timeout=30)\n'
+                 '  if result.returncode: raise RuntimeError("provider compiled task CLI/npm import preflight failed")\n')
+        self.remote(sid, code, timeout=900)
 
     def mirror(self, source, target, item):
         item = checked_binding(item)
@@ -130,6 +136,8 @@ class SDKIO:
                 ' and sha256_file_hex_cached(p)=='+repr(item['sha256'])+'))')
         if self.remote(target, code, timeout=600):
             return
+        if item['path'].startswith('/work/native-production/runtime/'):
+            raise ValueError('provider cannot overwrite published runtime through its alias; stage the matching Git runtime first')
         if source == target:
             raise ValueError('coordinator artifact differs from its own request binding')
         job = self.root/('ferry-'+item['sha256']+'-'+target+'.json')
