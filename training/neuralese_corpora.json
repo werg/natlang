@@ -84832,6 +84832,45 @@
       "required_conversion": "None for audit; approved rows curated separately",
       "notes": "V1 incorrectly asserted dataset19 M3 was routed cards; the exact source records say trust. V2 is the valid independent audit.",
       "supersedes": "luna-dataset-workbench-s77-audit-20261015-v1"
+    },
+    {
+      "id": "luna-held-shapes-s52078-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52078-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "90 exact accepted candidate roots; 89 admitted after one ambiguous parent hold; 663 approved native decisions, all failed or unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Exact accepted roots, source-review and protected checks, corrected source/day/expected/observed-bound independent dataset-workbench audit, one ambiguous international/world-events parent hold, native per-decision approval; only approved-turns.jsonl is training input",
+      "review_status": "Four of five dataset-workbench roots semantically approved; one world-events boundary parent held. All seven accepted HotpotQA research roots used required iterateOn and inline NL.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Audit v2 corrected a false v1 hold on an election item that was day4, before the day11 cutoff. Source and curation reviews bind immutable bytes; global union makes final cross-corpus decision."
+    },
+    {
+      "id": "luna-dataset-workbench-s78-audit-20261015-v2",
+      "owner": "pop",
+      "path": "runs/luna-dataset-workbench-s78-audit-20261015-v2",
+      "include": [
+        "review.json",
+        "REPORT.md"
+      ],
+      "source_class": "Independent exact-source-bound item-level semantic audit of five Luna dataset-workbench roots",
+      "license": "Project-generated curriculum with specific source license facts in parent campaign",
+      "split": "train-only source parents; audit itself is review evidence only",
+      "admission": "Five roots reviewed; four semantically clear, one ambiguous world-events criterion held; no direct training admission",
+      "training_admission": false,
+      "training_admission_reason": "Review and hold evidence, not training rows",
+      "review_status": "Corrected v2 audit verifies exact item days, text, expected and observed values; dataset16 day4 Bush–Kerry item correctly excluded by day11 cutoff",
+      "required_conversion": "None for audit; approved rows curated separately",
+      "notes": "V1 audit was never registered; it incorrectly claimed dataset16 M6 was day18. Exact source says day4. V2 is the valid independent audit."
     }
   ],
   "coverage_backlog": [
