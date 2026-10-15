@@ -77,6 +77,8 @@ def text_row_graph(row: Mapping[str, Any], *, source_tokenizer_fingerprint: str,
         "nodes": [{"name": "text", "token_ids": ids, "target_weights": weights}],
         "conversion": {"kind": "static-transformation", "role_interpretation": "ordinary-text",
             "source_row_id": identifier,
+            "source_record_ids": sorted(set(str(value) for value in
+                (row.get("source_record_ids") or [identifier]))),
             "source_twin_id": twin_id, "source_tokenizer_fingerprint": source_tokenizer_fingerprint,
             "source_text_sha256": _sha_text(text), "source_suffix_start": boundary,
             "context_weight": context_weight,
@@ -234,22 +236,48 @@ def witnessed_pair_graph(writer_row: Mapping[str, Any], reader_row: Mapping[str,
     wids, wweights, wstart, wstop, body, body_sha, producing = _wrap_span(
         wids, wweights, writer_span, open_id=p_open, close_id=p_close, role="produce",
         source_tokenizer=source_tokenizer, required_body_sha256=payload_sha256)
-    rids, rweights, rstart, rstop, read_body, read_sha, _ = _wrap_span(
-        rids, rweights, reader_span, open_id=c_open, close_id=c_close, role="consume",
-        source_tokenizer=source_tokenizer, required_body_sha256=payload_sha256)
-    if read_body != body or read_sha != body_sha:
-        raise ValueError("consumer span text is not the exact producer payload")
+    reader_spans = reader_span if isinstance(reader_span, (list, tuple)) else [reader_span]
+    if not reader_spans:
+        raise ValueError("producer/consumer graph needs at least one exact consumer occurrence")
+    if any(not isinstance(span, Mapping) for span in reader_spans):
+        raise ValueError("consumer occurrences must be exact span mappings")
+    ordered_spans = sorted(reader_spans,
+        key=lambda span: span.get("container_start", span.get("start", -1)), reverse=True)
+    original_ranges = []
+    for span in ordered_spans:
+        left = span.get("container_start", span.get("start"))
+        right = span.get("container_stop", span.get("stop"))
+        if type(left) is not int or type(right) is not int or not 0 <= left < right <= len(reader[0]):
+            raise ValueError("consumer occurrence is outside its source token row")
+        if any(max(left, previous_left) < min(right, previous_right)
+               for previous_left, previous_right in original_ranges):
+            raise ValueError("consumer occurrence spans overlap")
+        original_ranges.append((left, right))
+    consumer_starts = []
+    for span in ordered_spans:
+        before = len(rids)
+        rids, rweights, rstart, rstop, read_body, read_sha, _ = _wrap_span(
+            rids, rweights, span, open_id=c_open, close_id=c_close, role="consume",
+            source_tokenizer=source_tokenizer, required_body_sha256=payload_sha256)
+        if read_body != body or read_sha != body_sha:
+            raise ValueError("consumer span text is not the exact producer payload")
+        delta = len(rids) - before
+        consumer_starts = [start + delta for start in consumer_starts]
+        consumer_starts.append(rstart)
+    consumer_starts.sort()
     # The supplied imported body is teacher-forced state context, not a
     # consumer-authored output target. Preserve loss on the role markers and
     # on all later consumer response tokens.
-    rweights[rstart:rstop] = [0.] * (rstop-rstart)
+    for start in consumer_starts:
+        rweights[start:start + (wstop - wstart)] = [0.] * (wstop-wstart)
     # Inject imported state at the first token of the consumer payload, after
     # its consume-open marker. The own text remains present as aligned context.
     nodes = [
         {"name": "producer", "token_ids": wids, "target_weights": wweights,
          "producing": producing},
         {"name": "consumer", "token_ids": rids, "target_weights": rweights,
-         "imports": [{"at": rstart, "source": "producer", "start": wstart, "stop": wstop}]},
+         "imports": [{"at": start, "source": "producer", "start": wstart, "stop": wstop}
+                     for start in consumer_starts]},
     ]
     source_ids = sorted({wid, rid})
     pair_id = canonical_json_sha256_hex({"edge": edge_id, "source_ids": source_ids,

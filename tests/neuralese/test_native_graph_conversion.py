@@ -58,6 +58,7 @@ def test_text_row_conversion_preserves_full_tokens_and_exact_target_boundary():
     assert list(example.plan.invocations[0].token_ids) == ids
     assert list(example.target_weights) == [.0] + [.05] * (boundary-1) + [1.] * (len(ids)-boundary)
     assert graph['conversion']['kind'] == 'static-transformation'
+    assert graph['conversion']['source_record_ids'] == ['ordinary']
 
 
 def test_marker_looking_text_stays_complete_ordinary_text_without_attested_role():
@@ -148,12 +149,49 @@ def test_e2e_pair_occurrence_binds_structural_write_and_exact_read_not_text_sear
     occurrence = module.source_occurrences(writer, reader, 'r', payload,
         module.sha256_bytes(payload.encode()))
     assert occurrence['writer_json_pointer'].endswith('/$write')
-    assert occurrence['reader_json_pointer'] == '/messages/0/content/0'
+    assert occurrence['reader_json_pointers'] == ['/messages/0/content/0']
     duplicate_reader = {'messages': [{'type': 'read', 'name': 'r', 'source': payload},
                                      {'type': 'read', 'name': 'r', 'source': payload}]}
-    with pytest.raises(ValueError, match='ambiguous'):
-        module.source_occurrences(writer, duplicate_reader, 'r', payload,
-            module.sha256_bytes(payload.encode()))
+    repeated = module.source_occurrences(writer, duplicate_reader, 'r', payload,
+        module.sha256_bytes(payload.encode()))
+    assert repeated['reader_json_pointers'] == ['/messages/0', '/messages/1']
+    assert repeated['transform'] == 'static-shared-producer-multi-read'
+
+
+def test_witnessed_pair_imports_every_exact_static_read_occurrence():
+    import hashlib
+    tok = RoleAsciiTokenizer()
+    payload = 'typed value'
+    writer_text = 'prompt' + tok.markers[0] + payload + tok.markers[1]
+    reader_text = ('read:' + tok.markers[2] + payload + tok.markers[3] +
+                   ',then:' + tok.markers[2] + payload + tok.markers[3] + ':answer')
+    writer = row('writer', writer_text, boundary=6)
+    reader = row('reader', reader_text, boundary=1)
+    writer['token_ids'] = tok(writer_text)['input_ids']
+    reader['token_ids'] = tok(reader_text)['input_ids']
+    reader['supervised_suffix_start'] = len(reader['token_ids']) - 6
+    writer['tokenizer_sha256'] = reader['tokenizer_sha256'] = 'a' * 64
+    writer_open = writer['token_ids'].index(tok.marker_ids[0])
+    reader_opens = [i for i, token in enumerate(reader['token_ids']) if token == tok.marker_ids[2]]
+    reader_closes = [i for i, token in enumerate(reader['token_ids']) if token == tok.marker_ids[3]]
+    writer_span = {'container_start': writer_open,
+        'container_stop': writer['token_ids'].index(tok.marker_ids[1]) + 1,
+        'body_text': payload, 'payload_token_ids': list(payload.encode()), 'tokenize_payload_alone': True}
+    reader_spans = [{'container_start': start, 'container_stop': close + 1,
+        'body_text': payload, 'payload_token_ids': list(payload.encode()), 'tokenize_payload_alone': True}
+        for start, close in zip(reader_opens, reader_closes)]
+    graph = witnessed_pair_graph(writer, reader, source_tokenizer=tok,
+        source_tokenizer_fingerprint='a' * 64, expanded_tokenizer_fingerprint='a' * 64,
+        role_ids=tok.marker_ids, writer_span=writer_span, reader_span=reader_spans,
+        payload_sha256=hashlib.sha256(payload.encode()).hexdigest(), source_span_id='write:1',
+        edge_id='edge:multi', chain_id='chain:multi')
+    example = parse_graph(graph, tokenizer_fingerprint='a' * 64)
+    producer, consumer = example.plan.invocations
+    assert len(consumer.imports) == 2
+    assert [edge.at for edge in consumer.imports] == [reader_opens[0] + 1, reader_opens[1] + 1]
+    assert all(edge.source == 'producer' for edge in consumer.imports)
+    for edge in consumer.imports:
+        assert example.target_weights[example.plan.offsets[1] + edge.at] == 0.
 
 
 def test_prebounded_typed_pair_spans_reuse_markers_without_duplicate_wrapping():
