@@ -1,0 +1,71 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "native-state-big2-dgx-offload-1000-native-graphs-20261016-v1",
+  "owner": "dgx",
+  "path": "runs/native-big2-dgx-offload-1000-20261016-v1",
+  "files": [
+    {
+      "path": "first100-ordinary-row-overlap-proof.json",
+      "bytes": 1761,
+      "sha256": "78a35a2429c4e15ff3addee0ace5dbc4d5b2783b40d25e329662cc879e6f5476"
+    },
+    {
+      "path": "graphs/lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 1624041,
+      "sha256": "cacfbab289defdd58b8cebea638041155e3bb283a5ac56fff232b005863a81b3"
+    },
+    {
+      "path": "graphs/lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 8504291,
+      "sha256": "d5e8586671d98a99ba9e96405e44764960f0056f19a783613e08ed646ca96267"
+    },
+    {
+      "path": "graphs/mellum21/test/native-graphs.jsonl.zst",
+      "bytes": 1569315,
+      "sha256": "a366b6452e838a1c874e4dfc862a72755df390aede6da7af46f6dabc7db1cc24"
+    },
+    {
+      "path": "graphs/mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 8153724,
+      "sha256": "db8dd441d05dc5c9c33f2f7e4b96bc8504db11aad7bf32d56e43def46357135b"
+    },
+    {
+      "path": "pair-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "pairs/test/semantic-pairs.jsonl.zst",
+      "bytes": 6802361,
+      "sha256": "81e8f7446681402acee5a2d376d6a835127a45c763c2508765739b1b830c59cb"
+    },
+    {
+      "path": "pairs/train/semantic-pairs.jsonl.zst",
+      "bytes": 41698393,
+      "sha256": "d8681fade4df5715445c07ee54278775c02069b9714f2f3520968a4e738bf81e"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 4571,
+      "sha256": "07001f27b84de26a20c46acb197c660b4a7dd38bba56387b3c201eca0fe0585f"
+    },
+    {
+      "path": "render-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "resume-manifest.json",
+      "bytes": 1793390,
+      "sha256": "e1deea736f56816723812394c7e15f3a86d3f73b14785faa5125b483c7dd6ad6"
+    },
+    {
+      "path": "validation-proof.json",
+      "bytes": 6348,
+      "sha256": "1588580f26f143164c1bfa5aee622e6f3899858bfd690f1c3559ef487e9cc162"
+    }
+  ],
+  "bytes": 70158195
+}

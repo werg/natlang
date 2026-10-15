@@ -108563,6 +108563,172 @@
           }
         }
       }
+    },
+    {
+      "id": "native-state-big2-dgx-offload-1000-native-graphs-20261016-v1",
+      "owner": "dgx",
+      "path": "runs/native-big2-dgx-offload-1000-20261016-v1",
+      "include": [
+        "graphs/lfm25/train/native-graphs.jsonl.zst",
+        "graphs/lfm25/test/native-graphs.jsonl.zst",
+        "graphs/mellum21/train/native-graphs.jsonl.zst",
+        "graphs/mellum21/test/native-graphs.jsonl.zst",
+        "pairs/train/semantic-pairs.jsonl.zst",
+        "pairs/test/semantic-pairs.jsonl.zst",
+        "pair-omissions.jsonl",
+        "render-omissions.jsonl",
+        "receipt.json",
+        "resume-manifest.json",
+        "validation-proof.json",
+        "first100-ordinary-row-overlap-proof.json"
+      ],
+      "source_class": "verified-disjoint-Big2-incremental-whole-trajectory-and-native-communication-graph-tranche",
+      "split": "Reserved source interval [60000,61000): 920 train chains and 80 test chains. The candidate contains 9,556 train and 826 held ordinary graphs per model, plus 10,245 train and 909 held source-bound communication pairs.",
+      "admission": "This is an independently extracted disjoint 1,000-chain tranche from the larger Big2 source, not a claim that all Big2 has been converted. All 10,382 source records and 11,154 source edges were covered. Both models have exact tokenizer-specific graph views; all selected edges are paired and parsed; pair and ordinary train/test splits are group-disjoint. The conversion recorded zero render/pair omissions. Current protection closure and explicit decision holds have zero training intersections. Its graph source-record IDs and pair IDs do not overlap the admitted first100 Big2 tranche.",
+      "training_admission": true,
+      "training_admission_reason": "Independent ledgered verification passed exact extracted source SHAs, cloud assignment/exclusion disjointness, full chain and edge membership, all tokenizer-specific graph rows, all pair graphs and native producer/consumer geometry, group and held closure against the current protection bundle, explicit decision holds, and cross-tranche row identity disjointness. The held/test portion remains held and is not used for training.",
+      "derived_from": [
+        "neuralese-e2e-cloud-big2-protected-20261015-v1",
+        "native-state-big2-first100-native-graphs-20261015-v1"
+      ],
+      "license_provenance": "Inherited from the admitted Big2 source cohort; owner accepts all licenses.",
+      "note": "Incremental 1,000-chain source tranche. The remaining Big2 source chains continue through the cloud converter with this interval excluded. Registration does not claim actual student exposure.",
+      "source_bindings": {
+        "source_corpus_id": "neuralese-e2e-cloud-big2-protected-20261015-v1",
+        "archive": {
+          "path": "/home/werg/data/dgxops/big2-dgx-offload-transfer-20261015/big2-dgx-offload-1000-20261015-v1.tar.zst",
+          "sha256": "13f01bc4a89c57571f9f2d6fc0deba6f92f5ac220a36d477dd4da0c36be67557",
+          "bytes": 12018978
+        },
+        "extract_receipt": {
+          "path": "/mnt/external/natlang-development-data/big2-dgx-offload-1000-20261015-v1/source/extract-receipt.json",
+          "sha256": "1ead003a4ca8bb4a0e913914c355fd32c232734b82ae9c53bbfc81050e25a880"
+        },
+        "source_files": {
+          "chains.jsonl": {
+            "bytes": 738354,
+            "path": "/mnt/external/natlang-development-data/big2-dgx-offload-1000-20261015-v1/source/chains.jsonl",
+            "sha256": "5e3f7984a907f60005bba589c503c2e544677f78494bf5b33f49f4f59b74502f"
+          },
+          "edges.jsonl": {
+            "bytes": 5346888,
+            "path": "/mnt/external/natlang-development-data/big2-dgx-offload-1000-20261015-v1/source/edges.jsonl",
+            "sha256": "33d620d3c650c3d2db77fe70efcbe85c4130e2ead84ae287acd9145a365dcba4"
+          },
+          "omissions.jsonl": {
+            "bytes": 0,
+            "path": "/mnt/external/natlang-development-data/big2-dgx-offload-1000-20261015-v1/source/omissions.jsonl",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "pieces.jsonl": {
+            "bytes": 21862,
+            "path": "/mnt/external/natlang-development-data/big2-dgx-offload-1000-20261015-v1/source/pieces.jsonl",
+            "sha256": "3be9a082efdd7f59e1060658c6bf324c80ac2d7671c3c00f6fc2ed0ba67c50d7"
+          },
+          "records.jsonl": {
+            "bytes": 1503023372,
+            "path": "/mnt/external/natlang-development-data/big2-dgx-offload-1000-20261015-v1/source/records.jsonl",
+            "sha256": "931116b44f4fafd9893a5f142c60fee2d1334028b622d3517c864e741a77151a"
+          }
+        },
+        "selection": {
+          "bytes": 115066,
+          "path": "/mnt/external/natlang-development-data/big2-dgx-offload-1000-20261015-v1/assignment/selection.json",
+          "sha256": "76d0817005041dceaea171b75c82f651e85aeb391e9a83aa40242b5b7cb1f95b"
+        },
+        "active_assignment": {
+          "bytes": 47417,
+          "path": "/mnt/external/natlang-development-data/big2-dgx-offload-1000-20261015-v1/assignment/assignment-active-proof.json",
+          "sha256": "dcd4f724246d7d9c71a6c346af6bb5fd1d4a3fd3f1a23ade0aa228d5e63c2047"
+        },
+        "reservation_proof": {
+          "bytes": 2216,
+          "path": "/mnt/external/natlang-development-data/big2-dgx-offload-1000-20261015-v1/assignment/reservation-proof.json",
+          "sha256": "d0c14ba44286ca46d6d379126d6719392fe2825a91979a6be76989b1fc360660"
+        },
+        "parent_receipt": {
+          "bytes": 41228,
+          "path": "/mnt/external/natlang-development-data/big2-dgx-offload-1000-20261015-v1/parent/cohort-receipt.json",
+          "sha256": "c54815e06e9ce74fe090cfbbf0a9769fe7145501d0b521eb8165194268bdecc7"
+        },
+        "current_protection": {
+          "held_groups": 16133,
+          "path": "/home/werg/data/e2e-current-protection-bundle-20261015-v2/protection-manifest.json",
+          "quality_groups": 65161,
+          "sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+          "source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593"
+        },
+        "conversion_receipt_sha256": "07001f27b84de26a20c46acb197c660b4a7dd38bba56387b3c201eca0fe0585f",
+        "resume_manifest_sha256": "e1deea736f56816723812394c7e15f3a86d3f73b14785faa5125b483c7dd6ad6",
+        "validation_proof_sha256": "1588580f26f143164c1bfa5aee622e6f3899858bfd690f1c3559ef487e9cc162",
+        "first100_disjointness_proof_sha256": "78a35a2429c4e15ff3addee0ace5dbc4d5b2783b40d25e329662cc879e6f5476",
+        "counts": {
+          "chains": 1000,
+          "train_chains": 920,
+          "test_chains": 80,
+          "records": 10382,
+          "edges": 11154,
+          "paired_train": 10245,
+          "paired_test": 909,
+          "ordinary_graphs_per_model": {
+            "train": 9556,
+            "test": 826
+          }
+        },
+        "models": {
+          "lfm25": {
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+            "graph_files": {
+              "test": {
+                "bytes": 1624041,
+                "path": "/home/werg/natlang/runs/native-big2-dgx-offload-1000-20261016-v1/graphs/lfm25/test/native-graphs.jsonl.zst",
+                "rows": 826,
+                "sha256": "cacfbab289defdd58b8cebea638041155e3bb283a5ac56fff232b005863a81b3"
+              },
+              "train": {
+                "bytes": 8504291,
+                "path": "/home/werg/natlang/runs/native-big2-dgx-offload-1000-20261016-v1/graphs/lfm25/train/native-graphs.jsonl.zst",
+                "rows": 9556,
+                "sha256": "d5e8586671d98a99ba9e96405e44764960f0056f19a783613e08ed646ca96267"
+              }
+            }
+          },
+          "mellum21": {
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f",
+            "graph_files": {
+              "test": {
+                "bytes": 1569315,
+                "path": "/home/werg/natlang/runs/native-big2-dgx-offload-1000-20261016-v1/graphs/mellum21/test/native-graphs.jsonl.zst",
+                "rows": 826,
+                "sha256": "a366b6452e838a1c874e4dfc862a72755df390aede6da7af46f6dabc7db1cc24"
+              },
+              "train": {
+                "bytes": 8153724,
+                "path": "/home/werg/natlang/runs/native-big2-dgx-offload-1000-20261016-v1/graphs/mellum21/train/native-graphs.jsonl.zst",
+                "rows": 9556,
+                "sha256": "db8dd441d05dc5c9c33f2f7e4b96bc8504db11aad7bf32d56e43def46357135b"
+              }
+            }
+          }
+        },
+        "pair_files": {
+          "test": {
+            "bytes": 6802361,
+            "path": "/home/werg/natlang/runs/native-big2-dgx-offload-1000-20261016-v1/pairs/test/semantic-pairs.jsonl.zst",
+            "rows": 909,
+            "sha256": "81e8f7446681402acee5a2d376d6a835127a45c763c2508765739b1b830c59cb"
+          },
+          "train": {
+            "bytes": 41698393,
+            "path": "/home/werg/natlang/runs/native-big2-dgx-offload-1000-20261016-v1/pairs/train/semantic-pairs.jsonl.zst",
+            "rows": 10245,
+            "sha256": "d8681fade4df5715445c07ee54278775c02069b9714f2f3520968a4e738bf81e"
+          }
+        },
+        "cross_tranche_id_overlap": 0
+      }
     }
   ],
   "coverage_backlog": [
