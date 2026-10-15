@@ -91,3 +91,14 @@ Communication deficits execute first, then higher source priority, then stable
 physical row order within each visit. This changes only the pending optimizer
 schedule: row bindings, quotas, token weights, epochs and completed credits stay
 unchanged. The existing exact-index streamer supplies the requested order.
+# Active communication-foundation handoff
+
+The declared recipe selects a finite admitted communication cohort while
+ordinary CE remains mandatory. The crisp handoff verifier accepts its initial
+bound input and boolean boundary setting without resetting row credits; later
+appends retain that exact cohort. At first activation the existing indexed
+communication IDs and row bindings must equal all communication rows currently
+declared to the trainer. A pair-only cohort may omit ordinary rows, but may not
+silently weaken the declared communication coverage. This is an exact source
+and continuation verifier, not a second training scheduler.
+

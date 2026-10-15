@@ -14,6 +14,26 @@ from natlang_neuralese.train.recipe import load_recipe, require_gate, stage_para
 import legacy_recipes
 
 
+def test_started_native_append_adds_bound_finite_foundation_and_keeps_predecessor_guards(tmp_path):
+    from natlang_neuralese.train import recipe
+    from copy import deepcopy
+    bound=lambda name,digest:{'path':'/data/'+name,'sha256':digest*64,'binding':name}
+    old={'native_graphs':bound('old','a'),'held_native_graphs':bound('held','b')}
+    new={**old,'native_graphs':bound('new','c'),'continued_native_graphs':old['native_graphs'],
+         'foundation_native_graphs':bound('complete-pair-cohort','d')}
+    assert recipe._data_continuation(old,new)
+    wrong={**new,'continued_native_graphs':bound('wrong','e')}
+    assert not recipe._data_continuation(old,wrong)
+    later={**new,'native_graphs':bound('next','f'),'continued_native_graphs':new['native_graphs']}
+    assert recipe._data_continuation(new,later)
+    assert not recipe._data_continuation(new,{**later,'foundation_native_graphs':bound('weaker','e')})
+    before={'stages':[{'id':'full','kind':'native_state_sft','parameters':{'epochs':1}}]}
+    after=deepcopy(before);after['stages'][0]['parameters']['communication_foundation']=True
+    changes,left,right=recipe.direct_windowing_handoffs(before,after,tmp_path)
+    assert changes['full']['communication_foundation']==[None,True]
+    assert left==right
+
+
 def test_compressed_recipe_input_checks_decoder_before_launch(monkeypatch):
     from natlang_neuralese.train import recipe
 

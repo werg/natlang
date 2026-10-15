@@ -7,7 +7,7 @@ import pytest
 import torch
 
 from natlang_neuralese.train.native_continuation import (collect_sft_progress,restore_sft_progress,
-    progress_obligations,communication_foundation)
+    progress_obligations,communication_foundation,verify_initial_foundation_cohort)
 from natlang_neuralese.data.native_sources import NativeGraphSource
 from test_native_state_sft import graph, authenticated_pair, source_manifest
 
@@ -51,6 +51,24 @@ def test_foundation_uses_entire_current_admitted_cohort_but_ordinary_append_does
     # Missing immutable bindings cannot gain credit merely by reusing row IDs.
     bad=communication_foundation(added,{'lfm:a':10,'lfm:b':10},epochs=1,trained_bindings={'lfm:a':'wrong'})
     assert not bad['complete'] and bad['graph_visits']==0
+
+
+def test_initial_foundation_accepts_pair_only_complete_cohort_but_rejects_weaker_subset(tmp_path):
+    from types import SimpleNamespace
+    ordinary=[dict(graph('ordinary'),tokenizer_fingerprint='1'*64)]
+    path=source_manifest(tmp_path,ordinary,[authenticated_pair('a'),authenticated_pair('b')])
+    train=NativeGraphSource(path,'1'*64,required_split='train',role_ids=(58,59,60,61))
+    pairs=SimpleNamespace(entries=[dict(row) for row in train.entries if row['communication']])
+    verify_initial_foundation_cohort(train,pairs)
+    weaker=SimpleNamespace(entries=pairs.entries[:1])
+    with pytest.raises(ValueError,match='entire currently declared communication cohort'):
+        verify_initial_foundation_cohort(train,weaker)
+    changed=SimpleNamespace(entries=[{**row,'binding':'changed'} for row in pairs.entries])
+    with pytest.raises(ValueError,match='entire currently declared communication cohort'):
+        verify_initial_foundation_cohort(train,changed)
+    # Subsequent admitted communication is a mandatory deficit, not a moving
+    # first foundation. The recipe separately retains its exact source binding.
+    verify_initial_foundation_cohort(train,weaker,already_declared=True)
 
 
 def test_actual_sft_foundation_stops_before_ordinary_and_shared_resume_consumes_only_deficits(tmp_path):

@@ -73,6 +73,17 @@ def progress_obligations(progress):
         'remaining_graph_visits':sum(x['remaining_graph_visits'] for x in stages.values()),'stages':stages}
 
 
+def verify_initial_foundation_cohort(train, foundation, *, already_declared=False):
+    """First activation covers every current communication row, without ordinary CE."""
+    if already_declared:
+        return  # Later admitted rows remain mandatory without moving this finite cohort.
+    rows = lambda source: {entry['id']: entry['binding'] for entry in source.entries
+                           if entry.get('communication')}
+    expected, actual = rows(train), rows(foundation)
+    if not expected or actual != expected:
+        raise ValueError('initial communication foundation must bind the entire currently declared communication cohort')
+
+
 def communication_foundation(source,counts,*,epochs,trained_bindings):
     """Exact full declared communication cohort; ordinary rows do not gate it."""
     from ..common.hashing import canonical_json_sha256_hex

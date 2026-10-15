@@ -1313,7 +1313,7 @@ DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'coho
 def direct_windowing_handoffs(old_recipe, new_recipe, out):
     """Declared trainer-supported tuning, preserving each trainer's resume checks."""
     tuning = {'neuralese_direct': DIRECT_WINDOWING_PARAMETERS,
-              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs'),
+              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation'),
               'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs')}
     def parameters(recipe, stage):
         merged = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
@@ -1448,6 +1448,12 @@ def _data_continuation(old, new):
     ``text_data`` and declares ``continued_text_data`` as exactly the text data it trained on (content), every other
     role unchanged."""
     if 'native_graphs' in old and 'native_graphs' in new:
+        foundation = 'foundation_native_graphs'
+        if old.get(foundation) is not None and old[foundation] != new.get(foundation):
+            return False  # New data must not move an already declared finish line.
+        if new.get(foundation) is not None and not all(
+                new[foundation].get(key) for key in ('path', 'sha256', 'binding')):
+            return False
         roles = ('native_graphs', 'held_native_graphs')
         changed = False
         for role in roles:
@@ -1459,7 +1465,7 @@ def _data_continuation(old, new):
                     return False
             elif predecessor in new and new[predecessor].get('sha256') != old[role].get('sha256'):
                 return False
-        excluded = set(roles) | {'continued_' + role for role in roles}
+        excluded = set(roles) | {'continued_' + role for role in roles} | {foundation}
         return changed and {k: v for k, v in old.items() if k not in excluded} == {
             k: v for k, v in new.items() if k not in excluded}
     if 'text_data' not in old or 'text_data' not in new or DATA_CONTINUATION_ROLE not in new:
