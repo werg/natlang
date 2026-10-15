@@ -1,51 +1,55 @@
-# Current supervision update, 2026-10-15 07:05 UTC
+# Current supervision update, 2026-10-15 07:45 UTC
 
-Mellum is training on held replacement `5ffa592c-5f88-4b4f-b3cc-1507ab94a5dc`
-(RTX PRO 6000 96 GB, sm120), exact optimizer/RNG resume1700 under the approved
-held-v2 cadence1200 recipe. Latest observed update2200 completed in2.68seconds
-for20,272forward tokens, with no OOM or trainer errors. Its first replacement
-full checkpoint1870 is privately durable:46,821,490,903bytes, SHA
-`aa10dfefa2efdd0209f9a2f4d65cf675bf214fc7f410b70c71665018f0eeb023`.
-Scoped private PUT455seconds plus independent full GET/SHA254seconds passed.
-Periodic exports follow the replacement ID. Last task1600 was4/16 versus
-inherited base13; this remains unqualified. No production inputs were changed.
+Mellum is actively training on `5ffa592c-5f88-4b4f-b3cc-1507ab94a5dc`
+(RTX PRO 6000 96GB, sm120). Task2400 finished **5/16**, versus inherited base13
+and previous4:5success,2invalid,4repetition,1budget,4semantic failures,
+zero infrastructure/model-incomplete/unresolved. Duration828.65seconds.
+Training resumed and passed2420 without errors. Full checkpoint2210 is
+privately durable:46,821,491,287bytes, SHA
+`d8c7352bbaa7af4e7052dc95aa812a6cc513e410e2981b0ae0a4ec5a367a27d1`.
+Periodic full exports remain active. Terminal2400 prompt/output evidence and
+training metadata were independently collected to DGX (bundle
+`8a675d28419f1808bbed9f1f7f46e6907a1a6b7849008b1b54542c42218ddd51`).
 
-LFM stopped at15300 on responseKL1.5195159223, preserving the failed gate.
-Final private state SHA
-`af52732e404cc657e67b77d7067a6dbb6cec41b63e80b1abbe53e810672f6783`
-is1,149,839,963bytes. The last below-threshold evaluated step15000 had
-responseKL1.3316278644; preceding privately durable full state14960 has SHA
-`8b6e2d40b0b9851daaa0aba3412489ad8ac53eaeb38ec6eeb71ada2627c3fb58`.
-Standalone final15300 task/probe forensics retain the exact stopped weights,
-frozen full prompts, temperature0.6, seeds, four workers and original limits;
-no optimizer is constructed. The48-probe report was15/48, report-only.
-The first task attempt reached three terminal cases but its serving process
-RSS grew beyond55GB, predominantly anonymous128MiB mappings. Actual served
-prompt/output evidence and all terminal/active artifacts survived to DGX before
-an exact-process-tree shutdown. A fresh allocator control now uses
-`MALLOC_ARENA_MAX=2`, safe periodic `malloc_trim(0)` telemetry and one-frame
-tracemalloc; all model/evaluator controls remain unchanged. No completed final
-15300 task score or cause of the memory growth is yet established. The original
-failed report/certificate are hash-guarded. H100 kernel build is isolated from
-this frozen inference runtime; no unqualified wheel has been installed there.
+LFM's exact15300 full weights/optimizer/RNG remain in held H100 sandbox
+`7ee701ae-8e56-49d8-b97a-594f7eb33fe9`, SHA
+`af52732e404cc657e67b77d7067a6dbb6cec41b63e80b1abbe53e810672f6783`.
+It previously stopped at responseKL1.5195. The owner's new instruction removes
+KL as an automatic stop/qualification condition; the shared policy/recipe
+update is being prepared by the main supervisor. The next useful action is
+resume15300 with that code and Flash attention, retaining exact optimizer/RNG
+and original reference. No rollback, new research lineage or additional
+benchmark is required before that authorized training release.
 
-Search/OWL native replay finished40,818/40,818cases and658,396/658,396decisions.
-Complete closed handoffs, graph/IR/native output and provenance are being sealed
-with the shared `scripts/coreweave/source_archive.py` exact TAR+zstd protocol,
-independent decoded-member SHA verification, and scoped private PUT/fullGETSHA.
-The provenance archive already passed private readback; closed/native archives
-remain in progress. Registration/training admission is separate and pending.
-Dolci/Cognitive protected closure produced643,106train records from644,471
-candidates with1,365exact duplicate omissions and zero protection/closure errors;
-its isolated one-worker native replay is running on the reserved spare CPU.
+The exact stopped-weight Flash forensic finished all16 tasks in485.77seconds:
+**0/16**,10repetition,1budget,2model-incomplete,3semantic, zero infrastructure
+or unresolved. Behavior48 was15/48, report-only. RSS stayed1.71GB; previous
+cuDNN serving attempts grew above35–55GB before their unfinished evidence was
+saved. Actual shared cuDNN attention reproduced per-shape native-heap growth;
+repeated identical shapes plateaued, and Flash changing shapes plateaued.
+The v8 convolution cache environment control did not fix this SDPA path.
+Full exact-model comparison on two real served prompts plus16 forced decode
+steps each preserved34/34 greedy choices (maximum measured responseKL0.001396).
+The separately labeled forensic changed no optimizer weights or original
+failed report/certificate/task-history bytes. Full evidence survived to DGX,
+bundle `3f5c21b614a8f21329dad8bf4f5eb519c71d87d30cc7fa7bed1377a53a1678be`.
+This H100 finding does not explain the separate Mellum/DGX memory issue.
 
-Owner-host private export also passed for the547,812,322-byte port-record-s3-v1
-archive,38,312-byte clef-new archive and198,360,345-byte port-record-view-ask-v3
-archive, including their exact receipt/roundtrip-proof objects. Full independent
-GET/SHA passed for every object, without storing a second archive locally or
-sending account credentials to a sandbox. All remain archive-only, unadmitted.
-Raw-source survival remains16/16 acquired archives durable; four access-blocked
-sources and all conversion/admission omissions remain explicit.
+Search/OWL complete closed handoffs, native graph/IR,658,396decisions and
+provenance are now privately durable with independent full GET/SHA readback.
+The44,531,753,504-byte native tree is an11,382,584,581-byte archive, SHA
+`0bb13659806aa6ffed12a4ca61c68db9caf30f6f4ccc65a7d472d953611b9a75`.
+Source/native registration and training admission remain separate. Dolci/
+Cognitive's existing native replay is progressing on its643,106protected-closed
+train records;20/644shards were complete at the last counted frontier.
+
+All33 mined E2E source archives and their receipt/roundtrip-proof objects now
+passed private full GET/SHA verification:206,559,557,124raw bytes compressed to
+959,852,823archive bytes. No raw source was deleted by this supervisor. These
+archives preserve complete graph/source evidence and do not grant training
+admission. The separate16 acquired external-source archives remain privately
+durable, with four access-blocked source omissions explicit. Production inputs
+are updated through the shared recipe as protected data becomes usable.
 
 Earlier entries below are historical execution evidence.
 
