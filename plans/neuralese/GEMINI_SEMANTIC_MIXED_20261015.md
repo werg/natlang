@@ -9,17 +9,24 @@ carry file SHA-256, physical row coordinates and an explicit unknown-upstream
 metadata status. `teacher-decision-labels.mjs` validates these receipts without
 claiming a pinned upstream revision.
 
-Gemini batch01 closed 256/256 with 256 typed labels and 141 exact source
-matches: 56 Boardgame-QA and 85 PubMedQA. Its static adapter converted all 141
-matching labels into 18 authored multi-item Natlang programs and 318 native
-turns; all 18 reference replays passed. The remaining 115 provider labels were
-not converted. Batch02 is running behind the same project quota lock. Both
-batches remain held for semantic/source review and explicit static SFT admission.
-No provider-authored program or reasoning trace is claimed.
+Gemini batch01 closed 256/256 with 141 exact source matches: 56 Boardgame-QA
+and 85 PubMedQA. Batch02 closed 226/226 with 142 exact source matches. The
+static adapter converted all 283 matching labels into 37 authored multi-item
+Natlang programs and 640 native turns; all 37 reference replays passed. The
+199 mismatching provider choices were not converted. I inspected 140 unique
+source-matching question/answer pairs, 70 from each batch. One PubMedQA item
+asks whether biofeedback improves athletic performance, but its visible
+abstract reports only psychophysiological control; its whole authored program
+is held. The review and exact source/label/replay/turn freeze receipt are in
+`gemini-semantic-mixed-review-20261015-v1` and
+`gemini-semantic-mixed-freeze-20261015-v1` under the campaign root. No
+provider-authored program or reasoning trace is claimed.
 
-The existing exact static freeze verifier now accepts source and adapter
-directory templates so that the same source/label/replay/turn checks can be
-applied to this tranche after batch02 closes. The mixed tranche is a temporary
-source-diversity window; the CLINC replenisher timer resumes automatically after
-both batches complete. Its one-minute cadence will then keep the older source
-available while new source families are prepared.
+The exact static freeze verifier accepts source and adapter directory templates;
+it verified both mixed batches and compressed native/replay intermediates. The
+source corpus `gemini-semantic-mixed-static-reviewed-20261015-v1` is registered
+with immutable manifest `c04c6c59` and verified on DGX. Its training admission
+is for scripted static SFT only, with the one held program excluded at render
+and global held/source-quality filters still required. The mixed tranche was a
+temporary source-diversity window. The CLINC replenisher timer resumed after
+batch02 closed and has started batch47 at its one-minute cadence.
