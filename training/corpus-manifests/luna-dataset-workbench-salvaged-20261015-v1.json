@@ -1,0 +1,36 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-dataset-workbench-salvaged-20261015-v1",
+  "owner": "pop",
+  "path": "runs/luna-dataset-workbench-salvage-20261015-v1",
+  "files": [
+    {
+      "path": "accepted-parents.jsonl",
+      "bytes": 56040581,
+      "sha256": "53ee78c2af7448e4e8c4d889c4b7cde412d1944a4ad1beb88babe9d6e1a92ef8",
+      "lines": 30
+    },
+    {
+      "path": "accepted-parents.review.json",
+      "bytes": 523,
+      "sha256": "5622621f6a7c17efe532ce1a4b6105d2edf7259f3e4e35bd87107e9c228cd3bd"
+    },
+    {
+      "path": "approved-turns.jsonl",
+      "bytes": 63720156,
+      "sha256": "30c63a1614b92b591ba2f32d07910974f39d240a96901bdef3bb7d5a58194f56",
+      "lines": 769
+    },
+    {
+      "path": "curation-review.json",
+      "bytes": 1876,
+      "sha256": "e456ef7a1c78ed9561a13574b3fe89d206147c093252af87a42199a906b8c335"
+    },
+    {
+      "path": "semantic-holds.json",
+      "bytes": 309,
+      "sha256": "d367cd52a0f807bbbd3fa4518a6263aaeb5ade35fa723a82b772ce8184fa4896"
+    }
+  ],
+  "bytes": 119763445
+}

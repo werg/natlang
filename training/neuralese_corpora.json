@@ -81346,6 +81346,45 @@
           }
         }
       }
+    },
+    {
+      "id": "luna-dataset-workbench-held-audit-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-dataset-workbench-held-audit-20261015-v1",
+      "include": [
+        "review.json",
+        "REPORT.md"
+      ],
+      "source_class": "Independent source-bound semantic audit of forty held Luna dataset-workbench exact roots",
+      "license": "Project-generated curriculum with individual source facts in seed parent corpora",
+      "split": "train-only source parents but this audit itself is review evidence, not training rows",
+      "admission": "Forty parents item-by-item reviewed; 30 semantics approved for separate curation and ten held; no direct training admission",
+      "training_admission": false,
+      "training_admission_reason": "Review and hold evidence, not training data; approved data, if any, is in a separate curated corpus",
+      "review_status": "Complete independent semantic audit with source hashes and per-item rationales",
+      "required_conversion": "None for review evidence; selected exact parents were separately curated and registered",
+      "notes": "The audit holds two concrete label conflicts and eight other ambiguous/boundary cases; review.json pins original accepted-parents and semantic-hold hashes."
+    },
+    {
+      "id": "luna-dataset-workbench-salvaged-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-dataset-workbench-salvage-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Independently item-reviewed Luna dataset-workbench teacher decisions from exact train roots previously held for semantic label ambiguity",
+      "license": "Project-generated curriculum with source license facts in original seed52067-52072 registered parent corpora",
+      "split": "train only; source IDs/groups checked against held packet and original admitted seeds52067-52072, with no duplicate program/decision/source group; global union filters still required",
+      "admission": "Forty held dataset-workbench exact parents independently audited item by item; 30 semantically approved, ten remain held; 30 exact parents rematerialized with frozen collection runtime, 841 native decisions, 769 approved and 72 unapproved excluded",
+      "training_admission": true,
+      "training_admission_reason": "Independent source-hash-bound per-item audit, exact accepted roots and protected/source-disjoint check, native per-decision approval and curation; only approved-turns.jsonl is training input",
+      "review_status": "Thirty parents approved for static teacher SFT, ten held; no label rewriting; global protected and quality filters still required",
+      "required_conversion": "Render approved-turns.jsonl to LFM/Mellum twins in full, program-header, whole-trajectory before protected union",
+      "notes": "Supplemental salvage of useful exact native decisions that were held pending semantic review; original seed corpora remain immutable. Candidate materialization is reproducible from selected accepted-parents and frozen runtime and pruned after curation. Independent semantic-audit evidence is registered separately as luna-dataset-workbench-held-audit-20261015-v1."
     }
   ],
   "coverage_backlog": [
