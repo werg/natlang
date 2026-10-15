@@ -24,6 +24,8 @@ from scripts import source_review
 
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+from natlang_neuralese.common.jsonio import open_jsonl_text
+from natlang_neuralese.data.native_graph import parse_graph
 from natlang_neuralese.data.native_graph_conversion import text_row_graph
 from natlang_neuralese.data.text_corpus import native_gold_packet, tokenizer_fingerprint
 from natlang_neuralese.model.native_model import base_inventory
@@ -197,12 +199,39 @@ def verify_original_row(row, original):
     return path
 
 
+def graph_content_sha256(graph):
+    return canonical_json_sha256_hex({'tokenizer_fingerprint': graph['tokenizer_fingerprint'],
+                                     'nodes': graph['nodes']})
+
+
+def seed_content_fingerprints(paths, fingerprint):
+    seen, inputs = {}, []
+    for path in paths:
+        digest = sha256_file(path)
+        count = 0
+        with open_jsonl_text(path) as source:
+            for line in source:
+                if not line.strip():
+                    continue
+                graph = json.loads(line)
+                parsed = parse_graph(graph, tokenizer_fingerprint=fingerprint)
+                if parsed.split != 'train':
+                    raise ValueError('teacher deduplication references must be train graphs')
+                seen.setdefault(graph_content_sha256(graph), {'path': str(path), 'id': parsed.id})
+                count += 1
+        if sha256_file(path) != digest:
+            raise ValueError('teacher deduplication source changed during validation')
+        inputs.append({'path': str(path), 'sha256': digest, 'rows': count})
+    return seen, inputs
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--base-tokenizer", type=Path, required=True)
     parser.add_argument("--protection-manifest", type=Path, required=True)
+    parser.add_argument('--deduplicate-against', type=Path, action='append', default=[])
     parser.add_argument("--model-key", choices=("lfm25", "mellum21"), required=True)
     args = parser.parse_args()
     if args.output.exists() and any(args.output.iterdir()):
@@ -216,6 +245,8 @@ def main():
     inventory = base_inventory(args.base_tokenizer)
     model_type = json.loads((args.base_tokenizer / "config.json").read_text())["model_type"]
     model_id = model_type + ":" + canonical_json_sha256_hex(inventory)
+    seen_contents, dedup_inputs = seed_content_fingerprints(args.deduplicate_against, expanded_fingerprint)
+    duplicate_omissions = []
     writer = GraphWriter(args.output / "train" / "native-graphs.jsonl.zst")
     held = GraphWriter(args.output / "test" / "native-graphs.jsonl.zst")
     seen_ids = set()
@@ -280,8 +311,15 @@ def main():
                     "raw_response_sha256": turn.get("raw_response_sha256"),
                     "source_transport": (row.get("provenance") or {}).get("text_neuralese_transport"),
                 }
-                writer.write(graph)
                 teacher_turns += 1
+                content = graph_content_sha256(graph)
+                if content in seen_contents:
+                    duplicate_omissions.append({'id': graph['id'], 'content_sha256': content,
+                        'reason': 'exact token IDs and target weights already represented',
+                        'represented_by': seen_contents[content]})
+                    continue
+                seen_contents[content] = {'path': str(writer.path), 'id': graph['id']}
+                writer.write(graph)
         train = writer.finish()
         test = held.finish()
     except BaseException:
@@ -299,6 +337,8 @@ def main():
                       "expanded_fingerprint": expanded_fingerprint, "role_token_ids": list(role_ids)},
         "current_protection": binding["current"]["proof"],
         "turns": teacher_turns, "context_weight": .05,
+        'deduplication': {'inputs': dedup_inputs, 'omissions': duplicate_omissions,
+            'omitted_rows': len(duplicate_omissions), 'emitted_rows': train['rows']},
         "outputs": {"train": train, "test": test},
         "conversion": "captured full prompt + exact teacher assistant action, ordinary one-node text graph; "
                       "captured text-marker stand-in is not an authentic Neuralese edge"}

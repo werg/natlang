@@ -110,3 +110,25 @@ def test_historical_batches_are_bound_to_their_own_packet_not_future_queue(tmp_p
     put('transfer-receipt.json', transfer)
     with pytest.raises(ValueError, match='collection receipt differs'):
         converter.source_binding(args)
+
+
+def test_content_dedup_uses_actual_tokens_and_weights_not_execution_identity(tmp_path):
+    graph = {'schema': 'natlang.native-graph/1', 'id': 'old', 'split': 'train',
+        'source_groups': ['train-g'], 'tokenizer_fingerprint': 'tokenizer-a',
+        'nodes': [{'name': 'text', 'token_ids': [1, 2], 'target_weights': [0., 1.]}]}
+    # Use the shared graph schema instead of guessing a parallel schema.
+    from natlang_neuralese.data.native_graph import SCHEMA
+    graph['schema'] = SCHEMA
+    file = tmp_path / 'prior.jsonl'
+    file.write_text(json.dumps(graph) + '\n')
+    seen, bindings = converter.seed_content_fingerprints([file], 'tokenizer-a')
+    repeated = {**graph, 'id': 'new-execution', 'conversion': {'run_id': 'different'}}
+    assert converter.graph_content_sha256(repeated) in seen
+    changed = copy.deepcopy(repeated)
+    changed['nodes'][0]['target_weights'][1] = .05
+    assert converter.graph_content_sha256(changed) not in seen
+    assert bindings[0]['sha256'] == converter.sha256_file(file)
+    graph['split'] = 'test'
+    file.write_text(json.dumps(graph) + '\n')
+    with pytest.raises(ValueError, match='train graphs'):
+        converter.seed_content_fingerprints([file], 'tokenizer-a')
