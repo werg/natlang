@@ -178,6 +178,30 @@ def test_real_stop_checkpoints_before_held_eval_and_resume_logs_actual_updates(t
     assert all(math.isfinite(row['loss']) and row['seconds'] > 0 for row in rows)
     assert all(row['forward_tokens'] == 3 and row['supervised_tokens'] == 2 for row in rows)
     assert json.loads((tmp_path / 'run/progress.json').read_text()) == rows[-1]
+    # A completed three-epoch run must give an appended row all three visits,
+    # without replaying the already-complete prefix or resetting its moments.
+    appended = graph('new-train')
+    appended.update(source_groups=['new-train'], tokenizer_fingerprint=config['tokenizer_fingerprint'])
+    union = tmp_path / 'train-union.jsonl'
+    union.write_text(paths['train'].read_text() + json.dumps(appended) + '\n')
+    argv[argv.index('--native-graphs') + 1] = str(union)
+    with pytest.raises(ValueError, match='continuation predecessor'):
+        trainer.main([*argv, '--continued-native-graphs', str(paths['test'])])
+    argv += ['--continued-native-graphs', str(paths['train'])]
+    assert trainer.main(argv) == 0
+    checkpoint = torch.load(tmp_path / 'run/checkpoint.pt', weights_only=False)
+    assert checkpoint['training']['step'] == 6
+    assert checkpoint['training']['exposure_counts'] == {'train': 3, 'new-train': 3}
+    assert checkpoint['training']['optimizer']
+    assert json.loads((tmp_path / 'run/report.json').read_text())['completed'] is True
+
+
+def test_remaining_exposure_covers_partial_and_fractional_append_without_replay():
+    from natlang_neuralese.train.native_state_sft import pending_exposure_batches
+    entries = [{'id': str(index), 'forward_tokens': 3} for index in range(4)]
+    quotas, batches = pending_exposure_batches(entries, {'0': 2, '1': 1}, epochs=1.5, batch_tokens=6)
+    assert quotas == {'0': 2, '1': 2, '2': 1, '3': 1}
+    assert batches == [(0, [2, 3], True), (1, [1], True)]
 
 
 def test_tiny_native_sft_update_checkpoint_and_exact_resume(tmp_path):

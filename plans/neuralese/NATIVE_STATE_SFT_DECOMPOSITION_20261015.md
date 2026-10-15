@@ -18,6 +18,17 @@ The declared `native_state_sft` stage trains the same positional-KV/hybrid-state
 
 The checkpoint contains the exact `natlang.neuralese-native-checkpoint/1` model state plus optimizer state/schema, Python/NumPy/Torch CPU and CUDA RNG state, deterministic source schedule identity and consumed prefix, update count, and report/held-evaluation state. Adding admitted sources uses an explicit continuation whose prior schedule is an exact prefix; restore optimizer and RNG without resetting progress. Every checkpoint is atomically committed before its report claims the corresponding update. A receipt exposes model/checkpoint identity, source identities and per-source actual supervised-token exposure, held-data binding, optimizer policy, and completed recipe-stage progress for later shared VAE readiness.
 
+Source continuations retain the old row order and semantic hashes as a prefix.
+The runner admits an active native stage's new inputs only when
+`continued_native_graphs` and, for an expanded held split,
+`continued_held_native_graphs` bind the exact predecessor artifacts. The trainer
+checks those hashes against its restored checkpoint and checks every prior row.
+It schedules each row's remaining required visits from its recorded exposure,
+including additions after an earlier epoch completed; completed rows receive
+no duplicate visits. Fractional epochs cover the declared source prefix.
+Changed packing retains these visit credits and optimizer moments. This exact
+accounting is crisp mechanism for the recipe's complete-exposure policy.
+
 ## Shared recipe policy
 
 LFM and Mellum inherit one `native_state_sft` stage declaration and objective. Only backbone-inherent optimizer/memory settings may differ. Mellum uses its established MuonSR/in-backward and FP8 memory provisions; an AdamW-only 12B path is invalid. Recipe continuations append newly admitted sources while preserving all already consumed work and optimizer state. Full recipe progression and actual data exposure remain visible to the parent recipe runner.

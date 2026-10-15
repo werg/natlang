@@ -891,6 +891,46 @@ def test_lineage_handoff_allows_pinned_code_memory_and_retired_readiness_change(
     assert updated['code'] == new_code
 
 
+def test_active_native_data_handoff_binds_both_exact_predecessors(tmp_path):
+    import copy
+    from natlang_neuralese.train import recipe as runner
+    out = tmp_path / 'run'
+    frozen = out / 'runtime' / 'natlang_neuralese'
+    frozen.mkdir(parents=True)
+    (frozen / 'a.py').write_text('old = 1\n')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / 'a.py').write_text('new = 1\n')
+    (out / 'native').mkdir()
+
+    def plan(appended=False):
+        roles = {'native_graphs': 'train', 'held_native_graphs': 'held'}
+        bindings = {name: {'path': '/' + name + ('-union' if appended else ''),
+                           'sha256': name + ('-union' if appended else '')} for name in ('train', 'held')}
+        if appended:
+            for role, name in list(roles.items()):
+                roles['continued_' + role] = 'prior-' + name
+                bindings['prior-' + name] = {'path': '/' + name, 'sha256': name}
+        resolved = {role: {**bindings[name], 'binding': name} for role, name in roles.items()}
+        return {'recipe': {'id': 'native', 'input_bindings': bindings, 'stages': [
+            {'id': 'native', 'kind': 'native_state_sft', 'inputs': roles, 'parameters': {'epochs': 1}}]},
+            'recipe_sha256': 'current', 'device': 'cuda', 'stage_inputs': {'native': resolved},
+            'inputs': {item['path']: item['sha256'] for item in resolved.values()}}
+
+    existing = {**plan(), 'code': {'a.py': runner.sha(frozen / 'a.py')}}
+    path = out / 'recipe-plan.json'
+    candidate = plan(True)
+    candidate['recipe']['stages'][0]['parameters'].update(
+        epochs=2, batch_tokens=8192, learning_rate=6e-6, weight_decay=.05)
+    result = runner.lineage_handoff(copy.deepcopy(existing), candidate, frozen, package, path, out, dry_run=True)
+    assert result['handoffs'][-1]['stage_input_changes']['native']['kind'] == 'data_continuation'
+    assert result['handoffs'][-1]['windowing_changes']['native']['epochs'] == [1, 2]
+    invalid = copy.deepcopy(candidate)
+    invalid['stage_inputs']['native']['continued_held_native_graphs']['sha256'] = 'unrelated-held'
+    with pytest.raises(ValueError, match='started stage'):
+        runner.lineage_handoff(copy.deepcopy(existing), invalid, frozen, package, path, out, dry_run=True)
+
+
 def test_shared_lineage_handoff_allows_direct_stage_epoch_change_with_other_parameters_pinned(tmp_path):
     import json as _json
 

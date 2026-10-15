@@ -101,7 +101,7 @@ class NativeGraphSource:
     def __iter__(self):
         return self.iter_from(0)
 
-    def iter_from(self, start=0):
+    def iter_from(self, start=0, *, selected=None):
         from ..data.native_graph import parse_graph
         if not 0 <= start <= len(self.entries):
             raise ValueError(f'{self.path}: row cursor outside indexed source')
@@ -110,7 +110,7 @@ class NativeGraphSource:
             for line_number, line in enumerate(handle, 1):
                 if not line.strip():
                     continue
-                if index >= start:
+                if index >= start and (selected is None or index in selected):
                     try:
                         row = json.loads(line)
                     except json.JSONDecodeError as exc:
@@ -155,6 +155,27 @@ def batch_boundaries(entries, *, batch_graphs=1, batch_tokens=0):
     if start < len(entries):
         boundaries.append((start, len(entries)))
     return boundaries
+
+
+def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1, batch_tokens=0):
+    """Schedule only missing row visits, including rows appended after completion.
+
+    Each pass preserves source order. Completed visits remain credits across
+    changed packing and appended sources; fractional epochs cover the declared
+    source prefix. The checkpoint's actual row counts determine what remains.
+    """
+    whole = int(epochs)
+    fractional = math.ceil((epochs - whole) * len(entries))
+    quotas = {entry['id']: whole + (index < fractional) for index, entry in enumerate(entries)}
+    batches = []
+    for visit in range(math.ceil(epochs)):
+        indices = [index for index, entry in enumerate(entries)
+                   if exposure_counts.get(entry['id'], 0) <= visit < quotas[entry['id']]]
+        selected = [entries[index] for index in indices]
+        boundaries = batch_boundaries(selected, batch_graphs=batch_graphs, batch_tokens=batch_tokens)
+        for left, right in boundaries:
+            batches.append((visit, indices[left:right], right == len(indices)))
+    return quotas, batches
 
 
 def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in_backward=True):
@@ -398,6 +419,8 @@ def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--native-graphs', type=Path, required=True)
     parser.add_argument('--held-native-graphs', type=Path, required=True)
+    parser.add_argument('--continued-native-graphs', type=Path)
+    parser.add_argument('--continued-held-native-graphs', type=Path)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--base', type=Path)
     parser.add_argument('--continue-from', type=Path)
@@ -486,6 +509,8 @@ def main(argv=None):
             device=args.device, dtype=getattr(torch, args.dtype))
     if args.dtype is not None and config['dtype'] != str(getattr(torch, args.dtype)):
         raise ValueError('declared dtype differs from the exact restored native checkpoint')
+    if resume is None and (args.continued_native_graphs or args.continued_held_native_graphs):
+        raise ValueError('native data continuation predecessors require an actual resumable checkpoint')
     if config['rank'] != args.rank and not args.continue_from and not policy.slot.exists():
         raise ValueError('native rank differs from declared stage rank')
     from ..data.text_corpus import tokenizer_fingerprint
@@ -537,6 +562,13 @@ def main(argv=None):
             'optimizer': shared_resume['optimizer'], 'rng': shared_resume['rng'],
             'fp8': shared_resume.get('fp8'), 'step': 0, 'global_step': shared_resume['step']}
     if resume is not None:
+        for role, position in (('continued_native_graphs', 0), ('continued_held_native_graphs', 1)):
+            predecessor = getattr(args, role)
+            if predecessor is not None:
+                prior_receipts = resume.get('source_receipts') or []
+                if (len(prior_receipts) <= position
+                        or sha256_file_hex_cached(predecessor) != prior_receipts[position]['sha256']):
+                    raise ValueError('native data continuation predecessor differs from the actual checkpoint: ' + role)
         previous = resume.get('identity') or {}
         stable = ('schema', 'config', 'schedule', 'optimizer', 'seed', 'rank', 'fp8', 'objective')
         if parent_continuation and args.objective_continuation:
@@ -608,7 +640,6 @@ def main(argv=None):
     step, epoch, cursor, global_step = 0, 0, 0, 0
     metrics = {}
     exposure_counts = {key: 0 for key in source_row_bindings}
-    schedule_prefix_ids = set(resume['source_row_bindings']) if resume is not None and appended_ids else None
     if resume is not None:
         optimizer.load_state_dict(resume['optimizer'])
         # Adaptive production may tune the step size without discarding moments.
@@ -653,42 +684,32 @@ def main(argv=None):
     # Adapt packing after a safe stop without replaying or skipping any row.
     if parent_continuation:
         step = 0
-    remaining_updates = 0
-    for pending_epoch in range(epoch, math.ceil(args.epochs)):
-        limit = fractional_rows if pending_epoch == whole_epochs and fractional_rows else len(train)
-        start = cursor if pending_epoch == epoch else 0
-        remaining_updates += len(batch_boundaries(train.entries[start:limit],
-            batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens))
-    total_end = step + remaining_updates
+    required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
+        epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens)
+    total_end = step + len(pending_batches)
     if step > total_end:
         raise ValueError('native checkpoint update is beyond the declared epoch exposure')
     resumed_step = step
     last_saved_step = step if policy.slot.is_file() and not parent_continuation else -1
-    source_iter = train.iter_from(cursor) if cursor else iter(train)
+    source_iter, source_pass = None, None
+    pass_indices = {}
+    for visit, indices, _ in pending_batches:
+        pass_indices.setdefault(visit, set()).update(indices)
+    schedule = iter(pending_batches)
     eval_at = max(1, args.eval_every)
     started = time.time()
     while step < total_end and not policy.signaled:
         update_started = time.monotonic()
-        batch = []
-        limit = fractional_rows if epoch == whole_epochs and fractional_rows else len(train)
-        batch_tokens = 0
-        while epoch < math.ceil(args.epochs) and cursor < limit:
-            next_tokens = train.entries[cursor]['forward_tokens']
-            if batch and ((args.batch_tokens and batch_tokens + next_tokens > args.batch_tokens)
-                          or (not args.batch_tokens and len(batch) >= args.batch_graphs)):
-                break
-            try:
-                batch.append(next(source_iter))
-            except StopIteration as error:
-                raise ValueError('native graph source ended before its validated row count') from error
-            cursor += 1
-            batch_tokens += next_tokens
-        if cursor >= limit:
-            epoch += 1
-            cursor = 0
-            source_iter = iter(train)
-        if not batch:
-            break
+        visit, indices, pass_end = next(schedule)
+        if source_pass != visit:
+            source_iter = train.iter_from(min(pass_indices[visit]), selected=pass_indices[visit])
+            source_pass = visit
+        try:
+            batch = [next(source_iter) for _ in indices]
+        except StopIteration as error:
+            raise ValueError('native graph source ended before its validated row count') from error
+        batch_tokens = sum(train.entries[index]['forward_tokens'] for index in indices)
+        epoch, cursor = (visit + 1, 0) if pass_end else (visit, indices[-1] + 1)
         if backend is not None:
             backend.reset_row_counts()
         optimizer.zero_grad(set_to_none=True)
@@ -806,7 +827,7 @@ def main(argv=None):
               architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
               fp8_state=backend.extra_state() if backend is not None else None)
         last_saved_step = step
-    completed = epoch >= args.epochs and (whole_epochs == int(args.epochs) or fractional_rows > 0)
+    completed = all(exposure_counts[key] >= visits for key, visits in required_visits.items())
     # A continuation may inherit a completed checkpoint made before task
     # summaries were checkpointed. At the same final weights, make one real
     # cadence call; do not reuse an unbound log row or enter final_at's retry

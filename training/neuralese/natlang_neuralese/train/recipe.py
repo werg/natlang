@@ -38,7 +38,7 @@ HANDLERS = {
     # graph files are already admitted and carry explicit split provenance.
     'native_state_sft': {'module': 'natlang_neuralese.train.native_state_sft',
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
-                         'optional_inputs': {'continue_from'},
+                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs'},
                          'parameters': {'base', 'rank', 'dtype', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'seed', 'task_eval',
@@ -417,7 +417,8 @@ def stage_input_args(resolved, kind):
         if role in resolved and role in supported:
             args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'native_graphs',
-                 'held_native_graphs', 'rl_block_bundle', 'continue_from', 'continue_identity',
+                 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs',
+                 'rl_block_bundle', 'continue_from', 'continue_identity',
                  'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',
                  'direct_parent_proof', 'aligned_projection'):
@@ -1262,8 +1263,10 @@ DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'coho
 
 
 def direct_windowing_handoffs(old_recipe, new_recipe, out):
-    """{stage id: {parameter: [old, new]}} for the train-window geometry changes of neuralese_direct stages, and the
-    two recipes without those parameters. A finished stage keeps its geometry."""
+    """Declared trainer-supported tuning, preserving each trainer's resume checks."""
+    tuning = {'neuralese_direct': DIRECT_WINDOWING_PARAMETERS,
+              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay'),
+              'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay')}
     def parameters(recipe, stage):
         merged = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
         merged.update(stage.get('parameters', {}))
@@ -1272,10 +1275,11 @@ def direct_windowing_handoffs(old_recipe, new_recipe, out):
     changes = {}
     for stage in new_recipe.get('stages', []):
         old = old_stages.get(stage.get('id'))
-        if stage.get('kind') != 'neuralese_direct' or old is None or old.get('kind') != stage.get('kind'):
+        kind = stage.get('kind')
+        if kind not in tuning or old is None or old.get('kind') != kind:
             continue
         before, after = parameters(old_recipe, old), parameters(new_recipe, stage)
-        changed = {key: [before.get(key), after.get(key)] for key in DIRECT_WINDOWING_PARAMETERS
+        changed = {key: [before.get(key), after.get(key)] for key in tuning[kind]
                    if before.get(key) != after.get(key)}
         if changed:
             if stage_finished(out, stage['id']):
@@ -1286,12 +1290,13 @@ def direct_windowing_handoffs(old_recipe, new_recipe, out):
     stripped = []
     for recipe in (old_recipe, new_recipe):
         value = json.loads(json.dumps(recipe))
-        direct = value.get('stage_parameter_defaults', {}).get('neuralese_direct')
-        for container in [direct] + [stage.get('parameters') for stage in value.get('stages', [])
-                                     if stage.get('kind') == 'neuralese_direct']:
-            if isinstance(container, dict):
-                for key in DIRECT_WINDOWING_PARAMETERS:
-                    container.pop(key, None)
+        for kind, keys in tuning.items():
+            defaults = value.get('stage_parameter_defaults', {}).get(kind)
+            for container in [defaults] + [stage.get('parameters') for stage in value.get('stages', [])
+                                          if stage.get('kind') == kind]:
+                if isinstance(container, dict):
+                    for key in keys:
+                        container.pop(key, None)
         stripped.append(value)
     return changes, stripped[0], stripped[1]
 
@@ -1394,6 +1399,21 @@ def _data_continuation(old, new):
     """Whether a started stage's new inputs are a declared data continuation of its old ones: the stage now reads new
     ``text_data`` and declares ``continued_text_data`` as exactly the text data it trained on (content), every other
     role unchanged."""
+    if 'native_graphs' in old and 'native_graphs' in new:
+        roles = ('native_graphs', 'held_native_graphs')
+        changed = False
+        for role in roles:
+            predecessor = 'continued_' + role
+            if old.get(role) != new.get(role):
+                changed = True
+                if (not old.get(role) or not new.get(role)
+                        or new.get(predecessor, {}).get('sha256') != old[role].get('sha256')):
+                    return False
+            elif predecessor in new and new[predecessor].get('sha256') != old[role].get('sha256'):
+                return False
+        excluded = set(roles) | {'continued_' + role for role in roles}
+        return changed and {k: v for k, v in old.items() if k not in excluded} == {
+            k: v for k, v in new.items() if k not in excluded}
     if 'text_data' not in old or 'text_data' not in new or DATA_CONTINUATION_ROLE not in new:
         return False
     if new[DATA_CONTINUATION_ROLE].get('sha256') != old['text_data'].get('sha256'):
