@@ -1,6 +1,6 @@
 # DGX current state
 
-Generated 2026-10-15 08:27 UTC by `python3 scripts/current_state.py --machine dgx`. Do not edit by hand: regenerate.
+Generated 2026-10-15 09:21 UTC by `python3 scripts/current_state.py --machine dgx`. Do not edit by hand: regenerate.
 This page holds the present only. History is in git (`git log -p -- plans/neuralese/HANDOVER.md`), in the
 decision records and in the coordination log. Live processes and the status pages are the authority.
 
@@ -18,41 +18,41 @@ decision records and in the coordination log. Live processes and the status page
 
 ## DGX status page (this machine)
 
-Updated 2026-10-15T08:27:48.031144Z by dgx-supervisor.
+Updated 2026-10-15T09:21:34.740056Z by dgx-supervisor.
 
-DGX supervisor update 2026-10-15 08:25UTC.
-Cloud CONFIRMED both active at08:28UTC: Mellum Blackwell step2951/GPU100%, last real task2400 5/16 (baseline13), no infrastructure failures. LFM H100 exact15300 optimizer/RNG resume now advancing15630, finite loss0.45413,0.404s/update,39507supervisedTPS,10.24GiBactual allocated peak; Flash SDPA active.15600 responseKL1.4919 report-only and training continued.
-R11 FULL admitted natlang-target-union-r11-full-ready-20261015-v1 (54111 docs each), both model archives now private PUT/independentGET and cloudGET/SHA verified in existing allocations. Mellum helper preparing >=1epoch FULL plus restored PH/WT/E2E chain; no warmup-only endpoint. R11 PH LFM ready, other views building. New v31 AGNews hold groups independently scanned in both staged FULL files: zero intersections (dgxops/r11-v31-new-holds-scan.json); v30 original proof unchanged.
-All33 mined source archives independently private durable;31small restored cloud. First4 E2E assembler terminal0 4221records340chains1181edges; sidecar neuralese identity metadata bug found before admission, helper published shared repair df48f391 (12tests+quickpass), rerunning corrected batch with31 protections. No false admission.
-RL helper active: shared replay fix83d441e0 on main;43focused tests including differentiable tiny canonical LFM+Mellum rewarded likelihood improvement. Full-model/full-channel deployment not yet validated; implementing durable block+producer graph replay. Current-SOTA primary-source research and local/cloud throughput placement part of assignment.
-Prepared-window persistent cache integrated/pushed77b47c66+78e504ab (containing2e285629),49focused integrated tests+quickpassed. Next useful cloud handoff, no interruption to install; actual full-size cache speedup not yet measured.
-Adaptive production AGENTS/runtime235f0b09 now passed complete full suite. Root3b08541e allows safe completed direct stages to continue repairing precision failures without strict acceptance/false certificates;34focused tests+quick passed, main1c448c34. Newer full checks asynchronous.
-Storage100GiBNVMe/101GiBexternal free. DeepDive1818items4826native decisions registered; render2487/long2486 active. D30/D34 643106protectedclosedtrain,31/644shards at08:05. More usable-data integration continues. No claim archive availability means training exposure.
+DGX supervision 2026-10-15 09:22 UTC. Owner objective: comprehensive adaptive training of both models through entire production recipe; no base-drift stop or qualification barrier, no warmup-only endpoint, preserve useful optimizer state and share all generalizable changes.
+Cloud LFM H100: exact15300 state resume advancing19034 at last check, finite loss/28.1k supervisedTPS, no OOM. Task16000=1/16 (inherited0), no general lift claim. Full18480 checkpoint SHA0c95ff6da3574ac7f8d1aef30611a8d8c30de3ae046ab43e6deefcdf8e522a6f private PUT/independentGET verified. Flash fixed cuDNN host leak. Current task4000/checkpoint440 cadence, completed-task time~22% steady cycle.
+Cloud Mellum Blackwell: exact3108 full state SHAe21f1df8312037c625ebb5497478221375362fe4594e60d7ee50477cd91792f2 private durable. R11 FULL1epoch handoff hit old epoch-prefix guard on combined data+epoch change; shared141a4a8462 repaired with17tests+quick. Same allocation v2 bootstrap35032 / actualtrainer37550, light plan finished09:13:27 (22032updates/41378unseen docs), now CUDA model load; Actual new optimizer updates confirmed through3111 after cache HIT and guard repair. No optimizer/allocation reset. Prepared cache exists229390train/30021held/66479targetwindows; helper adding equivalent light-plan cache reuse. Next PH append checkpoint600 (~40min), prewarm CPU windows/plan before stopping GPU.
+Data: R11 FULL admitted/staged both sandboxes; current33 all392pending-group scan zero intersections with50956train docs per twin, immutable group-index proof in dgxops/r11-full-current-source-review-proof.json. PH twins972243docs each completed, independent latest-hold audit running prep-r11-ph-frontier-20261015; LFM per-view frontier persisted, Mellum scanning; finalization rereads latest stable registry. Root finalizes registration when terminal proof passes; do not wait WT. Whole future-stage append supported f6fa77ff.
+No-half-measures audit found real omission: data_continuation marks entire doc seen after one consumed window, dropping remaining targets/repeated draws.3-window probe after1update loses2remaining windows. Luna implementing occurrence/supervision-aware fix in isolated worktree, coordinating light-plan cache metadata with cloud helper. Keep current startup advancing; heal missing spans at useful checkpoint, preserve3108 parent and source data for exact reconstruction.
+RL: shared capture0e83669a and full-policy e1d1eff9 integrated/pushed;81integrated tests+quick passed. Actual full-size LFM and Mellum MuonSR backward/update finite. Real generic task harness LFM4/4 scored0success0infra; Mellum4/4 scored4success0infra. These are setup checks, not trained improvement. Real value graphs: LFMwidth1024/Pgrad72.59, Mellumwidth2304/Pgrad49.79,2vectors/8readeractions, recorded forward delta0 and durable graph roundtrip. Exact serving-step logprobs match; BF16 parallel differences localized, FP32reference6.68e-6, actualimportance ratios unclipped. Shared exact projection restoration c621e1de and ordinary held-window preservation181178d6 integrated/pushed,6projection/graph+17objective tests/quickpass. RL agent finishing real Neuralese collector transport (existing path was text-emulation-only), distributed bundle/controller, SOTA reuse/deployment docs; production RL readiness NOT claimed yet.
+E2E: first4 cohort neuralese-e2e-cloud-small-protected-20261015-v2 ADMITTED a1a03a08,4221records340chains1180edges (712train468held), complete graph/current32/quality/decision proofs, root manifest published. Next27 assembly terminal0:147473records11715chains55489edges (45265train10224held); independent verifier exposed original-source chain missing its producer receipt despite a valid later edge. Helper repairing whole-chain exclusion/provenance with assigned original retained, not admitted yet. Remaining two huge sources restoring on sparecore5/nice19 after actual Mellum update; all33 source archives already independently private durable.
+External fronts: DeepDive base1818items4826decisions rendered/registered; long recovery1150cases7374decisions registered2517 and rendering2518,48over-cap remain explicit paging work. D40p08/Evidencep09/RightFitlongp02 active, Dolci/Cognitive53/644native shards remote. Storage93GiBNVMe/101GiBexternal. Full main check2e285629 passed all stages (window cache/precision repair included); newer full check asynchronous. Source parent manifests remain immutable, no archived availability claimed as training exposure.
 
 ## POP status page
 
-Updated 2026-10-15T08:13:39.313613Z by pop-codex-01a0e480.
+Updated 2026-10-15T08:44:13.014182Z by pop-codex-01a0e480.
 
-Pop 2026-10-15 08:14 UTC: Six Luna workers active seed52106 (67/99 terminal), minute replenisher active. Seed52103 curated 81/401, seed52104 89/591, seed52105 74/368, all source/render SHA verified on DGX; current source-review v30 dc200f4c. Seed52105 rejected 11; four paired dataset27 all-false semantic judgments; eight process roots held, including both folder reducers. Folder v2 remains low process yield; redesign/live trial needed before higher allocation. Pop pruned 252MB unregistered seed streams plus 1.014GB closed unadmitted trial raw/intermediate artifacts; /srv/storage ~7.0GiB free. DGX briefed seed105; cloud training and R11 current-hold admission remain DGX-owned. Pop GPU idle under data-preparation allocation. Next curate seed52106, keep slots full and monitor DGX.
+Pop 2026-10-15 08:44 UTC: seed52107 closed 99/99, 89 accepted; curated 80 roots/389 decisions after nine holds; source/render manifests 94b13d1a/4c35e456 registered and SHA verified on DGX, each model 389 PH+248 whole. Source review v32 ccb2b9aa, accepted SHA unchanged. Six Luna slots replenished; seed52108 near terminal, seed52109 prebuilt and launching. Storage ~6.7GiB free; 87.8MB redundant intermediates pruned. Pop GPU idle under data-preparation allocation; cloud training DGX-owned. Shared checkout has concurrent edits; isolated publish active.
 
 ## Running on this machine
 
 | Unit | Priority | Budget / used GB | Recipe |
 | --- | --- | --- | --- |
-| `audit-r11-current-holds-expansion-2434` | low | 5.0 / 0.0 |  |
-| `build-r11-optimized-current-holds-2464` | low | 12.0 / 3.6 |  |
+| `audit-r11-current-holds-expansion-2434` | low | 5.0 / 0.5 |  |
+| `cw-e2e-unresolved-chain-publish-0917` | low | 3.0 / 0.0 |  |
 | `cw-lfm-periodic-private-checkpoint-export` | medium | 1.5 / 0.1 |  |
 | `cw-mellum-periodic-private-checkpoint-export` | medium | 1.0 / 0.1 |  |
-| `natlang-full-check-2e2856293c` | low | 13.5 / 0.5 |  |
 | `natlang-memory-guard` |  |  |  |
 | `natlang-task-eval-dispatch` | medium | 1.5 / 0.3 |  |
-| `prep-r11-ph-ready-20261015` | low | 4.0 / 0.8 |  |
 | `render-d40-bounded-resume-2402` | low | 4.0 / 0.1 |  |
+| `render-deepdive-long-2518` | low | 2.0 / 0.0 |  |
 | `render-evidence-bounded-resume-2403` | low | 4.0 / 0.0 |  |
-| `render-external-expansion-agentic-coding-native-20261014-v2-p07-50285` | low | 8.0 / 3.8 |  |
-| `render-external-expansion-evidence-terminal-native-20261015--p08-51947` | low | 8.0 / 2.1 |  |
-| `render-external-expansion-rightfit-native-long-20261015-v1-p01-50924` | low | 8.0 / 3.1 |  |
-| `render-rightfit-recovered-native-2418` | low | 4.0 / 0.0 |  |
+| `render-external-expansion-agentic-coding-native-20261014-v2-p08-53417` | low | 8.0 / 4.2 |  |
+| `render-external-expansion-deepdive-native-long-20261015-v1-p00-54761` | low | 8.0 / 2.3 |  |
+| `render-external-expansion-evidence-terminal-native-20261015--p10-55422` | low | 8.0 / 2.1 |  |
+| `render-rightfit-recovered-native-2418` | low | 4.0 / 0.3 |  |
+| `test-window-continuation-20261015` | low | 3.0 / 0.0 |  |
 
 ## Declared lineages (training/neuralese/line-parity.json: next launch per line)
 
@@ -63,11 +63,11 @@ Pop 2026-10-15 08:14 UTC: Six Luna workers active seed52106 (67/99 terminal), mi
 | e2e | lfm | `neuralese-e2e-lfm-v1` | neuralese-e2e-v1 | neuralese-e2e-v1 on LFM2.5-350M (Pop). |
 | e2e | mellum | `neuralese-e2e-mellum-v1` | neuralese-e2e-v1 | neuralese-e2e-v1 on Mellum2.1-12B-A2.5B (DGX). |
 
-Recipes on disk (61): `diag-e2e-lfm-u10006-r4-ph-heads-3e-6`, `diag-e2e-lfm-u10006-r4-text-heads-3e-4`, `diag-e2e-lfm-u10006-r4-text-heads-3e-6`, `diag-e2e-lfm-u10006-r5-writer-adamw-3e-5`, `diag-e2e-lfm-u10006-v2stream-b`, `diag-e2e-lfm-u10006-v2stream-c3e-4`, `diag-e2e-lfm-u10006-v2stream-c3e-5`, `diag-e2e-lfm-u10006-v2stream-c3e-6`, `diag-mixed-lfm-u10006-masked-clock-p10`, `diag-mixed-lfm-u10006-masked-clock-p25`, `diag-mixed-lfm-u10006-masked-clock-p50`, `diag-mixed-lfm-u10006-p10`, `diag-mixed-lfm-u10006-p25`, `diag-mixed-lfm-u10006-p50`, `diag-mixed-lfm-u10006-ratio-base`, `luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v3`, `luna-neuralese-direct-lfm-base-20261011-v8`, `neuralese-direct-lfm-muon-main-20261012-v1-full`, `neuralese-direct-lfm-muon-main-20261012-v2`, `neuralese-direct-lfm-muon-main-20261012-v3`, `neuralese-direct-lfm-muon-main-20261012-v3-pop-launch`, `neuralese-direct-lfm-qad-broad-20261013-v1`, `neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery`, `neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix`, `neuralese-direct-lfm-qad-broad-20261013-v1-eval-recovery`, `neuralese-direct-lfm-qad-broad-20261013-v1-exact-resume-v10`, `neuralese-direct-lfm-qad-broad-20261013-v1-measured-task-eval`, `neuralese-direct-lfm-qad-broad-20261013-v1-pop-discrete-ledger`, `neuralese-direct-lfm-qad-broad-20261013-v1-recovery-handoff-v12`, `neuralese-direct-lfm-qad-broad-20261013-v1-report-recovery`, `neuralese-direct-lfm-qad-broad-20261013-v1-stream-header`, `neuralese-direct-lfm-qad-broad-20261014-r5-data-continuation-v1`, `neuralese-direct-lfm-qad-r8-clean-warmup-20261014-v1`, `neuralese-direct-lfm-qad-r8-ph-coreweave-20261014-v1`, `neuralese-direct-lfm-qad-r8-ph-coreweave-20261014-v2`, `neuralese-direct-lfm-qad-r8-ph-coreweave-20261014-v3`, `neuralese-direct-lfm-qad-r8-ph-coreweave-cadence-20261014-v4`, `neuralese-direct-lfm-qad-r8-ph-coreweave-operational-20261015-v5`, `neuralese-direct-lfm-v1`, `neuralese-direct-lfm-v2`, `neuralese-direct-lfm-v3`, `neuralese-direct-mellum-r8-clean-warmup-20261014-v1`, `neuralese-direct-mellum-r8-clean-warmup-coreweave-20261014-v1`, `neuralese-direct-mellum-r8-clean-warmup-coreweave-fresh-20261014-v1`, `neuralese-direct-mellum-r8-clean-warmup-coreweave-held-resume-20261014-v1`, `neuralese-direct-mellum-r8-clean-warmup-coreweave-held-resume-cadence-20261014-v2`, `neuralese-direct-mellum-v1`, `neuralese-direct-mellum-v2`, `neuralese-direct-mellum-v3`, `neuralese-direct-mellum-v4`, `neuralese-direct-mellum-v4-from-v3-warmup`, `neuralese-direct-v1`, `neuralese-direct-v2`, `neuralese-direct-v3`, `neuralese-e2e-lfm-v1`, `neuralese-e2e-lfm-v1-qual-muon-main-v2-u9000`, `neuralese-e2e-mellum-v1`, `neuralese-e2e-v1`, `neuralese-mixed-lfm-qad-broad-v1`, `neuralese-mixed-mellum-v4`, `neuralese-mixed-mellum-v4-r5-data-continuation-v1`
+Recipes on disk (63): `diag-e2e-lfm-u10006-r4-ph-heads-3e-6`, `diag-e2e-lfm-u10006-r4-text-heads-3e-4`, `diag-e2e-lfm-u10006-r4-text-heads-3e-6`, `diag-e2e-lfm-u10006-r5-writer-adamw-3e-5`, `diag-e2e-lfm-u10006-v2stream-b`, `diag-e2e-lfm-u10006-v2stream-c3e-4`, `diag-e2e-lfm-u10006-v2stream-c3e-5`, `diag-e2e-lfm-u10006-v2stream-c3e-6`, `diag-mixed-lfm-u10006-masked-clock-p10`, `diag-mixed-lfm-u10006-masked-clock-p25`, `diag-mixed-lfm-u10006-masked-clock-p50`, `diag-mixed-lfm-u10006-p10`, `diag-mixed-lfm-u10006-p25`, `diag-mixed-lfm-u10006-p50`, `diag-mixed-lfm-u10006-ratio-base`, `luna-direct-lfm-native-e2e-token-writer-endpoint-epoch-20261011-v3`, `luna-neuralese-direct-lfm-base-20261011-v8`, `neuralese-direct-lfm-muon-main-20261012-v1-full`, `neuralese-direct-lfm-muon-main-20261012-v2`, `neuralese-direct-lfm-muon-main-20261012-v3`, `neuralese-direct-lfm-muon-main-20261012-v3-pop-launch`, `neuralese-direct-lfm-qad-broad-20261013-v1`, `neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery`, `neuralese-direct-lfm-qad-broad-20261013-v1-context-recovery-identity-fix`, `neuralese-direct-lfm-qad-broad-20261013-v1-eval-recovery`, `neuralese-direct-lfm-qad-broad-20261013-v1-exact-resume-v10`, `neuralese-direct-lfm-qad-broad-20261013-v1-measured-task-eval`, `neuralese-direct-lfm-qad-broad-20261013-v1-pop-discrete-ledger`, `neuralese-direct-lfm-qad-broad-20261013-v1-recovery-handoff-v12`, `neuralese-direct-lfm-qad-broad-20261013-v1-report-recovery`, `neuralese-direct-lfm-qad-broad-20261013-v1-stream-header`, `neuralese-direct-lfm-qad-broad-20261014-r5-data-continuation-v1`, `neuralese-direct-lfm-qad-r8-clean-warmup-20261014-v1`, `neuralese-direct-lfm-qad-r8-ph-coreweave-20261014-v1`, `neuralese-direct-lfm-qad-r8-ph-coreweave-20261014-v2`, `neuralese-direct-lfm-qad-r8-ph-coreweave-20261014-v3`, `neuralese-direct-lfm-qad-r8-ph-coreweave-cadence-20261014-v4`, `neuralese-direct-lfm-qad-r8-ph-coreweave-operational-20261015-v5`, `neuralese-direct-lfm-v1`, `neuralese-direct-lfm-v2`, `neuralese-direct-lfm-v3`, `neuralese-direct-mellum-r11-full-coreweave-adaptive-20261015-v1`, `neuralese-direct-mellum-r11-full-coreweave-adaptive-20261015-v2`, `neuralese-direct-mellum-r8-clean-warmup-20261014-v1`, `neuralese-direct-mellum-r8-clean-warmup-coreweave-20261014-v1`, `neuralese-direct-mellum-r8-clean-warmup-coreweave-fresh-20261014-v1`, `neuralese-direct-mellum-r8-clean-warmup-coreweave-held-resume-20261014-v1`, `neuralese-direct-mellum-r8-clean-warmup-coreweave-held-resume-cadence-20261014-v2`, `neuralese-direct-mellum-v1`, `neuralese-direct-mellum-v2`, `neuralese-direct-mellum-v3`, `neuralese-direct-mellum-v4`, `neuralese-direct-mellum-v4-from-v3-warmup`, `neuralese-direct-v1`, `neuralese-direct-v2`, `neuralese-direct-v3`, `neuralese-e2e-lfm-v1`, `neuralese-e2e-lfm-v1-qual-muon-main-v2-u9000`, `neuralese-e2e-mellum-v1`, `neuralese-e2e-v1`, `neuralese-mixed-lfm-qad-broad-v1`, `neuralese-mixed-mellum-v4`, `neuralese-mixed-mellum-v4-r5-data-continuation-v1`
 
 ## Corpus registry
 
-1662 live entries in `training/neuralese_corpora.json` (243 dgx, 1419 pop); 305 carry training admission.
+1670 live entries in `training/neuralese_corpora.json` (244 dgx, 1426 pop); 314 carry training admission.
 
 ## Open coordination requests to dgx
 
@@ -97,9 +97,9 @@ Recipes on disk (61): `diag-e2e-lfm-u10006-r4-ph-heads-3e-6`, `diag-e2e-lfm-u100
 
 ## Latest decisions (coord)
 
-- 2026-10-15T07:45 dgx-supervisor: Owner: adaptive comprehensive production; base drift report-only
-- 2026-10-15T07:54 dgx-supervisor: Adaptive production policy and shared runtime deployed in 235f0b09
-- 2026-10-15T08:02 dgx-coreweave-sandbox: Exact recipe handoff admits explicit attention execution controls
-- 2026-10-15T08:24 dgx-supervisor: Safe precision repair continuation is not qualification
-- 2026-10-15T08:26 dgx-supervisor: Reuse prepared training windows across safe resumes
-- 2026-10-15T08:27 dgx-coreweave-sandbox: E2E exact edge metadata repair for legacy Neuralese references
+- 2026-10-15T08:42 pop-storage-review: Retire obsolete v13/S2 Pop runs; use selected sources
+- 2026-10-15T09:05 dgx-supervisor: Shared full-policy Neuralese RL objective integrated
+- 2026-10-15T09:07 dgx-coreweave-sandbox: Qualified optional H100 causal conv selector
+- 2026-10-15T09:07 dgx-coreweave-sandbox: Combined epoch and data resume repaired
+- 2026-10-15T09:14 dgx-coreweave-sandbox: Prepared-window cache reused for continuation plans
+- 2026-10-15T09:21 dgx-supervisor: Exact Neuralese projections restored from mixed checkpoints
