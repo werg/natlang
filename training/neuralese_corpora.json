@@ -90789,6 +90789,30 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "luna-held-shapes-s52091-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52091-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "84 independently reviewed exact accepted roots; 556 approved native decisions out of 826 materialized from 89 selected parents; one v19 source-held accepted parent, four declared-process parent holds, one excessive-research parent hold, 45 unapproved decisions excluded",
+      "training_admission": true,
+      "training_admission_reason": "Current v19 source review, independent visible-feed semantic review, protected checks, exact trajectory holds for missing process or poor quality, and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "Seven source-level AG News semantic ambiguities in v19; three verbose evidence-equivalent rejected Hotpot answers are not DPO negatives. One exact-success Hutterite trajectory had 193 repetitive approved decisions and is held. Four other exact-success roots missed required inline NL or iterateOn.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Exact source review and five parent holds are authoritative. The v19 selection records one accepted source_review_hold. Generic shape quarantine has two clean-sibling collateral groups and must not be applied wholesale."
     }
   ],
   "coverage_backlog": [
