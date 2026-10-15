@@ -108786,6 +108786,63 @@
           "new_held_vs_previous_train_group_intersections": 0
         }
       }
+    },
+    {
+      "admission": "All 17,048 original FULL train rows per model are preserved exactly except top-level graph ID, deterministically prefixed `view:external-full-20261015-v1:`. The original FULL and header views collide on all 17,048 IDs with different row bindings. The qualified IDs were checked against every currently indexed source view and had zero collisions. Exact input/output stream comparison confirms every non-ID field is unchanged; both tokenizer-specific outputs parse as valid native graphs and preserve row counts, groups, token counts and masks.",
+      "derived_from": [
+        "external-expansion-evidence-terminal-full-native-graphs-20261015-v1",
+        "external-expansion-evidence-terminal-program-header-native-graphs-20261015-v2"
+      ],
+      "id": "external-expansion-evidence-terminal-full-view-qualified-native-graphs-20261016-v1",
+      "include": [
+        "lfm25/train/native-graphs.jsonl.zst",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "id-maps/lfm-id-crosswalk.jsonl",
+        "id-maps/mellum-id-crosswalk.jsonl",
+        "view-rebase-proof.json"
+      ],
+      "license_provenance": "Inherited from the admitted FULL and header source corpora; owner accepts all licenses.",
+      "note": "This is an explicit additional training view, not a revision to the immutable original FULL corpus. When composing an input manifest, include this qualified view instead of the original FULL IDs to avoid duplicate graph identity/exposure; the separately admitted header view remains independently addressable.",
+      "owner": "dgx",
+      "path": "runs/external-expansion-evidence-terminal-full-view-qualified-native-graphs-20261016-v1",
+      "source_bindings": {
+        "collision_audit_sha256": "b51df4abb2e13b483fcef555b2389be606a28c2eeca3c0195d2f7f7eb83dd254",
+        "files": [
+          {
+            "bytes": 19997270,
+            "path": "lfm25/train/native-graphs.jsonl.zst",
+            "sha256": "807d8953c427e8fcdaae3f43b6fb4ee0eece7d263cbfd0b24a6fce584cbc4c90"
+          },
+          {
+            "bytes": 18244113,
+            "path": "mellum21/train/native-graphs.jsonl.zst",
+            "sha256": "7017e14dfe9e46c67428107e5ce515df579baeb07ceb85fcdd750dbd2472a65f"
+          },
+          {
+            "bytes": 12888890,
+            "path": "id-maps/lfm-id-crosswalk.jsonl",
+            "sha256": "0cb1d52fff5ddaafaee96553c976e86f1538c85ac16386f4d5074e18b0c64cdd"
+          },
+          {
+            "bytes": 12889225,
+            "path": "id-maps/mellum-id-crosswalk.jsonl",
+            "sha256": "2a68e67a9e844831e8ba325d68b07dd34eef524791c68587718b0ad68087e8d6"
+          },
+          {
+            "bytes": 5807,
+            "path": "view-rebase-proof.json",
+            "sha256": "c1dabbc9aa8699e68917139d69b8dc9ab36ad892f4e0acb50a5a6b3a3213aaeb"
+          }
+        ],
+        "group_overlap_audit_sha256": "bb92c349ab08ccb55061a76316a1dd9fede36bb0850989912a2bc0eb06911178",
+        "header_registry_manifest_sha256": "0b102a21bb6c171c023ac377f92387060e2dbb7f3d30e6e015b8e27ffb32927d",
+        "source_registry_manifest_sha256": "6890d158c38d230073ad09bda2e0dca33999e6c60c69fd216121fbfbb9ea3bf3",
+        "view_rebase_proof_sha256": "c1dabbc9aa8699e68917139d69b8dc9ab36ad892f4e0acb50a5a6b3a3213aaeb"
+      },
+      "source_class": "view-qualified-derived-native-full-training-view",
+      "split": "17,048 train-only graph rows per model; no held/test rows in this supplement. Original FULL view identities are rebased to a deterministic view-qualified namespace so the independently useful FULL rendering can coexist with the header rendering; the original source groups/split remain unchanged.",
+      "training_admission": true,
+      "training_admission_reason": "Derived from an already admitted exact FULL source view by changing only graph IDs to distinguish it from the already independently admitted header rendering. Source split/protection decisions, source groups, tokenization, targets and graph payloads remain exactly inherited. The derivation proof binds both original manifests, complete cache-index collision audit and per-row old/new bindings. Registration does not claim student exposure."
     }
   ],
   "coverage_backlog": [
