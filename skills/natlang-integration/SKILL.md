@@ -246,3 +246,10 @@ artifact/archive protocol. Their dialect is bound to the semantic adapter SHA,
 and their token-first tensors retain text, source embeddings and semantic code.
 Even same-model consumers decode them. RL captures retain the actual decoded
 observation and an additional exact raw producer archive for gradient replay.
+
+For compact semantic RL turns, archive every `raw_state_id` in write receipts
+and every actual native observation in the sampling prompt, in addition to the
+compact outputs. Contextual `source_capture.imports` binds original references,
+`observed_native_state_id` and semantic adaptation identities; preserve and
+archive both sides when publishing a `.nz` body. Never reinterpret code tensors
+as raw KV or relabel a named semantic dialect to another adapter.

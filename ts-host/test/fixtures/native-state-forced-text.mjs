@@ -60,4 +60,15 @@ assert.equal(viewTurns.length, 3, 'two actual part writers and their actual comb
 assert.equal(viewTurns[2].messages[1].content.filter(part => part.type === 'native_state').length, 2);
 for (const turn of viewTurns) for (const write of turn.response.x_natlang_rl_capture.writes)
   assert.ok(await reopened.getNativeState(write.state_id));
+const { neuraleseServerModelTurn } = await import('../../dist/model/neuralese-server.js');
+const actor = neuraleseServerModelTurn({ endpoint, model: 'actual-native-receipt', store: reopened,
+  request: { temperature: 1, x_natlang_rl_capture: true, neuralese_template: {
+    call: 'return_result', arguments: { status: 'success' }, argument: 'value', value: 'write' } } });
+const response = await actor({ messages: [{ role: 'user', content: [{ type: 'native_state', id: viewed.$neuralese.id }] }], tools: [], max_tokens: 64 });
+const sampling = response.raw_response.x_natlang_rl_capture;
+assert.ok(sampling.writes.length);
+for (const write of sampling.writes) for (const stateId of [write.state_id, write.raw_state_id].filter(Boolean))
+  assert.ok(await reopened.getNativeState(stateId), 'ordinary server client archives raw and compact producer receipt artifacts');
+for (const observation of sampling.prompt) if (observation.kind === 'native_state')
+  assert.ok(await reopened.getNativeState(observation.id), 'ordinary server client archives actual decoded observations');
 console.log(JSON.stringify({ forced: true, contextual: true, view_parts: 2 }));

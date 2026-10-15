@@ -27,7 +27,7 @@ from natlang_neuralese.serve.http import serve
 
 
 @pytest.mark.parametrize('family', ['lfm', 'mellum'])
-@pytest.mark.parametrize('mode', ['handoff', 'forced'])
+@pytest.mark.parametrize('mode', ['handoff', 'forced', 'compact'])
 def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypatch, family, mode):
     repo = Path(__file__).resolve().parents[2]
     fixture = repo / ('ts-host/test/fixtures/native-state-child-parent.mjs' if mode == 'handoff' else 'ts-host/test/fixtures/native-state-forced-text.mjs')
@@ -46,7 +46,7 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
         del vocabulary[f't{token}']
         vocabulary[marker] = token
     raw_tokenizer = Tokenizer(WordLevel(vocabulary, unk_token='t0'))
-    if mode == 'forced':
+    if mode != 'handoff':
         # A real BPE merge crosses an ordinary-text body boundary, while actual
         # producer role tokens delimit independent prefix/body/suffix runs.
         for token, index in [('t', 10), ('5', 11), ('6', 12), ('7', 13), ('8', 14), ('t5t6', 15)]:
@@ -62,7 +62,7 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
     tokenizer.chat_template = ("{% for message in messages %}"
         "{% if message['role'] == 'assistant' and message.get('reasoning_content')" + last_only + " %}"
         "{{ message['reasoning_content'] }}{% endif %}{{ message['content'] }}{% endfor %}assistant:")
-    if mode == 'forced':
+    if mode != 'handoff':
         tokenizer.chat_template = ("{% for message in messages %}{{ message['role'] }}:"
             "{% if message['role'] == 'assistant' and message.get('reasoning_content')" + last_only + " %}"
             "{{ message['reasoning_content'] }}{% endif %}{{ message['content'] }}"
@@ -76,17 +76,31 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
     engine = Engine(port, None, tokenizer, TensorStore(), f"native-state/{config['architecture']}",
         shared_model=model, role_tokens=RoleTokens(*model.marker_ids), model_config=config,
         checkpoint_sha256=identity['checkpoint_sha256'], embedding_weight_sha256=identity['embedding_weight_sha256'])
-    if mode == 'forced':
+    engine.native_identity = identity
+    if mode != 'handoff':
         engine.context = 2048
         engine.max_block = 8
+    if mode == 'compact':
+        from dataclasses import replace
+        from natlang_neuralese.model.semantic_vae import SemanticStateVAE, StateLayout
+        from natlang_neuralese.model.semantic_channel import SemanticChannel
+        raw = engine.native_write_text('t5')
+        captured = engine.store.get_native_state(raw['id']).block
+        other = {**identity, 'checkpoint_sha256': '9' * 64}
+        vae = SemanticStateVAE({'source': StateLayout.from_block(captured), 'peer': StateLayout.from_block(captured)},
+                              latent_width=4, hidden_width=16)
+        engine.semantic_channel = SemanticChannel(vae, {'source': identity, 'peer': other},
+            {'source': tokenizer, 'peer': tokenizer}, adapter_sha256='a' * 64)
+        engine.semantic_participant = 'source'
+        engine.dialect = 'semantic-state/' + 'a' * 64
     # One payload token is actually forwarded/captured; parent then samples EOS.
-    samples = iter([(5, -.2), (61, -.3), (2, -.4)] * 4 if mode == 'forced' else [(60, -.1), (5, -.2), (61, -.3), (2, -.4), (2, -.5)])
+    samples = iter([(5, -.2), (61, -.3), (2, -.4)] * 4 if mode != 'handoff' else [(60, -.1), (5, -.2), (61, -.3), (2, -.4), (2, -.5)])
     def forced_sample(sequence):
         if sequence.request.messages[-1].get('content') == 'empty-fixture':
             return ((61, -.3) if sequence.native_capture_open else
                     (60, -.1) if sequence.generated_positions == 0 else (2, -.4))
         return ((5, -.2) if not sequence.native_capture_ids else (61, -.3)) if sequence.native_capture_open else (2, -.4)
-    monkeypatch.setattr(engine, '_native_token', forced_sample if mode == 'forced' else lambda _sequence: next(samples))
+    monkeypatch.setattr(engine, '_native_token', forced_sample if mode != 'handoff' else lambda _sequence: next(samples))
     imports, original_consume = [], engine._native_consume
     def record_consume(sequence, block_id):
         original_consume(sequence, block_id)
@@ -101,11 +115,12 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
         process = subprocess.run(command, cwd=repo, text=True, capture_output=True, timeout=60)
         assert process.returncode == 0, process.stdout + process.stderr
         receipt = json.loads(process.stdout.splitlines()[-1])
-        if mode == 'forced':
+        if mode != 'handoff':
             assert receipt == {'forced': True, 'contextual': True, 'view_parts': 2}
-            assert imports and all(item['mode'] == 'exact-native-state' for item in imports)
+            assert imports and all(item['mode'] == ('learned-semantic-state-deltas' if mode == 'compact' else 'exact-native-state') for item in imports)
         else:
-            assert imports[0] == {'id': receipt['state_id'], 'mode': 'exact-native-state'}
+            assert imports[0]['id'] == imports[0]['observed_native_state_id'] == receipt['state_id']
+            assert imports[0]['mode'] == 'exact-native-state'
             assert receipt['parent_result'] == 'consumed' and receipt['archived']
             block = engine.store.get_native_state(receipt['state_id']).block
             assert block.token_ids.tolist() == [5]

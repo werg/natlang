@@ -32,7 +32,7 @@ export const VIEW_TYPE = 'Neuralese<string>';
 export type ViewSite = { value: string; instructions?: string };
 /** Runs view's Neuralese instance on one value, or answers undefined to keep the crisp preview. */
 export type NativeViewTurn = { messages: unknown[]; tools: unknown[]; template: Record<string, unknown>;
-  response: { x_natlang_rl_capture: { schema: string; policy: Record<string, string>; prompt: { kind: string; token_ids?: number[] }[]; generated_inputs: { token_id: number; input_role: string }[]; writes: { state_id: string; native_identity: Record<string, string>; payload_own_begin: number; payload_own_end: number }[] }; native_state: { blocks: { id: string }[] } } };
+  response: { x_natlang_rl_capture: { schema: string; policy: Record<string, string>; prompt: { kind: string; token_ids?: number[]; id?: string; native_identity?: Record<string, string> }[]; generated_inputs: { token_id: number; input_role: string }[]; writes: { state_id: string; raw_state_id?: string; native_identity: Record<string, string>; payload_own_begin: number; payload_own_end: number }[] }; native_state: { blocks: { id: string }[] } } };
 export type Viewer = (site: ViewSite) => Promise<NeuraleseRef | undefined>;
 
 /** View's Neuralese instance on a Neuralese server, with the soft body from `bank` when it has it. `window` caps the
@@ -69,11 +69,35 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
           throw new Error('neuralese-view-source-integrity: native view turn lacks exact sampled producer provenance');
         const imports = requestNativeStateIds(turn.messages);
         for (const id of imports) await archiveNativeState(client, id);
+        for (const observation of receipt.prompt) if (observation.kind === 'native_state') {
+          if (!observation.id) throw new Error('neuralese-view-source-integrity: sampled observation lacks its actual artifact ID');
+          const observed = await archiveNativeState(client, observation.id);
+          if (observed.metadata.schema !== 'neuralese.native-state/1')
+            throw new Error('neuralese-view-source-integrity: sampled observation must be the actual decoded native state');
+          for (const key of ['checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'] as const)
+            if (observed.metadata[key] !== observation.native_identity?.[key] || observed.metadata[key] !== receipt.policy[key])
+              throw new Error('neuralese-view-source-integrity: decoded observation differs from the consuming policy');
+        }
         const node = graphNode(trace, 'model_turn', { turn: index + 1, calls: ['return_result'],
           temperature: 1, seed: null, source_kind: 'native-view', source_turn: turn },
           imports.map(id => blockInput(id, 'native-state')));
         for (const write of receipt.writes) {
           const artifact = await archiveNativeState(client, write.state_id);
+          if (artifact.metadata.schema === 'neuralese.semantic-state/1') {
+            if (!write.raw_state_id) throw new Error('neuralese-view-source-integrity: compact RL view requires its actual raw producer capture');
+            const raw = await archiveNativeState(client, write.raw_state_id);
+            if (raw.metadata.schema !== 'neuralese.native-state/1' || raw.metadata.text !== artifact.metadata.text)
+              throw new Error('neuralese-view-source-integrity: compact view lacks matching raw producer state');
+            for (const key of ['checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'] as const)
+              if (raw.metadata[key] !== artifact.metadata[key])
+                throw new Error('neuralese-view-source-integrity: compact and raw producer identities differ');
+            for (const name of ['token_ids', 'positions', 'embeddings']) {
+              const one = raw.tensors[name]!, two = artifact.tensors[name]!;
+              if (one.dtype !== two.dtype || JSON.stringify(one.shape) !== JSON.stringify(two.shape) ||
+                  one.data.length !== two.data.length || one.data.some((value, index) => value !== two.data[index]))
+                throw new Error('neuralese-view-source-integrity: compact and raw producer token/embedding captures differ');
+            }
+          }
           for (const key of ['checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'] as const)
             if (artifact.metadata[key] !== write.native_identity[key] || artifact.metadata[key] !== receipt.policy[key])
               throw new Error('neuralese-view-source-integrity: view output identity differs from its actual producer');

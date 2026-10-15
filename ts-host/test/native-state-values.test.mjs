@@ -133,3 +133,48 @@ test('zero-token native identity preserves exact layer layout through persistent
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test('shared semantic defaults bind their actual adapter and preserve strict named types', async () => {
+  const store = new MemoryNeuraleseStore(), input = nativeStateFixture('source');
+  input.metadata = { ...input.metadata, schema: 'neuralese.semantic-state/1', layer_kinds: [],
+    source_model: 'source', adapter_sha256: 'a'.repeat(64), offsets: [[0,3], [3,5]], posterior: 'mean', offset_policy: 'exact-tokenizer-offsets' };
+  for (const name of Object.keys(input.tensors)) if (name.startsWith('layers.')) delete input.tensors[name];
+  input.tensors.code = { dtype: 'F32', shape: [2, 2], data: new Uint8Array(new Float32Array([1,2,3,4]).buffer) };
+  const compact = await store.putNativeState(input), raw = await store.putNativeState(nativeStateFixture('source'));
+  assert.equal(store.peek(compact.id).dialect, 'semantic-state/' + 'a'.repeat(64));
+  const consumer = nativeStateConsumerFromInfo({ native_state: { enabled: true, ...nativeStateFixture('target').metadata,
+    semantic_adapter_sha256: 'a'.repeat(64), consumption_modes: ['learned-semantic-state-deltas'] } });
+  const runtime = { store, dialect: 'semantic-state/' + 'a'.repeat(64), nativeStateConsumer: consumer };
+  for (const id of [raw.id, compact.id]) {
+    const ref = neuraleseRef('Neuralese<string>', id);
+    assert.equal(coerce(ref, parseType('Neuralese<string>'), envFor(runtime)), ref);
+  }
+  assert.throws(() => coerce(neuraleseRef('Neuralese<string>', raw.id),
+    parseType('Neuralese<string, "semantic-state/' + 'a'.repeat(64) + '">'), envFor(runtime)), /dialect-mismatch/);
+  const wrong = { ...runtime, dialect: 'semantic-state/' + 'b'.repeat(64),
+    nativeStateConsumer: { ...consumer, semantic_adapter_sha256: 'b'.repeat(64) } };
+  assert.throws(() => coerce(neuraleseRef('Neuralese<string>', compact.id), parseType('Neuralese<string>'), envFor(wrong)), /consumer-unavailable/);
+});
+
+test('shared semantic standard libraries retain their dialect and archived zero identity', async () => {
+  const { COMBINATORS, loadStandardLibrary, createNeuraleseLibrary } = await import('../dist/neuralese/combinators.js');
+  const store = new MemoryNeuraleseStore(), input = nativeStateFixture();
+  input.metadata = { ...input.metadata, schema: 'neuralese.semantic-state/1', layer_kinds: [],
+    source_model: 'source', adapter_sha256: 'c'.repeat(64), offsets: [[0,3], [3,5]], posterior: 'mean', offset_policy: 'exact-tokenizer-offsets' };
+  for (const name of Object.keys(input.tensors)) if (name.startsWith('layers.')) delete input.tensors[name];
+  input.tensors.code = { dtype: 'F32', shape: [2, 2], data: new Uint8Array(new Float32Array([1,2,3,4]).buffer) };
+  const body = await store.putNativeState(input), emptyInput = structuredClone(input);
+  emptyInput.metadata.text = ''; emptyInput.metadata.offsets = [];
+  for (const tensor of Object.values(emptyInput.tensors)) { tensor.shape[0] = 0; tensor.data = new Uint8Array(); }
+  const empty = await store.putNativeState(emptyInput), exports = {};
+  for (const [name, entry] of Object.entries(COMBINATORS)) {
+    const type = `Neuralese<${entry.type}>`;
+    exports[name] = { type, value: { kind: 'soft-function', type, body: body.id, captures: {} } };
+  }
+  exports.empty = { type: 'Neuralese<unknown>', value: neuraleseRef('Neuralese<unknown>', empty.id) };
+  const dialect = 'semantic-state/' + 'c'.repeat(64);
+  const bytes = await saveNz(exports, { store, dialect });
+  const library = await loadStandardLibrary(bytes, store);
+  assert.equal(library.dialect, dialect);
+  assert.equal(createNeuraleseLibrary(library).empty().$neuralese.id, empty.id);
+});

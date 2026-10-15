@@ -391,9 +391,12 @@ export async function saveNz(exports: Record<string, NzSaveExport>, options: { s
     if (!value || typeof value !== 'object') return;
     const object = value as Record<string, unknown>;
     for (const key of ['source_capture', 'native_source_capture']) {
-      const capture = object[key] as { segments?: { kind?: string; id?: string }[] } | undefined;
+      const capture = object[key] as { segments?: { kind?: string; id?: string }[];
+        imports?: { id?: string; observed_native_state_id?: string }[] } | undefined;
       if (Array.isArray(capture?.segments)) for (const segment of capture.segments)
         if (segment.kind === 'native_state' && typeof segment.id === 'string') await use(segment.id, 'native source capture');
+      for (const imported of capture?.imports ?? []) for (const id of [imported.id, imported.observed_native_state_id])
+        if (typeof id === 'string') await use(id, 'native source import');
     }
     for (const nested of Object.values(object)) await sourceDependencies(nested);
   };

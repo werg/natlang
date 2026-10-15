@@ -10,7 +10,8 @@ export type NativeSourceCapture = { policy: { checkpoint_sha256: string; tokeniz
   embedding_weight_sha256: string; architecture: string };
   segments: ({ kind: 'tokens'; token_ids: number[]; producing: boolean[] } |
     { kind: 'native_state'; id: string; native_identity: Record<string, string> })[];
-  payload_start: number; payload_stop: number };
+  payload_start: number; payload_stop: number; imports?: { id: string; mode: string; observed_native_state_id?: string;
+    semantic_adaptation?: { adapter_sha256: string; source_native_identity: Record<string, string>; target_native_identity: Record<string, string> } }[] };
 export type NativeTextResult = { id: string; native_state: Record<string, unknown>; source_capture: NativeSourceCapture;
   source_text_sha256: string; init?: Record<string, unknown>; gate?: null };
 export type NativeClientOptions = { endpoint: string; headers?: Record<string, string>; store: NeuraleseStore;
@@ -99,6 +100,36 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
     for (const key of ['checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'] as const)
       if (segment.native_identity?.[key] !== imported.metadata[key] || segment.native_identity[key] !== result.source_capture.policy[key])
         return failure('neuralese-native-source-integrity', `source import ${segment.id} has an invalid ${key} binding`);
+  }
+  for (const imported of result.source_capture.imports ?? []) {
+    const original = await archiveNativeState(options, imported.id);
+    if (imported.mode === 'best-effort-text-retokenization') {
+      if (imported.observed_native_state_id || imported.semantic_adaptation)
+        return failure('neuralese-native-source-integrity', 'text fallback cannot attest an imported native KV artifact');
+      continue;
+    }
+    if (!['exact-native-state', 'learned-semantic-state-deltas'].includes(imported.mode) || !imported.observed_native_state_id)
+      return failure('neuralese-native-source-integrity', 'native import must retain its exact observed state and actual consumption mode');
+    const observed = await archiveNativeState(options, imported.observed_native_state_id);
+    if (observed.metadata.schema !== 'neuralese.native-state/1' ||
+        !result.source_capture.segments.some(segment => segment.kind === 'native_state' && segment.id === imported.observed_native_state_id))
+      return failure('neuralese-native-source-integrity', 'native import observation is missing from the actual source stream');
+    for (const key of ['checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'] as const)
+      if (observed.metadata[key] !== result.source_capture.policy[key])
+        return failure('neuralese-native-source-integrity', 'native import observation differs from the source policy');
+    if (imported.mode === 'exact-native-state') {
+      if (imported.id !== imported.observed_native_state_id || imported.semantic_adaptation)
+        return failure('neuralese-native-source-integrity', 'exact native import must preserve its original artifact');
+    } else {
+      const adaptation = imported.semantic_adaptation;
+      const adapter = (info.native_state as { semantic_adapter_sha256?: string }).semantic_adapter_sha256;
+      if (!adapter || adaptation?.adapter_sha256 !== adapter || original.metadata.schema === 'neuralese.semantic-state/1' && original.metadata.adapter_sha256 !== adapter)
+        return failure('neuralese-native-source-integrity', 'learned native import must bind the configured adapter and original message');
+      for (const key of ['checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'] as const)
+        if (adaptation.source_native_identity[key] !== original.metadata[key] ||
+            adaptation.target_native_identity[key] !== observed.metadata[key])
+          return failure('neuralese-native-source-integrity', 'learned native import source/target identities differ from their artifacts');
+    }
   }
   return { result, meta: { ...nativeStateBlockMeta(artifact), ...(typeof body.type === 'string' ? { type: body.type } : {}),
     producer: { ...(body.producer as Record<string, unknown> | undefined), native_source_capture: result.source_capture,

@@ -91,3 +91,35 @@ and suffix token runs, so valid contextual native bodies no longer fail when an
 ordinary string would merge across those boundaries. Actual payload/source
 captures remain verified. Ledger `native-review-native-bpe-body-20261015` passed
 four real LFM/Mellum handoff and BPE forced/body/view cases.
+
+Compact semantic wire review (2026-10-15):
+
+- Actual source token IDs cannot be replaced by tokenizing their decoded text.
+  The review found that serving rejected valid noncanonical/byte-fallback
+  sequences. The shared offset helper now preserves actual IDs; a real HF
+  ByteLevel regression covers split `hello` and partial UTF-8 `€` tokens.
+- Compact producer replay must archive its raw source capture; decoded consumer
+  observations must also be archived. Both use the existing exact native-store
+  lifecycle. Two actual LFM/Mellum incremental producer fixtures pass durable
+  compact+raw bundle, policy-logp and gradient replay checks.
+- View writers preserve every compact message, raw producer capture and decoded
+  observation through all part/combine turns. Contextual body provenance must
+  retain both original imports and actual observed artifacts, including the
+  exact adapter/source/target binding; `.nz` follows both dependencies.
+- The shared dialect is `semantic-state/<adapter SHA>`. Native and semantic
+  DefaultDialect values require explicitly advertised reencoding/adaptation;
+  named dialects stay strict. Native libraries retain their actual semantic
+  dialect and model-bound zero identity instead of creating old vector empties.
+
+Compact follow-up validation: ledger `native-review-compact-archive-e2e-20261015`
+passed 9 tests, including actual LFM/Mellum compact forced text/context/empty
+capture, original+decoded `.nz` dependencies, compact chunk/combine views,
+ordinary server receipt-only archival, durable producer RL replay and real HF
+ByteLevel offsets. `native-review-compact-archive-node-20261015` passed 8 typed,
+archive and semantic-library tests; quick checks passed. VAE weights in these
+fixtures are controls, not evidence of learned task quality.
+
+Adaptive adapter lifecycle remains OPEN: a later SFT/RL checkpoint update changes
+participant identity. Explicit shared-adapter continuation/retraining and bound
+export must accompany that change; a stale adapter must not be silently relabeled
+or leave the next actor startup permanently blocked.

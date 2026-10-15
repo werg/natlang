@@ -148,8 +148,8 @@ function checkBlockDialect(id: string, wanted: Extract<Type, { kind: 'neuralese'
   if (expected === DEFAULT_DIALECT) return;
   const stored = env.dialects?.blockDialect?.(id);
   if (stored === undefined || stored === expected) return;
-  if (wanted.dialect === DEFAULT_DIALECT && id.startsWith('nzs1_') && stored.startsWith('native-state/') &&
-      expected.startsWith('native-state/')) {
+  if (wanted.dialect === DEFAULT_DIALECT && id.startsWith('nzs1_') && /^(native|semantic)-state\//.test(stored) &&
+      /^(native|semantic)-state\//.test(expected)) {
     if (env.dialects?.nativeDefaultCompatible?.(id, stored, expected)) return;
     return reject(path, 'neuralese-native-consumer-unavailable', formatType(wanted),
       `native state from ${stored}; configure a native consumer that explicitly declares adaptation or text reencoding before passing it to ${expected}`);

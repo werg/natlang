@@ -461,7 +461,19 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       uploaded.add(meta.id);
     }
     const nativeBlocks = ((reply.native_state as Json | undefined)?.blocks ?? []) as Array<{ id: string }>;
-    for (const meta of nativeBlocks) {
+    // Sampling receipts also own raw producer captures and decoded native
+    // observations. Archive them before releasing the serving lease; compact
+    // outputs alone cannot reproduce the actor's actual policy inputs.
+    const sampling = reply.x_natlang_rl_capture as { prompt?: Array<{ kind?: string; id?: string }>;
+      writes?: Array<{ state_id?: string; raw_state_id?: string }> } | undefined;
+    const archiveIds = new Set(nativeBlocks.map(meta => meta.id));
+    for (const observation of sampling?.prompt ?? [])
+      if (observation.kind === 'native_state' && observation.id) archiveIds.add(observation.id);
+    for (const write of sampling?.writes ?? [])
+      for (const id of [write.state_id, write.raw_state_id]) if (id) archiveIds.add(id);
+    for (const id of archiveIds) {
+      if (!isNativeStateId(id)) throw new Error('neuralese-block-integrity: sampling receipt names an invalid native artifact');
+      const meta = { id };
       if (!meta?.id || !store) continue;
       if (!store.putNativeState || !store.getNativeState)
         throw new Error('neuralese-native-archive-unavailable: configure a store that preserves native-state artifacts');

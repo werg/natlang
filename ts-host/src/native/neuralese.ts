@@ -175,7 +175,7 @@ export class NeuraleseDialectError extends Error {
 
 /** A native reader's explicit, checkpoint-bound adaptation capabilities from /info. */
 export type NativeStateConsumer = { architecture: string; checkpoint_sha256: string;
-  tokenizer_fingerprint: string; embedding_weight_sha256: string; consumption_modes: string[] };
+  tokenizer_fingerprint: string; embedding_weight_sha256: string; consumption_modes: string[]; semantic_adapter_sha256?: string };
 
 export function nativeStateConsumerFromInfo(info: Record<string, unknown>): NativeStateConsumer | undefined {
   const native = info.native_state as Record<string, unknown> | undefined;
@@ -185,11 +185,14 @@ export function nativeStateConsumerFromInfo(info: Record<string, unknown>): Nati
         typeof native[key] !== 'string' || !/^[0-9a-f]{64}$/.test(native[key] as string)) ||
       native.consumption_modes !== undefined && (!Array.isArray(native.consumption_modes) || native.consumption_modes.some(mode => typeof mode !== 'string')))
     throw new NeuraleseUnsupportedError('native consumer must declare its model identity and actual state consumption modes');
+  if (native.semantic_adapter_sha256 !== undefined && (typeof native.semantic_adapter_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(native.semantic_adapter_sha256)))
+    throw new NeuraleseUnsupportedError('semantic consumer must bind its exact trained adapter SHA-256');
   if (!Array.isArray(native.consumption_modes)) return undefined;
   return { architecture: native.architecture, checkpoint_sha256: native.checkpoint_sha256 as string,
     tokenizer_fingerprint: native.tokenizer_fingerprint as string,
     embedding_weight_sha256: native.embedding_weight_sha256 as string,
-    consumption_modes: [...native.consumption_modes] as string[] };
+    consumption_modes: [...native.consumption_modes] as string[],
+    ...(native.semantic_adapter_sha256 ? { semantic_adapter_sha256: native.semantic_adapter_sha256 as string } : {}) };
 }
 
 /** Runtime configuration for soft values. */
@@ -236,9 +239,12 @@ export function dialectBinding(options: NeuraleseRuntimeOptions | undefined): Di
   return { dialect, blockDialect: id => store.peek?.(id)?.dialect ?? constantBlock(id)?.meta.dialect,
     nativeDefaultCompatible: (id, source, target) => {
       const consumer = options.nativeStateConsumer;
-      return isNativeStateId(id) && source.startsWith('native-state/') &&
-        target === `native-state/${consumer?.architecture}` &&
-        !!consumer?.consumption_modes.some(mode => mode === 'best-effort-text-retokenization' || mode === 'learned-semantic-adaptation');
+      if (!isNativeStateId(id) || !consumer || !/^(native|semantic)-state\//.test(source)) return false;
+      const semantic = consumer.semantic_adapter_sha256 ? `semantic-state/${consumer.semantic_adapter_sha256}` : undefined;
+      if (target !== `native-state/${consumer.architecture}` && target !== semantic) return false;
+      if (consumer.consumption_modes.includes('best-effort-text-retokenization')) return true;
+      return !!semantic && consumer.consumption_modes.includes('learned-semantic-state-deltas') &&
+        (!source.startsWith('semantic-state/') || source === semantic);
     } };
 }
 

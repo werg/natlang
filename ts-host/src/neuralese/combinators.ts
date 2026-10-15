@@ -23,7 +23,7 @@ import { currentFrame } from '../runtime/context.js';
 import { softFunction } from '../runtime/contexts.js';
 import { graphNode, traceFor, valueInputs } from '../native/graph.js';
 import { isNeuraleseRef, NeuraleseDialectError, neuraleseRef, type NeuraleseRef } from '../native/neuralese.js';
-import { emptyBlock, type NeuraleseBlock, type NeuraleseStore } from '../native/neuralese-store.js';
+import { nativeStateBlockMeta, emptyBlock, type NeuraleseBlock, type NeuraleseStore } from '../native/neuralese-store.js';
 import { decodeNz, isSoftFunctionSpec, saveNz } from '../native/nz-file.js';
 import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore } from '../model/neuralese-server.js';
@@ -180,7 +180,7 @@ export async function loadStandardLibrary(bytes: Uint8Array, store?: NeuraleseSt
     const block = blocks.get(spec.body);
     if (block) { width = block.meta.width; dialect = block.meta.dialect; }
     const nativeBody = nativeStates.get(spec.body);
-    if (nativeBody) { width = nativeBody.tensors.embeddings!.shape[1]!; dialect = `native-state/${nativeBody.metadata.architecture}`; }
+    if (nativeBody) { width = nativeBody.tensors.embeddings!.shape[1]!; dialect = nativeStateBlockMeta(nativeBody).dialect; }
   }
   let textReadSource: TextReadSource | undefined;
   const candidate = header.provenance?.text_read_source;
@@ -195,7 +195,7 @@ export async function loadStandardLibrary(bytes: Uint8Array, store?: NeuraleseSt
   }
   const emptyValue = exports.empty?.value as { $neuralese?: { id?: string } } | undefined;
   const emptyState = emptyValue?.$neuralese?.id;
-  if (dialect.startsWith('native-state/') && (!emptyState || nativeStates.get(emptyState)?.tensors.token_ids?.shape[0] !== 0))
+  if (/^(native|semantic)-state\//.test(dialect) && (!emptyState || nativeStates.get(emptyState)?.tensors.token_ids?.shape[0] !== 0))
     throw new Error('neuralese-native-empty-unavailable: native libraries must archive their model-bound zero-token identity');
   return { dialect, width, bodies, ...(emptyState ? { emptyState } : {}), ...(textReadSource ? { textReadSource } : {}) };
 }
@@ -297,7 +297,7 @@ export async function readNeuraleseForCurrentTask(value: unknown): Promise<unkno
 
 /** The content ID of the zero-length block of a library's dialect and width (the identity of `combine`). */
 function emptyId(library: StandardLibrary): string {
-  if (library.dialect.startsWith('native-state/')) {
+  if (/^(native|semantic)-state\//.test(library.dialect)) {
     if (!library.emptyState) throw new Error('neuralese-native-empty-unavailable: load the native library with its zero-token state');
     return library.emptyState;
   }

@@ -253,3 +253,9 @@ After shared adaptation, native writes may contain a compact semantic message
 with text, source embeddings and learned codes. Keep its typed reference through
 storage and calls. Its codes require the matching adapter before KV splicing;
 `neuralese-semantic-adapter-mismatch` has the same recovery described above.
+
+A learned compact value uses `semantic-state/<adapter SHA>` as its dialect.
+Keep its reference intact. DefaultDialect may use a consumer's explicitly
+advertised native adaptation/reencoding; a named semantic dialect still requires
+that exact adapter. A consumer-unavailable error requires configuring the
+matching adapter or an explicitly supported text reencoding path.
