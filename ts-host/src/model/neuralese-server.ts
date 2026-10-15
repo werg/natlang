@@ -30,8 +30,10 @@ import { activeAdapters, activeRecorder, type AdapterBinding, type TurnRecorder 
 import { serves } from './neuralese-info.js';
 import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
   isNativeStateId, partsToText, runtimePartsToText, runtimeTextToParts, type ContentPart, type RuntimeContentPart } from '../native/neuralese.js';
-import { constantBlock, decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta, neuraleseContentId, type NeuraleseBlock,
-  type NeuraleseBlockMeta, type NeuraleseBlockInput, type NativeStateArtifact, type NeuraleseDtype, type NeuraleseStore } from '../native/neuralese-store.js';
+import { constantBlock, decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
+  decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId,
+  nativeTensorArtifactBlockMeta, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
+  type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseDtype, type NeuraleseStore } from '../native/neuralese-store.js';
 
 type Json = Record<string, unknown>;
 
@@ -72,7 +74,8 @@ export function isUnknownBlockError(error: unknown): boolean {
   const found = error as { providerCode?: unknown; code?: unknown; message?: unknown } | null;
   return found?.providerCode === 'neuralese-unknown-block' || found?.code === 'neuralese-unknown-block' ||
     found?.providerCode === 'neuralese-unknown-native-state' || found?.code === 'neuralese-unknown-native-state' ||
-    (typeof found?.message === 'string' && /neuralese-unknown-(?:block|native-state)/.test(found.message));
+    found?.providerCode === 'neuralese-unknown-native-artifact' || found?.code === 'neuralese-unknown-native-artifact' ||
+    (typeof found?.message === 'string' && /neuralese-unknown-(?:block|native-state|native-artifact)/.test(found.message));
 }
 
 /**
@@ -161,10 +164,43 @@ export class HttpNeuraleseStore implements NeuraleseStore {
     if (!response.ok) throw new Error(`native-state metadata failed (${response.status})`);
     return true;
   }
+  async putNativeTensorArtifact(artifact: Omit<NativeTensorArtifact, 'id'>): Promise<NativeTensorArtifact> {
+    const id = nativeTensorArtifactContentId(artifact.metadata, artifact.tensors);
+    const response = await this.request(`/native-tensor-artifacts/${id}`, { method: 'PUT',
+      body: encodeNativeTensorArtifact(artifact) as BodyInit, headers: { 'content-type': 'application/octet-stream' } });
+    if (!response.ok) throw new Error(`native tensor artifact upload failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
+    return decodeNativeTensorArtifact(encodeNativeTensorArtifact(artifact));
+  }
+  async getNativeTensorArtifact(id: string): Promise<NativeTensorArtifact | undefined> {
+    const response = await this.request(`/native-tensor-artifacts/${id}`);
+    if (response.status === 404) return undefined;
+    if (!response.ok) throw new Error(`native tensor artifact fetch failed (${response.status})`);
+    const artifact = decodeNativeTensorArtifact(new Uint8Array(await response.arrayBuffer()));
+    if (artifact.id !== id) throw new Error(`native tensor artifact identity mismatch: requested ${id}, received ${artifact.id}`);
+    return artifact;
+  }
+  async hasNativeTensorArtifact(id: string): Promise<boolean> {
+    const response = await this.request(`/native-tensor-artifacts/${id}/meta`);
+    if (response.status === 404) return false;
+    if (!response.ok) throw new Error(`native tensor artifact metadata failed (${response.status})`);
+    return true;
+  }
   async meta(id: string): Promise<NeuraleseBlockMeta | undefined> {
     if (isNativeStateId(id)) {
       const artifact = await this.getNativeState(id);
       return artifact && nativeStateBlockMeta(artifact);
+    }
+    if (/^nnt1_[a-z2-7]{52}$/.test(id)) {
+      const response = await this.request(`/native-tensor-artifacts/${id}/meta`);
+      if (response.status === 404) return undefined;
+      if (!response.ok) throw new Error(`native tensor artifact metadata failed (${response.status})`);
+      const record = await response.json() as { id: string; schema: NativeTensorArtifact['metadata']['schema'];
+        kind: NativeTensorArtifact['metadata']['kind']; native_identity: NativeTensorArtifact['metadata']['native_identity'];
+        source_artifact_id: string | null; provenance: Record<string, unknown>;
+        tensors: NativeTensorArtifact['metadata']['tensors'] };
+      return nativeTensorArtifactBlockMeta({ id: record.id, metadata: { schema: record.schema, kind: record.kind,
+        native_identity: record.native_identity, source_artifact_id: record.source_artifact_id,
+        provenance: record.provenance, tensors: record.tensors } });
     }
     const response = await this.request(`/blocks/${id}/meta`);
     if (response.status === 404) return undefined;
@@ -173,12 +209,12 @@ export class HttpNeuraleseStore implements NeuraleseStore {
   }
   async has(id: string): Promise<boolean> { return (await this.meta(id)) !== undefined; }
   async pin(id: string): Promise<void> {
-    const family = id.startsWith('nzs1_') ? 'native-states' : 'blocks';
+    const family = id.startsWith('nzs1_') ? 'native-states' : id.startsWith('nnt1_') ? 'native-tensor-artifacts' : 'blocks';
     const response = await this.request(`/${family}/${id}/pin`, { method: 'POST' });
     if (!response.ok) throw new Error(`neuralese-unknown-block: ${id}`);
   }
   async unpin(id: string): Promise<void> {
-    const family = id.startsWith('nzs1_') ? 'native-states' : 'blocks';
+    const family = id.startsWith('nzs1_') ? 'native-states' : id.startsWith('nnt1_') ? 'native-tensor-artifacts' : 'blocks';
     await this.request(`/${family}/${id}/unpin`, { method: 'POST' });
   }
   async collect(referenced: ReadonlySet<string>): Promise<string[]> {

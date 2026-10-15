@@ -18,8 +18,10 @@
  */
 import { mkdir, open, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { checkBlockShape, neuraleseContentId, decodeNativeState, encodeNativeState, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlock, type NeuraleseBlockInput, type NeuraleseBlockMeta,
-  type NeuraleseStore } from '../native/neuralese-store.js';
+import { checkBlockShape, neuraleseContentId, decodeNativeState, encodeNativeState, nativeStateBlockMeta,
+  decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta,
+  type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseBlock, type NeuraleseBlockInput,
+  type NeuraleseBlockMeta, type NeuraleseStore } from '../native/neuralese-store.js';
 import { decodeBlockBody, encodeBlockBody } from '../model/neuralese-server.js';
 import { NzFileError } from '../native/nz-file.js';
 
@@ -28,7 +30,7 @@ export type FileNeuraleseStoreOptions = {
   residentBytes?: number;
 };
 
-const ID = /^(?:nz1|nzs1)_[a-z2-7]{52}$/;
+const ID = /^(?:nz1|nzs1|nnt1)_[a-z2-7]{52}$/;
 
 /** A block file's metadata from its safetensors header alone, without reading the payload. */
 async function readMeta(path: string): Promise<NeuraleseBlockMeta> {
@@ -46,8 +48,10 @@ async function readMeta(path: string): Promise<NeuraleseBlockMeta> {
     const meta = JSON.parse(String(parsed.__metadata__?.['natlang.block'] ?? 'null')) as NeuraleseBlockMeta | null;
     if (meta?.id) return meta;
     const native = JSON.parse(String(parsed.__metadata__?.['natlang.native_state'] ?? 'null'));
-    if (!native?.id) throw new Error('no native or legacy block metadata');
-    return nativeStateBlockMeta({ id: native.id, metadata: native, tensors: parsed as never });
+    if (native?.id) return nativeStateBlockMeta({ id: native.id, metadata: native, tensors: parsed as never });
+    const tensor = JSON.parse(String(parsed.__metadata__?.['natlang.native_tensor_artifact'] ?? 'null'));
+    if (tensor?.id) return nativeTensorArtifactBlockMeta({ id: tensor.id, metadata: tensor });
+    throw new Error('no native or legacy block metadata');
   } finally { await file.close(); }
 }
 
@@ -187,7 +191,7 @@ export class FileNeuraleseStore implements NeuraleseStore {
   }
 
   async get(id: string): Promise<NeuraleseBlock | undefined> {
-    if (id.startsWith('nzs1_')) return undefined; // Native tensors require getNativeState, never a flat vector payload.
+    if (id.startsWith('nzs1_') || id.startsWith('nnt1_')) return undefined; // Native tensors are never flat value payloads.
     const meta = this.index.get(id) ?? await this.discover(id);
     if (!meta) return undefined;
     const cached = this.resident.get(id);
@@ -238,6 +242,39 @@ export class FileNeuraleseStore implements NeuraleseStore {
 
   async hasNativeState(id: string): Promise<boolean> {
     return /^nzs1_[a-z2-7]{52}$/.test(id) && await this.has(id);
+  }
+
+  async putNativeTensorArtifact(input: Omit<NativeTensorArtifact, 'id'>): Promise<NativeTensorArtifact> {
+    const wire = encodeNativeTensorArtifact(input), artifact = decodeNativeTensorArtifact(wire);
+    return this.serialized(artifact.id, async () => {
+      if (await this.has(artifact.id)) {
+        const existing = await this.getNativeTensorArtifact(artifact.id);
+        if (existing) return existing;
+      }
+      await this.writeWire(artifact.id, wire);
+      this.index.set(artifact.id, nativeTensorArtifactBlockMeta(artifact));
+      this.noted.delete(artifact.id); this.remember(artifact.id, wire);
+      return structuredClone(artifact);
+    });
+  }
+
+  async getNativeTensorArtifact(id: string): Promise<NativeTensorArtifact | undefined> {
+    if (!/^nnt1_[a-z2-7]{52}$/.test(id) || !(await this.has(id))) return undefined;
+    let wire = this.resident.get(id);
+    if (!wire) try { wire = await readFile(this.path(id)); }
+    catch (error) { if (missing(error)) { this.forget(id); return undefined; } throw error; }
+    try {
+      const artifact = decodeNativeTensorArtifact(wire);
+      if (artifact.id !== id) throw new Error('content address differs');
+      this.remember(id, wire); return artifact;
+    } catch (error) {
+      this.forget(id); await rm(this.path(id), { force: true });
+      throw new NzFileError('neuralese-block-integrity', `native tensor artifact ${id}: ${String(error)}`);
+    }
+  }
+
+  async hasNativeTensorArtifact(id: string): Promise<boolean> {
+    return /^nnt1_[a-z2-7]{52}$/.test(id) && await this.has(id);
   }
 
   async meta(id: string): Promise<NeuraleseBlockMeta | undefined> {

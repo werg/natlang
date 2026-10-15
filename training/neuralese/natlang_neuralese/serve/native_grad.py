@@ -26,9 +26,8 @@ def _identity(engine):
 
 def _leaf_block(block):
     """Clone each imported floating tensor as a leaf while preserving IDs."""
-    embeddings = block.embeddings.detach().clone().requires_grad_(True)
     layers = []
-    leaves = {'embeddings': embeddings}
+    leaves = {}
     for index, layer in enumerate(block.layers):
         copied = dict(layer)
         for name in ('raw_k', 'v', 'gated_inputs'):
@@ -37,15 +36,17 @@ def _leaf_block(block):
                 copied[name] = value
                 leaves[f'layers.{index}.{name}'] = value
         layers.append(copied)
-    return replace(block, embeddings=embeddings, layers=tuple(layers)), leaves
+    # Imported embeddings/token IDs/positions are provenance and logical input
+    # metadata; raw KV and hybrid sequence tensors are the consumed state.
+    return replace(block, layers=tuple(layers)), leaves
 
 
 def _parameter_targets(model, requested):
-    available = {name: value for name, value in model.named_parameters() if value.requires_grad}
+    available = dict(model.named_parameters())
     if not isinstance(requested, list) or not requested or any(not isinstance(name, str) for name in requested):
         raise RequestError('neuralese-native-grad-target', 'parameter gradients require explicit trainable parameter names')
     if len(set(requested)) != len(requested) or any(name not in available for name in requested):
-        raise RequestError('neuralese-native-grad-target', 'requested names must uniquely select trainable native model parameters')
+        raise RequestError('neuralese-native-grad-target', 'requested names must uniquely select native model parameters')
     return {name: available[name] for name in requested}
 
 
@@ -63,6 +64,7 @@ def native_graph_gradient(engine, body, owner):
     row = body.get('graph')
     if not isinstance(row, dict):
         raise RequestError('neuralese-native-grad-graph', 'request must include one complete native graph row')
+    restore_grad_flags = {}
     try:
         example = parse_graph(row, tokenizer_fingerprint=engine.model_config['tokenizer_fingerprint'])
         if example.split != 'train':
@@ -89,6 +91,11 @@ def native_graph_gradient(engine, body, owner):
         kind = target.get('kind')
         if kind == 'model-parameters':
             selected = _parameter_targets(engine.shared_model, target.get('names'))
+            # Serving factories freeze the model for generation. Enable only
+            # the explicitly named gradient targets during this locked call.
+            restore_grad_flags = {parameter: parameter.requires_grad for parameter in selected.values()}
+            for parameter in restore_grad_flags:
+                parameter.requires_grad_(True)
             target_tensors = selected
             artifact_kind = 'parameter-gradient'
             source_id = None
@@ -100,7 +107,12 @@ def native_graph_gradient(engine, body, owner):
             if len(matching) != 1:
                 raise ValueError('native-state gradient target must occur exactly once as an imported graph state')
             prefix = f'external.{matching[0]}.'
-            target_tensors = {name.removeprefix(prefix): value for name, value in leaf_map.items() if name.startswith(prefix)}
+            available = {name.removeprefix(prefix): value for name, value in leaf_map.items() if name.startswith(prefix)}
+            requested = target.get('names', sorted(available))
+            if (not isinstance(requested, list) or not requested or len(set(requested)) != len(requested)
+                    or any(name not in available for name in requested)):
+                raise ValueError('native-state gradient names must select consumed named KV or hybrid-state tensors')
+            target_tensors = {name: available[name] for name in requested}
             artifact_kind = 'state-gradient'
             source_id = state_id
         else:
@@ -125,3 +137,6 @@ def native_graph_gradient(engine, body, owner):
         raise
     except (ValueError, KeyError, TypeError, RuntimeError) as error:
         raise RequestError('neuralese-native-grad-invalid', str(error)) from error
+    finally:
+        for parameter, enabled in restore_grad_flags.items():
+            parameter.requires_grad_(enabled)

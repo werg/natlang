@@ -71,6 +71,7 @@ def test_native_gradient_service_returns_exact_named_trainable_tensors(tmp_path)
     engine = SimpleNamespace(shared_model=model, store=store,
         checkpoint_sha256='1' * 64, embedding_weight_sha256='2' * 64,
         model_config={'architecture': 'lfm2', 'tokenizer_fingerprint': 'f' * 64})
+    model.requires_grad_(False)
     reply = native_graph_gradient(engine, {
         'schema': 'natlang.native-gradient-request/1', 'objective': 'graph-ce', 'graph': row(),
         'target': {'kind': 'model-parameters', 'names': ['adapter.up.weight']}}, 'test-owner')
@@ -81,6 +82,7 @@ def test_native_gradient_service_returns_exact_named_trainable_tensors(tmp_path)
     assert artifact.tensors['adapter.up.weight'].shape == model.adapter.up.weight.shape
     assert torch.isfinite(artifact.tensors['adapter.up.weight']).all()
     assert artifact.tensors['adapter.up.weight'].norm() > 0
+    assert not model.adapter.up.weight.requires_grad, 'serving freeze state is restored after gradient capture'
     store.close()
 
 
@@ -96,8 +98,8 @@ def test_native_gradient_service_rejects_held_rows_and_unselected_parameters():
         checkpoint_sha256='1' * 64, embedding_weight_sha256='2' * 64,
         model_config={'architecture': 'lfm2', 'tokenizer_fingerprint': 'f' * 64})
     request = {'schema': 'natlang.native-gradient-request/1', 'graph': row(),
-               'target': {'kind': 'model-parameters', 'names': ['port.layers.0.weight']}}
-    with pytest.raises(RequestError, match='trainable native model parameters'):
+               'target': {'kind': 'model-parameters', 'names': ['not_a_native_parameter']}}
+    with pytest.raises(RequestError, match='native model parameters'):
         native_graph_gradient(engine, request, None)
     held = row()
     held['split'] = 'test'
@@ -105,4 +107,44 @@ def test_native_gradient_service_rejects_held_rows_and_unselected_parameters():
     request['target'] = {'kind': 'model-parameters', 'names': ['adapter.up.weight']}
     with pytest.raises(RequestError, match='train rows only'):
         native_graph_gradient(engine, request, None)
+    store.close()
+
+
+def test_native_gradient_service_returns_producer_kv_and_hybrid_state_gradients(tmp_path):
+    from types import SimpleNamespace
+    from natlang_neuralese.model.state_block import NativeStateBlock
+    from natlang_neuralese.serve.native_grad import native_graph_gradient
+    from natlang_neuralese.serve.store import TensorStore
+
+    model = SharedStateModel(tiny('lfm'), marker_ids=(58, 59, 60, 61), rank=4)
+    identity = {'checkpoint_sha256': '1' * 64, 'tokenizer_fingerprint': 'f' * 64,
+                'embedding_weight_sha256': '2' * 64, 'architecture': 'lfm2'}
+    layers = []
+    for index, layer in enumerate(model.port.layers):
+        if model.port.is_attention(index):
+            attention = layer.self_attn
+            heads = attention.k_proj.out_features // attention.head_dim
+            shape = (2, heads, attention.head_dim)
+            layers.append({'kind': 'attention', 'raw_k': torch.randn(shape), 'v': torch.randn(shape)})
+        else:
+            channels = layer.conv.conv.weight.shape[0]
+            layers.append({'kind': 'finite_convolution', 'gated_inputs': torch.randn(2, channels)})
+    state = NativeStateBlock(text='source', token_ids=torch.tensor([9, 10]), positions=torch.tensor([0, 1]),
+        embeddings=torch.randn(2, model.port.embedding_weight.shape[1]), layers=tuple(layers), **identity).validate()
+    store = TensorStore(tmp_path)
+    stored = store.put_native_state(state, 'test-owner')
+    graph = row()
+    graph['external_states'] = {'prior': {'id': stored.id, 'token_count': 2}}
+    graph['nodes'][1]['imports'] = [{'at': 1, 'source': 'prior', 'start': 0, 'stop': 2}]
+    engine = SimpleNamespace(shared_model=model, store=store, checkpoint_sha256=identity['checkpoint_sha256'],
+        embedding_weight_sha256=identity['embedding_weight_sha256'], model_config={
+            'architecture': identity['architecture'], 'tokenizer_fingerprint': identity['tokenizer_fingerprint']})
+    reply = native_graph_gradient(engine, {'schema': 'natlang.native-gradient-request/1', 'graph': graph,
+        'target': {'kind': 'native-state', 'id': stored.id}}, 'test-owner')
+    gradient = store.get_native_tensor_artifact(reply['gradient']['id']).artifact
+    assert gradient.kind == 'state-gradient' and gradient.source_artifact_id == stored.id
+    assert 'layers.1.raw_k' in gradient.tensors and 'layers.1.v' in gradient.tensors
+    assert 'layers.0.gated_inputs' in gradient.tensors and 'embeddings' not in gradient.tensors
+    assert all(torch.isfinite(value).all() for value in gradient.tensors.values())
+    assert sum(value.float().norm() for value in gradient.tensors.values()) > 0
     store.close()

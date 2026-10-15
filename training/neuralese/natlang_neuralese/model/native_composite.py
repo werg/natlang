@@ -70,6 +70,12 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
     base_sha = sha256_file_hex_cached(base)
     if base_identity.get('checkpoint_sha256') != base_sha:
         raise ValueError('native composite base identity does not match the parent checkpoint bytes')
+    binding = getattr(model, '_native_backbone_binding', None)
+    current_parameters = tuple((name, id(parameter), parameter._version)
+                               for name, parameter in model.port.hf.named_parameters())
+    if (not isinstance(binding, dict) or binding.get('checkpoint_sha256') != base_sha
+            or binding.get('parameters') != current_parameters):
+        raise ValueError('interface-only composite update requires the unchanged backbone loaded from this exact parent checkpoint')
     if base_identity.get('architecture') != model_config.get('architecture'):
         raise ValueError('native composite base architecture differs from the live model')
     channel, tensors, has_output_rows = _channel_tensors(model)
@@ -134,7 +140,9 @@ def load_native_composite_checkpoint(path, *, base=None, device='cpu', dtype=Non
     if not isinstance(manifest, dict) or manifest.get('schema') != SCHEMA:
         raise ValueError('unsupported native composite checkpoint schema')
     parent = manifest['base_checkpoint']
-    base_path = Path(base or parent['path']).resolve(strict=True)
+    # `base` is the HF source directory override understood by the shared
+    # loader. The immutable parent checkpoint remains the manifest's file.
+    base_path = Path(parent['path']).resolve(strict=True)
     if sha256_file_hex_cached(base_path) != parent['sha256']:
         raise ValueError('native composite parent checkpoint bytes changed')
     from .native_model import load_native_checkpoint, native_identity
@@ -186,4 +194,6 @@ def load_native_composite_checkpoint(path, *, base=None, device='cpu', dtype=Non
              'parameter_artifact_id': artifact_id, 'optimizer': manifest.get('optimizer') or {},
              'optimizer_tensors': optimizer_artifact.tensors if optimizer_artifact is not None else {},
              'update_provenance': manifest.get('update_provenance') or {}}
+    from .native_model import _bind_backbone_revision
+    _bind_backbone_revision(model, __import__('hashlib').sha256(manifest_bytes).hexdigest())
     return model, tokenizer, roles, config, state

@@ -21,6 +21,8 @@ export type NeuraleseBlockMeta = {
   producer?: Record<string, unknown>;
   /** Present for exact multi-tensor state; this metadata is not a flat-vector payload. */
   native_state?: NativeStateMetadata & { embedding_dtype: NativeStateDtype };
+  /** Named gradients/parameters live in their own tensor domain, never a flat value payload. */
+  native_tensor_artifact?: NativeTensorArtifactMetadata;
   /** Writing hit the runtime's hard maximum instead of stopping. */
   truncated?: boolean;
 };
@@ -34,6 +36,16 @@ export type NativeStateTensor = { dtype: NativeStateDtype; shape: number[]; data
 export type NativeStateMetadata = { schema: 'neuralese.native-state/1'; text: string; architecture: string;
   tokenizer_fingerprint: string; checkpoint_sha256: string; embedding_weight_sha256: string; layer_kinds: string[] };
 export type NativeStateArtifact = { id: string; metadata: NativeStateMetadata; tensors: Record<string, NativeStateTensor> };
+export type NativeTensorDtype = 'F16' | 'BF16' | 'F32' | 'F64';
+export type NativeTensorValue = { dtype: NativeTensorDtype; shape: number[]; data: Uint8Array };
+export type NativeModelIdentity = { checkpoint_sha256: string; tokenizer_fingerprint: string;
+  embedding_weight_sha256: string; architecture: string };
+export type NativeTensorArtifactMetadata = { schema: 'natlang.neuralese-native-tensor-artifact/1';
+  kind: 'parameter-set' | 'parameter-gradient' | 'parameter-update' | 'state-gradient' | 'optimizer-state';
+  native_identity: NativeModelIdentity; source_artifact_id: string | null; provenance: Record<string, unknown>;
+  tensors: { name: string; dtype: NativeTensorDtype; shape: number[] }[] };
+export type NativeTensorArtifact = { id: string; metadata: NativeTensorArtifactMetadata;
+  tensors: Record<string, NativeTensorValue> };
 
 /** Existing typed-value metadata derived from a verified native artifact. */
 export function nativeStateBlockMeta(artifact: Pick<NativeStateArtifact, 'id' | 'metadata'> &
@@ -46,6 +58,12 @@ export function nativeStateBlockMeta(artifact: Pick<NativeStateArtifact, 'id' | 
     producer: { checkpoint_sha256: artifact.metadata.checkpoint_sha256,
       tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
       embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 } };
+}
+
+export function nativeTensorArtifactBlockMeta(artifact: Pick<NativeTensorArtifact, 'id' | 'metadata'>): NeuraleseBlockMeta {
+  return { id: artifact.id, dialect: `native-tensor/${artifact.metadata.kind}`, length: artifact.metadata.tensors.length,
+    width: 1, dtype: 'f32', native_tensor_artifact: structuredClone(artifact.metadata),
+    producer: { ...artifact.metadata.native_identity, objective: artifact.metadata.provenance.objective } };
 }
 
 /** Client interface to a tensor store: in memory, on disk, or a model server's block endpoints. */
@@ -74,6 +92,9 @@ export interface NeuraleseStore {
   putNativeState?(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact>;
   getNativeState?(id: string): Promise<NativeStateArtifact | undefined>;
   hasNativeState?(id: string): Promise<boolean>;
+  putNativeTensorArtifact?(artifact: Omit<NativeTensorArtifact, 'id'>): Promise<NativeTensorArtifact>;
+  getNativeTensorArtifact?(id: string): Promise<NativeTensorArtifact | undefined>;
+  hasNativeTensorArtifact?(id: string): Promise<boolean>;
 }
 
 const BYTES: Record<NeuraleseDtype, number> = { f32: 4, f16: 2, bf16: 2 };
@@ -115,6 +136,7 @@ export function neuraleseContentId(block: Pick<NeuraleseBlockInput, 'dialect' | 
 }
 
 const NATIVE_DTYPE_BYTES: Record<NativeStateDtype, number> = { F16: 2, BF16: 2, F32: 4, F64: 8, I64: 8 };
+const NATIVE_FLOAT_DTYPE_BYTES: Record<NativeTensorDtype, number> = { F16: 2, BF16: 2, F32: 4, F64: 8 };
 const SHA256 = /^[0-9a-f]{64}$/;
 function validateNativeState(metadata: NativeStateMetadata, tensors: Record<string, NativeStateTensor>): void {
   if (!metadata || metadata.schema !== 'neuralese.native-state/1' || typeof metadata.text !== 'string' ||
@@ -188,6 +210,105 @@ function nativeCanonicalJson(value: unknown): string {
     item && typeof item === 'object' ? Object.fromEntries(Object.keys(item).sort().map(key =>
       [key, sort((item as Record<string, unknown>)[key])])) : item;
   return JSON.stringify(sort(value));
+}
+
+function validateNativeTensorArtifact(metadata: NativeTensorArtifactMetadata,
+    tensors: Record<string, NativeTensorValue>): void {
+  if (!metadata || metadata.schema !== 'natlang.neuralese-native-tensor-artifact/1' ||
+      !['parameter-set', 'parameter-gradient', 'parameter-update', 'state-gradient', 'optimizer-state'].includes(metadata.kind) ||
+      !metadata.native_identity || !SHA256.test(metadata.native_identity.checkpoint_sha256) ||
+      !SHA256.test(metadata.native_identity.tokenizer_fingerprint) ||
+      !SHA256.test(metadata.native_identity.embedding_weight_sha256) ||
+      typeof metadata.native_identity.architecture !== 'string' || !metadata.native_identity.architecture ||
+      (metadata.source_artifact_id !== null && !/^(?:nzs1_|nnt1_)[a-z2-7]{52}$/.test(metadata.source_artifact_id)) ||
+      !metadata.provenance || typeof metadata.provenance !== 'object' || Array.isArray(metadata.provenance) ||
+      !tensors || typeof tensors !== 'object' || !Object.keys(tensors).length)
+    throw new RangeError('invalid native tensor artifact metadata');
+  const inventory = Object.keys(tensors).sort().map(name => {
+    const tensor = tensors[name]!;
+    if (!name || !tensor || !(tensor.dtype in NATIVE_FLOAT_DTYPE_BYTES) || !Array.isArray(tensor.shape) ||
+        !tensor.shape.length || tensor.shape.some(size => !Number.isSafeInteger(size) || size <= 0) ||
+        !Number.isSafeInteger(tensor.shape.reduce((n, size) => n * size, 1)) ||
+        tensor.data.length !== tensor.shape.reduce((n, size) => n * size, 1) * NATIVE_FLOAT_DTYPE_BYTES[tensor.dtype])
+      throw new RangeError(`invalid native artifact tensor ${name}`);
+    const view = new DataView(tensor.data.buffer, tensor.data.byteOffset, tensor.data.byteLength);
+    for (let at = 0; at < tensor.data.length; at += NATIVE_FLOAT_DTYPE_BYTES[tensor.dtype]) {
+      let value: number;
+      if (tensor.dtype === 'F16') {
+        const h = view.getUint16(at, true), sign = h & 0x8000 ? -1 : 1, exponent = (h >> 10) & 31, mantissa = h & 1023;
+        value = exponent === 31 ? Number.NaN : sign * (exponent === 0 ? mantissa * 2 ** -24 : (1 + mantissa / 1024) * 2 ** (exponent - 15));
+      } else if (tensor.dtype === 'BF16') {
+        const word = new ArrayBuffer(4), wordView = new DataView(word);
+        wordView.setUint32(0, view.getUint16(at, true) << 16, true); value = wordView.getFloat32(0, true);
+      } else value = tensor.dtype === 'F32' ? view.getFloat32(at, true) : view.getFloat64(at, true);
+      if (!Number.isFinite(value)) throw new RangeError(`native artifact tensor ${name} contains non-finite values`);
+    }
+    return { name, dtype: tensor.dtype, shape: [...tensor.shape] };
+  });
+  if (nativeCanonicalJson(metadata.tensors) !== nativeCanonicalJson(inventory))
+    throw new RangeError('native tensor metadata differs from the exact named tensor inventory');
+}
+
+/** ID algorithm shared byte-for-byte with model.native_artifact.native_tensor_artifact_id. */
+export function nativeTensorArtifactContentId(metadata: NativeTensorArtifactMetadata,
+    tensors: Record<string, NativeTensorValue>): string {
+  validateNativeTensorArtifact(metadata, tensors);
+  const parts: Uint8Array[] = [new TextEncoder().encode('natlang.neuralese-native-tensor-artifact/1\0'),
+    u64(new TextEncoder().encode(nativeCanonicalJson(metadata)).length),
+    new TextEncoder().encode(nativeCanonicalJson(metadata))];
+  for (const name of Object.keys(tensors).sort()) {
+    const tensor = tensors[name]!, nameBytes = new TextEncoder().encode(name);
+    const descriptor = new TextEncoder().encode(nativeCanonicalJson({ dtype: tensor.dtype, shape: tensor.shape }));
+    parts.push(u32(nameBytes.length), nameBytes, u32(descriptor.length), descriptor,
+      u64(tensor.data.length), tensor.data);
+  }
+  return `nnt1_${base32(digest(joinBytes(parts)))}`;
+}
+
+/** Versioned native gradient/parameter safetensors body matching Python exactly. */
+export function encodeNativeTensorArtifact(artifact: Omit<NativeTensorArtifact, 'id'>): Uint8Array {
+  const id = nativeTensorArtifactContentId(artifact.metadata, artifact.tensors);
+  const entries: Record<string, unknown> = {}, payloads: Uint8Array[] = [];
+  let offset = 0;
+  for (const name of Object.keys(artifact.tensors).sort()) {
+    const tensor = artifact.tensors[name]!;
+    entries[name] = { dtype: tensor.dtype, shape: tensor.shape, data_offsets: [offset, offset + tensor.data.length] };
+    payloads.push(tensor.data); offset += tensor.data.length;
+  }
+  entries.__metadata__ = { 'natlang.native_tensor_artifact': nativeCanonicalJson({ id, ...artifact.metadata }) };
+  const raw = new TextEncoder().encode(nativeCanonicalJson(entries));
+  const header = new Uint8Array(Math.ceil(raw.length / 8) * 8).fill(0x20); header.set(raw);
+  return joinBytes([u64(header.length), header, ...payloads]);
+}
+
+export function decodeNativeTensorArtifact(bytes: Uint8Array): NativeTensorArtifact {
+  if (bytes.length < 8) throw new RangeError('not a native tensor artifact safetensors file');
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), headerSize = Number(view.getBigUint64(0, true));
+  if (!Number.isSafeInteger(headerSize) || 8 + headerSize > bytes.length) throw new RangeError('native tensor artifact header exceeds body');
+  const header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + headerSize))) as Record<string, unknown>;
+  const metadataText = (header.__metadata__ as Record<string, unknown> | undefined)?.['natlang.native_tensor_artifact'];
+  if (typeof metadataText !== 'string') throw new RangeError('missing canonical native tensor artifact metadata');
+  const stored = JSON.parse(metadataText) as NativeTensorArtifactMetadata & { id?: string };
+  const { id, ...metadata } = stored;
+  const payload = bytes.subarray(8 + headerSize), tensors: Record<string, NativeTensorValue> = {}, spans: [number, number][] = [];
+  for (const [name, raw] of Object.entries(header)) {
+    if (name === '__metadata__') continue;
+    const entry = raw as { dtype?: NativeTensorDtype; shape?: number[]; data_offsets?: [number, number] };
+    if (!entry || !entry.dtype || !(entry.dtype in NATIVE_FLOAT_DTYPE_BYTES) || !Array.isArray(entry.shape) ||
+        !Array.isArray(entry.data_offsets) || entry.data_offsets.length !== 2)
+      throw new RangeError(`invalid native artifact descriptor ${name}`);
+    const [start, end] = entry.data_offsets, count = entry.shape.reduce((n, size) => n * size, 1);
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end - start !== count * NATIVE_FLOAT_DTYPE_BYTES[entry.dtype] || end > payload.length)
+      throw new RangeError(`invalid native artifact byte range ${name}`);
+    spans.push([start, end]); tensors[name] = { dtype: entry.dtype, shape: [...entry.shape], data: payload.slice(start, end) };
+  }
+  spans.sort((a, b) => a[0] - b[0]);
+  if (!spans.length || spans[0]![0] !== 0 || spans.at(-1)![1] !== payload.length ||
+      spans.some((span, index) => index > 0 && spans[index - 1]![1] !== span[0]))
+    throw new RangeError('native tensor artifact payload has gaps or overlaps');
+  const actual = nativeTensorArtifactContentId(metadata, tensors);
+  if (actual !== id) throw new RangeError(`native tensor artifact ID mismatch: ${actual}`);
+  return { id: actual, metadata, tensors };
 }
 
 /** Versioned ID shared byte-for-byte with `serve.store.native_state_id` (Python). */
@@ -281,6 +402,7 @@ export function checkBlockShape(block: NeuraleseBlockInput): void {
 export class MemoryNeuraleseStore implements NeuraleseStore {
   private readonly blocks = new Map<string, NeuraleseBlock>();
   private readonly nativeStates = new Map<string, NativeStateArtifact>();
+  private readonly nativeTensorArtifacts = new Map<string, NativeTensorArtifact>();
   /** Metadata of blocks held elsewhere (`note`). */
   private readonly noted = new Map<string, NeuraleseBlockMeta>();
   private readonly pins = new Map<string, number>();
@@ -306,7 +428,7 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
     const found = this.peek(id);
     return found && { ...found };
   }
-  async has(id: string): Promise<boolean> { return this.blocks.has(id) || this.nativeStates.has(id); }
+  async has(id: string): Promise<boolean> { return this.blocks.has(id) || this.nativeStates.has(id) || this.nativeTensorArtifacts.has(id); }
   async putNativeState(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
     const id = nativeStateContentId(artifact.metadata, artifact.tensors);
     const stored = { id, metadata: structuredClone(artifact.metadata), tensors: Object.fromEntries(
@@ -322,16 +444,29 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
     return found && structuredClone(found);
   }
   async hasNativeState(id: string): Promise<boolean> { return this.nativeStates.has(id); }
+  async putNativeTensorArtifact(artifact: Omit<NativeTensorArtifact, 'id'>): Promise<NativeTensorArtifact> {
+    const wire = encodeNativeTensorArtifact(artifact), stored = decodeNativeTensorArtifact(wire);
+    const found = this.nativeTensorArtifacts.get(stored.id);
+    if (found) return structuredClone(found);
+    this.nativeTensorArtifacts.set(stored.id, stored); this.noted.delete(stored.id);
+    return structuredClone(stored);
+  }
+  async getNativeTensorArtifact(id: string): Promise<NativeTensorArtifact | undefined> {
+    const found = this.nativeTensorArtifacts.get(id); return found && structuredClone(found);
+  }
+  async hasNativeTensorArtifact(id: string): Promise<boolean> { return this.nativeTensorArtifacts.has(id); }
   peek(id: string): NeuraleseBlockMeta | undefined {
     const native = this.nativeStates.get(id);
-    const found = this.blocks.get(id)?.meta ?? (native && nativeStateBlockMeta(native)) ?? this.noted.get(id);
+    const tensor = this.nativeTensorArtifacts.get(id);
+    const found = this.blocks.get(id)?.meta ?? (native && nativeStateBlockMeta(native)) ??
+      (tensor && nativeTensorArtifactBlockMeta(tensor)) ?? this.noted.get(id);
     return found && { ...found };
   }
   note(meta: NeuraleseBlockMeta): void {
     if (!this.blocks.has(meta.id)) this.noted.set(meta.id, { ...meta });
   }
   async pin(id: string): Promise<void> {
-    if (!this.blocks.has(id) && !this.nativeStates.has(id)) throw new Error(`neuralese-unknown-block: ${id}`);
+    if (!this.blocks.has(id) && !this.nativeStates.has(id) && !this.nativeTensorArtifacts.has(id)) throw new Error(`neuralese-unknown-block: ${id}`);
     this.pins.set(id, (this.pins.get(id) ?? 0) + 1);
   }
   async unpin(id: string): Promise<void> {
@@ -340,14 +475,14 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
   }
   async collect(referenced: ReadonlySet<string>): Promise<string[]> {
     const removed: string[] = [];
-    for (const id of [...this.blocks.keys(), ...this.nativeStates.keys()])
+    for (const id of [...this.blocks.keys(), ...this.nativeStates.keys(), ...this.nativeTensorArtifacts.keys()])
       if (!referenced.has(id) && !this.pins.has(id)) {
-        this.blocks.delete(id); this.nativeStates.delete(id); removed.push(id);
+        this.blocks.delete(id); this.nativeStates.delete(id); this.nativeTensorArtifacts.delete(id); removed.push(id);
       }
     for (const id of [...this.noted.keys()]) if (!referenced.has(id)) this.noted.delete(id);
     return removed;
   }
-  get size(): number { return this.blocks.size + this.nativeStates.size; }
+  get size(): number { return this.blocks.size + this.nativeStates.size + this.nativeTensorArtifacts.size; }
 }
 
 /** Write port: turns what a model wrote inside a literal into a stored block. */

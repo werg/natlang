@@ -83,3 +83,4 @@ export type { ReplayRecordSink, ReplaySession } from './neuralese/replay-records
 export * as gepa from './gepa/index.js';
 
 export { nativeStateWritePort, nativeTextOperation, type NativeClientOptions, type NativeSourceCapture, type NativeTextResult } from './neuralese/native-state-client.js';
+export { archiveNativeTensorArtifact, restoreNativeTensorArtifacts } from './neuralese/native-tensor-client.js';

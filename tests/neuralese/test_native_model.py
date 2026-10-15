@@ -74,6 +74,7 @@ def test_native_composite_checkpoint_applies_named_patch_and_has_restorable_effe
     model, _, _, config = load_native_model(base, dtype=torch.float32, rank=4)
     base_checkpoint = tmp_path / 'base-native.pt'
     torch.save({'schema': CHECKPOINT_SCHEMA, 'model_config': config, **model_state(model)}, base_checkpoint)
+    model, _, _, config, _ = load_native_checkpoint(base_checkpoint, base=base, dtype=torch.float32)
     base_sha = sha256_file_hex_cached(base_checkpoint)
     parent_identity = native_identity(model, config, checkpoint_sha256=base_sha)
     with torch.no_grad():
@@ -86,7 +87,9 @@ def test_native_composite_checkpoint_applies_named_patch_and_has_restorable_effe
         optimizer_tensors={'m.adapter.up.weight': torch.ones_like(model.adapter.up.weight),
                            'v.adapter.up.weight': torch.full_like(model.adapter.up.weight, 2.)},
         update_provenance={'step': 7, 'reason': 'test optimizer update'})
-    restored, _, _, restored_config, state = load_native_checkpoint(receipt['path'])
+    # An HF source override selects model files; it must not replace the
+    # immutable native parent checkpoint named inside the composite manifest.
+    restored, _, _, restored_config, state = load_native_checkpoint(receipt['path'], base=base, dtype=torch.float32)
     assert state['schema'] == 'natlang.neuralese-native-composite-checkpoint/1'
     assert state['optimizer'] == {'name': 'adam', 'step': 7, 'lr': 0.001}
     torch.testing.assert_close(state['optimizer_tensors']['m.adapter.up.weight'],
@@ -97,3 +100,21 @@ def test_native_composite_checkpoint_applies_named_patch_and_has_restorable_effe
     assert native_identity(restored, restored_config,
         checkpoint_sha256=receipt['native_identity']['checkpoint_sha256']) == receipt['native_identity']
     assert sha256_file_hex_cached(base_checkpoint) == base_sha
+
+
+def test_native_composite_refuses_backbone_mutation_under_interface_only_patch(tmp_path):
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    from natlang_neuralese.model.native_composite import write_native_composite_checkpoint
+
+    base = tmp_path / 'base'
+    tiny_source(base)
+    model, _, _, config = load_native_model(base, dtype=torch.float32, rank=4)
+    base_checkpoint = tmp_path / 'base-native.pt'
+    torch.save({'schema': CHECKPOINT_SCHEMA, 'model_config': config, **model_state(model)}, base_checkpoint)
+    model, _, _, config, _ = load_native_checkpoint(base_checkpoint, base=base, dtype=torch.float32)
+    identity = native_identity(model, config, checkpoint_sha256=sha256_file_hex_cached(base_checkpoint))
+    with torch.no_grad():
+        next(model.port.hf.parameters()).add_(0.001)
+    with pytest.raises(ValueError, match='unchanged backbone'):
+        write_native_composite_checkpoint(base_checkpoint, tmp_path / 'composite', model, config,
+                                          base_identity=identity)
