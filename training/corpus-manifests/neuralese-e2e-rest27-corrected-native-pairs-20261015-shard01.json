@@ -1,0 +1,34 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "neuralese-e2e-rest27-corrected-native-pairs-20261015-shard01",
+  "owner": "dgx",
+  "path": "runs/native-state-rest27-corrected-pair-shard-20261015-v1",
+  "files": [
+    {
+      "path": "graphs/lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 202840,
+      "sha256": "72568956042f70b685ebf1437f6afba3b75b5ff9242e0e586bad7c131fe50f98"
+    },
+    {
+      "path": "graphs/mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 197145,
+      "sha256": "16a88973f27b96b67f50da35afe70cbacae4030e24d32a96d062146d6953bdd5"
+    },
+    {
+      "path": "pair-shard-manifest.json",
+      "bytes": 3851,
+      "sha256": "2d533de747c3479c249380a08400e214de394898820915fd4845a1c062a0ec11"
+    },
+    {
+      "path": "pairs/train/semantic-pairs.jsonl.zst",
+      "bytes": 84543,
+      "sha256": "68a1ec0e2721c7506d530952dedaad9c89e025d62c101ff739065b51c555bd76"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 4715,
+      "sha256": "e64c5f11b92eb9ee4885ad358219d346c2a149648f14e779fd9ecd4122503b87"
+    }
+  ],
+  "bytes": 493094
+}

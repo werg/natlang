@@ -106948,6 +106948,48 @@
         }
       },
       "license": "Teacher/model license provenance recorded above; owner directs acceptance of all licenses."
+    },
+    {
+      "id": "neuralese-e2e-rest27-corrected-native-pairs-20261015-shard01",
+      "owner": "dgx",
+      "path": "runs/native-state-rest27-corrected-pair-shard-20261015-v1",
+      "include": [
+        "pair-shard-manifest.json",
+        "receipt.json",
+        "pairs/train/semantic-pairs.jsonl.zst",
+        "graphs/lfm25/train/native-graphs.jsonl.zst",
+        "graphs/mellum21/train/native-graphs.jsonl.zst"
+      ],
+      "source_class": "source-reviewed E2E whole-trajectory first-shard static transformations with authenticated native producer-consumer imports",
+      "split": "Train-only partial source shard: first 16 complete REST27 train trajectories, all 37 admitted authenticated edges converted; no held rows included. Not complete REST27 coverage.",
+      "training_admission": true,
+      "training_admission_reason": "All included pairs bind exact registered REST27 source records/edges and source occurrence; all 37 pairs parse for both model tokenizers with positive native imports and no duplicated consumer payload tokens. 16 complete source trajectories, 0 pair omissions. Exact current held/quality group protection index checked: 32 groups, zero intersections. Partial conversion scope and remaining full REST27 repair are explicit in pair-shard-manifest.json.",
+      "derived_from": [
+        "neuralese-e2e-cloud-rest27-protected-20261015-v2"
+      ],
+      "source_binding": {
+        "source_corpus_id": "neuralese-e2e-cloud-rest27-protected-20261015-v2",
+        "source_records_sha256": "e23ea20b684bce525a297ba5767ed82f84fc5097045bbcf68e13784decf9a17e",
+        "source_pieces_sha256": "8987dc2e7fad483ec294050777198cf253edb956f86b426e94353e1115a2bb60",
+        "source_edges_sha256": "26053ffead5b96d640fce4dcbd50a1cdaee781bf8702dbee0b3d35bffe6c7226",
+        "current_protection_reference_index_sha256": "f130d10bbe47b478eee6c6b33d6aaf4a144664fad3543f8b2b4a25a47bad142e",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "converter_commits": [
+          "8331c0da3",
+          "223977fbddbeb2f86482ad339838d8ed8b10e2c8"
+        ],
+        "pair_rows": 37,
+        "pair_sha256": "68a1ec0e2721c7506d530952dedaad9c89e025d62c101ff739065b51c555bd76",
+        "model_ids": {
+          "lfm25": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+          "mellum21": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f"
+        },
+        "tokenizer_fingerprints": {
+          "lfm25": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105",
+          "mellum21": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f"
+        },
+        "complete_rest27": false
+      }
     }
   ],
   "coverage_backlog": [
