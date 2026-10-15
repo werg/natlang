@@ -90548,6 +90548,52 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "owner": "pop",
+      "path": "runs/luna-repair-s52082-s52089-review-20261015-v1",
+      "license": "Project-generated curriculum; source data licenses retained in selected IR program records",
+      "split": "train-only replay-checked failed-action handoffs; protected packet and current source review v18 checked",
+      "notes": "One of five Luna repair attempts passed exact oracle; four failed attempts remain excluded. Source quality, causal pair and native admission are separate.",
+      "id": "luna-repair-s52082-s52089-reviewed-20261015-v1",
+      "include": [
+        "handoffs.selected.ir.jsonl",
+        "handoffs.selected.ir.manifest.json",
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "SEMANTIC_REVIEW.md",
+        "action-shape-quarantine.jsonl",
+        "action-shape-review.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna replay-checked failed-action recovery teacher decisions",
+      "admission": "One exact-success recovery parent; nine native-approved post-breakage decisions of fifteen materialized; six failed or unexecuted proposals excluded",
+      "training_admission": true,
+      "training_admission_reason": "Exact recovery oracle, current source review v18, causal handoff source binding, protected split check, independent process audit and native per-decision approval. Only approved-turns.jsonl is SFT input.",
+      "review_status": "One accepted ticket-count repair; four failed recoveries held; no source or process hold on the accepted parent.",
+      "required_conversion": "Render LFM/Mellum full, program-header and whole-trajectory twins before global union"
+    },
+    {
+      "owner": "pop",
+      "path": "runs/luna-repair-s52082-s52089-review-20261015-v1",
+      "license": "Project-generated curriculum; source data licenses retained in selected IR program records",
+      "split": "train-only replay-checked failed-action handoffs; protected packet and current source review v18 checked",
+      "notes": "One of five Luna repair attempts passed exact oracle; four failed attempts remain excluded. Source quality, causal pair and native admission are separate.",
+      "id": "luna-repair-s52082-s52089-preference-candidate-20261015-v1",
+      "include": [
+        "SEMANTIC_REVIEW.md",
+        "preference-pairs.review-candidates.jsonl",
+        "preference-pairs.review-candidates.jsonl.audit.jsonl",
+        "preference-pairs.review-candidates.jsonl.manifest.json"
+      ],
+      "source_class": "causally verified Luna failed-action preference pair candidate",
+      "admission": "One chosen/rejected pair at the same failed action site; causal audit reports one verified pair; final DPO label/training audit remains pending",
+      "training_admission": false,
+      "training_admission_reason": "Pair is retained for explicit DPO review only; builder manifest marks final_training_audited=false and labels_finalized=false.",
+      "review_status": "Reviewed chosen typed eval and malformed rejected eval-argument object; no direct DPO training admission yet.",
+      "required_conversion": "Final preference-pair training audit, explicit labels and per-model DPO recipe if used"
     }
   ],
   "coverage_backlog": [

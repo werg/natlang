@@ -1,0 +1,31 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "luna-repair-s52082-s52089-preference-candidate-20261015-v1",
+  "owner": "pop",
+  "path": "runs/luna-repair-s52082-s52089-review-20261015-v1",
+  "files": [
+    {
+      "path": "SEMANTIC_REVIEW.md",
+      "bytes": 1360,
+      "sha256": "2315735b91049fbeaa5ca3b3570ea5f5456a7b2de65ae6c3261ee6576a691e2f"
+    },
+    {
+      "path": "preference-pairs.review-candidates.jsonl",
+      "bytes": 29458,
+      "sha256": "4e2e3d9d165e63e38674f331d6441c2a3ee3a32fd75b0efff0e52d65301200f5",
+      "lines": 1
+    },
+    {
+      "path": "preference-pairs.review-candidates.jsonl.audit.jsonl",
+      "bytes": 235,
+      "sha256": "bcd31de2f717a4f1c107c2a882c47dc829e0e3b4a83b48fbff61b915b105b5f1",
+      "lines": 1
+    },
+    {
+      "path": "preference-pairs.review-candidates.jsonl.manifest.json",
+      "bytes": 2106,
+      "sha256": "5f8a98db170af59ed9309acacec948f767905d9f99681f6fe688ea566dd56432"
+    }
+  ],
+  "bytes": 33159
+}
