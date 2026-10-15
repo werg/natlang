@@ -86549,6 +86549,45 @@
         "held_text": {}
       },
       "notes": ""
+    },
+    {
+      "id": "luna-dataset-workbench-s82-audit-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-dataset-workbench-s82-audit-20261015-v1",
+      "include": [
+        "review.json",
+        "REPORT.md"
+      ],
+      "source_class": "Independent source-bound item-level semantic audit of four Luna dataset-workbench roots",
+      "license": "Project-generated curriculum with specific source license facts in parent campaign",
+      "split": "train-only source parents; audit itself is review evidence only",
+      "admission": "Four accepted roots reviewed and semantically approved; no direct training admission",
+      "training_admission": false,
+      "training_admission_reason": "Review and hold evidence, not training rows",
+      "review_status": "Visible items and criterion independently checked, exact expected/observed values verified",
+      "required_conversion": "None for audit; approved rows curated separately",
+      "notes": "All four accepted dataset-workbench parents cleared; eight separate rejected-case source-contract conflicts entered source-review v7."
+    },
+    {
+      "id": "luna-held-shapes-s52082-curated-20261015-v1",
+      "owner": "pop",
+      "path": "runs/luna-s52082-parent-review-20261015-v1",
+      "include": [
+        "accepted-parents.jsonl",
+        "accepted-parents.review.json",
+        "semantic-holds.json",
+        "approved-turns.jsonl",
+        "curation-review.json"
+      ],
+      "source_class": "Luna train-only curriculum teacher decisions with exact outcome and independent semantic review",
+      "license": "Project-generated curriculum; CC-BY-SA-4.0 HotpotQA source; specific dataset licenses in source campaign",
+      "split": "train only; protected held packet and preceding seed source groups checked; global union held/source-quality filters required",
+      "admission": "88 exact accepted roots admitted; 756 approved native decisions out of 787 materialized, 31 unapproved excluded",
+      "training_admission": true,
+      "training_admission_reason": "Exact accepted roots, current v7 source-review and protected checks, independent source-bound audit of all four dataset-workbench roots, required research iterateOn/inline NL verified for all eight accepted research roots, native per-decision approval; only approved-turns.jsonl is training input",
+      "review_status": "All four accepted dataset-workbench roots approved; all eight accepted HotpotQA research roots used iterateOn and inline NL. No identical consecutive decisions. Rejected source-label conflicts are held by v7, not negative examples.",
+      "required_conversion": "Render LFM/Mellum twins in full, program-header and whole-trajectory before protected union",
+      "notes": "Global protected union applies current source holds across all corpora; this source has zero overlap with the eight new v7 held IDs."
     }
   ],
   "coverage_backlog": [
