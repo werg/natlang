@@ -645,3 +645,14 @@ preserve typed value references but bind dialect metadata to the trained adapter
 SHA. Existing semantic-adapter recovery text is reused. Metadata/behavior changes
 have 0/48 live executor samples; measure during the native sandbox teacher window.
 Codec, actual state decoding and gradient replay checks prove mechanism only.
+
+### 2026-10-15: recorded-continuation teacher extraction contract
+
+`ground_teacher_continuations.py` changes selected teacher task requests to
+explicit recorded-message extraction and supplies that recorded target as
+labeled evidence. This repairs the observed non-unique future-search oracle
+(ALFWorld shelf4/shelf5 source actions versus provided sidetable2 floorplan).
+Original historical source SFT and failed samples retain their identities.
+Live measurement is assigned to the current Qwen CoreWeave teacher window;
+collect at least48 samples before adopting the derivative's measured outcome
+quality. No runtime prompt, result classification or existing oracle is changed.

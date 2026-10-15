@@ -46,3 +46,20 @@ it does not decide which targets are admitted or change their source labels.
 
 No policy interface or model-facing wording is changed. The newly rendered
 prompt content is copied byte-for-byte from the hash-bound source piece table.
+
+## Grounded teacher continuation derivatives (2026-10-15)
+
+A recorded next action is usable imitation data but is not a unique oracle for
+an independent future-action question. Preserve that source. For the explicitly
+declared recorded-extraction derivative, the existing typed directory reducer
+and inline natural-language child remain the program: read every item, retrieve
+the exact recorded assistant message supplied as evidence, accumulate answers,
+write/read the answer map. The child question explicitly asks for extraction.
+
+`ground_teacher_continuations.py` is the crisp schema transformation: bind the
+unchanged source program hash, supply the recorded target as labeled evidence,
+update exact item/reference hashes, retain all split/source/protection groups,
+and mark the derivative's contract and zero independent-world credit. Exact
+reference replay, live teacher collection and downstream admission remain the
+existing mechanisms. No source is silently discarded, no failed earlier sample
+is relabeled, and supplying source targets grants no training admission.
