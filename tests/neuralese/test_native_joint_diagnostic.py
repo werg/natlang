@@ -9,6 +9,18 @@ from natlang_neuralese.rl.native_replay import compile_replay,replay_logps
 from test_native_full_updates import source
 
 
+def test_diagnostic_rejects_configured_but_unexecuted_fp8_backend():
+    from types import SimpleNamespace
+    path=Path(__file__).resolve().parents[2]/'scripts/neuralese_data/qualify_native_joint_cuda.py'
+    spec=importlib.util.spec_from_file_location('joint_cuda_execution_diagnostic',path)
+    diagnostic=importlib.util.module_from_spec(spec);spec.loader.exec_module(diagnostic)
+    configured=SimpleNamespace(collect_row_counts=lambda: {'calls':0,'rows':0},
+        configuration=lambda: {'enabled':True,'expert_modules':['layer0']})
+    with pytest.raises(ValueError, match='executed no projections'):
+        diagnostic.backend_execution({'mellum':SimpleNamespace(backend=configured)})
+    assert diagnostic.backend_execution({'lfm':SimpleNamespace(backend=None)}) == {}
+
+
 @pytest.mark.parametrize('family',['lfm','mellum'])
 def test_forced_writer_actual_sampled_reader_trace_replays_and_backpropagates(tmp_path,family):
     dtype=source(tmp_path/'base',family)

@@ -71,6 +71,19 @@ def contexts(participants):
     return stack
 
 
+def backend_execution(participants):
+    """Attest actual work for every selected backend, never configuration alone."""
+    result = {}
+    for name, participant in participants.items():
+        if participant.backend is None:
+            continue
+        counts = participant.backend.collect_row_counts()
+        if counts.get('calls', 0) <= 0 or counts.get('rows', 0) <= 0:
+            raise ValueError('selected FP8 backend executed no projections: ' + name)
+        result[name] = {'configuration': participant.backend.configuration(), 'row_counts': counts}
+    return result
+
+
 def sampled_native_graph(participant,roles,payload,seed,extra_banned=()):
     """Forced native producer; genuinely sampled reader with exact masked law.
 
@@ -171,6 +184,8 @@ def run(args):
     vae=SemanticStateVAE(layouts,latent_width=128,hidden_width=512).to('cuda')
     vae_optimizer=_vae_optimizer(vae,{'vae_lr':1e-4})
     for phase in ('vae','joint','distill'):
+        for participant in participants.values():
+            if participant.backend is not None:participant.backend.reset_row_counts()
         before={name:value.model.input_rows.detach().clone() for name,value in participants.items()}
         for name,participant in participants.items():
             participant.optimizer.zero_grad(set_to_none=True)
@@ -193,12 +208,14 @@ def run(args):
         if phase=='vae' and any(changed.values()):raise ValueError('VAE-only changed model rows')
         if phase!='vae' and not all(changed.values()):raise ValueError('joint/distill failed to update actual model rows')
         item={'phase':phase,'loss':float(loss.detach()),'gradient_norm':float(norm),'row_gradient_norms':gradients,
-              'role_rows_changed':changed,'details':details,'memory':memory()}
+              'role_rows_changed':changed,'details':details,'memory':memory(),
+              'backend_execution':backend_execution(participants)}
         report['phases'].append(item);write_json_durable(out/'progress.json',report);event('semantic_update',**item)
         del loss,parameters,before
     for participant in participants.values():participant.optimizer.zero_grad(set_to_none=True)
     vae_optimizer.zero_grad(set_to_none=True)
     for name,participant in participants.items():
+        if participant.backend is not None:participant.backend.reset_row_counts()
         participant.optimizer.zero_grad(set_to_none=True);participant.model.eval()
         participant.identity=identity(participant.model,participant.config)
         payload=participant.tokenizer.encode('42',add_special_tokens=False)
@@ -236,7 +253,8 @@ def run(args):
             'exact_native_writer_reader':True,'crisp_fallback':False,'sampling_replay_max_logp_abs':max_gap,
             'ratio_min':min(ratios),'ratio_max':max(ratios),
             'initial_ratio_clipped_fraction':sum(value<.8 or value>1.28 for value in ratios)/len(ratios),
-            'controlled_outcomes_not_task_rewards':True,'optimizer_state':tensor_inventory(participant.optimizer.state_dict()),'memory':memory()}
+            'controlled_outcomes_not_task_rewards':True,'optimizer_state':tensor_inventory(participant.optimizer.state_dict()),'memory':memory(),
+            'backend_execution':backend_execution({name:participant})}
         report['rl'][name]=item;write_json_durable(out/'progress.json',report);event('native_policy_update',model=name,**item)
         participant.optimizer.zero_grad(set_to_none=True)
     report.update(completed=True,elapsed_seconds=time.time()-started,memory=memory())

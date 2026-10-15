@@ -23,6 +23,11 @@ is architecture/kernel/gradient evidence, not foundation readiness or model lift
 4. Check finite losses/gradients, actual parameter/optimizer changes, exact
    writer/read replay behavior, and measured memory/time. Record any blocker
    without replacing it with a tiny fixture or silent precision fallback.
+5. Reset and record the selected backend's actual projection counters for each
+   semantic phase and policy update. Reject a claimed FP8 phase with no executed
+   FP8 projection, even when configuration names eligible modules. This guards
+   the dispatch gap found after the first fit check; configuration alone never
+   establishes kernel qualification.
 
 All code here is crisp numerical verification and resource instrumentation.
 Production task choice, adaptation and readiness remain existing typed policy /
