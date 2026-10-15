@@ -170,11 +170,12 @@ def test_a_windowing_continuation_rebuilds_the_trained_plan_and_trains_the_unsee
     assert record['windowing'] == {'previous': {'train_target_tokens': None, 'merge_prefix_rows': False, **unchanged},
                                    'current': {'train_target_tokens': 56, 'merge_prefix_rows': True, **unchanged}}
     assert record['held']['rebased'] is False
-    seen = {w['document'] for batch, _ in old_plan[:consumed] for w in batch}
     trained = [w for batch, _ in plan[consumed:] for w in batch]
-    assert all(any(sha not in seen for sha, _ in w.get('merged_rows', [[w['document'], None]])) for w in trained)
-    expected = trainer.continued_unseen(new_targets, record)
-    assert sorted(map(id, trained)) == sorted(map(id, expected))
+    expected = trainer._subtract_window_counts(
+        trainer._first_pass_windows(trainer.direct_sampler(new_targets, getattr(new_a, 'cohort_repeats', None)),
+                                    new_a.seed),
+        record['seen_window_counts'])
+    assert sorted(map(trainer.window_occurrence_key, trained)) == sorted(map(trainer.window_occurrence_key, expected))
     # Fewer forward tokens for the same decisions: the chains are forwarded once.
     forward = lambda ws: sum(len(w['ids']) for w in ws)
     assert forward(new_targets) < forward(old_targets)

@@ -642,7 +642,8 @@ def direct_sft_calibration_kind(fp8_training: str, fp8_recipe: str, mode: str,
     raise ValueError(f'unknown direct-SFT FP8 backend {fp8_training!r}')
 
 
-CONTINUATION_SCHEMA = 'natlang.neuralese-direct-data-continuation/1'
+CONTINUATION_SCHEMA = 'natlang.neuralese-direct-data-continuation/2'
+LEGACY_CONTINUATION_SCHEMA = 'natlang.neuralese-direct-data-continuation/1'
 
 
 def target_bearing(window):
@@ -675,9 +676,58 @@ def _window_length(window):
     return len(window['ids']) - 1
 
 
+def window_occurrence_key(window):
+    """Stable identity of one supervised window; changed geometry conservatively replays it."""
+    semantic = {
+        'document': window.get('document'), 'document_id': window.get('document_id'),
+        'start': window.get('start'), 'offset': window.get('offset'), 'prefix': window.get('prefix'),
+        'length': len(window['ids']), 'supervised_suffix_start': window.get('supervised_suffix_start'),
+        'supervised_spans': window.get('supervised_spans'), 'merged_rows': window.get('merged_rows'),
+        'context_only_spans': window.get('context_only_spans'),
+        'token_choice_detached_spans': window.get('token_choice_detached_spans'),
+        'cohort': window.get('cohort', 'native'), 'sampling_group': window.get('sampling_group'),
+    }
+    return canonical_json_sha256_hex(semantic)
+
+
+def _window_counts(windows):
+    counts = {}
+    for window in windows:
+        key = window_occurrence_key(window)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _subtract_window_counts(windows, consumed):
+    remaining = dict(consumed or {})
+    out = []
+    for window in windows:
+        key = window_occurrence_key(window)
+        if remaining.get(key, 0):
+            remaining[key] -= 1
+        else:
+            out.append(window)
+    return out
+
+
+def _first_pass_windows(sampler, seed):
+    return [window for document in sampler.epoch(0, seed) for window in document]
+
+
+def _pack_first_pass(windows, a, seed):
+    """Pack explicit remaining occurrences with the shared length-bucketed packer."""
+    import random
+    from .text_supervision import pack_updates
+    return pack_updates(windows, length=_window_length, max_tokens=a.batch_tokens, max_items=a.batch,
+                        rng=random.Random(f'{seed}:pack:0'))
+
+
 def continued_unseen(targets, continuation):
-    """The target windows of documents a data continuation has not seen (by content hash or document id). A merged
-    window (``merge_prefix_rows``) is unseen while any of its constituent rows is."""
+    """Target windows whose exact supervised occurrence has not been consumed (v2 records)."""
+    if continuation.get('schema') == CONTINUATION_SCHEMA:
+        return _subtract_window_counts(targets, continuation.get('seen_window_counts', {}))
+    # Rebuild v1 plans with their original document rule; new records upgrade from exact batches and replay any
+    # unrepresented legacy history conservatively.
     hashes, ids = set(continuation['seen_document_sha256']), set(continuation['seen_document_ids'])
     unseen = lambda sha, name: sha not in hashes and name not in ids
     return [w for w in targets if (any(unseen(sha, name) for sha, name in w['merged_rows']) if w.get('merged_rows')
@@ -687,11 +737,11 @@ def continued_unseen(targets, continuation):
 def direct_schedule(targets, a, continuation=None):
     """The stage's whole update plan, a pure function of the data, the seed, the packing and the continuation.
 
-    Without a continuation: ``text_supervision.epoch_schedule`` over the target-bearing windows. After a data
-    continuation (``--continued-text-data``) at update k: k placeholder entries (the updates trained on the previous
-    data), then the rest of the first pass on this data's unseen documents (same sampler policy, same seed and
-    packing), then the remaining whole passes over all of this data. ``epochs_covered`` counts seen windows plus this
-    data's windows trained so far, over seen plus unseen windows. Returns (sampler, plan)."""
+    Without a continuation: ``text_supervision.epoch_schedule`` over target-bearing windows. A v2 continuation has k
+    placeholder updates, then the unconsumed exact window occurrences from this data's first epoch draw, preserving
+    cohort repeats/group rotation, then the remaining whole passes. A v1 continuation is rebuilt with its original
+    document-level rule for compatibility; upgrading it conservatively replays windows whose exact history is absent.
+    Returns (sampler, plan)."""
     from .text_supervision import epoch_schedule
     repeats = getattr(a, 'cohort_repeats', None)
     sampler = direct_sampler(targets, repeats)
@@ -702,12 +752,23 @@ def direct_schedule(targets, a, continuation=None):
     if a.epochs is None or not float(a.epochs).is_integer():
         raise ValueError('a data continuation continues a whole-epoch budget (--epochs 1, 2, ...)')
     consumed, seen = continuation['consumed_updates'], continuation['seen_windows']
-    unseen = continued_unseen(targets, continuation)
+    if continuation.get('schema') == CONTINUATION_SCHEMA:
+        # Expand the epoch's actual draw occurrences so repeat weights and grouped candidate rotation remain exact.
+        unseen = _subtract_window_counts(_first_pass_windows(sampler, a.seed),
+                                         continuation.get('seen_window_counts', {}))
+    else:
+        unseen = continued_unseen(targets, continuation)
     total = seen + len(unseen)
     plan = [([], seen / total * (i + 1) / consumed) for i in range(consumed)]
     if unseen:
-        plan += [(batch, (seen + covered * len(unseen)) / total)
-                 for batch, covered in epoch_schedule(direct_sampler(unseen, repeats), epochs=1.0, **pack)]
+        if continuation.get('schema') == CONTINUATION_SCHEMA:
+            processed = 0
+            for batch in _pack_first_pass(unseen, a, a.seed):
+                processed += len(batch)
+                plan.append((batch, (seen + processed) / total))
+        else:
+            plan += [(batch, (seen + covered * len(unseen)) / total)
+                     for batch, covered in epoch_schedule(direct_sampler(unseen, repeats), epochs=1.0, **pack)]
     if a.epochs > 1:
         plan += [(batch, 1.0 + covered) for batch, covered in epoch_schedule(sampler, epochs=a.epochs - 1, **pack)]
     return sampler, plan
@@ -741,9 +802,9 @@ def data_continuation(previous_targets, previous_held, targets, held, *, consume
                       previous_a=None):
     """Continue the stage's epoch budget on new data after ``consumed`` updates (owner 2026-10-12: "continue our
     training from what we have with more data"). The previous plan is rebuilt exactly (from the previous data and its
-    own continuation, if any); the documents of its consumed updates count as seen, and the rest of the epoch is this
-    data minus the seen documents, matched by content hash or document id (a partly consumed document counts as
-    seen). The update counter, weights and optimizer state continue. The QAT progress is rebased so it continues from
+    own continuation, if any); consumed window occurrences are matched by content, target geometry and source
+    identity. New windows, changed geometries and unrepresented legacy windows are replayed conservatively. The update
+    counter, weights and optimizer state continue. The QAT progress is rebased so it continues from
     its value at update k to the stage's end over the new total: progress(t) = p_k + (p1 - p_k) (t - k) / (N - k).
     Learning rates are constant in this trainer (no schedule, no warm-up), so nothing else is rebased.
     ``previous_a``: the options the previous plan was built with when the train-window geometry changes too (a
@@ -753,12 +814,21 @@ def data_continuation(previous_targets, previous_held, targets, held, *, consume
     if previous is not None and previous.get('plan_documents_sha256') not in (
             None, plan_documents_sha256(previous_plan, offset)):
         raise ValueError('the previous plan does not rebuild from the previous data and options')
+    if previous is not None and previous.get('plan_windows_sha256') not in (
+            None, plan_windows_sha256(previous_plan, offset)):
+        raise ValueError('the previous window plan does not rebuild from the previous data and options')
     if not offset <= consumed <= len(previous_plan):
         raise ValueError(f'data continuation at update {consumed} lies outside the previous plan '
                          f'({offset}..{len(previous_plan)})')
     if consumed and previous_plan[consumed - 1][1] > 1:
         raise ValueError('a data continuation must start inside the first pass of the previous data')
     batches = [batch for batch, _ in previous_plan[offset:consumed]]
+    # A v1 document list is not evidence that every window of that document was consumed. Reconstruct this plan's
+    # exact batches when available; older unrepresented windows have zero counts and are replayed conservatively.
+    window_counts = dict(previous.get('seen_window_counts', {}) if previous and
+                         previous.get('schema') == CONTINUATION_SCHEMA else {})
+    for key, count in _window_counts(window for batch in batches for window in batch).items():
+        window_counts[key] = window_counts.get(key, 0) + count
     hashes = set(previous['seen_document_sha256'] if previous else ())
     ids = set(previous['seen_document_ids'] if previous else ())
     hashes |= {w['document'] for batch in batches for w in batch}
@@ -776,11 +846,29 @@ def data_continuation(previous_targets, previous_held, targets, held, *, consume
               'previous_epochs_covered': previous_plan[consumed - 1][1] if consumed else 0.0,
               'seen_documents': len(hashes), 'seen_windows': seen_windows,
               'seen_document_sha256': sorted(hashes), 'seen_document_ids': sorted(ids),
-              'previous': ({k: v for k, v in previous.items() if not k.startswith('seen_document_')}
+              'seen_window_counts': dict(sorted(window_counts.items())),
+              'legacy_window_coverage': ({'status': 'unknown; unrepresented legacy windows replay conservatively',
+                                          'source_schema': LEGACY_CONTINUATION_SCHEMA}
+                                         if previous and previous.get('schema') == LEGACY_CONTINUATION_SCHEMA else
+                                         previous.get('legacy_window_coverage') if previous else None),
+              'previous': ({k: v for k, v in previous.items()
+                            if not k.startswith('seen_document_') and k != 'seen_window_counts'}
                            if previous else None)}
     _, plan = direct_schedule(targets, a, record)
     unseen = continued_unseen(targets, record)
+    legacy_coverage = record.get('legacy_window_coverage')
+    if legacy_coverage is not None and previous and previous.get('schema') == LEGACY_CONTINUATION_SCHEMA:
+        legacy_hashes = set(previous.get('seen_document_sha256', ())) if previous else set()
+        legacy_ids = set(previous.get('seen_document_ids', ())) if previous else set()
+        first_pass = _first_pass_windows(direct_sampler(targets, getattr(a, 'cohort_repeats', None)), a.seed)
+        uncertain = [w for w in first_pass
+                     if (w['document'] in legacy_hashes or w.get('document_id') in legacy_ids)]
+        legacy_coverage = {**legacy_coverage,
+                           'replayed_uncertain_window_occurrences': len(_subtract_window_counts(
+                               uncertain, window_counts))}
+        record['legacy_window_coverage'] = legacy_coverage
     record.update(updates=len(plan), plan_documents_sha256=plan_documents_sha256(plan, consumed),
+                  plan_windows_sha256=plan_windows_sha256(plan, consumed),
                   unseen_target_windows=len(unseen),
                   unseen_documents=len({w['document'] for w in unseen}),
                   matched_seen_documents=len({w['document'] for w in targets} - {w['document'] for w in unseen}),
@@ -1149,10 +1237,17 @@ def stage_plan_data(engine, a, text_data):
     equals the one over ``stage_data``'s windows (the trainer checks the plan's hash)."""
     from .text_warmup import prepare_text_windows, select_held_document_windows
 
-    def light(window):
+    def light(window, masks=None):
         value = {'ids': range(len(window['ids'])), 'prefix': window['prefix'], 'document': window['document'],
                  'document_id': window.get('document_id'), 'cohort': window.get('cohort', 'native'),
-                 'groups': window.get('groups'), 'offset': window.get('offset', 0)}
+                 'groups': window.get('groups'), 'offset': window.get('offset', 0),
+                 'start': window.get('start', 0)}
+        if window.get('supervised_suffix_start') is not None:
+            value['supervised_suffix_start'] = window['supervised_suffix_start']
+        if 'supervised_spans' in window:
+            value['supervised_spans'] = window['supervised_spans']
+        if masks:
+            value.update(masks)
         if window.get('sampling_group') is not None:
             value['sampling_group'] = window['sampling_group']
         if window.get('merged_rows'):
@@ -1166,11 +1261,16 @@ def stage_plan_data(engine, a, text_data):
         with prepared_windows.locked(path) as acquired:
             cached = prepared_windows.load(path, spec) if acquired else None
         if cached is not None:
-            windows, _, _, expected_selection = cached
-            tests = [light(w) for w in windows['test']]
+            windows, rows_meta, _, expected_selection = cached
+            masks_by_document = {hashlib.sha256(meta['text'].encode()).hexdigest(): {
+                'context_only_spans': meta.get('context_only_spans', []),
+                'token_choice_detached_spans': meta.get('token_choice_detached_spans', []),
+            } for meta in rows_meta if meta.get('text') is not None}
+            tests = [light(w, masks_by_document.get(w['document'])) for w in windows['test']]
             held, selection = select_held_document_windows(tests, a.held_documents)
             if selection == expected_selection:
-                targets = [light(w) for w in windows['train'] if target_bearing(w)]
+                targets = [light(w, masks_by_document.get(w['document'])) for w in windows['train']
+                           if target_bearing(w)]
                 print(json.dumps({'event': 'prepared_window_cache', 'status': 'plan-hit',
                                   'target_windows': len(targets), 'test_windows': len(tests)}), flush=True)
                 return targets, held, selection
@@ -1180,8 +1280,11 @@ def stage_plan_data(engine, a, text_data):
                                           target_tokens=a.target_tokens, mask_system_prompt=True,
                                           train_target_tokens=getattr(a, 'train_target_tokens', None),
                 train_min_context_tokens=getattr(a, 'train_min_context_tokens', 0))
-        targets += [light(w) for w in windows['train'] if target_bearing(w)]
-        tests += [light(w) for w in windows['test']]
+        masks = ({'context_only_spans': row.get('context_only_spans', []),
+                  'token_choice_detached_spans': row.get('token_choice_detached_spans', [])}
+                 if row.get('context_only_spans') or row.get('token_choice_detached_spans') else None)
+        targets += [light(w, masks) for w in windows['train'] if target_bearing(w)]
+        tests += [light(w, masks) for w in windows['test']]
     held, held_selection = select_held_document_windows(tests, a.held_documents)
     return targets, held, held_selection
 
@@ -1189,6 +1292,12 @@ def stage_plan_data(engine, a, text_data):
 def plan_documents_sha256(plan, start=0):
     """The documents of each update of ``plan[start:]``, in order, hashed (plan identity across code paths)."""
     return hashlib.sha256(json.dumps([[w['document'] for w in batch] for batch, _ in plan[start:]]).encode()).hexdigest()
+
+
+def plan_windows_sha256(plan, start=0):
+    """Hash the exact supervised window occurrences per update, including empty continuation placeholders."""
+    rows = [[window_occurrence_key(w) for w in batch] for batch, _ in plan[start:]]
+    return hashlib.sha256(json.dumps(rows, separators=(',', ':')).encode()).hexdigest()
 
 
 def continuation_inputs(a, inputs):
@@ -1543,15 +1652,17 @@ def main(argv=None):
                                   neuralese_projection=neuralese, token_choice_projection=token_choice)
     # The budget (data audit 2026-10-11, DATA_INVENTORY_20261011.md E): epochs over the target-bearing train windows
     # (target_bearing), sampled by document without replacement through the shared CohortDocumentSampler, packed into
-    # updates of up to --batch-tokens forward tokens (direct_schedule); after a data continuation, the rest of the
-    # budget on the unseen documents. Context-only windows (history repeated by later decision documents) are not
-    # trained.
+    # updates of up to --batch-tokens forward tokens (direct_schedule); after a data continuation, the remaining
+    # unconsumed window occurrences are scheduled, including other windows of a partially consumed document.
+    # Context-only windows (history repeated by later decision documents) are not trained.
     from .text_supervision import epoch_schedule
     if not targets:
         raise ValueError('neuralese_direct found no target-bearing train window')
     sampler, schedule = direct_schedule(targets, a, continuation)
     if continuation is not None and (continuation['updates'] != len(schedule) or plan_documents_sha256(
-            schedule, continuation['consumed_updates']) != continuation['plan_documents_sha256']):
+            schedule, continuation['consumed_updates']) != continuation['plan_documents_sha256'] or
+            continuation.get('plan_windows_sha256') not in (None, plan_windows_sha256(
+                schedule, continuation['consumed_updates']))):
         raise ValueError('the data continuation record does not rebuild its plan on this data')
     if a.epochs is not None:
         a.steps = len(schedule)  # derived: the stage's schedules (QAT ramps, cadence ends) follow it

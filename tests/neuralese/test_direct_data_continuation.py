@@ -1,6 +1,4 @@
-"""Data continuation of an active neuralese_direct stage (owner 2026-10-12: "continue our training from what we have
-with more data"): direct_sft continues its update counter, weights and optimizer on new text data, the documents of
-its consumed updates counted as seen; the handoff accepts it only when declared (continued_text_data)."""
+"""Data continuation of an active neuralese_direct stage: exact consumed window occurrences survive handoffs."""
 import copy
 import json
 from types import SimpleNamespace
@@ -30,7 +28,7 @@ def quantization_stage():
     return {'id': 'direct_sft', 'progress': [0.0, 0.35], 'start': 0, 'end': 'derived'}
 
 
-def test_continuation_keeps_the_consumed_prefix_and_trains_the_unseen_rest_once():
+def test_continuation_keeps_the_consumed_prefix_and_trains_the_unconsumed_window_occurrences_once():
     a = args()
     previous = corpus(range(40))
     # The new data: the old documents (one re-rendered: new content hash, same id) plus 60 new ones.
@@ -39,20 +37,86 @@ def test_continuation_keeps_the_consumed_prefix_and_trains_the_unseen_rest_once(
     consumed = 9
     record, plan = trainer.data_continuation(previous, previous[:2], new, new[:2], consumed=consumed, previous=None,
                                              quantization_stage=quantization_stage(), a=a)
-    seen = {w['document'] for batch, _ in old_plan[:consumed] for w in batch}
-    assert record['consumed_updates'] == consumed and record['seen_documents'] == len(seen)
+    seen = [w for batch, _ in old_plan[:consumed] for w in batch]
+    assert record['consumed_updates'] == consumed and record['seen_documents'] == len({w['document'] for w in seen})
     assert record['seen_windows'] == sum(len(batch) for batch, _ in old_plan[:consumed])
     assert record['updates'] == len(plan) and all(not batch for batch, _ in plan[:consumed])
     trained = [w for batch, _ in plan[consumed:] for w in batch]
-    # Every unseen window exactly once; no window of a seen document (by hash or by id) again.
-    seen_ids = {w['document_id'] for batch, _ in old_plan[:consumed] for w in batch}
-    expected = [w for w in new if w['document'] not in seen and w['document_id'] not in seen_ids]
+    # Re-rendered text gets new content identity. Matching target windows are removed by occurrence count;
+    # the other windows of a partially consumed document remain in the continuation.
+    expected = trainer._subtract_window_counts(
+        trainer._first_pass_windows(trainer.direct_sampler(new, getattr(a, 'cohort_repeats', None)), a.seed),
+        trainer._window_counts(seen))
     assert sorted(map(id, trained)) == sorted(map(id, expected))
     covered = [c for _, c in plan]
     assert covered == sorted(covered) and covered[-1] == pytest.approx(1.0)
     # Deterministic: the record rebuilds the same plan (a later resume).
     _, again = trainer.direct_schedule(new, a, record)
     assert [list(map(id, b)) for b, _ in again] == [list(map(id, b)) for b, _ in plan]
+
+
+def test_partial_document_handoff_trains_the_remaining_two_windows():
+    data = [window('one-doc', start, length=40 + start) for start in range(3)]
+    a = args(batch_tokens=20)
+    _, old_plan = trainer.direct_schedule(data, a)
+    assert len(old_plan) == 3
+    record, plan = trainer.data_continuation(data, [], data, [], consumed=1, previous=None,
+                                             quantization_stage=None, a=a)
+    consumed_start = old_plan[0][0][0]['start']
+    remaining_starts = sorted({0, 1, 2} - {consumed_start})
+    assert sorted(w['start'] for batch, _ in old_plan[1:] for w in batch) == remaining_starts
+    assert sorted(w['start'] for batch, _ in plan[1:] for w in batch) == remaining_starts
+    assert record['unseen_target_windows'] == 2
+
+
+def test_v1_document_only_history_replays_unrepresented_windows_conservatively():
+    data = [window('legacy-doc', start, length=40 + start) for start in range(3)]
+    a = args(batch_tokens=20)
+    legacy = {'schema': trainer.LEGACY_CONTINUATION_SCHEMA, 'consumed_updates': 1, 'previous_updates': 1,
+              'seen_windows': 1, 'seen_documents': 1, 'seen_document_sha256': ['h-legacy-doc'],
+              'seen_document_ids': ['id-legacy-doc'], 'previous_epochs_covered': 1.0}
+    _, old_plan = trainer.direct_schedule(data, a)
+    legacy_plan = trainer.direct_schedule(data, a, legacy)[1]
+    legacy['plan_documents_sha256'] = trainer.plan_documents_sha256(legacy_plan, 1)
+    assert not any(batch for batch, _ in legacy_plan[1:])  # exact v1 semantics for rebuilding
+    record, plan = trainer.data_continuation(data, [], data, [], consumed=1, previous=legacy,
+                                             quantization_stage=None, a=a)
+    assert record['legacy_window_coverage']['status'].startswith('unknown;')
+    assert record['legacy_window_coverage']['replayed_uncertain_window_occurrences'] == 3
+    assert len([w for batch, _ in plan[1:] for w in batch]) == 3
+    assert len(old_plan) == 3
+
+
+def test_windowing_change_replays_unmatched_geometry_and_keeps_merged_target_spans():
+    old = [window('merged-doc', 0, length=50), window('merged-doc', 1, length=50)]
+    old[0].update(supervised_spans=[(4, 14)], merged_rows=[['source-a', 'a'], ['source-b', 'b']])
+    old[1].update(supervised_spans=[(4, 14)], merged_rows=[['source-a', 'a'], ['source-b', 'b']])
+    new = [window('merged-doc', 0, length=60)]
+    new[0].update(supervised_spans=[(4, 20)], merged_rows=[['source-a', 'a'], ['source-b', 'b']])
+    a = args(batch_tokens=49)
+    _, old_plan = trainer.direct_schedule(old, a)
+    record, plan = trainer.data_continuation(old, [], new, [], consumed=1, previous=None,
+                                             quantization_stage=None, a=a)
+    assert len(old_plan) == 2
+    assert [w for batch, _ in plan[1:] for w in batch] == new
+    assert record['unseen_target_windows'] == 1
+
+
+def test_repeated_cohort_draws_are_consumed_by_multiplicity():
+    data = corpus(['repeat'], windows_per_document=2)
+    for row in data:
+        row['cohort'] = 'repeated'
+    a = args(cohort_repeats={'repeated': 3}, batch_tokens=20)
+    _, old_plan = trainer.direct_schedule(data, a)
+    assert len([w for batch, _ in old_plan for w in batch]) == 6
+    record, plan = trainer.data_continuation(data, [], data, [], consumed=1, previous=None,
+                                             quantization_stage=None, a=a)
+    consumed = [w for batch, _ in old_plan[:1] for w in batch]
+    expected = trainer._subtract_window_counts(trainer._first_pass_windows(
+        trainer.direct_sampler(data, a.cohort_repeats), a.seed), trainer._window_counts(consumed))
+    trained = [w for batch, _ in plan[1:] for w in batch]
+    assert sorted(map(trainer.window_occurrence_key, trained)) == sorted(map(trainer.window_occurrence_key, expected))
+    assert len(trained) == 5
 
 
 def test_continuation_rebases_the_qat_progress_without_a_jump():
