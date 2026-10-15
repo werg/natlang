@@ -213,3 +213,42 @@ def test_native_decision_hold_files_reject_unreviewed_ids(tmp_path):
     witness = tmp_path / 'bad.jsonl'; witness.write_text('{"id":"unreviewed"}\n')
     with pytest.raises(ValueError, match='invalid native decision hold'):
         load_decision_holds([witness])
+
+
+def test_neuralese_reference_metadata_retains_two_edges_between_same_records(monkeypatch):
+    spec = importlib.util.spec_from_file_location('e2e_edge_identity', Path(__file__).parents[1] / 'scripts/neuralese_data/e2e_mine.py')
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    rows = [{'id': rid, 'split': 'train', 'source_ref': {'trajectory_id': 'chain'}}
+            for rid in ['writer', 'reader']]
+    refs = [{'kind': 'neuralese', 'writer_record_id': 'writer', 'writer_name': 'result:a',
+             'source_sha256': 'a' * 64, 'gradient_edge': True},
+            {'kind': 'neuralese', 'writer_record_id': 'writer', 'writer_name': 'result:b',
+             'source_sha256': 'b' * 64, 'gradient_edge': True},
+            {'kind': 'read', 'writer_record_id': 'writer', 'name': 'result:a',
+             'body_sha256': 'a' * 64, 'gradient_edge': True}]
+    review = {'decisions': [{'id': 'reader', 'references': refs}], 'excluded': []}
+    actual = module.edges_from_authenticated_decisions(rows, review['decisions'])
+    assert [(edge['write_name'], edge['body_sha256']) for edge in actual] == [
+        ('result:a', 'a' * 64), ('result:b', 'b' * 64)]
+    from natlang_neuralese.train import trajectories
+    calls = []
+    def authenticate(records, pieces):
+        calls.append((records, pieces))
+        return records, review
+    monkeypatch.setattr(trajectories, 'authenticated_recurrence_context_view', authenticate)
+    legacy = [{**actual[0], 'write_name': None, 'body_sha256': None}]
+    repaired, receipt = module.repair_legacy_edge_metadata(rows, {}, legacy)
+    assert repaired == actual and len(calls) == 1
+    assert receipt['trajectories'] == 1 and receipt['prior_edges'] == 1 and receipt['reconstructed_edges'] == 2
+    # Complete sidecars do not need a second authentication pass.
+    assert module.repair_legacy_edge_metadata(rows, {}, actual) == (actual, None)
+    assert len(calls) == 1
+    # A concrete historical identity must not be silently replaced by a different body.
+    with pytest.raises(ValueError, match='contradicts prior sidecar'):
+        module.repair_legacy_edge_metadata(rows, {}, legacy + [{**actual[0], 'body_sha256': 'c' * 64}])
+    with pytest.raises(ValueError, match='lacks exact local writer'):
+        module.edges_from_authenticated_decisions(rows, [{'id': 'reader', 'references': [
+            {**refs[0], 'writer_record_id': 'missing'}]}])
+    review['excluded'] = [{'id': 'reader', 'reason': 'body authentication failed'}]
+    with pytest.raises(ValueError, match='failed native authentication'):
+        module.repair_legacy_edge_metadata(rows, {}, legacy)
