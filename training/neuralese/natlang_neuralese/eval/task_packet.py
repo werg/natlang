@@ -29,6 +29,36 @@ def _text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str).casefold()
 
 
+def _native_terminal_outcome(accounting: dict[str, Any]) -> str | None:
+    """Recognize exact engine termination evidence, not generated action text."""
+    states = accounting.get("job_states")
+    if (accounting.get("manifest_valid") is not True
+            or accounting.get("expected_jobs") != 1
+            or not isinstance(states, list) or len(states) != 1):
+        return None
+    state = states[0]
+    if not isinstance(state, dict) or state.get("state") != "failed":
+        return None
+    error = state.get("terminal_error")
+    if (not isinstance(error, dict)
+            or not re.fullmatch(r"[0-9a-f]{64}", str(error.get("sha256", "")))):
+        return None
+    message = error.get("error")
+    prefix = "Error: model stream error: "
+    if not isinstance(message, str) or not message.startswith(prefix):
+        return None
+    try:
+        payload = json.loads(message[len(prefix):])
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("code") != "neuralese-native-state-open":
+        return None
+    return {
+        "neuralese-native-state-open: generation ended inside a produce span": "budget_exhaustion",
+        "neuralese-native-state-open: generation stopped inside a produce span": "model_incomplete",
+    }.get(payload.get("message") if isinstance(payload.get("message"), str) else None)
+
+
 def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) -> str:
     """Use explicit terminal evidence; repeated action-shape counts alone are not a failure label."""
     if finish and finish.get('status') == 'repetition' and finish.get('resource_limit_reason') == 'identical_turn_limit':
@@ -44,6 +74,9 @@ def classify_case(result: dict[str, Any] | None, finish: dict[str, Any] | None) 
             return "budget_exhaustion"
         if finish and finish.get("status") in {"complete", "complete_with_skips"}:
             return "infrastructure_error"
+        native_outcome = _native_terminal_outcome(accounting)
+        if native_outcome is not None:
+            return native_outcome
         return "unresolved"
 
     outcome = result.get("outcome") if isinstance(result.get("outcome"), dict) else {}
