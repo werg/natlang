@@ -46,3 +46,37 @@ The waiting old1938 readiness controller was drained without a live joint optimi
 Actual SDK CPU fixture refresh76artifacts and round12artifacts completed; batched round ferry69seconds. Actual host SIGTERM forwarded to exact remote worker, drained stopped checkpoint at638epochs/global641, and verified all12artifacts/result last. These prove transport/update mechanisms, not full-model task quality. Actual stopped-state restart and injected launch-metadata/terminal-no-result/SDK-timeout recoveries remain to be completed. Participant-sharded shared storage implementation is under focused validation and independent review, not deployed. Exact selected participant/VAE/RNG closure, complete recovery, atomic failure cleanup and closure-aware pin retention tests use actual two-port weights/optimizers. Existing monolithic exporter must adopt full closure snapshots before any sharded production activation. Provider and async eval now share `common/runtime_inventory.py` rather than duplicate runtime/protection inventory logic.
 
 LF3000 current evaluation at21:43 had14/16 terminal cases:1success,2semantic,2repetition,9unresolved. Four preserved first-request errors enter a produce span then hit8192tokens or EOS/server stop; requests have no forced template. Exact terminal token IDs were not persisted by failed non-RL streams. Held-only diagnostic pack SHA `20f208e2f5ed51a2344f19d0ea09b4fe6bb66c38d128bb1f5d274679baf422b3` is under `/home/werg/data/dgxops/lfm-native-task3000-held-diagnosis-20261015`. Do not score unresolved rows as model failures or alter the in-flight evaluation.
+
+## 22:05 UTC operational update
+
+LF3000 routine evaluation drained21:46:46 (28m03), but the old cadence failure
+counter then terminated training at21:46:55 with ten unresolved results. The
+completed observed counts were1success/2semantic/3repetition/10unresolved;
+this is incomplete evidence, not a valid1/16 model score. The safe resume used
+exact full parent3000,2068262663B,SHA
+`fd7932ad14128070fbcd096f9ccf1a4a9f049222363551f96dede5080cc3dfd8`,
+optimizer/RNG/exposure7575 preserved. Recipe403619 under qualifiedcf7 resumed;
+actual22:01:43 step3019/loss.213293/6054.6supervisedTPS confirmed.
+
+Current LF recipe is
+`/work/native-production/control/lfm-routine-async-cadence-cf7c53d6019a-20261015-v1-v2/declared-cadence-recipe.json`,
+4227B SHA`802f4cda44537b37289ee90f5cec881b48001663a7954737149bb7bac692c64c`.
+Only routine task cadence1000→0 changed. Existing DGX verified-export task
+dispatch supplies historical monitoring; current-weight foundation/refresh/final
+and held checks remain mandatory. Canonical readiness metadata is being refreshed
+to this actual recipe and ownership path, without restarting either trainer.
+Mellum22:01 step2866/loss.129991/2200.2supervisedTPS remained active. Exact
+checkpoint3000LF/2750M optimizer metadata shows every groupLR3e-6, including
+role/thinking sparse tables in torch-Muon; no learning-rate adjustment was made.
+
+Shared checkpoint storage dd4b689d0 passed root's independent code review and
+actual SDK CPU/tiny two-port qualification. Existing signed artifact ferry moved
+20files886381B from Mellum to H100; the peer payload was absent on H100. Same
+globalSHA`170f1cf471a09847e6da6749994edbf57cb57445aa1eac178d6af3e7ff6334b5`
+restored exact selected weights, optimizer, RNG, CE credits and VAE; one next
+real optimizer update matched source loss and every resulting weight/moment.
+Proof`/home/werg/data/dgxops/coreweave-shared-selected-sdk-proof-20261015.json`.
+This qualifies storage/transport on real tiny models, not full trained-parent
+CUDA arithmetic or task quality. Scheduled exporters must use complete closure
+pins before exporting this new form; no manifest-only durability claim is valid.
+Production shared activation still waits actual foundations and qualified runtime.

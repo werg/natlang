@@ -310,3 +310,69 @@ def test_partial_diagnostic_preserves_runtime_counter_and_unqualified_score(tmp_
         evaluator.cadence(36000, final=True)  # final remains bounded and cannot certify a partial result
     with pytest.raises(ValueError, match='runtime_failure_policy'):
         parse_task_eval({**spec, 'runtime_failure_policy': 'ignore-everything'})
+
+
+@pytest.mark.parametrize('failure', ['partial', 'all-broken', 'exception'])
+def test_explicit_report_keeps_routine_failures_unscored_and_final_strict(tmp_path, failure):
+    import json
+    from natlang_neuralese.eval.task_cadence import TaskEval
+    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': list(range(16)),
+                            'runtime_failure_policy': 'report', 'max_consecutive_failures': 1})
+    evaluator = _light_evaluator(spec, tmp_path)
+    evaluator.rows = [{} for _ in range(16)]
+    def execute(run, repeat=0):
+        run.mkdir(parents=True, exist_ok=True)
+        if failure == 'exception': raise OSError('collector unavailable')
+        counts = ({'task_success': 1, 'semantic_mismatch': 2, 'repetition': 3, 'unresolved': 10}
+                  if failure == 'partial' else {'infrastructure_error': 16})
+        return {'task_successes': counts.get('task_success', 0), 'task_success_rate': 0.,
+                'complete': False, 'cases': [], 'cases_expected': 16, 'outcome_counts': counts}, [1]
+    evaluator._execute = execute
+    for step in (1000, 2000):
+        result = evaluator.cadence(step)
+        assert result['eligible'] is False and result['task_successes'] is None
+        assert result['model_outcome'] == 'unscored'
+        if failure == 'exception': assert 'OSError' in result['error']
+        else:
+            assert 'error' not in result
+            assert result['observed_task_successes'] == (1 if failure == 'partial' else 0)
+        assert task_gate(result, spec)['passed'] is False
+    assert evaluator.consecutive_failures() == 2
+    with pytest.raises(RuntimeError, match='times in a row'):
+        evaluator.cadence(3000, final=True)
+    assert evaluator.consecutive_failures() == 3
+
+
+def test_explicit_report_async_submit_preserves_failed_result_counter(tmp_path, monkeypatch):
+    from natlang_neuralese.eval import task_cadence
+    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': [0], 'async': True,
+                            'runtime_failure_policy': 'report', 'max_consecutive_failures': 1})
+    evaluator = _light_evaluator(spec, tmp_path)
+    monkeypatch.setattr(task_cadence, 'request_queue', lambda: tmp_path/'queue')
+    monkeypatch.setattr(evaluator, '_prune_in_background', lambda request: None)
+    monkeypatch.setattr(task_cadence.threading, 'Thread', lambda **kw: type('Thread', (), {'start': lambda self: None})())
+    slot = tmp_path/'checkpoint.pt'; slot.write_bytes(b'actual snapshot')
+    evaluator.record_failure(10, 'collector broken')
+    assert evaluator.submit(20, slot, heads=None)['pending'] is True
+    assert evaluator.consecutive_failures() == 1
+
+
+def test_legacy_partial_policy_uses_observed_count_without_creating_score(tmp_path):
+    from natlang_neuralese.eval.task_cadence import partial_runtime_diagnostic
+    spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'cases': list(range(16)),
+                            'reference_successes': 0, 'runtime_failure_policy': 'diagnostic-partial',
+                            'max_consecutive_failures': 1})
+    evaluator = _light_evaluator(spec, tmp_path)
+    evaluator.rows = [{} for _ in range(16)]
+    def execute(run, repeat=0):
+        run.mkdir(parents=True, exist_ok=True)
+        return {'task_successes': 1, 'task_success_rate': 1/16,
+            'complete': False, 'cases': [], 'cases_expected': 16,
+            'outcome_counts': {'task_success': 1, 'semantic_mismatch': 14,
+                               'infrastructure_error': 0, 'unresolved': 1}}, [1]
+    evaluator._execute = execute
+    summary = evaluator.cadence(10)
+    assert summary['task_successes'] is None and summary['observed_task_successes'] == 1
+    assert partial_runtime_diagnostic(summary, spec)
+    assert not task_gate(summary, spec)['passed']
+    assert not partial_runtime_diagnostic(summary, {**spec, 'reference_successes': 2})

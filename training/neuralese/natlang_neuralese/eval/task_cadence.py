@@ -51,6 +51,9 @@ previous eligible evaluation of the stage minus ``noise_successes``. Every evalu
                   serving exception) before the training run stops (default 3). A single failed evaluation is recorded
                   in task-eval.jsonl and the next cadence evaluates again: a transient eval failure must not end a
                   multi-day run, a persistent one must not pass silently (DGX/Pop 2026-10-12).
+  runtime_failure_policy  stop (legacy default), diagnostic-partial, or report. Report preserves every
+                  incomplete result/counter as unscored monitoring and continues routine training;
+                  mandatory current-weight final/foundation checks remain strict.
 """
 from __future__ import annotations
 
@@ -99,8 +102,8 @@ def parse_task_eval(value):
     if spec.get('prompt_rendering') not in (None, 'full', 'program-header'):
         raise ValueError('task_eval.prompt_rendering must be full or program-header')
     spec.setdefault('prompt_rendering', 'full')
-    if spec.setdefault('runtime_failure_policy', 'stop') not in ('stop', 'diagnostic-partial'):
-        raise ValueError('task_eval.runtime_failure_policy must be stop or diagnostic-partial')
+    if spec.setdefault('runtime_failure_policy', 'stop') not in ('stop', 'diagnostic-partial', 'report'):
+        raise ValueError('task_eval.runtime_failure_policy must be stop, diagnostic-partial or report')
     temperature = spec.setdefault('temperature', 0)
     if isinstance(temperature, bool) or not isinstance(temperature, (int, float)) or not 0 <= temperature <= 2:
         raise ValueError('task_eval.temperature must be a number in [0, 2]')
@@ -321,17 +324,18 @@ class TaskEval:
                    'noise_successes': noise,
                    'previous_step': previous.get('step') if previous else None,
                    'previous_successes': previous.get('task_successes') if previous else None,
-                   'regressed': bool(previous) and score['task_successes'] < previous['task_successes'] - noise,
+                   'regressed': eligible and bool(previous) and score['task_successes'] < previous['task_successes'] - noise,
                    'code_commit': _git_head(),
                    'seconds': time.time() - started, 'run': str(run)}
+        if not eligible:
+            summary.update(observed_task_successes=score['task_successes'],
+                           observed_regressed=bool(previous) and score['task_successes'] < previous['task_successes'] - noise,
+                           task_successes=None, task_success_rate=None, model_outcome='unscored')
         if getattr(self,'evaluation_provenance',None):
             from .native_async import verify_environment
             summary['evaluation_provenance']=verify_environment(self.evaluation_provenance)
             summary['historical']=True
             summary['qualifies_current_weights']=False
-            if not eligible:
-                summary.update(observed_task_successes=score['task_successes'],
-                    task_successes=None,task_success_rate=None,model_outcome='unscored')
         (run / 'task-score.json').write_text(json.dumps({**summary, 'cases_detail': score['cases']}, indent=1) + '\n')
         with (self.out / 'task-eval.jsonl').open('a') as handle:
             handle.write(json.dumps(summary) + '\n')
@@ -388,12 +392,13 @@ class TaskEval:
     def cadence(self, step: int, *, final=False) -> dict:
         """One in-run evaluation for the training loop: the summary of ``run``. An ineligible evaluation or an
         exception from the collector or serving stack is recorded and returned as an ineligible summary, so the next
-        cadence evaluates again; ``max_consecutive_failures`` of them in a row raise and stop the run."""
+        cadence evaluates again. The explicit report policy keeps routine failures as unscored monitoring;
+        mandatory final checks and other policies retain the consecutive-failure bound."""
         started = time.time()
         try:
             summary = self.run(step)
         except Exception as error:  # noqa: BLE001 - any eval infrastructure failure is recorded, then counted
-            summary = {'schema': SCHEMA, 'step': step, 'task_successes': 0, 'cases': len(self.rows),
+            summary = {'schema': SCHEMA, 'step': step, 'task_successes': None, 'task_success_rate': None, 'model_outcome': 'unscored', 'cases': len(self.rows),
                        'outcome_counts': None, 'eligible': False, 'error': f'{type(error).__name__}: {error}',
                        'packet_sha256': self.spec['packet']['sha256'], 'case_indices': self.spec['cases'],
                        'code_commit': _git_head(), 'seconds': time.time() - started,
@@ -407,10 +412,10 @@ class TaskEval:
                           'max_consecutive_failures': self.spec['max_consecutive_failures'],
                           'outcome_counts': summary.get('outcome_counts'), 'error': summary.get('error'),
                           'run': summary.get('run')}), flush=True)
-        if not final and partial_runtime_diagnostic(summary, self.spec):
+        if not final and (self.spec.get('runtime_failure_policy') == 'report' or partial_runtime_diagnostic(summary, self.spec)):
             print(json.dumps({'event': 'task_eval_runtime_degraded', 'step': step,
                               'consecutive_failures': failures, 'eligible': False,
-                              'policy': 'diagnostic-partial', 'qualification': 'unchanged; incomplete evaluation'}),
+                              'policy': self.spec.get('runtime_failure_policy', 'stop'), 'qualification': 'unchanged; incomplete evaluation'}),
                   flush=True)
             return summary
         if failures >= self.spec['max_consecutive_failures']:
@@ -452,7 +457,7 @@ class TaskEval:
         failures = self.consecutive_failures()
         print(json.dumps({'event': 'task_eval_submitted', 'step': step, 'request': str(request_dir),
                           'consecutive_failures': failures}), flush=True)
-        if failures >= self.spec['max_consecutive_failures']:
+        if failures >= self.spec['max_consecutive_failures'] and self.spec.get('runtime_failure_policy') != 'report':
             raise RuntimeError(f'task_eval failed {failures} times in a row (asynchronous results in '
                                f'{self.out / "task-eval.jsonl"})')
         return {'schema': SCHEMA, 'step': step, 'pending': True, 'eligible': None, 'task_successes': None,
@@ -509,7 +514,7 @@ class TaskEval:
     def record_failure(self, step: int, error: str, *, superseded: bool = False, skipped: bool = False) -> dict:
         """An ineligible row for an evaluation whose job could not produce one (counted by consecutive_failures),
         or, ``superseded``/``skipped``, a dropped request (not counted)."""
-        summary = {'superseded': superseded, 'skipped': skipped,'schema': SCHEMA, 'step': step, 'task_successes': 0, 'cases': len(self.rows),
+        summary = {'superseded': superseded, 'skipped': skipped,'schema': SCHEMA, 'step': step, 'task_successes': None, 'task_success_rate': None, 'model_outcome': 'unscored', 'cases': len(self.rows),
                    'outcome_counts': None, 'eligible': False, 'error': error, 'async': True,
                    'packet_sha256': self.spec['packet']['sha256'], 'case_indices': self.spec['cases'],
                    'code_commit': _git_head(), 'seconds': 0.0, 'run': str(self.root / f'step-{step:07d}')}
@@ -742,6 +747,8 @@ def task_quality_reasons(summary, spec):
     """Existing capability comparisons, separate from runtime score eligibility."""
     successes, reference = summary.get('task_successes'), spec.get('reference_successes')
     reasons = []
+    if successes is None:
+        return ['task evaluation unscored']
     if reference is None:
         reasons.append('base reference_successes unmeasured for this line')
     elif successes < reference:
@@ -770,7 +777,11 @@ def partial_runtime_diagnostic(summary, spec):
     known_counts = {**counts, 'infrastructure_error': 0, 'unresolved': 0}
     if not accounted({'cases_expected': known, 'outcome_counts': known_counts}):
         return False
-    return not task_quality_reasons(summary, spec)
+    diagnostic = summary
+    if summary.get('task_successes') is None:
+        diagnostic = {**summary, 'task_successes': summary.get('observed_task_successes'),
+                      'regressed': summary.get('observed_regressed', summary.get('regressed', False))}
+    return not task_quality_reasons(diagnostic, spec)
 
 
 def task_gate(summary: dict | None, spec: dict | None) -> dict | None:
