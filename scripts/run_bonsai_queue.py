@@ -146,11 +146,13 @@ class ProviderObservations:
                        'invalid_events': self.invalid_events}
 
 
-def read_json(path):
+def read_json(path, *, with_sha=False):
     try:
-        return json.loads(Path(path).read_text())
+        payload = Path(path).read_bytes()
+        value = json.loads(payload)
+        return (value,hashlib.sha256(payload).hexdigest()) if with_sha else value
     except (OSError, ValueError):
-        return None
+        return (None,None) if with_sha else None
 
 
 def canonical_json_sha256(value):
@@ -189,11 +191,13 @@ def output_accounting(entry, runtime=None):
     """Validate exact collector rows and batch manifest before a queue key can be called complete."""
     jobs = resolve_entry_jobs(entry, runtime)
     root = Path(entry['jobs'])
+    source_sha256 = sha256_file(entry['source'])
     states, result_ids, result_digests, saved_result_rows = [], [], [], []
     candidate_result_rows = []
     for job in jobs:
         resource_limit_reason = None
         terminal_error = None
+        unverified_error = None
         result_path = root / f"{job['key']}.result.json"
         partial_path = root / f"{job['key']}.partial.json"
         error_path = root / f"{job['index']:06d}.error.json"
@@ -211,17 +215,23 @@ def output_accounting(entry, runtime=None):
             if exact:
                 candidate_result_rows.append((job, row, result_path))
         else:
-            error = read_json(error_path)
+            error,error_sha256 = read_json(error_path,with_sha=True)
             if error and error.get('index') == job['index'] and error.get('program_id') == job['program_id'] and \
                     error.get('generation_hold') and error.get('generation_hold') == job.get('generation_hold'):
                 state = 'generation_held'
             elif error and error.get('index') == job['index'] and error.get('program_id') == job['program_id'] and error.get('generation_hold'):
                 state = 'invalid_generation_hold'
+            elif error and error.get('index') == job['index'] and error.get('program_id') == job['program_id'] and (
+                    error.get('program_ir_sha256') != job['digest'] or error.get('source_sha256') != source_sha256):
+                state = 'unverified_terminal_error'
+                unverified_error = {'path':str(error_path),'sha256':error_sha256,
+                    'reason':'terminal error lacks matching immutable record/source digests'}
             elif error and error.get('index') == job['index'] and error.get('program_id') == job['program_id']:
                 if error.get('code') == 'NATLANG_MODEL_REQUEST_BUDGET':
                     resource_limit_reason = 'model_request_budget'
                 terminal_error = {'error': str(error.get('error', '')), 'path': str(error_path),
-                                  'sha256': sha256_file(error_path)}
+                                  'sha256': error_sha256, 'program_ir_sha256':error['program_ir_sha256'],
+                                  'source_sha256':error['source_sha256'], 'record_binding_verified':False}
                 message = terminal_error['error'].lower()
                 state = 'transport_failed' if message.strip() == 'typeerror: terminated' or any(term in message for term in
                     ('transport', 'rate limit', 'timed out', 'timeout', 'socket', 'connection', 'fetch failed')) else 'failed'
@@ -235,7 +245,8 @@ def output_accounting(entry, runtime=None):
         states.append({'index': job['index'], 'program_id': job['program_id'],
                        'digest': job['digest'], 'state': state,
                        **({'resource_limit_reason': resource_limit_reason} if resource_limit_reason else {}),
-                       **({'terminal_error': terminal_error} if terminal_error else {})})
+                       **({'terminal_error': terminal_error} if terminal_error else {}),
+                       **({'unverified_error':unverified_error} if unverified_error else {})})
 
     embedded_records = [row.get('task', {}).get('program_ir') for _, row, _ in candidate_result_rows]
     try:
@@ -289,19 +300,22 @@ def output_accounting(entry, runtime=None):
              [state['index'] for state in states if state['state'] != 'result']),
             ('manifest_output_sha256_mismatch', manifest.get('output_sha256') == output_hash),
             ('manifest_source_path_mismatch', same_resolved_path(manifest.get('source'), entry['source'])),
-            ('manifest_source_sha256_mismatch', manifest.get('source_sha256') == sha256_file(entry['source'])),
+            ('manifest_source_sha256_mismatch', manifest.get('source_sha256') == source_sha256),
             ('output_parse_error', not output_error),
             ('manifest_output_rows_mismatch', output_row_hashes == saved_row_hashes and not output_row_errors),
         ]
         manifest_errors.extend(reason for reason, passed in checks if not passed)
     manifest_ok = not manifest_errors
+    for state in states:
+        if state.get('terminal_error'):
+            state['terminal_error']['record_binding_verified'] = manifest_ok
     all_accounted = all(state['state'] in {'result', 'generation_held'} for state in states)
     any_held = any(state['state'] == 'generation_held' for state in states)
     unresolved = [state['state'] for state in states if state['state'] not in {'result', 'generation_held'}]
     if not manifest_ok or not all_accounted:
         disposition = next((value for value in ('transport_failed', 'partial_without_terminal_result',
             'accounting_error', 'invalid_result_ir_digest', 'invalid_generation_hold', 'invalid_result', 'invalid_partial',
-            'failed', 'missing_terminal_result') if value in unresolved),
+            'unverified_terminal_error', 'failed', 'missing_terminal_result') if value in unresolved),
             'export_validation_failed')
         complete = False
     else:
@@ -328,7 +342,7 @@ def output_accounting(entry, runtime=None):
             'output_rows': len(output_rows), 'output_error': output_error, 'output_row_errors': output_row_errors,
             'saved_row_hashes': saved_row_hashes, 'output_row_hashes': output_row_hashes,
             'embedded_digest_error': embedded_digest_error,
-            'manifest_present': manifest is not None, 'manifest_valid': manifest_ok,
+            'manifest_present': manifest is not None, 'manifest_valid': manifest_ok, 'source_sha256':source_sha256,
             'manifest_errors': manifest_errors,
             'transport_retry_observed': transport_retry_observed}
 

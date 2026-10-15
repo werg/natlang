@@ -112,6 +112,8 @@ export type ProvenanceOptions = { modelId: string; rootSeed: number; systemPromp
   /** A separately identified model for rubric-backed `judged` oracles. */
   judgeModel?: { modelId: string; endpoint?: string; provider?: string; piOptions?: Record<string, unknown> } };
 export type CollectorConfig = ProvenanceOptions & { jobs: string; output: string; workers: number;
+  /** Immutable bytes parsed by the CLI; absent custom callers cannot attest source-bound errors. */
+  sourceSha256?: string;
   /** Optional low-sensitivity live state for diagnosing an idle, unresolved collection. */
   collectionState?: (snapshot: CollectionLivenessSnapshot) => void;
   /** Legacy whole-case retry count. New runs default to zero because this re-runs the authored row/effects. */
@@ -170,10 +172,10 @@ export function validateFocusedRecord(record: ProgramRecord): void {
     throw new Error('failure_seed must contain nonempty code and a supported failure kind');
 }
 
-export async function loadRecords(path: string, start = 0, limit = 10): Promise<IndexedRecord[]> {
+export async function loadRecords(path: string, start = 0, limit = 10, sourceText?: string): Promise<IndexedRecord[]> {
   if (!Number.isInteger(start) || start < 0 || !Number.isInteger(limit) || limit < 0)
     throw new RangeError('start must be nonnegative and limit must be nonnegative (zero means all)');
-  const lines = (await readFile(path, 'utf8')).split(/\r?\n/);
+  const lines = (sourceText ?? await readFile(path, 'utf8')).split(/\r?\n/);
   const records: IndexedRecord[] = [];
   for (let index = start; index < lines.length && (limit === 0 || records.length < limit); index++) {
     if (!lines[index]!.trim()) continue;
@@ -354,6 +356,13 @@ function reusedRow(found: { row: TeacherRow; path: string }, expected: Record<st
 export async function collectBatch(records: IndexedRecord[], config: CollectorConfig, runner: JobRunner,
   signal?: AbortSignal, admissionSignal?: AbortSignal): Promise<{ completed: number; missing: number[] }> {
   if (!Number.isInteger(config.workers) || config.workers < 1) throw new RangeError('workers must be positive');
+  const sourceSha256 = config.sourceSha256;
+  if (sourceSha256 !== undefined && !/^[0-9a-f]{64}$/.test(sourceSha256))
+    throw new Error('collector source SHA must bind the exact parsed immutable source bytes');
+  const errorBinding = (expected: Record<string, unknown>) => ({
+    program_ir_sha256: expected.program_ir_sha256,
+    ...(sourceSha256 ? { source_sha256: sourceSha256 } : {}),
+  });
   await mkdir(config.jobs, { recursive: true });
   if (config.caseEventsFile) await mkdir(dirname(config.caseEventsFile), { recursive: true });
   let caseEventFailure: unknown;
@@ -382,7 +391,7 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
     const hold = config.collectionRole === 'reference' ? undefined : generationHoldReason(item.record);
     if (hold) {
       await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
-        JSON.stringify({ index: item.index, program_id: item.record.id, generation_hold: hold, error: `generation held: ${hold}` }) + '\n');
+        JSON.stringify({ index: item.index, program_id: item.record.id, ...errorBinding(expected), generation_hold: hold, error: `generation held: ${hold}` }) + '\n');
       await caseEvent(item, 'case_held', { reason: hold });
       continue;
     }
@@ -470,7 +479,7 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
         if (signal?.aborted) return;
         if (error instanceof ProviderRequestTimeoutError || error instanceof ProviderActionCycleTimeoutError) {
           await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
-            JSON.stringify({ index: item.index, program_id: item.record.id, code: error.code,
+            JSON.stringify({ index: item.index, program_id: item.record.id, ...errorBinding(expected), code: error.code,
               error: `${error.name}: ${error.message}`, timeout: error.metadata }) + '\n');
           await caseEvent(item, 'case_finish', { status: 'error', code: error.code });
           break;
@@ -478,7 +487,7 @@ export async function collectBatch(records: IndexedRecord[], config: CollectorCo
         const limited = rateLimited(error);
         if (!transportFailure(error) || attempt >= (config.transportRetries ?? 0) * (limited ? 3 : 1)) {
           await writeAtomic(join(config.jobs, `${String(item.index).padStart(6, '0')}.error.json`),
-            JSON.stringify({ index: item.index, program_id: item.record.id,
+            JSON.stringify({ index: item.index, program_id: item.record.id, ...errorBinding(expected),
               ...(error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
                 ? { code: error.code } : {}),
               ...(providerFinishReason(error) ? { provider_finish_reason: providerFinishReason(error) } : {}),

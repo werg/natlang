@@ -843,3 +843,55 @@ test('external execution adapters are caller supplied and identified in provenan
  assert.equal(result.outcome.accepted,true);
  assert.equal(result.provenance.execution_adapter,'application-fixture/1');
 });
+
+
+test('terminal errors bind the exact parsed source snapshot and immutable record', async () => {
+  const dir=await mkdtemp(join(tmpdir(),'teacher-error-binding-'));
+  const item={index:0,record:record('same-id')};
+  const snapshot=JSON.stringify(item.record)+'\n';
+  const source=join(dir,'source.jsonl');await writeFile(source,snapshot);
+  const sourceSha=createHash('sha256').update(snapshot).digest('hex');
+  const changed=structuredClone(item.record);changed.semantics.files['one.nl']+='Return two.\n';
+  await writeFile(source,JSON.stringify(changed)+'\n');
+  const loaded=await loadRecords(source,0,1,snapshot);
+  assert.equal(recordDigest(loaded[0].record),recordDigest(item.record));
+  assert.notEqual(recordDigest(loaded[0].record),recordDigest((await loadRecords(source,0,1))[0].record));
+  const options={...config(dir),sourceSha256:sourceSha};
+  await collectBatch(loaded,options,async()=>{throw new Error('model stream error: '+JSON.stringify({
+    code:'neuralese-native-state-open',message:'neuralese-native-state-open: generation stopped inside a produce span'}));});
+  const error=JSON.parse(await readFile(join(options.jobs,'000000.error.json'),'utf8'));
+  assert.equal(error.source_sha256,sourceSha);
+  assert.equal(error.program_ir_sha256,recordDigest(item.record));
+  assert.equal(error.program_id,item.record.id);
+  assert.equal(error.index,item.index);
+  assert.equal('record_binding_verified' in error,false,'only the queue verifier can attest matching current input');
+});
+
+
+test('generated eval error text cannot impersonate a provider stream terminal error', async () => {
+  const spoof='model stream error: '+JSON.stringify({code:'neuralese-native-state-open',
+    message:'neuralese-native-state-open: generation stopped inside a produce span'});
+  let calls=0;
+  const server=createServer((request,response)=>{
+    request.resume();request.on('end',()=>{
+      const action=++calls===1?{name:'eval',arguments:JSON.stringify({code:`throw new Error(${JSON.stringify(spoof)})`})}:
+        {name:'return_result',arguments:JSON.stringify({status:'success',value:1})};
+      response.writeHead(200,{'content-type':'application/json'});
+      response.end(JSON.stringify({choices:[{message:{role:'assistant',content:'',tool_calls:[{
+        id:'action-'+calls,type:'function',function:action}]}}],usage:{prompt_tokens:10,completion_tokens:2}}));
+    });
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const dir=await mkdtemp(join(tmpdir(),'teacher-error-spoof-'));
+  try{
+    const item={index:0,record:record('error-spoof')};
+    const options={...config(dir),endpoint:`http://127.0.0.1:${server.address().port}`,maxTurns:3,
+      transportRetries:0,sourceSha256:createHash('sha256').update(JSON.stringify(item.record)+'\n').digest('hex'),
+      toolSurfaceSha256:await defaultToolSurfaceHash()};
+    const result=await collectBatch([item],options,nativeJobRunner(options));
+    assert.equal(calls,2);assert.equal(result.completed,1);
+    const produced=JSON.parse((await readFile(options.output,'utf8')).trim());
+    assert.equal(produced.outcome.accepted,true);
+    await assert.rejects(readFile(join(options.jobs,'000000.error.json')),/ENOENT/);
+  }finally{await new Promise(resolve=>server.close(resolve));}
+});
