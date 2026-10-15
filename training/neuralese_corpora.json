@@ -107167,6 +107167,49 @@
         "edges_sha256": "26053ffead5b96d640fce4dcbd50a1cdaee781bf8702dbee0b3d35bffe6c7226",
         "current_source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593"
       }
+    },
+    {
+      "id": "native-state-rest27-ordinary-tail-20261015-v7",
+      "owner": "dgx",
+      "path": "runs/native-state-rest27-ordinary-tail-20261015-v7",
+      "include": [
+        "tail-receipt.json",
+        "validation-proof.json",
+        "lfm25/train-sources.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "mellum21/train-sources.json",
+        "mellum21/train/native-graphs.jsonl.zst"
+      ],
+      "source_class": "source-bound-novel-ordinary-training-graph-tail-with-append-prefix-deduplication",
+      "split": "Train only. This tail contains novel REST27 source rows after exact graph/content deduplication against the current FULL, Qwen v1/v2, Qwen v3, REST572 and corrected pair37 inputs.",
+      "training_admission": true,
+      "training_admission_reason": "Ordinary whole-trajectory outputs from admitted REST27, with exact source and dedupe input hashes in tail-receipt.json. Ledgered validation proves schema/split, row counts, unique graph/source IDs, and zero intersection with all explicit ordinary source exclusions. Exact revision graph-ID rebases retain source row IDs and source text SHAs. No held examples in this train-only addition.",
+      "admission": "125,643 LFM and 125,644 Mellum train graphs; 4,305 duplicate or previously consumed source rows omitted per model; 1,109 graph-ID revisions deterministically rebased per model.",
+      "derived_from": [
+        "native-state-rest27-ordinary-graphs-20261015-v1",
+        "native-state-full-graphs-20261015-v1",
+        "qwen-verified-positive-native-graphs-20261015-v1-v2",
+        "qwen-verified-positive-native-graphs-20261015-v3",
+        "neuralese-e2e-rest27-corrected-native-pairs-20261015-shard01"
+      ],
+      "license": "Inherited from the admitted REST27 source corpus; owner accepts all licenses.",
+      "renders": {
+        "train": {
+          "lfm25": {
+            "rows": 125643,
+            "sha256": "6594e091ed17e21cc6efe8a429ed9445dd22778508076a80c3828a280a8aa9f2"
+          },
+          "mellum21": {
+            "rows": 125644,
+            "sha256": "21b43285ca50b00c593a1cf9a650d57db5bcdd21d0c1b728d275a46bf8ac8730"
+          }
+        }
+      },
+      "source_bindings": {
+        "source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+        "tail_receipt_sha256": "a2ae9c397f186cc81df80f8496957ce3cfd541b535bfc07a2e67a9e63101207b",
+        "validation_proof_sha256": "766688d04da73668ae27b47ce0a31662b741a8de866de3288f0aa071c5f68fbb"
+      }
     }
   ],
   "coverage_backlog": [
