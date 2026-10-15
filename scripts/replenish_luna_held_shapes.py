@@ -453,23 +453,30 @@ def finalize_repair_cycle(cycle):
 
 
 def run_repair_cycle(campaigns):
-    latest = max(int(campaign.name.split('-s')[-1].split('-')[0]) for campaign in campaigns)
-    if latest < FIRST_REPAIR_SEED or (latest - FIRST_REPAIR_SEED) % REPAIR_EVERY_SEEDS:
-        return False
-    # First cycle uses s52018..s52025 after the live s52026 work closes;
-    # subsequent cycles use the previous eight complete campaigns.
-    cycle = prepare_repair_cycle(campaigns, latest)
-    if (cycle / 'empty-selection.json').exists():
-        return False
-    teacher = cycle / 'teacher'
-    manifest = json.loads((teacher / 'campaign-manifest.json').read_text())
-    for number in range(1, manifest['workers'] + 1):
-        worker = teacher / f'worker-{number:02d}'
-        if not (worker / 'journal.jsonl').exists() and not active(f'natlang-pop-luna-repair-s{latest}-w{number:02d}.service'):
-            launch_worker(teacher, latest, number, repair=True)
-    if not complete(teacher):
+    by_seed = {int(campaign.name.split('-s')[-1].split('-')[0]): campaign for campaign in campaigns}
+    # Overlapping source campaigns can be prepared before the last worker in
+    # the preceding eight finishes. Discover every closed boundary instead of
+    # testing only the newest directory name, or that repair window is lost.
+    for seed in range(FIRST_REPAIR_SEED, max(by_seed) + 1, REPAIR_EVERY_SEEDS):
+        recent = [by_seed.get(previous) for previous in range(seed - REPAIR_EVERY_SEEDS, seed)]
+        if any(campaign is None or not complete(campaign) for campaign in recent):
+            continue
+        cycle = REPAIR / f'luna-s{seed - REPAIR_EVERY_SEEDS}-s{seed - 1}-v1'
+        if (cycle / 'empty-selection.json').exists() or (cycle / 'review-candidates.json').exists():
+            continue
+        cycle = prepare_repair_cycle(campaigns, seed)
+        if (cycle / 'empty-selection.json').exists():
+            continue
+        teacher = cycle / 'teacher'
+        manifest = json.loads((teacher / 'campaign-manifest.json').read_text())
+        for number in range(1, manifest['workers'] + 1):
+            worker = teacher / f'worker-{number:02d}'
+            if not (worker / 'journal.jsonl').exists() and not active(f'natlang-pop-luna-repair-s{seed}-w{number:02d}.service'):
+                launch_worker(teacher, seed, number, repair=True)
+        if not complete(teacher):
+            return True
+        finalize_repair_cycle(cycle)
         return True
-    finalize_repair_cycle(cycle)
     return False
 
 
@@ -707,7 +714,7 @@ def main():
         if (len(pending_campaigns) >= 3 or active_luna_workers() >= WORKERS or
                 any(has_launchable_waiting_worker(campaign) for campaign in pending_campaigns)):
             return
-        if campaigns and not pending_campaigns and run_repair_cycle(campaigns):
+        if campaigns and run_repair_cycle(campaigns):
             return
         seed = START_SEED if not campaigns else max(int(p.name.split('-s')[-1].split('-')[0]) for p in campaigns) + 1
         campaign = BASE / f'provider-luna-held-shapes-s{seed}-v1'
