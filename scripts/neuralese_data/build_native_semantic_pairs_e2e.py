@@ -175,6 +175,19 @@ def _remaining_edges_by_chain(edges_by_chain, completed_edge_ids):
     return remaining
 
 
+def _remove_completed_edges(edges_by_chain, chain, completed_edge_ids):
+    """Advance a pair-only source frontier by the exact edges a worker handled."""
+    if chain not in edges_by_chain:
+        return
+    remaining = [edge for edge in edges_by_chain[chain]
+        if hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        not in completed_edge_ids]
+    if remaining:
+        edges_by_chain[chain] = remaining
+    else:
+        edges_by_chain.pop(chain)
+
+
 def _selected_edge_ids(edges_by_chain, split='all'):
     """Hash every source edge independently; never reuse a prior loop identity."""
     return {hashlib.sha256(json.dumps(edge, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
@@ -1075,10 +1088,13 @@ def main():
             raise ValueError('trajectory rows are not contiguous in their admitted source')
         first_chain_result = chain not in seen_chains
         seen_chains.add(chain)
-        if not pair_only:
+        processed_edge_ids = set(result.get('processed_edge_ids', []))
+        if pair_only:
+            _remove_completed_edges(edges_by_chain, chain, processed_edge_ids)
+        else:
             edges_by_chain.pop(chain, None)
-        current_chunk_edge_ids.update(result.get('processed_edge_ids', []))
-        completed_edge_ids.update(result.get('processed_edge_ids', []))
+        current_chunk_edge_ids.update(processed_edge_ids)
+        completed_edge_ids.update(processed_edge_ids)
         for name, count in result['totals'].items():
             totals[name] += count
         for split, by_model in result['graphs'].items():
