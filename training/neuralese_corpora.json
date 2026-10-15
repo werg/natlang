@@ -83102,6 +83102,145 @@
       "review_status": "Complete independent audit with source hash and item-level rationale",
       "required_conversion": "None for audit; approved rows curated separately",
       "notes": "Dataset5 M2 reports unauthorized payment without indicating payment card involvement, so card-status classification is ambiguous."
+    },
+    {
+      "id": "external-expansion-agentsynth-native-20261015-v1-render",
+      "owner": "dgx",
+      "path": "runs/external-expansion-agentsynth-render-20261015-v1",
+      "include": [
+        "receipt.json",
+        "parts.json",
+        "merge.json",
+        "*/*/text-data.jsonl",
+        "*/*/text-data.jsonl.zst",
+        "*/*/omissions.jsonl",
+        "parts/*/receipt.json",
+        "parts/*/*.jsonl",
+        "parts/*/*/*/omissions.jsonl",
+        "parts/*/*/*/omissions.jsonl.zst",
+        "parts/*/render-omissions/*/omissions.jsonl"
+      ],
+      "source_class": "rendered-natlang-native-teacher-turn-text",
+      "split": "per document, inherited from the source rows (validation/dev rendered as test); protected bgkit benchmark overlaps and explicit test reservations dropped; train documents sharing a source group with held text (4962 union, harness bench) dropped",
+      "admission": "renders of external-expansion-agentsynth-native-20261015-v1 in parts (scripts/neuralese_data/render_parts.py): program-header and whole-trajectory for every program, full only for the 5% warm-up sample (zstd); LFM2.5 and Mellum2.1 twins; no new example admission",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11: maximize data; renders of a training-admitted corpus",
+      "derived_from": [
+        "external-expansion-agentsynth-native-20261015-v1"
+      ],
+      "license": "facts from the source rows",
+      "renders": {
+        "full": {
+          "lfm25": {
+            "documents": 110,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 110,
+                "supervised_tokens": 9912,
+                "tokens": 673239,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 8876,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "fc0ac246abd2ee4120825aa22f6b065dfc9d0a13f1b2c5d27253bf470393a168",
+            "decoded_text_data_sha256": "0aa36fe6a264b3f7564af5b34a22cb71733df97afa36c4a6edaf73f844ef7077",
+            "decoded_text_data_bytes": 6387793
+          },
+          "mellum21": {
+            "documents": 110,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 110,
+                "supervised_tokens": 10485,
+                "tokens": 650817,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 8800,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "209288ed09214946234405e90856cb811d9624ec04c6cbd2b37144fe127ef83d",
+            "decoded_text_data_sha256": "e985919ad1e4fbbcf265bd45190a90ce17ac02fefbaf306a20723c3cec80e83e",
+            "decoded_text_data_bytes": 6083617
+          }
+        },
+        "program-header": {
+          "lfm25": {
+            "documents": 2186,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 2186,
+                "supervised_tokens": 201929,
+                "tokens": 3460054,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 2624,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "8e7dc1bcddd935f57cd58111f9b04cd85c3bf8a064e64f1568a1b0498d6cadb4",
+            "decoded_text_data_sha256": "17bb9f740d40cdc87819987e697800326039f33a6da7618bc2ccdce5c5e6b190",
+            "decoded_text_data_bytes": 32468826
+          },
+          "mellum21": {
+            "documents": 2186,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 0,
+                "documents": 2186,
+                "supervised_tokens": 210955,
+                "tokens": 2949318,
+                "tool_tokens": 0
+              }
+            },
+            "max_document_tokens": 2470,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "ba141e88421332613b543d35b8e4b3df2879826997db9c5f36ee0c8376cb1b2b",
+            "decoded_text_data_sha256": "4a5a85e8fab413ecd991b0d1df301a80d5d23c14ed98677a1be05da04e301eb3",
+            "decoded_text_data_bytes": 29336692
+          }
+        },
+        "whole-trajectory": {
+          "lfm25": {
+            "documents": 1093,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 365201,
+                "documents": 1093,
+                "opening_tokens": 154305,
+                "supervised_tokens": 210896,
+                "tokens": 1948563,
+                "tool_tokens": 1283635
+              }
+            },
+            "max_document_tokens": 2611,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "9b524177a219aa5ea768d79ce9ca9284e05cec9e74c6d4e55ee77cd5ae79ceda",
+            "decoded_text_data_sha256": "66af243d7a3b8b127abae91784bd4e4582483de187747a8b05a04da1aff73b47",
+            "decoded_text_data_bytes": 18437897
+          },
+          "mellum21": {
+            "documents": 1093,
+            "by_split": {
+              "train": {
+                "assistant_tokens": 417724,
+                "documents": 1093,
+                "opening_tokens": 171339,
+                "supervised_tokens": 246385,
+                "tokens": 1699679,
+                "tool_tokens": 978728
+              }
+            },
+            "max_document_tokens": 2476,
+            "text_data_file": "text-data.jsonl.zst",
+            "text_data_sha256": "11cd1385a565f75a96296af04c48d70620594669bc0c261cfd285b431e46a383",
+            "decoded_text_data_sha256": "f5f2a4c09a88485db218245f331c081410c4a82713711c3e4786ef8944731fa6",
+            "decoded_text_data_bytes": 16953645
+          }
+        }
+      }
     }
   ],
   "coverage_backlog": [
