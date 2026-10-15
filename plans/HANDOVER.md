@@ -1,5 +1,28 @@
 # Continuation guide — updated 2026-10-15
 
+## Storage consolidation, 2026-10-15
+
+The v13 teacher-turn source is now stored directly at
+`data/neuralese/corpora/native-sft-v13-r2` with its immutable corpus manifest;
+the old `runs/data-lineage-20261002` intermediates were retired. Its 111,301
+rows remain approved source data, but the direct training stage cannot read them
+until the registered rendering, language migration and split repair are done.
+The S2 mixed candidate snapshot was reduced to 25 verified source-episode,
+decision-case, label and improvement-step files (144 MB) at
+`data/neuralese/corpora/s2-usable-sources-20261015-v1`. The separate current
+`source-episode-pools-20261005` snapshot also verifies. No old candidate
+attempt had graded training admission, so their bulky queue traces were
+retired along with the superseded Pop run copy. The old
+`runs/lfm25-350m-broad-20261002` training run, render and
+checkpoint were retired; current production follows the QAD foundation and
+R11 data-integration pipeline. The retired recurring DGX development-data
+sync and completed initial bootstrap units were disabled and removed, so they
+cannot repopulate those
+paths. Pop root free space rose from about 32 GiB to about 74 GiB (a net gain
+of about 42 GiB while other workloads remained active). Historical paths and
+retention notes below describe their original state, not current storage
+locations.
+
 ## 19:24 CEST: protected Pop QAD warmup qualified
 
 The clean Pop QAD run `natlang-pop-qad-r8-clean-warmup-v1.service` completed

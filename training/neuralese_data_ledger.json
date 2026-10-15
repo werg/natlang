@@ -5263,14 +5263,14 @@
   {
    "id": "natlang:v13-corpus",
    "project": "natlang",
-   "location": "runs/lfm25-350m-broad-20261002",
+   "location": "data/neuralese/corpora/native-sft-v13-r2",
    "kind": "model-neutral-corpus",
    "bytes": null,
    "rows": null,
    "family": null,
    "disposition": "queued",
    "converter": "api-migration neuralese-language (ts-host/scripts/migrate-neuralese-language.mjs)",
-   "reason": "111,301 rows (105,869 train / 5,432 test); to be migrated through eager typing and explicit captures. Builder skeleton and inventory exist; rewriting waits on the S4 compiler passes.",
+   "reason": "111,301 rows (105,869 train / 5,432 test); approved source turns. Current direct training requires rendering, language migration, and source-split repair before consuming them.",
    "license": "LicenseRef-mixed"
   },
   {

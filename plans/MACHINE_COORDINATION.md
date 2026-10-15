@@ -273,10 +273,11 @@ new registry records concrete current outputs rather than replacing that ledger.
   instruction and compaction sites. Only 153 child-result writers/342 reads;
   1,693 missing producers and 476 unprinted values remain exact. We need richer
   recurrence examples and explicit current admission, not just more copies.
-- **S2:** generated crisp-skill, adversarial, optimization/semantic families and
-  paired search/repair evidence are retained under `runs/dgx-development-generated`.
-  Mixed candidates and quarantined attempts must be passed through the paired
-  improvement/transfer gates and converted to current neuralese records.
+- **S2:** reusable source episodes and decision cases are retained under
+  `data/neuralese/corpora/s2-usable-sources-20261015-v1` and the verified
+  `source-episode-pools-20261005` snapshot. The old candidate queues had no
+  graded training admission and were retired. Apply source-quality holds and
+  paired gates before converting sources to current neuralese records.
 - **Maple:** v13-r2 native SFT is a rendering of existing examples, not new source
   coverage. `maple-nested-20261005/mixed-v1.jsonl` is a separate broad-domain input
   and is registered independently. Expert slice benchmark files are model

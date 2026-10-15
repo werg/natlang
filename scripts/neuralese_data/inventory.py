@@ -350,9 +350,9 @@ MANUAL = [
      "(the hub cache holds only the SWE-smith README); openhands is covered by swe_compaction. Hermes (Apache-2.0), "
      "UltraChat and SWE-smith (MIT) need a download before conversion; cross-experience episodes handed to S2.", "LicenseRef-mixed"),
     # natlang
-    ("natlang:v13-corpus", "natlang", "runs/lfm25-350m-broad-20261002", "model-neutral-corpus", "queued", "api-migration neuralese-language (ts-host/scripts/migrate-neuralese-language.mjs)",
-     "111,301 rows (105,869 train / 5,432 test); to be migrated through eager typing and explicit captures. Builder skeleton "
-     "and inventory exist; rewriting waits on the S4 compiler passes.", "LicenseRef-mixed"),
+    ("natlang:v13-corpus", "natlang", "data/neuralese/corpora/native-sft-v13-r2", "model-neutral-corpus", "queued", "api-migration neuralese-language (ts-host/scripts/migrate-neuralese-language.mjs)",
+     "111,301 rows (105,869 train / 5,432 test); approved source turns. Current direct training requires rendering, "
+     "language migration, and source-split repair before consuming them.", "LicenseRef-mixed"),
     ("natlang:teacher-ir", "natlang", "data/teacher", "program-ir", "source", "collector",
      "natlang.program/2 IR sources; unchanged as IR, re-collected when runtime or prompts change.", "LicenseRef-mixed"),
     ("natlang:retired-python-sources", "natlang", "data/external", "raw-tasks", "queued", "natlang.retired_sources",

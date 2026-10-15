@@ -992,19 +992,6 @@
       "training_admission_reason": "audit 2026-10-11 (DATA_INVENTORY_20261011.md): duplicate render of native-sft-v13-r2 for the retired Maple tokenizer; the source is admitted instead"
     },
     {
-      "id": "s2-generated-20261004",
-      "owner": "dgx",
-      "path": "data/neuralese/corpora/s2-generated-20261004",
-      "include": [
-        "**/*.jsonl",
-        "**/*.json",
-        "**/*.md"
-      ],
-      "admission": "superseded-artifact-selection-not-default",
-      "retired": true,
-      "superseded_by": "s2-generated-20261004-v2"
-    },
-    {
       "id": "s2-sample-20261003",
       "owner": "dgx",
       "path": "data/neuralese/corpora/s2-sample-20261003",
@@ -1064,43 +1051,17 @@
       ]
     },
     {
-      "id": "s2-generated-20261004-v2",
-      "owner": "dgx",
-      "path": "data/neuralese/corpora/s2-generated-20261004-v2",
-      "admission": "mixed-candidates-and-quarantined-attempts-use-paired-gates",
+      "id": "s2-usable-sources-20261015-v1",
+      "owner": "pop",
+      "path": "data/neuralese/corpora/s2-usable-sources-20261015-v1",
+      "admission": "source-episodes-and-decision-cases-require-quality-gates",
       "include": [
-        "**/*.jsonl",
-        "**/*.json",
-        "**/*.md",
-        "**/*.nl",
-        "**/*.ts",
-        "**/*.js",
-        "**/*.mjs",
-        "**/*.txt",
-        "**/*.csv",
-        "**/*.svg",
-        "**/*.html",
-        "**/*.css",
-        "**/*.nz",
-        "**/*.pt"
+        "**/*.jsonl"
       ],
-      "exclude_dirs": [
-        "node_modules",
-        ".git",
-        ".venv",
-        "__pycache__",
-        "toolchain"
-      ],
-      "exclude_dir_prefixes": [
-        "runtime-",
-        "pop-runtime-"
-      ],
-      "exclusion_reason": "Pinned runtime/dependency build caches are preserved in existing run archives on both hosts and through source commits; this snapshot selects case data, definitions, skill/tensor payloads, output/admission/rejection evidence, not duplicate build trees.",
-      "supersedes": "s2-generated-20261004",
-      "training_admission": true,
-      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
-      "review_status": "accepted attempts and graded decision cases only; quarantined/failed attempts excluded (concrete defect)",
-      "required_conversion": "select accepted; convert to teacher turns or port records; render",
+      "training_admission": false,
+      "training_admission_reason": "Selected source tasks, decision cases, teacher labels and improvement records are reusable inputs, but are not model-ready examples. Apply source-quality holds, paired outcome gates, split closure and current rendering before admission.",
+      "review_status": "The mixed v2 snapshot contained ungraded and failed candidate attempts; only source episodes, decision cases, labels and small improvement-step evidence were retained. No queue result was promoted to training.",
+      "required_conversion": "filter decision cases by decision_source_quality_holds.json; select verified labels and outcomes; convert accepted examples to teacher turns or port records; render for the current direct stage",
       "consumable_by_direct_stage": false
     },
     {
@@ -1210,7 +1171,7 @@
         "**/*.mjs",
         "**/*.txt"
       ],
-      "note": "Latest version of each S2 source-episode pool (contractnli v4-r3, scifact source v6 and episodes v2, kernel source, efficiency, code golf, crossword, CSP, timeseries, research landscape, selection v3-r2, optimization expanded, slate v3). Earlier versions in the run archives are superseded. Some feed s2-generated-20261004-v2 queues; the rest were never queued."
+      "note": "Latest version of each S2 source-episode pool (contractnli v4-r3, scifact source v6 and episodes v2, kernel source, efficiency, code golf, crossword, CSP, timeseries, research landscape, selection v3-r2, optimization expanded, slate v3). Earlier source versions and the ungraded candidate queues were retired; selected reusable source episodes and decision cases are in s2-usable-sources-20261015-v1."
     },
     {
       "id": "translation-sources-20261004",
@@ -23745,21 +23706,6 @@
       "notes": "FinalactualLuna19casequalityaudit sourcebindings/choiceerrors/keysets/capture/actions allheld separatefromreference810turns."
     },
     {
-      "id": "pop-closed-builder-exact-dedup-evidence-20261010-v1",
-      "owner": "pop",
-      "path": "runs/data-lineage-20261002/storage-review-readonly-v1",
-      "include": [
-        "dedup-proposal.json",
-        "dedup-execution-v1.jsonl",
-        "dedup-execution-v1.jsonl.summary.json"
-      ],
-      "split": "evidence-only",
-      "source_class": "storage-maintenance-provenance",
-      "training_admission": false,
-      "admission": "maintenance-evidence-only",
-      "notes": "11byteidenticalV11/V12closedbuilderpairs SHAverified replacedbyreadonlyhardlinks preservingbothpaths;20760555520physicalbytes reclaimed. Uniqueoutputs/manifest/logs retained. Sourcecachedeletionnotauthorizedbythisrecord."
-    },
-    {
       "id": "free-provider-luna-v39-reviewed-inputs-held-20261010-v1",
       "owner": "pop",
       "path": "runs/free-provider-generation-20261009-v1/provider-luna-choice-folder-v39-fortyeight-runtimev12-v1",
@@ -23915,19 +23861,6 @@
       "training_admission": false,
       "admission": "held-runtime-invocation-trace-and-quality-review-required",
       "notes": "V5childintegrityflagwaswronghashencodingcomparison.7/7childdeclaredsource_case_row_sha256 equalexactrawJSONLrowbytesexcludingLF(documentedproducercontract). Exactparentfile/ID/context/resultpinsverified17refs; no runtimeparent-childinvocationproof/admission."
-    },
-    {
-      "id": "pop-v12-teacher-distinct-payload-correction-held-20261010-v1",
-      "owner": "pop",
-      "path": "runs/data-lineage-20261002/storage-review-readonly-v1",
-      "include": [
-        "v12-teacher-correction.json"
-      ],
-      "split": "evidence-only",
-      "source_class": "storage-review-correction",
-      "training_admission": false,
-      "admission": "evidence-only",
-      "notes": "V12teacheractualc09424fd...8445878237B differsV13r2registered a55d1c9c...8445872885B. Sameinputs/differentbuilderoutputs notproofduplicate. Originalreviewwrongcitecorrected; uniqueV12retained."
     },
     {
       "id": "pop-storage-cleanup-completed-evidence-20261010-v1",
@@ -35788,10 +35721,10 @@
           "conversion": "render as natlang calls (D16; port_record_calls.sh in progress by another agent, S3 subset first); apply the JeFF reservations (D3) and provenance pins (D4)"
         },
         {
-          "dataset": "s2-generated-20261004-v2",
+          "dataset": "s2-usable-sources-20261015-v1",
           "status": "not integrated",
-          "reason": "149 attempts, 1 positive; the 58,500 decision cases are a generation source (they feed Pop's choice/annotation curricula, e.g. v64/v73 dc-* ids)",
-          "conversion": "D11 (Pop): keep accepted and grader-passed only, convert to teacher turns; 7,624 heldout cases stay out"
+          "reason": "The old candidate attempts had no graded training admission; retained source episodes and decision cases feed source-reviewed generation and choice/annotation curricula.",
+          "conversion": "Apply decision-source holds and source-group splits, select verified labels and outcomes, then render current teacher turns; heldout cases stay out"
         },
         {
           "dataset": "nebius-swe-rebench-openhands-trajectories-20261009-v1 (32,161 resolved)",
@@ -36581,10 +36514,10 @@
           "conversion": "render as natlang calls (D16; port_record_calls.sh in progress by another agent, S3 subset first); apply the JeFF reservations (D3) and provenance pins (D4)"
         },
         {
-          "dataset": "s2-generated-20261004-v2",
+          "dataset": "s2-usable-sources-20261015-v1",
           "status": "not integrated",
-          "reason": "149 attempts, 1 positive; the 58,500 decision cases are a generation source (they feed Pop's choice/annotation curricula, e.g. v64/v73 dc-* ids)",
-          "conversion": "D11 (Pop): keep accepted and grader-passed only, convert to teacher turns; 7,624 heldout cases stay out"
+          "reason": "The old candidate attempts had no graded training admission; retained source episodes and decision cases feed source-reviewed generation and choice/annotation curricula.",
+          "conversion": "Apply decision-source holds and source-group splits, select verified labels and outcomes, then render current teacher turns; heldout cases stay out"
         },
         {
           "dataset": "nebius-swe-rebench-openhands-trajectories-20261009-v1 (32,161 resolved)",

@@ -20,7 +20,7 @@
     "note": "Previous immutable75hold snapshot retained in published root-review-v16 artifacts."
   },
   "source": {
-    "path": "runs/dgx-development-generated/decision-data-20261004/decision-v1/decision-cases.jsonl",
+    "path": "data/neuralese/corpora/s2-usable-sources-20261015-v1/decision-data-20261004/decision-v1/decision-cases.jsonl",
     "sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097"
   },
   "semantic_review": {

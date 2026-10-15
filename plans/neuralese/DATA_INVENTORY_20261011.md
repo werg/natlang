@@ -3,12 +3,22 @@
 Audit by DGX. Machine-readable twin: `DATA_INVENTORY_20261011.json`, built by
 `scripts/neuralese_data/build_data_inventory.py` from the registry, the manifests and the curated table
 `DATA_INVENTORY_20261011.curated.json`. Owner rules applied:
+
 - Maximize data. Admit unless there is a concrete defect; "pending review" is recorded as a review status.
 - All licences are fine.
 - Breadth comes from natlang domains.
 - Training data covers whole trajectories.
 - The generic system prompt is dropped after a warm-up; program-specific content always stays.
 - Pop repairs the defect sets in section D.
+
+**Retention update, 2026-10-15:** The S2 mixed candidate snapshot named
+`s2-generated-20261004-v2` in this historical inventory has been retired on
+Pop. No queue attempt from it had graded training admission. The verified
+`s2-usable-sources-20261015-v1` snapshot retains 25 source, decision and
+improvement files (144 MB), and `source-episode-pools-20261005` retains the
+current source pools. Neither snapshot is directly consumable by the current
+training stage; the current registry records the required quality gates and
+conversion.
 
 ## Reading inventory totals
 

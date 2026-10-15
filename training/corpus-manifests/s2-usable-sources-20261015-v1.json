@@ -1,0 +1,159 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "s2-usable-sources-20261015-v1",
+  "owner": "pop",
+  "path": "data/neuralese/corpora/s2-usable-sources-20261015-v1",
+  "files": [
+    {
+      "path": "adversarial-self-play-20261004/input-v1/adversarial-episodes.jsonl",
+      "bytes": 124785,
+      "sha256": "ce7dda59c0328f7b65554e909719377f58255e113097054a245effb390862002",
+      "lines": 11
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/bird-v2/sql-episodes.jsonl",
+      "bytes": 7014686,
+      "sha256": "f6f6e8b081f8cbadf32e3ad89196754c3cafd8315b5d9648dc19ef2290864bf4",
+      "lines": 156
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/code-v1/code-episodes.jsonl",
+      "bytes": 5553909,
+      "sha256": "b609292938b96a78d1f409177fdb3d7e9b738942b0cab7abdcfe6145ca594beb",
+      "lines": 200
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/graded-pilot-v1-input/episodes.jsonl",
+      "bytes": 678521,
+      "sha256": "2044552f9e42dd3c44e81f8db602578f3bbb7b79c4ce82412c027ff88a3ed6a8",
+      "lines": 20
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/graded-v3/hotpot-answer-episodes.jsonl",
+      "bytes": 4486043,
+      "sha256": "349fff45b9658077732b02d32210b34bf5f136b9e34fd47f1c9c6cf2d42f4ea9",
+      "lines": 60
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/graded-v3/hotpot-compaction-episodes.jsonl",
+      "bytes": 5564475,
+      "sha256": "1a6c6c40160eb687a7e009ed436953f936bbcaded88dd378bf8be4fe13486509",
+      "lines": 60
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/graded-v3/hotpot-support-episodes.jsonl",
+      "bytes": 4501863,
+      "sha256": "a3ade9e3e155d420cccf0ce7c95f7468d2767618dd7e869f5940c2640cdbfcab",
+      "lines": 60
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/graded-v3/knights-episodes.jsonl",
+      "bytes": 789184,
+      "sha256": "50421f38c6ccdd08912977ff31149da90c6e8ad0212872245dab86d53371c272",
+      "lines": 70
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/graded-v3/xlam-episodes.jsonl",
+      "bytes": 992185,
+      "sha256": "946336dabfa6b374a94fab3d1247d6cdf2001f5d83c1f39b3e2042297f7cf2f9",
+      "lines": 50
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/graded-v4/worldtree-episodes.jsonl",
+      "bytes": 334339,
+      "sha256": "d57bc84877c2c804362cee47367f533df24fb73dd198f55de17e6bcb2d940596",
+      "lines": 50
+    },
+    {
+      "path": "crisp-skill-self-improvement-20261004/sql-v1/sql-episodes.jsonl",
+      "bytes": 4428332,
+      "sha256": "250e5b85fd9dafda497573e4749fe288460dff75ac9ac2820d8c14b4e6bf51c2",
+      "lines": 242
+    },
+    {
+      "path": "decision-data-20261004/decision-v1/decision-cases.jsonl",
+      "bytes": 54864414,
+      "sha256": "4fea381b9f21aab86d73342fc4213d7956b9dc6bf8d21c6839dbef7bb8686097",
+      "lines": 58500
+    },
+    {
+      "path": "decision-data-20261004/decision-v1/decision-episodes.jsonl",
+      "bytes": 9225937,
+      "sha256": "b9a0e07653f7a2516112ae12c60d0647a50151227b457fc5242ac6e4df40bd0d",
+      "lines": 624
+    },
+    {
+      "path": "decision-data-20261004/labels-decider-2B-v19.jsonl",
+      "bytes": 33371555,
+      "sha256": "25e6f5a5ff476b635ffa6232ede53848d3299ec4c0cfdcef32a8aaed43052c09",
+      "lines": 58500
+    },
+    {
+      "path": "decision-data-20261004/memetic-decision-v1/improvement-steps.jsonl",
+      "bytes": 78944,
+      "sha256": "352f42e35fd95c7ad99f52abfb16fe292184bd4af9fb70eb78aa831018e8a257",
+      "lines": 64
+    },
+    {
+      "path": "decision-data-20261004/method-arms-v2/improvement-steps.jsonl",
+      "bytes": 90331,
+      "sha256": "021a2f642d9673db163d9ef3697dd5060172db6ed8d9574d9b49ccac32656baa",
+      "lines": 70
+    },
+    {
+      "path": "improvement-steps-20261004/converted-v1.jsonl",
+      "bytes": 113496,
+      "sha256": "09710c56a421c6f9365e9a015cdb29ab344c352e0c73d263cd561b334b1d96f5",
+      "lines": 67
+    },
+    {
+      "path": "self-improvement-expansion-20261004/code-golf-v1/code-golf-episodes.jsonl",
+      "bytes": 1144454,
+      "sha256": "8c52c1c23cd036c0666146302c9910045f8d98d58c657b468a3cb2401e382c84",
+      "lines": 54
+    },
+    {
+      "path": "self-improvement-expansion-20261004/contractnli-pilot-v1/episodes.jsonl",
+      "bytes": 1699610,
+      "sha256": "8d204cb5e279652fc26f0430989eb0f93a0ac1842e648dd4b14a581d906b3e0b",
+      "lines": 17
+    },
+    {
+      "path": "self-improvement-expansion-20261004/contractnli-pilot-v1-recovery-transport-v3/episodes.jsonl",
+      "bytes": 1200141,
+      "sha256": "4da2ceb15b57e648d324a3000ee7c30bdd959e37aedbfdecd03e4133242f4859",
+      "lines": 12
+    },
+    {
+      "path": "self-improvement-expansion-20261004/pilot-v2/episodes.jsonl",
+      "bytes": 487521,
+      "sha256": "c75069504875a8107773edd5896fdb921e7a8ce35065a9e6f276bcdf346b64ee",
+      "lines": 32
+    },
+    {
+      "path": "self-improvement-expansion-20261004/semantic-headroom-v2/episodes.jsonl",
+      "bytes": 4262086,
+      "sha256": "59cefbd2fd349573ecc796e85279c5935de71ddd8714b52cdc0ad485f973420f",
+      "lines": 112
+    },
+    {
+      "path": "self-improvement-expansion-20261004/semantic-headroom-v2-recovery-transport-v3/episodes.jsonl",
+      "bytes": 2904570,
+      "sha256": "591c03e9ea1c2e185cb98c01007a9f01540d87b7fc095132ca73dec138704516",
+      "lines": 75
+    },
+    {
+      "path": "self-improvement-expansion-20261004/semantic-presentation-v1/episodes.jsonl",
+      "bytes": 106110,
+      "sha256": "55fe24a17ffd35b26a3b56eca19569e1530c8adc99ff9838a2b673615e0caaad",
+      "lines": 3
+    },
+    {
+      "path": "self-improvement-expansion-20261004/transport-recovery-v3/episodes.jsonl",
+      "bytes": 135078,
+      "sha256": "c8338000199d2952d1f43a2c5145b08656fbadc22aed8ed4c09815c3f47467fb",
+      "lines": 8
+    }
+  ],
+  "bytes": 144152569
+}

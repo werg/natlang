@@ -124,18 +124,18 @@
       },
       "init": {
         "method": "trained",
-        "source": "runs/dgx-development-generated/decision-data-20261004"
+        "source": "data/neuralese/corpora/s2-usable-sources-20261015-v1/decision-data-20261004"
       },
       "training": {
         "corpora": [],
         "trainer": "ts-host/scripts/skills/memetic-decision.mjs",
         "commit": "913c4a988601e9fbbed4cb5bde4282664ef1ebc4",
-        "run": "runs/dgx-development-generated/decision-data-20261004/memetic-decision-v1"
+        "run": "data/neuralese/corpora/s2-usable-sources-20261015-v1/decision-data-20261004/memetic-decision-v1"
       },
       "qualification": {
         "status": "unqualified",
         "evidence": [
-          "runs/dgx-development-generated/decision-data-20261004/memetic-decision-v1/improvement-steps.jsonl"
+          "data/neuralese/corpora/s2-usable-sources-20261015-v1/decision-data-20261004/memetic-decision-v1/improvement-steps.jsonl"
         ]
       },
       "origin": {
@@ -163,18 +163,18 @@
       },
       "init": {
         "method": "trained",
-        "source": "runs/dgx-development-generated/decision-data-20261004"
+        "source": "data/neuralese/corpora/s2-usable-sources-20261015-v1/decision-data-20261004"
       },
       "training": {
         "corpora": [],
         "trainer": "ts-host/scripts/skills/run-method-arms.mjs",
         "commit": "913c4a988601e9fbbed4cb5bde4282664ef1ebc4",
-        "run": "runs/dgx-development-generated/decision-data-20261004/method-arms-v2"
+        "run": "data/neuralese/corpora/s2-usable-sources-20261015-v1/decision-data-20261004/method-arms-v2"
       },
       "qualification": {
         "status": "unqualified",
         "evidence": [
-          "runs/dgx-development-generated/decision-data-20261004/method-arms-v2/improvement-steps.jsonl"
+          "data/neuralese/corpora/s2-usable-sources-20261015-v1/decision-data-20261004/method-arms-v2/improvement-steps.jsonl"
         ]
       },
       "origin": {
