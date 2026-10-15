@@ -115,12 +115,12 @@
         "prompt_bank.py": "f72333f6b98dc0add5dc66beffc31936be4cb9b5fddad70f091d91aa4985f0cc",
         "read.py": "45e3128aba58dc7eca8a26b7fe72397316df055bf508e0f168145a0971eb039f",
         "rl/__init__.py": "177133f12d780bddb16728b0e3a88cb83ecd11534b0f6c309eea1a8929bce5c5",
-        "rl/full_policy.py": "3ecc7ba0153aeb6303fedde06e3fcda9c33eef038453cb162dadc29ae11cb779",
+        "rl/full_policy.py": "e5e2fdeb93d8c9b3a80839dae0b80215d1a3d941a2b652a962696f81e308a463",
         "rl/graph_replay.py": "dbdd04e58c801e5d8d4b58fcd67c066bcb5ba0ef8183cf6a2b246b4daab021dd",
         "rl/grpo.py": "0e4662121b9515763839370179b20b4037df75d9721699302bd11573d1bcf470",
         "rl/memetic_tasks.py": "444ad48a4f9e888d10d8c9fe6270e2456f15edd26ca315d6f15e6d0030b3d66a",
         "rl/sampling.py": "9323bd8f32298b7c1eff442fafb8cd44451afc9fb7b619c321a56baa3102a10e",
-        "rl/stage.py": "e00cb00bae66147ffbaf07766fc8affcb6f8fe2f7e85bc0efde3ec37a623b7a8",
+        "rl/stage.py": "f32a1843008bd05195b25b1ece3f55cdb8560bfcecca6fdcf7958272c6f57c52",
         "rl/task_rollouts.py": "83f821fee4dd494a7b2573facd339960fdaa78b1feb19b6dc916945aa967eed3",
         "serve/__init__.py": "e436acd58826ba72cf1e2d3c0fac8df2a9bc5dd2b01b86a981dd63a894df3725",
         "serve/__main__.py": "6e999ff2473e7d4164d21045577177cc9da1eb1769789bac7194da2564f41bec",
@@ -152,7 +152,7 @@
         "train/delta_e2e.py": "3a5676e1ceb92b5d5ae9ff126be3a13ed2519ad21ffecdadcc116f29792942b5",
         "train/delta_projection.py": "cd97769f9d257d0ff8b660039c162d09822fc76de8cd11a01f1033c67f4caa91",
         "train/direct_export.py": "5ad70b7792ec2ef7d544159bed84de19bd407ec79ec89cdd1e65acb94171d370",
-        "train/direct_sft.py": "d4b00bb5558e27b53358ede1bb2f5b72cbfd30b15c70c5fedc17a1f8fcd7331f",
+        "train/direct_sft.py": "3874b8407f402a6fe5eef70ad6c8a2a4d4a4e3d6ca1d42a82222fa705960eeb9",
         "train/drift_monitor.py": "dc9875ffcde1b40003a3986d6226f5df409440693fecbc2cf06a399b8b139c5f",
         "train/e2e_acceptance.py": "1e380f8c5663f1537beb2d3a61ccc8a22bba9fc5f7e7e289aebccf25a0b2ae93",
         "train/e2e_records.py": "c0b22034181a7c985919d0718978ef1125ced8b347ca68c1321bb680766aeb3d",
@@ -422,7 +422,8 @@
     "stages": {
       "direct_warmup": {
         "parameters": {
-          "checkpoint_every": 600
+          "checkpoint_every": 600,
+          "checkpoint_layers": true
         }
       }
     }
