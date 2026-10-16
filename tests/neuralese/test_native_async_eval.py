@@ -82,6 +82,25 @@ def test_live_rebuild_does_not_mutate_sealed_async_runtime(tmp_path):
     assert (prepared/'prelude.js').read_text()=='{}'
 
 
+@pytest.mark.parametrize('consume_export',[False,True])
+def test_sealed_weights_have_no_mutable_source_alias(tmp_path,consume_export):
+    base,_,checkpoint,spec,export=fixture(tmp_path)
+    original=checkpoint.stat()
+    active=seal_request(checkpoint,identity=export['receipt']['identity'],step=7,spec=spec,
+        out=tmp_path/'eval',base=base,queue=tmp_path/'queue',device='cpu',consume_export=consume_export)
+    request=json.loads((Path(active['request'])/'request.json').read_text())
+    weights=Path(request['weights'])
+    assert weights.stat().st_nlink==1
+    if consume_export:
+        assert not checkpoint.exists() and weights.stat().st_ino==original.st_ino
+    else:
+        assert weights.stat().st_ino!=original.st_ino
+    # Reusing a former download name or rewriting an actual local rolling
+    # checkpoint cannot rewrite the sealed model's bytes.
+    checkpoint.write_bytes(b'new mutable checkpoint')
+    assert file_binding(weights)['sha256']==export['receipt']['identity']['sha256']
+
+
 def test_latest_export_coalesces_without_changing_running_request(tmp_path,monkeypatch):
     base,_,checkpoint,spec,export=fixture(tmp_path)
     export_path=tmp_path/'export-state.json';export_path.write_text(json.dumps(export))

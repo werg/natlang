@@ -49,7 +49,7 @@ def verify_request(request):
     return verify_environment(provenance)
 
 
-def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=None,device='cuda'):
+def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=None,device='cuda',consume_export=False):
     """Seal verified export bytes; keep a derived view's original parent separate."""
     from ..train.checkpoint_policy import CheckpointPolicy
     from ..model.native_model import CHECKPOINT_SCHEMA,base_inventory
@@ -73,6 +73,9 @@ def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=No
             raise ValueError('native inference export lacks its exact original full-parent provenance')
     if state.get('step')!=step:
         raise ValueError('native eval export step differs from actual saved checkpoint')
+    # Large training schedule dictionaries are not needed while copying runtime
+    # assets or scheduling the actor. Tensor data stays memory mapped.
+    del state
     actual_base=base_inventory(base)
     if actual_base!=config['base_inventory']:
         raise ValueError('native eval relocated base differs from actual pinned inventory')
@@ -85,8 +88,14 @@ def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=No
     request_dir.mkdir(parents=True,exist_ok=True)
     weights=request_dir/'weights.pt'
     if not weights.exists():
-        try:os.link(checkpoint,weights)
-        except OSError:
+        if consume_export:
+            import errno
+            try:os.replace(checkpoint,weights)
+            except OSError as error:
+                if error.errno!=errno.EXDEV:raise
+                from ..train.checkpoint_offload import verified_copy
+                verified_copy(checkpoint,weights)
+        else:
             from ..train.checkpoint_offload import verified_copy
             verified_copy(checkpoint,weights)
     if file_binding(weights)['sha256']!=identity['sha256']:
@@ -152,7 +161,8 @@ def poll_latest(export_state,*,out,spec,base,queue,fetch_command,local_checkpoin
             subprocess.run(argv,check=True,stdout=subprocess.DEVNULL)
             checkpoint=destination
         active=seal_request(checkpoint,identity=identity,step=current['last_verified_step'],
-            spec=spec,out=out,base=base,queue=queue,source_export=receipt,device=device)
+            spec=spec,out=out,base=base,queue=queue,source_export=receipt,device=device,
+            consume_export=not local_checkpoint)
         write_json_durable(state_path,{**prior,'active':active,'last_enqueued_at':time.time()})
         if not local_checkpoint:destination.unlink(missing_ok=True)  # sealed request now owns immutable bytes
         receipt_path.unlink(missing_ok=True)

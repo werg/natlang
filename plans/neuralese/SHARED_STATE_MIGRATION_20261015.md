@@ -49,24 +49,36 @@ through the projected-value implementation.
 ## Current status
 
 Raw native-state production training is deployed on BOTH sandboxes through
-shared `native_state_sft` jobs under `/work/native-production`. At11:11 UTC
-October16 Mellum was advancing at7663 on runtime4bda74b8c99a. LFM stopped after
-6654 when simultaneous CPU index materialization, a separate model qualifier
-and training exhausted host RAM. Its exact committed6620 parent is preserved;
-34 unsaved updates are not credited. Recovery is serialized with preparation
-and qualification rather than counting prelaunch free memory as a reservation.
-An earlier Mellum host OOM recovered its committed7000 parent; rejected-table
-buffering in D20 normalization was fixed in4ecd2a791. Native interface rows use
+shared `native_state_sft` jobs under `/work/native-production`. At16:01 UTC
+October16 LFM was advancing at7663 (GPU100%) and Mellum at10328 (GPU94%).
+Their original producer/consumer foundations had13,450 and12,101 graph visits
+respectively, out of26,312 each. These are live update counters, not a claim of
+whole-recipe completion. The latest independently PUT/GET verified full parents
+were LFM7500 and Mellum10000. Both runs recovered from earlier host-memory
+failures; preparation and qualification now preserve actual runtime headroom.
+Native interface rows use
 FP32 AdamW masters at.0003; LFM reasoning rows use.0003, while Mellum reasoning,
 backbone and adapter rates remain3e-6. These are current settings, not evidence
 of optimal rates or downstream task lift.
 
-The immutable6181 LFM parent records25,755 graph visits/916,597 active rows,
-including10,985/26,312 original foundation graphs. Mellum6813 records21,070
-visits/949,801 rows, including8,237/26,312 foundation graphs. Live updates after
-those parents are not included in these counts. Neither foundation is complete;
-no model is ready for shared-dialect training. Additional admitted sources are
-obligations, not earned exposure.
+Neither foundation is complete; no model is ready for shared-dialect training.
+Additional admitted sources are obligations, not earned exposure. Current
+resident generations and subsequent progress belong in the live coordination
+status and exact checkpoint/data receipts, rather than inferred from downloads.
+
+Whole-episode semantic RL is integrated in e517466a7, with historical optimized
+message provenance in14482bfe1. Independent root review passed46 CPU cases and
+19 actual CUDA/archive cases, including two-model/codec optimizer, RNG and
+exposure continuation. Real source/codec/consumer adjoints stay connected.
+Task correctness earns reward without requiring Neuralese; successful native
+flat-reward batches use positive whole-episode RFT (62c369df5). Raw rounds no
+longer require a shared VAE, and their existing provider bridge preserves exact
+full-checkpoint continuation (db53d2f95). Production bootstrap, ownership-safe
+SFT/RL interleave, full-size runtime/geometry qualification and actual cloud RL
+updates remain operational work; these component checks do not claim task lift
+or completed migration. Track their mechanisms in
+`shared-state/EARLY_RAW_RL_DECOMPOSITION_20261016.md` and
+`shared-state/NATIVE_OCCURRENCE_CODEC_RL_DECOMPOSITION_20261016.md`.
 
 Current-capacity D12/D16/D18 v2 admissions retain exact full rows and protected
 splits while making1,739 additional LFM training graphs fit the actual measured
@@ -177,7 +189,8 @@ training/inference/transport qualification remain required.
 
 Pop is closed; DGX supervises all remaining work. The dedicated generation
 sandbox `dadd0462-0175-470d-b1ee-4d52edfe110e` runs the stronger self-hosted
-Qwen3.8-Flash-Next NVFP4 teacher with PennyRoyal/SGLang on SM120. Mellum and
+Qwen3.8-Flash-Next NVFP4 teacher on SM120. Current batches bind the actual NVIDIA
+actor and serving runtime in their collection receipts. Mellum and
 LFM are students, not generation teachers. Qwen V6 and the disjoint Big2
 1,000-chain tranche are admitted; staging is not trained exposure. See the
 current `HANDOVER.md`, immutable corpus manifests and live coordination status

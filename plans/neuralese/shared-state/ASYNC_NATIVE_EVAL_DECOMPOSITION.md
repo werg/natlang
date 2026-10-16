@@ -43,3 +43,12 @@ a different evaluation or selection policy. Existing dispatch records retain
 their exact unit identity across dispatcher upgrades; never duplicate an active
 or queued evaluator because its naming convention changed. Legacy request names
 remain unchanged. Budget estimation and measured memory guards still apply.
+
+2026-10-16 snapshot ownership repair: arbitrary local rolling checkpoints are
+sealed through the existing verified independent-copy mechanism. Controlled
+incoming downloads transfer ownership by rename (verified copy across devices);
+no mutable hardlink aliases are created. Release unneeded loaded training
+schedule metadata before runtime sealing. The LFM dispatcher exceeded its old
+3 GiB cgroup during full-checkpoint ingestion; restart with an 8 GiB ledger claim
+and preserve its existing export, queue, request and lease state. Focused async
+evaluation tests: 20 passed, including mutation isolation and transfer ownership.
