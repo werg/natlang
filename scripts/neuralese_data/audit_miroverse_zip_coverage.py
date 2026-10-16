@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import io
 import json
 from pathlib import Path
 import sqlite3
@@ -33,12 +32,16 @@ def _identity(row):
     return None
 
 
-def _read_rows(stream, insert, side: str, key: str) -> int:
+def _read_rows(stream, insert, side: str, key: str, *, raw_digest=None) -> int:
     count = 0
     for ordinal, line in enumerate(stream):
+        if raw_digest is not None:
+            raw_digest.update(line)
         if not line.strip():
             continue
         try:
+            if isinstance(line, bytes):
+                line = line.decode('utf-8')
             row = json.loads(line)
         except (TypeError, json.JSONDecodeError) as error:
             raise ValueError(f'{side} {key} row {ordinal} is not JSON: {error}') from error
@@ -65,8 +68,9 @@ def audit(acquisition_receipt: Path, source_root: Path, output: Path, *, sqlite_
     if not source_items:
         raise ValueError('pinned acquisition receipt has no sibling JSONL SFT files')
 
+    relevant = {archive_rel: archive_bound, **source_items}
     verified = {}
-    for name, item in files.items():
+    for name, item in relevant.items():
         path = (source_root / name).resolve(strict=True)
         if not path.is_relative_to(source_root):
             raise ValueError(f'acquired path escapes source root: {name}')
@@ -98,17 +102,26 @@ def audit(acquisition_receipt: Path, source_root: Path, output: Path, *, sqlite_
             infos = [item for item in archive.infolist() if not item.is_dir()]
             archive_jsonl = [item for item in infos if item.filename.endswith('.jsonl')]
             basenames: dict[str, list[zipfile.ZipInfo]] = {}
+            member_hashes = {}
             for info in archive_jsonl:
                 basenames.setdefault(Path(info.filename).name, []).append(info)
-                with io.TextIOWrapper(archive.open(info, 'r'), encoding='utf-8', errors='strict', newline='') as stream:
-                    count = _read_rows(stream, lambda values, key=info.filename: insert(('zip', key, *values[2:])), 'zip', info.filename)
+                member_digest = hashlib.sha256()
+                with archive.open(info, 'r') as stream:
+                    count = _read_rows(stream,
+                        lambda values, key=info.filename: insert(('zip', key, *values[2:])),
+                        'zip', info.filename, raw_digest=member_digest)
                 if count == 0:
                     raise ValueError(f'empty JSONL archive member: {info.filename}')
+                # Store the exact uncompressed member hash even when no sibling
+                # JSONL exists; the archive-level digest alone cannot identify
+                # which member produced a later coverage decision.
+                member_hashes[id(info)] = member_digest.hexdigest()
             for info in archive_jsonl:
                 match = sources_by_basename.get(Path(info.filename).name, [])
                 if len(match) != 1 or len(basenames[Path(info.filename).name]) != 1:
                     unmatched_archive_members.append({'member': info.filename, 'reason': 'ambiguous-or-unmatched-basename',
-                        'source_candidates': match, 'archive_members_with_basename': [x.filename for x in basenames[Path(info.filename).name]]})
+                        'source_candidates': match, 'archive_members_with_basename': [x.filename for x in basenames[Path(info.filename).name]],
+                        'archive_member_sha256': member_hashes[id(info)]})
                     continue
                 source_name = match[0]
                 source_path = Path(verified[source_name]['path'])
@@ -137,14 +150,10 @@ def audit(acquisition_receipt: Path, source_root: Path, output: Path, *, sqlite_
                 row_sha = lambda side, key: canonical_json_sha256_hex(connection.execute(
                     'SELECT digest,COUNT(*) AS n FROM rows WHERE side=? AND file_key=? GROUP BY digest ORDER BY digest',
                     (side, key)).fetchall())
-                member_digest = hashlib.sha256()
-                with archive.open(info, 'r') as raw_member:
-                    while chunk := raw_member.read(1024 * 1024):
-                        member_digest.update(chunk)
                 pairs.append({'member': info.filename, 'source': source_name,
                     'archive_uncompressed_bytes': info.file_size, 'archive_compressed_bytes': info.compress_size,
                     'archive_member_crc32': f'{info.CRC:08x}',
-                    'archive_member_sha256': member_digest.hexdigest(),
+                    'archive_member_sha256': member_hashes[id(info)],
                     'source_sha256': verified[source_name]['sha256'],
                     'archive_rows': zip_count, 'source_rows': source_count,
                     'archive_row_multiset_sha256': row_sha('zip', info.filename),
@@ -162,8 +171,14 @@ def audit(acquisition_receipt: Path, source_root: Path, output: Path, *, sqlite_
         'pairs': pairs, 'unmatched_archive_members': unmatched_archive_members,
         'jsonl_sources_without_unique_archive_pair': source_not_in_archive,
         'all_paired_rows_exact': bool(pairs) and all(item.get('exact_row_multiset_match') is True for item in pairs),
+        'complete_jsonl_coverage': (bool(source_items) and not unmatched_archive_members and not source_not_in_archive
+                                    and len(pairs) == len(archive_jsonl)
+                                    and all(item.get('exact_row_multiset_match') is True for item in pairs)),
         'zip_non_jsonl_members': [{'path': item.filename, 'bytes': item.file_size, 'compressed_bytes': item.compress_size}
-                                  for item in infos if not item.is_dir() and not item.filename.endswith('.jsonl')],
+                                  for item in infos if not item.filename.endswith('.jsonl')],
+        'unhandled_archive_payloads': [{'path': item.filename, 'bytes': item.file_size}
+            for item in infos if not item.filename.endswith(('.md', '.txt', '.jsonl'))],
+        'all_archive_payloads_accounted_for': not any(not item.filename.endswith(('.md', '.txt', '.jsonl')) for item in infos),
     }
     write_json_durable(output, output_receipt)
     connection.close()
