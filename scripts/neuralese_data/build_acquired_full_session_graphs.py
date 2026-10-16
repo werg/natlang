@@ -46,6 +46,20 @@ def held_session_targets(value, held_sources):
     return sorted(identities & held_sources)
 
 
+def session_exclusion(value, protection, held_sources):
+    """Exact declared source eligibility shared by conversion and admission."""
+    trajectory = value['trajectory']
+    if not value.get('positive_candidate') or trajectory['outcome'].get('label') == 'failed':
+        return 'source-reported-non-positive'
+    if set(trajectory['split_groups']) & (protection['quality'] | protection['pending']):
+        return 'current-source-quality-or-pending-protection'
+    if held_session_targets(value, held_sources):
+        return 'current-decision-hold'
+    if not source_target_ids(value):
+        return 'source-session-without-assistant-target'
+    return None
+
+
 def runtime_bindings(root=None):
     root = Path(root or Path(__file__).resolve().parents[2])
     package = root / 'training' / 'neuralese' / 'natlang_neuralese'
@@ -418,15 +432,7 @@ def _convert(args, prepared):
 
     def process(value, omissions, writers, shard_counts):
         trajectory = value['trajectory']; identifier = trajectory['id']; groups = set(trajectory['split_groups'])
-        reason = None
-        if not value.get('positive_candidate') or trajectory['outcome'].get('label') == 'failed':
-            reason = 'source-reported-non-positive'
-        elif groups & (protection['quality'] | protection['pending']):
-            reason = 'current-source-quality-or-pending-protection'
-        elif held_session_targets(value, held_sources):
-            reason = 'current-decision-hold'
-        elif not source_target_ids(value):
-            reason = 'source-session-without-assistant-target'
+        reason = session_exclusion(value, protection, held_sources)
         if reason:
             omissions.write(json.dumps({'id': identifier, 'source_row': value['source_row'], 'reason': reason,
                 'original_target_ids': source_target_ids(value),
