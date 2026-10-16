@@ -38,17 +38,18 @@ def _release_cache(fd):
 
 
 class SavedFileTensor:
-    def __init__(self, store, path, tensor, size):
+    def __init__(self, store, path, tensor, size, span):
         self.store, self.path = store, path
         self.shape, self.dtype, self.device = tuple(tensor.shape), tensor.dtype, tensor.device
-        self.numel, self.size = tensor.numel(), size
+        self.stride = tuple(tensor.stride())
+        self.numel, self.size = span, size
         self.cleanup = weakref.finalize(self, _remove_tensor, path, store, size)
 
     def unpack(self):
         # A new device tensor owns its values independently of the scratch file.
         # Keep the holder/file for retain_graph and repeated higher derivatives.
         mapped = torch.from_file(str(self.path), shared=False, size=self.numel,
-                                 dtype=self.dtype).reshape(self.shape)
+                                 dtype=self.dtype)
         restored = mapped.to(device=self.device, copy=True, non_blocking=False)
         del mapped
         with self.path.open('rb') as stream:
@@ -56,7 +57,7 @@ class SavedFileTensor:
         with self.store.lock:
             self.store.counters['read_bytes'] += self.size
             self.store.counters['unpacks'] += 1
-        return restored
+        return restored.as_strided(self.shape, self.stride)
 
 
 class CheckpointFileStore:
@@ -97,17 +98,22 @@ class CheckpointFileStore:
             return tensor.detach()  # The checkpoint's empty sentinel owns no bytes.
         if tensor.layout != torch.strided:
             raise ValueError('file checkpoint inputs require dense strided tensors')
-        size = tensor.numel() * tensor.element_size()
+        # Preserve physical strides, including overlap/expansion, because native
+        # attention dispatch binds actual layouts. Rebase the offset as an
+        # ordinary device copy does; never copy the unused storage prefix.
+        span = 1 + sum((length - 1) * stride for length, stride in zip(tensor.shape, tensor.stride()))
+        size = span * tensor.element_size()
         fd, name = tempfile.mkstemp(prefix='tensor-', suffix='.bin', dir=self.path)
         path = Path(name)
         try:
             os.ftruncate(fd, size)
-            mapped = torch.from_file(name, shared=True, size=tensor.numel(),
-                                     dtype=tensor.dtype).reshape(tensor.shape)
+            mapped = torch.from_file(name, shared=True, size=span, dtype=tensor.dtype)
             # Copy logical values directly into file-backed host memory: no
             # accumulated anonymous CPU tensor or serialization storage alias.
-            mapped.copy_(tensor.detach(), non_blocking=False)
+            source = tensor.detach().as_strided((span,), (1,), storage_offset=tensor.storage_offset())
+            mapped.copy_(source, non_blocking=False)
             del mapped
+            del source
             os.fdatasync(fd)
             _release_cache(fd)
             with self.lock:
@@ -117,7 +123,7 @@ class CheckpointFileStore:
                                                       self.counters['live_bytes'])
                 self.counters['live_files'] += 1
                 self.counters['packs'] += 1
-            return SavedFileTensor(self, path, tensor, size)
+            return SavedFileTensor(self, path, tensor, size, span)
         except BaseException:
             path.unlink(missing_ok=True)
             raise

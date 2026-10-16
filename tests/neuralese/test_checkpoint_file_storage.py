@@ -241,3 +241,22 @@ def test_recipe_handoff_explicitly_tunes_storage_without_changing_the_stage(tmp_
     changes,before,after=direct_windowing_handoffs(old,new,tmp_path)
     assert changes['native']['checkpoint_input_offload_directory']==[None,str(tmp_path/'scratch')]
     assert _without_operational(before)==_without_operational(after)
+
+
+@pytest.mark.parametrize('layout',['transpose','offset_slice','expanded','overlap','channels_last'])
+@pytest.mark.parametrize('device',['cpu','cuda'])
+def test_kernel_relevant_strides_survive_file_storage_without_unused_prefix(tmp_path,layout,device):
+    if device=='cuda' and not torch.cuda.is_available():pytest.skip('CUDA unavailable')
+    base=torch.arange(120,dtype=torch.float32,device=device)
+    if layout=='transpose':tensor=base.reshape(12,10).T
+    elif layout=='offset_slice':tensor=base[17:91:3]
+    elif layout=='expanded':tensor=base[17:18].expand(7,9)
+    elif layout=='overlap':tensor=base.as_strided((6,7),(2,1),storage_offset=17)
+    else:tensor=base.reshape(2,3,4,5).to(memory_format=torch.channels_last)
+    store=CheckpointFileStore(tmp_path);saved=store.pack(tensor);restored=saved.unpack()
+    assert restored.stride()==tensor.stride()
+    assert restored.storage_offset()==0
+    torch.testing.assert_close(restored,tensor,atol=0,rtol=0)
+    span=1+sum((n-1)*s for n,s in zip(tensor.shape,tensor.stride()))
+    assert saved.path.stat().st_size==span*tensor.element_size()
+    if layout=='expanded':assert saved.path.stat().st_size==tensor.element_size()

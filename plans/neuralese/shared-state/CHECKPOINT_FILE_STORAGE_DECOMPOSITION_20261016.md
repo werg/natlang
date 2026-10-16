@@ -40,3 +40,13 @@ Actual cloud full-model/long-whole-graph capacity and throughput qualification
 and independent review remain open. No larger capacity certificate or production
 file-storage adoption is claimed. The standing full check covers the published
 implementation after the current snapshot completes.
+
+Independent data-agent review found that restoring contiguous values alone
+could change stride-sensitive native attention dispatch for external inputs.
+The implementation now copies the minimal original storage span and restores
+exact shape/strides, including zero-stride expansion and overlapping views.
+Offsets are rebased like an ordinary device copy; unused storage prefixes are
+not serialized. Counters reflect the copied span, including necessary gaps.
+The targeted69-test integration passed13.61s, including10 new CPU/CUDA layout
+regressions plus both-native gradient/update/RNG and continuation checks. No
+production capacity or throughput claim follows from these local checks.
