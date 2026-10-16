@@ -1,5 +1,14 @@
 # Native turn rendering with authenticated source pieces
 
+## Retired external label generation (2026-10-16)
+
+The owner's generation policy selects the stronger self-hosted Qwen teacher in
+the existing CoreWeave sandbox. The old Clef daily label-provider stage is
+retired: its `run` entry must fail before provider calls or writes. Historical
+registration and offline rendering remain available for existing usable data,
+with original provider provenance. The crisp entry guard enforces this existing
+policy; it introduces no alternative provider, allocation or model-facing text.
+
 ## Mechanical capacity continuation (2026-10-16)
 
 The supervisor decides whether a reviewed optimizer/telemetry repair preserves

@@ -1,26 +1,11 @@
 #!/usr/bin/env python3
-"""Daily Clef-flash labelling of the new source pools (DGX share of the shared Workers AI free allocation).
+"""Historical Clef corpus registration and offline rendering.
 
-Plumbing around the existing Clef pipeline (ts-host/scripts/inline-curriculum/clef-programs.mjs, clef-label.mjs,
-replay-demonstrations.mjs); the programs, their questions and the confidence gating live there. One batch per UTC day:
-
-  run [--day YYYYMMDD] [--budget N] [--count N]
-      1. skeletons for the day's seed over NEW_POOLS (CLINC150 skill routing, emotion wellbeing triage, CoEdIT edit
-         review, CUAD clause risk); train split only, by the shared content partition (source-split.mjs);
-      2. Clef-flash answers up to the day's budget minus what this batch already spent (resumable: answered items are
-         skipped, so an interrupted run continues);
-      3. assemble the confidence-gated cases, replay them into native teacher-training turns (no model calls);
-      4. write summary.json and registry-entry.json (the batch's registry entry, ready to merge);
-      5. queue the shared render (render_native_turn_corpus.sh, both tokenizers) as a low-priority ledger unit.
-      6. register the batch and every finished render of earlier batches (register_corpora.py: entries and manifests
-         committed and pushed from a private worktree off origin/main; no agent commits by hand). A render finishes
-         after the run, so its registration happens on the next timer run (06:10 or the next day's), or with
-  register [--day YYYYMMDD]
-      register that day's batch and every finished, unregistered render now.
-
-Budget: the free allocation (~1.22M Clef-flash input tokens/day, reset 00:00 UTC) is shared with Pop; the DGX share is
-800k/day (plans/neuralese/CLEF_DECISION_DISTILLATION.md, memory clef-quota-shared). Credentials: DGX's own wrangler
-login (clef-label refreshes it); never Pop's.
+External teacher generation was retired by the owner on 2026-10-15. The old
+``run`` entry fails before provider calls or file writes. ``register`` and
+``render(day)`` remain available for already-produced source data; they do not
+obtain new model labels. Continuous generation belongs to the self-hosted
+Qwen3.8-Flash-Next teacher on the existing CoreWeave generation sandbox.
 """
 from __future__ import annotations
 
@@ -88,62 +73,11 @@ def registered(day: str) -> bool:
 
 
 def run(day: str, budget: int, count: int) -> None:
-    if registered(day):  # a published manifest is immutable: never rewrite a registered batch
-        print(json.dumps({'day': day, 'skipped': 'already registered'}))
-        register(None)  # renders of earlier batches that finished since
-        return
-    out = batch_dir(day)
-    out.mkdir(parents=True, exist_ok=True)
-    seed = seed_for(day)
-    sk, ans = out / f'clef-pools-{day}.skeletons.jsonl', out / f'clef-pools-{day}.answers.jsonl'
-    ir, rows, turns = (out / f'clef-pools-{day}.{kind}.jsonl' for kind in ('ir', 'rows', 'turns'))
-    if not sk.exists():
-        node(str(CURRICULUM / 'clef-programs.mjs'), 'skeletons', str(seed), str(count), str(sk), 'new')
-    remaining = budget - spent(ans)
-    label = None
-    if remaining > 2_000:
-        label = json.loads(node(str(CURRICULUM / 'clef-label.mjs'), str(sk), str(ans), '--budget', str(remaining),
-                                '--concurrency', '4') or '{}')
-    assembled = json.loads(node(str(CURRICULUM / 'clef-programs.mjs'), 'assemble', str(sk), str(ans), str(ir)))
-    replay = json.loads(node(str(CURRICULUM / 'replay-demonstrations.mjs'), str(ir), str(rows), str(turns)))
-    families: dict[str, int] = {}
-    for line in ir.open():
-        family = json.loads(line)['curriculum']['family']
-        families[family] = families.get(family, 0) + 1
-    summary = {'day': day, 'seed': seed, 'skeletons': count_lines(sk), 'answered_items': count_lines(ans),
-               'input_tokens': spent(ans), 'budget': budget, 'last_label_run': label, 'assembled': assembled,
-               'replay': replay, 'families': families,
-               'finished_utc': dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')}
-    (out / 'summary.json').write_text(json.dumps(summary, indent=1) + '\n')
-    entry = {
-        'id': corpus_id(day), 'owner': 'dgx', 'path': f'data/neuralese/corpora/{corpus_id(day)}',
-        'include': ['*.jsonl', 'summary.json'],
-        'admission': 'reference-demonstrations-verified-replay; clef-flash-distilled child labels with per-item confidence '
-                     'gating; action-notes reasoning (not trained); not teacher-sampled',
-        'training_admission': True,
-        'training_admission_reason': "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak "
-                                     "into held/eval, protected eval, verified wrong labels); 'pending review' is recorded "
-                                     "as review status, not a reason to exclude; splits and source-disjointness kept "
-                                     "(plans/neuralese/DATA_INVENTORY_20261011.md)",
-        'review_status': f"verified replay {replay.get('admitted')}/{replay.get('cases')} cases; Clef-flash labels unreviewed",
-        'required_conversion': 'render (render_native_turn_corpus.sh, both tokenizers); root rationales in a teacher window',
-        'split': 'train only: items drawn from the train side of the shared content partition (source-split.mjs, '
-                 'training/source-split-reservations.json); generated case ids carry the seed',
-        'source_class': 'public-dataset-items-with-clef-flash-decisions',
-        'license': 'per source: CLINC150 CC-BY-3.0, dair-ai/emotion (dataset card), CoEdIT Apache-2.0, CUAD v1 CC-BY-4.0; '
-                   'Clef-flash outputs (Cloudflare Workers AI terms). Provenance facts only (owner rule 2026-10-10)',
-        'build': {'driver': 'scripts/neuralese_data/clef_pools_daily.py', 'seed': seed,
-                  'templates': 'clef-programs.mjs NEW_POOLS (skill_routing, wellbeing_triage, edit_review, clause_risk)',
-                  'model': '@cf/cloudflare/clef-flash', 'input_tokens': summary['input_tokens']},
-        'note': f"Clef-flash-distilled inline-lambda programs over new source pools, day {day}: {replay.get('admitted')} "
-                f"cases, {replay.get('decisions')} decisions ({families}). Files: *.skeletons (Clef requests), *.answers "
-                "(Clef outputs with usage), *.ir (cases), *.rows (trajectories), *.turns (native training turns).",
-        'consumable_by_direct_stage': False,
-    }
-    (out / 'registry-entry.json').write_text(json.dumps(entry, indent=1) + '\n')
-    print(json.dumps(summary))
-    render(day)
-    register(day)
+    """Keep historical invocations explicit; never restart the retired provider."""
+    raise RuntimeError(
+        'External teacher generation is retired by AGENTS.md ownership policy '
+        '(2026-10-15). Use the self-hosted Qwen teacher on the existing CoreWeave '
+        'generation sandbox. Use register for already-produced Clef corpora.')
 
 
 HELD_TEXT = ['runs/neuralese-foundation-text-input-4962-root-adopted-union-20261009-v1/text-data.jsonl',
