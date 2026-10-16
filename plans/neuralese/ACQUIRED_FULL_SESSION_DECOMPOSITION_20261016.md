@@ -24,3 +24,9 @@ current protected source groups and decision holds, and binds both tokenizer and
 source receipt. Existing corpus registration/whole-union split validation and
 resident continuation own final admission and actual training exposure. Conversion
 alone does not grant admission.
+
+The pinned source-ref to complete-session adapter lookup is shared in
+`acquired_agents.FULL_TRAJECTORY_CORPORA`; the exporter resolves that lookup
+through the existing `agents.CORPORA` registry. The lookup is crisp plumbing
+because a ref must select exactly one already-authored adapter. Session
+normalization and source-quality interpretation remain in the shared adapters.
