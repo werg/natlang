@@ -115,3 +115,72 @@ def test_combined_evidence_requires_exact_transitive_actual_case_union(tmp_path)
     review['source_certificate'] = binding(cert_path)
     with pytest.raises(ValueError, match='actual bound proofs'):
         invoke(tmp_path, old, new, review)
+
+
+def metadata_chain(tmp_path):
+    import shutil
+    old, adam, review, _ = fixture(tmp_path)
+    first=tmp_path/'first';first.mkdir()
+    certificate=invoke(first,old,adam,review)
+    new=tmp_path/'scheduled';shutil.copytree(adam,new)
+    (new/'train/native_pending_sources.py').write_text('reviewed pending row metadata\n')
+    continued=copy.deepcopy(review)
+    continued.update(old_code=code_inventory(adam),new_code=code_inventory(new),
+        source_certificate=binding(certificate),old_parent_checkpoint_sha256='b'*64,
+        new_parent_checkpoint_sha256='c'*64,optimizer_policy=mechanism.METADATA_POLICY,
+        optimizer_state_unchanged=True,metadata_extra_bytes=1<<30)
+    continued['changes']={'train/native_pending_sources.py':{
+        'old':None,'new':continued['new_code']['train/native_pending_sources.py']}}
+    second=tmp_path/'second';second.mkdir()
+    return second,adam,new,continued,certificate
+
+
+def test_metadata_continuation_keeps_actual_origin_and_cumulative_memory(tmp_path):
+    phase,old,new,review,original=metadata_chain(tmp_path)
+    output=invoke(phase,old,new,review)
+    certificate=json.loads(output.read_text())
+    result=json.loads(Path(certificate['evidence']['path']).read_text())
+    assert result['measured_parent_checkpoint_sha256']=='a'*64
+    assert result['source_parent_checkpoint_sha256']=='b'*64
+    assert result['continued_parent_checkpoint_sha256']=='c'*64
+    assert result['new_parent_measured'] is False
+    assert result['extra_bytes_per_memory_domain']==1<<30
+    assert result['measured_peaks'][0]['inherited_extra_bytes']==64*4*2304
+    assert result['measured_peaks'][0]['device_bytes']==8<<30
+    assert geometry_capacity(binding(output),identity=review['identity'],code=code_inventory(new))==certificate['limits']
+
+
+@pytest.mark.parametrize('mutation',['lost-optimizer','small-allowance','chain-policy','chain-extra','chain-origin','chain-review-schema','chain-summary-policy','cumulative-headroom','new-model-code'])
+def test_metadata_chain_rejects_changed_optimizer_unbound_math_and_lost_reserves(tmp_path,mutation):
+    phase,old,new,review,original=metadata_chain(tmp_path)
+    if mutation=='lost-optimizer':review['optimizer_state_unchanged']=False
+    elif mutation=='small-allowance':review['metadata_extra_bytes']=1
+    elif mutation=='cumulative-headroom':review['device_memory_bytes']=review['identity']['runtime']['total_memory_bytes']=10<<30
+    elif mutation=='new-model-code':
+        (new/'model/forward.py').write_text('changed math\n')
+        review['new_code']=code_inventory(new)
+        review['changes']['model/forward.py']={'old':review['old_code']['model/forward.py'],'new':review['new_code']['model/forward.py']}
+    else:
+        cert=json.loads(original.read_text());path=Path(cert['evidence']['path']);value=json.loads(path.read_text())
+        if mutation=='chain-extra':value['extra_bytes_per_memory_domain']=0
+        elif mutation=='chain-origin':value['measured_parent_checkpoint_sha256']='e'*64
+        elif mutation=='chain-summary-policy':value['continuation_policy']='incorrect-policy'
+        elif mutation=='chain-review-schema':
+            child_path=Path(value['review']['path']);child=json.loads(child_path.read_text())
+            child['schema']='incorrect-review-schema';child_path.write_text(json.dumps(child))
+            value['review']=binding(child_path)
+        else:value['runtime_code_sha256']='d'*64
+        path.write_text(json.dumps(value));cert['evidence']=binding(path);original.write_text(json.dumps(cert))
+        review['source_certificate']=binding(original)
+    with pytest.raises(ValueError):invoke(phase,old,new,review)
+
+
+@pytest.mark.parametrize('injected',[-(16<<30),0,1<<30])
+def test_raw_measurement_cannot_forge_an_inherited_memory_allowance(tmp_path,injected):
+    old,new,review,proof=fixture(tmp_path)
+    value=json.loads(proof.read_text());value['capacity']['cases'][0]['inherited_extra_bytes']=injected
+    proof.write_text(json.dumps(value))
+    cert_path=Path(review['source_certificate']['path']);cert=json.loads(cert_path.read_text())
+    cert['evidence']=binding(proof);cert_path.write_text(json.dumps(cert));review['source_certificate']=binding(cert_path)
+    with pytest.raises(ValueError,match='raw measured cases'):
+        invoke(tmp_path,old,new,review)
