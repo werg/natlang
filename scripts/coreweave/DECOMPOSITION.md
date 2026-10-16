@@ -83,6 +83,27 @@ policy: large reusable checkpoint objects retain the existing private ferry.
 The source archive verifier binds every member; atomic restore rejects escaped
 paths and links and verifies each destination byte before the result commit.
 
+## Resumable private evaluation exports
+
+The receipt decides which already-verified private artifact is fetched. This
+fetcher only transports those declared bytes; it does not choose or qualify an
+evaluation checkpoint.
+
+| Unit | Representation | Reason |
+| --- | --- | --- |
+| Export selection and expected identity | Existing owner-side receipt | The exact size and SHA are already independently verified upstream. |
+| Private artifact lookup and authenticated HTTP stream | Crisp `fetch_native_eval_export.py` | W&B API/credentials and HTTP Range are external-service plumbing. |
+| Partial progress | `<destination>.pending` plus recomputed prefix SHA | A retry can continue at the exact durable byte offset without a second state format. |
+| Resume acceptance and publication | Crisp exact verifier | Check HTTP status, exact `Content-Range`, total length and final SHA before atomic rename. |
+
+An existing destination is reused only when its complete receipt-bound SHA and
+size match. A complete valid pending file is published without another API
+request. A partial pending file is hashed from byte zero before requesting the
+remaining range. A server that ignores Range with HTTP 200 causes a safe
+truncate-and-rewrite from the beginning; a malformed 206 is rejected without
+changing the pending prefix. A complete artifact is exposed only after its
+receipt-bound byte count and SHA match, followed by parent-directory fsync.
+
 ## Participant-sharded shared checkpoint storage
 
 The existing recipe still chooses and serializes participant updates, shared
