@@ -87,7 +87,6 @@ def d12_feature_status_diagnoses(limit=None):
     Failed assistant turns remain serialized as tool context, never targets.
     This is source-curated status supervision, not a cause/fix diagnosis.
     """
-    from copy import deepcopy
     from .acquired_archives import cooper_archive_acquired
 
     emitted=0
@@ -166,16 +165,19 @@ def d12_feature_status_diagnoses(limit=None):
             note=derived.lineage.setdefault('notes',{})
             note['source_reported_feature_status']={**source_binding,
                 'view_id_sha256':view_digest,'review_kind':'source-curated-reported-status',
-                'original_source_outcome':deepcopy(original.outcome),
+                'original_source_outcome':{'label':'failed',
+                    'sha256':hashlib.sha256(json.dumps(original.outcome,ensure_ascii=False,
+                        sort_keys=True,separators=(',',':')).encode()).hexdigest()},
                 'complete_failed_transcript_is_context':True,'failed_actions_positive_targets':False,
                 'causal_claims':False,'repair_claims':False,'source_judge_is_local_oracle':False,
                 'native_execution_verified':False,'executed_locally':False,
                 'target_fields':sorted(reported.keys())}
-            derived.outcome=dict(original.outcome)
-            derived.outcome['details']=dict(details)
-            derived.outcome['label']='teacher'
-            derived.outcome['details'].update(supervised_task='exact source-reported D12 feature status',
-                source_curated=True,executed_locally=False,source_execution_outcome='failed')
+            derived.outcome={'label':'teacher','details':{
+                'supervised_task':'exact source-reported D12 feature status',
+                'source_curated':True,'executed_locally':False,
+                'source_execution_outcome':'failed',
+                'original_source_outcome_sha256':note['source_reported_feature_status']['original_source_outcome']['sha256'],
+                'reported_evaluation_sha256':source_binding['evaluation_sha256']}}
             emitted+=1
             yield derived.id,derived
         except (Reject,ValueError,TypeError,KeyError) as error:

@@ -108,6 +108,9 @@ def test_d12_failed_actions_are_context_only_and_target_is_exact_reported_status
     provenance=t.lineage['notes']['source_reported_feature_status']
     assert provenance['review_kind']=='source-curated-reported-status'
     assert provenance['original_source_outcome']['label']=='failed'
+    assert len(provenance['original_source_outcome']['sha256'])==64
+    assert 'do not copy this prose' not in json.dumps(provenance)
+    assert 'do not copy this prose' not in json.dumps(t.outcome)
     assert provenance['failed_actions_positive_targets'] is False
     assert provenance['causal_claims'] is False and provenance['native_execution_verified'] is False
     assert t.split_groups[0]=='source-group' and t.split=='train'
