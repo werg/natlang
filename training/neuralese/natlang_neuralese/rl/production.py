@@ -681,11 +681,11 @@ def configure_native(args):
         raise ValueError('native RL parent participant and semantic adapter must bind the same actual shared checkpoint')
     recipe = resolve_recipe_data(args.production_recipe)
     stages = [stage for stage in recipe['stages'] if stage['id'] == args.production_stage]
-    if len(stages) != 1 or stages[0]['kind'] not in {'native_state_sft', 'native_state_rl'}:
+    if len(stages) != 1 or stages[0]['kind'] not in {'native_state_sft', 'native_state_rl','native_offline_preference'}:
         raise ValueError('native RL configure requires the actual declared native production stage')
     parameters = effective_stage_parameters(stages[0], [], recipe)
     parameters = {key: value for key, value in parameters.items()
-                  if key in HANDLERS['native_state_sft']['parameters'] and value is not None}
+                  if key in HANDLERS['native_offline_preference' if stages[0]['kind']=='native_offline_preference' else 'native_state_sft']['parameters'] and value is not None}
     parameters.pop('memory_qualification',None)  # one-time source-capacity probe already bound to the SFT parent
     parameters.update(base=str(args.base.resolve()))
     parameters.setdefault('epochs', 1)
@@ -730,6 +730,13 @@ def configure_native(args):
             raise ValueError('native production foundation requires its exact declared foundation_native_graphs source')
         config['foundation_native_graphs']=foundation['path']
         config['seed_command'] += ['--foundation-native-graphs','{foundation_native_graphs}']
+    from .native_supervised import bind_seed_objective
+    bind_seed_objective(config,stages[0]['kind'],resolve_stage_inputs(recipe,stages[0],{}))
+    if stages[0]['kind']=='native_offline_preference':
+        config['seed_trainer_parameters']=dict(parameters)
+        config['trainer_parameters']={key:value for key,value in parameters.items()
+            if key not in {'preference_beta','preference_margin'}}
+        config['seed_command']=[part.replace('{trainer_args}','{seed_trainer_args}') for part in config['seed_command']]
     coefficient_policy=getattr(args,'coefficient_policy',None)
     if coefficient_policy is not None:
         from ..model.native_coefficient_policy import policy_core

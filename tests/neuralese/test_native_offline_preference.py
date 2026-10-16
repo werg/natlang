@@ -169,6 +169,9 @@ def test_actual_shared_trainer_stop_resume_tweak_and_pair_exposure(tmp_path,monk
     assert first['training']['step']==1 and first['training']['exposure_counts']=={example.id:1}
     assert first['training']['identity']['objective_kind']==KIND
     assert first['training']['optimizer'] and first['training']['rng']
+    logged=json.loads((out/'train.jsonl').read_text().splitlines()[0])
+    assert logged['offline_preference']['scored_assistant_tokens']==5
+    assert logged['supervised_tokens']==0  # no rejected-positive CE credit
     assert main(args+['--preference-beta','1.7'])==0
     last=torch.load(out/'checkpoint.pt',weights_only=False)
     assert last['training']['step']==3 and last['training']['exposure_counts']=={example.id:3}
@@ -186,6 +189,7 @@ def test_recipe_preference_stage_reuses_native_defaults_and_explicit_objective_o
     assert values=={'learning_rate':3e-6,'fp8_recipe':'current-bf16-dx','preference_beta':.5,'preference_margin':.2}
     assert recipe.HANDLERS[stage['kind']]['module']=='natlang_neuralese.train.native_preference'
     assert 'objective_spec' in recipe.HANDLERS[stage['kind']]['required_inputs']
+    assert 'pending_native_sources' in recipe.HANDLERS[stage['kind']]['optional_inputs']
     assert stage['kind'] in recipe.NATIVE_TRAINING_KINDS
     args=recipe.stage_parameter_args(values)
     assert '--preference-beta' in args and '--preference-margin' in args
@@ -225,3 +229,99 @@ def test_actual_miro_pair_both_tokenizers_preserves_full_histories_and_only_dive
         _,ids,boundary=native_gold_packet(tokenizer,messages[:index],messages[index],record['alternatives'][alternative].get('tools'))
         assert node['token_ids']==ids and suffix['suffix_start']==boundary and suffix['suffix_stop']==len(ids)
         assert index>=record['common_message_count']
+
+
+def test_completed_objective_tweak_adds_honest_full_pair_pass_without_reset(tmp_path,monkeypatch):
+    # Reuse the actual shared trainer setup, then inspect its completed state.
+    from test_native_model import tiny_source
+    from test_native_state_sft import graph
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train.native_preference import main
+    base=tmp_path/'base';tiny_source(base)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    example,objective=example_spec(tmp_path,fingerprint=config['tokenizer_fingerprint'])
+    row={'schema':SCHEMA,'id':example.id,'split':'train','source_groups':['exact-task'],
+        'tokenizer_fingerprint':config['tokenizer_fingerprint'],'nodes':[
+            {'name':n.name,'token_ids':list(n.token_ids),'target_weights':[0.]*len(n.token_ids)} for n in example.plan.invocations]}
+    train=tmp_path/'train.jsonl';train.write_text(json.dumps(row)+'\n')
+    held=tmp_path/'held.jsonl';held.write_text(json.dumps(dict(graph('held'),split='test',
+        source_groups=['held'],tokenizer_fingerprint=config['tokenizer_fingerprint']))+'\n')
+    out=tmp_path/'run';args=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(train),'--held-native-graphs',str(held),'--objective-spec',str(objective.path),
+        '--epochs','1','--eval-every','100','--out',str(out)]
+    assert main(args)==0
+    before=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+    assert before['exposure_counts']=={example.id:1}
+    assert main(args+['--preference-margin','.8'])==0
+    after=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+    assert after['step']==2 and after['exposure_counts']=={example.id:2}
+    transition=after['options']['offline_objective_transition']
+    assert transition['additional_full_pair_visits']==1 and transition['previous_stage_complete']
+    frame=after['sft_progress'][KIND]
+    assert frame['required_visits']=={example.id:2}
+    assert frame['options']['epochs']==1  # original declared quota remains recorded
+    assert main(args+['--preference-margin','.8'])==0
+    assert torch.load(out/'checkpoint.pt',weights_only=False)['training']['step']==2
+    # A newly admitted pair adds its own quota; unchanged completed rows are not replayed.
+    extra_dir=tmp_path/'appended';extra_dir.mkdir()
+    extra,extra_objective=example_spec(extra_dir,fingerprint=config['tokenizer_fingerprint'],source_sha='b'*64)
+    new_row={**row,'id':extra.id}
+    combined=tmp_path/'combined.jsonl';combined.write_text(train.read_text()+json.dumps(new_row)+'\n')
+    specification=copy.deepcopy(objective.spec)
+    specification['rows'].update(extra_objective.spec['rows'])
+    combined_spec=tmp_path/'appended-objective.json';combined_spec.write_text(json.dumps(specification))
+    continued=list(args)
+    continued[continued.index('--native-graphs')+1]=str(combined)
+    continued[continued.index('--objective-spec')+1]=str(combined_spec)
+    assert main(continued+['--preference-margin','.8','--continued-native-graphs',str(train)])==0
+    appended=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+    assert appended['step']==3 and appended['exposure_counts']=={example.id:2,extra.id:1}
+
+
+def test_actual_preference_deficits_survive_three_phase_semantic_training_and_next_real_update(tmp_path,monkeypatch):
+    from test_native_semantic_stage import _fixture
+    from test_native_semantic import setup_pair
+    from natlang_neuralese.train import native_semantic_stage as semantic
+    from natlang_neuralese.train.native_continuation import collect_sft_progress,restore_sft_progress,progress_obligations
+    from natlang_neuralese.train.native_state_sft import native_training_update,make_native_optimizer,pending_exposure_batches
+    from natlang_neuralese.model.native_model import restore_model_state
+    path,manifest,_,_=_fixture(tmp_path,monkeypatch)
+    original_load=semantic.load_participant;frames={}
+    def load(name,*args,**kwargs):
+        participant=original_load(name,*args,**kwargs)
+        directory=tmp_path/name;directory.mkdir(exist_ok=True)
+        example,objective=example_spec(directory,fingerprint=participant.config['tokenizer_fingerprint'])
+        participant.optimizer.zero_grad(set_to_none=True)
+        loss,_=packed_graph_loss(participant.model,[example],objective=objective,checkpoint_layers=False)
+        loss.backward();participant.optimizer.step();participant.optimizer.zero_grad(set_to_none=True)
+        assert torch.isfinite(loss)
+        frame={'schema':'natlang.neuralese-native-sft-training/1','identity':{'objective_kind':KIND,'objective':objective.binding()},
+            'step':1,'global_step':1,'epoch':1,'cursor':1,'source_row_bindings':{example.id:'exact-binding'},
+            'source_row_order':[example.id],'exposure_counts':{example.id:1},'source_receipts':[{'sha256':'train'},{'sha256':'held'}],
+            'options':{'stage_id':'offline-pairs','epochs':2},'optimizer':participant.optimizer.state_dict()}
+        participant.sft_progress=collect_sft_progress(frame);participant.global_step=1
+        frames[name]=(example,objective,copy.deepcopy(participant.sft_progress))
+        return participant
+    monkeypatch.setattr(semantic,'load_participant',load)
+    report=semantic.run(path,manifest,tmp_path/'semantic',device='cpu')
+    assert report['completed']
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    saved=CheckpointPolicy.load(tmp_path/'semantic/checkpoint.pt')
+    for name,entry in saved['participants'].items():
+        example,objective,original=frames[name]
+        assert entry['sft_progress']==original and entry['global_step']==3
+        assert progress_obligations(entry['sft_progress'])['remaining_graph_visits']==1
+        participant=setup_pair()[0][name]
+        if name=='mellum':participant.model.port.hf.natlang_precision='bf16'
+        restore_model_state(participant.model,entry['model_state'])
+        optimizer,_=make_native_optimizer(participant.model,lr=1e-4,in_backward=False)
+        optimizer.load_state_dict(entry['optimizer'])
+        restored=restore_sft_progress({**entry,'rng':saved['training']['rng']},'offline-pairs')
+        quotas,batches=pending_exposure_batches([{'id':example.id,'forward_tokens':9}],restored['exposure_counts'],epochs=2)
+        assert quotas=={example.id:2} and len(batches)==1
+        optimizer.zero_grad(set_to_none=True)
+        loss,_=packed_graph_loss(participant.model,[example],objective=objective,checkpoint_layers=False)
+        loss.backward();optimizer.step()
+        restored['exposure_counts'][example.id]+=1
+        restored['step']+=1;restored['global_step']+=1
+        assert progress_obligations(collect_sft_progress(restored))['complete']

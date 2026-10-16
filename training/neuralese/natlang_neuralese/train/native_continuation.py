@@ -111,6 +111,8 @@ def _retain_pending_sources(frame,previous):
     for key,required in required_visits(frame.get('source_row_order') or list(active),
             float((frame.get('options') or {}).get('epochs',1))).items():
         quotas[key]=max(quotas.get(key,0),required)
+    for key,required in ((frame.get('options') or {}).get('_objective_required_visits') or {}).items():
+        if key in active:quotas[key]=max(quotas.get(key,0),required)
     for declaration in (frame.get('options') or {}).get('_pending_native_source_declarations') or []:
         reference=declaration['binding'];fingerprint=reference['sha256']
         record={key:copy.deepcopy(value) for key,value in declaration.items() if key!='rows'}
@@ -191,6 +193,7 @@ def progress_obligations(progress):
             'epochs':(frame.get('options') or {}).get('epochs',1)}
         if (frame.get('identity') or {}).get('objective_kind'):
             stages[stage]['objective_kind']=frame['identity']['objective_kind']
+            stages[stage]['objective']=copy.deepcopy(frame['identity']['objective'])
         if frame.get('pending_source_declarations') or frame.get('pending_source_rows'):
             stages[stage].update(
                 pending_source_graph_visits=sum(value for key,value in missing.items() if key in (frame.get('pending_source_rows') or {})),

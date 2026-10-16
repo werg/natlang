@@ -895,6 +895,9 @@ def main(argv=None):
             'optimizer': shared_resume['optimizer'], 'rng': shared_resume['rng'],
             'fp8': shared_resume.get('fp8'), 'step': 0, 'global_step': shared_resume['step']}
     if resume is not None:
+        if mandatory_objective:
+            checkpoint_options['_objective_required_visits']=dict((resume.get('options') or {}).get('_objective_required_visits') or {})
+            checkpoint_options['offline_objective_revisions']=list((resume.get('options') or {}).get('offline_objective_revisions') or [])
         checkpoint_options['source_predecessors'] = continuation_predecessors(resume,
             {role: getattr(args, role) for role in ('continued_native_graphs', 'continued_held_native_graphs')},
             stage_id=args.stage_id or 'native-graph-ce')
@@ -925,8 +928,19 @@ def main(argv=None):
             raise ValueError('native SFT checkpoint has an unsupported row-credit schedule')
         offline_tweak=mandatory_objective and args.objective_continuation and previous.get('objective_kind')==objective.kind
         if offline_tweak and previous.get('objective')!=objective_binding:
-            checkpoint_options['offline_objective_transition']={'from':previous.get('objective'),
-                'to':objective_binding,'optimizer_rng_exposure':'preserved'}
+            transition={'from':previous.get('objective'),'to':objective_binding,
+                'optimizer_rng_exposure':'preserved','previous_stage_complete':False,
+                'additional_full_pair_visits':0}
+            old_frame=collect_sft_progress(resume).get(args.stage_id or 'native-graph-ce') or {}
+            old_quotas=resume.get('required_visits') or old_frame.get('required_visits') or {}
+            old_counts=resume.get('exposure_counts') or {}
+            parameter_change=any((previous.get('objective') or {}).get(key)!=objective_binding.get(key) for key in ('beta','margin'))
+            if parameter_change and old_quotas and all(old_counts.get(key,0)>=visits for key,visits in old_quotas.items()):
+                transition.update(previous_stage_complete=True,additional_full_pair_visits=1)
+                checkpoint_options['_objective_required_visits'].update({key:int(old_counts.get(key,0))+1
+                    for key in source_row_bindings})
+            checkpoint_options['offline_objective_transition']=transition
+            checkpoint_options['offline_objective_revisions'].append(transition)
         if (parent_continuation and args.objective_continuation) or offline_tweak:
             stable = tuple(key for key in stable if key not in {'objective', 'batch_graphs', 'batch_tokens'})
         if any(previous.get(key, 0 if key == 'batch_tokens' else None) != training_identity.get(key) for key in stable):
@@ -1236,6 +1250,7 @@ def main(argv=None):
             if foundation_priority_ids is not None:
                 progress['foundation_schedule'] = {'communication_batches_per_priority_ordinary': args.foundation_communication_batches,
                     'fixed_foundation_graphs': sum(train.entries[index]['id'] in foundation_priority_ids for index in indices)}
+            if mandatory_objective:progress['offline_preference']=details
             progress['learning_rates']=optimizer.native_learning_rates
             progress['checkpoint_input_offload'] = {'enabled': args.checkpoint_input_offload,
                 'checkpoint_calls': getattr(model.port.activation_checkpoint, 'calls', 0)}

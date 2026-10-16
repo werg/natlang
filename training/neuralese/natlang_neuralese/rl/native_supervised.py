@@ -1,4 +1,4 @@
-"""Exact whole-graph CE continuations between joint/RL publications.
+"""Exact whole-graph CE and offline-preference continuations between joint/RL publications.
 
 The declared recipe selects sources and checkpoint cadence. This module only
 builds/verifies the same shared-trainer invocation and durable pending update.
@@ -9,6 +9,46 @@ from pathlib import Path
 
 from ..common.hashing import sha256_file_hex_cached
 from ..common.jsonio import write_json_durable
+
+
+MANDATORY_STAGE_KINDS=frozenset({'native_state_sft','native_offline_preference'})
+
+
+def objective_contract(sources,parameters):
+    if 'objective_spec' not in sources:return None
+    from ..train.native_preference import NativePreferenceObjective
+    reference=sources['objective_spec']
+    if sha256_file_hex_cached(reference['path'])!=reference['sha256']:
+        raise ValueError('mandatory offline objective changed its declared source binding')
+    return NativePreferenceObjective(reference['path'],beta=parameters.get('preference_beta'),
+        margin=parameters.get('preference_margin')).binding()
+
+
+def bind_seed_objective(config,kind,sources):
+    """The same seed command invokes the implemented objective, never CE by omission."""
+    command=list(config['seed_command'])
+    modules={'natlang_neuralese.train.native_state_sft','natlang_neuralese.train.native_preference'}
+    module=next((index for index,value in enumerate(command) if value in modules),None)
+    # Ordinary custom launchers retain their established contract. Offline
+    # execution must explicitly expose the shared trainer seam.
+    if kind=='native_offline_preference' and module is None:
+        raise ValueError('offline preference seed command must bind the actual shared native trainer module')
+    if module is not None:
+        command[module]=('natlang_neuralese.train.native_preference' if kind=='native_offline_preference'
+                         else 'natlang_neuralese.train.native_state_sft')
+    for flag in ('--objective-spec',):
+        while flag in command:
+            index=command.index(flag);del command[index:index+2]
+    if kind=='native_offline_preference':
+        while '--foundation-native-graphs' in command:
+            index=command.index('--foundation-native-graphs');del command[index:index+2]
+        config['objective_spec']=sources['objective_spec']['path']
+        config['offline_objective_binding']=objective_contract(sources,config['trainer_parameters'])
+        command+=['--objective-spec','{objective_spec}']
+    else:
+        config.pop('objective_spec',None);config.pop('offline_objective_binding',None)
+    config['seed_command']=command
+    return config
 
 
 def continuation_config(config,stage,*,checkpoint,adapter,out):
@@ -26,15 +66,24 @@ def continuation_config(config,stage,*,checkpoint,adapter,out):
         'semantic_adapter':adapter,'production_stage':stage['id'],'trainer_parameters':parameters,
         'seed_native_graphs':sources['native_graphs']['path'],
         'held_native_graphs':sources['held_native_graphs']['path']}
-    if 'pending_native_sources' in sources:
-        result['pending_native_sources'] = sources['pending_native_sources']['path']
-        if '--pending-native-sources' not in result['seed_command']:
-            result['seed_command'] = list(result['seed_command']) + ['--pending-native-sources', '{pending_native_sources}']
+    result['seed_command']=list(result['seed_command'])
+    for role in ('pending_native_sources','continued_native_graphs','continued_held_native_graphs'):
+        flag='--'+role.replace('_','-')
+        while flag in result['seed_command']:
+            index=result['seed_command'].index(flag);del result['seed_command'][index:index+2]
+        result.pop(role,None)
+        if role in sources:
+            result[role]=sources[role]['path']
+            result['seed_command'] += [flag,'{'+role+'}']
+    bind_seed_objective(result,stage['kind'],sources)
     return result,sources
 
 
-def stage_pending(adapter,participant,stage,sources,epochs):
+def stage_pending(adapter,participant,stage,sources,epochs,*,objective=None):
     progress=(adapter['models'][participant].get('mandatory_sft') or {}).get('stages',{}).get(stage)
+    if objective is not None:
+        actual=(progress or {}).get('objective') or {}
+        if any(actual.get(key)!=value for key,value in objective.items()):return True
     pending = sources.get('pending_native_sources')
     if pending and (not progress or pending['sha256'] not in (progress.get('pending_source_declarations') or {})):
         return True  # Persist a newly declared obligation even when active CE is already complete.
@@ -55,7 +104,8 @@ def execute(config,state,state_path,control):
     report_path=directory/'report.json'
     values={**{k:v for k,v in config.items() if isinstance(v,(str,int,float,list))},
         'checkpoint':state['checkpoint'],'policy_id':sha256_file_hex_cached(state['checkpoint']),
-        'learner_out':str(directory),'trainer_args':stage_parameter_args(config['trainer_parameters'])}
+        'learner_out':str(directory),'trainer_args':stage_parameter_args(config['trainer_parameters']),
+        'seed_trainer_args':stage_parameter_args(config['trainer_parameters'])}
     if control is not None:values['_run_control']=control
     if config.get('before_update'):run_command(config['before_update'],values)
     state.update(phase='updating_mandatory_sft',pending_update_kind='mandatory_sft')
@@ -104,7 +154,7 @@ def interleave(config_paths,configs,adapter_path,directory,*,cycle,latest,device
     from ..train.recipe import resolve_recipe_data
     from ..train.native_readiness import _bound
     plans=[[stage for stage in resolve_recipe_data(config['production_recipe'])['stages']
-            if stage['kind']=='native_state_sft'] for config in configs]
+            if stage['kind'] in MANDATORY_STAGE_KINDS] for config in configs]
     prior=json.loads(latest.read_text()) if latest.exists() else {}
     if prior.get('supervised_cycle')==cycle:return adapter_path
     cursor=prior.get('supervised_cursor') or {}
@@ -122,7 +172,8 @@ def interleave(config_paths,configs,adapter_path,directory,*,cycle,latest,device
             declaration,sources=continuation_config(config,stage,checkpoint=export['checkpoint']['path'],
                 adapter=adapter_path,out=out)
             if not stage_pending(export,config['native_participant'],stage['id'],sources,
-                                 declaration['trainer_parameters'].get('epochs',1)):
+                                 declaration['trainer_parameters'].get('epochs',1),
+                                 objective=declaration.get('offline_objective_binding')):
                 continue
             path=out/'config.json';path.parent.mkdir(parents=True,exist_ok=True)
             write_json_durable(path,declaration)

@@ -67,3 +67,28 @@ configuration and actual target-sandbox pair-capacity qualification remain OPEN.
 This objective is reference-free offline preference learning, not standard DPO
 or an on-policy reward. No production exposure or preference quality lift is
 claimed by these mechanism tests.
+
+
+## Mandatory interleave and revisions
+
+The existing mandatory supervised interleave selects CE and offline preference
+stages. It binds the exact objective sidecar and effective beta/margin, invokes
+the implemented shared preference entrypoint and refreshes semantic adapters
+before any subsequent actor uses changed weights. Native-policy RL receives its
+own parameter set; offline-only options never alter the policy objective.
+Current mandatory progress carries exact objective identity as well as source,
+held source, epochs and pair visits.
+
+A mid-stage objective adjustment retains completed visits and trains remaining
+whole-pair deficits with the new declared objective. After a completed cohort,
+changing beta or margin adds one explicit further full pair visit per row while
+retaining all prior visits/moments/RNG. These obligations execute in the same
+finite checkpoint refresh quanta; neither readiness relabeling nor an all-pairs
+barrier before the next semantic refresh is introduced. A source-only append
+adds new row obligations and does not replay the completed unchanged prefix.
+
+Foundation deployment and foundation qualification remain genuine communication
+SFT selectors. Resident hot append remains its existing CE-only exact
+transaction; preference source/objective append uses safe stop and the same
+shared trainer resume until an objective-aware resident transaction is qualified.
+No preference graph may qualify a producer/consumer foundation.

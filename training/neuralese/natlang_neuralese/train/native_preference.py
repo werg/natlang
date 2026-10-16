@@ -125,6 +125,7 @@ def main(argv=None):
         if value.get('schema')!=SCHEMA or value.get('kind')!=KIND:
             raise ValueError('offline preference stage requires its exact jointly bound objective')
         if '--objective-continuation' not in arguments:arguments.append('--objective-continuation')
+        if '--stage-id' not in arguments:arguments+=['--stage-id',KIND]
     from .native_state_sft import main as native_main
     return native_main(arguments)
 

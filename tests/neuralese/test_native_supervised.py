@@ -45,7 +45,8 @@ def test_pending_source_comparison_checks_real_source_epochs_and_completed_credi
     assert supervised.stage_pending(adapter,'student','full',sources,1)
 
 
-def test_interleave_shares_parent_merges_both_partial_updates_and_does_not_repeat_cycle(tmp_path,monkeypatch):
+@pytest.mark.parametrize('kind',['native_state_sft','native_offline_preference'])
+def test_interleave_shares_parent_merges_both_partial_updates_and_does_not_repeat_cycle(tmp_path,monkeypatch,kind):
     import threading
     from natlang_neuralese.rl import native_rounds
     parent=tmp_path/'parent.pt';parent.write_bytes(b'joint parent')
@@ -55,20 +56,28 @@ def test_interleave_shares_parent_merges_both_partial_updates_and_does_not_repea
     train=tmp_path/'train.jsonl';train.write_text('{}\n')
     held=tmp_path/'held.jsonl';held.write_text('{}\n')
     recipe=tmp_path/'recipe.json'
+    objective=tmp_path/'objective.json'
+    objective.write_text(json.dumps({'schema':'natlang.native-offline-pairwise-objective/1',
+        'kind':'native-offline-pairwise','beta':.1,'margin':0.,'rows':{'exact-pair':{}}}))
+    preference={'objective_spec':'objective'} if kind=='native_offline_preference' else {}
     recipe.write_text(json.dumps({'schema':'natlang.neuralese-training-recipe/1','id':'mechanism-fixture',
         'input_bindings':{'train':{'path':str(train),'sha256':sha256_file_hex(train)},
-                          'held':{'path':str(held),'sha256':sha256_file_hex(held)}},
-        'stages':[{'id':'full','kind':'native_state_sft','requires':[],
-            'inputs':{'native_graphs':'train','held_native_graphs':'held'},
+                          'held':{'path':str(held),'sha256':sha256_file_hex(held)},
+                          'objective':{'path':str(objective),'sha256':sha256_file_hex(objective)}},
+        'stages':[{'id':'full','kind':kind,'requires':[],
+            'inputs':{'native_graphs':'train','held_native_graphs':'held',**preference},
             'parameters':{'epochs':1,'checkpoint_every':7,'eval_every':7,'communication_foundation':True}}]}))
     configs=[{'native_state':True,'native_participant':name,'checkpoint':str(parent),
         'semantic_adapter':str(adapter),'production_recipe':str(recipe),'production_stage':'full',
         'semantic_refresh_config':str(tmp_path/'semantic.json'),'out':str(tmp_path/name),
-        'seed_command':['existing-seed']} for name in ('a','b')]
+        'seed_command':['python','-m','natlang_neuralese.train.native_state_sft']} for name in ('a','b')]
     barrier=threading.Barrier(2);calls=[]
     def job(path,config,directory,stop):
         assert config['mandatory_sft_only'] and config['checkpoint']==str(parent)
         assert config['seed_native_graphs']==str(train)
+        if kind=='native_offline_preference':
+            assert config['seed_command'][2]=='natlang_neuralese.train.native_preference'
+            assert config['objective_spec']==str(objective)
         assert config['trainer_parameters']['refresh_at_checkpoint']
         assert 'communication_foundation' not in config['trainer_parameters']
         barrier.wait(timeout=10)
@@ -122,3 +131,33 @@ def test_pending_metadata_admission_is_not_claimed_as_optimizer_work_and_is_resu
     assert state['phase']=='awaiting_semantic_refresh' and not state['mandatory_sft']['complete']
     assert state['last_learner_progress']['pending_source_admission']['new_optimizer_updates']==0
     assert production.run(path,rounds=1,defer_native_refresh=True)==state and len(calls)==1
+
+
+def test_offline_continuation_binds_actual_objective_and_effective_revision(tmp_path):
+    from natlang_neuralese.train.native_preference import SCHEMA,KIND
+    from natlang_neuralese.train.native_preference import NativePreferenceObjective
+    objective=tmp_path/'objective.json'
+    objective.write_text(json.dumps({'schema':SCHEMA,'kind':KIND,'beta':.1,'margin':0.,'rows':{'bound-pair':{}}}))
+    train=tmp_path/'train';train.write_text('exact pair source')
+    held=tmp_path/'held';held.write_text('protected ordinary source')
+    recipe=tmp_path/'recipe.json'
+    stage={'id':'offline','kind':'native_offline_preference','requires':[],
+        'inputs':{'native_graphs':'train','held_native_graphs':'held','objective_spec':'objective'},
+        'parameters':{'epochs':2,'preference_beta':.7,'preference_margin':.2,'checkpoint_every':5}}
+    recipe.write_text(json.dumps({'schema':'natlang.neuralese-training-recipe/1','id':'test-offline',
+        'input_bindings':{name:{'path':str(path),'sha256':sha256_file_hex(path)}
+                          for name,path in [('train',train),('held',held),('objective',objective)]},'stages':[stage]}))
+    config={'production_recipe':str(recipe),'seed_command':['python','-m','natlang_neuralese.train.native_state_sft',
+        '--native-graphs','{seed_native_graphs}','{trainer_args}']}
+    declaration,sources=supervised.continuation_config(config,stage,checkpoint='current',adapter='adapter',out=tmp_path/'out')
+    assert declaration['seed_command'][2]=='natlang_neuralese.train.native_preference'
+    assert declaration['objective_spec']==str(objective)
+    assert '--objective-spec' in declaration['seed_command']
+    contract=NativePreferenceObjective(objective,beta=.7,margin=.2).binding()
+    frame={'complete':True,'train_source_sha256':sha256_file_hex(train),
+           'held_source_sha256':sha256_file_hex(held),'epochs':2,'objective':contract}
+    adapter={'models':{'student':{'mandatory_sft':{'stages':{'offline':frame}}}}}
+    assert not supervised.stage_pending(adapter,'student','offline',sources,2,objective=contract)
+    assert supervised.stage_pending(adapter,'student','offline',sources,2,objective={**contract,'beta':.8})
+    assert supervised.stage_pending(adapter,'student','offline',sources,2,objective={**contract,'sha256':'new-file'})
+    assert 'native_offline_preference' in supervised.MANDATORY_STAGE_KINDS

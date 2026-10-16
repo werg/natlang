@@ -326,7 +326,7 @@ HANDLERS['native_state_rl'] = {
 HANDLERS['native_offline_preference'] = {
     'module':'natlang_neuralese.train.native_preference',
     'required_inputs':{'native_graphs','held_native_graphs','objective_spec'},
-    'optional_inputs':{'continue_from','continued_native_graphs','continued_held_native_graphs'},
+    'optional_inputs':{'continue_from','continued_native_graphs','continued_held_native_graphs','pending_native_sources'},
     'parameters':(set(HANDLERS['native_state_sft']['parameters']) -
         {'communication_foundation','foundation_communication_batches','share_causal_prefixes'}) |
         {'preference_beta','preference_margin'},
@@ -1403,7 +1403,7 @@ def direct_windowing_handoffs(old_recipe, new_recipe, out):
         if kind not in tuning or old is None or old.get('kind') != kind:
             continue
         before, after = parameters(old_recipe, old), parameters(new_recipe, stage)
-        if kind == 'native_state_sft' and before.get('fp8_recipe', 'delayed') != after.get('fp8_recipe', 'delayed'):
+        if kind in {'native_state_sft','native_offline_preference'} and before.get('fp8_recipe', 'delayed') != after.get('fp8_recipe', 'delayed'):
             from .fp8_backend import expert_precision_transition
             def backend_identity(values):
                 return {'kind': values.get('fp8_training', 'off'),
