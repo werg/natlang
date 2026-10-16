@@ -171,3 +171,22 @@ legacy runtime index, bind the exact approved writer record SHA and unique named
 must match that writer; body text alone never joins an edge. Keep raw source
 bodies distinct from legacy display wrappers. The unchanged original source
 receipts are nested as original-only evidence in the derived graph provenance.
+
+Prepared tokenizer service: bulk conversion may prepare one exact local tokenizer
+and invoke the same conversion repeatedly. Preparation binds HF configuration and
+tokenizer file inventories, pre-provision source fingerprint, expanded fingerprint,
+and the actual history-reasoning/rendering configuration. Each invocation verifies
+those inputs and the live tokenizer before and after rendering; mutation fails
+closed. Tokenizer inventory reuses the native model input inventory without reading
+backbone weight shards. Source, protection, holds, runtime, shard durability and
+whole-trajectory rendering remain the existing implementation. The callable CLI
+explicitly releases its exclusive output lease on success and failure. This is
+exact reuse/plumbing, not a separate training policy or rendering fork.
+
+Qualification: 16 focused tests passed, including actual LFM and Mellum
+fresh-load versus reusable-context conversion of two distinct source exports.
+All graph bytes, shard/final receipts and resume-state hashes match exactly.
+Live backend/template, rendering settings, base metadata and binding mutations
+fail closed. Callable success/interruption tests verify explicit lease closure;
+the shared inventory test verifies unchanged base inventory and no tokenizer
+preparation reads of safetensors shards. The ledgered quick check passed.

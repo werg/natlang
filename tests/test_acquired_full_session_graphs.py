@@ -124,7 +124,9 @@ def test_runtime_resume_fingerprint_is_independent_of_checkout_path(tmp_path):
         'training/neuralese/natlang_neuralese/serve/chat.py',
         'training/neuralese/natlang_neuralese/common/jsonio.py',
         'scripts/neuralese_data/build_native_graph_text_corpus.py',
-        'scripts/neuralese_data/build_acquired_full_session_graphs.py']
+        'scripts/neuralese_data/build_acquired_full_session_graphs.py',
+        'scripts/neuralese_data/build_native_semantic_pairs_e2e.py',
+        'training/neuralese/natlang_neuralese/model/native_model.py']
     for root in (first,second):
         for name in names:
             path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'fixed runtime bytes')
@@ -180,6 +182,14 @@ def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch)
     receipt.write_text(json.dumps({'schema':'natlang.normalized-agent-source-file/1',
         'contract':{'source':rows[0]['source_file'],'revision':rows[0]['source_revision']},
         'outputs':{source.name:sha256_file_hex(source)},'complete_sessions':len(rows)}))
+    from types import SimpleNamespace
+    prepared=SimpleNamespace(tokenizer=object(),source_fingerprint='a'*64,expanded_fingerprint='a'*64,
+        binding={'schema':'test-prepared-tokenizer'},validate=lambda base:None)
+    monkeypatch.setattr(builder,'prepare_tokenizer',lambda base:prepared)
+    leases=[];acquire=builder.acquire_output_lease
+    def acquire_tracked(output):
+        lease=acquire(output);leases.append(lease);return lease
+    monkeypatch.setattr(builder,'acquire_output_lease',acquire_tracked)
     monkeypatch.setattr(builder.AutoTokenizer,'from_pretrained',lambda *a,**k:object())
     monkeypatch.setattr(builder,'tokenizer_fingerprint',lambda t:'a'*64)
     monkeypatch.setattr(builder,'provision',lambda t:None)
@@ -200,6 +210,7 @@ def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch)
     monkeypatch.setattr(sys,'argv',argv)
     with pytest.raises(RuntimeError,match='simulated interruption'):
         builder.main()
+    assert leases[-1].closed,'failed callable conversion must explicitly release its output lease'
     interrupted=json.loads((output/'resume-state.json').read_text())
     assert interrupted['completed_source_record_frontier']==4
     assert len(interrupted['shards'])==2
@@ -207,6 +218,7 @@ def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch)
     assert [item['directory'] for item in cleanup]==['session-shards/shard-00000004']
     assert cleanup[0]['files']
     builder.main()
+    assert leases[-1].closed,'successful callable conversion must explicitly release its output lease'
     with open_jsonl_text(output/'test/native-graphs.jsonl.zst') as stream:
         assert [json.loads(line)['id'] for line in stream]==['a','b']
     omissions=[json.loads(line) for line in (output/'omissions.jsonl').read_text().splitlines()]

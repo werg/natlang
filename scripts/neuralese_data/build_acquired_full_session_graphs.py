@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from datetime import datetime, timezone
+from dataclasses import dataclass
 import fcntl
 import json
 import os
@@ -17,6 +18,8 @@ from natlang_neuralese.common.jsonio import open_jsonl_text, write_json_durable
 from natlang_neuralese.data.native_graph_conversion import text_row_graph, whole_trajectory_text_row_graph
 from natlang_neuralese.data.text_corpus import (native_gold_document, native_gold_packet,
     native_gold_rendered_text, tokenizer_fingerprint)
+from natlang_neuralese.model.native_model import tokenizer_inventory
+from natlang_neuralese.serve.chat import bind_history_reasoning
 from scripts.neuralese_data.build_native_graph_text_corpus import GraphWriter
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import provision
 from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
@@ -54,6 +57,8 @@ def runtime_bindings(root=None):
         'serve_chat': package / 'serve' / 'chat.py',
         'jsonio': package / 'common' / 'jsonio.py',
         'graph_writer': root / 'scripts' / 'neuralese_data' / 'build_native_graph_text_corpus.py',
+        'tokenizer_provision': root / 'scripts' / 'neuralese_data' / 'build_native_semantic_pairs_e2e.py',
+        'tokenizer_inventory': package / 'model' / 'native_model.py',
     }
     # Identity follows the logical runtime files and their bytes, not checkout
     # location. Keep observed paths as receipt metadata outside the fingerprint.
@@ -270,7 +275,63 @@ def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint
         yield graph
 
 
-def main():
+def _tokenizer_rendering_configuration(tokenizer):
+    return {'class': type(tokenizer).__module__ + '.' + type(tokenizer).__qualname__,
+        'history_reasoning': getattr(tokenizer, 'natlang_history_reasoning', None),
+        **{name: getattr(tokenizer, name, None) for name in ('padding_side', 'truncation_side',
+            'model_max_length', 'clean_up_tokenization_spaces', 'split_special_tokens')}}
+
+
+@dataclass(frozen=True)
+class PreparedTokenizer:
+    """One explicitly bound tokenizer, validated before and after every source."""
+    tokenizer: object
+    base: Path
+    source_fingerprint: str
+    expanded_fingerprint: str
+    base_files: dict
+    rendering_configuration: dict
+    render_method: object
+    binding_sha256: str
+
+    @property
+    def binding(self):
+        return {'schema': 'natlang.prepared-native-tokenizer/1',
+            'base_files': self.base_files, 'source_fingerprint': self.source_fingerprint,
+            'expanded_fingerprint': self.expanded_fingerprint,
+            'rendering_configuration': self.rendering_configuration}
+
+    def validate(self, base):
+        if canonical_json_sha256_hex(self.binding) != self.binding_sha256:
+            raise ValueError('prepared tokenizer binding was mutated')
+        if tokenizer_inventory(base) != self.base_files or tokenizer_inventory(self.base) != self.base_files:
+            raise ValueError('prepared tokenizer base/configuration inventory changed')
+        if tokenizer_fingerprint(self.tokenizer) != self.expanded_fingerprint:
+            raise ValueError('prepared tokenizer vocabulary/backend/template was mutated')
+        if (_tokenizer_rendering_configuration(self.tokenizer) != self.rendering_configuration
+                or self.tokenizer.apply_chat_template != self.render_method):
+            raise ValueError('prepared tokenizer rendering configuration was mutated')
+
+
+def prepare_tokenizer(base):
+    base = Path(base).resolve(strict=True)
+    files = tokenizer_inventory(base)
+    tokenizer = AutoTokenizer.from_pretrained(base, local_files_only=True, trust_remote_code=False)
+    source_fp = tokenizer_fingerprint(tokenizer)
+    provision(tokenizer)
+    expanded_fp = tokenizer_fingerprint(tokenizer)
+    bind_history_reasoning(tokenizer)
+    configuration = json.loads(json.dumps(_tokenizer_rendering_configuration(tokenizer)))
+    binding = {'schema': 'natlang.prepared-native-tokenizer/1', 'base_files': files,
+        'source_fingerprint': source_fp, 'expanded_fingerprint': expanded_fp,
+        'rendering_configuration': configuration}
+    context = PreparedTokenizer(tokenizer, base, source_fp, expanded_fp, files,
+        configuration, tokenizer.apply_chat_template, canonical_json_sha256_hex(binding))
+    context.validate(base)
+    return context
+
+
+def main(argv=None, *, prepared=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--export-receipt', type=Path, required=True)
     parser.add_argument('--base-tokenizer', type=Path, required=True)
@@ -278,12 +339,15 @@ def main():
     parser.add_argument('--decision-hold', type=Path, action='append', required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--chunk-sessions', type=int, default=100)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.chunk_sessions <= 0:
         raise ValueError('--chunk-sessions must be a positive integer')
-    # The lease precedes completed_shards(), which may clean unreceipted
-    # directories. The open file descriptor holds flock until this process exits.
-    output_lease = acquire_output_lease(args.output)
+    # A callable invocation releases ownership on every success/error path.
+    with acquire_output_lease(args.output):
+        return _convert(args, prepared)
+
+
+def _convert(args, prepared):
     export = json.loads(args.export_receipt.read_text())
     if export.get('schema') != 'natlang.normalized-agent-source-file/1':
         raise ValueError('source needs its complete normalized export receipt')
@@ -297,10 +361,10 @@ def main():
         raise ValueError('decision hold bindings must include the complete current file set')
     decision_ids, decision_bindings = load_decision_holds(current_holds)
     held_sources = {identifier.split(':decision:', 1)[0] for identifier in decision_ids} | decision_ids
-    tokenizer = AutoTokenizer.from_pretrained(args.base_tokenizer, local_files_only=True, trust_remote_code=False)
-    source_fp = tokenizer_fingerprint(tokenizer)
-    provision(tokenizer)
-    expanded_fp = tokenizer_fingerprint(tokenizer)
+    prepared = prepare_tokenizer(args.base_tokenizer) if prepared is None else prepared
+    prepared.validate(args.base_tokenizer)
+    tokenizer = prepared.tokenizer
+    source_fp, expanded_fp = prepared.source_fingerprint, prepared.expanded_fingerprint
     # Complete source-file held-group closure before writing any shard. Final
     # corpus admission also closes groups across all source files and views.
     held = set(protection['held'])
@@ -325,6 +389,7 @@ def main():
         'source_contract': export['contract'], 'protection': protection['proof'],
         'decision_holds': decision_bindings, 'decision_hold_ids_sha256': canonical_json_sha256_hex(sorted(decision_ids)),
         'source_tokenizer_fingerprint': source_fp, 'expanded_tokenizer_fingerprint': expanded_fp,
+        'prepared_tokenizer': prepared.binding,
         'runtime': {'files': runtime['files'], 'fingerprint': runtime['fingerprint']},
         'chunk_sessions': args.chunk_sessions,
         'held_group_closure_sha256': canonical_json_sha256_hex(sorted(held))}
@@ -447,6 +512,7 @@ def main():
         raise ValueError('complete normalized source session accounting differs')
     if sha256_file_hex(source) != digest:
         raise ValueError('source changed during rendering')
+    prepared.validate(args.base_tokenizer)
     final_protection = current_protection(args.protection)
     if final_protection['proof'] != protection['proof']:
         raise ValueError('current source protection changed during rendering')
@@ -473,6 +539,7 @@ def main():
         'protection': protection['proof'], 'decision_holds': decision_bindings,
         'source_tokenizer_fingerprint': source_fp, 'expanded_tokenizer_fingerprint': expanded_fp,
         'builder_sha256': sha256_file_hex(__file__), 'runtime': runtime,
+        'prepared_tokenizer': prepared.binding,
         'counts': dict(counts), 'outputs': outputs, 'training_admission': False,
         'source_record_count': source_rows, 'held_group_closure_sha256': binding['held_group_closure_sha256'],
         'shards': shard_receipts, 'resume_state_sha256': sha256_file_hex(state_path),

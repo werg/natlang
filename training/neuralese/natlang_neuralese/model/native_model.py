@@ -103,8 +103,8 @@ def native_identity(model, config, *, checkpoint_sha256):
             'embedding_weight_sha256': digest.hexdigest(), 'architecture': config['architecture']}
 
 
-def base_inventory(base):
-    """Pin actual model/tokenizer inputs, reusing the shared verified file cache."""
+def _input_inventory(base, *, include_weights):
+    """Shared exact local HF input inventory, optionally including weight shards."""
     root = Path(base).resolve(strict=True)
     names = {'config.json', 'generation_config.json', 'model.safetensors.index.json',
              'tokenizer.json', 'tokenizer.model', 'spiece.model', 'tokenizer_config.json',
@@ -112,11 +112,20 @@ def base_inventory(base):
              'added_tokens.json'}
     files = {str(path.relative_to(root)): sha256_file_hex_cached(path)
              for path in sorted(root.rglob('*'))
-             if path.is_file() and (path.suffix == '.safetensors' or path.name in names)}
-    if 'config.json' not in files or not any(name.endswith('.safetensors') for name in files):
+             if path.is_file() and (include_weights and path.suffix == '.safetensors' or path.name in names)}
+    if 'config.json' not in files or include_weights and not any(name.endswith('.safetensors') for name in files):
         raise ValueError('native model needs a local pinned configuration and safetensors weights')
     return files
 
+
+def tokenizer_inventory(base):
+    """Pin tokenizer/configuration inputs without reading model weight shards."""
+    return _input_inventory(base, include_weights=False)
+
+
+def base_inventory(base):
+    """Pin actual model/tokenizer inputs, reusing the shared verified file cache."""
+    return _input_inventory(base, include_weights=True)
 
 def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", token_override_ids=None, token_override_dtype=torch.float32, sparse_row_dtype=torch.float32):
     """Return (SharedStateModel, tokenizer, RoleTokens, model_config).
