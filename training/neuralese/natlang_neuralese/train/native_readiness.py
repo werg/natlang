@@ -168,6 +168,17 @@ def validate_ready(path, requirement):
 
 
 def ready_participants(config):
+    if config.get('raw_rl_bootstrap'):
+        from ..rl.native_raw_rounds import raw_out,validate_release
+        raw_state=raw_out(config)/'state.json'
+        if raw_state.exists():
+            try:released=validate_release(raw_state,_bound(config['raw_rl_bootstrap']))
+            except (ValueError,OSError,KeyError) as error:
+                return [],[{'reason':'raw optimizer handoff needs repair: '+str(error),'repair_required':True}]
+            if released is None:
+                return [],[{'model_id':item['model_id'],'reason':'raw optimizer owner has not released current checkpoint'}
+                           for item in config['participants']]
+            return [released[key] for key in sorted(released)],[]
     ready, pending = {}, []
     for participant in config['participants']:
         path = Path(participant['readiness'])
@@ -251,6 +262,15 @@ def rl_bootstrap_command(config, completion, proof):
     signature = canonical_json_sha256_hex({'plan_sha256': config['rl_bootstrap']['sha256'],
         'shared_checkpoint': proof['checkpoint'], 'adapter': proof['adapter'], 'out': str(out)})
     return argv, signature
+
+
+def raw_bootstrap_command(config):
+    from ..rl.native_raw_rounds import raw_out
+    plan=_bound(config['raw_rl_bootstrap']);value=json.loads(plan.read_text())
+    if value.get('schema')!='natlang.native-raw-rl-bootstrap/1' or not value.get('models'):
+        raise ValueError('raw bootstrap needs its declared actual students and original-owner handoffs')
+    out=raw_out(config)
+    return [sys.executable,'-m','natlang_neuralese.rl.native_rounds','--raw-bootstrap',str(plan),'--out',str(out)]
 
 
 _CHILD_OWNER_ENV = 'NATLANG_NATIVE_CONTROLLER_LAUNCH'
@@ -495,6 +515,13 @@ def _run(config_path, *, once=False, stop):
                 'participants': signature, 'curriculum': curriculum_signature})
             participants = out/'participants.json'
             retry_ready = retry is None or time.time() >= retry['next_retry_at']
+            if (child is None and len(ready)<2 and config.get('raw_rl_bootstrap') and not last_success
+                    and not semantic_publication and not once and not stop.requested and retry_ready):
+                try:
+                    child,launch=_launch_child(raw_bootstrap_command(config),'native-raw-rl',config,out,execution_signature,None)
+                    child_kind='native-raw-rl'
+                except (OSError,ValueError) as error:
+                    retry=_retry_failure(retry,'native-raw-rl',execution_signature,interval,error=error)
             if len(ready) >= 2:
                 manifest = {'schema': 'natlang.native-shared-participants/1', 'models': ready,
                             'signature': signature}
@@ -612,7 +639,15 @@ def _run(config_path, *, once=False, stop):
                     write_json_durable(state_path, state)
                     time.sleep(interval)
                     continue
-                if child_kind == 'native-rl':
+                if child_kind == 'native-raw-rl':
+                    from ..rl.native_raw_rounds import raw_out,validate_release
+                    if validate_release(raw_out(config)/'state.json',_bound(config['raw_rl_bootstrap'])) is None:
+                        retry=_retry_failure(retry,child_kind,execution_signature,interval,
+                            error='raw owner exited without current checkpoint/readiness release')
+                        state.update(retry=retry,status='retry_wait',child_pid=None,child_kind=None)
+                        child,child_kind=None,None;forwarded=False
+                        write_json_durable(state_path,state);time.sleep(interval);continue
+                elif child_kind == 'native-rl':
                     rl_last_success = active_rl_signature
                     state['last_successful_rl_bootstrap'] = rl_last_success
                 else:

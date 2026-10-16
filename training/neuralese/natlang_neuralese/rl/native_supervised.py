@@ -57,7 +57,7 @@ def continuation_config(config,stage,*,checkpoint,adapter,out):
     sources=resolve_stage_inputs(recipe,stage,{})
     parameters=effective_stage_parameters(stage,[],recipe)
     parameters={key:value for key,value in parameters.items() if value is not None}
-    parameters.pop('communication_foundation',None)
+    if adapter is not None:parameters.pop('communication_foundation',None)
     parameters.pop('memory_qualification',None)  # one restored-parent capacity check, not every CE quantum
     parameters['refresh_at_checkpoint']=True
     parameters['stage_id']=stage['id']
@@ -66,6 +66,7 @@ def continuation_config(config,stage,*,checkpoint,adapter,out):
         'semantic_adapter':adapter,'production_stage':stage['id'],'trainer_parameters':parameters,
         'seed_native_graphs':sources['native_graphs']['path'],
         'held_native_graphs':sources['held_native_graphs']['path']}
+    if adapter is None:result.pop('semantic_adapter',None)
     result['seed_command']=list(result['seed_command'])
     for role in ('pending_native_sources','continued_native_graphs','continued_held_native_graphs'):
         flag='--'+role.replace('_','-')
@@ -99,7 +100,11 @@ def execute(config,state,state_path,control):
     from .production import run_command
     from ..train.recipe import stage_parameter_args
     if state.get('pending_native_checkpoint'):
-        return state
+        retry=(state.get('last_learner_progress') or {})
+        if not (config.get('raw_foundation_qualification')
+                and (retry.get('communication_foundation') or {}).get('complete')
+                and retry.get('foundation_ready') is not True):
+            return state
     directory=Path(config['out'])/'learner'
     report_path=directory/'report.json'
     values={**{k:v for k,v in config.items() if isinstance(v,(str,int,float,list))},
@@ -138,6 +143,19 @@ def execute(config,state,state_path,control):
     state.update(phase='awaiting_semantic_refresh',pending_native_checkpoint=str(checkpoint),
         pending_native_round_dir=str(Path(config['out'])),last_learner_progress=report,
         mandatory_sft=report.get('mandatory_sft'))
+    if config.get('native_actor_mode')=='raw-state' and report.get('resident_adoption'):
+        from ..train.native_resident import current,binding,bound
+        from ..common.jsonio import write_bytes_durable
+        adopted=report['resident_adoption'];source=Path(adopted['directory']);resident=current(source)
+        if (not resident or resident['generation']!=adopted['generation'] or
+                resident['payload']['recipe']!=(json.loads((directory/'native-training-receipt.json').read_text())).get('recipe')):
+            raise ValueError('raw SFT worker changed its actual final adopted source generation')
+        snapshot=directory/'resident-source';snapshot.mkdir(parents=True,exist_ok=True)
+        write_bytes_durable(snapshot/'current.json',bound(binding(source/'current.json')).read_bytes())
+        recipe=resident['payload']['recipe'];recipe_binding={'path':recipe['path'],'sha256':recipe['file_sha256']}
+        write_bytes_durable(snapshot/'recipe.json',bound(recipe_binding).read_bytes())
+        state['resident_current']=binding(snapshot/'current.json')
+        state['resident_recipe']={'source':recipe_binding,'copy':binding(snapshot/'recipe.json')}
     write_json_durable(state_path,state)
     return state
 

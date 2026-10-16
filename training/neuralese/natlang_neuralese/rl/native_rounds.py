@@ -96,39 +96,45 @@ def bootstrap_configs(plan_path, completion_path, out):
             coefficient_optimizer=declaration.get('coefficient_optimizer'),
             coefficient_task_eval=declaration.get('coefficient_task_eval'))
         config = configure_native(args)
-        overrides = declaration.get('commands') or {}
-        if set(overrides) - {'actor_command', 'learner_command', 'seed_command', 'round_command',
-                             'refresh_command', 'before_collect', 'before_update', 'after_update'}:
-            raise ValueError('native RL bootstrap has an unsupported provider command hook')
-        for name, argv in overrides.items():
-            if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) for arg in argv):
-                raise ValueError('native RL provider bridge commands must be explicit nonempty argv lists')
-            config[name] = argv
-        if plan.get('refresh_command'):
-            argv = plan['refresh_command']
-            if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) for arg in argv):
-                raise ValueError('native RL refresh provider must be an explicit argv list')
-            config['refresh_command'] = argv
-        if declaration.get('provider'):
-            config['provider'] = declaration['provider']
-        if declaration.get('provider_queue'):
-            import sys
-            config['round_command'] = [sys.executable, '-m', 'natlang_neuralese.rl.native_bridge',
-                '--queue', declaration['provider_queue'], '--request', '{request}',
-                '--result', '{result}', '--stop-file', '{stop_file}']
-        if plan.get('refresh_provider'):
-            config['refresh_provider'] = plan['refresh_provider']
-        config['bootstrap_binding'] = binding
-        config['source_admission'] = declaration.get('source_admission')
-        if declaration.get('task_source'):
-            config['task_source'] = declaration['task_source']
-        write_json_durable(config_path, config)
+        configure_provider(config,declaration,plan,binding,config_path)
         results.append(config_path)
     write_json_durable(receipt, {'schema': 'natlang.native-rl-bootstrap-receipt/1',
         'binding': binding, 'configs': [str(path.resolve()) for path in results],
         'participants': sorted(participants), 'provider_commands_executed': False})
     return results
 
+
+
+def configure_provider(config,declaration,plan,binding,config_path):
+    """One exact provider/actor command contract for raw and joint bootstrap."""
+    overrides = declaration.get('commands') or {}
+    if set(overrides) - {'actor_command', 'learner_command', 'seed_command', 'round_command',
+                         'refresh_command', 'before_collect', 'before_update', 'after_update'}:
+        raise ValueError('native RL bootstrap has an unsupported provider command hook')
+    for name, argv in overrides.items():
+        if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) for arg in argv):
+            raise ValueError('native RL provider bridge commands must be explicit nonempty argv lists')
+        config[name] = argv
+    if plan.get('refresh_command'):
+        argv = plan['refresh_command']
+        if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) for arg in argv):
+            raise ValueError('native RL refresh provider must be an explicit argv list')
+        config['refresh_command'] = argv
+    if declaration.get('provider'):
+        config['provider'] = declaration['provider']
+    if declaration.get('provider_queue'):
+        import sys
+        config['round_command'] = [sys.executable, '-m', 'natlang_neuralese.rl.native_bridge',
+            '--queue', declaration['provider_queue'], '--request', '{request}',
+            '--result', '{result}', '--stop-file', '{stop_file}']
+    if plan.get('refresh_provider'):
+        config['refresh_provider'] = plan['refresh_provider']
+    config['bootstrap_binding'] = binding
+    config['source_admission'] = declaration.get('source_admission')
+    if declaration.get('task_source'):
+        config['task_source'] = declaration['task_source']
+    write_json_durable(config_path, config)
+    return config
 
 def bridge_result(command, request, stop):
     from .native_bridge import binding, verify_result
@@ -365,11 +371,15 @@ def main(argv=None):
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument('--config', action='append', type=Path)
     source.add_argument('--bootstrap', type=Path)
+    source.add_argument('--raw-bootstrap', type=Path)
     parser.add_argument('--shared-completion', type=Path)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--rounds', type=int)
     parser.add_argument('--device', default='cuda')
     args = parser.parse_args(argv)
+    if args.raw_bootstrap:
+        from .native_raw_rounds import run as run_raw
+        return run_raw(args.raw_bootstrap,args.out,cycles=args.rounds)
     if args.bootstrap and not args.shared_completion:
         parser.error('--bootstrap requires actual --shared-completion')
     configs = bootstrap_configs(args.bootstrap, args.shared_completion, args.out) if args.bootstrap else args.config

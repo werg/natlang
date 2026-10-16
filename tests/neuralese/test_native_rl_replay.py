@@ -12,12 +12,15 @@ from natlang_neuralese.serve.store import native_state_id
 from test_shared_state import tiny
 
 
-def actor_rollout(family):
-    torch.manual_seed(901)
-    model = SharedStateModel(tiny(family), marker_ids=(58, 59, 60, 61), rank=4)
-    roles = SimpleNamespace(produce_open=58, produce_close=59, consume_open=60, consume_close=61)
-    identity = {'checkpoint_sha256': '1'*64, 'tokenizer_fingerprint': '2'*64,
-                'embedding_weight_sha256': '3'*64, 'architecture': model.port.config.model_type}
+def actor_rollout(family,*,loaded=None,text='payload'):
+    if loaded is None:
+        torch.manual_seed(901)
+        model = SharedStateModel(tiny(family), marker_ids=(58, 59, 60, 61), rank=4)
+        roles = SimpleNamespace(produce_open=58, produce_close=59, consume_open=60, consume_close=61)
+        identity = {'checkpoint_sha256': '1'*64, 'tokenizer_fingerprint': '2'*64,
+                    'embedding_weight_sha256': '3'*64, 'architecture': model.port.config.model_type}
+    else:model,roles,identity=loaded
+    device=next(model.parameters()).device
     def capture(prompt):
         return {'schema': 'natlang.native-rl-sampling/1', 'policy': dict(identity), 'prompt': prompt,
                 'samples': [], 'writes': [], 'sample_range_convention': 'half-open', 'finish_reason': 'stop',
@@ -30,25 +33,25 @@ def actor_rollout(family):
             record['samples'].append({'index': index, 'token_id': token, 'logp': float(logp),
                 'input_role': 'produce' if producing else 'ordinary', 'terminal': token == 2})
             if token != 2:
-                out = native_step(model, torch.tensor([[token]]), out['cache'], producing=producing)
+                out = native_step(model, torch.tensor([[token]],device=device), out['cache'], producing=producing)
                 if producing:
                     chunks.append(out)
         return out, chunks
     with torch.no_grad():
         producer = capture([{'kind': 'tokens', 'token_ids': [1, 4], 'producing': [False, False]}])
-        _, chunks = sample(native_step(model, torch.tensor([[1, 4]])), producer,
-                           [(58, False), (5, True), (6, True), (59, False), (2, False)])
-        block = NativeStateBlock(text='payload', **identity, **concatenate_captures(chunks)).validate()
+        _, chunks = sample(native_step(model, torch.tensor([[1, 4]],device=device)), producer,
+                           [(roles.produce_open, False), (5, True), (6, True), (roles.produce_close, False), (2, False)])
+        block = NativeStateBlock(text=text, **identity, **concatenate_captures(chunks)).validate()
         block_id = native_state_id(block)
         producer['writes'] = [{'state_id': block_id, 'begin_sample': 0, 'end_sample': 4,
                               'payload_begin': 1, 'payload_end': 3, 'native_identity': identity}]
-        consumer = capture([{'kind': 'tokens', 'token_ids': [3, 60], 'producing': [False, False]},
+        consumer = capture([{'kind': 'tokens', 'token_ids': [3, roles.consume_open], 'producing': [False, False]},
             {'kind': 'native_state', 'id': block_id, 'native_identity': identity},
-            {'kind': 'tokens', 'token_ids': [61], 'producing': [False]}])
-        out = native_step(model, torch.tensor([[3, 60]]))
+            {'kind': 'tokens', 'token_ids': [roles.consume_close], 'producing': [False]}])
+        out = native_step(model, torch.tensor([[3, roles.consume_open]],device=device))
         cache = splice_block(model, out['cache'], block,
                              **{key: value for key, value in identity.items() if key != 'architecture'})
-        out = native_step(model, torch.tensor([[61]]), cache)
+        out = native_step(model, torch.tensor([[roles.consume_close]],device=device), cache)
         sample(out, consumer, [(11, False), (2, False)])
     turns = [{'graph_turn': 'consumer', 'sampling': consumer, 'read_bindings': {block_id: 'write-0'}},
              {'graph_turn': 'producer', 'sampling': producer, 'written_nodes': {block_id: 'write-0'}}]

@@ -181,6 +181,14 @@ def execute(request_path, result_path, *, stop=None):
                     write_json_durable(state_path, json.loads(snapshot.read_text()))
             elif state_path.exists():
                 raise ValueError('unexpected remote round state; recover its artifacts before starting a new request')
+            if request.get('native_actor_mode')=='raw-state' and config.get('resident_data_directory'):
+                # Read actual worker-host authority, never a historical handoff
+                # snapshot or a coordinator's stale mirror, before allocation.
+                initial=Path(config['resident_data_directory'])/'initial.json'
+                if initial.exists():
+                    from ..train.native_resident import owner_alive
+                    if owner_alive(json.loads(initial.read_text()).get('owner') or {}):
+                        raise ValueError('raw worker resident optimizer owner is still alive; drain or reattach its exact request')
             _bound(request['parent_checkpoint'])
             prior = json.loads(state_path.read_text()) if state_path.exists() else config
             if (sha256_file_hex_cached(prior['checkpoint']) != request['parent_checkpoint']['sha256']

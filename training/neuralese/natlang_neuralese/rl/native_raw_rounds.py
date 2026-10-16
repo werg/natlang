@@ -1,0 +1,399 @@
+"""Per-student whole-recipe/RL continuation before the shared-codec rendezvous.
+
+The recipe/curriculum declares work. Exact plumbing serializes existing workers,
+commits current checkpoint ownership and releases only genuine latest readiness.
+"""
+from __future__ import annotations
+import fcntl
+import json
+import os
+from pathlib import Path
+from types import SimpleNamespace
+import time
+from ..common.hashing import sha256_file_hex_cached
+from ..common.jsonio import write_json_durable,write_bytes_durable
+from ..train.native_readiness import _bound
+from .native_raw_handoff import binding,verify_handoff
+
+SCHEMA='natlang.native-raw-rounds/1'
+
+
+def raw_out(config):
+    return Path(config.get('raw_rl_out',str(Path(config.get('rl_out',Path(config['out'])/'rl')).parent/'native_raw_rl'))).resolve()
+
+
+def _inputs(declaration):
+    from ..common.jsonio import iter_jsonl_rows
+    inputs={name:_bound(declaration[name]) for name in ('cases','production_recipe','seed_native_graphs','held_native_graphs')}
+    cases=[row for _,row in iter_jsonl_rows(inputs['cases'])]
+    if not cases or any(row.get('split')!='train' for row in cases):
+        raise ValueError('raw bootstrap requires nonempty exact admitted TRAIN tasks')
+    if declaration.get('task_source'):
+        from .task_source import resolve_task_source
+        declared=declaration['task_source'];actual=resolve_task_source(declared['manifest'])
+        if (any(actual[key]!=declared[key] for key in ('manifest_sha256','cases_sha256','rows','audit_sha256','selection_proof_sha256'))
+                or actual['cases']!=inputs['cases']):
+            raise ValueError('raw bootstrap task-source admission binding changed')
+    return inputs
+
+
+def configure_model(plan_path,declaration,handoff,out):
+    from .production import configure_native
+    from .native_rounds import configure_provider
+    plan_path=Path(plan_path);out=Path(out);out.mkdir(parents=True,exist_ok=True)
+    record,saved=verify_handoff(handoff,requirement=declaration['handoff_requirement'])
+    actual=saved['model_config']['architecture']+':'+saved['model_config']['base_inventory_sha256']
+    if actual!=declaration['handoff_requirement']['model_id']:
+        raise ValueError('raw bootstrap drained another student/base identity')
+    del saved  # release mapped weight references before actor/model construction
+    active_declaration=declaration
+    if (record.get('resident') or {}).get('current'):
+        from ..train.native_resident import current
+        reference=record['resident']['current']
+        _release_requirement(declaration,{'resident_current':reference})
+        resident=current(_bound(reference).parent)['payload']
+        recipe=resident['recipe']
+        active_declaration={**declaration,'production_recipe':{'path':recipe['path'],'sha256':recipe['file_sha256']},
+            'seed_native_graphs':resident['train'],'held_native_graphs':resident['held']}
+    inputs=_inputs(active_declaration)
+    runtime=Path(declaration['runtime']).resolve(strict=True)
+    if not (runtime/'dist/teacher/cli.js').is_file():raise ValueError('raw bootstrap needs its actual built collector runtime')
+    path=out/'config.json';owner={'plan_sha256':sha256_file_hex_cached(plan_path),'handoff':handoff}
+    if path.exists():
+        prior=json.loads(path.read_text())
+        if (prior.get('bootstrap_binding') or {}).get('handoff')!=handoff:
+            raise ValueError('raw bootstrap original optimizer handoff changed')
+        if prior.get('bootstrap_binding')==owner:return path
+        cursor=json.loads((out/'cycle.json').read_text()) if (out/'cycle.json').exists() else {}
+        if cursor.get('phase')=='sft' or cursor.get('pending_rl_round'):
+            return path  # Finish the already sealed exact operation before hot config adoption.
+    args=SimpleNamespace(**inputs,model=declaration['model'],native_participant=None,semantic_adapter=None,
+        semantic_refresh_config=None,checkpoint=_bound(record['checkpoint']),base=Path(declaration['base']),
+        production_stage=declaration['production_stage'],runtime=runtime,out=out/'production',config=path,
+        port=declaration['port'],coefficient_policy=None,coefficient_optimizer=None,coefficient_task_eval=None)
+    config=configure_native(args)
+    config['seed_trainer_parameters']['refresh_at_checkpoint']=True
+    if record.get('resident'):
+        config['resident_data_directory']=record['resident']['directory']
+        config['seed_trainer_parameters']['resident_data_directory']=record['resident']['directory']
+    config['raw_model_id']=actual
+    configure_provider(config,declaration,{},owner,path)
+    return path
+
+
+def _publish_checkpoint(config,checkpoint):
+    """Only the drained worker's actual checkpoint becomes the sole current parent."""
+    out=Path(config['out']);out.mkdir(parents=True,exist_ok=True);path=out/'state.json'
+    with (out/'controller.lock').open('a') as lease:
+        fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        from .production import initial_controller_state
+        state=json.loads(path.read_text()) if path.exists() else initial_controller_state(config)
+        state.update(checkpoint=str(_bound(checkpoint)),phase='collect',actor_policy_pending_load=checkpoint['sha256'])
+        write_json_durable(path,state)
+
+
+def _current_checkpoint(config):
+    path=Path(config['out'])/'state.json'
+    return binding(json.loads(path.read_text())['checkpoint'] if path.exists() else config['checkpoint'])
+
+
+def _progress(checkpoint):
+    from ..train.checkpoint_policy import CheckpointPolicy
+    from ..train.native_continuation import progress_obligations
+    state=CheckpointPolicy.load(_bound(checkpoint))
+    return progress_obligations(state['training']['sft_progress'])
+
+
+def _restore_recipe_alias(source,copy):
+    """Install verified immutable bytes without replacing another writer's file."""
+    if source['sha256']!=copy['sha256']:raise ValueError('raw recipe alias changed immutable source bytes')
+    target=Path(source['path'])
+    if not target.exists():
+        target.parent.mkdir(parents=True,exist_ok=True)
+        temporary=target.with_name('.raw-immutable-'+source['sha256'])
+        write_bytes_durable(temporary,_bound(copy).read_bytes())
+        try:
+            # The newly copied payload is immutable before linking; this is
+            # never a link to a mutable checkpoint/source authority.
+            try:os.link(temporary,target)
+            except FileExistsError:pass
+            descriptor=os.open(target.parent,os.O_DIRECTORY)
+            try:os.fsync(descriptor)
+            finally:os.close(descriptor)
+        finally:temporary.unlink(missing_ok=True)
+    _bound(source)
+
+
+def student_cycle(plan_path,declaration,handoff,directory,*,stop):
+    """Resume exact per-operation outputs; every source remains a carried obligation."""
+    from .native_rounds import round_job
+    from .native_supervised import continuation_config,stage_pending,MANDATORY_STAGE_KINDS
+    from ..train.recipe import resolve_recipe_data
+    directory=Path(directory);config_path=configure_model(plan_path,declaration,handoff,directory)
+    config=resolve_recipe_data(config_path)
+    cursor_path=directory/'cycle.json'
+    cursor=json.loads(cursor_path.read_text()) if cursor_path.exists() else {'cycle':0,'phase':'rl','next_stage':0}
+    cycle=cursor['cycle'];work=directory/'cycles'/f'{cycle:06d}'
+    if cursor['phase']=='rl':
+        if stop.requested:return cursor
+        production_state=Path(config['out'])/'state.json'
+        state=json.loads(production_state.read_text()) if production_state.exists() else {'round':0}
+        if 'pending_rl_round' not in cursor:
+            cursor['pending_rl_round']=state['round']+1
+            write_json_durable(cursor_path,cursor)
+        result=(state if state['round']>=cursor['pending_rl_round'] else
+            round_job(config_path,config,work/'rl-bridge',stop))
+        if stop.requested:return cursor
+        if result.get('phase')!='collect':raise RuntimeError('raw RL operation needs its actual drained published boundary')
+        cursor.update(phase='sft',next_stage=0,current_checkpoint=_current_checkpoint(config))
+        cursor.pop('pending_rl_round',None)
+        write_json_durable(cursor_path,cursor)
+    recipe=resolve_recipe_data(config['production_recipe'])
+    stages=[stage for stage in recipe['stages'] if stage['kind'] in MANDATORY_STAGE_KINDS]
+    foundation=[stage for stage in stages if stage['id']==config['production_stage']]
+    if len(foundation)!=1:raise ValueError('raw continuation lost its actual foundation recipe stage')
+    # The actual foundation trainer is last, so its receipt certifies the current
+    # post-preference/RL weights rather than a stale earlier parent.
+    stages=[stage for stage in stages if stage['id']!=foundation[0]['id']]+foundation
+    for index in range(cursor.get('next_stage',0),len(stages)):
+        if stop.requested:return cursor
+        stage=stages[index];checkpoint=_current_checkpoint(config)
+        jobdir=work/'supervised'/f'{index:03d}'
+        continuation,sources=continuation_config(config,stage,checkpoint=str(_bound(checkpoint)),adapter=None,out=jobdir)
+        parameters=continuation['trainer_parameters']
+        is_foundation=stage['id']==config['production_stage']
+        # Once the cohort is ready, ordinary mandatory deficits still receive
+        # useful finite quanta; a final existing foundation qualification below
+        # binds the resulting actual weights before rendezvous.
+        parameters['communication_foundation']=bool(is_foundation and not cursor.get('foundation_qualified'))
+        if is_foundation and config.get('resident_data_directory'):
+            parameters['resident_data_directory']=config['resident_data_directory']
+        continuation['raw_foundation_qualification']=parameters['communication_foundation']
+        export={'models':{'raw':{'mandatory_sft':_progress(checkpoint)}}}
+        pending=stage_pending(export,'raw',stage['id'],sources,parameters.get('epochs',1),
+            objective=continuation.get('offline_objective_binding'))
+        if pending or is_foundation:
+            _supervised_job(continuation,jobdir,config,cursor,stop)
+            if stop.requested:return cursor
+        cursor.update(next_stage=index+1,current_checkpoint=_current_checkpoint(config))
+        write_json_durable(cursor_path,cursor)
+    if cursor.get('foundation_qualified'):
+        # This is the same shared trainer, not a fabricated copy of an old
+        # certificate. It may do zero updates when the exact cohort is complete,
+        # but rechecks runtime/task behavior against current post-RL weights.
+        checkpoint=_current_checkpoint(config);jobdir=work/'foundation-current'
+        continuation,_=continuation_config(config,foundation[0],checkpoint=str(_bound(checkpoint)),adapter=None,out=jobdir)
+        continuation['trainer_parameters']['communication_foundation']=True
+        if config.get('resident_data_directory'):
+            continuation['trainer_parameters']['resident_data_directory']=config['resident_data_directory']
+        continuation['raw_foundation_qualification']=True
+        _supervised_job(continuation,jobdir,config,cursor,stop)
+        if stop.requested:return cursor
+    cursor.update(cycle=cycle+1,phase='rl',next_stage=0,current_checkpoint=_current_checkpoint(config))
+    write_json_durable(cursor_path,cursor)
+    return cursor
+
+
+def _supervised_job(continuation,jobdir,config,cursor,stop):
+    from .native_rounds import round_job
+    path=Path(jobdir)/'config.json';path.parent.mkdir(parents=True,exist_ok=True)
+    write_json_durable(path,continuation)
+    result=round_job(path,continuation,Path(jobdir)/'bridge',stop)
+    if stop.requested:return
+    pending=result.get('pending_native_checkpoint')
+    if not pending:raise RuntimeError('raw supervised quantum returned no exact drained checkpoint')
+    checkpoint=binding(pending);report_path=Path(pending).parent/'native-training-receipt.json'
+    _publish_checkpoint(config,checkpoint)
+    cursor.pop('readiness',None)
+    if report_path.is_file():
+        report=json.loads(report_path.read_text())
+        if report['checkpoint']['sha256']!=checkpoint['sha256']:
+            raise ValueError('raw supervised readiness belongs to another checkpoint')
+        if continuation.get('raw_foundation_qualification') and (report.get('foundation_ready') or report.get('completed')):
+            cursor.update(readiness=binding(report_path),foundation_qualified=True)
+        elif (continuation.get('raw_foundation_qualification')
+                and (report.get('communication_foundation') or {}).get('complete')):
+            raise RuntimeError('raw current foundation runtime/task qualification needs repair; exact checkpoint retained')
+        adopted=report.get('resident_adoption')
+        if adopted and continuation.get('resident_data_directory',continuation['trainer_parameters'].get('resident_data_directory')):
+            from ..train.native_resident import current
+            source=Path(adopted['directory'])
+            reference=result.get('resident_current')
+            recipe_copy=result.get('resident_recipe') or {}
+            if reference is None or not recipe_copy.get('source') or not recipe_copy.get('copy'):
+                raise ValueError('raw SFT worker omitted its final immutable resident source snapshots')
+            state=current(_bound(reference).parent)
+            if not state or state['generation']!=adopted['generation'] or state['payload']['recipe']!=report['recipe']:
+                raise ValueError('raw continuation changed its actual committed resident source generation')
+            expected={'path':report['recipe']['path'],'sha256':report['recipe']['file_sha256']}
+            if recipe_copy['source']!=expected or recipe_copy['copy']['sha256']!=expected['sha256']:
+                raise ValueError('raw resident recipe snapshot changed its exact original bytes')
+            _restore_recipe_alias(expected,recipe_copy['copy'])
+            snapshot=Path(jobdir)/'resident-snapshot';snapshot.mkdir(parents=True,exist_ok=True)
+            write_bytes_durable(snapshot/'current.json',_bound(reference).read_bytes())
+            cursor['resident_current']=binding(snapshot/'current.json')
+            # Follow the already validated shared resident policy. No new rows
+            # earn credit here, and pending.json remains with its existing owner.
+            config['production_recipe']=state['payload']['recipe']['path']
+            from ..train.recipe import resolve_recipe_data
+            recipe=resolve_recipe_data(config['production_recipe'])
+            stage=next(stage for stage in recipe['stages'] if stage['id']==config['production_stage'])
+            from .native_supervised import continuation_config
+            refreshed,_=continuation_config(config,stage,checkpoint=checkpoint['path'],adapter=None,out=config['out'])
+            for key in ('seed_command','seed_native_graphs','held_native_graphs','pending_native_sources',
+                        'continued_native_graphs','continued_held_native_graphs','objective_spec'):
+                if key in refreshed:config[key]=refreshed[key]
+                else:config.pop(key,None)
+            config['seed_trainer_parameters']={**refreshed['trainer_parameters'],
+                'resident_data_directory':str(source),'refresh_at_checkpoint':True}
+            write_json_durable(Path(config['out']).parent/'config.json',config)
+
+
+def _release_requirement(declaration,value):
+    """Recheck the existing resident append contract, preserving fixed foundation."""
+    requirement={**declaration['handoff_requirement'],'trainer_exit':None,'trainer_launch':None,'resident_adoption':None}
+    reference=value.get('resident_current')
+    if reference is None:return requirement
+    from ..train.native_resident import current,_contract
+    from ..train.recipe import resolve_recipe_data,resolve_stage_inputs,recipe_identity_sha256
+    path=_bound(reference);state=current(path.parent)
+    if not state:raise ValueError('raw release lost its exact committed resident source')
+    payload=state['payload'];stage=payload['stage_id']
+    if stage not in requirement['stage_ids']:raise ValueError('raw release adopted another production stage')
+    bindings=[payload['prior_recipe'],*[item['recipe'] for item in state['history']]]
+    start=next((index for index,item in enumerate(bindings) if item['sha256']==requirement['recipe_sha256']),None)
+    if start is None:raise ValueError('raw release resident history omitted its declared original recipe')
+    def plan(reference):
+        recipe_path=_bound({'path':reference['path'],'sha256':reference.get('file_sha256',reference['sha256'])})
+        if recipe_identity_sha256(recipe_path)!=reference['sha256']:raise ValueError('raw resident recipe identity changed')
+        recipe=resolve_recipe_data(recipe_path)
+        inputs={item['id']:({} if item.get('admitted') is False else resolve_stage_inputs(recipe,item,{})) for item in recipe['stages']}
+        return {**payload['plan'],'recipe':recipe,'stage_inputs':inputs}
+    prior=plan(bindings[start])
+    for reference in bindings[start+1:]:
+        proposed=plan(reference);_contract(prior,proposed,stage);prior=proposed
+    if payload['recipe']!=bindings[-1] or prior['recipe']!=payload['plan']['recipe'] or prior['stage_inputs']!=payload['plan']['stage_inputs']:
+        raise ValueError('raw release resident history differs from its actual current source plan')
+    requirement['recipe_sha256']=payload['recipe']['sha256']
+    if value.get('readiness'):
+        receipt=json.loads(_bound(value['readiness']).read_text())
+        adopted=receipt.get('resident_adoption') or {}
+        if adopted.get('generation')!=state['generation'] or adopted.get('history')!=state['history']:
+            raise ValueError('raw release readiness omitted the actual current resident history')
+    return requirement
+
+
+def validate_release(path,plan_path,*,allow_live=False):
+    from ..train.native_resident import owner_alive
+    record=json.loads(Path(path).read_text());plan=json.loads(Path(plan_path).read_text())
+    if (record.get('schema')!=SCHEMA or record.get('plan_sha256')!=sha256_file_hex_cached(plan_path)
+            or record.get('released') is not True):return None
+    if not allow_live and owner_alive(record.get('owner') or {}):return None
+    models=record.get('models') or {}
+    if set(models)!={model['model'] for model in plan['models']}:raise ValueError('raw release omitted an actual student owner')
+    result={}
+    from ..train.native_readiness import validate_ready
+    for declaration in plan['models']:
+        value=models[declaration['model']]
+        config=json.loads(_bound(value['config']).read_text())
+        if (config.get('bootstrap_binding') or {}).get('plan_sha256')!=record['plan_sha256']:
+            return None  # a sealed older operation must finish before live-plan adoption
+        verify_handoff(value['handoff'],requirement=declaration['handoff_requirement'])
+        current=json.loads(_bound(value['production_state']).read_text())
+        if binding(current['checkpoint'])!=value['checkpoint']:
+            raise ValueError('raw release substituted its actual last published checkpoint')
+        requirement=_release_requirement(declaration,value)
+        from ..train.checkpoint_policy import CheckpointPolicy
+        from .native_raw_policy import require_raw_training
+        saved=CheckpointPolicy.load(_bound(value['checkpoint']));require_raw_training(saved)
+        if saved['model_config']['architecture']+':'+saved['model_config']['base_inventory_sha256']!=requirement['model_id']:
+            raise ValueError('raw release substituted another student/base optimizer')
+        del saved
+        ready=validate_ready(_bound(value['readiness']),requirement)
+        if ready is None or any(ready['checkpoint'][key]!=value['checkpoint'][key] for key in ('path','sha256')):
+            raise ValueError('raw release has no genuine current complete communication-foundation readiness')
+        result[requirement['model_id']]=ready
+    return result
+
+
+def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
+    from ..train.loop import StopSignal
+    from ..train.native_resident import process_owner
+    from concurrent.futures import ThreadPoolExecutor,wait,FIRST_COMPLETED
+    plan_path=Path(plan_path).resolve(strict=True);plan=json.loads(plan_path.read_text())
+    if (plan.get('schema')!='natlang.native-raw-rl-bootstrap/1' or not plan.get('models')
+            or len({row['model'] for row in plan['models']})!=len(plan['models'])
+            or not 0<poll_seconds<=60):raise ValueError('raw bootstrap requires distinct declared students and bounded polling')
+    out=Path(out).resolve();out.mkdir(parents=True,exist_ok=True)
+    owned=stop is None;stop=StopSignal().install() if owned else stop
+    try:
+        with (out/'controller.lock').open('a') as lease:
+            fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            state_path=out/'state.json'
+            if state_path.exists() and validate_release(state_path,plan_path) is not None:return json.loads(state_path.read_text())
+            state={'schema':SCHEMA,'plan_sha256':sha256_file_hex_cached(plan_path),'owner':process_owner(),
+                'released':False,'models':{},'production_complete':False}
+            counts={row['model']:0 for row in plan['models']}
+            eligible=set();rendezvous=False;active={}
+            with ThreadPoolExecutor(max_workers=len(plan['models'])) as pool:
+                while True:
+                    updated=json.loads(plan_path.read_text())
+                    if (updated.get('schema')!=plan['schema'] or
+                            {row['model']:row['handoff_requirement']['model_id'] for row in updated['models']}!=
+                            {row['model']:row['handoff_requirement']['model_id'] for row in plan['models']}
+                            or {row['model']:{key:row['handoff_requirement'].get(key) for key in
+                                ('foundation_sources','foundation_epochs','readiness_boundary')} for row in updated['models']}!=
+                               {row['model']:{key:row['handoff_requirement'].get(key) for key in
+                                ('foundation_sources','foundation_epochs','readiness_boundary')} for row in plan['models']}):
+                        raise ValueError('live raw plan cannot silently replace a student optimizer owner')
+                    plan=updated
+                    state['plan_sha256']=sha256_file_hex_cached(plan_path)
+                    models={row['model']:row for row in plan['models']}
+                    if not stop.requested and not rendezvous:
+                        for name,model in models.items():
+                            if name in active or (cycles is not None and counts[name]>=cycles):continue
+                            witness=model.get('handoff_receipt')
+                            if witness is None:
+                                candidate=out/'handoffs'/(name+'.json')
+                                if candidate.is_file():witness=binding(candidate)
+                            if witness is not None:
+                                # Published eligibility is informational while this
+                                # student's optimizer is owned by another cycle.
+                                active[name]=(pool.submit(student_cycle,plan_path,model,witness,out/name,stop=stop),witness)
+                    write_json_durable(state_path,state)
+                    if not active:
+                        if rendezvous and eligible!=set(models):
+                            rendezvous=False
+                        if rendezvous:
+                            state['released']=True;write_json_durable(state_path,state)
+                            if validate_release(state_path,plan_path,allow_live=True) is not None:return state
+                            state['released']=False;rendezvous=False;eligible.clear()
+                        if stop.requested or (cycles is not None and all(counts[name]>=cycles for name in models)):
+                            write_json_durable(state_path,state);return state
+                        time.sleep(poll_seconds);continue
+                    finished,_=wait([value[0] for value in active.values()],timeout=poll_seconds,return_when=FIRST_COMPLETED)
+                    for name,(future,witness) in list(active.items()):
+                        if future not in finished:continue
+                        try:cursor=future.result()
+                        except BaseException:
+                            # Drain sibling-owned workers rather than waiting
+                            # indefinitely while their coordinator has failed.
+                            stop.requested=True
+                            write_json_durable(state_path,state)
+                            raise
+                        del active[name];counts[name]+=1
+                        config=json.loads((out/name/'config.json').read_text())
+                        state['models'][name]={'handoff':witness,'checkpoint':_current_checkpoint(config),
+                            'config':binding(out/name/'config.json'),
+                            'production_state':binding(Path(config['out'])/'state.json'),
+                            **({'resident_current':cursor['resident_current']} if cursor.get('resident_current') else {}),
+                            **({'readiness':cursor['readiness']} if cursor.get('readiness') else {})}
+                        if cursor.get('readiness'):eligible.add(name)
+                        else:eligible.discard(name)
+                    # Do not idle the first eligible student. Only after every
+                    # student has reached an actual eligible boundary do we stop
+                    # resubmitting and drain their currently owned operations.
+                    if eligible==set(models):rendezvous=True
+            return state
+    finally:
+        if owned:stop.restore()

@@ -5,6 +5,17 @@ from types import SimpleNamespace
 from ..common.hashing import sha256_file_hex_cached
 
 
+def require_raw_training(state):
+    """One metadata contract for the actual resumable single-model optimizer."""
+    from ..model.native_model import CHECKPOINT_SCHEMA
+    from ..train.native_continuation import TRAINING_SCHEMA
+    training=state.get('training') or {}
+    if (state.get('schema')!=CHECKPOINT_SCHEMA or state.get('optimizer_pruned')
+            or not training.get('optimizer') or training.get('schema')!=TRAINING_SCHEMA or not training.get('rng')):
+        raise ValueError('raw native RL requires its actual full model optimizer, native training schedule and RNG state')
+    return training
+
+
 def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=True):
     import torch
     from transformers import AutoTokenizer
@@ -16,13 +27,7 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
     state = CheckpointPolicy.load(checkpoint)
     if state.get('schema') != CHECKPOINT_SCHEMA:
         raise ValueError('raw native RL requires an actual single-model native checkpoint')
-    training = state.get('training') or {}
-    if require_optimizer and (state.get('optimizer_pruned') or not training.get('optimizer')):
-        raise ValueError('raw native RL must preserve the actual parent optimizer; weights-only parents cannot resume')
-    if require_optimizer:
-        from ..train.native_continuation import TRAINING_SCHEMA
-        if training.get('schema') != TRAINING_SCHEMA or not training.get('rng'):
-            raise ValueError('raw native RL requires the actual native training schedule and RNG state')
+    if require_optimizer:require_raw_training(state)
     config = state['model_config']
     interface = state['interface_state']
     embedding_keys = [key for key in state['backbone_state'] if key == 'embed_tokens.weight' or key.endswith('.embed_tokens.weight')]
