@@ -566,6 +566,8 @@ def build_parser():
         help='qualify actual enabled backend on restored live weights before useful updates; preserve RNG/state')
     parser.add_argument('--resident-data-directory', type=Path)
     parser.add_argument('--resident-geometry-qualification', type=Path)
+    parser.add_argument('--memory-qualification', default=None,
+        help='bound prepared new-source capacity request JSON; checked read-only after exact restore')
     parser.add_argument('--recipe-binding', default=None)
     parser.add_argument('--stage-id', default=None)
     parser.add_argument('--prerequisite-stages', default='[]')
@@ -936,6 +938,16 @@ def main(argv=None):
             forward_atol=args.forward_atol, gradient_atol=args.gradient_atol, device=args.device)
         checkpoint_options['training_backend_check'] = backend_check
         write_json(args.out / 'training-backend-check.json', backend_check)
+    if args.memory_qualification:
+        from ..eval.native_memory import run_prepared
+        memory_check = run_prepared(model,optimizer,train,roles,config,args,backend=backend,
+            checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
+                if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'])
+        checkpoint_options['memory_qualification'] = {'passed':memory_check['passed'],
+            'request':memory_check['request'],'parent_checkpoint_sha256':memory_check['parent_checkpoint_sha256']}
+        checkpoint_options['checkpoint_input_offload'] = args.checkpoint_input_offload
+        checkpoint_options['resident_geometry_qualification'] = (str(args.resident_geometry_qualification)
+            if args.resident_geometry_qualification else None)
     # Actual per-row optimizer credits drive the schedule. Source identity
     # remains append-only while communication deficits execute first.
     whole_epochs = int(args.epochs)
@@ -960,14 +972,11 @@ def main(argv=None):
     resident = None
     if args.resident_data_directory is not None:
         from .native_resident import ResidentAdoption
+        from ..eval.native_memory import capacity_identity
         resident = ResidentAdoption(args.resident_data_directory, stage_id=args.stage_id,
             recipe_binding=json.loads(args.recipe_binding), train=train, held=held,
             geometry_qualification=args.resident_geometry_qualification,
-            geometry_identity={'model_config': config, 'batch_graphs': args.batch_graphs,
-                'batch_tokens': args.batch_tokens, 'checkpoint_layers': args.checkpoint_layers,
-                'chunk_tokens': args.chunk_tokens, 'checkpoint_input_offload': args.checkpoint_input_offload,
-                'fp8': {**training_identity['fp8'],
-                        'input_gradient_precision': getattr(backend, 'input_gradient_precision', None)}})
+            geometry_identity=capacity_identity(config,args,backend))
         if resident.state:
             checkpoint_options['resident_adoption'] = {'generation': resident.generation,
                 'history': resident.state['history']}
