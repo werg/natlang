@@ -97,6 +97,8 @@ def validate_config(config):
     declarations=[config,config.get('options') or {},*config.get('models',{}).values(),
                   *[phase.get('options') or {} for phase in phases]]
     for declaration in declarations:
+        if 'checkpoint_input_offload' in declaration and type(declaration['checkpoint_input_offload']) is not bool:
+            raise ValueError('semantic checkpoint_input_offload must be a boolean')
         for name in ('learned_row_learning_rate','interface_row_learning_rate'):
             if name in declaration:
                 validate_learned_row_rate(declaration[name],name=name)
@@ -173,6 +175,10 @@ def load_participant(name, binding, config, device):
         backend.restore_extra_state(inherited['fp8'])
     _adjust_lr(optimizer, config['backbone_lr'], declaration.get('learned_row_learning_rate',config.get('learned_row_learning_rate')),
         declaration.get('interface_row_learning_rate',config.get('interface_row_learning_rate')))
+    from ..common.checkpoint_offload import configure_checkpoint_input_offload
+    offload = declaration.get('checkpoint_input_offload',config.get('checkpoint_input_offload',
+        (inherited.get('options') or {}).get('checkpoint_input_offload',False)))
+    configure_checkpoint_input_offload(model.port,enabled=offload)
     model.port.checkpoint_layers = True
     model.train()
     result = SemanticParticipant(model, tokenizer, model_config, identity, optimizer, backend)
@@ -289,11 +295,14 @@ def _native_modules(participants):
 
 
 def save_shared(policy, participants, vae, optimizer, *, training, device):
+    from ..common.checkpoint_offload import CheckpointInputOffload
     with _native_modules(participants):
         state = {'schema': SHARED_CHECKPOINT_SCHEMA,
             'participants': {name: {'model_config': entry.config, 'model_state': model_state(entry.model),
                 'source_identity': entry.identity, 'optimizer': entry.optimizer.state_dict(),
                 'sft_progress': entry.sft_progress, 'global_step': entry.global_step,
+                'training_options': {'checkpoint_input_offload': isinstance(
+                    getattr(entry.model.port, 'activation_checkpoint', None), CheckpointInputOffload)},
                 'fp8': entry.backend.extra_state() if entry.backend is not None else None}
                 for name, entry in participants.items()},
             'vae_specification': vae.specification(), 'vae_state': vae.state_dict(),
@@ -596,6 +605,11 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                            'learned_row_learning_rate',config.get('learned_row_learning_rate'))),
                        options.get('interface_row_learning_rate',config.get('models',{}).get(name,{}).get(
                            'interface_row_learning_rate',config.get('interface_row_learning_rate'))))
+            from ..common.checkpoint_offload import configure_checkpoint_input_offload, CheckpointInputOffload
+            enabled = options.get('checkpoint_input_offload',config.get('models',{}).get(name,{}).get(
+                'checkpoint_input_offload',config.get('checkpoint_input_offload',
+                    isinstance(getattr(participant.model.port, 'activation_checkpoint', None),CheckpointInputOffload))))
+            configure_checkpoint_input_offload(participant.model.port,enabled=enabled)
             for key, value in participant.model.named_parameters():
                 value.requires_grad_(phase['kind'] != 'vae' and name in active and key in trainable[name])
         optimizer.zero_grad(set_to_none=True)

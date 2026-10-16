@@ -125,3 +125,59 @@ def test_checkpoint_input_storage_is_host_memory_for_cuda_inputs(monkeypatch):
     assert observations and all(source == 'cuda' and target == 'cpu' and pinned
                                 for source, target, pinned in observations)
     torch.testing.assert_close(x.grad, 2*x.detach().sin()*x.detach().cos(), atol=0, rtol=0)
+
+
+def test_native_sft_explicit_offload_inherits_resume_mode_without_reset(tmp_path,monkeypatch):
+    import json
+    from test_native_model import tiny_source
+    from test_native_state_sft import graph
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+    base=tmp_path/'base';tiny_source(base)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    paths={}
+    for split in ('train','test'):
+        row=graph(split);row.update(split=split,tokenizer_fingerprint=config['tokenizer_fingerprint'],source_groups=[split])
+        paths[split]=tmp_path/(split+'.jsonl');paths[split].write_text(json.dumps(row)+'\n')
+    out=tmp_path/'run'
+    argv=['--base',str(base),'--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
+        '--out',str(out),'--device','cpu','--dtype','float32','--rank','4','--epochs','1',
+        '--eval-every','1','--checkpoint-every','1','--checkpoint-input-offload']
+    assert trainer.main(argv)==0
+    before=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+    assert before['options']['checkpoint_input_offload'] is True
+    del argv[-1];argv[argv.index('--epochs')+1]='2'
+    assert trainer.main(argv)==0
+    after=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+    assert after['options']['checkpoint_input_offload'] is True
+    assert after['exposure_counts']=={'train':2}
+    assert after['global_step']==before['global_step']+1
+    assert json.loads((out/'progress.json').read_text())['checkpoint_input_offload']['checkpoint_calls']>0
+    argv[argv.index('--epochs')+1]='3';argv+=['--no-checkpoint-input-offload']
+    assert trainer.main(argv)==0
+    disabled=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+    assert disabled['options']['checkpoint_input_offload'] is False
+    assert disabled['exposure_counts']=={'train':3}
+
+
+def test_semantic_checkpoint_persists_actual_per_participant_offload_mode(tmp_path,monkeypatch):
+    import json
+    from test_native_semantic_stage import _fixture
+    from natlang_neuralese.train import native_semantic_stage as stage
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    path,manifest,config,_=_fixture(tmp_path,monkeypatch)
+    config['checkpoint_input_offload']=True;path.write_text(json.dumps(config))
+    result=stage.run(path,manifest,tmp_path/'shared',device='cpu')
+    assert result['completed']
+    checkpoint=CheckpointPolicy.load(tmp_path/'shared/checkpoint.pt')
+    assert all(item['training_options']['checkpoint_input_offload'] is True
+               for item in checkpoint['participants'].values())
+
+
+@pytest.mark.parametrize('value',['false',1,None])
+def test_semantic_offload_declaration_is_a_real_boolean(tmp_path,monkeypatch,value):
+    from test_native_semantic_stage import _fixture
+    from natlang_neuralese.train.native_semantic_stage import validate_config
+    _,_,config,_=_fixture(tmp_path,monkeypatch)
+    config['checkpoint_input_offload']=value
+    with pytest.raises(ValueError,match='must be a boolean'):validate_config(config)
