@@ -34,8 +34,8 @@ def block_ids(value):
             yield from block_ids(item)
 
 
-def verified_bundle_bytes(manifest_path, block_id, *, policy_id, manifest=None):
-    """Reuse exact durable bytes when an interrupted actor lease is restarted."""
+def verified_bundle_path(manifest_path, block_id, *, policy_id, manifest=None):
+    """Authenticate one archived member without materializing its payload."""
     from ..common.hashing import sha256_file_hex_cached
     manifest_path = Path(manifest_path)
     if not manifest_path.exists():
@@ -50,7 +50,13 @@ def verified_bundle_bytes(manifest_path, block_id, *, policy_id, manifest=None):
     if (path.parent != manifest_path.parent.resolve() or path.stat().st_size != entry['bytes']
             or sha256_file_hex_cached(path) != entry['sha256']):
         raise ValueError('RL archived block path/size/hash changed')
-    return path.read_bytes()
+    return path
+
+
+def verified_bundle_bytes(manifest_path, block_id, *, policy_id, manifest=None):
+    """Reuse exact durable bytes when an interrupted actor lease is restarted."""
+    path=verified_bundle_path(manifest_path,block_id,policy_id=policy_id,manifest=manifest)
+    return None if path is None else path.read_bytes()
 
 
 class NativeBundleStore:

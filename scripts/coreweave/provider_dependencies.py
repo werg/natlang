@@ -16,6 +16,7 @@ from natlang_neuralese.train.recipe import native_source_dependencies
 
 def dependency_closure(request, *, namespace='/work/native-production'):
     files, assets, active_configs, relocations = {}, {}, set(), {}
+    consumed_adapters = set()
     root = Path(namespace).absolute()
 
     def add(path, expected=None):
@@ -41,6 +42,7 @@ def dependency_closure(request, *, namespace='/work/native-production'):
     def training_inputs(training):
         if not isinstance(training, dict):
             return
+        policy_sources(training.get('policy_source_history', []))
         if not training.get('sft_progress') and training.get('schema') != 'natlang.neuralese-native-sft-training/1':
             return
         from natlang_neuralese.train.native_continuation import collect_sft_progress, progress_obligations
@@ -113,15 +115,54 @@ def dependency_closure(request, *, namespace='/work/native-production'):
                              'inventory': inventory,
                              'sha256': canonical_json_sha256_hex(inventory)}
 
+    def bundle(reference, *, policy_id=None):
+        manifest_path = bound(reference)
+        manifest = json.loads(manifest_path.read_text())
+        if manifest.get('schema') != 'natlang.rl-block-bundle/1':
+            raise ValueError('provider semantic external input is not a native block bundle')
+        if policy_id is not None and manifest.get('policy_id') != policy_id:
+            raise ValueError('provider policy bundle differs from its behavior adapter checkpoint')
+        from natlang_neuralese.rl.graph_replay import verified_bundle_path
+        for ident, entry in manifest['blocks'].items():
+            child = (manifest_path.parent/entry['path']).resolve(strict=True)
+            if child.parent != manifest_path.parent.resolve():
+                raise ValueError('provider semantic block escaped its bound bundle')
+            bound({**entry, 'path': str(child)})
+            verified_bundle_path(manifest_path, ident, policy_id=manifest.get('policy_id'), manifest=manifest)
+
+    def semantic_adapter(reference):
+        path = bound(reference)
+        value = json.loads(path.read_text())
+        if str(path) in consumed_adapters:
+            return value
+        consumed_adapters.add(str(path))
+        curriculum = value.get('qualified_curriculum')
+        if curriculum is not None:
+            if canonical_json_sha256_hex(curriculum['config']) != curriculum['sha256']:
+                raise ValueError('provider qualified semantic curriculum hash changed')
+            config_value(curriculum['config'], 'qualified-curriculum:'+curriculum['sha256'])
+        checkpoint(value['checkpoint'], semantic_only=True)
+        for child, digest in _semantic_dependencies(path, value['checkpoint']['sha256']).values():
+            add(child, digest)
+        policy_sources((value.get('policy_training_progress') or {}).get('policy_source_history', []))
+        return value
+
+    def policy_sources(sources):
+        for source in sources:
+            bound(source['rollouts'])
+            adapter = semantic_adapter(source['adapter'])
+            bundle(source['block_bundle'], policy_id=adapter['checkpoint']['sha256'])
+
     def config_value(value, marker):
         if marker in active_configs:
             raise ValueError("provider consumed configuration contains a cycle")
         active_configs.add(marker)
-        if value.get('base') and value.get('native_participant'):
-            relocations.setdefault(value['native_participant'],value['base'])
+        if value.get('base'):
+            relocations.setdefault(value.get('native_participant'),value['base'])
         for name,declaration in value.get('models',{}).items():
             if declaration.get('base'):
                 relocations.setdefault(name,declaration['base'])
+        policy_sources((value.get('policy_training') or {}).get('sources', []))
         # Exact fields consumed by production.run/native semantic refresh.
         if value.get('pending_native_sources'):
             from natlang_neuralese.train.native_pending_sources import pending_source_dependencies
@@ -162,16 +203,8 @@ def dependency_closure(request, *, namespace='/work/native-production'):
             item = value.get(key)
             if item:
                 bound(item) if isinstance(item, dict) else add(item)
-        for binding in value.get('external_bundles', {}).values():
-            manifest_path = bound(binding)
-            manifest = json.loads(manifest_path.read_text())
-            if manifest.get('schema') != 'natlang.rl-block-bundle/1':
-                raise ValueError('provider semantic external input is not a native block bundle')
-            for entry in manifest['blocks'].values():
-                child = (manifest_path.parent/entry['path']).resolve(strict=True)
-                if child.parent != manifest_path.parent.resolve():
-                    raise ValueError('provider semantic block escaped its bound bundle')
-                bound({**entry, 'path': str(child)})
+        for reference in value.get('external_bundles', {}).values():
+            bundle(reference)
         for declaration in value.get('models', {}).values():
             if declaration.get('base'):asset(declaration['base'],base=True)
             if declaration.get('checkpoint'): checkpoint(declaration['checkpoint'])
@@ -185,7 +218,7 @@ def dependency_closure(request, *, namespace='/work/native-production'):
     # inventories. Saved paths may name a different model on the coordinator.
     for key in ('config', 'semantic_config'):
         if request.get(key): config(bound(request[key]))
-    for key in ('parent_checkpoint',):
+    for key in ('parent_checkpoint', 'partial_checkpoint'):
         if request.get(key): checkpoint(request[key])
     for value in request.get('updates', {}).values():
         checkpoint(value)
@@ -195,19 +228,12 @@ def dependency_closure(request, *, namespace='/work/native-production'):
         bound(receipt['training_receipt'])
     if request.get('state'):
         state = json.loads(bound(request['state']).read_text())
-        for key in ('checkpoint', 'pending_native_checkpoint'):
+        for key in ('checkpoint', 'pending_native_checkpoint', 'partial_checkpoint'):
             if state.get(key): checkpoint(state[key])
+        if state.get('pending_semantic_source'):
+            policy_sources([state['pending_semantic_source']])
     if request.get('semantic_adapter'):
-        path = bound(request['semantic_adapter'])
-        value = json.loads(path.read_text())
-        curriculum = value.get('qualified_curriculum')
-        if curriculum is not None:
-            if canonical_json_sha256_hex(curriculum['config']) != curriculum['sha256']:
-                raise ValueError('provider qualified semantic curriculum hash changed')
-            config_value(curriculum['config'], 'qualified-curriculum:'+curriculum['sha256'])
-        checkpoint(value['checkpoint'], semantic_only=True)
-        for child, digest in _semantic_dependencies(path, value['checkpoint']['sha256']).values():
-            add(child, digest)
+        semantic_adapter(request['semantic_adapter'])
     return {'files': list(files.values()), 'assets': list(assets.values())}
 
 

@@ -91,6 +91,97 @@ def test_prior_qualified_semantic_sources_and_block_bundles_survive_refresh(tmp_
     with pytest.raises(ValueError,match='qualified semantic curriculum hash'):
         deps.dependency_closure({'semantic_adapter':adapter},namespace=str(tmp_path))
 
+
+@pytest.mark.parametrize('location', ['curriculum', 'pending', 'checkpoint-history', 'relocated-curriculum'])
+def test_live_policy_source_closure_preserves_behavior_semantics_and_every_archive_member(tmp_path, location, monkeypatch):
+    checkpoint=write(tmp_path/'behavior.pt','immutable-semantic-parent')
+    base_files=[]
+    if location=='relocated-curriculum':
+        import torch
+        from natlang_neuralese.model.native_model import base_inventory
+        base=tmp_path/'current-base'
+        base_files=[write(base/'config.json',{'model_type':'lfm2'}),write(base/'model.safetensors','same-base')]
+        path=Path(checkpoint['path'])
+        torch.save({'participant':'student','model_config':{'base':str(tmp_path/'old-absent-base'),
+            'base_inventory':base_inventory(base)}},path)
+        checkpoint={'path':str(path),'sha256':deps.sha256_file_hex_cached(path)}
+    token=write(tmp_path/'tokenizer/tokenizer.json','behavior-tokenizer-bytes')
+    adapter=write(tmp_path/'adapter.json',{'schema':'natlang.native-semantic-adapter/1',
+        'checkpoint':checkpoint,'models':{'student':{'native_identity':{'checkpoint_sha256':checkpoint['sha256']}}},
+        'tokenizers':{'student':{'path':'tokenizer','files':{'tokenizer.json':token['sha256']}}}})
+    rollout=write(tmp_path/'rollouts.jsonl','whole-episode')
+    raw=write(tmp_path/'producer.state','exact-state-and-derivation')
+    dependency=write(tmp_path/'adapter.tensor','exact-recursive-artifact')
+    original_read=Path.read_bytes
+    def no_payload_read(path):
+        if str(path) in (raw['path'],dependency['path']):
+            raise AssertionError('metadata closure materialized raw KV bytes')
+        return original_read(path)
+    monkeypatch.setattr(Path,'read_bytes',no_payload_read)
+    archive=write(tmp_path/'blocks.json',{'schema':'natlang.rl-block-bundle/1',
+        'policy_id':checkpoint['sha256'],'blocks':{'producer':{**raw,'path':'producer.state'},
+            'dependency':{**dependency,'path':'adapter.tensor'}}})
+    source={'rollouts':rollout,'block_bundle':archive,'adapter':adapter,'mode':'rft','collector_participant':'student'}
+    calls=[];original=deps.composite_dependencies
+    def observed(path, **kwargs):
+        calls.append((str(path),kwargs.get('semantic_only',False)))
+        return original(path,**kwargs)
+    monkeypatch.setattr(deps,'composite_dependencies',observed)
+    if location in ('curriculum','relocated-curriculum'):
+        value={'policy_training':{'sources':[source]}}
+        if location=='relocated-curriculum':value['models']={'student':{'base':str(base)}}
+        control=write(tmp_path/'control.json',value)
+        request={'config':control}
+    elif location=='pending':
+        control=write(tmp_path/'state.json',{'pending_semantic_source':source})
+        request={'state':control}
+    else:
+        import torch
+        path=tmp_path/'current.pt';torch.save({'training':{'policy_source_history':[source]}},path)
+        control={'path':str(path),'sha256':deps.sha256_file_hex_cached(path)}
+        request={'parent_checkpoint':control}
+    closure=deps.dependency_closure(request,namespace=str(tmp_path))
+    assert {row['path'] for row in closure['files']}=={row['path'] for row in
+        [control,checkpoint,token,adapter,rollout,raw,dependency,archive,*base_files]}
+    assert (checkpoint['path'],True) in calls
+    Path(dependency['path']).write_text('changed recursive artifact')
+    with pytest.raises(ValueError,match='hash changed'):
+        deps.dependency_closure(request,namespace=str(tmp_path))
+
+
+def test_archive_metadata_verifier_rejects_invalid_member_size(tmp_path):
+    from natlang_neuralese.rl.graph_replay import verified_bundle_path
+    raw=write(tmp_path/'raw.state','same-bytes')
+    bundle=write(tmp_path/'bundle.json',{'schema':'natlang.rl-block-bundle/1','policy_id':'actor',
+        'blocks':{'member':{**raw,'path':'raw.state','bytes':raw['bytes']+1}}})
+    with pytest.raises(ValueError,match='size/hash changed'):
+        verified_bundle_path(bundle['path'],'member',policy_id='actor')
+    config=write(tmp_path/'config.json',{'external_bundles':{'student':bundle}})
+    with pytest.raises(ValueError,match='size changed'):
+        deps.dependency_closure({'config':config},namespace=str(tmp_path))
+
+
+@pytest.mark.parametrize('location', ['request', 'state'])
+def test_raw_partial_checkpoint_uses_none_participant_base_relocation(tmp_path, location):
+    import torch
+    from natlang_neuralese.model.native_model import base_inventory
+    base=tmp_path/'current-base'
+    write(base/'config.json',{'model_type':'lfm2'})
+    write(base/'model.safetensors','exact-native-base')
+    path=tmp_path/'partial.pt'
+    torch.save({'model_config':{'base':str(tmp_path/'absent-saved-base'),
+        'base_inventory':base_inventory(base)}},path)
+    partial={'path':str(path),'sha256':deps.sha256_file_hex_cached(path)}
+    config=write(tmp_path/'config.json',{'base':str(base),'native_participant':None})
+    request={'kind':'round','config':config}
+    if location=='state':
+        request['state']=write(tmp_path/'state.json',{'partial_checkpoint':partial})
+    else:
+        request['partial_checkpoint']=partial
+    closure=deps.dependency_closure(request,namespace=str(tmp_path))
+    assert str(path) in {row['path'] for row in closure['files']}
+    assert [row['path'] for row in closure['assets']]==[str(base)]
+
 def test_mmap_checkpoint_declares_exact_public_base_preflight(tmp_path):
     import torch
     base=tmp_path/'public-base'
