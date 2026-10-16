@@ -1,4 +1,73 @@
-# CoreWeave supervision — 2026-10-16 03:39 UTC
+# CoreWeave supervision — 2026-10-16 04:29 UTC
+
+## Current operational update (supersedes older observations below)
+
+ACTIVE V7 unchanged: 804180 LF /804181 Mellum train,15827held,57144communication.
+Direct04:08 LF4934 loss.07692/3999supervisedTPS/62676physical tokens,GPU100%;
+M5000 actual task eval GPU36%. Original foundation8335/26312LF,7150/26312M;
+expanded M7150/57144. Full checkpoint GET verified LF4750/M5000. Neither
+foundation complete. No trained dialect, task-lift or production RL claim.
+Teacher04:19 GPU95%/90.6GB. M task cadence stays5000, not1000.
+
+Next cloud update prewarms while learners continue. Idle release guardians alone
+paused for held-max coverage and complementary whole-graph envelopes. Big2 M
+physical112008/KV124339, Search physical96447/KV173589. Capacity union fix
+a832cf875 (canonical32af9a731) binds ALL actual successful same-parent/runtime
+case proofs, maxima rather than sums; later failure retains earlier pass.
+Resident train+held append, named M role rows.003 (others3e-6), checkpoint input
+offload and per-class boundary metrics integrated. No activation claim yet.
+
+New ADMITTED but NOT EXPOSED: QwenV9 3154train/model, V10 2028train/model,
+Search v3 shard0000 5177program-header+1696whole-trajectory train/model,0held.
+Search shard proof0e6adf0e99498155cfd4c301b4238e4257e5f79c3332c769de7eedce8ee8d09c,
+registration eb7e6d287. V10 staged both; V9/Search0 next append. Existing Big2,
+V8 and overcap cohorts remain staged pending handoff. No downloaded=trained claim.
+Search resume4 uses4workers/32GB, actual25GB cgroup,3/256jobs done, selection
+164/164files/658396rows unchanged. Scratch external; obsolete uncommitted spools
+10.2GB removed after exact stop. Root39GB/external~49GB free.
+
+Qwen04:10 batch12:3405finished/3826,2993success/81semantic/324invalid/7budget,
+8active,413notstarted. Fresh authored512tasks/128worlds/8domains under complete
+actual reference replay, nested callable-folder path corrected. No held inputs,
+external teacher or static reference mislabeled as model generation. V11 harvest
+82new successes/144.9MB now materializing after exact V1–V10 dedup; not admitted.
+Big2cloud5800chains/133938edges/131443ordinary each,0omissions. Dolci380/644
+at04:10 with actual live Node. Cloud owns atomic next teacher-source switch.
+
+M acquired D25,D17,D36,D37,D14,D19. D20/D24/D39 have real authenticated403
+GatedRepoError, proof authenticated-source-access-root-20261016.json, no license
+review hold. LF acquired D22,D35,D26,D28,D27,D38,D23,D32,D04; D13/D09 completion
+still pending. D04 inspected timing/hash IDs only, no text SFT. New seven adapters
+8e4851c5e support D26/D27/D28/D38/D23/D36/D37 plus JSONL/gz/zstd; unsupported
+images and pretokenized duplicates explicitly accounted for. Bulk normalization
+of seven sources, D14 segments/D32 blocks/D19 traces and D12/15/16/18 remain work.
+
+Whole-session native converter0f4a1af2a (five actual-HF/CLI tests + independent
+review) preserves complete chat/tools and EVERY reasoned assistant target, exact
+source receipts/split closure/current protections. ONE sequential worker across
+both ports LF503139/503143/503145 launched04:00, immutable0f4 runtime. Actual04:24
+child92%core, +13.25MB writes/5s, compressed train24.4→24.6MB: useful conversion,
+not stalled despite emptylog. No completed-file/native admission claim. D17/D25
+whole native conversion and further acquired bulk work still pending.
+
+FP32 rows actually update; LF held4750 close-think p.000863, M5000 produce
+roles~6e-5/7e-5. Per-class telemetry integrated to localize without added GPU pass;
+different cohorts do not prove temporal regression. Actual one-step LF phase
+timing requested. M source reasoning audit found no explicitly untrained rows:
+3203approved turns resolved, no unsupported withdrawal. Coefficient production
+route3e1a048b6 ready for independent root review: real two-controller/CLI cycles
+and interruption2PASS46.48s, real subprocess/store restart2PASS25.23s; complete
+portable moments/RNG/exposure and explicit base rebind/recollection. Controlled
+test rewards, no cloud production claim. Shared policy_dependencies must be loaded.
+
+Async runtime d2ac81994 now copies immutable697-file Node/protection closure.
+LF4000 unscored runtime changed failure; SAME4750 weights resealed and restarted
+03:43 as taskeval-e9ed8d2d-0004750, five case rows04:07; dispatcher live. Full
+c59a5cbb0c failed old semantic fixtures, fixed d2ac with actual29async+5semantic
+passes; latest full autoqueued, no duplicate suite. CoordACK04:27,next05:17UTC.
+No hour sleep while actionable work remains.
+
+## Earlier observations retained for exact parent/context
 
 DGX owns all operations; Pop closed. Exactly two student sandboxes and one
 stronger self-hosted Qwen teacher. Comprehensive evolving production recipe is
