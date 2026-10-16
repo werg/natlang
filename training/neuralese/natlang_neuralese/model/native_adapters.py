@@ -372,7 +372,8 @@ def optimize_adapter(engine, gradient, options, state_id, owner=None):
             next_state['momentum.'+name] = state['momentum_buffer'].detach().cpu()
     parent = engine.store.get_native_tensor_artifact(adapter_id).artifact
     updated = engine.store.put_native_tensor_artifact(NativeTensorArtifact('adapter-coefficients', engine.native_identity,
-        next_coefficients, parent.source_artifact_id, {'adapter_spec': spec}), owner)
+        next_coefficients, parent.source_artifact_id, {'adapter_spec': spec,
+            'coefficient_lineage':(parent.provenance or {}).get('coefficient_lineage',adapter_id)}), owner)
     next_entries = ([{'id': updated.id if entry['id'] == adapter_id else entry['id'],
                       'scale': float.fromhex(entry['scale_hex'])} for entry in actor_binding['adapters']]
                     if actor_binding else [updated.id])

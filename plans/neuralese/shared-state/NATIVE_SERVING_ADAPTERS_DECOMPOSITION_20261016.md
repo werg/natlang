@@ -111,3 +111,16 @@ review**. Adapted-policy RL, higher order, legacy projection decoders and GGUF
 LoRA export remain separate explicit unsupported paths. This is not full
 learning-continuum or production cutover completion. The existing production
 models, recipes and unadapted kernel arithmetic are unchanged.
+
+### Coefficient identity at numeric convergence
+
+Exact durability must distinguish independent optimizer histories even when
+coefficient values become equal. Shared `optimize_adapter` now carries a stable
+`coefficient_lineage`: the parent's existing lineage, or its original coefficient
+artifact ID. This changes metadata identity only; frozen bases, arithmetic and
+named moments are unchanged. Initial identical artifact content still denotes
+one shared coefficient value. Different parents retain their independent
+histories after convergence. The regression starts distinct same-basis parents,
+makes all coefficients exactly equal with momentum SGD, verifies distinct IDs
+and moments, then checks the next updates against exact different expected
+values. No model-facing errors, prompts or capability flags change.
