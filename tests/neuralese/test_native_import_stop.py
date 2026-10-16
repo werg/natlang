@@ -115,11 +115,15 @@ def test_reference_hessian_keeps_constant_import_source_coordinates_zero(family)
     plan=stopped_plan()
     inputs=torch.randn(1,plan.token_count,port.embedding_weight.shape[1],device=device,requires_grad=True)
     weight=torch.randn(1,2,inputs.shape[-1],device=device)
-    with reference_arithmetic(query_chunk_tokens=2):
+    with reference_arithmetic(query_chunk_tokens=2) as arithmetic:
         output=forward_graph(port,plan,embeddings=inputs)['h_final'][:,-2:]
         loss=(output*weight).square().sum()
         first=torch.autograd.grad(loss,inputs,create_graph=True)[0]
         second=torch.autograd.grad(first.square().sum(),inputs)[0]
+        # A passing native HVP alone does not prove that the explicitly
+        # declared reference law ran instead of a fused first-order kernel.
+        assert arithmetic.counters.get('attention',0)>0
+        assert arithmetic.counters.get('linear',0)>0
     assert torch.count_nonzero(first[:,:4])==0
     assert torch.count_nonzero(second[:,:4])==0
     assert second[:,-2:].norm()>0 and torch.isfinite(second).all()
