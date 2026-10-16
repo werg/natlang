@@ -5,6 +5,7 @@ Native continuation frames remain the sole owner of required/earned visits.
 """
 from __future__ import annotations
 import json
+import os
 from pathlib import Path
 import re
 
@@ -60,7 +61,7 @@ def load_pending_sources(path,*,tokenizer_fingerprint):
         'sources':[{key:item for key,item in source.items() if key!='rows'} for source in value['sources']],'rows':rows,'dependencies':dependencies}
 
 
-def declaration(full_cohort,pending_native_graphs,*,tokenizer_fingerprint,role_ids,required_visits=1,evidence=()):
+def declaration(full_cohort,pending_native_graphs,*,tokenizer_fingerprint,role_ids,required_visits=1,evidence=(),output_base=None):
     """Compile actual pending graph identities once using the shared parser/cache."""
     from ..data.native_sources import NativeGraphSource
     if type(required_visits) is not int or required_visits<1:
@@ -70,8 +71,12 @@ def declaration(full_cohort,pending_native_graphs,*,tokenizer_fingerprint,role_i
     from .recipe import native_source_dependencies
     native_source_dependencies(full_cohort)
     native_source_dependencies(pending_native_graphs)
+    def reference(path, digest):
+        return {'path': os.path.relpath(path, Path(output_base).resolve()) if output_base is not None else str(path),
+            'sha256': digest}
+    evidence = [reference(Path(item['path']).resolve(strict=True), item['sha256']) for item in evidence]
     return {'schema':SCHEMA,'tokenizer_fingerprint':tokenizer_fingerprint,'sources':[{
-        'full_cohort':{'path':str(full_cohort),'sha256':sha256_file_hex_cached(full_cohort)},
-        'pending_native_graphs':{'path':str(pending_native_graphs),'sha256':sha256_file_hex_cached(pending_native_graphs)},
+        'full_cohort':reference(full_cohort,sha256_file_hex_cached(full_cohort)),
+        'pending_native_graphs':reference(pending_native_graphs,sha256_file_hex_cached(pending_native_graphs)),
         'evidence':list(evidence),'rows':[{'id':entry['id'],'binding':entry['binding'],'required_visits':required_visits}
             for entry in source.entries]}]}

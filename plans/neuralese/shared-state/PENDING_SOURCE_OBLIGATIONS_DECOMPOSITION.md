@@ -41,3 +41,10 @@ ONLY fit manifests as training entrypoints, and binds all remaining rows to the
 same pending obligations. The full aggregate is provenance, never another source
 to mix with its partition. Registration and execution qualification remain
 separate; no live registry is written by the proposal helper.
+
+Declaration CLI outputs use paths relative to each declaration's directory for
+full-cohort, pending-role and evidence files. The same immutable bytes resolve
+inside the transferred corpus on another machine. Returned runtime bindings are
+resolved locally; no DGX absolute source path is required on a sandbox. A new
+portable declaration/proposal version is published rather than modifying a
+previous immutable declaration.

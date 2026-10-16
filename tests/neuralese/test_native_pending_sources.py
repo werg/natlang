@@ -163,3 +163,22 @@ def test_whole_readiness_cannot_claim_complete_with_pending_source_deficits(tmp_
     receipt['mandatory_sft']=obligations;path.write_text(json.dumps(receipt))
     with pytest.raises(ValueError,match='mandatory pending source'):
         validate_ready(path,requirement)
+
+
+def test_relative_pending_declaration_relocates_complete_graph_and_evidence_closure(tmp_path):
+    import shutil
+    first=tmp_path/'dgx';first.mkdir();graphs=first/'rows.jsonl'
+    row=dict(graph('long'),tokenizer_fingerprint='1'*64);graphs.write_text(json.dumps(row)+'\n')
+    source=first/'full.json';source.write_text(json.dumps({'schema':'natlang.native-graph-sources/1',
+        'sources':[{'kind':'native-graphs','path':graphs.name,'sha256':sha256_file_hex_cached(graphs)}]}))
+    evidence=first/'audit.json';evidence.write_text('{"passed":true}')
+    declaration_dir=first/'derived';declaration_dir.mkdir();path=declaration_dir/'pending.json'
+    value=declaration(source,source,tokenizer_fingerprint='1'*64,role_ids=(58,59,60,61),
+        evidence=[{'path':str(evidence),'sha256':sha256_file_hex_cached(evidence)}],output_base=path.parent)
+    path.write_text(json.dumps(value))
+    assert all(not __import__('pathlib').Path(ref['path']).is_absolute()
+        for ref in [value['sources'][0]['full_cohort'],value['sources'][0]['pending_native_graphs'],*value['sources'][0]['evidence']])
+    cloud=tmp_path/'cloud';shutil.copytree(first,cloud);shutil.rmtree(first)
+    loaded=load_pending_sources(cloud/'derived/pending.json',tokenizer_fingerprint='1'*64)
+    assert set(loaded['rows'])=={'long'}
+    assert all(str(item['path']).startswith(str(cloud)) for item in loaded['dependencies'])

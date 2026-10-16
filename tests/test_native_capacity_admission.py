@@ -19,7 +19,7 @@ def test_derivative_keeps_original_eligibility_and_exact_pending_set_without_dou
     for model in limits:
         pending=directory/receipt['manifests'][model+':train:remaining-long']
         path=directory/(model+'-pending.json');path.write_text(json.dumps(declaration(root/(model+'-train.jsonl'),pending,
-            tokenizer_fingerprint='fp',role_ids=(58,59,60,61))))
+            tokenizer_fingerprint='fp',role_ids=(58,59,60,61),output_base=path.parent)))
         declarations[model]=path
     output=directory/'proposal.json'
     result=propose(proposal,directory/'receipt.json',declarations,cohort_root=root,identifier='derivative',output=output)

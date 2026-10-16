@@ -22,7 +22,7 @@ def main(argv=None):
     prepared=prepare_tokenizer(args.base_tokenizer)
     value=declaration(args.full_cohort,args.pending_native_graphs,
         tokenizer_fingerprint=prepared.expanded_fingerprint,role_ids=provision(prepared.tokenizer),
-        required_visits=args.required_visits,evidence=[{'path':str(path.resolve(strict=True)),
+        required_visits=args.required_visits,output_base=args.output.parent,evidence=[{'path':str(path.resolve(strict=True)),
             'sha256':sha256_file_hex_cached(path)} for path in args.evidence])
     prepared.validate(args.base_tokenizer)
     if args.output.exists():

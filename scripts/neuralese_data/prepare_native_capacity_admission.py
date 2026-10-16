@@ -7,7 +7,7 @@ from pathlib import Path
 
 from natlang_neuralese.common.hashing import sha256_file_hex
 from natlang_neuralese.common.jsonio import write_json_durable
-from natlang_neuralese.train.native_pending_sources import load_pending_sources
+from natlang_neuralese.train.native_pending_sources import load_pending_sources, bound as pending_bound
 from scripts.neuralese_data.build_acquired_full_session_graphs import sessions
 from scripts.neuralese_data.prepare_acquired_session_admission import bound
 
@@ -43,8 +43,8 @@ def propose(full_proposal, partition_receipt, declarations, *, cohort_root, iden
         expected=directory/receipt['manifests'][model+':train:remaining-long']
         if (set(loaded['rows'])!=pending_ids[model] or any(row['required_visits']!=1 for row in loaded['rows'].values())
                 or len(loaded['sources'])!=1
-                or Path(loaded['sources'][0]['pending_native_graphs']['path']).resolve()!=expected.resolve()
-                or str(Path(loaded['sources'][0]['full_cohort']['path']).resolve().relative_to(root)) not in include):
+                or pending_bound(loaded['sources'][0]['pending_native_graphs'],path.parent)!=expected.resolve()
+                or str(pending_bound(loaded['sources'][0]['full_cohort'],path.parent).relative_to(root)) not in include):
             raise ValueError('capacity derivative pending declaration does not cover the complete unchanged long-row set')
         include.add(str(path.relative_to(root)))
         entrypoints[model]={'native_graphs':str((directory/receipt['manifests'][model+':train:fit']).relative_to(root)),
