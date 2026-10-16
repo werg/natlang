@@ -115,6 +115,53 @@ def test_original_target_identity_closes_decision_hold_descendants():
     assert held_session_targets(row,{'unrelated:1'})==[]
 
 
+def test_runtime_resume_fingerprint_is_independent_of_checkout_path(tmp_path):
+    from scripts.neuralese_data.build_acquired_full_session_graphs import runtime_bindings
+    first=tmp_path/'checkout-a';second=tmp_path/'checkout-b'
+    names=['training/neuralese/natlang_neuralese/data/text_corpus.py',
+        'training/neuralese/natlang_neuralese/data/native_graph_conversion.py',
+        'training/neuralese/natlang_neuralese/data/prompt_rendering.py',
+        'training/neuralese/natlang_neuralese/serve/chat.py',
+        'training/neuralese/natlang_neuralese/common/jsonio.py',
+        'scripts/neuralese_data/build_native_graph_text_corpus.py',
+        'scripts/neuralese_data/build_acquired_full_session_graphs.py']
+    for root in (first,second):
+        for name in names:
+            path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'fixed runtime bytes')
+    a=runtime_bindings(first);b=runtime_bindings(second)
+    assert a['fingerprint']==b['fingerprint']
+    assert a['files']==b['files']
+    assert a['observed_paths']!=b['observed_paths']
+
+
+def test_output_lease_rejects_second_writer_before_shard_cleanup(tmp_path):
+    from scripts.neuralese_data.build_acquired_full_session_graphs import acquire_output_lease
+    output=tmp_path/'graphs';unfinished=output/'session-shards'/'shard-00000000'
+    unfinished.mkdir(parents=True);(unfinished/'partial').write_text('still owned')
+    lease=acquire_output_lease(output)
+    try:
+        with pytest.raises(RuntimeError,match='already owns'):
+            acquire_output_lease(output)
+        assert (unfinished/'partial').read_text()=='still owned'
+    finally:
+        lease.close()
+
+
+def test_unreceipted_shard_cleanup_is_durably_listed_first(tmp_path):
+    from scripts.neuralese_data.build_acquired_full_session_graphs import completed_shards
+    import json
+    output=tmp_path/'graphs';shards=output/'session-shards';unfinished=shards/'shard-00000000'
+    unfinished.mkdir(parents=True);payload=unfinished/'partial.bin';payload.write_bytes(b'partial output')
+    frontier,receipts=completed_shards(shards,{},0)
+    assert (frontier,receipts)==(0,[])
+    assert not unfinished.exists()
+    line=(output/'cleanup-receipt.jsonl').read_text().splitlines()[0]
+    receipt=json.loads(line)
+    assert receipt['directory']=='session-shards/shard-00000000'
+    assert receipt['files']==[{'path':'session-shards/shard-00000000/partial.bin','bytes':14,
+        'sha256':__import__('hashlib').sha256(b'partial output').hexdigest()}]
+
+
 def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch):
     import json,sys
     from scripts.neuralese_data import build_acquired_full_session_graphs as builder

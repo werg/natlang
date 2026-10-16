@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from datetime import datetime, timezone
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -41,8 +43,8 @@ def held_session_targets(value, held_sources):
     return sorted(identities & held_sources)
 
 
-def runtime_bindings():
-    root = Path(__file__).resolve().parents[2]
+def runtime_bindings(root=None):
+    root = Path(root or Path(__file__).resolve().parents[2])
     package = root / 'training' / 'neuralese' / 'natlang_neuralese'
     paths = {
         'builder': Path(__file__).resolve(),
@@ -53,8 +55,55 @@ def runtime_bindings():
         'jsonio': package / 'common' / 'jsonio.py',
         'graph_writer': root / 'scripts' / 'neuralese_data' / 'build_native_graph_text_corpus.py',
     }
-    files = {name: {'path': str(path), 'sha256': sha256_file_hex(path)} for name, path in paths.items()}
-    return {'files': files, 'fingerprint': canonical_json_sha256_hex(files)}
+    # Identity follows the logical runtime files and their bytes, not checkout
+    # location. Keep observed paths as receipt metadata outside the fingerprint.
+    files = {name: {'sha256': sha256_file_hex(path)} for name, path in paths.items()}
+    observed_paths = {name: str(path.resolve()) for name, path in paths.items()}
+    return {'files': files, 'fingerprint': canonical_json_sha256_hex(files),
+            'observed_paths': observed_paths}
+
+
+def acquire_output_lease(output):
+    """Acquire an exclusive output lease before inspecting or cleaning shard state."""
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    lease_path = output / '.conversion.lock'
+    lease = lease_path.open('a+', encoding='utf-8')
+    try:
+        fcntl.flock(lease.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+        lease.close()
+        raise RuntimeError(f'an acquired-session conversion already owns {lease_path}') from exc
+    lease.seek(0)
+    lease.truncate()
+    lease.write(json.dumps({'pid': os.getpid(), 'started_at': datetime.now(timezone.utc).isoformat()}) + '\n')
+    lease.flush()
+    os.fsync(lease.fileno())
+    return lease
+
+
+def _record_uncommitted_cleanup(shard_root, directory):
+    """Durably record every exact unreceipted directory before deleting it."""
+    root = Path(shard_root).parent
+    files = []
+    if directory.is_dir():
+        for path in sorted(directory.rglob('*')):
+            if path.is_file():
+                files.append({'path': str(path.relative_to(root)), 'bytes': path.stat().st_size,
+                              'sha256': sha256_file_hex(path)})
+    record = {'schema': 'natlang.acquired-session-uncommitted-cleanup/1',
+        'directory': str(directory.relative_to(root)), 'recorded_at': datetime.now(timezone.utc).isoformat(),
+        'reason': 'unreceipted shard cannot advance source frontier', 'files': files}
+    journal = root / 'cleanup-receipt.jsonl'
+    with journal.open('a', encoding='utf-8', newline='\n') as stream:
+        stream.write(json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(',', ':')) + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+    dir_fd = os.open(root, os.O_DIRECTORY)
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
 
 
 def completed_shards(shard_root, binding, expected_sessions):
@@ -66,6 +115,7 @@ def completed_shards(shard_root, binding, expected_sessions):
     for directory in sorted(shard_root.glob('shard-*')):
         receipt_path = directory / 'receipt.json'
         if not receipt_path.exists():
+            _record_uncommitted_cleanup(shard_root, directory)
             shutil.rmtree(directory)
             continue
         receipt = json.loads(receipt_path.read_text())
@@ -215,6 +265,9 @@ def main():
     args = parser.parse_args()
     if args.chunk_sessions <= 0:
         raise ValueError('--chunk-sessions must be a positive integer')
+    # The lease precedes completed_shards(), which may clean unreceipted
+    # directories. The open file descriptor holds flock until this process exits.
+    output_lease = acquire_output_lease(args.output)
     export = json.loads(args.export_receipt.read_text())
     if export.get('schema') != 'natlang.normalized-agent-source-file/1':
         raise ValueError('source needs its complete normalized export receipt')
@@ -250,14 +303,14 @@ def main():
         raise ValueError('normalized source row count differs from its complete export receipt')
     if (args.output / 'receipt.json').exists():
         raise ValueError('completed graph output is immutable; use its bound receipt')
-    args.output.mkdir(parents=True, exist_ok=True)
     runtime = runtime_bindings()
     binding = {'source': {'path': str(source), 'sha256': digest, 'sessions': source_rows},
         'export_receipt': {'path': str(args.export_receipt), 'sha256': sha256_file_hex(args.export_receipt)},
         'source_contract': export['contract'], 'protection': protection['proof'],
         'decision_holds': decision_bindings, 'decision_hold_ids_sha256': canonical_json_sha256_hex(sorted(decision_ids)),
         'source_tokenizer_fingerprint': source_fp, 'expanded_tokenizer_fingerprint': expanded_fp,
-        'runtime': runtime, 'chunk_sessions': args.chunk_sessions,
+        'runtime': {'files': runtime['files'], 'fingerprint': runtime['fingerprint']},
+        'chunk_sessions': args.chunk_sessions,
         'held_group_closure_sha256': canonical_json_sha256_hex(sorted(held))}
     shard_root = args.output / 'session-shards'
     state_path = args.output / 'resume-state.json'
@@ -343,6 +396,8 @@ def main():
                         value = next(sessions_iterator)
                     except StopIteration:
                         break
+                omissions.flush()
+                os.fsync(omissions.fileno())
             outputs = [writer.finish() for writer in writers.values()]
         except BaseException:
             for writer in writers.values():
