@@ -1,5 +1,28 @@
 # Native turn rendering with authenticated source pieces
 
+## Mechanical capacity continuation (2026-10-16)
+
+The supervisor decides whether a reviewed optimizer/telemetry repair preserves
+the measured forward-memory contract. Its natural-language policy is: reuse
+useful measured capacity when forward execution, model layout and packing are
+unchanged, retain the original evidence honestly, and account conservatively for
+additional optimizer memory. A changed checkpoint is a continuation, never a
+new measured parent. Changed offload, kernels, models or data geometry require
+their own evidence.
+
+`continue_native_capacity.py` is the exact verifier of that recorded decision:
+1. Verify the approved review, both complete runtime inventories and every exact
+   reviewed file change; reject changes outside optimizer/telemetry plumbing.
+2. Verify all original numerical/capacity proofs and unchanged execution identity.
+3. Count the declared unchanged ordinary parameter layout and reserve64bytes
+   per element on host and device, in addition to a recorded safety reserve.
+4. Check every measured peak against actual hardware/cgroup limits. Publish an
+   immutable continuation receipt binding both parents and the original proof,
+   with the same geometry limits and an explicit inherited-evidence scope.
+
+Inventory comparison, byte arithmetic, proof checking and atomic receipt writes
+are crisp helpers. This adds no learned policy or model-facing prompt.
+
 ## Purpose
 
 Render admitted native teacher turns after recovering exact prompt bodies from
