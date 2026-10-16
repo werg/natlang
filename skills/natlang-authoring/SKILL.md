@@ -482,3 +482,9 @@ readout snapshot for the matching base and layout, including final norm, tied
 vocabulary table and sparse rows. A teacher hidden state alone does not select
 a different teacher head; stop the declared teacher distribution. This does
 not enable arbitrary heterogeneous full-backbone parameter overlays.
+
+For a native derivative objective-origin error, restore the exact declared
+program, graph and bound values. Older internal program gradients without an
+exact graph receipt need a genuine reexecution; do not synthesize or relabel
+provenance. This stronger program check does not invalidate ordinary prior
+first-order state/gradient history.

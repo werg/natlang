@@ -32,6 +32,11 @@ export function validateNativeOptimizerBinding(value:Record<string,string>):void
     b2=hexNumber(value.beta2_hex),eps=hexNumber(value.eps_hex),momentum=hexNumber(value.momentum_hex);
   if(!(lr>0&&decay>=0&&b1>=0&&b1<1&&b2>=0&&b2<1&&eps>0&&momentum>=0))throw new RangeError('native optimizer settings are out of range');
 }
+export function nativeOptimizerOptions(value:Record<string,string>):Record<string,string|number>{
+  validateNativeOptimizerBinding(value);
+  return {name:value.name!,...Object.fromEntries(['learning_rate','weight_decay','beta1','beta2','eps','momentum']
+    .map(key=>[key,hexNumber(value[key+'_hex'])]))};
+}
 export function validateNativeStateDerivation(value:NativeStateDerivation|undefined):void {
   if(value===undefined)return;
   if(value&&['semantic-encode','semantic-adapt'].includes(value.kind)){

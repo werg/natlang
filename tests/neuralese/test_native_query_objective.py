@@ -232,3 +232,34 @@ def test_real_service_distillation_uses_explicit_teacher_head(tmp_path,family):
         engine.store.collect({bound['gradient']['id']})
         assert engine.store.get_native_tensor_artifact(readout.id) is not None
     finally:engine.store.close()
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_program_origin_rejects_jointly_rehashed_objective_and_other_root_rebinding(tmp_path,family):
+    import json
+    from natlang_neuralese.common.jsonio import canonical_json_str
+    from natlang_neuralese.model.native_derivative_contract import verify_derivative_gradient_origin
+    engine=engine_fixture(tmp_path,family)
+    adapter,_=nonzero_adapter(engine)
+    other,_=nonzero_adapter(engine,'tiny')
+    source=program(engine,adapter)
+    source['inputs']['b']={'kind':'adapter','id':other.id}
+    for objective in [source['outer'],*(node for node in source['nodes'] if node['kind']=='gradient')]:
+        objective['request']['objective']=query_nll(objective['request']['graph'])
+    try:
+        result=execute_derivative_program(engine,source)
+        original=engine.store.get_native_tensor_artifact(result['outputs']['g0']).artifact
+        forged=copy.deepcopy(original)
+        spec=json.loads(forged.provenance['query_objective_json']);spec['terms'][0]['weight']=-.5
+        forged.provenance['query_objective_json']=canonical_json_str(spec)
+        forged.provenance['query_objective_sha256']=canonical_json_sha256_hex(spec)
+        with pytest.raises(ValueError,match='declared query objective'):verify_derivative_gradient_origin(engine.store,forged)
+        forged=copy.deepcopy(original)
+        graph=json.loads(forged.provenance['graph_json']);graph['nodes'][0]['token_ids'][0]+=1
+        forged.provenance['graph_json']=canonical_json_str(graph)
+        forged.provenance['graph_sha256']=canonical_json_sha256_hex(graph)
+        with pytest.raises(ValueError,match='declared objective graph'):verify_derivative_gradient_origin(engine.store,forged)
+        forged=copy.deepcopy(original)
+        forged.provenance['evaluation_inputs']['b']['value_id']=adapter.id
+        with pytest.raises(ValueError,match='unchanged declared root'):verify_derivative_gradient_origin(engine.store,forged)
+    finally:engine.store.close()

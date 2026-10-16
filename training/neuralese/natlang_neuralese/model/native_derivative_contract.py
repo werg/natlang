@@ -322,6 +322,47 @@ def verify_derivative_gradient_origin(store,artifact):
                 or execution.artifact.provenance.get('outer_evaluation_inputs')!=inputs
                 or execution.artifact.provenance.get('outer_functional_actor')!=actor):
             raise ValueError('native derivative outer gradient differs from its exact original input and actual execution')
+    objective=node if target['stage']=='inner' else parsed['outer']
+    request=objective['request']
+    # Bind all evaluated roots, not only the one whose adjoint is returned.
+    for name,value in inputs.items():
+        variable=objective['bindings'].get(name,name)
+        if variable in parsed['inputs']:
+            if value['value_id']!=parsed['inputs'][variable]['id']:
+                raise ValueError('native derivative objective changed an unchanged declared root')
+        else:
+            update=next((item for item in parsed['nodes'] if item['name']==variable),None)
+            if update is None or update['kind']!='optimizer':raise ValueError('native derivative objective lacks its declared updated value')
+            if value['kind']=='native-state':
+                state=store.get_native_state(value['value_id']).block
+                derivation=state.derivation or {}
+                gradient=store.get_native_tensor_artifact(derivation.get('gradient_id'))
+                if (derivation.get('program_id')!=program.id or gradient is None or
+                        gradient.artifact.provenance.get('node')!=update['gradient'] or
+                        derivation.get('optimizer')!=optimizer_binding(update['optimizer'])):
+                    raise ValueError('native derivative objective changed its declared state update')
+            else:
+                current=store.get_native_tensor_artifact(value['value_id']).artifact
+                if current.provenance.get('derivative_program_id')!=program.id or current.provenance.get('node')!=variable:
+                    raise ValueError('native derivative objective changed its declared parameter update')
+    import copy
+    expected_graph=copy.deepcopy(request['graph'])
+    replacements={root['id']:inputs[name]['value_id'] for name,root in parsed['inputs'].items() if root['kind']=='native-state'}
+    for value in (expected_graph.get('external_states') or {}).values():value['id']=replacements.get(value['id'],value['id'])
+    from ..common.hashing import canonical_json_sha256_hex
+    text=provenance.get('graph_json')
+    if (not isinstance(text,str) or hashlib.sha256(text.encode()).hexdigest()!=provenance.get('graph_sha256') or
+            json.loads(text)!=expected_graph or canonical_json_sha256_hex(expected_graph)!=provenance.get('graph_sha256')):
+        raise ValueError('native derivative gradient changed its declared objective graph')
+    expected_objective=copy.deepcopy(request.get('objective'))
+    if isinstance(expected_objective,dict) and expected_objective.get('kind')=='native-query':
+        expected_objective['graph_sha256']=provenance['graph_sha256']
+        text=provenance.get('query_objective_json')
+        if (not isinstance(text,str) or hashlib.sha256(text.encode()).hexdigest()!=provenance.get('query_objective_sha256') or
+                json.loads(text)!=expected_objective):
+            raise ValueError('native derivative gradient changed its declared query objective')
+    elif provenance.get('query_objective_json') is not None:
+        raise ValueError('native derivative gradient introduced an undeclared query objective')
     for entries in [actor['uniform_adapters'],*(actor['invocation_adapters'] or {}).values()]:
         for entry in entries:
             record=store.get_native_tensor_artifact(entry['id'])

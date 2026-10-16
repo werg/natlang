@@ -53,5 +53,19 @@ const inner=[...tensors.values()].find(value=>value.metadata.provenance.native_d
 assert(inner);const wrongOrigin=structuredClone(inner);delete wrongOrigin.id;
 wrongOrigin.metadata.provenance.native_derivative_target.variable='absent';
 await assert.rejects(()=>memory.putNativeTensorArtifact(wrongOrigin),/declared inner/);
+const wrongGraph=structuredClone(inner);delete wrongGraph.id;
+const graph=JSON.parse(wrongGraph.metadata.provenance.graph_json);
+graph.nodes[0].token_ids[0]+=1;
+wrongGraph.metadata.provenance.graph_json=JSON.stringify(graph);
+wrongGraph.metadata.provenance.graph_sha256=hexDigest(wrongGraph.metadata.provenance.graph_json);
+await assert.rejects(()=>memory.putNativeTensorArtifact(wrongGraph),/declared objective graph/);
+if(inner.metadata.provenance.query_objective_json){
+  const wrongQuery=structuredClone(inner);delete wrongQuery.id;
+  const objective=JSON.parse(wrongQuery.metadata.provenance.query_objective_json);
+  objective.terms[0].weight=-.5;
+  wrongQuery.metadata.provenance.query_objective_json=JSON.stringify(objective);
+  wrongQuery.metadata.provenance.query_objective_sha256=hexDigest(wrongQuery.metadata.provenance.query_objective_json);
+  await assert.rejects(()=>memory.putNativeTensorArtifact(wrongQuery),/declared query objective/);
+}
 }
 await writeFile(output,JSON.stringify(result));console.log(JSON.stringify({passed:true,artifacts:closure.size,states:parsed.nativeStates.size}));

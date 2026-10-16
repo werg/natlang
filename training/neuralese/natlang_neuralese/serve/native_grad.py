@@ -295,7 +295,7 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
             **({'query_objective_sha256':canonical_json_sha256_hex(query_objective.spec),
                 'query_objective_json':canonical_json_bytes(query_objective.spec).decode()}
                 if query_objective is not None else {}), 'graph_id': example.id,
-            'graph_sha256': graph_sha256, 'target_kind': kind,
+            'graph_sha256': graph_sha256, 'graph_json':canonical_json_bytes(row).decode(), 'target_kind': kind,
             'external_source_identities': input_identities,
             'external_adapter_state_contracts': {name: {key: value for key, value in receipt.items()
             if key not in {'target_position_start', 'tokens'}} for name, receipt in {**consumption_receipts, **(objective.evaluation_external_contracts if objective is not None else {})}.items()},

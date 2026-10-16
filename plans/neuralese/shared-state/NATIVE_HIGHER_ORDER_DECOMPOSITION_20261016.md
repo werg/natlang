@@ -353,3 +353,23 @@ the readout dependency. Direct gradient provenance stores exact objective JSON
 bytes plus SHA and dependencies, preserving numeric metadata across languages.
 One operation-local cache shares immutable device copies across inner updates;
 it is released after the derivative operation rather than retained on Engine.
+
+### Exact program objective origin hardening
+
+The format/origin verifier now checks every evaluated root against its declared
+unchanged input or optimizer variable, and reconstructs the selected program
+request's graph using only the explicit external-state ID replacements. Each
+new gradient retains exact graph JSON bytes and their SHA. Inline query JSON
+is compared to the same declared objective with only its corresponding graph
+binding refreshed. Python and TypeScript reject jointly rehashed changed
+graph/query declarations under an unchanged program. TypeScript verifies the
+immutable JSON byte digest before comparing parsed numeric semantics; it does
+not recompute a Python hash through JavaScript float spelling. This is program/
+origin consistency, not an independent numerical model-gradient attestation.
+
+Older internal program gradients lacking exact graph JSON cannot qualify this
+stronger check and require real reexecution. Original ordinary first-order
+gradients and optimized-state history without a derivative-program target keep
+their prior contract. No production deployment of the earlier unadvertised
+program API was claimed. Focused adversarial/portable tests22PASS8.18s; broader
+derivative/state integration36PASS2skip16.05s.

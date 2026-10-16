@@ -905,3 +905,9 @@ The inline-objective debt also covers existing native-gradient errors for a
 missing or incompatible immutable readout snapshot. Recovery restores its exact
 base/layout and full dependency closure. No readout is silently inferred from
 a detached teacher hidden state, and no model-facing prompt is added.
+
+Native derivative origin validation also uses the existing native-gradient
+error family for changed declared graph/query roots or a missing exact program
+graph receipt. Recovery restores the matching program or genuinely reexecutes
+older internal program calculations. These detail changes remain in the same
+unmeasured internal-learning debt; no prompt or public capability is added.
