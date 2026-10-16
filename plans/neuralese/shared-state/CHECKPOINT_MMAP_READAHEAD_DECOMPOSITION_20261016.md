@@ -7,7 +7,7 @@ descriptor would not change its later mapped faults. A bounded diagnostic read
 measured175MB/s; it ran after SGD resumed and does not prove a restore speedup.
 
 1. Keep the existing shared `CheckpointPolicy.load` and mmap/weights-only path.
-2. After loading metadata, identify read-only-file-backed memory regions by
+2. After loading metadata, identify readable non-executable file-backed memory regions by
    exact filesystem device and inode of the checkpoint, rather than matching
    paths, guessing addresses or walking tensors and forcing faults.
 3. Give only those regions Linux `MADV_SEQUENTIAL`. This is a kernel hint,
@@ -28,3 +28,10 @@ Root local qualification:18 tests passed, including a real Linux mapping whose
 exclusion, private-map isolation, advisory failure, disable/invalid-setting
 handling, and bitwise next AdamW update/optimizer/RNG equality. No actual
 full-size sandbox restore speedup is claimed.
+
+Both actual training sandboxes also passed the tiny exact helper probe on
+Torch2.14.0a0+b2c75dd062.nv26.09:20,480 mapped bytes genuinely gained the
+sequential kernel flag, values/RNG/private-file isolation stayed exact, and
+CUDA allocation remained zero. Exact source SHA and both receipts are in
+`/home/werg/data/dgxops/checkpoint-readahead-cloud-qualification-root-20261016.json`.
+This is target OS/loader mechanism evidence, not full-restore timing evidence.

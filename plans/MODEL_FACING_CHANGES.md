@@ -812,8 +812,14 @@ No new prompt policy and no production controller adoption are introduced.
   value boundaries. An ordinary string slot now sees the existing type-mismatch
   feedback instead of accepting an internal opaque-ID sentinel as an answer.
   Literal raw strings stay exact; no payload decoding or prompt is added.
-  Live48-sample feedback qualification on admitted TRAIN tasks is pending before
-  production adoption; protected evaluation cases are not training inputs.
+  Actual own-teacher paired measurement completed48/48 per variant on admitted
+  TRAIN tasks: baseline46 accepted, candidate45, all96 completed with zero
+  transport/infrastructure errors. The five failures are ordinary semantic
+  label choices. Report SHA b8f939939e679e475849e3f188c9425961732aa1bd1b47458cd9d25ee15dd62a
+  is bound in `/home/werg/data/dgxops/native-result-transport-measurement-20261016/measurement-report.json`;
+  independent root review verified all five raw/runtime/source bindings.
+  This qualifies this runtime-facing variant for adoption, not native-student
+  task quality or KV interchange; protected cases remain outside training.
 
 - 2026-10-16: The acquired D12 feature-status view asks a model to read a full
   failed-session transcript and copy only the exact source-reported feature
@@ -823,8 +829,12 @@ No new prompt policy and no production controller adoption are introduced.
   are never positive targets. The original wording did not specify JSON, and a
   live sample returned YAML-like output. The instruction now explicitly asks
   for one JSON object preserving the same schema, keys and values. Preserve the
-  original wording observations as their own variant; the corrected wording
-  still needs a live 48-sample self-hosted teacher measurement before adoption.
+  original wording observations as their own variant. The corrected instruction
+  completed48/48 exact JSON matches on the self-hosted teacher,16 per status
+  stratum; results SHA8317c924043578c56c67478ea95b158550ec7474870ee07ea89643cb6780b871.
+  Exact packet/summary bindings are recorded by the D12 status exporter.
+  Both full-model tokenizers retain complete source context. This qualifies
+  format behavior, not downstream task lift or inferred diagnosis correctness.
 
 ## 2026-10-16: advertise qualified native adapter service operations
 
