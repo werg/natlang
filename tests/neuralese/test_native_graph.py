@@ -194,14 +194,13 @@ def test_native_policy_gradient_scores_imported_kv_and_finite_convolution(tmp_pa
     example = parse_graph(graph, tokenizer_fingerprint=identity['tokenizer_fingerprint'])
     store = TensorStore(tmp_path / 'tensor-store')
     store.put_native_state(block, 'test-owner')
+    # Exercise the production archive writer, including its exact native
+    # identity receipt, rather than hand-building an incomplete old fixture.
+    from natlang_neuralese.rl.graph_replay import save_bundle
     bundle_dir = tmp_path / 'blocks'
-    bundle_dir.mkdir()
-    block_file = bundle_dir / f'{state_id}.safetensors'
-    block_file.write_bytes(encode_native_state(block))
-    bundle = bundle_dir / 'bundle.json'
-    bundle.write_text(json.dumps({'schema': 'natlang.rl-block-bundle/1', 'policy_id': identity['checkpoint_sha256'],
-        'blocks': {state_id: {'path': block_file.name, 'bytes': block_file.stat().st_size,
-                              'sha256': sha256_file_hex_cached(block_file)}}}))
+    save_bundle([graph], bundle_dir, policy_id=identity['checkpoint_sha256'],
+                fetch=lambda ident: encode_native_state(store.get_native_state(ident).block))
+    bundle = bundle_dir / 'manifest.json'
     spec = tmp_path / 'objective.json'
     spec.write_text(json.dumps({'schema': 'natlang.native-policy-objective/1', 'kind': 'native-policy',
         'mode': 'rft', 'policy': identity, 'block_bundle': str(bundle),
