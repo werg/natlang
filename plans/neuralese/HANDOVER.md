@@ -1,6 +1,6 @@
 # DGX current state
 
-Generated 2026-10-16 09:24 UTC by `python3 scripts/current_state.py --machine dgx`. Do not edit by hand: regenerate.
+Generated 2026-10-16 10:20 UTC by `python3 scripts/current_state.py --machine dgx`. Do not edit by hand: regenerate.
 This page holds the present only. History is in git (`git log -p -- plans/neuralese/HANDOVER.md`), in the
 decision records and in the coordination log. Live processes and the status pages are the authority.
 
@@ -19,9 +19,9 @@ decision records and in the coordination log. Live processes and the status page
 
 ## DGX status page (this machine)
 
-Updated 2026-10-16T09:24:46.088639Z by dgx-codex-01a13659.
+Updated 2026-10-16T10:20:13.381666Z by dgx-codex-01a13659.
 
-DGX 2026-10-16 09:26UTC, continuous supervision ACTIVE. Two training sandboxes plus one strong self-hosted Qwen generation sandbox; Pop closed. Owner latest: bring in ALL deferred improvements; AGENTS2b99e189c records active integration and independent per-model progress. Direct root SDK09:23 LF6269/runtime2af640d3e5a3/GPU100%, M7010/runtimea765bd1bea00/GPU83%; real SGD after exact6181/6813 restores, no rollback. Immutable LF6181 SHA5537bd71 records25755visits/916597rows, foundation10985/26312; M6813 SHA7a8765fa records21070visits/949801rows, foundation8237/26312. No foundation complete/no trained shared dialect claim. Learners ordinary native AdamW FP32 .0003 interface; LFreasoning.0003/Mreasoning3e-6. Actual LFcap92606physical/157075KV, Mcap112008/173589. D12/D16/D18v2 full-row capacity promotions registered, +1739LFfit graphs; D15full+capacity admitted (LF16300fit/118long,M606/5), V17registered8309/model and BOTH staged. Staged/admitted is NOT exposure; prior pending quotas retained. Six-ref D13/D14/D19/D32/D36/D37 full normalizer ACTUAL runner57792109:16:53; existing source converters continue. D20/D24 full acquisition receipts verified; D39 121files42.68GB sizecomplete/fullSHAreceipt underverification, D09manual403, HFwatch next09:45UTC untilOct19. D12factual1993views newJSON live48/48, materialization/export running before fullconversion/admission. Shared resident pending adoption + precommitwithdrawal fix integrated6b3f84c40/13b64b6e1, root109testsPASS; offline reference-free pair objective6d90ab732 integrated, actual source/capacity/mandatory-interleave still being completed. Provider exact sidecar closure183cd6a95 root17PASS; capacity metadata continuation adds resident only after independentreview,29PASS. Native serving adapters actual40CUDA/typedHTTP/restore testsPASS,323680aa8 published; noorder2/fullsizecloud/taskliftclaim. HTTPtransport candidate48/48exit0,45accepted/0infra; baseline47/48lastcase; finish paired receipt then rearm corrected currentstudenttaskeval/controller. Teacher generation continuous; NVIDIA33files102262310289B fullSHAverified, pinnedOCIprep active samegeneration sandbox, engine trial after paired measurement/drain. LFprefix/fullruntimecomposition and bounded checkpointprefetch active cloudowner; Mgradientproblem retained explicit. Searchr7live3NVMeSQLite workers, durableoutputs external; root15GiB/ext52GiB lastsample. Fullcheckbfdc7e75 COMPLETE GREEN includingCUDA/TS; currentmain quick+nextstandingfull required. No goalcompletion/RLlift/entirerecipecompletion claim.
+DGX 2026-10-16 10:18UTC, continuous supervision ACTIVE. Owner latest: integrate ALL deferred improvements; two training sandboxes plus one strong self-hosted Qwen generation sandbox, Pop closed. Actual cloud10:12 LF6493 GPU81%/51.95GB and M7177 GPU88%/54.67GB, both useful SGD; teacher14 181finished/8active/835unstarted GPU97%. M host-OOM interruption recovered exact COMMITTED7000 (48158789273B,21395creditedvisits); no credit for lost uncheckpointed7134 progress. D20 cause was rejected 11.6M-row table buffering, bounded rejection fix4ecd2a791 published. LF immutable6181:25755visits/916597rows,originalfoundation10985/26312; M6813foundation8237/26312. Neither foundation complete/no trained dialect claim. Corrected f01 TS controller ACTUAL rearmed10:09 supervisor433722, exact699fileinventory43e248; paired teacher measurement complete96tasks,baseline46/48,candidate45/48,0infra/errors. Current native rates/interface FP32AdamW .0003both,LFreasoning.0003,Mreasoning/backbone3e-6. Actual capacity LF92606physical/157075KV,M112008/173589. Resident+sequentialmmap IO packages LF3042af96a386/M1d7a8d242eb1 independentreview APPROVED, remote preflightPASS, recipe preflight2436 active before stopping trainers; actual handoff pending. LFprewarm75.7knewfitrows40kgeometrydone10:03; M26907fittrain+169held ready. Prior pending quotas must survive (LF2331+118D15,M488+5D15). D12featurestatus full1993/model admitted ffbd94ecc and BOTH staged verified:LF1488fit/505long,M1613/380; no truncated graphs/earnedexposure claim. D12/D16/D18v2 +1739LFfit promotions, D15full+capacity, QwenV16/V17 and Search0008/9/10 registered; staged/admitted is not trained. Shared Search guardian continuously verifies actual source-bound receipts and admits both views. Offline reference-free pair objective+mandatory postjoint interleave+durable both-model source conversion+all-pair original-token rerender integrated (6d90/23c15/3faedf/2b7); root34integrationPASS; actual D24source conversion/capacity/production adoption remains. D20/D24/D39fullacquired; D39all4formatsqualified. D24zip15JSONarrays vs12JSONL requires content-multiset audit, updated8aab verifier running next; first metadata-only audit did not establish coverage. HF09:45 D09manual403,next12:45 throughOct19. Shared source-reader+per-shard numerical metadata74e47f187 fixes linked zstd and future thread context,27tests+quickPASS. Guardian e2a2 persistent boundary repair+cooperative drain integrated, retry actual-actor strengthening under independentreview, notarmed. NVIDIAfullquant102262310289B and pinnedOCI745feb ready same generation sandbox; engine trial after safe task drain. PrefixOFF, exact minimal old-package integration identified5706256bc+b5cff288d, actualLFH100 qualification pending independently of M adjoints. Order2 reference backend/real public natlang.grad migration in progress, no capability claim. Standing fullcheck0369e9110 complete GREEN all11steps inclGPU/TS/conformance. Searchr7 three renderer workers useful; lastroot14GiB/ext50GiB. Continue all deferred production work; no entire-recipe/RLlift/optimal-utilization claim.
 
 ## POP status page
 
@@ -33,15 +33,16 @@ Pop generation closeout complete (2026-10-15 12:20 UTC): Luna seed52118 terminal
 
 | Unit | Priority | Budget / used GB | Recipe |
 | --- | --- | --- | --- |
+| `cw-d24-zip-audit-v2-stage-2439` | low | 1.0 / 0.1 |  |
 | `cw-lfm-foundation-ferry-2264` | low | 1.0 / 0.1 |  |
-| `cw-metadata-monitor-1792142669` | medium | 1.0 / 0.1 |  |
-| `cw-next-admitted-prewarm-2382` | low | 1.0 / 0.1 |  |
-| `dgx-d12-status-export-verify-20261016` | low | 2.0 / 0.0 |  |
-| `dgx-d12-status-export-verify2-20261016` | low | 2.0 / 0.0 |  |
-| `natlang-full-check-323680aa8e` | low | 13.5 / 4.1 |  |
+| `cw-metadata-monitor-1792145976` | medium | 1.0 / 0.1 |  |
+| `miroverse-zip-array-full-20261016` | low | 16.0 / 0.8 |  |
+| `natlang-full-check-74e47f187d` | low | 13.5 / 0.8 |  |
 | `natlang-memory-guard` |  |  |  |
 | `search-completed-selection-dedup2-20261016` | low | 2.0 / 0.0 |  |
-| `searchowl-native-render-optimized-resume-20261016-r7` | low | 16.0 / 4.3 |  |
+| `search-completed-shards-admission-current-root-20261016` | low | 8.0 / 0.7 |  |
+| `searchowl-native-render-optimized-resume-20261016-r7` | low | 16.0 / 4.6 |  |
+| `teacher-actor-independent-root-20261016` | medium | 2.0 / 0.0 |  |
 
 ## Declared lineages (training/neuralese/line-parity.json: next launch per line)
 
@@ -58,7 +59,7 @@ Recipes on disk (77): `diag-e2e-lfm-u10006-r4-ph-heads-3e-6`, `diag-e2e-lfm-u100
 
 ## Corpus registry
 
-1755 live entries in `training/neuralese_corpora.json` (309 dgx, 1446 pop); 398 carry training admission.
+1759 live entries in `training/neuralese_corpora.json` (313 dgx, 1446 pop); 402 carry training admission.
 
 ## Open coordination requests to dgx
 
@@ -67,9 +68,9 @@ Recipes on disk (77): `diag-e2e-lfm-u10006-r4-ph-heads-3e-6`, `diag-e2e-lfm-u100
 
 ## Latest decisions (coord)
 
-- 2026-10-16T04:00 dgx-codex-01a13659: Seven more acquired source adapters prepared
-- 2026-10-16T04:13 dgx-codex-01a13659: Same-forward held boundary diagnostics by graph class
 - 2026-10-16T04:18 dgx-codex-01a13659: Read-only held-shape capacity coverage supported
 - 2026-10-16T04:34 dgx-codex-01a13659: Shared coefficient RL route integrated; provider mode stays disabled
 - 2026-10-16T05:06 dgx-coreweave-sandbox: Native routine evaluation: one deterministic full pass
 - 2026-10-16T08:34 dgx-codex-01a13659: Pending-only recipe handoff fix 9cf6c95eb
+- 2026-10-16T09:26 dgx-codex-01a13659: Adopt live pending obligations and offline objective shared mechanisms
+- 2026-10-16T10:00 dgx-codex-01a13659: Deploy adaptive source and restore improvements with exact current-parent binding
