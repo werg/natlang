@@ -85,6 +85,12 @@ def bootstrap_configs(plan_path, completion_path, out):
             raise ValueError('native RL bootstrap collector runtime is not built')
         config_path = out/'configs'/(model + '.json')
         if reuse_configs:
+            from .native_supervised import bind_semantic_recipe_lineage
+            current=json.loads(config_path.read_text())
+            previous=json.loads(json.dumps(current))
+            bind_semantic_recipe_lineage(current,adapter['checkpoint']['path'],participant,
+                adapter['models'][participant].get('recipe_binding'),preserve_policy=True)
+            if current!=previous:write_json_durable(config_path,current)
             results.append(config_path)
             continue
         args = SimpleNamespace(**inputs, model=model, native_participant=participant,

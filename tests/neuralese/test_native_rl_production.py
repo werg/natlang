@@ -194,9 +194,12 @@ def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_p
     from types import SimpleNamespace
     from natlang_neuralese.train import recipe
     parent = tmp_path/'shared.pt'; parent.write_bytes(b'actual-bound-parent')
+    policy=tmp_path/'production_recipe';policy.write_text('{}')
+    reference=recipe.native_recipe_binding(policy,'a'*64)
+    monkeypatch.setattr(recipe,'checkpoint_recipe_binding',lambda *a,**kw:reference)
     adapter = tmp_path/'semantic-adapter.json'
     adapter.write_text(json.dumps({'schema': 'natlang.native-semantic-adapter/1',
-        'checkpoint': {'sha256': sha256_file_hex(parent)}, 'models': {'lfm': {}}}))
+        'checkpoint': {'sha256': sha256_file_hex(parent)}, 'models': {'lfm': {'recipe_binding':reference}}}))
     monkeypatch.setattr(recipe, 'resolve_recipe_data', lambda path: {'stages': [
         {'id': 'native_full', 'kind': 'native_state_sft', 'parameters': {
             'epochs': 3, 'dtype': 'float32', 'batch_tokens': 8192,'communication_foundation':foundation,
@@ -212,6 +215,9 @@ def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_p
         assert saved['foundation_native_graphs']==str(tmp_path/'exact-foundation')
         assert saved['seed_command'][-2:]==['--foundation-native-graphs','{foundation_native_graphs}']
     assert saved['trainer_parameters']['epochs'] == 3
+    assert saved['recipe_lineage_sha256']=='a'*64
+    assert saved['trainer_parameters']['recipe_binding']==reference
+    assert saved['seed_trainer_parameters']['recipe_binding']==reference
     assert saved['trainer_parameters']['dtype'] == 'float32'
     assert '--native-state' in saved['actor_command'] and '--heads' not in saved['actor_command']
     assert 'natlang_neuralese.rl.native_stage' in saved['learner_command']
@@ -269,6 +275,14 @@ def test_bootstrap_binds_actual_export_and_train_files_then_preserves_hot_config
             'cases': {'path': str(task_source['cases']), 'sha256': task_source['cases_sha256']},
             'task_source': task_source_binding,
             'runtime': str(runtime.parent.parent), 'port': 8097 if model == 'lfm' else 8098})
+    references={name:recipe.native_recipe_binding(tmp_path/(model+'-recipe.json'),letter*64)
+        for name,model,letter in [('actual-lfm-id','lfm','a'),('actual-mellum-id','mellum','b')]}
+    exported=json.loads(Path(adapter['path']).read_text())
+    for name,reference in references.items():exported['models'][name]['recipe_binding']=reference
+    Path(adapter['path']).write_text(json.dumps(exported))
+    adapter['sha256']=sha256_file_hex(adapter['path'])
+    completion.write_text(json.dumps(proof))
+    monkeypatch.setattr(recipe,'checkpoint_recipe_binding',lambda path,*,participant:references[participant])
     plan = tmp_path/'bootstrap-plan.json'
     plan.write_text(json.dumps({'schema': 'natlang.native-rl-bootstrap/1', 'models': models}))
     configs = native_rounds.bootstrap_configs(plan, completion, tmp_path/'rl')
@@ -276,6 +290,8 @@ def test_bootstrap_binds_actual_export_and_train_files_then_preserves_hot_config
     first = json.loads(configs[0].read_text())
     assert first['native_participant'] == 'actual-lfm-id'
     assert first['checkpoint'] == str(parent)
+    assert first['recipe_lineage_sha256']=='a'*64
+    assert first['trainer_parameters']['recipe_binding']==references['actual-lfm-id']
     assert first['bootstrap_binding']['adapter_sha256'] == adapter['sha256']
     assert first['task_source'] == task_source_binding
     assert all(json.loads(path.read_text())['cases'] == models[0]['cases']['path'] for path in configs)

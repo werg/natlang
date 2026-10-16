@@ -23,6 +23,10 @@ def fixture(tmp_path):
     original,channel,_,_=case(tmp_path,'lfm','mellum')
     participants={name:SemanticParticipant(value.model,value.tokenizer,value.config,value.identity,
         make_native_optimizer(value.model,lr=1e-4,in_backward=False)[0]) for name,value in original.items()}
+    from natlang_neuralese.train.recipe import native_recipe_binding
+    for name,value in participants.items():
+        recipe=tmp_path/(name+'-recipe.json');recipe.write_text(json.dumps({'model':name}))
+        value.recipe_binding=native_recipe_binding(recipe,('a' if name=='lfm' else 'b')*64)
     from natlang_neuralese.train.fp8_backend import make_backend
     participants['mellum'].backend=make_backend('triton-experts',participants['mellum'].model.port.hf,device=device)
     participants['mellum'].model.port.activation_checkpoint=participants['mellum'].backend.checkpoint
@@ -109,6 +113,12 @@ def test_real_joint_policy_stage_stop_resume_preserves_both_models_codec_optimiz
     from natlang_neuralese.train.native_semantic_policy import validate_policy_boundary
     export=json.loads((tmp_path/'whole'/'semantic-adapter.json').read_text())
     validate_policy_boundary(whole,export,config)
+    from natlang_neuralese.train.recipe import checkpoint_recipe_binding
+    for name in a['participants']:
+        expected=a['participants'][name]['training_options']['recipe_binding']
+        assert expected['sha256']!=expected['lineage_sha256']
+        assert export['models'][name]['recipe_binding']==expected
+        assert checkpoint_recipe_binding(tmp_path/'continued'/'checkpoint.pt',participant=name)==expected
     forged=copy.deepcopy(whole);forged['policy_training_progress']['policy_obligations']['complete']=False
     with pytest.raises(ValueError,match='exposure provenance'):validate_policy_boundary(forged,export,config)
     # Completed semantic phases do not block new policy obligations. This is a
@@ -121,3 +131,6 @@ def test_real_joint_policy_stage_stop_resume_preserves_both_models_codec_optimiz
     assert list(extended['exposure']['policy'].values())==[{'episode':3}]
     for phase in ('vae','joint','distill'):assert extended['exposure'][phase]==whole['exposure'][phase]
     assert extended['metrics']['held']['scope']=='full'
+    extended_export=json.loads((tmp_path/'extended'/'semantic-adapter.json').read_text())
+    for name in a['participants']:
+        assert extended_export['models'][name]['recipe_binding']==export['models'][name]['recipe_binding']

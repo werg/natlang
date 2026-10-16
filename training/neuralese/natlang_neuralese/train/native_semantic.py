@@ -32,6 +32,7 @@ class SemanticParticipant:
     backend: object = None
     sft_progress: dict = field(default_factory=dict)
     global_step: int = 0
+    recipe_binding: dict | None = None
 
 
 def producer(participant, example, view, *, external_blocks=None, chunk_tokens=128, supervise=True):

@@ -180,6 +180,26 @@ def load_participant(name, binding, config, device):
     optimizer, _ = make_native_optimizer(model, lr=config['backbone_lr'],
         weight_decay=config.get('weight_decay', .1), latent_ns=config.get('latent_ns', 'quintic'), in_backward=False)
     inherited = state.get('training') or state.get('shared_training') or {}
+    from .recipe import training_recipe_binding,native_recipe_provenance
+    recipe_binding=training_recipe_binding(state)
+    declared=native_recipe_provenance(binding.get('recipe'))
+    if declared is not None:
+        if recipe_binding is not None and recipe_binding!=declared:
+            raise ValueError('semantic participant recipe provenance differs from its actual checkpoint: '+name)
+        if recipe_binding is None:
+            if not binding.get('readiness'):
+                raise ValueError('semantic participant needs exact readiness to recover missing saved recipe provenance')
+            readiness=json.loads(_bound(binding['readiness']).read_text())
+            if (readiness.get('recipe')!=declared or readiness.get('native_identity')!=identity
+                    or (readiness.get('checkpoint') or {}).get('sha256')!=binding['checkpoint']['sha256']):
+                raise ValueError('semantic participant recipe recovery differs from its actual readiness/checkpoint')
+            from .native_readiness import validate_ready
+            requirement={'model_id':readiness.get('model_id'),'recipe_sha256':declared['sha256'],
+                'recipe_lineage_sha256':declared.get('lineage_sha256',declared['sha256']),
+                'readiness_boundary':binding.get('readiness_boundary','stage-complete')}
+            if validate_ready(_bound(binding['readiness']),requirement) is None:
+                raise ValueError('semantic participant recipe recovery requires qualified original readiness')
+        recipe_binding=declared
     if inherited.get('optimizer') and config.get('inherit_optimizer', True):
         optimizer.load_state_dict(inherited['optimizer'],native_optimizer_migration=migration)
     if backend is not None and inherited.get('fp8') is not None:
@@ -190,7 +210,7 @@ def load_participant(name, binding, config, device):
     configure_checkpoint_storage_options(model.port,declaration,config,inherited.get('options') or {})
     model.port.checkpoint_layers = True
     model.train()
-    result = SemanticParticipant(model, tokenizer, model_config, identity, optimizer, backend)
+    result = SemanticParticipant(model, tokenizer, model_config, identity, optimizer, backend,recipe_binding=recipe_binding)
     from .native_continuation import collect_sft_progress
     result.sft_progress = collect_sft_progress(inherited)
     result.global_step = int(inherited.get('global_step', inherited.get('step', 0)))
@@ -310,7 +330,8 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
             'participants': {name: {'model_config': entry.config, 'model_state': model_state(entry.model),
                 'source_identity': entry.identity, 'optimizer': entry.optimizer.state_dict(),
                 'sft_progress': entry.sft_progress, 'global_step': entry.global_step,
-                'training_options': checkpoint_input_storage_options(entry.model.port),
+                'training_options': {**checkpoint_input_storage_options(entry.model.port),
+                    **({'recipe_binding':entry.recipe_binding} if entry.recipe_binding is not None else {})},
                 'fp8': entry.backend.extra_state() if entry.backend is not None else None}
                 for name, entry in participants.items()},
             'vae_specification': vae.specification(), 'vae_state': vae.state_dict(),
@@ -340,6 +361,7 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
                         'mandatory_sft':progress_obligations(participants[name].sft_progress),
                         'raw_communication_rows':raw_communication_rows(participants[name].sft_progress),
                         'marker_ids':list(participants[name].model.marker_ids),
+                        **({'recipe_binding':participants[name].recipe_binding} if participants[name].recipe_binding is not None else {}),
                         'checkpoint': {'path': str(policy.slot.resolve()), 'sha256': checkpoint_sha,
                                        'participant': name}} for name, identity in identities.items()},
         'step': training['step'], 'communication': 'shared-semantic-state-deltas'}
@@ -481,9 +503,20 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             participant = participants[name]
             if participant.config != saved['model_config']:
                 raise ValueError('semantic continuation changed model geometry: ' + name)
+            from .recipe import native_recipe_provenance
+            previous_recipe=native_recipe_provenance((saved.get('training_options') or {}).get('recipe_binding'))
+            if previous_recipe is not None and participant.recipe_binding is not None:
+                if previous_recipe.get('lineage_sha256',previous_recipe['sha256'])!=participant.recipe_binding.get('lineage_sha256',participant.recipe_binding['sha256']):
+                    raise ValueError('semantic refresh changed preserved participant recipe lineage: '+name)
             same_source = participant.identity == saved['source_identity']
             same_export = (bindings[name]['checkpoint']['sha256'] == prior_sha
                            and bindings[name]['checkpoint'].get('participant') == name)
+            if participant.recipe_binding is None and previous_recipe is not None:
+                if not same_source and not same_export:
+                    raise ValueError('updated semantic participant lost its current recipe provenance: '+name)
+                participant.recipe_binding=previous_recipe
+            if (same_source or same_export) and previous_recipe is not None and participant.recipe_binding!=previous_recipe:
+                raise ValueError('unchanged semantic participant changed its saved recipe provenance: '+name)
             if not same_source and not same_export:
                 if not refresh_participants:
                     raise ValueError('semantic continuation changed the declared model lineage: ' + name)

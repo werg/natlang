@@ -56,8 +56,42 @@ and executed-FP8 Mellum SFT→RL→SFT→RL preserve optimizer/RNG, global steps
 source credits1/1/2/2 and a recipe lineage distinct from current file SHA. An
 explicit relabel attempt rejects without modifying the parent checkpoint.
 
-The adjacent fresh shared-semantic bootstrap/export must also carry per-model
-recipe provenance. That metadata path is separately identified for closure;
-these raw/continuation checks do not claim it already inherits lineage from a
-semantic export that never recorded it. No model arithmetic, source-policy,
-reward/whole-episode eligibility or model-facing prompt changes occur here.
+Shared semantic continuation carries each participant's own current recipe and
+preserved lineage in its `training_options`, and the adapter export repeats that
+exact metadata. The existing selected participant loader exposes these options;
+the joint semantic curriculum identity never replaces a model's recipe lineage.
+Actual participant load rejects manifest/checkpoint disagreement. Resume retains
+metadata on unchanged participants and requires the same lineage on an explicitly
+optimizer-preserving changed participant; a new current recipe remains distinct.
+
+Fresh and reused semantic RL bootstrap verify adapter metadata against the actual
+selected checkpoint payload before building both seed and RL trainer bindings.
+These bindings reference the supplied current recipe under the preserved lineage.
+Operator settings survive reuse; unchanged configs are not rewritten. Semantic
+refresh carries exact updated receipt metadata and unchanged exported metadata
+into its next participant manifest. Provenance-only historical recipe paths do
+not become new runtime dependencies. A legacy checkpoint missing the metadata
+cannot invent a lineage from an adapter: recovery requires its exact original
+qualified readiness and checkpoint binding, otherwise it must be repaired before
+production bootstrap.
+
+The policy remains natural language in the existing recipe. These helpers are
+crisp identity readers, exact mismatch verifiers and durable metadata plumbing.
+No model arithmetic, source-policy, reward/whole-episode eligibility or
+model-facing prompt changes occur here. Current-policy readiness checks remain
+mandatory independently of preserved lineage.
+
+Semantic qualification: `native-semantic-lineage-final-cpu-20261016`42 PASS,
+16.70s/953MiB, including actual both-port shared payload/bundle reload,
+checkpoint-versus-export forgery rejection, actual participant load and bootstrap
+hot-config retention. `native-semantic-lineage-resume2-20261016`3 PASS3.83s:
+updated checkpoint missing metadata, changed lineage and unchanged weights with
+relabeled policy all reject without changing the parent. The first invocation
+of those three new tests used a fixture output path occupied by its source file;
+that fixture path was corrected before these terminal results.
+`native-semantic-lineage-final-cuda-20261016`1 PASS19.30s/3.0GiB: real LFM and
+executed-FP8 Mellum VAE/joint/distill/policy training, stop/resume and extended
+policy epochs preserve exact participant recipe metadata, optimizer, RNG and
+all existing exposure obligations. `native-semantic-lineage-quick-20261016`
+passed22 ratchets and TypeScript checks. No full-model cloud cutover or semantic
+foundation completion is claimed by these tiny actual-port checks.

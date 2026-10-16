@@ -399,3 +399,33 @@ def test_live_parent_change_cannot_reset_current_cycle_credits(tmp_path,monkeypa
     saved=CheckpointPolicy.load(tmp_path/'current/checkpoint.pt')
     assert saved['training']['step']==1
     assert saved['training']['refresh_cycle']['completed_updates']=={'vae':1,'joint':0,'distill':0}
+
+
+@pytest.mark.parametrize('change', ['missing-updated','lineage','unchanged-policy'])
+def test_semantic_resume_never_relabels_changed_or_unchanged_participant_recipe(tmp_path,monkeypatch,change):
+    from natlang_neuralese.train.recipe import native_recipe_binding
+    config,manifest,_,_=_fixture(tmp_path,monkeypatch)
+    recipe=tmp_path/'recipe.json';recipe.write_text('{}')
+    reference=native_recipe_binding(recipe,'a'*64)
+    original=stage.load_participant
+    def initial(*args):
+        result=original(*args);result.recipe_binding=copy.deepcopy(reference);return result
+    monkeypatch.setattr(stage,'load_participant',initial)
+    stage.run(config,manifest,tmp_path/'lineage-parent',max_updates=1,device='cpu')
+    parent=tmp_path/'lineage-parent'/'checkpoint.pt'
+    def changed(*args):
+        result=initial(*args)
+        if args[0]=='lfm':
+            if change=='unchanged-policy':result.recipe_binding['sha256']='c'*64
+            else:
+                result.identity={**result.identity,'checkpoint_sha256':'f'*64}
+                result.continuation_proof={'checkpoint_sha256':sha256_file_hex(parent),'participant':'lfm',
+                    'objective_transition':True}
+                if change=='missing-updated':result.recipe_binding=None
+                else:result.recipe_binding['lineage_sha256']='c'*64
+        return result
+    monkeypatch.setattr(stage,'load_participant',changed)
+    before=sha256_file_hex(parent)
+    with pytest.raises(ValueError,match='recipe provenance|recipe lineage'):
+        stage.run(config,manifest,tmp_path/'changed',resume=parent,refresh_participants=True,device='cpu')
+    assert sha256_file_hex(parent)==before

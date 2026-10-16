@@ -78,6 +78,19 @@ def bind_recipe_lineage(config,lineage):
     return config
 
 
+def bind_semantic_recipe_lineage(config,checkpoint,participant,declared,*,preserve_policy=False):
+    from ..train.recipe import checkpoint_recipe_binding,native_recipe_provenance
+    actual=checkpoint_recipe_binding(checkpoint,participant=participant)
+    if actual is None or native_recipe_provenance(declared)!=actual:
+        raise ValueError('semantic RL requires exact participant recipe provenance in checkpoint and adapter export')
+    lineage=actual.get('lineage_sha256',actual['sha256'])
+    if preserve_policy and config.get('recipe_lineage_sha256') is not None:
+        if recipe_lineage(config)!=lineage:
+            raise ValueError('semantic bootstrap config changed its authenticated participant recipe lineage')
+        return config  # A sealed/current policy is not rebound by a bootstrap poll.
+    return bind_recipe_lineage(config,lineage)
+
+
 def continuation_config(config,stage,*,checkpoint,adapter,out):
     from ..train.recipe import resolve_recipe_data,resolve_stage_inputs,effective_stage_parameters,native_recipe_binding
     recipe=resolve_recipe_data(config['production_recipe'])

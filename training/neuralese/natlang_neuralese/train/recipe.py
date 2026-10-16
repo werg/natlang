@@ -723,6 +723,34 @@ def native_recipe_binding(path, lineage_sha256):
             'file_sha256': sha(path), 'lineage_sha256': lineage_sha256}
 
 
+def native_recipe_provenance(value):
+    """Exact saved provenance metadata; this does not re-qualify recipe file bytes."""
+    if value is None:return None
+    if isinstance(value,str):value=json.loads(value)
+    if (not isinstance(value,dict) or not isinstance(value.get('path'),str) or not value['path']
+            or any(not isinstance(value.get(key),str) or len(value[key])!=64
+                   or any(char not in '0123456789abcdef' for char in value[key])
+                   for key in ['sha256']+[key for key in ('file_sha256','lineage_sha256') if key in value])):
+        raise ValueError('native recipe provenance needs exact current policy and preserved lineage identities')
+    return json.loads(json.dumps(value))
+
+
+def training_recipe_binding(state, *, participant=None):
+    """Read one model's own options, never the joint semantic config's identity."""
+    if participant is not None:
+        entry=state.get('participants',{}).get(participant)
+        if entry is None:raise ValueError('recipe provenance requires its actual shared participant')
+        options=entry.get('training_options') or {}
+    else:
+        options=((state.get('training') or state.get('shared_training') or {}).get('options') or {})
+    return native_recipe_provenance(options.get('recipe_binding'))
+
+
+def checkpoint_recipe_binding(path, *, participant):
+    from .checkpoint_policy import CheckpointPolicy
+    return training_recipe_binding(CheckpointPolicy.load(path,shared_participant=participant),participant=participant)
+
+
 DIRECT_IDENTITY_QUALIFICATION = 'neuralese_direct_step0_identity'
 # The end-to-end lineage (owner decision 2026-10-12, plans/neuralese/NEURALESE_DIRECT_V1.md "End-to-end stage"):
 # it starts from a direct export, which the lineage's first stage runtime-qualifies on those exact weights; the

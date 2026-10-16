@@ -40,8 +40,11 @@ def actual_shared(tmp_path):
         logits = entry.model.logits(result['h_final'])[0]
         torch.nn.functional.cross_entropy(logits[:-1].float(), torch.tensor([roles[0], 5, roles[1], 6])).backward()
         optimizer.step(); optimizer.zero_grad(set_to_none=True)
+        from natlang_neuralese.train.recipe import native_recipe_binding
+        recipe=tmp_path/(name+'-recipe.json');recipe.write_text(json.dumps({'model':name}))
+        reference=native_recipe_binding(recipe,('a' if name=='lfm' else 'b')*64)
         trained[name] = SemanticParticipant(entry.model, entry.tokenizer, entry.config,
-            channel.bindings[name], optimizer, sft_progress={'stage': {'exposure_counts': {'earned': 3}}}, global_step=7)
+            channel.bindings[name], optimizer, sft_progress={'stage': {'exposure_counts': {'earned': 3}}}, global_step=7,recipe_binding=reference)
     optimizer = torch.optim.AdamW(channel.vae.parameters(), lr=.001)
     sum(value.square().mean() for value in channel.vae.parameters()).backward()
     optimizer.step(); optimizer.zero_grad(set_to_none=True)
@@ -66,6 +69,10 @@ def test_actual_both_ports_restore_selected_bundle_and_complete_joint_state(tmp_
     for name, entry in participants.items():
         equal_tree(full['participants'][name]['optimizer'], entry.optimizer.state_dict())
         assert full['participants'][name]['sft_progress'] == entry.sft_progress
+        assert full['participants'][name]['training_options']['recipe_binding']==entry.recipe_binding
+        assert export['models'][name]['recipe_binding']==entry.recipe_binding
+        from natlang_neuralese.train.recipe import checkpoint_recipe_binding
+        assert checkpoint_recipe_binding(policy.slot,participant=name)==entry.recipe_binding
     full_bundle = export_bundle(policy.slot, tmp_path/'full-bundle',
                                 semantic_adapter=policy.out/'semantic-adapter.json')
     peer = Path(manifest['participants']['mellum']['path'])
@@ -91,6 +98,7 @@ def test_actual_both_ports_restore_selected_bundle_and_complete_joint_state(tmp_
         assert torch.equal(parameter, dict(model.named_parameters())[name])
     equal_tree(state['shared_training']['optimizer'], participants['lfm'].optimizer.state_dict())
     assert state['shared_training']['sft_progress'] == participants['lfm'].sft_progress
+    assert state['shared_training']['options']['recipe_binding']==participants['lfm'].recipe_binding
     restored_channel = SemanticChannel.load(portable['semantic_adapter']['resolved'])
     equal_tree(restored_channel.vae.state_dict(), channel.vae.state_dict())
     complete = CheckpointPolicy.load(full_bundle['checkpoint']['resolved'])
@@ -259,3 +267,49 @@ def test_shared_export_release_waits_for_same_consumer_pack_without_blocking_tra
         assert ending.result(timeout=20)['pin_released']
     assert second['checkpoint']['sha256'] == first['checkpoint']['sha256']
     assert Path(second['archive']['path']).is_file()
+
+
+def test_semantic_continuation_authenticates_participant_lineage_against_actual_checkpoint(tmp_path):
+    import copy
+    from natlang_neuralese.rl.native_supervised import bind_semantic_recipe_lineage,continuation_config
+    policy,participants,_,_,export=actual_shared(tmp_path)
+    current=tmp_path/'current.json'
+    current.write_text(json.dumps({'stages':[]}))
+    for name,entry in participants.items():
+        reference=export['models'][name]['recipe_binding']
+        # Historical policy files are provenance, not a new runtime dependency.
+        Path(reference['path']).unlink()
+        config={'production_recipe':str(current),'trainer_parameters':{},'seed_trainer_parameters':{}}
+        bind_semantic_recipe_lineage(config,policy.slot,name,reference)
+        assert config['recipe_lineage_sha256']==entry.recipe_binding['lineage_sha256']
+        for key in ('trainer_parameters','seed_trainer_parameters'):
+            bound=config[key]['recipe_binding']
+            assert bound['lineage_sha256']==entry.recipe_binding['lineage_sha256']
+            assert bound['sha256']!=reference['sha256']
+        previous=json.loads(json.dumps(config))
+        current.write_text(json.dumps({'stages':[],'changed_current_policy':name}))
+        bind_semantic_recipe_lineage(config,policy.slot,name,reference,preserve_policy=True)
+        assert config==previous  # Polling cannot rewrite an already sealed policy binding.
+        for field,value in [('lineage_sha256','c'*64),('sha256','d'*64)]:
+            forged=copy.deepcopy(reference);forged[field]=value
+            with pytest.raises(ValueError,match='exact participant recipe provenance'):
+                bind_semantic_recipe_lineage({'production_recipe':str(current)},policy.slot,name,forged)
+        with pytest.raises(ValueError,match='exact participant recipe provenance'):
+            bind_semantic_recipe_lineage({'production_recipe':str(current)},policy.slot,name,None)
+
+
+def test_real_semantic_participant_load_preserves_and_authenticates_recipe_metadata(tmp_path):
+    from natlang_neuralese.train.native_semantic_stage import load_participant
+    policy,participants,_,_,export=actual_shared(tmp_path)
+    name='lfm'
+    binding={'checkpoint':{**export['checkpoint'],'participant':name},
+        'native_identity':export['models'][name]['native_identity'],
+        'recipe':export['models'][name]['recipe_binding']}
+    config={'backbone_lr':.001,'models':{name:{'base':str(tmp_path/'lfm'),'fp8_training':'off'}}}
+    loaded=load_participant(name,binding,config,'cpu')
+    assert loaded.recipe_binding==participants[name].recipe_binding
+    equal_tree(loaded.optimizer.state_dict(),participants[name].optimizer.state_dict())
+    assert loaded.sft_progress==participants[name].sft_progress
+    forged=json.loads(json.dumps(binding));forged['recipe']['lineage_sha256']='c'*64
+    with pytest.raises(ValueError,match='actual checkpoint'):
+        load_participant(name,forged,config,'cpu')

@@ -63,10 +63,11 @@ def refresh(*, adapter, updates, config, out, device='cuda', stop=None):
             # The shared trainer rechecks this identity against actual restored
             # tensors; use its bound receipt here to avoid an extra 24GB load.
             models.append({'model_id': name, 'checkpoint': {'path': str(path), 'sha256': identity['checkpoint_sha256']},
-                           'native_identity': identity})
+                           'native_identity': identity,**({'recipe':receipt['recipe']} if receipt.get('recipe') else {})})
         else:
             models.append({'model_id': name, 'checkpoint': binding['checkpoint'],
-                           'native_identity': binding['native_identity']})
+                           'native_identity': binding['native_identity'],
+                           **({'recipe':binding['recipe_binding']} if binding.get('recipe_binding') else {})})
     manifest = {'schema': 'natlang.native-shared-participants/1', 'models': models,
                 'signature': canonical_json_sha256_hex(models)}
     participants = out/'participants.json'

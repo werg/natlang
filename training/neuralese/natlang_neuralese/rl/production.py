@@ -836,6 +836,10 @@ def configure_native(args):
         config['actor_command'] += ['--coefficient-cancel-stale-reason','{coefficient_cancel_stale_reason}']
         config['learner_command'] += ['--coefficient-policy','{coefficient_policy}']
         config['seed_command']=[part.replace('{trainer_args}','{seed_trainer_args}') for part in config['seed_command']]
+    if semantic:
+        from .native_supervised import bind_semantic_recipe_lineage
+        bind_semantic_recipe_lineage(config,args.checkpoint,args.native_participant,
+            adapter['models'][args.native_participant].get('recipe_binding'))
     write_json_durable(args.config, config)
     return config
 
