@@ -1,4 +1,4 @@
-"""Mandatory CE-stage credits carried through shared objectives.
+"""Mandatory CE and offline-pair credits carried through shared objectives.
 
 These are schedule metadata, never another optimizer/RNG history. The live
 participant owns one current model/optimizer/FP8/RNG continuation stream.
@@ -149,7 +149,8 @@ def _retain_pending_sources(frame,previous):
 def collect_sft_progress(training):
     """Capture an actual CE schedule, retaining older mandatory stages unchanged."""
     result=copy.deepcopy(training.get('sft_progress') or {})
-    if training.get('schema')==TRAINING_SCHEMA and (training.get('identity') or {}).get('objective') is None:
+    if training.get('schema')==TRAINING_SCHEMA and ((training.get('identity') or {}).get('objective') is None
+            or (training.get('identity') or {}).get('objective_kind')=='native-offline-pairwise'):
         frame={key:copy.deepcopy(value) for key,value in training.items() if key not in _TRANSIENT}
         key=stage_key(training)
         _retain_pending_sources(frame,result.get(key) or {})
@@ -188,6 +189,8 @@ def progress_obligations(progress):
             'train_source_sha256':(frame.get('source_receipts') or [{}])[0].get('sha256'),
             'held_source_sha256':(frame.get('source_receipts') or [{},{}])[-1].get('sha256'),
             'epochs':(frame.get('options') or {}).get('epochs',1)}
+        if (frame.get('identity') or {}).get('objective_kind'):
+            stages[stage]['objective_kind']=frame['identity']['objective_kind']
         if frame.get('pending_source_declarations') or frame.get('pending_source_rows'):
             stages[stage].update(
                 pending_source_graph_visits=sum(value for key,value in missing.items() if key in (frame.get('pending_source_rows') or {})),

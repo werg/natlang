@@ -64,7 +64,7 @@ class _HostPeak:
 
 
 def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers=True,
-                     chunk_tokens=1024, checkpoint_sha256, source_binding, gradient_observer=None):
+                     chunk_tokens=1024, checkpoint_sha256, source_binding, gradient_observer=None, objective=None):
     """Cases are whole, source-authenticated graphs chosen by the supervisor.
 
     The existing gated optimizer hooks stay installed but unarmed. Temporary
@@ -120,6 +120,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                     with backend.autocast() if backend is not None else contextlib.nullcontext():
                         packing = ({'share_causal_prefixes':True}
                             if getattr(model,'share_causal_prefixes',False) else {})
+                        if objective is not None:packing['objective']=objective
                         loss,_=packed_graph_loss(model,[example],checkpoint_layers=checkpoint_layers,
                             chunk_tokens=chunk_tokens,**packing)
                     loss.backward()
@@ -147,6 +148,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
         return {'schema':'natlang.native-memory-capacity-check/1',
             'passed':len(rows)==len(cases) and all(row['status']=='passed' for row in rows),
             'parent_checkpoint_sha256':checkpoint_sha256,'source':source_binding,'cases':rows,
+            **({'objective':objective.binding()} if objective is not None else {}),
             'optimizer_updates':0,'gradients_released_per_parameter':True,'whole_graphs':True,
             'task_quality_qualified':False,'cpu_and_all_cuda_rng_restored':True,
             'checkpoint_layers':checkpoint_layers,'chunk_tokens':chunk_tokens,
@@ -184,7 +186,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
 
 
 def offload_numerical_parity(model, optimizer, example, *, backend=None, chunk_tokens=1024,
-                             checkpoint_sha256, source_binding, checkpoint_layers=True, checkpoint_input_offload=None):
+                             checkpoint_sha256, source_binding, checkpoint_layers=True, checkpoint_input_offload=None, objective=None):
     """Bitwise full named-gradient parity, retaining only per-parameter digests."""
     from ..common.checkpoint_offload import configure_checkpoint_input_offload
     checkpoint_input_offload = checkpoint_layers if checkpoint_input_offload is None else checkpoint_input_offload
@@ -204,10 +206,10 @@ def offload_numerical_parity(model, optimizer, example, *, backend=None, chunk_t
     try:
         configure_checkpoint_input_offload(model.port,enabled=False)
         baseline=qualify_capacity(model,optimizer,[example],backend=backend,chunk_tokens=chunk_tokens,
-            checkpoint_sha256=checkpoint_sha256,source_binding=source_binding,gradient_observer=reference)
+            checkpoint_sha256=checkpoint_sha256,source_binding=source_binding,gradient_observer=reference,objective=objective)
         configure_checkpoint_input_offload(model.port,enabled=checkpoint_input_offload)
         candidate=qualify_capacity(model,optimizer,[example],backend=backend,chunk_tokens=chunk_tokens,
-            checkpoint_layers=checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=source_binding,gradient_observer=compare)
+            checkpoint_layers=checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=source_binding,gradient_observer=compare,objective=objective)
         return {'passed':baseline['passed'] and candidate['passed'] and not mismatches
                     and seen==gradients.keys() and baseline['cases'][0].get('loss')==candidate['cases'][0].get('loss'),
                 'baseline':baseline,'offloaded':candidate,'candidate_checkpoint_layers':checkpoint_layers,
@@ -228,14 +230,19 @@ def memory_runtime(device):
 
 
 def capacity_identity(config,args,backend):
-    return {'model_config':config,'batch_graphs':args.batch_graphs,'batch_tokens':args.batch_tokens,
+    objective={}
+    if getattr(args,'objective_spec',None):
+        from ..train.native_preference import NativePreferenceObjective
+        objective={'objective':NativePreferenceObjective(args.objective_spec,
+            beta=getattr(args,'preference_beta',None),margin=getattr(args,'preference_margin',None)).binding()}
+    return {**objective,'model_config':config,'batch_graphs':args.batch_graphs,'batch_tokens':args.batch_tokens,
         'checkpoint_layers':args.checkpoint_layers,'chunk_tokens':args.chunk_tokens,
         'checkpoint_input_offload':args.checkpoint_input_offload,'runtime':memory_runtime(args.device),
         'fp8':{'kind':args.fp8_training,'recipe':args.fp8_recipe,'amax_history_len':args.fp8_amax_history_len,
                'input_gradient_precision':getattr(backend,'input_gradient_precision',None)}}
 
 
-def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256):
+def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256,objective=None):
     """Called once at the normal restore boundary, before any new optimizer step.
 
     Failed novel source checks cannot stop useful SGD on the existing source.
@@ -253,6 +260,9 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
     package=Path(__file__).resolve().parents[1]
     code_sha=canonical_json_sha256_hex(code_inventory(package))
     identity=capacity_identity(config,args,backend)
+    actual_objective=objective.binding() if objective is not None else None
+    if request.get('objective')!=actual_objective:
+        raise ValueError('memory qualification objective differs from actual paired training objective')
     if (request.get('schema')!='natlang.native-memory-qualification-request/1'
             or request.get('identity')!=identity or request.get('runtime_code_sha256')!=code_sha):
         raise ValueError('memory qualification request differs from actual restored model/runtime/packing')
@@ -316,11 +326,11 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
         example=next(train.iter_indices([ref_index]))
         result['numerical_reference']=offload_numerical_parity(model,optimizer,example,backend=backend,
             chunk_tokens=args.chunk_tokens,checkpoint_sha256=checkpoint_sha256,source_binding=binding(train.path),
-            checkpoint_layers=args.checkpoint_layers,checkpoint_input_offload=args.checkpoint_input_offload)
+            checkpoint_layers=args.checkpoint_layers,checkpoint_input_offload=args.checkpoint_input_offload,objective=objective)
         if result['numerical_reference']['passed']:
             examples=list(source.iter_indices([row['index'] for row in selected]))
             result['capacity']=qualify_capacity(model,optimizer,examples,backend=backend,chunk_tokens=args.chunk_tokens,
-                checkpoint_layers=args.checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=request['source'])
+                checkpoint_layers=args.checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=request['source'],objective=objective)
             result['passed']=result['capacity']['passed']
     except (RuntimeError,FloatingPointError,MemoryError) as error:
         if isinstance(error,CapacityStateChangedError):raise
@@ -382,7 +392,7 @@ def combine_capacity_proofs(out, proofs, *, identity, code_sha, checkpoint_sha25
     return certificate
 
 
-def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256):
+def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256,objective=None):
     """Independent source cohorts share one restored parent and retain each pass.
 
     A novel larger cohort failing must not discard capacity already established
@@ -392,7 +402,7 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
     requests=json.loads(args.memory_qualification)
     if isinstance(requests,dict):
         return _run_one_prepared(model,optimizer,train,roles,config,args,
-            backend=backend,checkpoint_sha256=checkpoint_sha256)
+            backend=backend,checkpoint_sha256=checkpoint_sha256,objective=objective)
     if not isinstance(requests,list) or not requests:
         raise ValueError('memory qualification needs a binding or nonempty ordered bindings')
     original=args.memory_qualification;checks=[]
@@ -400,7 +410,7 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
         for request in requests:
             args.memory_qualification=json.dumps(request)
             checks.append(_run_one_prepared(model,optimizer,train,roles,config,args,
-                backend=backend,checkpoint_sha256=checkpoint_sha256))
+                backend=backend,checkpoint_sha256=checkpoint_sha256,objective=objective))
             if 'numerical_reference' in checks[-1] and not (checks[-1]['numerical_reference'] or {}).get('passed'):
                 break  # Failed exact-reference qualification cannot certify a later cohort.
     finally:

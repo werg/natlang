@@ -328,6 +328,8 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
     """One backbone graph forward for a minibatch; mean the original per-graph losses."""
     import torch.nn.functional as F
     from torch.utils.checkpoint import checkpoint
+    if objective is None and any(not any(weight>0 for weight in example.target_weights) for example in examples):
+        raise ValueError('native graph has no ordinary CE targets; its declared offline/policy objective is required')
     from .native_prefix_packing import pack_causal_prefixes
     shared = pack_causal_prefixes(examples) if share_causal_prefixes and objective is None else None
     if shared is None:
@@ -426,7 +428,7 @@ def scheduled_indices(examples, *, seed, epoch, prior_ids=None):
     return old + new
 
 
-def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None, graph_classes=None):
+def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None, graph_classes=None, objective=None):
     from ..data.native_graph import graph_loss
     previous_mode = model.training
     model.eval()
@@ -441,14 +443,18 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None,
         with scope, torch.no_grad():
             total_weight, total_loss, total_correct, total_tokens, total_graphs, forward_tokens = 0., 0., 0., 0, 0, 0
             for example in examples:
-                loss, detail = graph_loss(model, example, checkpoint_layers=checkpoint_layers,
-                                          chunk_tokens=chunk_tokens, boundary_token_ids=boundary_ids)
+                if objective is not None:
+                    loss,detail=objective.evaluate(model,example,checkpoint_layers=checkpoint_layers,
+                        chunk_tokens=chunk_tokens,boundary_ids=boundary_ids)
+                else:
+                    loss, detail = graph_loss(model, example, checkpoint_layers=checkpoint_layers,
+                                              chunk_tokens=chunk_tokens, boundary_token_ids=boundary_ids)
                 for token, sums in detail['boundary_sums'].items():
                     for key, value in sums.items():
                         boundary_sums[token][key] += value
                 weight = detail['weight']
                 if graph_classes is not None:
-                    name = graph_classes[example.id]
+                    name = detail.get('metric') or graph_classes[example.id]
                     sums = classes.setdefault(name, {'loss_sum': 0., 'correct_sum': 0., 'weight': 0.,
                         'graphs': 0, 'supervised_tokens': 0, 'forward_tokens': 0,
                         'boundaries': {token: dict.fromkeys(values, 0.) for token, values in boundary_sums.items()}})
@@ -500,7 +506,7 @@ def held_cadence_indices(entries, cursor=0, *, token_budget=0, graph_budget=0):
 
 
 def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backend=None,
-                      previous_result=None):
+                      previous_result=None, objective=None):
     from .native_held import held_selection
     coverage = coverage or {}
     indices, next_coverage, selection = held_selection(source.entries, coverage,
@@ -509,7 +515,7 @@ def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backen
     cursor = next_coverage['cursor']
     started = time.monotonic()
     result = _evaluate(model, source.iter_indices(indices), checkpoint_layers=args.checkpoint_layers,
-                       chunk_tokens=args.chunk_tokens, backend=backend,
+                       chunk_tokens=args.chunk_tokens, backend=backend, objective=objective,
                        graph_classes={source.entries[i]['id']: ('communication' if source.entries[i].get('communication')
                                       else 'ordinary') for i in indices})
     result.update(scope='full' if len(indices) == len(source) else 'cadence-subset',
@@ -676,6 +682,8 @@ def build_parser():
     parser.add_argument('--stage-id', default=None)
     parser.add_argument('--prerequisite-stages', default='[]')
     parser.add_argument('--objective-spec', type=Path, default=None)
+    parser.add_argument('--preference-beta',type=float)
+    parser.add_argument('--preference-margin',type=float)
     return parser
 
 
@@ -827,14 +835,23 @@ def main(argv=None):
         spec_sha256 = sha256_file_hex_cached(args.objective_spec)
         objective_binding = {'path': str(args.objective_spec.resolve()), 'sha256': spec_sha256}
         spec = json.loads(args.objective_spec.read_text())
-        if spec.get('schema') != 'natlang.native-policy-objective/1' or spec.get('kind') != 'native-policy':
-            raise ValueError('native replay objective spec must declare natlang.native-policy-objective/1 kind native-policy')
-        from ..rl.native_replay import NativePolicyObjective
-        objective = NativePolicyObjective(args.objective_spec)
-        if parent_continuation:
-            actual = native_identity(model, config, checkpoint_sha256=sha256_file_hex_cached(args.continue_from))
-            if objective.identity != actual:
-                raise ValueError('native policy objective differs from the actual loaded actor embedding/checkpoint identity')
+        if spec.get('schema')=='natlang.native-offline-pairwise-objective/1' and spec.get('kind')=='native-offline-pairwise':
+            from .native_preference import NativePreferenceObjective
+            objective=NativePreferenceObjective(args.objective_spec,beta=args.preference_beta,margin=args.preference_margin)
+            objective_binding.update(kind=objective.kind,beta=objective.beta,margin=objective.margin)
+        else:
+            if spec.get('schema') != 'natlang.native-policy-objective/1' or spec.get('kind') != 'native-policy':
+                raise ValueError('native objective spec must declare an implemented native policy or offline pairwise objective')
+            from ..rl.native_replay import NativePolicyObjective
+            objective = NativePolicyObjective(args.objective_spec)
+            if parent_continuation:
+                actual = native_identity(model, config, checkpoint_sha256=sha256_file_hex_cached(args.continue_from))
+                if objective.identity != actual:
+                    raise ValueError('native policy objective differs from the actual loaded actor embedding/checkpoint identity')
+    mandatory_objective=bool(getattr(objective,'mandatory_progress',False))
+    held_objective=objective if mandatory_objective else None
+    if (args.preference_beta is not None or args.preference_margin is not None) and not mandatory_objective:
+        raise ValueError('preference beta/margin require the declared native offline pairwise objective')
     model.share_causal_prefixes = args.share_causal_prefixes
     training_identity = {'schema': TRAINING_SCHEMA, 'config': config, 'train_source_hash': source_hash,
                 'schedule': 'row-visit-deficit/2',
@@ -845,9 +862,11 @@ def main(argv=None):
                 'fp8': {'kind': args.fp8_training, 'recipe': args.fp8_recipe,
                         'amax_history_len': args.fp8_amax_history_len},
                 'objective': objective_binding}
+    if mandatory_objective:
+        training_identity['objective_kind']=objective.kind
     appended_ids = set()
     restored_frame = (restore_sft_progress(shared_resume or resume or {}, args.stage_id)
-                      if parent_continuation and objective is None else None)
+                      if parent_continuation and (objective is None or mandatory_objective) else None)
     if restored_frame is not None:
         resume = restored_frame
         restored_progress = True
@@ -904,7 +923,11 @@ def main(argv=None):
             raise ValueError('native SFT continuation changes model identity beyond declared GEMM arithmetic')
         if previous.get('schedule') not in {'source-order-stream/1', 'row-visit-deficit/2'}:
             raise ValueError('native SFT checkpoint has an unsupported row-credit schedule')
-        if parent_continuation and args.objective_continuation:
+        offline_tweak=mandatory_objective and args.objective_continuation and previous.get('objective_kind')==objective.kind
+        if offline_tweak and previous.get('objective')!=objective_binding:
+            checkpoint_options['offline_objective_transition']={'from':previous.get('objective'),
+                'to':objective_binding,'optimizer_rng_exposure':'preserved'}
+        if (parent_continuation and args.objective_continuation) or offline_tweak:
             stable = tuple(key for key in stable if key not in {'objective', 'batch_graphs', 'batch_tokens'})
         if any(previous.get(key, 0 if key == 'batch_tokens' else None) != training_identity.get(key) for key in stable):
             raise ValueError('native SFT continuation changes model/held/optimizer/schedule identity')
@@ -1045,7 +1068,7 @@ def main(argv=None):
         write_json(args.out / 'training-backend-check.json', backend_check)
     if args.memory_qualification:
         from ..eval.native_memory import run_prepared
-        memory_check = run_prepared(model,optimizer,train,roles,config,args,backend=backend,
+        memory_check = run_prepared(model,optimizer,train,roles,config,args,backend=backend,objective=held_objective,
             checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
                 if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'])
         checkpoint_options['memory_qualification'] = {'passed':memory_check['passed'],
@@ -1246,7 +1269,7 @@ def main(argv=None):
             due_eval = step % eval_at == 0 or step == total_end or due_task
             if due_eval:
                 held_metrics, held_coverage = _evaluate_cadence(model, held, args=args,
-                    coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end, backend=backend)
+                    coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end, backend=backend, objective=held_objective)
                 metrics = {'train_loss': train_loss, 'held': held_metrics, 'held_coverage': held_coverage,
                            'step': step, 'epoch': epoch, 'cursor': cursor,
                            'elapsed_seconds': time.time() - started,
@@ -1313,7 +1336,7 @@ def main(argv=None):
     if metadata_dirty or ((step != resumed_step or policy.signaled) and last_saved_step != step):
         if not policy.signaled and not metrics.get('held'):
             metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
-                coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end, backend=backend)
+                coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end, backend=backend, objective=held_objective)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
               global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
               source_hash=source_hash, source_row_bindings=source_row_bindings,
@@ -1326,7 +1349,7 @@ def main(argv=None):
     if completed and not policy.signaled and (metrics.get('held', {}).get('scope') != 'full'
             or metrics.get('held', {}).get('source_sha256') != held.file_sha256):
         metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
-            coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=True, backend=backend)
+            coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=True, backend=backend, objective=held_objective)
         metrics.pop('task_checkpoint_sha256', None)
         metrics.pop('task_native_identity', None)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,

@@ -147,7 +147,7 @@ RL_PARAMETERS = {'rft_document_kind', 'rl_mode', 'rl_tokenizer', 'rl_prompt_rend
                  'rl_policy_id', 'rl_clip_low', 'rl_clip_high', 'rl_block_bundle', 'rl_held_documents'}
 HANDLERS['neuralese_rl']['parameters'] = set(HANDLERS['neuralese_direct']['parameters']) | RL_PARAMETERS
 # A stage kind whose parameter defaults start from another kind's declared defaults.
-RL_DEFAULTS_FROM = {'neuralese_rl': 'neuralese_direct'}
+RL_DEFAULTS_FROM = {'neuralese_rl': 'neuralese_direct','native_offline_preference':'native_state_sft'}
 DIRECT_STAGE_SCHEMA = 'natlang.neuralese-declared-direct-stage/1'
 
 INPUT_BINDING_NAME = re.compile(r'[a-z][a-z0-9_.-]*')
@@ -213,17 +213,23 @@ def validate_stage_parameters(kind, parameters):
         if 'coefficient_optimizer' in parameters and (not isinstance(parameters['coefficient_optimizer'],dict)
                 or parameters['coefficient_optimizer'].get('name') not in {'adam','sgd'}):
             raise ValueError('native coefficient optimizer must declare the shared named Adam/SGD mechanism')
-    if kind in {'native_state_sft','native_state_rl'}:
+    if kind in {'native_state_sft','native_state_rl','native_offline_preference'}:
         from .native_optimizer_migration import validate_native_optimizer_migration
         validate_native_optimizer_migration(parameters.get('native_optimizer_migration'))
         from .native_learning_rates import validate_learned_row_rate
         for name in ('learned_row_learning_rate','interface_row_learning_rate'):
             if name in parameters:
                 validate_learned_row_rate(parameters[name],name=name)
-    if kind in {'native_state_sft','native_state_rl'} and 'checkpoint_input_offload' in parameters:
+    if kind in {'native_state_sft','native_state_rl','native_offline_preference'} and 'checkpoint_input_offload' in parameters:
         if parameters['checkpoint_input_offload'] is not None and type(parameters['checkpoint_input_offload']) is not bool:
             raise ValueError('checkpoint_input_offload must be a boolean or omitted for inheritance')
-    if kind == 'native_state_sft' and parameters.get('memory_qualification') is not None:
+    if kind=='native_offline_preference':
+        beta=parameters.get('preference_beta');margin=parameters.get('preference_margin')
+        if beta is not None and (type(beta) not in (int,float) or not math.isfinite(beta) or beta<=0):
+            raise ValueError('offline preference beta must be finite and positive')
+        if margin is not None and (type(margin) not in (int,float) or not math.isfinite(margin)):
+            raise ValueError('offline preference margin must be finite')
+    if kind in {'native_state_sft','native_offline_preference'} and parameters.get('memory_qualification') is not None:
         declared=parameters['memory_qualification']
         values=declared if isinstance(declared,list) else [declared]
         if not values:
@@ -317,6 +323,15 @@ HANDLERS['native_state_rl'] = {
         {'rl_tokenizer', 'rl_mode', 'native_participant'},
     'result': 'checkpoint.pt'}
 
+HANDLERS['native_offline_preference'] = {
+    'module':'natlang_neuralese.train.native_preference',
+    'required_inputs':{'native_graphs','held_native_graphs','objective_spec'},
+    'optional_inputs':{'continue_from','continued_native_graphs','continued_held_native_graphs'},
+    'parameters':(set(HANDLERS['native_state_sft']['parameters']) -
+        {'communication_foundation','foundation_communication_batches','share_causal_prefixes'}) |
+        {'preference_beta','preference_margin'},
+    'result':'checkpoint.pt'}
+
 HANDLERS['native_coefficient_rl'] = {
     'module':'natlang_neuralese.rl.native_stage',
     'required_inputs':{'rollouts','held_native_graphs','continue_from','coefficient_policy'},
@@ -326,7 +341,7 @@ HANDLERS['native_coefficient_rl'] = {
                   'checkpoint_layers','fp8_training','fp8_recipe'},
     'result':'checkpoint.pt'}
 COEFFICIENT_NATIVE_KINDS=frozenset({'native_coefficient_rl'})
-NATIVE_TRAINING_KINDS = frozenset({'native_state_sft', 'native_state_rl'})
+NATIVE_TRAINING_KINDS = frozenset({'native_state_sft', 'native_state_rl','native_offline_preference'})
 SHARED_NATIVE_KINDS = frozenset({'native_semantic_training', 'native_shared_stage_controller'})
 HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | SHARED_NATIVE_KINDS | COEFFICIENT_NATIVE_KINDS
 NATIVE_IDENTITY_QUALIFICATION = 'native_state_runtime_qualified'
@@ -549,7 +564,11 @@ def mapped_fixup_continuation(stage, reports):
 def effective_stage_parameters(stage, reports, recipe=None):
     """Resolve fixup ``steps`` as new updates above its exact predecessor step."""
     parameter_defaults = (recipe or {}).get('stage_parameter_defaults', {})
-    parameters = dict(parameter_defaults.get(RL_DEFAULTS_FROM.get(stage['kind']), {}))
+    inherited=parameter_defaults.get(RL_DEFAULTS_FROM.get(stage['kind']), {})
+    if stage['kind']=='native_offline_preference':
+        inherited={key:value for key,value in inherited.items()
+                   if key in HANDLERS[stage['kind']]['parameters']}
+    parameters = dict(inherited)
     parameters.update(parameter_defaults.get(stage['kind'], {}))
     parameters.update(stage['parameters'])
     if stage['kind'] == 'core_text_warmup' and parameters.get('ar_feedback_fixup',False):
@@ -1370,6 +1389,7 @@ def direct_windowing_handoffs(old_recipe, new_recipe, out):
     """Declared trainer-supported tuning, preserving each trainer's resume checks."""
     tuning = {'neuralese_direct': DIRECT_WINDOWING_PARAMETERS,
               'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'learn_reasoning_boundaries', 'native_linear_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'memory_qualification'),
+              'native_offline_preference': ('preference_beta', 'preference_margin', 'epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'learn_reasoning_boundaries', 'native_linear_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'memory_qualification'),
               'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'native_linear_precision', 'checkpoint_input_offload')}
     def parameters(recipe, stage):
         merged = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
