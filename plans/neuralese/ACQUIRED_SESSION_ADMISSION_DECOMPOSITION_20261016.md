@@ -22,3 +22,11 @@ This is declared natural-language admission policy. Hashing, identity joins,
 exact counts, native schema validation and immutable manifest writing are crisp
 verifiers. Existing converters, source-group/decision-hold mechanisms and corpus
 registration remain the sole implementations of their concepts.
+
+The all-row audit authenticates source occurrence, provenance, target identities,
+view completeness and native schema; it is not an independent token re-render.
+A separate small qualification selects the first positive and largest complete
+positive session per model, re-renders through the existing canonical
+session_graphs mechanism with the actual pinned tokenizers, and compares every
+stored graph token, weight, view and provenance value exactly. This is a source
+render spotcheck, not a full-cohort re-render or a task-quality oracle.
