@@ -80,8 +80,8 @@ def propose(full_proposal, partition_receipt, declarations, *, cohort_root, iden
             'path': str(certificate_path.relative_to(root)), 'sha256': sha256_file_hex(certificate_path),
             'new_protection': {**certificate['new_protection'], 'path': str(
                 (certificate_path.parent / certificate['new_protection']['path']).resolve(strict=True).relative_to(root))},
-            'eligibility_only': True, 'numeric_partition_unchanged': True}
-        proposal['training_admission_reason'] += ' Eligibility continued explicitly under the bound stricter connected-source protection; original numeric audit and partition remain unchanged.'
+            'eligibility_only': True, 'numeric_rows_unchanged': True}
+        proposal['training_admission_reason'] += ' Eligibility continued explicitly under the bound stricter connected-source protection; original numeric graph rows and audit remain unchanged; the separately bound capacity partition declares their current fit classification.'
     write_json_durable(output,proposal)
     return proposal
 

@@ -36,3 +36,12 @@ evidence; conversion receipt bytes remain untouched. Existing source-backed
 sample qualification re-renders its exact selected full views without a special
 or weakened path. Later continuation certificates understand this original
 numeric provenance separately from the audit's current eligibility proof.
+
+A stricter-protection certificate binds the original complete numeric row audit,
+not a fixed capacity envelope. A newly measured envelope may classify more of
+those same complete rows as fit without rerendering or changing eligibility.
+Publish a new immutable partition/derivative and retain its exact coverage,
+zero new earned visits, remaining long obligations and held split. The proposal
+records `numeric_rows_unchanged`; it must not claim the capacity partition itself
+is unchanged when its fit boundary moves. The old derivative remains a required
+consumer dependency until actual source adoption has safely superseded it.
