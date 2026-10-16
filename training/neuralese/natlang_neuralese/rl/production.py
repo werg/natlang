@@ -538,12 +538,12 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 raise RuntimeError('RL collector infrastructure failed; repair and retry retained round with fresh attempt')
             from .native_semantic_route import has_semantic_inputs
             semantic_batch=bool(config.get('native_state') and has_semantic_inputs(rows))
-            if report.get('scored') == report.get('successes') and not semantic_batch:
+            if report.get('scored') == report.get('successes') and not config.get('native_state'):
                 state.update(round=state['round'] + 1, offset=(selection[-1]['row'] + 1) % len(cases),
                              phase='collect', collection_attempt=0)
                 write_json_durable(state_path, state)
                 completed += 1
-                continue  # all-success groups have no useful gradient
+                continue  # Legacy relative-only path; native successes use positive whole-episode RFT below.
             rft_stages = ['all']
             if report['groups_with_spread']:
                 mode = 'grpo'

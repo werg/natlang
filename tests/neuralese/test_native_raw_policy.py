@@ -89,3 +89,38 @@ def test_bare_native_factory_keeps_actual_recipe_and_omits_shared_artifact_requi
     forged={**receipt,'native_identity':{**receipt['native_identity'],'embedding_weight_sha256':'f'*64}}
     with pytest.raises(ValueError):production.validate_actor_receipts({'local':forged},policy_id=sha256_file_hex(checkpoint),
         neuralese_server=True,expected_native=bound)
+
+
+def test_all_correct_ordinary_native_batch_updates_policy_without_semantic_refresh(tmp_path,monkeypatch):
+    """Controller behavior only; exact real optimizer continuation is tested separately."""
+    import json
+    from natlang_neuralese.rl import production,native_raw_policy,native_refresh
+    source=tmp_path/'cases.jsonl';source.write_text('{"id":"ordinary","split":"train"}\n')
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'exact-parent')
+    out=tmp_path/'out';config=tmp_path/'config.json'
+    config.write_text(json.dumps({'native_state':True,'checkpoint':str(parent),'base':'base',
+        'out':str(out),'cases':str(source),'endpoints':['unused'],'learner_command':['learn'],
+        'after_update':['publish']}))
+    monkeypatch.setattr(native_raw_policy,'prepare_raw_policy',lambda *a,**kw:{'tokenizer':'exact-tokenizer'})
+    monkeypatch.setattr(native_refresh,'refresh',lambda **kw:pytest.fail('raw policy must not wait for shared VAE'))
+    def collect(**kwargs):
+        (kwargs['out']/'rollouts.jsonl').write_text(json.dumps({'task_id':'ordinary','split':'train',
+            'reward':{'quality':1},'turns':[{'invocation_id':'ordinary','sampling':{'prompt':[]}}]})+'\n')
+        return {'scored':1,'successes':1,'groups_with_spread':0}
+    monkeypatch.setattr(production,'collect',collect)
+    calls=[]
+    def command(argv,values):
+        calls.append((argv[0],values['mode'],values['checkpoint']))
+        if argv[0]=='publish':return
+        destination=Path(values['learner_out']);destination.mkdir(parents=True)
+        (destination/'checkpoint.pt').write_bytes(b'updated-policy')
+        (destination/'report.json').write_text(json.dumps({'completed':True,'step':1}))
+        (destination/'rl-data-receipt.json').write_text(json.dumps({'tasks_selected':[
+            {'task_id':'ordinary','split':'train'}]}))
+        (destination/'train.jsonl').write_text('{"step":1,"target_tokens":2,"supervised_tokens":2}\n')
+    monkeypatch.setattr(production,'run_command',command)
+    state=production.run(config,rounds=1)
+    current=out/'round-000000/learner/checkpoint.pt'
+    assert calls==[('learn','rft',str(parent)),('publish','rft',str(current))]
+    assert state['checkpoint']==str(current) and state['trained_task_ids']==['ordinary']
+    assert state['trained_target_tokens']==2 and not state.get('pending_native_checkpoint')

@@ -77,6 +77,12 @@ def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_fini
     assert {item['provider']['sandbox_id'] for item in bootstrap['models']}=={'lfm-existing','mellum-existing'}
     assert bootstrap['refresh_provider']['sandbox_id']=='mellum-existing'
     assert all(item['production_stage']=='native_full_sft' for item in bootstrap['models'])
+    raw=json.loads(Path(config['raw_rl_bootstrap']['path']).read_text())
+    assert raw['schema']=='natlang.native-raw-rl-bootstrap/1'
+    assert {item['model'] for item in raw['models']}=={'lfm','mellum'}
+    assert all(item['handoff_requirement']==requirement for item,requirement in
+               zip(raw['models'],config['participants']))
+    assert 'semantic_refresh_config' not in raw
     # Production auto-bootstrap defaults to the integrity-bound 128-task union
     # for both participants; the older explicit fixture above remains supported.
     admitted_manifest = (Path(__file__).resolve().parents[2]
