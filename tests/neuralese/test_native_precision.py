@@ -124,12 +124,15 @@ def test_real_training_precision_transition_restores_optimizer_rng_and_row_credi
         torch.save(diagnostic, out/'checkpoint.pt')
         with pytest.raises(ValueError, match='explicitly transition'):
             trainer.main(argv)
-    optimizer_loads, rng_restores = [], []
+    optimizer_loads, optimizer_load_options, rng_restores = [], [], []
     actual_make, actual_restore = trainer.make_native_optimizer, trainer.restore_training_rng_state
     def make(*args, **kwargs):
         optimizer, named = actual_make(*args, **kwargs)
         actual_load = optimizer.load_state_dict
-        def load(state): optimizer_loads.append(copy.deepcopy(state)); return actual_load(state)
+        def load(state, **load_options):
+            optimizer_loads.append(copy.deepcopy(state))
+            optimizer_load_options.append(copy.deepcopy(load_options))
+            return actual_load(state, **load_options)
         optimizer.load_state_dict = load
         return optimizer, named
     def restore(state, *args): rng_restores.append(copy.deepcopy(state)); return actual_restore(state, *args)
@@ -148,6 +151,7 @@ def test_real_training_precision_transition_restores_optimizer_rng_and_row_credi
             for a,b in zip(left,right): equal(a,b)
         else: assert left == right
     equal(optimizer_loads[0], before['training']['optimizer'])
+    assert optimizer_load_options == [{'native_optimizer_migration': None}]
     equal(rng_restores[0], before['training']['rng'])
     equal(rng_restores[1], rng_restores[0])
     assert after['training']['options']['native_precision_transition']['reference_check']['runtime_reference']['passed']

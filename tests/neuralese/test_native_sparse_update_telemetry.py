@@ -18,6 +18,11 @@ def test_sparse_row_telemetry_matches_actual_committed_parameters(family,master_
         'source_groups':['train'],'tokenizer_fingerprint':'fixture','nodes':[
             {'name':'answer','token_ids':[1,58,54,59,60,55,61,2],
              'target_weights':[0,1,1,1,1,1,1,1]}]},tokenizer_fingerprint='fixture')
+    if family=='mellum':
+        # Deliberate FP32/BF16 counterfactual: 1.0 is exact in both dtypes,
+        # while a first AdamW update at this LR is below half a BF16 ULP.
+        # Random near-zero rows can now move after the correct AdamW routing.
+        with torch.no_grad():model.extra_output_rows.fill_(1.0)
     optimizer,_=make_native_optimizer(model,lr=1e-5)
     names=('input_rows','extra_input_rows') if model.tied else (
         'input_rows','output_rows','extra_input_rows','extra_output_rows')
@@ -39,7 +44,8 @@ def test_sparse_row_telemetry_matches_actual_committed_parameters(family,master_
             assert row['gradient_l2']>0
             if master_dtype==torch.float32:assert row['update_l2']>0
     if family=='mellum' and master_dtype==torch.bfloat16:
-        # This is the independently reproduced defect: a real nonzero
-        # gradient can produce no change in a BF16 sparse output row.
-        assert any(row['gradient_l2']>0 and row['changed_elements']==0
+        assert torch.all(before['extra_output_rows']==1.0)
+        # Real CE gradients still exist, but every deliberately representable
+        # BF16 output coordinate rounds away this production-small Adam step.
+        assert all(row['gradient_l2']>0 and row['changed_elements']==0
                    for row in metrics['extra_output_rows']['rows'])
