@@ -162,10 +162,15 @@ def validate_ready(path, requirement):
         raise ValueError('native task execution proof is incomplete or bound to different weights')
     # Task-success counts remain telemetry. The owner wants capable models,
     # adaptive improvements and complete exposure, not a base-relative barrier.
+    # Carry the supervisor's declared policy, never reconstruct it from a
+    # receipt when a legacy participant needs provenance backfill later.
+    recovery_keys=('model_id','recipe_sha256','recipe_lineage_sha256','stage_ids',
+        'readiness_boundary','foundation_sources','foundation_epochs','forward_atol','gradient_atol')
     return {'model_id': receipt['model_id'], 'readiness': {'path': str(path),
             'sha256': sha256_file_hex_cached(path)}, 'checkpoint': checkpoint,
             'native_identity': identity, 'stage_id': receipt['stage_id'], 'recipe': receipt['recipe'],
             'readiness_boundary': 'stage-complete' if receipt.get('completed') else 'communication-foundation',
+            'readiness_requirement':{key:requirement[key] for key in recovery_keys if key in requirement},
             'mandatory_sft': receipt.get('mandatory_sft'),
             'communication_foundation': receipt.get('communication_foundation')}
 

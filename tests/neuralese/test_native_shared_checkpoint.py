@@ -313,3 +313,76 @@ def test_real_semantic_participant_load_preserves_and_authenticates_recipe_metad
     forged=json.loads(json.dumps(binding));forged['recipe']['lineage_sha256']='c'*64
     with pytest.raises(ValueError,match='actual checkpoint'):
         load_participant(name,forged,config,'cpu')
+
+
+@pytest.mark.parametrize('boundary',['stage-complete','communication-foundation'])
+def test_legacy_recipe_backfill_uses_real_readiness_and_original_stage_source_policy(tmp_path,boundary):
+    import copy
+    from test_native_readiness import ready
+    from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA,model_state,native_identity
+    from natlang_neuralese.train.native_state_sft import TRAINING_SCHEMA
+    from natlang_neuralese.train.native_semantic_stage import load_participant
+    from natlang_neuralese.train.native_readiness import validate_ready
+    from natlang_neuralese.train.native_continuation import communication_foundation,progress_obligations,collect_sft_progress
+    from test_native_continuation import progress
+    from test_native_state_sft import source_manifest,authenticated_pair,graph
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    policy,participants,_,_,_=actual_shared(tmp_path)
+    entry=participants['lfm']
+    # Actual old-style model+optimizer state has no recipe metadata. Readiness
+    # carries exact bound protocol evidence; this test does not claim that its
+    # synthetic exposure/runtime receipt fields qualify real production models.
+    training=progress();training.update(schema=TRAINING_SCHEMA,optimizer=entry.optimizer.state_dict(),fp8=None,
+        options={'stage_id':'graph','epochs':1})
+    training['sft_progress']={'graph':copy.deepcopy(training)}
+    parent=tmp_path/'legacy.pt'
+    torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':entry.config,**model_state(entry.model),
+        'training':training},parent)
+    identity=native_identity(entry.model,entry.config,checkpoint_sha256=sha256_file_hex_cached(parent))
+    evidence=tmp_path/'evidence';evidence.mkdir()
+    path,receipt,requirement=ready(evidence,'lfm')
+    receipt['checkpoint']={'schema':CHECKPOINT_SCHEMA,'path':str(parent),'sha256':identity['checkpoint_sha256']}
+    receipt['native_identity']=identity
+    receipt['recipe'].update(file_sha256=receipt['recipe']['sha256'],lineage_sha256='a'*64)
+    requirement['recipe_lineage_sha256']='a'*64
+    for role in ('runtime_certificate','task_execution_receipt'):
+        proof_path=Path(receipt[role]['path']);proof=json.loads(proof_path.read_text())
+        proof['native_identity']=identity;proof_path.write_text(json.dumps(proof))
+        receipt[role]['sha256']=sha256_file_hex_cached(proof_path)
+    report_path=Path(receipt['training_receipt']['path']);report=json.loads(report_path.read_text())
+    report['checkpoint_sha256']=identity['checkpoint_sha256']
+    if boundary=='communication-foundation':
+        source_dir=tmp_path/'foundation';source_dir.mkdir()
+        manifest=source_manifest(source_dir,[dict(graph('ordinary'),tokenizer_fingerprint=identity['tokenizer_fingerprint'])],[authenticated_pair('a',roles=entry.model.marker_ids,
+            fingerprint=identity['tokenizer_fingerprint'])])
+        source=NativeGraphSource(manifest,identity['tokenizer_fingerprint'],required_split='train',role_ids=entry.model.marker_ids)
+        foundation=communication_foundation(source,{'lfm:a':1},epochs=1,trained_bindings=source.bindings)
+        mandatory=progress_obligations(collect_sft_progress(training))
+        report.update(completed=False,foundation_ready=True,communication_foundation=foundation,
+            mandatory_sft=mandatory,model_config={'marker_ids':list(entry.model.marker_ids)})
+        receipt.update(completed=False,foundation_ready=True,communication_foundation=foundation,mandatory_sft=mandatory)
+        requirement.update(readiness_boundary=boundary,foundation_epochs=1,
+            foundation_sources={'path':str(manifest),'sha256':sha256_file_hex_cached(manifest)})
+    report_path.write_text(json.dumps(report));receipt['training_receipt']['sha256']=sha256_file_hex_cached(report_path)
+    path.write_text(json.dumps(receipt))
+    selected=validate_ready(path,requirement)
+    assert selected['readiness_requirement']['stage_ids']==requirement['stage_ids']
+    assert selected['readiness_requirement']['forward_atol']==requirement['forward_atol']
+    config={'backbone_lr':.001,'models':{'lfm':{'base':str(tmp_path/'lfm'),'fp8_training':'off'}}}
+    loaded=load_participant('lfm',selected,config,'cpu')
+    assert loaded.recipe_binding==receipt['recipe']
+    equal_tree(loaded.optimizer.state_dict(),entry.optimizer.state_dict())
+    for damage in ('missing-policy','wrong-stage','loosened-stage'):
+        forged=copy.deepcopy(selected)
+        if damage=='missing-policy':forged.pop('readiness_requirement')
+        elif damage=='wrong-stage':forged['stage_id']='not-declared'
+        else:forged['readiness_requirement']['stage_ids']=['full']
+        with pytest.raises(ValueError,match='original readiness policy|declared required native stage'):
+            load_participant('lfm',forged,config,'cpu')
+    if boundary=='communication-foundation':
+        assert selected['readiness_requirement']['foundation_sources']==requirement['foundation_sources']
+        # A replaced protected/source projection cannot inherit the old source
+        # binding just because the old readiness JSON still reports complete.
+        Path(requirement['foundation_sources']['path']).write_text('{}')
+        with pytest.raises(ValueError,match='artifact changed'):
+            load_participant('lfm',selected,config,'cpu')

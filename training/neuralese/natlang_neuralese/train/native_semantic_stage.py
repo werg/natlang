@@ -194,10 +194,14 @@ def load_participant(name, binding, config, device):
                     or (readiness.get('checkpoint') or {}).get('sha256')!=binding['checkpoint']['sha256']):
                 raise ValueError('semantic participant recipe recovery differs from its actual readiness/checkpoint')
             from .native_readiness import validate_ready
-            requirement={'model_id':readiness.get('model_id'),'recipe_sha256':declared['sha256'],
-                'recipe_lineage_sha256':declared.get('lineage_sha256',declared['sha256']),
-                'readiness_boundary':binding.get('readiness_boundary','stage-complete')}
-            if validate_ready(_bound(binding['readiness']),requirement) is None:
+            requirement=binding.get('readiness_requirement')
+            if (not isinstance(requirement,dict) or requirement.get('model_id')!=name
+                    or requirement.get('recipe_sha256')!=declared['sha256']
+                    or not requirement.get('stage_ids')
+                    or binding.get('stage_id') not in requirement['stage_ids']):
+                raise ValueError('semantic recipe recovery requires its declared original readiness policy')
+            checked=validate_ready(_bound(binding['readiness']),requirement)
+            if checked is None or checked['stage_id']!=binding['stage_id']:
                 raise ValueError('semantic participant recipe recovery requires qualified original readiness')
         recipe_binding=declared
     if inherited.get('optimizer') and config.get('inherit_optimizer', True):

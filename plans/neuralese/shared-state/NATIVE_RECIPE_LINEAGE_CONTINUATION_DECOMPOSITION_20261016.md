@@ -95,3 +95,30 @@ policy epochs preserve exact participant recipe metadata, optimizer, RNG and
 all existing exposure obligations. `native-semantic-lineage-quick-20261016`
 passed22 ratchets and TypeScript checks. No full-model cloud cutover or semantic
 foundation completion is claimed by these tiny actual-port checks.
+
+Independent-review repair: original readiness policy on legacy backfill
+
+The initial legacy metadata recovery constructed an incomplete readiness
+requirement. It omitted `stage_ids` and numerical/source policy fields required
+by the shared verifier; that route could not complete. The verified participant
+record now carries the supervisor's original stable `readiness_requirement`:
+model/current recipe identities, optional preserved lineage, required stages,
+forward/gradient tolerances, and the declared foundation source/epochs/boundary.
+Only the shared readiness verifier creates this record. Legacy backfill requires
+that manifest-bound policy and reruns the same verifier; it cannot select a
+stage, foundation cohort or tolerance from the receipt it is authenticating.
+Owner-process paths are not copied into this historical policy, because original
+ownership was checked before manifest publication and may legitimately move.
+An old manifest without the declared recovery policy must be regenerated from
+its original valid readiness requirement before recovering absent metadata.
+
+`native-semantic-lineage-legacy2-20261016`2 PASS2.71s uses a real tiny LFM model
+and actual optimizer checkpoint missing recipe metadata. Both full-stage and
+communication-foundation recovery run the real readiness verifier without a
+mock. Exact metadata and optimizer values survive. Missing policy, wrong stage,
+changed declared stage inventory and changed bound foundation-source metadata
+reject. The initial foundation test invocation supplied an empty ordinary
+source to a helper that requires nonempty files; the fixture was corrected to
+include an actual ordinary context row. Protocol receipt fields in this test
+are synthetic evidence fixtures, not claims of production numerical/task or
+source-exposure qualification. No model arithmetic is changed.
