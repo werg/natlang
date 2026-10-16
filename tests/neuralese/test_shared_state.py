@@ -580,3 +580,42 @@ def test_native_attention_cached_adjoint_uses_fixed_delta(heads):
     expected_grad = torch.autograd.grad((expected*upstream).sum(), (q, k, v))
     for a, b in zip(actual_grad, expected_grad):
         assert torch.equal(a, b)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA unavailable')
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_attention_physical_index_reused_through_checkpoint_with_bitwise_adjoints(monkeypatch, family):
+    from natlang_neuralese.model import shared_state
+    port = tiny(family).to('cuda')
+    port.checkpoint_layers = True
+    plan = graph()
+    inputs = torch.randn(1, plan.token_count, port.embedding_weight.shape[1], device='cuda', requires_grad=True)
+    upstream = torch.randn_like(inputs)
+    parameters = (inputs, *(parameter for parameter in port.parameters() if parameter.requires_grad))
+    original = shared_state.graph_attention
+    observed = []
+    def observe(*args, **kwargs):
+        prepared = kwargs.get('prepared_workspace')
+        assert prepared is not None
+        observed.append(prepared)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(shared_state, 'graph_attention', observe)
+    actual = forward_graph(port, plan, embeddings=inputs)['h_final']
+    actual_grad = torch.autograd.grad((actual*upstream).sum(), parameters, allow_unused=True)
+    assert len(observed) >= 2
+    assert all(item[0] is observed[0][0] and item[1] is observed[0][1] for item in observed)
+    def rebuild(*args, **kwargs):
+        kwargs.pop('prepared_workspace', None)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(shared_state, 'graph_attention', rebuild)
+    expected = forward_graph(port, plan, embeddings=inputs)['h_final']
+    expected_grad = torch.autograd.grad((expected*upstream).sum(), parameters, allow_unused=True)
+    assert torch.equal(actual, expected)
+    for value, reference in zip(actual_grad, expected_grad):
+        assert (value is None) == (reference is None)
+        if value is not None: assert torch.equal(value, reference)
+    previous = observed[0]
+    observed.clear()
+    monkeypatch.setattr(shared_state, 'graph_attention', observe)
+    forward_graph(port, compile_graph([Invocation('other', (7, 6, 5, 4))]))
+    assert observed[0][0] is not previous[0] and observed[0][1] is not previous[1]

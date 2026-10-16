@@ -163,12 +163,16 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
     state = []
     masks = {}
     convolution_indices = {}
+    attention_workspace = None
     checkpointed = bool(getattr(port, 'checkpoint_layers', False)) and torch.is_grad_enabled()
     for i, layer in enumerate(port.layers):
         attention = port.is_attention(i)
         window = port.window(i) if attention and hasattr(port, 'window') else None
         if attention and window not in masks:
             from ..common.native_higher_order import active_reference_arithmetic
+            if attention_workspace is None and h.is_cuda and active_reference_arithmetic() is None:
+                workspace, rows = query_workspace(plan)
+                attention_workspace = (workspace, torch.tensor(rows, device=device))
             masks[window] = (None if active_reference_arithmetic() is not None else
                 graph_block_mask(plan, device, window) if h.is_cuda else plan.attention_mask(device, window))
         convolution_index = None
@@ -182,7 +186,7 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
             convolution_index = convolution_indices[width]
         external_i = tuple(value for item in external for value in item[i])
 
-        def run_layer(value, *imported, index=i, attention=attention, window=window, convolution_index=convolution_index):
+        def run_layer(value, *imported, index=i, attention=attention, window=window, convolution_index=convolution_index, attention_workspace=attention_workspace):
             layer = port.layers[index]
             values = _actor_layer_inputs(actor_bank,actor_groups,port,layer,value,attention)
             if attention:
@@ -201,7 +205,7 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
                 if _fp32_kv_cotangents(port, q):
                     kr, value_slots = kr.float(), value_slots.float()
                 out = graph_attention(q, kr, value_slots, plan, window,
-                                      layer.self_attn.scaling, prepared_mask=masks[window])
+                                      layer.self_attn.scaling, prepared_mask=masks[window], prepared_workspace=attention_workspace)
             else:
                 gated, c = values
                 if imported:
@@ -366,7 +370,7 @@ def graph_block_mask(plan, device, window=None):
     return mask
 
 
-def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=None):
+def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=None, prepared_workspace=None):
     global _flex
     from ..common.native_higher_order import active_reference_arithmetic,reference_attention
     if active_reference_arithmetic() is not None:
@@ -380,8 +384,11 @@ def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=No
         from ..common.attention_backend import flex_kernel_options
         physical_rows = None
         if isinstance(plan, GraphPlan):
-            workspace, physical_rows = query_workspace(plan)
-            physical_rows = torch.tensor(physical_rows, device=q.device)
+            if prepared_workspace is None:
+                workspace, physical_rows = query_workspace(plan)
+                physical_rows = torch.tensor(physical_rows, device=q.device)
+            else:
+                workspace, physical_rows = prepared_workspace
             # Pad only attention Q/output workspace. Embeddings, residuals,
             # layer norms and feed-forward never execute padding token rows.
             pieces = []
