@@ -109923,6 +109923,62 @@
       },
       "admission_proof": "admission-proof.json",
       "notes": "Incremental shard admission; does not claim full Search/OWL conversion completion or training exposure."
+    },
+    {
+      "id": "external-expansion-search-owl-native-graphs-20261016-v3-shard0002",
+      "owner": "dgx",
+      "path": "runs/search-owl-native-render-20261016-v3/shard0002-native-graphs",
+      "include": [
+        "admission-proof.json",
+        "selection-state.json",
+        "launch-binding.json",
+        "source-protection-preparation.json",
+        "selected-shard-0002.jsonl.zst",
+        "renderer-receipts/lfm25-0002.json",
+        "renderer-receipts/mellum21-0002.json",
+        "program-header/lfm25/receipt.json",
+        "program-header/lfm25/train/native-graphs.jsonl.zst",
+        "program-header/lfm25/test/native-graphs.jsonl.zst",
+        "source-text/program-header/lfm25/0002.jsonl.zst",
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "source-text/whole-trajectory/lfm25/0002.jsonl.zst",
+        "program-header/mellum21/receipt.json",
+        "program-header/mellum21/train/native-graphs.jsonl.zst",
+        "program-header/mellum21/test/native-graphs.jsonl.zst",
+        "source-text/program-header/mellum21/0002.jsonl.zst",
+        "mellum21/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "source-text/whole-trajectory/mellum21/0002.jsonl.zst"
+      ],
+      "source_class": "static-role-aware-native-graph-conversion-of-approved-search-owl-shard",
+      "split": "Train-only selected shard 0002; completed global selection checkpoint covers 164/164 sources and 658,396 approved train decisions. This shard has 5,033 selected source records, 5,033 program-header rows and 1,653 complete whole-trajectory rows per model. No held rows are present.",
+      "training_admission": true,
+      "training_admission_reason": "Shard 0002 derives from already admitted Search/OWL source corpus external-expansion-search-owl-native-20261015-v1. The completed global selection checkpoint binds the 164/164 source frontier and 658,396 train decisions; exact per-shard source, selection, renderer, and graph receipts are immutable manifest members. Both actual expanded student tokenizers passed NativeGraphSource parsing for all rows in both views. Current held/quality/pending group intersections and source decision-hold hits are zero; the source renderer reports no decision exclusions, target exclusions, or decontamination in this shard. Program-header and whole-trajectory are distinct static ordinary one-node graph views; no native producer/consumer edges are inferred. The 7,002 over-cap source omissions remain separately pending.",
+      "derived_from": [
+        "external-expansion-search-owl-native-20261015-v1"
+      ],
+      "license": "Inherited from the admitted Search/OWL source: MIT for SearchSwarm D02 and Apache-2.0 for OWL-SFT D21, as pinned in source provenance; owner accepts all licenses.",
+      "native_graph_views": {
+        "lfm25": {
+          "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+          "views": {
+            "program-header": 5033,
+            "whole-trajectory": 1653
+          }
+        },
+        "mellum21": {
+          "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+          "views": {
+            "program-header": 5033,
+            "whole-trajectory": 1653
+          }
+        }
+      },
+      "admission_proof": "admission-proof.json",
+      "notes": "Incremental shard admission; does not claim full Search/OWL conversion completion or training exposure."
     }
   ],
   "coverage_backlog": [
