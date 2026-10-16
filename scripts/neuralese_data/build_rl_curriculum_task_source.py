@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
 import json
 from collections import Counter
 from pathlib import Path
+
+from natlang_neuralese.common.hashing import sha256_file_hex
+from natlang_neuralese.common.jsonio import canonical_json_bytes
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -31,21 +33,9 @@ LEVEL_TWO = {
 }
 
 
-def sha(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def read_rows(path: Path) -> list[dict]:
     with path.open(encoding='utf-8') as stream:
         return [json.loads(line) for line in stream if line.strip()]
-
-
-def canonical(row: dict) -> bytes:
-    return (json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(',', ':')) + '\n').encode()
 
 
 def classify(row: dict) -> tuple[int, str]:
@@ -113,7 +103,7 @@ def main() -> None:
         # The only changed path is scheduling metadata.
         stripped = copy.deepcopy(row)
         stripped['curriculum'].pop('rl')
-        if canonical(stripped) != canonical(old):
+        if canonical_json_bytes(stripped) != canonical_json_bytes(old):
             raise ValueError(f'non-scheduling task content changed for {row["id"]}')
         new_rows.append(row)
 
@@ -129,7 +119,7 @@ def main() -> None:
     current = old_audit['current_protection']
     held_path = Path(current['held_groups_path']).resolve(strict=True)
     quality_path = Path(current['quality_groups_path']).resolve(strict=True)
-    if sha(held_path) != current['held_groups_sha256'] or sha(quality_path) != current['quality_groups_sha256']:
+    if sha256_file_hex(held_path) != current['held_groups_sha256'] or sha256_file_hex(quality_path) != current['quality_groups_sha256']:
         raise ValueError('the v1 held/quality protection inputs changed; refresh their closure before building')
     held_groups = {group for row in read_rows(held_path) for group in row.get('source_groups', [])}
     quality_groups = {group for row in read_rows(quality_path) for group in row.get('source_groups', [])}
@@ -138,7 +128,7 @@ def main() -> None:
     hold_ids: set[str] = set()
     hold_bindings = {}
     for hold_file in hold_files:
-        hold_bindings[hold_file.name] = sha(hold_file)
+        hold_bindings[hold_file.name] = sha256_file_hex(hold_file)
         for hold in read_rows(hold_file):
             if isinstance(hold.get('id'), str):
                 hold_ids.add(hold['id'])
@@ -165,14 +155,14 @@ def main() -> None:
     audit = copy.deepcopy(old_audit)
     audit['training_admitted'] = False
     audit['union'] = {
-        **audit['union'], 'path': str(case_path), 'sha256': sha(case_path), 'rows': len(new_rows),
+        **audit['union'], 'path': str(case_path), 'sha256': sha256_file_hex(case_path), 'rows': len(new_rows),
     }
     audit['curriculum_schedule'] = {
         'policy': 'explicit scheduling metadata only; exact task inputs, prompts, source identities, executable references and expected outputs are unchanged',
         'level_counts': {str(level): levels[level] for level in sorted(levels)},
         'assignments': assigned,
         'source_manifest': str(source / 'task-source-manifest.json'),
-        'source_manifest_sha256': sha(source / 'task-source-manifest.json'),
+        'source_manifest_sha256': sha256_file_hex(source / 'task-source-manifest.json'),
         'source_cases_sha256': source_info['cases_sha256'],
         'current_decision_hold_files': hold_bindings,
         'current_protection_intersections': {
@@ -189,14 +179,14 @@ def main() -> None:
         **old_manifest,
         'id': 'decision-rich-train-20261016-v2-curriculum',
         'cases': 'cases.jsonl',
-        'cases_sha256': sha(case_path),
+        'cases_sha256': sha256_file_hex(case_path),
         'source_audit': 'union-audit.json',
-        'source_audit_sha256': sha(audit_path),
+        'source_audit_sha256': sha256_file_hex(audit_path),
         'broad_selection_proof': 'broad-selection-proof.json',
-        'broad_selection_proof_sha256': sha(output / 'broad-selection-proof.json'),
+        'broad_selection_proof_sha256': sha256_file_hex(output / 'broad-selection-proof.json'),
         'derived_from_task_source': {
             'id': old_manifest['id'],
-            'manifest_sha256': sha(source / 'task-source-manifest.json'),
+            'manifest_sha256': sha256_file_hex(source / 'task-source-manifest.json'),
             'cases_sha256': source_info['cases_sha256'],
         },
         'curriculum_levels': {str(level): levels[level] for level in sorted(levels)},
@@ -205,8 +195,8 @@ def main() -> None:
     manifest_path = output / 'task-source-manifest.json'
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
     print(json.dumps({
-        'manifest': str(manifest_path), 'manifest_sha256': sha(manifest_path),
-        'cases_sha256': sha(case_path), 'rows': len(new_rows),
+        'manifest': str(manifest_path), 'manifest_sha256': sha256_file_hex(manifest_path),
+        'cases_sha256': sha256_file_hex(case_path), 'rows': len(new_rows),
         'levels': {str(level): levels[level] for level in sorted(levels)},
         'decision_hold_files': hold_bindings,
         'protection_intersections': audit['curriculum_schedule']['current_protection_intersections'],
