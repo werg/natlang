@@ -119883,6 +119883,93 @@
       }
     },
     {
+      "id": "qwen-verified-positive-native-graphs-20261015-v19-lfm-prefix",
+      "owner": "dgx",
+      "path": "runs/qwen-verified-positive-native-graphs-20261015-v19",
+      "include": [
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "lfm-prefix-validation-proof.json",
+        "lfm-prefix-decision-hold-closure-proof.json"
+      ],
+      "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
+      "split": "LFM-only train prefix: 6,845 unique graphs; empty test file; no held evaluation rows claimed. Mellum view remains an explicit pending continuation and is not included here.",
+      "admission": "The source contains 235 verified Qwen3.8-Flash-Next trajectories and 6,920 eligible assistant turns. The independently validated LFM tokenizer view emits 6,845 new train graphs after 75 exact token/weight duplicate omissions; 401 actions remain explicit omissions for failed or unexecuted proposals. This entry admits only LFM. Mellum is pending its own completed tokenizer view and validation.",
+      "training_admission": true,
+      "training_admission_reason": "Independent LFM-only validation recomputed source and decision-admission bindings, parsed the complete train view under the expanded LFM tokenizer fingerprint, verified source-group closure against current held, quality and pending-review protections, and found zero target-decision intersections with the exact current decision-hold set. This is a model-scoped partial admission; no Mellum view or exposure is claimed.",
+      "derived_from": [
+        "qwen-positive-clean-actions-20261015-v1",
+        "qwen-verified-positive-native-graphs-20261015-v1-v2",
+        "qwen-verified-positive-native-graphs-20261015-v10",
+        "qwen-verified-positive-native-graphs-20261015-v11",
+        "qwen-verified-positive-native-graphs-20261015-v12",
+        "qwen-verified-positive-native-graphs-20261015-v13",
+        "qwen-verified-positive-native-graphs-20261015-v14",
+        "qwen-verified-positive-native-graphs-20261015-v15",
+        "qwen-verified-positive-native-graphs-20261015-v16",
+        "qwen-verified-positive-native-graphs-20261015-v17",
+        "qwen-verified-positive-native-graphs-20261015-v18",
+        "qwen-verified-positive-native-graphs-20261015-v3",
+        "qwen-verified-positive-native-graphs-20261015-v4",
+        "qwen-verified-positive-native-graphs-20261015-v5",
+        "qwen-verified-positive-native-graphs-20261015-v6",
+        "qwen-verified-positive-native-graphs-20261015-v7",
+        "qwen-verified-positive-native-graphs-20261015-v8",
+        "qwen-verified-positive-native-graphs-20261015-v9"
+      ],
+      "license_provenance": "Project-collected trajectories from the pinned RadixArk/Qwen3.8-Flash-Next-NVFP4 teacher revision. License provenance remains a source fact; no license exclusion.",
+      "note": "Model-scoped continuation: LFM view is admitted and may be appended; Mellum view remains a mandatory pending continuation. Do not infer cross-model exposure or V19 completeness from this prefix.",
+      "source_binding": {
+        "raw_source": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v19/native-trajectories.jsonl",
+          "sha256": "3e89fe78d0200fd41525b2f7e4023c00175fad66df1c6afe5b82cddfc761ec45",
+          "bytes": 445839415,
+          "rows": 235
+        },
+        "transfer_receipt": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v19/transfer-receipt.json",
+          "sha256": "03f45fd9cb479e8ca170f413afdfc9870196c0d71941a2b4d0a96c4fcc1cddd4"
+        },
+        "batch_source_bindings": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v19/batch-source-bindings.json",
+          "sha256": "1160f867640299061d9ea30c6ea39890f17a1b196457d191a22ba02830b5cff8"
+        },
+        "actual_source_binding_verification_sha256": "486d4984610937a1770c1d016a20ea63144a348856c70e997791813feb4babdd",
+        "decision_admission_cache_sha256": "48f7ad5d0a17943c0e42e11bdc2988bc3ed471971a674306dfffc9d3f16e81c5",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "current_source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+        "validation_proof_sha256": "5452a5213e219d7a5b2c707276035ebe3b6d0269d6dbc8e73a2b33ea74854fa8",
+        "eligible_turns": 6920,
+        "duplicate_omissions_per_model": 75,
+        "action_omissions_per_model": 401,
+        "deduplication": "The exact LFM view was deduplicated against V1–V18 verified-positive and clean-action views; source-bound omissions are recorded in the build receipt.",
+        "decision_hold_closure": {
+          "path": "runs/qwen-verified-positive-native-graphs-20261015-v19/lfm-prefix-decision-hold-closure-proof.json",
+          "sha256": "577becf54d22ac18dcb86a5457a4dc6c6c301dd43e4f4c5e5c3b155d5e7b4afe",
+          "scope": "All 6,845 LFM positive target decision IDs joined against the exact sorted current decision-hold files; 0 intersections. Only the LFM view is covered."
+        },
+        "model_views_complete": false,
+        "pending_model_views": [
+          "mellum21"
+        ],
+        "models": {
+          "lfm25": {
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "build_receipt_sha256": "e7a0e813680c4b2a9492dd79ea8a733cbe27f3b296f0f069c5804f5666c6acfd",
+            "train_sha256": "e2c18762776c9b92b57e3d57744d406c2a7e43a17982539fca3d0c8ba96ac194",
+            "test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+            "rows": 6845,
+            "tokens": 46305228,
+            "expanded_tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105"
+          }
+        }
+      },
+      "model_scope": [
+        "lfm25"
+      ]
+    },
+    {
       "id": "external-expansion-search-owl-native-graphs-20261016-v3-shard0018",
       "owner": "dgx",
       "path": "runs/search-owl-native-render-20261016-v3/shard0018-native-graphs",

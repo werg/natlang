@@ -1,0 +1,34 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "qwen-verified-positive-native-graphs-20261015-v19-lfm-prefix",
+  "owner": "dgx",
+  "path": "runs/qwen-verified-positive-native-graphs-20261015-v19",
+  "files": [
+    {
+      "path": "lfm-prefix-decision-hold-closure-proof.json",
+      "bytes": 1152,
+      "sha256": "577becf54d22ac18dcb86a5457a4dc6c6c301dd43e4f4c5e5c3b155d5e7b4afe"
+    },
+    {
+      "path": "lfm-prefix-validation-proof.json",
+      "bytes": 1408,
+      "sha256": "5452a5213e219d7a5b2c707276035ebe3b6d0269d6dbc8e73a2b33ea74854fa8"
+    },
+    {
+      "path": "lfm25/receipt.json",
+      "bytes": 503634,
+      "sha256": "e7a0e813680c4b2a9492dd79ea8a733cbe27f3b296f0f069c5804f5666c6acfd"
+    },
+    {
+      "path": "lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 3163812,
+      "sha256": "e2c18762776c9b92b57e3d57744d406c2a7e43a17982539fca3d0c8ba96ac194"
+    }
+  ],
+  "bytes": 3670019
+}
