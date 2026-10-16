@@ -38,9 +38,17 @@ def test_unchanged_config_rechecks_sources_and_ownership_without_deserializing_p
     assert raw.configure_model(plan,declaration,handoff,out)==path
     assert len(calls)==1
     # Host configuration tamper invalidates reuse and re-runs the full verifier.
-    value=json.loads(path.read_text());value['operational_note']='changed';write(path,value)
+    value=json.loads(path.read_text());value['operational_note']='changed'
+    value['trainer_parameters']['fp8_training']='triton-experts'
+    value['seed_trainer_parameters']={}
+    value['seed_command']=['python','seed','{trainer_args}']
+    write(path,value)
     raw.configure_model(plan,declaration,handoff,out)
     assert len(calls)==2
+    repaired=json.loads(path.read_text())
+    assert repaired['seed_command']==['python','seed','{seed_trainer_args}']
+    assert repaired['seed_trainer_parameters']['fp8_training']=='triton-experts'
+    assert repaired['seed_trainer_parameters']['refresh_at_checkpoint'] is True
     seed=Path(refs['train']['path']);original=seed.read_bytes();seed.write_text('changed graph bytes')
     with pytest.raises(ValueError,match='changed'):raw.configure_model(plan,declaration,handoff,out)
     assert len(calls)==3  # Changed graph bytes trigger the complete original verifier.
@@ -93,3 +101,29 @@ def test_hot_task_plan_keeps_latest_committed_resident_sources(actual_drain,tmp_
     assert updated['seed_native_graphs']==adopted['payload']['train']['path']
     assert seen[-1].cases==second and seen[-1].seed_native_graphs==paths['new']
     assert updated['recipe_lineage_sha256']==manager.recipe_binding['lineage_sha256']
+
+
+def test_seed_quantum_emits_full_backend_rates_and_explicit_objective_overrides(monkeypatch):
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    parameters={'learning_rate':3e-6,'checkpoint_layers':True,'fp8_training':'triton-experts',
+        'fp8_recipe':'current','native_linear_precision':'bf16x6','checkpoint_input_offload':True}
+    config={'trainer_parameters':parameters.copy(),'seed_trainer_parameters':{'learning_rate':0.0003},
+        'seed_command':['python','-m','natlang_neuralese.train.native_state_sft','{trainer_args}'],
+        'learner_command':['python','learner','{trainer_args}']}
+    original=dict(parameters)
+    raw._seed_quantum(config,{'resident':{'directory':'/actual/resident'}})
+    actual=[]
+    monkeypatch.setattr(production.subprocess,'run',lambda argv,**kw:actual.append(argv))
+    production.run_command(config['seed_command'],{
+        'trainer_args':stage_parameter_args(config['trainer_parameters']),
+        'seed_trainer_args':stage_parameter_args(config['seed_trainer_parameters'])})
+    argv=actual[0]
+    for key,value in {**parameters,'learning_rate':0.0003,'resident_data_directory':'/actual/resident'}.items():
+        flag='--'+key.replace('_','-')
+        assert flag in argv
+        if value is not True:assert argv[argv.index(flag)+1]==str(value)
+    assert '--refresh-at-checkpoint' in argv
+    assert config['trainer_parameters']==original
+    assert config['learner_command']==['python','learner','{trainer_args}']
+    before=json.dumps(config,sort_keys=True);raw._seed_quantum(config,{'resident':{'directory':'/actual/resident'}})
+    assert json.dumps(config,sort_keys=True)==before

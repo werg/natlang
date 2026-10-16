@@ -37,6 +37,20 @@ def _inputs(declaration):
     return inputs
 
 
+def _seed_quantum(config,record):
+    """Bind the complete supervised settings to the finite seed operation."""
+    config['seed_trainer_parameters']={**config.get('trainer_parameters',{}),
+        **config.get('seed_trainer_parameters',{}),'refresh_at_checkpoint':True}
+    if record.get('resident'):
+        directory=record['resident']['directory']
+        config['resident_data_directory']=directory
+        config['seed_trainer_parameters']['resident_data_directory']=directory
+    if config.get('seed_command'):
+        config['seed_command']=[part.replace('{trainer_args}','{seed_trainer_args}')
+            for part in config['seed_command']]
+    return config
+
+
 def configure_model(plan_path,declaration,handoff,out):
     from .production import configure_native
     from .native_rounds import configure_provider
@@ -108,12 +122,14 @@ def configure_model(plan_path,declaration,handoff,out):
             if prior.get('recipe_lineage_sha256')==lineage:
                 from .native_supervised import recipe_lineage
                 recipe_lineage(prior)
+                _seed_quantum(prior,record)
+                write_json_durable(path,prior)
                 save(verification,plan_path,declaration,handoff,prior)
                 return path
             cursor=json.loads((out/'cycle.json').read_text()) if (out/'cycle.json').exists() else {}
             if cursor.get('phase')=='sft' or cursor.get('pending_rl_round'):return path
             from .native_supervised import bind_recipe_lineage
-            bind_recipe_lineage(prior,lineage);write_json_durable(path,prior)
+            bind_recipe_lineage(prior,lineage);_seed_quantum(prior,record);write_json_durable(path,prior)
             return path
         cursor=json.loads((out/'cycle.json').read_text()) if (out/'cycle.json').exists() else {}
         if cursor.get('phase')=='sft' or cursor.get('pending_rl_round'):
@@ -128,10 +144,7 @@ def configure_model(plan_path,declaration,handoff,out):
     del saved  # No mapped tensor state survives this invocation.
     from .native_supervised import bind_recipe_lineage
     bind_recipe_lineage(config,lineage)
-    config['seed_trainer_parameters']['refresh_at_checkpoint']=True
-    if record.get('resident'):
-        config['resident_data_directory']=record['resident']['directory']
-        config['seed_trainer_parameters']['resident_data_directory']=record['resident']['directory']
+    _seed_quantum(config,record)
     config['raw_model_id']=actual
     configure_provider(config,declaration,{},owner,path)
     save(verification,plan_path,declaration,handoff,config)

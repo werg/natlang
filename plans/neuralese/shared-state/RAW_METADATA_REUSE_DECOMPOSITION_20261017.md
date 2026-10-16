@@ -19,3 +19,10 @@ configuration. It does not repeatedly deserialize an unchanged original parent.
 
 These are exact verifier/durability/external-service mechanisms, not a change to
 scheduling policy, model arithmetic, objectives, source admission or gradients.
+
+The seed operation inherits the complete learner/backend settings, then retains
+explicit seed-objective overrides. Its command expands those seed settings,
+including the existing refresh boundary and resident source authority. Existing
+fully revalidated configurations receive the same correction before reuse;
+policy updates retain their own arguments. This closes argument plumbing, without
+changing the declared finite-boundary scheduling policy.
