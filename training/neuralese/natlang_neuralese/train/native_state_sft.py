@@ -212,12 +212,13 @@ def _source_receipt(path, examples):
 
 
 def _source_hash(examples):
+    from ..model.native_graph_plan import invocation_dict
     digest = hashlib.sha256()
     for item in examples:
         row = {'id': item.id, 'groups': item.source_groups, 'split': item.split,
                'tokenizer': item.tokenizer_fingerprint, 'targets': item.target_weights,
                'nodes': [{'name': node.name, 'token_ids': node.token_ids,
-                          'imports': [edge.__dict__ for edge in node.imports],
+                          'imports': list(invocation_dict(node)['imports']),
                           'producing': node.producing, 'logical_producing': node.logical_producing}
                          for node in item.plan.invocations]}
         value = json.dumps(row, sort_keys=True, separators=(',', ':')).encode()
@@ -239,7 +240,7 @@ def pack_native_graphs(examples):
                                zip(example.plan.external_names, example.plan.external_sizes)})
         for node in example.plan.invocations:
             imports = tuple(ImportSpan(source=names[edge.source], start=edge.start,
-                                       stop=edge.stop, at=edge.at, logical=edge.logical)
+                                       stop=edge.stop, at=edge.at, logical=edge.logical,stop_gradient=edge.stop_gradient)
                             for edge in node.imports)
             invocations.append(Invocation(name=names[node.name], token_ids=node.token_ids,
                 imports=imports, producing=node.producing,

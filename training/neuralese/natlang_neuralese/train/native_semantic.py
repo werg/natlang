@@ -80,7 +80,7 @@ def consumer_example(example, view, token_count):
         for edge in node.imports:
             if (edge.source == export['node'] and edge.start == export['start'] and edge.stop == export['stop']
                     and edge.logical == export.get('logical', False)):
-                imports.append(ImportSpan(edge.at, wire, 0, token_count))
+                imports.append(ImportSpan(edge.at, wire, 0, token_count,stop_gradient=edge.stop_gradient))
                 replacements.add(name)
             else:
                 imports.append(edge)

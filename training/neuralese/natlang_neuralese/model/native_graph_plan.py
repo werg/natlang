@@ -12,6 +12,7 @@ class ImportSpan:
     start: int
     stop: int
     logical: bool = False
+    stop_gradient: bool = False
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,8 @@ def invocation_dict(node):
     value = asdict(node)
     if not node.cache_prefix:
         value.pop('cache_prefix')
+    for edge in value['imports']:
+        if not edge['stop_gradient']:edge.pop('stop_gradient')
     return value
 
 
@@ -48,6 +51,7 @@ class GraphPlan:
     external_names: tuple[str, ...] = ()
     external_sizes: tuple[int, ...] = ()
     boundaries: tuple[tuple[int, ...], ...] = ()
+    slot_stops: tuple[bool, ...] = ()
 
     @property
     def token_count(self):
@@ -66,6 +70,13 @@ class GraphPlan:
         sequence = self.sequences[node]
         end = self.own_positions[row] + 1
         return sequence[max(0, end-width) if width is not None else 0:end]
+
+    def history_stops(self,row,width=None):
+        node=self.node_ids[row]
+        end=self.own_positions[row]+1
+        start=max(0,end-width) if width is not None else 0
+        offset=self.slot_offsets[node]
+        return self.slot_stops[offset+start:offset+end] if self.slot_stops else (False,)*(end-start)
 
     @property
     def allowed(self):
@@ -88,6 +99,10 @@ class GraphPlan:
 
 def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, external_sizes=None, kv_block_alignment=128) -> GraphPlan:
     invocations = tuple(invocations)
+    if any(type(edge.stop_gradient) is not bool for node in invocations for edge in node.imports):
+        raise ValueError('import stop_gradient must be an explicit boolean')
+    stopped=any(edge.stop_gradient for node in invocations for edge in node.imports)
+    sequence_stops,slot_stops=[],[]
     if not isinstance(kv_block_alignment, int) or kv_block_alignment < 1:
         raise ValueError('KV block alignment must be a positive integer')
     external_sizes = external_sizes or {}
@@ -124,6 +139,7 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
                     raise ValueError('import span is outside external state tokens')
                 ext_offset = external_offsets[edge.source]
                 imported = tuple(range(ext_offset+edge.start, ext_offset+edge.stop))
+                imported_stops=(edge.stop_gradient,)*len(imported) if stopped else ()
             else:
                 if edge.source not in known:
                     raise ValueError('imports require an earlier source or declared external state')
@@ -146,25 +162,31 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
                 if not any(a <= lo and hi <= b for a, b in declared):
                     raise ValueError('imports must reference an explicitly producing span')
                 imported = sequences[source_index][lo:hi]
+                imported_stops=tuple(flag or edge.stop_gradient for flag in sequence_stops[source_index][lo:hi]) if stopped else ()
             if node.cache_prefix and (edge.source in external_sizes or not source_node.cache_prefix):
                 raise ValueError('raw prefix caches can extend only another raw complete prefix cache')
-            edges.setdefault(edge.at, []).append(imported)
+            edges.setdefault(edge.at, []).append((imported,imported_stops))
         logical = []
+        logical_stops=[]
         own = []
         boundary = []
         for local in range(count+1):
             boundary.append(len(logical))
-            for imported in edges.get(local, ()):
+            for imported,imported_stops in edges.get(local, ()):
                 logical.extend(imported)
+                if stopped:logical_stops.extend(imported_stops)
             if local < count:
                 own.append(len(logical))
                 logical.append(offset+local)
+                if stopped:logical_stops.append(False)
         padding_slots = (-len(sources)) % kv_block_alignment
         sources.extend([-1] * padding_slots)
+        if stopped:slot_stops.extend([False]*padding_slots)
         positions.extend([0] * padding_slots)
         slot_offset = len(sources)
         slot_offsets.append(slot_offset)
         sources.extend(logical)
+        if stopped:slot_stops.extend(logical_stops)
         positions.extend(range(len(logical)))
         for pos in own:
             own_positions.append(pos)
@@ -182,6 +204,7 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
             raise ValueError('an invocation must contain tokens or imported state')
         producing.extend(producer)
         sequences.append(tuple(logical))
+        if stopped:sequence_stops.append(tuple(logical_stops))
         boundaries.append(tuple(boundary))
         known[node.name] = node, offset, len(sequences)-1
         physical_count += count
@@ -189,6 +212,6 @@ def compile_graph(invocations: tuple[Invocation, ...] | list[Invocation], *, ext
         raise ValueError('graph cannot be empty')
     return GraphPlan(invocations, tuple(offsets), tuple(sequences), tuple(own_positions),
                      tuple(sources), tuple(positions), tuple(node_ids), tuple(slot_offsets), tuple(producing),
-                     tuple(external_sizes), tuple(external_sizes.values()), tuple(boundaries))
+                     tuple(external_sizes), tuple(external_sizes.values()), tuple(boundaries),tuple(slot_stops))
 
 

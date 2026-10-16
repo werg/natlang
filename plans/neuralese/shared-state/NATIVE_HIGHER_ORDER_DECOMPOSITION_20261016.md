@@ -424,3 +424,29 @@ Likelihood scores only actual sampled actions; forced context has no invented
 density. A policy-law request on greedy recording must fail before forward.
 Teacher branches use the exact teacher receipt and a stopped immutable readout;
 both teacher option scores and teacher token distributions are stopped targets.
+
+Per-use constants are reference metadata, never a new state artifact, dialect or
+model role token. Preserve that metadata through the runtime's private marker
+conversion, typed wire parts, exact capture and execution-graph read occurrence.
+The graph import declares `stop_gradient`; the compiler carries a per-logical-
+slot constant flag. Imported aliases inherit any earlier stop, including logical
+reexports, while each invocation's own physical tokens remain ordinary live
+coordinates. Attention detaches only those gathered KV slots; finite convolution
+detaches only their gathered gated-history slots. Another live use of the same
+artifact remains differentiable. Forward values, masks, positions and normal
+unflagged arithmetic are unchanged. The cached/reference oracle must explicitly
+detach the same consumed state and verify source, own-token and parameter
+adjoints, including checkpoint recomputation and higher-order derivatives.
+
+Internal import mechanism qualification:43CPU tests passed (9CUDA-only skips)
+with existing shared-state regressions, exact legacy row/source hash bytes,
+packing and semantic rewrite preservation;7actualCUDA tests passed on both
+ports, including all-parameter/reference adjoints and explicit HVPs. Independent
+stop/live adjoints use fresh fast-path forwards because Mellum's AOT donated
+buffers do not support retaining that same backward graph. No production
+arithmetic or gradient tolerance was changed for that oracle correction.
+The typed wire/reference/adapter/body propagation remains open; no public
+stopGradient migration is claimed by this internal component. Source-reader
+code bindings change and require the existing explicit bounded cache/source
+continuation review before any cloud adoption; default numeric row identities
+were preserved, not silently relabeled under a new policy.

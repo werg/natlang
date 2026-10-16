@@ -264,6 +264,7 @@ def _require_communication_graph(example, view, role_ids):
 
 def _row_bindings(examples):
     """Exact semantic identities needed to prove an append-only data continuation."""
+    from ..model.native_graph_plan import invocation_dict
     result = {}
     for item in examples:
         value = {'id': item.id, 'groups': item.source_groups, 'split': item.split,
@@ -272,7 +273,7 @@ def _row_bindings(examples):
                  'external_sizes': item.plan.external_sizes,
                  'external_states': getattr(item, 'external_states', {}),
                  'nodes': [{'name': node.name, 'token_ids': node.token_ids,
-                            'imports': [edge.__dict__ for edge in node.imports],
+                            'imports': list(invocation_dict(node)['imports']),
                             'producing': node.producing, 'logical_producing': node.logical_producing}
                            for node in item.plan.invocations]}
         result[item.id] = hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()

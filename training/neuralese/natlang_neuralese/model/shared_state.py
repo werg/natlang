@@ -103,9 +103,22 @@ def _convolve(layer, gated, c, plan, rows, *, index=None):
     kernel = layer.conv.conv
     if index is None:
         index = _convolution_index(plan, kernel.weight.shape[-1], rows, gated.device)
+    stop_mask=None
+    if isinstance(index,tuple):index,stop_mask=index
+    elif plan.slot_stops:
+        stop_mask=_convolution_stops(plan,kernel.weight.shape[-1],rows,gated.device)
     padded = torch.cat([gated, gated.new_zeros(1, 1, gated.shape[-1])], dim=1)
     gathered = padded[:, index]  # B,Q,W,C; -1 selects the explicit zero row
+    if stop_mask is not None:gathered=torch.where(stop_mask[None,:,:,None],gathered.detach(),gathered)
     return _finite_convolution(kernel, gathered, c)
+
+
+def _convolution_stops(plan,width,rows,device):
+    masks=[]
+    for row in rows:
+        flags=plan.history_stops(row,width)
+        masks.append([False]*max(0,width-len(flags))+list(flags))
+    return torch.tensor(masks,device=device,dtype=torch.bool)
 
 
 def _finite_convolution(kernel, histories, c):
@@ -135,6 +148,7 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
     if adapter is not None:
         h = adapter(h, plan.tensor(plan.producing, device, torch.bool)[None])
     slots = plan.tensor(plan.slot_sources, device)
+    stopped_slots=plan.tensor(plan.slot_stops,device,torch.bool)[None,None,:,None] if plan.slot_stops else None
     key_positions = plan.tensor(plan.slot_positions, device)
     query_positions = plan.tensor(plan.own_positions, device)
     external = _external_layers(port, plan, external_blocks, external_identity)
@@ -162,6 +176,9 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
             width = layer.conv.conv.weight.shape[-1]
             if width not in convolution_indices:
                 convolution_indices[width] = _convolution_index(plan, width, range(plan.token_count), device)
+                if plan.slot_stops:
+                    convolution_indices[width]=(convolution_indices[width],
+                        _convolution_stops(plan,width,range(plan.token_count),device))
             convolution_index = convolution_indices[width]
         external_i = tuple(value for item in external for value in item[i])
 
@@ -175,8 +192,12 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
                     v = torch.cat([v, *imported[1::2]], dim=2)
                 captured = (k, v)
                 q = _rotate(port, q, query_positions, index)
-                kr = _rotate(port, k[:, :, slots].to(q.dtype), key_positions, index)
+                key_slots=k[:, :, slots].to(q.dtype)
                 value_slots = v[:, :, slots].to(q.dtype)
+                if stopped_slots is not None:
+                    key_slots=torch.where(stopped_slots,key_slots.detach(),key_slots)
+                    value_slots=torch.where(stopped_slots,value_slots.detach(),value_slots)
+                kr = _rotate(port, key_slots, key_positions, index)
                 if _fp32_kv_cotangents(port, q):
                     kr, value_slots = kr.float(), value_slots.float()
                 out = graph_attention(q, kr, value_slots, plan, window,
@@ -246,11 +267,17 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                 cache.append((k, v))
                 window = port.window(i) if hasattr(port, 'window') else None
                 indices = plan.tensor(remap(logical), device)
-                kr = _rotate(port, source_k[:, :, indices].to(q.dtype), torch.arange(len(logical), device=device), i)
+                key_slots=source_k[:, :, indices].to(q.dtype)
+                value_slots = source_v[:, :, indices].to(q.dtype)
+                if plan.slot_stops:
+                    start=plan.slot_offsets[plan.node_ids[offset]]
+                    flags=plan.tensor(plan.slot_stops[start:start+len(logical)],device,torch.bool)[None,None,:,None]
+                    key_slots=torch.where(flags,key_slots.detach(),key_slots)
+                    value_slots=torch.where(flags,value_slots.detach(),value_slots)
+                kr = _rotate(port, key_slots, torch.arange(len(logical), device=device), i)
                 query_positions = plan.own_positions[offset:offset+count]
                 qr = _rotate(port, q, plan.tensor(query_positions, device), i)
                 layout = AttentionLayout(query_positions, len(logical))
-                value_slots = source_v[:, :, indices].to(q.dtype)
                 if _fp32_kv_cotangents(port, q):
                     kr, value_slots = kr.float(), value_slots.float()
                 out = graph_attention(qr, kr, value_slots, layout, window, layer.self_attn.scaling)
@@ -265,6 +292,9 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                 for local in range(count):
                     history = remap(plan.history(offset+local, width))
                     data = source[:, plan.tensor(history, device)].transpose(1, 2)
+                    if plan.slot_stops:
+                        flags=plan.tensor(plan.history_stops(offset+local,width),device,torch.bool)[None,None]
+                        data=torch.where(flags,data.detach(),data)
                     data = F.pad(data, (width-data.shape[-1], 0))
                     if getattr(port, 'native_linear_precision', 'ieee') != 'ieee':
                         parts.append(_finite_convolution(kernel, data.transpose(1, 2)[:, None], c[:, local:local+1]))
