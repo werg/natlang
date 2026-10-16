@@ -81,6 +81,7 @@ if (recorder) {
   }
   assert.throws(() => recorder.linkNativeTurn(produced.id, consumed.graph.graph_turn), /two model-turn occurrences/);
   await writeFile(archive + '/native-recorded-turns.json', JSON.stringify(turns));
+  await writeFile(archive + '/native-recorded-graph.json', JSON.stringify([...recorder.graphNodes.values()]));
   const conflicting = new ModelTurnRecorder();
   conflicting.record(turns[0]);
   conflicting.linkNativeTurn(produced.id, consumed.graph.graph_turn);

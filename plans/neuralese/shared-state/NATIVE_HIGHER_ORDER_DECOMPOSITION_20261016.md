@@ -394,3 +394,20 @@ logLikelihood selects the former. The lowerer must reject a sampled-policy
 objective on a greedy structural capture, which has no behavior density. These
 are internal exact metadata fields; they do not change prompts or enable the
 still-guarded public native gradient route.
+
+Recorded-turn lowering shares the existing exact structural replay compiler.
+Its deterministic decision case accepts the original decision-capture schema
+only in structural mode, with no sampled actions or fabricated decoding law.
+The source graph verifier independently reconstructs writer/read occurrence
+maps from the actual graph events before comparing host-provided links. Decision
+options become independent masked invocations with the actual imported prompt;
+their conditional query coordinates are derived from the resulting single plan.
+Captured producers remain one invocation each, so their state is differentiable
+without recursively replaying a writer for each scored alternative.
+An actual origin edge outside this session remains explicitly external, even
+when another captured write has an equal content ID. Its original occurrence
+binding is retained in the graph identity; it never gains a fabricated local
+producer gradient. Option expansion also expands exact external-consumer and
+actor inventories. Decoded semantic/reencoded imports and forced writes without
+an actual matching capture remain blocked until their differentiable lowering
+is implemented; this compiler does not silently flatten or externalize them.

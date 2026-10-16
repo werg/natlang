@@ -153,6 +153,56 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
                 assert not replay.actions
                 assert len(replay.plan.invocations) == 2
                 assert any(node.imports for node in replay.plan.invocations)
+                from natlang_neuralese.serve.native_recorded_graph import compile_recorded_graph
+                from natlang_neuralese.data.native_graph import parse_graph
+                from natlang_neuralese.rl.native_replay import token_action_logps
+                events=json.loads((tmp_path / 'archive/native-recorded-graph.json').read_text())
+                compiled=compile_recorded_graph(recorded,events,identity=identity,
+                    roles=engine.role_tokens,fetch_block=fetch)
+                assert len(compiled.replay.plan.invocations)==6
+                assert len(compiled.decision_actions)==2
+                assert not compiled.replay.external_blocks, 'both decisions consume the actual captured producer'
+                only_decisions=[turn for turn in recorded if turn['native']['kind']=='decision']
+                external=compile_recorded_graph(only_decisions,events,identity=identity,
+                    roles=engine.role_tokens,fetch_block=fetch)
+                assert len(external.replay.external_blocks)==1
+                assert len(external.replay.plan.invocations)==4
+                assert len(next(iter(external.replay.external_invocations.values())))==4
+                assert all(item['invocation'] in {node.name for node in external.replay.plan.invocations}
+                    for items in external.replay.external_invocations.values() for item in items)
+                assert all(binding['external_read_bindings'] for binding in external.origin_bindings.values())
+                external_row=external.row(tokenizer_fingerprint=config['tokenizer_fingerprint'],source_id='external-recorded-graph')
+                assert next(iter(external_row['external_states'].values()))['id']==receipt['state_id']
+                row=compiled.row(tokenizer_fingerprint=config['tokenizer_fingerprint'],source_id='actual-recorded-graph')
+                parsed=parse_graph(row,tokenizer_fingerprint=config['tokenizer_fingerprint'])
+                assert parsed.plan==compiled.replay.plan
+                with torch.no_grad():
+                    result=model(parsed.plan,external_blocks=compiled.replay.external_blocks,retain_states=False)
+                    for turn in recorded:
+                        if turn['native']['kind']!='decision':continue
+                        from natlang_neuralese.serve.native_learning import decide_native
+                        cached=decide_native(engine,{'messages':turn['messages'],
+                            'options':turn['decision']['options']})
+                        actions=compiled.decision_actions[turn['native']['id']]
+                        flat=[float(token_action_logps(model,result['h_final'][0],option).sum()) for option in actions]
+                        torch.testing.assert_close(torch.tensor(flat),torch.tensor(cached['log_probs']),rtol=2e-5,atol=3e-5)
+                import copy
+                forged=copy.deepcopy(recorded)
+                forged[-1]['native']['graph']['read_bindings']={}
+                with pytest.raises(ValueError,match='occurrence maps'):
+                    compile_recorded_graph(forged,events,identity=identity,roles=engine.role_tokens,fetch_block=fetch)
+                forged=copy.deepcopy(recorded)
+                forged[-1]['native']['decision']['prompt']=[segment for segment in
+                    forged[-1]['native']['decision']['prompt'] if segment['kind']!='native_state']
+                with pytest.raises(ValueError,match='occurrence-matched'):
+                    compile_recorded_graph(forged,events,identity=identity,roles=engine.role_tokens,fetch_block=fetch)
+                forged=copy.deepcopy(recorded)
+                forged[-1]['native']['decision']['sampling_law']={'temperature':1.}
+                with pytest.raises(ValueError,match='cannot declare sampled'):
+                    compile_recorded_graph(forged,events,identity=identity,roles=engine.role_tokens,fetch_block=fetch)
+                with pytest.raises(ValueError,match='repeats an occurrence'):
+                    compile_recorded_graph(recorded,events+[events[0]],identity=identity,
+                        roles=engine.role_tokens,fetch_block=fetch)
             block = engine.store.get_native_state(receipt['state_id']).block
             assert block.token_ids.tolist() == [5]
             assert any(layer['kind'] == 'attention' for layer in block.layers)

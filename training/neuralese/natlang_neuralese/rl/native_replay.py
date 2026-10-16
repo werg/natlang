@@ -128,15 +128,17 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         capture = turn.get('sampling') or {}
         actor_identity=(invocation_actors['invocations'][name]['native_identity'] if invocation_actors is not None else identity)
         greedy = capture.get('schema') == 'natlang.native-structural-capture/1'
+        decision = capture.get('schema') == 'natlang.native-decision-capture/1'
         schemas = {'natlang.native-rl-sampling/1', 'natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3'}
         if structural:
             schemas.add('natlang.native-structural-capture/1')
+            schemas.add('natlang.native-decision-capture/1')
         if (capture.get('schema') not in schemas
                 or capture.get('policy') != actor_identity
-                or capture.get('sample_range_convention') != 'half-open'):
+                or not decision and capture.get('sample_range_convention') != 'half-open'):
             raise ValueError('native RL capture has a different policy or unsupported sampling schema')
         binding = capture.get('adapter_binding')
-        if capture['schema'] == 'natlang.native-rl-sampling/3' or greedy and binding is not None:
+        if capture['schema'] == 'natlang.native-rl-sampling/3' or (greedy or decision) and binding is not None:
             from types import SimpleNamespace
             from ..model.native_adapters import validate_state_binding
             validate_state_binding(binding, SimpleNamespace(**actor_identity))
@@ -147,7 +149,10 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         adapter_binding, binding_seen = binding, True
         law = capture.get('sampling_law') or {}
         temperature = law.get('temperature')
-        if greedy:
+        if decision:
+            if any(capture.get(key) for key in ('samples','generated_inputs','writes','sampling_law')):
+                raise ValueError('native decision capture cannot declare sampled actions or a sampling law')
+        elif greedy:
             if (type(temperature) not in (int, float) or temperature != 0
                     or law.get('probabilities') != 'greedy-argmax'):
                 raise ValueError('native structural receipt needs its actual greedy decoding law')
@@ -291,7 +296,14 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             for at, block_id, receipt in item['reads']:
                 choices = writers.get(block_id, [])
                 occurrence_binding = (item['turn'].get('read_bindings') or {}).get(block_id)
-                if occurrence_binding is not None:
+                outside = (item['turn'].get('external_read_bindings') or {}).get(block_id)
+                if outside is not None:
+                    if (not structural or not isinstance(outside,str) or not outside
+                            or occurrence_binding is not None
+                            or any(choice[3]==outside for choice in choices)):
+                        raise ValueError('native structural external origin must remain outside actual captured writer occurrences')
+                    choices = []
+                elif occurrence_binding is not None:
                     choices = [choice for choice in choices if choice[3] == occurrence_binding]
                     if len(choices) != 1:
                         raise ValueError('native RL read has no unique captured writer occurrence')
