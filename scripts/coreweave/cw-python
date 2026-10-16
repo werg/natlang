@@ -1,0 +1,4 @@
+#!/bin/sh
+# Run CoreWeave SDK clients with the dedicated environment, even when the
+# caller's shell is in the project venv. Keep the caller's arguments intact.
+exec /home/werg/.local/share/natlang/cw-venv/bin/python "$@"
