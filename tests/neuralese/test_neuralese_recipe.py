@@ -1338,3 +1338,13 @@ def test_lineage_handoff_can_activate_only_an_unstarted_declared_stage(tmp_path)
     changed['recipe']['stages'][1]['parameters']['lr'] = 2e-5
     with pytest.raises(ValueError, match='more than operational'):
         runner.lineage_handoff(copy.deepcopy(old), changed, frozen, package, path, out, dry_run=True)
+
+
+def test_absent_prepared_memory_request_is_omitted_from_actual_sft_cli():
+    # Runtime/recipe handoffs clear this optional request after qualifying the
+    # resident envelope. Neither "None" nor JSON null is a request binding.
+    from natlang_neuralese.train.native_state_sft import build_parser
+    argv=stage_parameter_args({'memory_qualification':None,'epochs':1})
+    assert argv==['--epochs','1']
+    # Parser's optional memory request must retain its actual None default.
+    assert build_parser().get_default('memory_qualification') is None

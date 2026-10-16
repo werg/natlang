@@ -1986,6 +1986,8 @@ def stage_parameter_args(parameters):
     command = []
     for key, value in parameters.items():
         if key=='memory_qualification':
+            if value is None:
+                continue
             command += ['--memory-qualification',json.dumps(value,sort_keys=True,separators=(',',':'))]
             continue
         if key=='cohort_weights':
