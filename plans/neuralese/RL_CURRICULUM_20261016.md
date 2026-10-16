@@ -98,7 +98,11 @@ rows before changing production cases. Until then, existing train tasks remain
 usable with the corrected selector. Do not claim that pending rows were trained.
 
 The production RL bootstrap now defaults to the published 128-row train-only
-union at `runs/decision-rich-train-20261016-v1/`. Its manifest binds the 72-row
+union at `runs/decision-rich-train-20261016-v2-curriculum/`. This scheduling-only
+successor retains every original task and adds structurally checked levels
+0/1/2/3 with counts 1/3/8/116. Both raw and shared-semantic bootstrap plans use
+its exact cases SHA `bfb1b595d013616cfca5c4bc4aab44a218e2398ffc505b1954405dbb56bfd53a`.
+Its manifest retains the 72-row
 S7 base, 56 admitted broad tasks, and their exact audit and selection proof;
 both model entries share the same case SHA. The pending 12-task executor
 qualification remains excluded and can be appended through a separately

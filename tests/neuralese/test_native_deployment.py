@@ -86,13 +86,13 @@ def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_fini
     # Production auto-bootstrap defaults to the integrity-bound 128-task union
     # for both participants; the older explicit fixture above remains supported.
     admitted_manifest = (Path(__file__).resolve().parents[2]
-        / 'runs/decision-rich-train-20261016-v1/task-source-manifest.json')
+        / 'runs/decision-rich-train-20261016-v2-curriculum/task-source-manifest.json')
     admitted = prepare(release, curriculum, tmp_path/'deployment-admitted',
         participants=participants, runtime=runtime, namespace=str(tmp_path))
     admitted_bootstrap = json.loads(Path(json.loads(admitted.read_text())['rl_bootstrap']['path']).read_text())
     assert len(admitted_bootstrap['models']) == 2
     assert {row['cases']['sha256'] for row in admitted_bootstrap['models']} == {
-        'd99a1c0fca902a811fa95a9107345875d2f7e504bda9221dfc49cbc8a2026e9a'}
+        'bfb1b595d013616cfca5c4bc4aab44a218e2398ffc505b1954405dbb56bfd53a'}
     assert all(row['task_source']['manifest'] == str(admitted_manifest.resolve())
         and row['task_source']['rows'] == 128 for row in admitted_bootstrap['models'])
     first = json.loads(Path(config['curriculum']).read_text())

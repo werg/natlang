@@ -35,7 +35,7 @@ def prepare(release_path, curriculum_path, out, *, participants, cases=None, tas
         raise ValueError('native deployment requires the actual built runtime')
     task_source = None
     if task_source_manifest is None and cases is None:
-        task_source_manifest = Path(__file__).resolve().parents[4] / 'runs/decision-rich-train-20261016-v1/task-source-manifest.json'
+        task_source_manifest = Path(__file__).resolve().parents[4] / 'runs/decision-rich-train-20261016-v2-curriculum/task-source-manifest.json'
     if task_source_manifest is not None:
         from ..rl.task_source import resolve_task_source
         task_source = resolve_task_source(task_source_manifest)
@@ -162,7 +162,7 @@ def main(argv=None):
         parser.add_argument('--'+flag, type=Path, required=True)
     parser.add_argument('--cases', type=Path, help='explicit admitted train task packet; defaults to the bound 128-row RL source')
     parser.add_argument('--task-source-manifest', type=Path,
-                        help='integrity-bound admitted RL task source; defaults to decision-rich-train-20261016-v1')
+                        help='integrity-bound admitted RL task source; defaults to decision-rich-train-20261016-v2-curriculum')
     parser.add_argument('--participant', action='append', required=True, help='role=exact architecture:base-inventory identity')
     parser.add_argument('--namespace', default='/work/native-production')
     parser.add_argument('--refresh-curriculum', type=Path,
