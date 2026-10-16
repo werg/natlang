@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from scripts.neuralese_data.qualify_native_attention_index import paired_case, tensor_digest
+from scripts.neuralese_data.qualify_native_attention_index import diagnostic_optimizer, paired_case, tensor_digest
 from natlang_neuralese.model import shared_state
 from natlang_neuralese.train.native_state_sft import make_native_optimizer
 from test_shared_state import tiny
@@ -17,7 +17,10 @@ def test_real_paired_backward_preserves_weights_optimizer_rng_and_dispatch(famil
     model = shared_state.SharedStateModel(tiny(family), (58, 59, 60, 61), rank=4)
     if family == 'mellum':
         model.port.hf.natlang_precision = 'bf16'
-    optimizer, _ = make_native_optimizer(model, lr=3e-6)
+    # Actual saved-parent qualifier loader freezes everything first.
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
+    optimizer = diagnostic_optimizer(model)
     weights = copy.deepcopy(model.state_dict())
     state = copy.deepcopy(optimizer.state_dict())
     rng = torch.get_rng_state().clone()
@@ -25,6 +28,8 @@ def test_real_paired_backward_preserves_weights_optimizer_rng_and_dispatch(famil
     result = paired_case(model, optimizer, examples()[0], SimpleNamespace(forward_graph=original),
         chunk_tokens=3, checkpoint_sha256='a'*64, source_binding={})
     assert result['passed'] and result['gradient_parameters'] > 0
+    assert any(name.startswith('backbone.') for name in result['observed_gradient_names'])
+    assert any(name.startswith('interface.') for name in result['observed_gradient_names'])
     assert result['old_seconds'] > 0 and result['new_seconds'] > 0
     assert_exact(weights, model.state_dict())
     assert_exact(state, optimizer.state_dict())

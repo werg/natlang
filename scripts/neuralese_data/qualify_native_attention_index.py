@@ -25,6 +25,20 @@ from natlang_neuralese.train.native_resident import binding, bound, code_invento
 from natlang_neuralese.train.native_state_sft import make_native_optimizer
 
 
+def diagnostic_optimizer(model):
+    """Reapply the same full latent-layer selection as production after loading."""
+    for name, parameter in model.named_parameters():
+        if name.startswith(('input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows', 'adapter.')):
+            parameter.requires_grad_(True)
+    optimizer, named = make_native_optimizer(model, lr=3e-6, latent_ns='cubic5',
+        learned_row_lr=3e-4, interface_row_lr=3e-4)
+    if not any(name.startswith('backbone.') for name, _ in named):
+        raise ValueError('paired diagnostic omitted production backbone trainables')
+    if any(not parameter.requires_grad for _, parameter in named):
+        raise ValueError('paired diagnostic production trainables remain frozen')
+    return optimizer
+
+
 def tensor_digest(value):
     value = value.detach()
     if not value.is_contiguous():
@@ -52,6 +66,13 @@ def paired_case(model, optimizer, example, reference, *, backend=None, checkpoin
                 chunk_tokens=1024, checkpoint_sha256, source_binding, trace=None):
     """Existing zero-update capacity machinery owns every execution/state guard."""
     candidate = shared_state.forward_graph
+    trainable = {name: {'shape': list(parameter.shape), 'dtype': str(parameter.dtype)}
+                 for name, parameter in optimizer._native_named_parameters if parameter.requires_grad}
+    production_names = {id(parameter): name for name, parameter in optimizer._native_named_parameters}
+    names = {name: production_names[id(parameter)] for name, parameter in model.named_parameters()
+             if parameter.requires_grad}
+    if not any(name.startswith('backbone.') for name in trainable):
+        raise ValueError('paired diagnostic needs production backbone gradients')
     values, hashes, outputs, geometries = {}, {}, {}, {}
     try:
         for label, implementation in [('old', reference.forward_graph), ('new', candidate)]:
@@ -66,12 +87,14 @@ def paired_case(model, optimizer, example, reference, *, backend=None, checkpoin
                 values[label] = qualify_capacity(model, optimizer, [example], backend=backend,
                     checkpoint_layers=checkpoint_layers, chunk_tokens=chunk_tokens,
                     checkpoint_sha256=checkpoint_sha256, source_binding=source_binding,
-                    gradient_observer=lambda name, value: gradients.update({name: tensor_digest(value)}))
+                    gradient_observer=lambda name, value: gradients.update({names[name]: tensor_digest(value)}))
             finally:
                 hook.remove()
             if len(observed) != 1:
                 raise ValueError('paired index path must execute exactly one explicit graph forward')
             hashes[label], outputs[label] = gradients, observed[0]
+            if not any(name.startswith('backbone.') for name in gradients):
+                raise ValueError('paired backward observed no production backbone adjoints')
         passed = (all(value['passed'] for value in values.values()) and hashes['old'] == hashes['new']
             and outputs['old'] == outputs['new'] and geometries['old'] == geometries['new']
             and values['old']['cases'][0]['loss'] == values['new']['cases'][0]['loss'])
@@ -99,6 +122,9 @@ def paired_case(model, optimizer, example, reference, *, backend=None, checkpoin
             'old_seconds': timings['old'], 'new_seconds': timings['new'],
             'outputs_bitwise': True, 'loss_bitwise': True, 'all_named_adjoints_bitwise': True,
             'gradient_parameters': len(hashes['old']), 'gradient_digest': canonical_json_sha256_hex(hashes['old']),
+            'production_trainable_inventory': trainable,
+            'observed_gradient_names': sorted(hashes['new']),
+            'unobserved_trainable_names': sorted(trainable.keys() - hashes['new'].keys()),
             'optimizer_updates': 0, 'optimizer_state_unchanged': True, 'rng_restored': True,
             'source_credits_unchanged': True, 'cuda_synchronized': next(model.parameters()).is_cuda,
             'timing_scope': 'whole-graph forward/backward with existing finite-gradient checks and release; no SGD',
@@ -125,9 +151,6 @@ def main(argv=None):
     if certificate['runtime_code_sha256'] != canonical_json_sha256_hex(old_code):
         raise ValueError('paired index source capacity belongs to another old package')
     model, tokenizer, roles, config, parent, options = load_qualification_model(args)
-    for name, parameter in model.named_parameters():
-        if name.startswith(('input_rows', 'output_rows', 'extra_input_rows', 'extra_output_rows', 'adapter.')):
-            parameter.requires_grad_(True)
     backend = None
     if args.model == 'mellum':
         backend = make_backend(identity['fp8']['kind'], model.port.hf, device='cuda',
@@ -135,8 +158,7 @@ def main(argv=None):
         if options.get('extra_state') is not None:
             backend.restore_extra_state(options['extra_state'])
         model.port.activation_checkpoint = backend.checkpoint
-    optimizer, _ = make_native_optimizer(model, lr=3e-6, latent_ns='cubic5',
-        learned_row_lr=3e-4, interface_row_lr=3e-4)
+    optimizer = diagnostic_optimizer(model)
     configure_checkpoint_input_offload(model.port, enabled=identity['checkpoint_input_offload'])
     model.share_causal_prefixes = identity.get('share_causal_prefixes', False)
     actual_args = argparse.Namespace(**{key: identity[key] for key in
