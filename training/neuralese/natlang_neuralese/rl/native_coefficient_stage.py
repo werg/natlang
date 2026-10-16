@@ -38,10 +38,8 @@ def bind_policy(engine,path):
 
 def train(engine,**kwargs):
     """One owner of this actual output slot, including direct CLI/recipe runs."""
-    import fcntl
-    directory=Path(kwargs['out']).resolve();directory.mkdir(parents=True,exist_ok=True)
-    with (directory/'learner.lock').open('w') as lock:
-        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    from .native_output_lease import coefficient_output_lease
+    with coefficient_output_lease(kwargs['out']):
         return _train_locked(engine,**kwargs)
 
 
@@ -266,15 +264,6 @@ def _train_locked(engine,*,policy,graphs,objective,out,epochs,optimizer,evaluate
 
 def main(argv=None):
     import argparse
-    from types import SimpleNamespace
-    from ..common.jsonio import iter_jsonl_rows
-    from ..serve import load_native_engine
-    from ..serve.store import TensorStore
-    from ..eval.task_cadence import TaskEval,parse_task_eval,task_gate
-    from ..data.native_sources import NativeGraphSource
-    from ..train.native_state_sft import _evaluate_cadence
-    from ..model.native_adapters import run_native
-    from ..train.loop import StopSignal
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--coefficient-policy',type=Path,required=True)
     parser.add_argument('--graphs',type=Path,required=True)
@@ -296,6 +285,21 @@ def main(argv=None):
     parser.add_argument('--fp8-training',dest='fp8_backend',choices=('off','triton-experts'),default='off')
     parser.add_argument('--fp8-recipe',choices=('delayed','current','current-bf16-dx'),default='delayed')
     args=parser.parse_args(argv)
+    from .native_output_lease import coefficient_output_lease
+    with coefficient_output_lease(args.out):
+        return _run_cli(args)
+
+
+def _run_cli(args):
+    from types import SimpleNamespace
+    from ..common.jsonio import iter_jsonl_rows
+    from ..serve import load_native_engine
+    from ..serve.store import TensorStore
+    from ..eval.task_cadence import TaskEval,parse_task_eval,task_gate
+    from ..data.native_sources import NativeGraphSource
+    from ..train.native_state_sft import _evaluate_cadence
+    from ..model.native_adapters import run_native
+    from ..train.loop import StopSignal
     stop=StopSignal().install()
     engine=None
     try:

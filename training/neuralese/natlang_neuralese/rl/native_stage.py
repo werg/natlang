@@ -108,6 +108,13 @@ def main(argv=None):
     parser.add_argument('--communication-foundation', action='store_true')
     parser.add_argument('--foundation-native-graphs', type=Path)
     args, trainer = parser.parse_known_args(argv)
+    from contextlib import nullcontext
+    from .native_output_lease import coefficient_output_lease
+    with coefficient_output_lease(args.out) if args.coefficient_policy is not None else nullcontext():
+        return _admit_and_train(args,trainer)
+
+
+def _admit_and_train(args,trainer):
     from ..common.jsonio import iter_jsonl_rows
     rows = [row for path in args.rollouts for _, row in iter_jsonl_rows(path)]
     graphs, objective = prepare(rows, checkpoint=args.continue_from, tokenizer=args.rl_tokenizer,

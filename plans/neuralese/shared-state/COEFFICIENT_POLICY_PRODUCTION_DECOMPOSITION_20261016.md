@@ -140,3 +140,9 @@ sidecar are removed only after the replacement checkpoint/report commit. The
 prune receipt lists exact private paths before deletion. Input/initial policies
 and qualified publications are retained; this does not delete externally
 published parents or pending source/objective dependencies.
+
+The output lease covers the entire coefficient admission transaction, including
+prepared graphs/objective/receipt, plus direct CLI model/store setup and direct
+training calls. Nested synchronous calls reuse the owning descriptor; other
+threads/processes fail before source mutation. Locking only the inner update
+loop was insufficient because competing admission could overwrite its inputs.
