@@ -204,25 +204,107 @@ def test_verified_model_view_cache_skips_rerender_only_for_same_exact_inputs(tmp
     assert not calls and repaired['source_units']==first['source_units']
 
 
+def test_source_eligibility_index_recovers_durable_prefix_and_reuses_across_tokenizer_views(tmp_path,monkeypatch):
+    from scripts.neuralese_data import prepare_acquired_preference_admission as admission
+    _,protected,values=setup_conversion(tmp_path,monkeypatch)
+    source=tmp_path/'full-trajectories.jsonl.zst';export_path=tmp_path/'export.json'
+    export=json.loads(export_path.read_text())
+    source_binding={'path':str(source.resolve()),'sha256':sha256_file_hex(source),'bytes':source.stat().st_size}
+    # One complete original pair has a source-quality hold and must remain an explicit omission.
+    protected['quality'].update(values[0]['trajectory']['split_groups'])
+    root=tmp_path/'shared-source-index';original=admission.normalized_preference_records
+    original_sessions=admission.sessions
+    def interrupt_after_one(source_path):
+        iterator=original(source_path)
+        yield next(iterator)
+        raise RuntimeError('simulated stop after first indexed pair')
+    monkeypatch.setattr(admission,'normalized_preference_records',interrupt_after_one)
+    with pytest.raises(RuntimeError,match='simulated stop'):
+        admission._source_eligibility_index(source,export_path,export,source_binding,None,
+            protected,set(),[],root,expected_units=2,batch_units=1)
+    partial=next(root.glob('*.state.json'))
+    state=json.loads(partial.read_text())
+    assert state['units']==1 and state['source_frontier']==2
+    # Resume from the durable pair boundary; all normalized rows are accounted
+    # for and the protected occurrence remains a source-level omission.
+    monkeypatch.setattr(admission,'normalized_preference_records',original)
+    expected,omitted,frontier,units,receipt=admission._source_eligibility_index(
+        source,export_path,export,source_binding,None,protected,set(),[],root,
+        expected_units=2,batch_units=1)
+    assert frontier==4 and units==2 and len(expected)==1 and len(omitted)==1
+    assert omitted[0]['normalized_source_rows']==[0,1]
+    # The completed index is source-only and can be reused by the sibling
+    # tokenizer view without another source parser pass.
+    def forbidden(_):raise AssertionError('re-read completed shared source index')
+    monkeypatch.setattr(admission,'sessions',forbidden)
+    monkeypatch.setattr(admission,'normalized_preference_records',forbidden)
+    again=admission._source_eligibility_index(source,export_path,export,source_binding,None,
+        protected,set(),[],root,expected_units=2,batch_units=1)
+    assert again==(expected,omitted,frontier,units,receipt)
+    assert len(list(root.glob('*.receipt.json')))==1
+    # A changed current protection gets a new identity and cannot reuse the
+    # earlier eligibility/omission decision.
+    monkeypatch.setattr(admission,'sessions',original_sessions)
+    monkeypatch.setattr(admission,'normalized_preference_records',original)
+    changed={**protected,'quality':set()}
+    new_expected,new_omitted,_,_,new_receipt=admission._source_eligibility_index(
+        source,export_path,export,source_binding,None,changed,set(),[],root,
+        expected_units=2,batch_units=1)
+    assert len(new_expected)==2 and not new_omitted
+    assert new_receipt['identity_sha256']!=receipt['identity_sha256']
+    assert len(list(root.glob('*.receipt.json')))==2
+
+
 def test_conversion_runtime_drift_requires_the_exact_named_full_rerender_transition():
     from copy import deepcopy
     from scripts.neuralese_data import prepare_acquired_preference_admission as admission
     from scripts.neuralese_data import build_acquired_preference_graphs as source_builder
     current=source_builder._runtime()
     transition=admission._D24_RENDER_REQUALIFICATION
-    assert current['fingerprint']==transition['to_fingerprint']
     old=deepcopy(current)
     for key,(before,after) in transition['changed_files'].items():
         assert old['files'][key]['sha256']==after
         old['files'][key]['sha256']=before
+    old['files']['tokenizer_inventory']['sha256']='99eee6d5b2bbe87b8957b3df486951fdf37e8a102d73eaf0cbd91f7274924e9d'
     old['fingerprint']=transition['from_fingerprint']
     proof=admission._conversion_runtime_transition(old,current)
     assert proof['kind']=='exact-all-pair-rerender-continuation'
     assert set(proof['changed_files'])==set(transition['changed_files'])
+    scoped=proof['function_scoped_tokenizer_inventory_transition']
+    assert scoped['conversion_module_sha256']==old['files']['tokenizer_inventory']['sha256']
+    assert scoped['verification_module_sha256']==current['files']['tokenizer_inventory']['sha256']
+    assert scoped['qualified_function_ast_sha256']==admission._TOKENIZER_INVENTORY_WITNESS['functions']
     mutated=deepcopy(old);mutated['files']['graph_writer']['sha256']='0'*64
     mutated['fingerprint']=transition['from_fingerprint']
     with pytest.raises(ValueError,match='exact all-pair rerender continuation'):
         admission._conversion_runtime_transition(mutated,current)
+
+
+def test_tokenizer_inventory_transition_rejects_function_ast_drift(tmp_path,monkeypatch):
+    from scripts.neuralese_data import prepare_acquired_preference_admission as admission
+    from scripts.neuralese_data import build_acquired_preference_graphs as source_builder
+    import training.neuralese.natlang_neuralese.model.native_model as native_model
+    import inspect
+    from copy import deepcopy
+    current=source_builder._runtime()
+    old=deepcopy(current)
+    for key,(before,_) in admission._D24_RENDER_REQUALIFICATION['changed_files'].items():
+        old['files'][key]['sha256']=before
+    old['files']['tokenizer_inventory']['sha256']='99eee6d5b2bbe87b8957b3df486951fdf37e8a102d73eaf0cbd91f7274924e9d'
+    old['fingerprint']=admission._D24_RENDER_REQUALIFICATION['from_fingerprint']
+    module=tmp_path/'training/neuralese/natlang_neuralese/model/native_model.py'
+    module.parent.mkdir(parents=True)
+    source=inspect.getsource(native_model).replace(
+        'return _input_inventory(base, include_weights=False)',
+        'return _input_inventory(base, include_weights=True)')
+    module.write_text(source)
+    monkeypatch.setattr(admission,'CODE_ROOT',tmp_path)
+    with pytest.raises(ValueError,match='function witness'):
+        admission._conversion_runtime_transition(old,current)
+    unchanged=inspect.getsource(native_model)+'\n\ndef untrusted_rebind():\n    global Path\n    Path = object\n'
+    module.write_text(unchanged)
+    with pytest.raises(ValueError,match='global is rebound'):
+        admission._tokenizer_inventory_ast_witness(module)
 
 
 def test_admission_cli_preserves_existing_held_prefix_and_emits_executable_shared_stage_inputs(tmp_path,monkeypatch):

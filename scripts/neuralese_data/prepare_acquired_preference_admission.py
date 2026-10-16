@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import ast
 from collections import Counter
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -41,6 +43,75 @@ _D24_RENDER_REQUALIFICATION={
                             '618beef2bacb26995cdf391ce07e621f6ab43ab146ca91fa5f6033625d8fcda9'),
     }}
 
+# The model loader also owns tokenizer inventory. D24's old renderer predates
+# unrelated attention-loading changes to native_model.py, so a whole-module
+# hash is too broad for that one dependency. This witness pins the two exact
+# functions and the imports/globals they use. The module's complete old/new
+# hashes remain in the receipt for provenance; any change to these functions,
+# their imports, or a rebinding of their globals still rejects the transition.
+_TOKENIZER_INVENTORY_WITNESS={
+    'module':'training/neuralese/natlang_neuralese/model/native_model.py',
+    'functions':{
+        '_input_inventory':'9deb4993237bbe0d853ca4912fda519e3b60aa68a05bacd2598efaa82eaf2821',
+        'tokenizer_inventory':'7d1f7639865c403de69295eae79c7ff84c6363e0607a4192a4f685f6327fec8c',
+    },
+    'imports':'7c5568b938f4cc9d2cb8264ee8e05304adb23cb4298c2c04277529ed204d1321',
+    'bindings':['Path','sha256_file_hex_cached','_input_inventory'],
+}
+
+
+def _tokenizer_inventory_ast_witness(path):
+    source=Path(path).read_text()
+    tree=ast.parse(source)
+    wanted=set(_TOKENIZER_INVENTORY_WITNESS['functions'])
+    functions={node.name:node for node in tree.body if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef))}
+    if not wanted.issubset(functions):
+        raise ValueError('tokenizer inventory function witness is incomplete')
+    actual_functions={name:hashlib.sha256(ast.dump(functions[name],include_attributes=False).encode()).hexdigest()
+                      for name in sorted(wanted)}
+    # Freeze only imports relevant to the inventory functions. The definitions
+    # are still exact ASTs, and all names they can resolve are checked below.
+    relevant_imports=[]
+    for node in tree.body:
+        if isinstance(node,ast.ImportFrom) and node.module=='pathlib':
+            if any(alias.name=='Path' for alias in node.names):relevant_imports.append(node)
+        elif isinstance(node,ast.ImportFrom) and node.module and node.module.endswith('common.hashing'):
+            if any(alias.name=='sha256_file_hex_cached' for alias in node.names):relevant_imports.append(node)
+    import_sha=hashlib.sha256('\n'.join(ast.dump(node,include_attributes=False)
+                                            for node in relevant_imports).encode()).hexdigest()
+    if actual_functions!=_TOKENIZER_INVENTORY_WITNESS['functions'] or import_sha!=_TOKENIZER_INVENTORY_WITNESS['imports']:
+        raise ValueError('tokenizer inventory implementation differs from its qualified function witness')
+    bindings=set(_TOKENIZER_INVENTORY_WITNESS['bindings'])
+    defining_nodes=[]
+    for node in tree.body:
+        names=set()
+        if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node,(ast.Import,ast.ImportFrom)):
+            names.update(alias.asname or alias.name.split('.')[0] for alias in node.names)
+        else:
+            for child in ast.walk(node):
+                if isinstance(child,ast.Name) and isinstance(child.ctx,ast.Store):names.add(child.id)
+        overlap=names & bindings
+        if overlap:
+            allowed=((isinstance(node,ast.ImportFrom) and node.module=='pathlib' and overlap=={'Path'})
+                     or (isinstance(node,ast.ImportFrom) and node.module and node.module.endswith('common.hashing')
+                         and overlap=={'sha256_file_hex_cached'})
+                     or (isinstance(node,ast.FunctionDef) and node.name=='_input_inventory'))
+            if not allowed:
+                raise ValueError('tokenizer inventory dependency global is rebound: '+','.join(sorted(overlap)))
+    for function in (node for node in tree.body if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef))):
+        declared={name for child in ast.walk(function) if isinstance(child,ast.Global) for name in child.names}
+        rebound={child.id for child in ast.walk(function)
+                 if isinstance(child,ast.Name) and isinstance(child.ctx,ast.Store)
+                 and child.id in bindings and child.id in declared}
+        if rebound:
+            raise ValueError('tokenizer inventory dependency global is rebound: '+','.join(sorted(rebound)))
+    return {'module_path':_TOKENIZER_INVENTORY_WITNESS['module'],
+            'module_sha256':hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+            'function_ast_sha256':actual_functions,'relevant_imports_ast_sha256':import_sha,
+            'forbidden_rebindings':sorted(bindings)}
+
 
 def _conversion_runtime_transition(conversion_runtime,verification_runtime=None):
     verification_runtime=_runtime() if verification_runtime is None else verification_runtime
@@ -52,22 +123,41 @@ def _conversion_runtime_transition(conversion_runtime,verification_runtime=None)
     differences={key:(old_files.get(key) or {}).get('sha256') for key in sorted(set(old_files)|set(new_files))
         if (old_files.get(key) or {}).get('sha256')!=(new_files.get(key) or {}).get('sha256')}
     named={key:pair[0] for key,pair in expected['changed_files'].items()}
+    inventory_key='tokenizer_inventory'
+    inventory_old='99eee6d5b2bbe87b8957b3df486951fdf37e8a102d73eaf0cbd91f7274924e9d'
+    inventory_proof=None
+    inventory_transition=(old_files.get(inventory_key) or {}).get('sha256')==inventory_old
+    if inventory_transition:
+        inventory_proof=_tokenizer_inventory_ast_witness(
+            CODE_ROOT/_TOKENIZER_INVENTORY_WITNESS['module'])
+    allowed_differences=set(named)|({inventory_key} if inventory_transition else set())
     if (conversion_runtime.get('fingerprint')!=expected['from_fingerprint']
-            or verification_runtime.get('fingerprint')!=expected['to_fingerprint']
             or conversion_runtime.get('fingerprint')!=canonical_json_sha256_hex(old_files)
             or verification_runtime.get('fingerprint')!=canonical_json_sha256_hex(new_files)
-            or differences!=named
+            or set(differences)!=allowed_differences
             or set(old_files)!=set(new_files)
+            or (inventory_transition and (new_files.get(inventory_key) or {}).get('sha256')!=inventory_proof['module_sha256'])
             or any((new_files.get(key) or {}).get('sha256')!=pair[1]
                    for key,pair in expected['changed_files'].items())):
         raise ValueError('offline conversion runtime differs outside its exact all-pair rerender continuation')
-    return {'kind':'exact-all-pair-rerender-continuation',
+    proof={'kind':'exact-all-pair-rerender-continuation',
         'conversion_fingerprint':conversion_runtime['fingerprint'],
         'verification_fingerprint':verification_runtime['fingerprint'],
         'changed_files':{key:{'conversion_sha256':pair[0],'verification_sha256':pair[1]}
                          for key,pair in expected['changed_files'].items()},
         'required_requalification':['full-current-source-eligibility','all-current-tokenizer-pair-renders',
                                     'exact-graph-and-objective-hashes','global-split-and-held-joins']}
+    if inventory_proof is not None:
+        proof['function_scoped_tokenizer_inventory_transition']={
+            'conversion_module_sha256':inventory_old,
+            'verification_module_sha256':inventory_proof['module_sha256'],
+            'qualified_function_ast_sha256':inventory_proof['function_ast_sha256'],
+            'qualified_imports_ast_sha256':inventory_proof['relevant_imports_ast_sha256'],
+            'forbidden_rebindings':inventory_proof['forbidden_rebindings'],
+            'scope':'tokenizer_inventory and _input_inventory are byte-equivalent ASTs with qualified imports; unrelated module changes are provenance-bound only'}
+    elif old_files.get(inventory_key)!=new_files.get(inventory_key):
+        raise ValueError('tokenizer inventory module drift has no exact function-scoped witness')
+    return proof
 
 
 def _verification_dependencies():
@@ -116,6 +206,180 @@ def _write_owned_json(path,value):
     write_json_durable(path,value)
 
 
+SOURCE_INDEX_SCHEMA='natlang.offline-preference-source-eligibility-index/1'
+SOURCE_INDEX_RECORD_SCHEMA='natlang.offline-preference-source-eligibility-record/1'
+
+
+def _source_index_implementation():
+    """Bind the exact parser, pair-join and source policy used by this index."""
+    root=CODE_ROOT
+    paths={
+        'admission':Path(__file__),
+        'preference_reader':root/'scripts/neuralese_data/acquired_preferences.py',
+        'session_reader':root/'scripts/neuralese_data/build_acquired_full_session_graphs.py',
+        'source_policy':root/'scripts/neuralese_data/build_acquired_preference_graphs.py',
+        'decision_holds':root/'scripts/neuralese_data/decision_holds.py',
+        'source_admission':root/'scripts/neuralese_data/prepare_acquired_session_admission.py',
+    }
+    return {name:{'path':path.resolve(strict=True).relative_to(root).as_posix(),
+                  'bytes':path.stat().st_size,'sha256':sha256_file_hex(path)}
+            for name,path in sorted(paths.items())}
+
+
+def _read_source_index(index_path,identity,*,state=None):
+    """Read and check a committed source-index prefix, truncating only torn/uncommitted tail bytes."""
+    index_path=Path(index_path)
+    identity_sha=canonical_json_sha256_hex(identity)
+    state_path=index_path.with_suffix('.state.json')
+    if state is None:
+        state=json.loads(state_path.read_text()) if state_path.is_file() else None
+    committed_offset=0;committed_units=0;source_frontier=0;rows=[]
+    if state is not None:
+        if (state.get('schema')!=SOURCE_INDEX_SCHEMA or state.get('identity')!=identity
+                or state.get('identity_sha256')!=identity_sha
+                or type(state.get('byte_offset')) is not int or type(state.get('units')) is not int
+                or type(state.get('source_frontier')) is not int):
+            raise ValueError('offline preference source-index checkpoint has a different input binding')
+        committed_offset=state['byte_offset'];committed_units=state['units'];source_frontier=state['source_frontier']
+    if not index_path.exists():
+        if committed_offset:raise ValueError('offline preference source-index frontier has no data file')
+        return [],0,0,0
+    with index_path.open('r+b') as stream:
+        size=stream.seek(0,os.SEEK_END)
+        if committed_offset>size:raise ValueError('offline preference source-index checkpoint exceeds its data file')
+        if size!=committed_offset:
+            stream.truncate(committed_offset);stream.flush();os.fsync(stream.fileno())
+        stream.seek(0)
+        previous=0
+        for line in stream:
+            if not line.endswith(b'\n'):
+                raise ValueError('committed offline preference source-index has a torn line')
+            item=json.loads(line)
+            indices=item.get('normalized_source_rows')
+            if (item.get('schema')!=SOURCE_INDEX_RECORD_SCHEMA
+                    or item.get('identity_sha256')!=identity_sha
+                    or not isinstance(indices,list) or not indices
+                    or indices!=list(range(previous,previous+len(indices)))):
+                raise ValueError('offline preference source-index records are not an exact ordered partition')
+            previous+=len(indices);rows.append(item)
+        if len(rows)!=committed_units or previous!=source_frontier:
+            raise ValueError('offline preference source-index frontier differs from its committed records')
+    return rows,committed_units,source_frontier,committed_offset
+
+
+def _load_complete_source_index(index_path,identity):
+    """Authenticate the immutable finished source eligibility index."""
+    index_path=Path(index_path);receipt_path=index_path.with_suffix('.receipt.json')
+    receipt=json.loads(receipt_path.read_text())
+    if (receipt.get('schema')!=SOURCE_INDEX_SCHEMA or receipt.get('identity')!=identity
+            or receipt.get('identity_sha256')!=canonical_json_sha256_hex(identity)
+            or receipt.get('index')!={'path':str(index_path.resolve()),'bytes':index_path.stat().st_size,
+                                      'sha256':sha256_file_hex(index_path)}):
+        raise ValueError('completed offline preference source-index receipt or bytes differ')
+    rows,units,frontier,offset=_read_source_index(index_path,identity,
+        state={'schema':SOURCE_INDEX_SCHEMA,'identity':identity,
+               'identity_sha256':canonical_json_sha256_hex(identity),
+               'byte_offset':index_path.stat().st_size,'units':receipt['units'],
+               'source_frontier':receipt['source_frontier']})
+    if (units!=receipt['units'] or frontier!=receipt['source_frontier']
+            or frontier!=receipt['normalized_sessions'] or offset!=index_path.stat().st_size):
+        raise ValueError('completed offline preference source-index accounting differs')
+    return rows,receipt
+
+
+def _source_eligibility_index(source,export_path,export,source_binding,closure_binding,
+                              protection,decision_ids,decision_bindings,index_root,*,
+                              expected_units,batch_units=128):
+    """Build/reuse one resumable source-only eligibility index shared by model views."""
+    source_contract={'source_file':export['contract']['source'],
+                     'source_revision':export['contract']['revision']}
+    identity={'schema':SOURCE_INDEX_SCHEMA,'source':source_binding,
+        'export_receipt':_bound(export_path),'source_contract':source_contract,
+        'source_closure_receipt':closure_binding,
+        'protection':protection['proof'],
+        'protection_sets':{key:sorted(protection[key]) for key in ('held','quality','pending')},
+        'decision_holds':decision_contract(decision_bindings),
+        'implementation':_source_index_implementation()}
+    identity_sha=canonical_json_sha256_hex(identity)
+    root=Path(index_root);root.mkdir(parents=True,exist_ok=True)
+    index_path=root/(identity_sha+'.jsonl');receipt_path=index_path.with_suffix('.receipt.json')
+    state_path=index_path.with_suffix('.state.json')
+    if receipt_path.is_file():
+        indexed,receipt=_load_complete_source_index(index_path,identity)
+    else:
+        indexed,units,source_frontier,offset=_read_source_index(index_path,identity)
+        # Verify the complete normalized session source contract once per
+        # shared source index, rather than once for each tokenizer view.
+        actual_sessions=0
+        for value in sessions(source):
+            if (value['source_file']!=source_contract['source_file']
+                    or value['source_revision']!=source_contract['source_revision']):
+                raise ValueError('offline normalized session changed its original source binding')
+            actual_sessions+=1
+        if actual_sessions!=export['complete_sessions']:
+            raise ValueError('offline source session count differs from its complete export')
+        iterator=iter(normalized_preference_records(source))
+        for _ in range(units):
+            try:next(iterator)
+            except StopIteration as error:raise ValueError('offline source index frontier exceeds its source') from error
+        batch=[];unit_frontier=units;row_frontier=source_frontier
+        mode='ab' if offset else 'wb'
+        with index_path.open(mode) as stream:
+            for indices,record,error in iterator:
+                if tuple(indices)!=tuple(range(row_frontier,row_frontier+len(indices))):
+                    raise ValueError('offline normalized source rows are omitted, duplicated or reordered')
+                row_frontier+=len(indices);unit_frontier+=1
+                record,reason=(None,str(error)) if error else protected_pair(record,protection,decision_ids)
+                if reason:
+                    item={'schema':SOURCE_INDEX_RECORD_SCHEMA,'identity_sha256':identity_sha,
+                          'normalized_source_rows':list(indices),'kind':'omission','reason':reason}
+                else:
+                    source_sha=canonical_json_sha256_hex(record)
+                    item={'schema':SOURCE_INDEX_RECORD_SCHEMA,'identity_sha256':identity_sha,
+                          'normalized_source_rows':list(indices),'kind':'eligible',
+                          'source_record_sha256':source_sha,'split':record['split'],
+                          'groups':record['source_groups'],'source':record['source']}
+                batch.append(item)
+                if len(batch)>=batch_units:
+                    for value in batch:
+                        stream.write((json.dumps(value,sort_keys=True,separators=(',',':'))+'\n').encode())
+                    stream.flush();os.fsync(stream.fileno());offset=stream.tell()
+                    write_json_durable(state_path,{'schema':SOURCE_INDEX_SCHEMA,'identity':identity,
+                        'identity_sha256':identity_sha,'byte_offset':offset,'units':unit_frontier,
+                        'source_frontier':row_frontier})
+                    indexed.extend(batch);batch=[]
+            if batch:
+                for value in batch:
+                    stream.write((json.dumps(value,sort_keys=True,separators=(',',':'))+'\n').encode())
+                stream.flush();os.fsync(stream.fileno());offset=stream.tell()
+                write_json_durable(state_path,{'schema':SOURCE_INDEX_SCHEMA,'identity':identity,
+                    'identity_sha256':identity_sha,'byte_offset':offset,'units':unit_frontier,
+                    'source_frontier':row_frontier})
+                indexed.extend(batch)
+        if row_frontier!=export['complete_sessions']:
+            raise ValueError('offline preference source index lost or added normalized source rows')
+        if unit_frontier!=expected_units:
+            raise ValueError('offline preference source index changed its normalized pair unit count')
+        receipt={'schema':SOURCE_INDEX_SCHEMA,'identity':identity,'identity_sha256':identity_sha,
+            'units':unit_frontier,'source_frontier':row_frontier,'normalized_sessions':actual_sessions,
+            'index':{'path':str(index_path.resolve()),'bytes':index_path.stat().st_size,
+                     'sha256':sha256_file_hex(index_path)}}
+        write_json_durable(receipt_path,receipt)
+        state_path.unlink(missing_ok=True)
+    expected={};omitted=[];frontier=0
+    for item in indexed:
+        indices=item['normalized_source_rows'];frontier+=len(indices)
+        if item['kind']=='omission':
+            omitted.append({'normalized_source_rows':indices,'reason':item['reason']})
+        elif item['kind']=='eligible':
+            source_sha=item['source_record_sha256']
+            if source_sha in expected:raise ValueError('offline preference source repeats an immutable source occurrence')
+            expected[source_sha]={'split':item['split'],'groups':item['groups'],'source':item['source'],
+                                  'normalized_source_rows':indices}
+        else:raise ValueError('offline preference source-index record has an unknown kind')
+    return expected,omitted,frontier,receipt['units'],receipt
+
+
 def _proposal_request(models,protection_path,protection,runtime,holds):
     """Bind a resumable proposal to every declared source and decision input."""
     return {'schema':'natlang.acquired-offline-preference-request/1',
@@ -128,7 +392,8 @@ def _proposal_request(models,protection_path,protection,runtime,holds):
 
 
 def verify_conversion(directory,*,protection_path,base,prepared=None,
-                      verified_closures=None,verification_receipt_path=None):
+                      verified_closures=None,verification_receipt_path=None,
+                      source_index_root=None):
     directory=Path(directory);receipt_path=directory/'receipt.json'
     receipt=json.loads(receipt_path.read_text());binding=receipt.get('binding') or {}
     if (receipt.get('schema')!='natlang.acquired-offline-preference-graphs/1'
@@ -186,11 +451,24 @@ def verify_conversion(directory,*,protection_path,base,prepared=None,
         bound(item['path'],item)
     for key in ('objective','row_proof','omissions'):
         bound(receipt[key]['path'],receipt[key])
+    units=binding.get('source_units')
+    if type(units) is not int or units<1:raise ValueError('offline verification receipt lacks exact source-unit count')
+    index_root=(Path(source_index_root) if source_index_root is not None
+                else directory/'source-eligibility-indexes')
+    expected,omitted,frontier,index_units,index_receipt=_source_eligibility_index(
+        source,export_path,export,binding['source'],closure_binding,protection,decision_ids,
+        decision_bindings,index_root,expected_units=units)
+    if (frontier!=export['complete_sessions'] or frontier!=binding['normalized_sessions']
+            or index_units!=binding['source_units']):
+        raise ValueError('offline preference complete source accounting differs')
+    if list(sessions(receipt['omissions']['path']))!=omitted:
+        raise ValueError('offline omission ledger differs from current exact source eligibility')
     identity={'conversion_receipt':{'path':str(receipt_path.resolve()),'bytes':receipt_path.stat().st_size,
                                     'sha256':sha256_file_hex(receipt_path)},
         'conversion_binding':binding,'verified_shards':shards,
         'runtime':_runtime(),'conversion_runtime_transition':runtime_transition,
         'verifier_dependencies':_verification_dependencies(),
+        'source_eligibility_index':index_receipt,
         'protection':protection['proof'],'decision_holds':decision_contract(decision_bindings),
         'tokenizer_base':tokenizer_inventory(base),'prepared_tokenizer':prepared.binding,
         'source_artifacts':[{'path':str(Path(item['path']).resolve()),'bytes':item.get('bytes',Path(item['path']).stat().st_size),
@@ -227,29 +505,6 @@ def verify_conversion(directory,*,protection_path,base,prepared=None,
                     if key in verified_renders and verified_renders[key]!=value:
                         raise ValueError('offline preference render checkpoint repeats a source with different output')
                     verified_renders[key]=value;valid_end=stream.tell()
-    expected={};omitted=[];frontier=0;units=0
-    for indices,record,error in normalized_preference_records(source):
-        if tuple(indices)!=tuple(range(frontier,frontier+len(indices))):
-            raise ValueError('offline normalized source rows are omitted, duplicated or reordered')
-        frontier+=len(indices);units+=1
-        record,reason=(None,str(error)) if error else protected_pair(record,protection,decision_ids)
-        if reason:
-            omitted.append({'normalized_source_rows':list(indices),'reason':reason});continue
-        sha=canonical_json_sha256_hex(record)
-        if sha in expected:raise ValueError('offline preference source repeats an immutable source occurrence')
-        expected[sha]={'split':record['split'],'groups':record['source_groups'],
-            'source':record['source'],'normalized_source_rows':list(indices)}
-    if (frontier!=export['complete_sessions'] or frontier!=binding['normalized_sessions']
-            or units!=binding['source_units']):
-        raise ValueError('offline preference complete source accounting differs')
-    actual_sessions=0
-    for value in sessions(source):
-        if value['source_file']!=export['contract']['source'] or value['source_revision']!=export['contract']['revision']:
-            raise ValueError('offline normalized session changed its original source binding')
-        actual_sessions+=1
-    if actual_sessions!=frontier:raise ValueError('offline source session count differs')
-    if list(sessions(receipt['omissions']['path']))!=omitted:
-        raise ValueError('offline omission ledger differs from current exact source eligibility')
     objective=NativePreferenceObjective(receipt['objective']['path'])
     if {'kind':objective.kind,'beta':objective.beta,'margin':objective.margin}!=binding['objective']:
         raise ValueError('offline objective differs from declared conversion objective')
@@ -331,6 +586,7 @@ def verify_conversion(directory,*,protection_path,base,prepared=None,
         'conversion_runtime_transition':runtime_transition,
         'outputs':outputs,'counts':dict(counts),'groups':{key:sorted(value) for key,value in groups.items()},
         'proofs':proofs,'source_membership':sorted(expected),'source_units':units,'normalized_sessions':frontier,
+        'source_eligibility_index':index_receipt,
         'exact_original_alternative_renders':len(checked),'source_render_verified':True}
     if verification_receipt_path is not None:
         payload={'identity':identity,'identity_sha256':identity_sha,'result':result}
@@ -379,7 +635,8 @@ def prepare(args):
             cache_path=cache_root/f'{name}-{index:04d}.json'
             views.append(verify_conversion(path,protection_path=args.protection,base=declaration['base'],
                 prepared=prepared,verified_closures=verified_closures,
-                verification_receipt_path=cache_path))
+                verification_receipt_path=cache_path,
+                source_index_root=cache_root/'source-eligibility-indexes'))
         membership=[source for view in views for source in view['source_membership']]
         if len(set(membership))!=len(membership):raise ValueError('offline admission repeats source pairs across conversions')
         if reference is not None and set(membership)!=reference:raise ValueError('offline model views differ in exact source pair membership')
