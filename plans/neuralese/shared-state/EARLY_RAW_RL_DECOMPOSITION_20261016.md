@@ -101,3 +101,8 @@ runs BF16/bf16x6 with executed current-FP8 projection counters in all four phase
 Rewards/actions in these fixtures are diagnostic inputs, not task-lift evidence.
 Actual full-size cloud batch geometry/backend qualification and safe operational
 handoff remain necessary; no production raw-RL launch is claimed by this commit.
+
+Original launch and terminal records are also copied byte-for-byte into immutable
+handoff evidence. Their original path/SHA bindings remain explicit for requirement
+matching, while later legitimate writes to the operational control slots cannot
+invalidate that historical drain proof. A source/snapshot digest mismatch rejects.

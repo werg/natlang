@@ -36,15 +36,24 @@ def capture_drain_intent(launch, out):
     argv=[part.decode() for part in bytes.fromhex(owner['argv_hex']).split(b'\0') if part]
     if argv!=record.get('argv'):
         raise ValueError('raw handoff launch argv differs from its actual process')
-    children=[];todo=[owner['pid']]
+    children=[];todo=[owner['pid']];seen={owner['pid']}
     while todo:
         pid=todo.pop()
-        try:ids=Path('/proc',str(pid),'task',str(pid),'children').read_text().split()
-        except FileNotFoundError:continue
-        for ident in ids:
-            child=observe(int(ident))
+        # Linux assigns a child to the spawning thread, not necessarily
+        # the process leader. Inspect every live TID and deduplicate PIDs.
+        try:tasks=list(Path('/proc',str(pid),'task').iterdir())
+        except (FileNotFoundError,ProcessLookupError):continue
+        ids=set()
+        for task in tasks:
+            try:ids.update(int(value) for value in (task/'children').read_text().split())
+            except (FileNotFoundError,ProcessLookupError):continue
+        for ident in sorted(ids-seen):
+            seen.add(ident);child=observe(ident)
             if child is not None:children.append(child);todo.append(child['pid'])
-    write_json_durable(out,{'schema':INTENT,'at':time.time(),'launch':launch,'owner':owner,'children':children})
+    launch_snapshot=Path(out).with_name(Path(out).stem+'-launch.json')
+    write_bytes_durable(launch_snapshot,_bound(launch).read_bytes())
+    write_json_durable(out,{'schema':INTENT,'at':time.time(),'source_launch':launch,
+        'launch':binding(launch_snapshot),'owner':owner,'children':children})
     return binding(out)
 
 
@@ -69,7 +78,10 @@ def complete_drain(intent, terminal, checkpoint, out, *, original_slot, resident
     if (checkpoint['sha256']!=original_slot['sha256'] or pin_stat.st_size!=slot_stat.st_size
             or (pin_stat.st_dev,pin_stat.st_ino)==(slot_stat.st_dev,slot_stat.st_ino)):
         raise ValueError('raw handoff needs an independent immutable pin of the exact drained checkpoint')
-    record={'schema':SCHEMA,'at':time.time(),'intent':intent,'terminal':terminal,'checkpoint':checkpoint,
+    terminal_snapshot=Path(out).with_name(Path(out).stem+'-terminal.json')
+    write_bytes_durable(terminal_snapshot,_bound(terminal).read_bytes())
+    record={'schema':SCHEMA,'at':time.time(),'intent':intent,'source_terminal':terminal,
+            'terminal':binding(terminal_snapshot),'checkpoint':checkpoint,
             'checkpoint_pin':{'original_slot':original_slot,'bytes':pin_stat.st_size,
                 'original_inode':[slot_stat.st_dev,slot_stat.st_ino],'pin_inode':[pin_stat.st_dev,pin_stat.st_ino]},
             'observations':observations,'resident':None}
@@ -100,6 +112,8 @@ def verify_handoff(reference, *, requirement=None):
     if intent.get('schema')!=INTENT or not isinstance(intent.get('children'),list):
         raise ValueError('raw handoff needs its original pre-signal process tree')
     launch=json.loads(_bound(intent['launch']).read_text())
+    if intent.get('source_launch',intent['launch'])['sha256']!=intent['launch']['sha256']:
+        raise ValueError('raw handoff launch snapshot differs from original source')
     owner=intent.get('owner');identities=[owner,*intent['children']]
     if (not all(_identity(item) for item in identities) or launch.get('pid')!=owner['pid']
             or len({item['pid'] for item in identities})!=len(identities)
@@ -107,6 +121,8 @@ def verify_handoff(reference, *, requirement=None):
             or [part.decode() for part in bytes.fromhex(owner['argv_hex']).split(b'\0') if part]!=launch.get('argv')):
         raise ValueError('raw handoff changed its exact boot/start/PID/argv owner binding')
     terminal=json.loads(_bound(record['terminal']).read_text())
+    if record.get('source_terminal',record['terminal'])['sha256']!=record['terminal']['sha256']:
+        raise ValueError('raw handoff terminal snapshot differs from original source')
     if (terminal.get('returncode')!=0 or any(type(item) not in (int,float) for item in
             (launch.get('at'),intent.get('at'),terminal.get('at'),record.get('at')))
             or not launch['at']<=intent['at']<=terminal['at']<=record['at']):
@@ -123,9 +139,9 @@ def verify_handoff(reference, *, requirement=None):
             if owner_alive(old) and (observe(old['pid']) or {}).get('state') not in ('Z','X'):
                 raise ValueError('raw optimizer owner or captured child is currently alive')
     if requirement:
-        if requirement.get('trainer_launch')!=intent['launch']:
+        if requirement.get('trainer_launch')!=intent.get('source_launch',intent['launch']):
             raise ValueError('raw handoff belongs to another declared original trainer launch')
-        if Path(requirement['trainer_exit']).resolve()!=_bound(record['terminal']):
+        if Path(requirement['trainer_exit']).resolve()!=Path(record.get('source_terminal',record['terminal'])['path']).resolve():
             raise ValueError('raw handoff terminal belongs to another original optimizer owner')
     checkpoint=_bound(record['checkpoint'])
     pin=record.get('checkpoint_pin') or {}

@@ -111,3 +111,34 @@ def test_final_resident_snapshot_survives_later_legitimate_owner_rewrite(actual_
     write_json_durable(directory/'initial.json',{'owner':resident.process_owner()})
     write_json_durable(directory/'current.json',{'new-generation':'later'})
     verify_handoff(reference)
+
+
+def test_original_control_launch_and_exit_can_advance_without_rewriting_handoff(actual_drain):
+    _,intent,terminal,_,_=actual_drain
+    source_launch=json.loads(Path(intent['path']).read_text())['source_launch']
+    reference=drained(actual_drain)
+    requirement={'trainer_launch':source_launch,'trainer_exit':str(terminal)}
+    verify_handoff(reference,requirement=requirement)
+    write_json_durable(Path(source_launch['path']),{'pid':123,'argv':['later-owner']})
+    write_json_durable(terminal,{'at':time.time(),'returncode':1,'reason':'later-worker'})
+    verify_handoff(reference,requirement=requirement)
+
+
+def test_process_tree_includes_children_spawned_by_nonleader_thread(tmp_path):
+    code="""import subprocess,sys,threading
+ready=threading.Event();drain=threading.Event()
+def worker():
+    p=subprocess.Popen([sys.executable,'-c','import sys;sys.stdin.buffer.read()'],stdin=subprocess.PIPE)
+    print('ready',flush=True);ready.set();drain.wait();p.communicate()
+t=threading.Thread(target=worker);t.start();ready.wait();sys.stdin.buffer.read();drain.set();t.join()
+"""
+    argv=[sys.executable,'-c',code]
+    process=subprocess.Popen(argv,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+    try:
+        assert process.stdout.readline().strip()=='ready'
+        launch=tmp_path/'thread-launch.json';write_json_durable(launch,{'at':time.time(),'pid':process.pid,'argv':argv})
+        intent=capture_drain_intent(binding(launch),tmp_path/'thread-intent.json')
+        children=json.loads(Path(intent['path']).read_text())['children']
+        assert len(children)==1 and children[0]['pid']!=process.pid
+    finally:process.communicate()
+    assert process.returncode==0
