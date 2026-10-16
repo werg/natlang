@@ -169,6 +169,22 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
     held_tokens = [False] * len(ids)
     hold_fields = ('assistant_turn_count', 'target_exclusion_bindings', 'target_source_bindings',
                    'target_source_record_ids', 'context_only_source_record_ids')
+    source_groups_by_id = row.get('source_record_groups')
+    if source_groups_by_id is not None:
+        group_sources = row.get('source_records')
+        if (not isinstance(group_sources, list) or not group_sources
+                or any(not isinstance(item, Mapping) or not isinstance(item.get('id'), str)
+                       or not re.fullmatch('[0-9a-f]{64}', str(item.get('sha256', '')))
+                       for item in group_sources)):
+            raise ValueError('whole source groups need exact source record identities and hashes')
+        group_source_ids = [item['id'] for item in group_sources]
+        if (len(group_source_ids) != len(set(group_source_ids))
+                or not isinstance(source_groups_by_id, Mapping) or set(source_groups_by_id) != set(group_source_ids)
+                or any(not isinstance(values, list) or not values
+                       or any(not isinstance(group, str) or not group for group in values)
+                       for values in source_groups_by_id.values())
+                or {group for values in source_groups_by_id.values() for group in values} != set(groups)):
+            raise ValueError('whole source groups must close over the complete source-group union')
     if held_turns is None and any(key in row for key in hold_fields):
         raise ValueError('whole-trajectory target hold metadata is incomplete')
     if held_turns is not None:
@@ -185,6 +201,8 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
                        or not isinstance(item.get('sha256'), str) for item in source_entries)):
             raise ValueError('target holds require exact source record bindings')
         source_hashes = {item['id']: item['sha256'] for item in source_entries}
+        if source_groups_by_id is None:
+            raise ValueError('target holds require complete source-group bindings')
         if (len(source_hashes) != len(source_entries)
                 or any(not isinstance(item, Mapping) or not isinstance(item.get('id'), str)
                        or item['id'] not in source_hashes
@@ -211,11 +229,22 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
             raise ValueError('positive target bindings must name exact unheld assistant spans')
         all_bindings = bindings + positive_bindings
         if (any(not re.fullmatch(r'[0-9a-f]{64}', str(item.get('source_target_sha256', '')))
+                or not re.fullmatch(r'[0-9a-f]{64}', str(item.get('history_assistant_sha256', '')))
                 for item in all_bindings)
                 or len({item['assistant_turn'] for item in all_bindings}) != len(all_bindings)
                 or len({item['id'] for item in positive_bindings}) != len(positive_bindings)
                 or set(item['id'] for item in positive_bindings) != set(target_ids or [])):
             raise ValueError('source targets require unique exact authenticated assistant bindings')
+        for binding in all_bindings:
+            rebindings = binding.get('tool_call_id_rebindings')
+            if (not isinstance(rebindings, list)
+                    or any(not isinstance(item, Mapping) or set(item) != {'call_index', 'source_id', 'history_id'}
+                           or type(item.get('call_index')) is not int or item['call_index'] < 0
+                           or any(value is not None and (not isinstance(value, str) or not value)
+                                  for value in (item.get('source_id'), item.get('history_id')))
+                           or item['source_id'] == item['history_id'] for item in rebindings)
+                    or [item['call_index'] for item in rebindings] != sorted({item['call_index'] for item in rebindings})):
+                raise ValueError('assistant transport needs exact distinct ordered tool-call ID rebindings')
         if (not isinstance(target_ids, list) or not target_ids or not isinstance(context_ids, list)
                 or any(not isinstance(value, str) or not value for value in target_ids + context_ids)
                 or len(set(held_ids)) != len(held_ids)
@@ -240,6 +269,45 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
     if held_turns is not None and any(assistant_runs[item['assistant_turn']] not in target_spans
                                      for item in positive_bindings):
         raise ValueError('positive source target maps to a runtime-failed assistant span')
+    reasoning_turns = row.get('context_only_reasoning_turns')
+    reasoning_fields = ('reasoning_assistant_turn_count', 'reasoning_exclusion_bindings')
+    untrained_reasoning_tokens = [False] * len(ids)
+    if reasoning_turns is None and any(key in row for key in reasoning_fields):
+        raise ValueError('whole-trajectory untrained reasoning metadata is incomplete')
+    if reasoning_turns is not None:
+        if (not isinstance(reasoning_turns, list) or not reasoning_turns
+                or any(type(index) is not int or not 0 <= index < len(assistant_runs) for index in reasoning_turns)
+                or reasoning_turns != sorted(set(reasoning_turns))
+                or type(row.get('reasoning_assistant_turn_count')) is not int
+                or row['reasoning_assistant_turn_count'] != len(assistant_runs)):
+            raise ValueError('untrained reasoning needs exact distinct assistant ordinals and count')
+        reasoning_bindings = row.get('reasoning_exclusion_bindings')
+        entries = row.get('source_records')
+        if (not isinstance(reasoning_bindings, list) or not reasoning_bindings or not isinstance(entries, list)
+                or any(not isinstance(item, Mapping) or not isinstance(item.get('id'), str)
+                       or not isinstance(item.get('sha256'), str) for item in entries)):
+            raise ValueError('untrained reasoning needs hash-bound source record inventory')
+        sources = {item['id']: item['sha256'] for item in entries}
+        if (len(sources) != len(entries)
+                or any(not isinstance(item, Mapping) or not isinstance(item.get('id'), str)
+                       or item['id'] not in sources or item.get('source_record_sha256') != sources[item['id']]
+                       or not re.fullmatch('[0-9a-f]{64}', sources[item['id']])
+                       or item.get('teacher_reasoning_trained') is not False
+                       or type(item.get('assistant_turn')) is not int or item['assistant_turn'] not in reasoning_turns
+                       or any(not re.fullmatch('[0-9a-f]{64}', str(item.get(key, '')))
+                              for key in ('source_target_sha256', 'history_assistant_sha256', 'untrained_reasoning_sha256'))
+                       for item in reasoning_bindings)
+                or {item['assistant_turn'] for item in reasoning_bindings} != set(reasoning_turns)
+                or len({item['id'] for item in reasoning_bindings}) != len(reasoning_bindings)):
+            raise ValueError('untrained reasoning binding differs from the declared source assistant')
+        for ordinal in reasoning_turns:
+            begin, end = assistant_runs[ordinal]
+            for index in range(begin, end):
+                # Markers teach structural termination even when stock notes
+                # are explicitly not admitted as reasoning targets.
+                untrained_reasoning_tokens[index] = (labels[index] == ROLE_CODES.index('assistant_reasoning')
+                                                     and ids[index] not in (think_open, think_close))
+        excluded = [bool(old or untrained) for old, untrained in zip(excluded, untrained_reasoning_tokens)]
     # Apply the existing segment policy per assistant turn. Each complete turn
     # gets target mass while intervening prompts and tool feedback remain
     # lower-weight context; rejected assistant turns are excluded everywhere.
@@ -263,7 +331,8 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
                    'runtime_opening_assistant_turns': opening_turns,
                    'runtime_opening_assistant_tokens': sum(end - begin for begin, end in opening_spans),
                    'failed_assistant_tokens_masked': sum(bool(value) for value in failed),
-                   'assistant_target_tokens': sum(end - begin for begin, end in target_spans),
+                   'assistant_target_tokens': sum(not excluded[index] for begin, end in target_spans
+                                                 for index in range(begin, end)),
                    'failure_detector': 'natlang_neuralese.train.text_supervision.failed_assistant_mask',
                    'role_parser': 'natlang_neuralese.train.text_supervision.chat_roles',
                    'weighting': 'natlang_neuralese.train.text_supervision.segmented_position_weights'}
@@ -271,6 +340,11 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
         role_policy.update(name='whole-trajectory-context-feedback-target-holds-v3',
                            context_only_assistant_turns=held_turns,
                            context_only_assistant_tokens_masked=sum(held_tokens))
+    if reasoning_turns is not None:
+        role_policy.update(name='whole-trajectory-source-reasoning-holds-v4',
+                           context_only_reasoning_turns=reasoning_turns,
+                           untrained_reasoning_tokens_masked=sum(untrained_reasoning_tokens),
+                           reasoning_boundary_weight='unchanged structural targets')
     return {
         'schema': SCHEMA,
         'id': 'text:' + identifier,
@@ -280,10 +354,14 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
         'nodes': [{'name': 'text', 'token_ids': ids, 'target_weights': weights}],
         'conversion': {'kind': 'static-transformation', 'role_interpretation': 'whole-trajectory-chat-roles',
             'source_row_id': identifier, 'source_record_ids': sorted(set(str(value) for value in source_records)),
+            **({'legacy_source_row_id': row['source_row_id']} if row.get('source_row_id') else {}),
             'source_twin_id': twin_id, 'source_tokenizer_fingerprint': source_tokenizer_fingerprint,
             'source_text_sha256': _sha_text(text), 'supervision_policy': role_policy,
+            **({'source_record_groups': source_groups_by_id, 'source_records': row['source_records']}
+               if source_groups_by_id is not None else {}),
             'runtime_opening_assistant_turns': row.get('runtime_opening_assistant_turns', 0),
             **({key: row[key] for key in (*hold_fields, 'context_only_assistant_turns')} if held_turns is not None else {}),
+            **({key: row[key] for key in (*reasoning_fields, 'context_only_reasoning_turns')} if reasoning_turns is not None else {}),
             'context_attestations': row.get('neuralese_context_attestations', [])},
     }
 

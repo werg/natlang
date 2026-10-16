@@ -43,7 +43,17 @@ def document_identity(row):
     identity['source_groups'] = sorted(row.get('source_groups') or [])
     identity.update({key: row.get(key) or [] for key in PROVENANCE_FIELDS})
     identity.update({key: row[key] for key in ('assistant_turn_count', 'context_only_assistant_turns',
-        'target_exclusion_bindings', 'target_source_bindings', 'target_source_record_ids', 'context_only_source_record_ids') if key in row})
+        'target_exclusion_bindings', 'target_source_bindings', 'source_record_groups',
+        'target_source_record_ids', 'context_only_source_record_ids', 'context_only_reasoning_turns',
+        'reasoning_assistant_turn_count', 'reasoning_exclusion_bindings') if key in row})
+    return identity
+
+
+def document_dedup_identity(row):
+    """Collapse bytes only when the complete source/protection identity agrees."""
+    identity = document_identity(row)
+    if row.get('source_record_ids') or row.get('source_records'):
+        identity.pop('id', None)  # view IDs may differ for the same exact source
     return identity
 
 

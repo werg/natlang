@@ -42,7 +42,7 @@ sys.path.insert(0, str(ROOT / 'training' / 'neuralese'))
 sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT / 'scripts' / 'neuralese_data'))
 from render_native_turn_corpus import canonical, file_sha, role_counter, sha, whole_trajectory_target_tokens  # noqa: E402
-from text_tokenizer_twin import document_identity, IDENTITY_FIELDS, PROVENANCE_FIELDS  # noqa: E402
+from text_tokenizer_twin import document_identity, document_dedup_identity, IDENTITY_FIELDS, PROVENANCE_FIELDS  # noqa: E402
 from source_review import pending_unpinned_source_groups, registry_sha256  # noqa: E402
 from neuralese_data.decision_holds import load_decision_holds  # noqa: E402
 from natlang_neuralese.common.jsonio import write_json_durable  # noqa: E402
@@ -128,9 +128,12 @@ def _row_identity(row: dict) -> dict:
         'text_sha256': sha(row['text'].encode()),
         'source_identity_sha256': (sha(canonical(document_identity(row)).encode())
                                    if row.get('source_record_ids') else None),
+        'source_dedup_sha256': sha(canonical(document_dedup_identity(row)).encode()),
     }
     if 'context_only_assistant_turns' in row:
         identity['target_mask'] = tuple(row['context_only_assistant_turns'])
+    if 'context_only_reasoning_turns' in row:
+        identity['reasoning_mask'] = tuple(row['context_only_reasoning_turns'])
     return identity
 
 
@@ -315,7 +318,11 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
     seen_text = {}
     for rid, candidate in sorted(selected_by_id.items(), key=lambda item: member_rank[item[1]['member']]):
         key = (candidate['identity']['split'], candidate['identity']['twin_text_sha256'],
-               candidate['identity'].get('target_mask'))
+               candidate['identity'].get('target_mask'), candidate['identity'].get('reasoning_mask'),
+               candidate['identity'].get('source_dedup_sha256') or sha(canonical({
+                   'groups': candidate['identity']['source_groups'],
+                   'sources': candidate['identity'].get('source_record_ids') or [rid],
+                   'binding': candidate['identity'].get('source_identity_sha256')}).encode()))
         if key in seen_text:
             kept_member, kept_id = seen_text[key]
             if kept_member in supersedes.get(candidate['member'], set()):

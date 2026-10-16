@@ -174,6 +174,10 @@ def chain_key(row: dict) -> str:
     return f"{ref.get('trajectory_id') or row.get('teacher_trajectory_id')}#{ref.get('invocation_id') or ''}"
 
 
+def split_chain_key(row: dict) -> str:
+    return canonical([chain_key(row), row.get('split')])
+
+
 def registered_source_pieces(sources):
     """Load exact piece tables listed beside the source in its immutable corpus manifest."""
     registry_path = ROOT / 'training/neuralese_corpora.json'
@@ -640,7 +644,7 @@ def select(args, shard_dir: Path):
                             # earlier source, e.g. a replacement overlay) was selected. Blocking its chain cut the
                             # selected copy and every longer decision out of whole-trajectory documents (the 4962
                             # render kept 32 of 4962 rows, 2026-10-12).
-                            chain = chain_key(row)
+                            chain = split_chain_key(row)
                             blocked[chain] = min(blocked.get(chain, 1 << 30), len(row.get('messages') or []))
                         continue
                     seen_ids.add(rid)
@@ -688,28 +692,106 @@ def _message_digest(message) -> str:
     return sha(canonical(message).encode())
 
 
+def source_assistant_binding(member, actual):
+    """Authenticate the action, allowing only declared reasoning and call-ID transport."""
+    from natlang_neuralese.data.text_corpus import target_with_teacher_reasoning
+    target = member.get('target')
+    if (not isinstance(target, dict) or target.get('role') != 'assistant'
+            or not isinstance(actual, dict) or actual.get('role') != 'assistant'
+            or (actual.get('reasoning_content') is not None and not isinstance(actual['reasoning_content'], str))):
+        return None
+    def without_call_ids(message):
+        normalized = dict(message)
+        calls = normalized.get('tool_calls')
+        if calls is None:
+            return normalized, []
+        if (not isinstance(calls, list) or any(not isinstance(call, dict)
+                or (call.get('id') is not None and not isinstance(call['id'], str)) for call in calls)):
+            return None, None
+        identifiers = [call.get('id') for call in calls]
+        present = [value for value in identifiers if value is not None]
+        if len(present) != len(set(present)):
+            return None, None
+        normalized['tool_calls'] = [{key: value for key, value in call.items() if key != 'id'} for call in calls]
+        return normalized, identifiers
+    normalized_actual, actual_ids = without_call_ids(actual)
+    if normalized_actual is None:
+        return None
+    candidates = [target, target_with_teacher_reasoning(member)]
+    reasoning = member.get('teacher_reasoning')
+    if (member.get('teacher_reasoning_trained') is False and isinstance(reasoning, str) and reasoning
+            and not target.get('reasoning_content')):
+        candidates.append({**target, 'reasoning_content': reasoning})
+    for candidate in candidates:
+        normalized_target, source_ids = without_call_ids(candidate)
+        if normalized_target is not None and normalized_target == normalized_actual:
+            return {'source_target_sha256': _message_digest(target),
+                    'history_assistant_sha256': _message_digest(actual),
+                    **({'untrained_reasoning_sha256': sha(actual['reasoning_content'].encode())}
+                       if member.get('teacher_reasoning_trained') is False and actual.get('reasoning_content') else {}),
+                    'tool_call_id_rebindings': [{'call_index': index, 'source_id': source_id, 'history_id': actual_id}
+                                                for index, (source_id, actual_id) in enumerate(zip(source_ids, actual_ids))
+                                                if source_id != actual_id]}
+    return None
+
+
+def source_decision_in_history(member, record):
+    """An input prefix alone never proves that its admitted answer occurred."""
+    prefix, history = member.get('messages') or [], record.get('messages') or []
+    return (len(prefix) < len(history) and prefix == history[:len(prefix)]
+            and source_assistant_binding(member, history[len(prefix)]) is not None)
+
+
+def decontaminate_source_records(records, held_groups):
+    """Protect exact held context as well as each record's own source groups."""
+    protected = defaultdict(list)
+    for record in records:
+        hits = sorted(set(record.get('source_groups') or []) & held_groups)
+        if hits or record.get('split') == 'test':
+            protected[chain_key(record)].append((record, hits))
+    kept, omissions = [], []
+    for record in records:
+        own_hits = sorted(set(record.get('source_groups') or []) & held_groups)
+        inherited = next(((member, hits) for member, hits in protected.get(chain_key(record), [])
+                          if member['id'] != record['id'] and source_decision_in_history(member, record)), None)
+        if record.get('split') == 'train' and (own_hits or inherited is not None):
+            omissions.append({'id': record['id'], 'rendering': 'all', 'stage': 'decontamination',
+                'reason': ('train_decision_shares_held_source_group' if own_hits else
+                           'train_trajectory_contains_held_source_decision'),
+                **({'group': own_hits[0]} if own_hits else
+                   {'held_source_record_id': inherited[0]['id'],
+                    'held_source_groups': sorted(inherited[0].get('source_groups') or [])})})
+        else:
+            kept.append(record)
+    return kept, omissions
+
+
 def whole_trajectory_records(records: list[dict], blocked: dict) -> list[tuple[dict, list[str]]]:
     """Maximal clean decision chains: (record whose messages+target is the document, ids of decisions it covers)."""
     groups = defaultdict(list)
     for r in records:
-        groups[chain_key(r)].append(r)
+        groups[(chain_key(r), r.get('split'))].append(r)
     out = []
-    for chain, rows in groups.items():
-        limit = blocked.get(chain, 1 << 30)
+    for (chain, _split), rows in groups.items():
+        # Older completed selection states used invocation-only keys. Preserve
+        # their conservative exclusions explicitly; new states are split-local.
+        limit = blocked.get(canonical([chain, _split]), blocked.get(chain, 1 << 30))
         clean = sorted((r for r in rows if len(r.get('messages') or []) < limit),
                        key=lambda r: len(r.get('messages') or []))
         digests = [[_message_digest(m) for m in r.get('messages') or []] for r in clean]
         covered_by = {}
         for i, r in enumerate(clean):
             for j in range(len(clean) - 1, i, -1):
-                if len(digests[j]) > len(digests[i]) and digests[j][:len(digests[i])] == digests[i]:
+                if (len(digests[j]) > len(digests[i]) and digests[j][:len(digests[i])] == digests[i]
+                        and source_decision_in_history(r, clean[j])):
                     covered_by[i] = j
                     break
         for i, r in enumerate(clean):
             if i in covered_by:
                 continue
             members = [clean[k]['id'] for k in range(len(clean))
-                       if k == i or (len(digests[k]) < len(digests[i]) and digests[i][:len(digests[k])] == digests[k])]
+                       if k == i or (len(digests[k]) < len(digests[i]) and digests[i][:len(digests[k])] == digests[k]
+                                     and source_decision_in_history(clean[k], r))]
             out.append((r, members))
     return out
 
@@ -726,22 +808,21 @@ def whole_trajectory_target_holds(record, members, messages, records_by_id, sour
     assistants = sum(message.get('role') == 'assistant' for message in original)
     if sum(message.get('role') == 'assistant' for message in messages) != assistants:
         raise ValueError('target hold mapping changed assistant count during context authentication')
-    from natlang_neuralese.data.text_corpus import target_with_teacher_reasoning
     bindings, positive_bindings, seen_turns = [], [], set()
     for identifier in sorted(members):
         member = records_by_id[identifier]
-        if (member.get('split') != record.get('split') or
-                set(member.get('source_groups') or []) != set(record.get('source_groups') or [])):
-            raise ValueError('target hold members require the same split and complete source groups')
+        groups = member.get('source_groups')
+        if (member.get('split') != record.get('split') or not isinstance(groups, list) or not groups
+                or any(not isinstance(group, str) or not group for group in groups)):
+            raise ValueError('target hold members require the same split and factual source groups')
         prefix = member.get('messages') or []
         if (len(prefix) > len(original) or prefix != original[:len(prefix)]
                 or (identifier != record['id'] and
                     (len(prefix) == len(original) or original[len(prefix)].get('role') != 'assistant'))):
             raise ValueError('decision is not bound to an assistant in its exact source prefix')
         actual = record.get('target') if len(prefix) == len(original) else original[len(prefix)]
-        target = member.get('target')
-        if (not isinstance(target, dict) or target.get('role') != 'assistant' or
-                actual not in (target, target_with_teacher_reasoning(member))):
+        assistant_binding = source_assistant_binding(member, actual)
+        if assistant_binding is None:
             raise ValueError('decision target differs from the actual source assistant')
         ordinal = sum(message.get('role') == 'assistant' for message in prefix)
         if ordinal in seen_turns:
@@ -752,12 +833,49 @@ def whole_trajectory_target_holds(record, members, messages, records_by_id, sour
             raise ValueError('decision lacks its exact source record digest')
         (bindings if identifier in held else positive_bindings).append(
             {'id': identifier, 'source_record_sha256': digest,
-             'source_target_sha256': _message_digest(actual), 'assistant_turn': ordinal})
+             **assistant_binding, 'assistant_turn': ordinal})
     return {'assistant_turn_count': assistants + 1,
             'context_only_assistant_turns': sorted({item['assistant_turn'] for item in bindings}),
             'target_exclusion_bindings': bindings, 'target_source_bindings': positive_bindings,
+            'source_record_groups': {identifier: sorted(set(records_by_id[identifier]['source_groups']))
+                                     for identifier in sorted(members)},
             'target_source_record_ids': targets,
             'context_only_source_record_ids': held}
+
+
+def whole_trajectory_reasoning_holds(record, members, messages, target, records_by_id, source_hashes):
+    """Source-declared untrained notes stay context, including historical turns."""
+    original = record.get('messages') or []
+    assistants = sum(message.get('role') == 'assistant' for message in original)
+    if sum(message.get('role') == 'assistant' for message in messages) != assistants:
+        raise ValueError('reasoning hold mapping changed assistant count during context authentication')
+    bindings = []
+    for identifier in members:
+        member = records_by_id[identifier]
+        if member.get('teacher_reasoning_trained') is not False:
+            continue
+        prefix = member.get('messages') or []
+        if prefix != original[:len(prefix)] or len(prefix) > len(original):
+            raise ValueError('untrained reasoning source differs from its actual history prefix')
+        actual = record.get('target') if identifier == record['id'] else original[len(prefix)]
+        if not isinstance(actual, dict) or not actual.get('reasoning_content'):
+            continue
+        binding = source_assistant_binding(member, actual)
+        if binding is None:
+            raise ValueError('untrained reasoning action differs from its actual source assistant')
+        if 'untrained_reasoning_sha256' not in binding:
+            continue
+        digest = source_hashes[identifier]
+        if not isinstance(digest, str) or re.fullmatch('[0-9a-f]{64}', digest) is None:
+            raise ValueError('untrained reasoning lacks its exact source record binding')
+        bindings.append({'id': identifier, 'source_record_sha256': digest,
+                         'assistant_turn': sum(message.get('role') == 'assistant' for message in prefix),
+                         'teacher_reasoning_trained': False, **binding})
+    if not bindings:
+        return {}
+    return {'reasoning_assistant_turn_count': assistants+1,
+            'context_only_reasoning_turns': sorted({item['assistant_turn'] for item in bindings}),
+            'reasoning_exclusion_bindings': bindings}
 
 
 def bind_target_hold_policy(out, sources, holds):
@@ -778,6 +896,14 @@ def bind_target_hold_policy(out, sources, holds):
         temporary.write_text(canonical(binding)+'\n')
         temporary.replace(path)
     return {'file': path.name, 'sha256': file_sha(path)}
+
+
+def qualified_whole_trajectory_row(row):
+    """Keep source/mask variants distinct before corpus-union ID selection."""
+    from text_tokenizer_twin import document_dedup_identity
+    legacy_id = row['id']
+    digest = sha(canonical(document_dedup_identity(row)).encode())
+    return {**row, 'source_row_id': legacy_id, 'id': legacy_id + ':source-sha256:' + digest}
 
 
 def render_shard(job):
@@ -807,15 +933,8 @@ def render_shard(job):
     omissions = []
     # Source-group-disjoint decontamination: a train decision sharing a source group with any held document (this
     # corpus's test rows or another corpus's held set) is dropped; held rows never move.
-    kept = []
-    for r in records:
-        hit = sorted(set(r.get('source_groups') or []) & held_groups) if r.get('split') == 'train' else []
-        if hit:
-            omissions.append({'id': r['id'], 'rendering': 'all', 'stage': 'decontamination',
-                              'reason': 'train_decision_shares_held_source_group', 'group': hit[0]})
-        else:
-            kept.append(r)
-    records = kept
+    records, decontamination_omissions = decontaminate_source_records(records, held_groups)
+    omissions.extend(decontamination_omissions)
     result['decontaminated'] = result['records'] - len(records)
     if not records:
         write_done(Path(out_dir), tok_name, stem, result)
@@ -915,6 +1034,8 @@ def render_shard(job):
                 records_by_id, source_hashes, target_exclude)
             # Gates above bind the exact source target; the teacher reasoning is added only for rendering.
             target = crisp_messages([target_with_teacher_reasoning(record)], piece_map, handover_notes(record))[0]
+            reasoning_holds = whole_trajectory_reasoning_holds(record, members, messages, target,
+                records_by_id, source_hashes)
             text, ids = native_gold_document(tok, messages, target, record.get('tools') or [],
                                              prompt_rendering='full' if header_as_full else 'program-header')
         except (KeyError, TypeError, ValueError, IndexError) as exc:
@@ -928,15 +1049,20 @@ def render_shard(job):
                     opening += 1
                     continue
                 break
-        wt.append({'text': text, 'token_ids': ids, 'tokenizer_sha256': fingerprint, 'split': record['split'],
+        wt.append(qualified_whole_trajectory_row({'text': text, 'token_ids': ids, 'tokenizer_sha256': fingerprint, 'split': record['split'],
                    'runtime_opening_assistant_turns': opening,
-                   'source_groups': sorted(set(g for g in record.get('source_groups') or [] if isinstance(g, str) and g)),
+                   'source_groups': sorted({g for member in members
+                                            for g in records_by_id[member].get('source_groups') or []
+                                            if isinstance(g, str) and g}),
                    'id': 'whole-trajectory:' + record['id'],
                    'source_record_ids': target_holds.get('target_source_record_ids', members),
                    'source_records': [{'id': m, 'sha256': source_hashes[m]} for m in members],
+                   'source_record_groups': {m: sorted(set(records_by_id[m].get('source_groups') or []))
+                                            for m in members},
                    **target_holds,
+                   **reasoning_holds,
                    'corpus': corpus, 'prompt_rendering': 'program-header', 'supervision': 'whole-trajectory',
-                   **({'system_prompt_mode': 'program-own'} if header_as_full else {})})
+                   **({'system_prompt_mode': 'program-own'} if header_as_full else {})}))
     rows['whole-trajectory'] = wt
     for mode in [m for m in rows if m not in renderings]:  # rendered only for the parity check
         del rows[mode]
@@ -982,6 +1108,7 @@ def role_counter(tok):
                            think_close=token_id('</think>'), tool_response_prefixes=prefixes)
         c = Counter(ROLE_CODES[x] for x in codes)
         return c, codes
+    count.reasoning_boundary_ids = (token_id('<think>'), token_id('</think>'))
     return count
 
 
@@ -990,17 +1117,22 @@ def whole_trajectory_target_tokens(row, count_roles):
     turns (weight 1) less the leading turns the runtime ran itself (the opening eval: inputs, supervised as context
     like the user turn)."""
     c, codes = count_roles(row['token_ids'])
-    runs, inside = [], False
-    for code in codes:
+    runs, reasoning_body, inside = [], [], False
+    boundaries = getattr(count_roles, 'reasoning_boundary_ids', ())
+    for position, code in enumerate(codes):
         is_assistant = code in (4, 5)  # ROLE_CODES assistant_reasoning, assistant_reply
         if is_assistant and not inside:
             runs.append(0)
+            reasoning_body.append(0)
         if is_assistant:
             runs[-1] += 1
+            reasoning_body[-1] += int(code == 4 and row['token_ids'][position] not in boundaries)
         inside = is_assistant
     skip = row.get('runtime_opening_assistant_turns', 0)
     held = set(row.get('context_only_assistant_turns', []))
-    return sum(size for index, size in enumerate(runs) if index >= skip and index not in held), sum(runs[:skip]), c
+    reasoning_held = set(row.get('context_only_reasoning_turns', []))
+    return sum(size - (reasoning_body[index] if index in reasoning_held else 0)
+               for index, size in enumerate(runs) if index >= skip and index not in held), sum(runs[:skip]), c
 
 
 def held_groups_from(paths):
@@ -1016,6 +1148,7 @@ def held_groups_from(paths):
 
 def merge(out: Path, mode: str, tok_name: str, shards: list[str], held_external: set, count_roles, *, compress_text=False):
     """Concatenate shard outputs in shard order with the global split and dedup checks of gold_text_rows."""
+    from text_tokenizer_twin import document_dedup_identity
     src = [out / 'work' / mode / tok_name / f'{s}.jsonl' for s in shards]
     src = [p if p.exists() else p.with_suffix('.jsonl.zst') for p in src]
     src = [p for p in src if p.exists()]
@@ -1051,7 +1184,9 @@ def merge(out: Path, mode: str, tok_name: str, shards: list[str], held_external:
                             omissions.append({'id': row['id'], 'reason': 'train_copy_of_held_document'})
                             continue
                     key = (row['split'], sha(row['text'].encode()), sha(canonical(row['token_ids']).encode()),
-                           row.get('supervised_suffix_start'), tuple(row.get('context_only_assistant_turns', [])))
+                           row.get('supervised_suffix_start'), tuple(row.get('context_only_assistant_turns', [])),
+                           tuple(row.get('context_only_reasoning_turns', [])),
+                           canonical(document_dedup_identity(row)))
                     if key in seen:
                         # Same document as a kept one: its source decisions are covered there (lineage kept here).
                         omissions.append({'id': row['id'], 'reason': 'exact_duplicate_document',
