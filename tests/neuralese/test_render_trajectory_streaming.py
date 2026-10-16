@@ -390,6 +390,13 @@ def test_done_receipts_verify_output_checksums_without_rewriting_them(tmp_path):
     renderer._verify_trajectory_receipts(job, result, {
         renderer.file_sha(Path(renderer.__file__).resolve()), old_sha})
     assert {path.name: path.read_bytes() for path in receipts_root.glob('*.json')} == before
+    aggregate_path = out / 'whole-trajectory' / 'lfm25' / 'selected.jsonl'
+    aggregate_original = aggregate_path.read_bytes()
+    aggregate_path.write_bytes(aggregate_original + b'corrupt')
+    with __import__('pytest').raises(ValueError, match='aggregate output checksum mismatch'):
+        renderer._verify_trajectory_receipts(job, result, {
+            renderer.file_sha(Path(renderer.__file__).resolve()), old_sha})
+    aggregate_path.write_bytes(aggregate_original)
     with __import__('pytest').raises(ValueError, match='approved historical migration witness'):
         renderer._legacy_render_job_binding(job, renderer.file_sha(selected), 'd' * 64)
     receipt_path = next(receipts_root.glob('*.json'))

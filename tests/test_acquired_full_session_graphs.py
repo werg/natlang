@@ -126,6 +126,7 @@ def test_runtime_resume_fingerprint_is_independent_of_checkout_path(tmp_path):
         'scripts/neuralese_data/build_native_graph_text_corpus.py',
         'scripts/neuralese_data/build_acquired_full_session_graphs.py',
         'scripts/neuralese_data/build_native_semantic_pairs_e2e.py',
+        'scripts/neuralese_data/conversion_output_lease.py',
         'training/neuralese/natlang_neuralese/model/native_model.py']
     for root in (first,second):
         for name in names:

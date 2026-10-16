@@ -1302,6 +1302,24 @@ def _legacy_render_job_binding(job, source_sha, renderer_sha):
 def _verify_trajectory_receipts(job, done_result, allowed_renderer_shas):
     shard_path, out_dir, tok_name = Path(job[0]), Path(job[1]), job[2]
     stem = shard_path.name.removesuffix('.zst').removesuffix('.jsonl')
+    expected_aggregate = {}
+    for mode in job[9]:
+        suffix = '.jsonl.zst' if bool(job[10]) else '.jsonl'
+        expected_aggregate[f'{mode}/{tok_name}/{stem}{suffix}'] = None
+    expected_aggregate[f'omissions/{tok_name}/{stem}.jsonl'] = None
+    recorded_aggregate = done_result.get('aggregate_outputs')
+    if not isinstance(recorded_aggregate, dict) or set(recorded_aggregate) != set(expected_aggregate):
+        raise ValueError(f'done marker aggregate output inventory mismatch: {stem}/{tok_name}')
+    for relative, metadata in recorded_aggregate.items():
+        relative_path = Path(relative)
+        if relative_path.is_absolute() or '..' in relative_path.parts:
+            raise ValueError(f'done marker contains unsafe aggregate output path: {relative}')
+        output_path = out_dir / relative_path
+        if not output_path.is_file():
+            raise ValueError(f'aggregate output missing: {output_path}')
+        if (not isinstance(metadata, dict) or metadata.get('bytes') != output_path.stat().st_size
+                or metadata.get('sha256') != file_sha(output_path)):
+            raise ValueError(f'aggregate output checksum mismatch: {output_path}')
     receipts_root = out_dir / 'trajectory-stream' / tok_name / stem / 'receipts'
     receipts = sorted(receipts_root.glob('*.json'))
     expected_count = done_result.get('trajectories_committed')
@@ -1648,7 +1666,16 @@ def render_shard(job):
             os.fsync(stream.fileno())
         os.replace(omission_tmp, omission_path)
         db.close()
+        aggregate_outputs = {}
+        for mode in renderings:
+            path = out_dir / mode / tok_name / (
+                f'{stem}.jsonl.zst' if compress_text else f'{stem}.jsonl')
+            aggregate_outputs[str(path.relative_to(out_dir))] = {
+                'bytes': path.stat().st_size, 'sha256': file_sha(path)}
+        aggregate_outputs[str(omission_path.relative_to(out_dir))] = {
+            'bytes': omission_path.stat().st_size, 'sha256': file_sha(omission_path)}
         aggregate['trajectories_committed'] = trajectory_count
+        aggregate['aggregate_outputs'] = aggregate_outputs
         aggregate['group_renderer_code_sha256s'] = sorted(group_renderer_shas)
         aggregate['trajectory_bindings'] = dict(sorted(trajectory_bindings.items()))
         aggregate['trajectory_renderers'] = dict(sorted(trajectory_renderers.items()))

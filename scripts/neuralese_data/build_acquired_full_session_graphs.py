@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -72,6 +73,7 @@ def runtime_bindings(root=None):
         'graph_writer': root / 'scripts' / 'neuralese_data' / 'build_native_graph_text_corpus.py',
         'tokenizer_provision': root / 'scripts' / 'neuralese_data' / 'build_native_semantic_pairs_e2e.py',
         'tokenizer_inventory': package / 'model' / 'native_model.py',
+        'conversion_output_lease': root / 'scripts' / 'neuralese_data' / 'conversion_output_lease.py',
     }
     # Identity follows the logical runtime files and their bytes, not checkout
     # location. Keep observed paths as receipt metadata outside the fingerprint.
