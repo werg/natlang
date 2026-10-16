@@ -124,7 +124,8 @@ def test_original_control_launch_and_exit_can_advance_without_rewriting_handoff(
     verify_handoff(reference,requirement=requirement)
 
 
-def test_process_tree_includes_children_spawned_by_nonleader_thread(tmp_path):
+@pytest.mark.parametrize('missing_children',[False,True])
+def test_process_tree_includes_children_spawned_by_nonleader_thread(tmp_path,monkeypatch,missing_children):
     code="""import subprocess,sys,threading
 ready=threading.Event();drain=threading.Event()
 def worker():
@@ -136,9 +137,80 @@ t=threading.Thread(target=worker);t.start();ready.wait();sys.stdin.buffer.read()
     process=subprocess.Popen(argv,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
     try:
         assert process.stdout.readline().strip()=='ready'
+        if missing_children:
+            from natlang_neuralese.rl import native_raw_handoff as handoff
+            monkeypatch.setattr(handoff,'_thread_children',lambda pid:set())
         launch=tmp_path/'thread-launch.json';write_json_durable(launch,{'at':time.time(),'pid':process.pid,'argv':argv})
         intent=capture_drain_intent(binding(launch),tmp_path/'thread-intent.json')
         children=json.loads(Path(intent['path']).read_text())['children']
         assert len(children)==1 and children[0]['pid']!=process.pid
     finally:process.communicate()
     assert process.returncode==0
+
+
+def test_proc_parent_census_survives_missing_children_files(actual_drain,tmp_path,monkeypatch):
+    from natlang_neuralese.rl import native_raw_handoff as handoff
+    process,original,_,_,_=actual_drain
+    value=json.loads(Path(original['path']).read_text())
+    monkeypatch.setattr(handoff,'_thread_children',lambda pid:set())
+    reference=capture_drain_intent(value['source_launch'],tmp_path/'ppid-intent.json')
+    captured=json.loads(Path(reference['path']).read_text())
+    assert [child['pid'] for child in captured['children']]==[child['pid'] for child in value['children']]
+    assert captured['process_tree']['links'][0]['observed_by']==['proc-ppid']
+    assert captured['children'][0]['ppid']==process.pid
+
+
+@pytest.mark.parametrize('race',['reparent','reuse','new-child','owner-reuse'])
+def test_census_rejects_changed_parent_or_identity_without_claiming_unrelated_process(tmp_path,monkeypatch,race):
+    from natlang_neuralese.rl import native_raw_handoff as handoff
+    owner={'pid':101,'ppid':1,'boot_id':'boot','start_ticks':'10','state':'S','argv_hex':'6100'}
+    child={'pid':102,'ppid':101,'boot_id':'boot','start_ticks':'11','state':'S','argv_hex':'6200'}
+    unrelated={'pid':103,'ppid':1,'boot_id':'boot','start_ticks':'12','state':'S','argv_hex':'6300'}
+    table={item['pid']:dict(item) for item in (owner,child,unrelated)};calls=0
+    def scan():
+        nonlocal calls
+        calls+=1
+        if race=='new-child' and calls>1:
+            return {**table,104:{**child,'pid':104,'start_ticks':'14'}}
+        return table
+    def observe(pid):
+        value=table.get(pid)
+        if value is None:return None
+        if pid==child['pid'] and race in ('reparent','reuse'):
+            return {**value,**({'ppid':103} if race=='reparent' else {'start_ticks':'99'})}
+        if pid==owner['pid'] and race=='owner-reuse':return {**value,'start_ticks':'99'}
+        return value
+    monkeypatch.setattr(handoff,'_process_table',scan)
+    monkeypatch.setattr(handoff,'_thread_children',lambda pid:set())
+    monkeypatch.setattr(handoff,'observe',observe)
+    with pytest.raises(ValueError,match='census'):
+        handoff._capture_process_tree(owner)
+
+
+def test_census_never_admits_unrelated_process_or_stale_thread_pid(monkeypatch):
+    from natlang_neuralese.rl import native_raw_handoff as handoff
+    owner={'pid':101,'ppid':1,'boot_id':'boot','start_ticks':'10','state':'S','argv_hex':'6100'}
+    unrelated={**owner,'pid':103,'start_ticks':'12'}
+    table={item['pid']:item for item in (owner,unrelated)}
+    monkeypatch.setattr(handoff,'_process_table',lambda:table)
+    monkeypatch.setattr(handoff,'observe',lambda pid:table.get(pid))
+    monkeypatch.setattr(handoff,'_thread_children',lambda pid:set())
+    assert handoff._capture_process_tree(owner)==([],[])
+    monkeypatch.setattr(handoff,'_thread_children',lambda pid:{103} if pid==101 else set())
+    with pytest.raises(ValueError,match='descendant identity or parent'):
+        handoff._capture_process_tree(owner)
+
+
+@pytest.mark.parametrize('tamper',['parent','omit','origin','reuse'])
+def test_census_parent_evidence_survives_archive_validation(actual_drain,tamper):
+    from natlang_neuralese.rl import native_raw_handoff as handoff
+    reference=drained(actual_drain);record=json.loads(Path(reference['path']).read_text())
+    intent_path=Path(record['intent']['path']);intent=json.loads(intent_path.read_text())
+    links=intent['process_tree']['links']
+    if tamper=='parent':links[0]['child']['ppid']=999
+    elif tamper=='omit':links.clear()
+    elif tamper=='origin':links[0]['observed_by']=[]
+    else:links[0]['parent']['start_ticks']='9999999999'
+    write_json_durable(intent_path,intent);record['intent']=binding(intent_path)
+    path=Path(reference['path']);write_json_durable(path,record)
+    with pytest.raises(ValueError,match='census'):handoff.verify_handoff(binding(path))

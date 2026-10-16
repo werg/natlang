@@ -16,11 +16,24 @@ SCHEMA='natlang.native-raw-optimizer-handoff/1'
 INTENT='natlang.native-raw-optimizer-drain/1'
 
 
+def _process_stat(pid):
+    try:
+        fields=Path('/proc',str(pid),'stat').read_text().rsplit(')',1)[1].split()
+        return {'pid':pid,'start_ticks':fields[19],'state':fields[0],'ppid':int(fields[1])}
+    except (FileNotFoundError,ProcessLookupError):return None
+
+
 def observe(pid):
     try:
-        proc=Path('/proc',str(pid));fields=(proc/'stat').read_text().rsplit(')',1)[1].split()
-        return {'pid':pid,'boot_id':Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
-                'start_ticks':fields[19],'state':fields[0],'argv_hex':(proc/'cmdline').read_bytes().hex()}
+        before=_process_stat(pid)
+        if before is None:return None
+        value={**before,'boot_id':Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+               'argv_hex':Path('/proc',str(pid),'cmdline').read_bytes().hex()}
+        after=_process_stat(pid)
+        if after is None:return None
+        if any(before[key]!=after[key] for key in ('pid','start_ticks','ppid')):
+            raise ValueError('raw handoff process identity or parent changed during observation')
+        return value
     except (FileNotFoundError,ProcessLookupError):return None
 
 
@@ -28,32 +41,84 @@ def same_process(expected,actual):
     return actual is not None and all(actual.get(key)==expected.get(key) for key in ('pid','boot_id','start_ticks'))
 
 
+def _thread_children(pid):
+    try:tasks=list(Path('/proc',str(pid),'task').iterdir())
+    except (FileNotFoundError,ProcessLookupError,PermissionError):return set()
+    children=set()
+    for task in tasks:
+        try:children.update(int(value) for value in (task/'children').read_text().split())
+        except (FileNotFoundError,ProcessLookupError,PermissionError):continue
+    return children
+
+
+def _process_table():
+    table={}
+    for path in Path('/proc').iterdir():
+        if path.name.isdigit():
+            try:value=_process_stat(int(path.name))
+            except PermissionError:continue  # Unrelated processes can be private.
+            if value is not None:table[value['pid']]=value
+    return table
+
+
+def _capture_process_tree(owner):
+    table=_process_table();identities={owner['pid']:owner};links=[];todo=[owner['pid']]
+    while todo:
+        pid=todo.pop();parent=identities[pid];threads=_thread_children(pid)
+        candidates=threads|{key for key,value in table.items() if value['ppid']==pid}
+        for ident in sorted(candidates):
+            child=observe(ident)
+            if child is None or child['state'] in ('Z','X'):continue  # Already finished.
+            scanned=table.get(ident)
+            if (child['ppid']!=pid or child['boot_id']!=owner['boot_id']
+                    or int(child['start_ticks'])<int(parent['start_ticks'])
+                    or scanned is not None and any(child[key]!=scanned[key] for key in ('start_ticks','ppid'))):
+                raise ValueError('raw handoff descendant identity or parent changed during census')
+            if ident in identities:
+                raise ValueError('raw handoff process census contains a repeated or cyclic descendant')
+            if not same_process(parent,observe(pid)):
+                raise ValueError('raw handoff parent identity changed during census')
+            identities[ident]=child;todo.append(ident)
+            links.append({'parent':parent,'child':child,
+                          'observed_by':(['thread-children'] if ident in threads else [])+
+                                        (['proc-ppid'] if scanned is not None and scanned['ppid']==pid else [])})
+    # Do not publish a silently partial tree if a child was created, reparented
+    # or recycled while the census was being assembled.
+    final=_process_table()
+    for ident,value in final.items():
+        if value['ppid'] in identities and ident not in identities:
+            raise ValueError('raw handoff process tree grew during census; capture again')
+    for ident,previous in identities.items():
+        actual=observe(ident)
+        if actual is None or actual['state'] in ('Z','X'):
+            if ident==owner['pid']:raise ValueError('raw handoff owner exited during census')
+            continue
+        if (not same_process(previous,actual) or previous['argv_hex']!=actual['argv_hex']
+                or previous['ppid']!=actual['ppid']):
+            raise ValueError('raw handoff process identity or parent changed during census')
+        for child in _thread_children(ident):
+            if child not in identities and observe(child) is not None:
+                raise ValueError('raw handoff process tree grew during census; capture again')
+    return [value for ident,value in identities.items() if ident!=owner['pid']],links
+
+
 def capture_drain_intent(launch, out):
     """Call before the existing owner-safe signal, on the owning machine."""
-    record=json.loads(_bound(launch).read_text());owner=observe(record['pid'])
+    launch_path=_bound(launch);launch_bytes=launch_path.read_bytes();record=json.loads(launch_bytes)
+    owner=observe(record['pid'])
     if owner is None or owner['state'] in ('Z','X'):
         raise ValueError('raw handoff needs its actual live original optimizer owner')
     argv=[part.decode() for part in bytes.fromhex(owner['argv_hex']).split(b'\0') if part]
-    if argv!=record.get('argv'):
-        raise ValueError('raw handoff launch argv differs from its actual process')
-    children=[];todo=[owner['pid']];seen={owner['pid']}
-    while todo:
-        pid=todo.pop()
-        # Linux assigns a child to the spawning thread, not necessarily
-        # the process leader. Inspect every live TID and deduplicate PIDs.
-        try:tasks=list(Path('/proc',str(pid),'task').iterdir())
-        except (FileNotFoundError,ProcessLookupError):continue
-        ids=set()
-        for task in tasks:
-            try:ids.update(int(value) for value in (task/'children').read_text().split())
-            except (FileNotFoundError,ProcessLookupError):continue
-        for ident in sorted(ids-seen):
-            seen.add(ident);child=observe(ident)
-            if child is not None:children.append(child);todo.append(child['pid'])
+    if argv!=record.get('argv') or record.get('identity') and not same_process(record['identity'],owner):
+        raise ValueError('raw handoff launch argv or identity differs from its actual process')
+    children,links=_capture_process_tree(owner)
     launch_snapshot=Path(out).with_name(Path(out).stem+'-launch.json')
-    write_bytes_durable(launch_snapshot,_bound(launch).read_bytes())
+    write_bytes_durable(launch_snapshot,launch_bytes)
+    if binding(launch_snapshot)['sha256']!=launch['sha256']:
+        raise ValueError('raw handoff launch changed while capturing its immutable snapshot')
     write_json_durable(out,{'schema':INTENT,'at':time.time(),'source_launch':launch,
-        'launch':binding(launch_snapshot),'owner':owner,'children':children})
+        'launch':binding(launch_snapshot),'owner':owner,'children':children,
+        'process_tree':{'schema':'natlang.linux-process-census/1','links':links}})
     return binding(out)
 
 
@@ -63,6 +128,30 @@ def _identity(value):
         and isinstance(value.get('start_ticks'),str) and value['start_ticks'].isdigit()
         and isinstance(value.get('argv_hex'),str) and bool(value['argv_hex'])
         and value.get('state') not in (None,'Z','X'))
+
+
+def _verify_process_tree(intent):
+    census=intent.get('process_tree')
+    if census is None:return  # Historical evidence keeps its original scope.
+    if not isinstance(census,dict) or census.get('schema')!='natlang.linux-process-census/1' or not isinstance(census.get('links'),list):
+        raise ValueError('raw handoff process census schema is invalid')
+    known={intent['owner']['pid']:intent['owner']};children={item['pid']:item for item in intent['children']}
+    for link in census['links']:
+        if not isinstance(link,dict):raise ValueError('raw handoff process census link is invalid')
+        parent,child=link.get('parent'),link.get('child');origins=link.get('observed_by')
+        if (not isinstance(parent,dict) or not isinstance(child,dict)
+                or known.get(parent.get('pid'))!=parent or children.get(child.get('pid'))!=child
+                or child.get('pid') in known or type(child.get('ppid')) is not int or child['ppid']!=parent['pid']
+                or child.get('boot_id')!=parent.get('boot_id')
+                or not str(child.get('start_ticks','')).isdigit()
+                or int(child['start_ticks'])<int(parent['start_ticks'])
+                or not isinstance(origins,list) or not origins or any(not isinstance(value,str) for value in origins)
+                or len(origins)!=len(set(origins))
+                or any(value not in ('thread-children','proc-ppid') for value in origins)):
+            raise ValueError('raw handoff process census lost exact parent/child identity evidence')
+        known[child['pid']]=child
+    if set(known)!={intent['owner']['pid'],*children}:
+        raise ValueError('raw handoff process census omitted a captured descendant')
 
 
 def complete_drain(intent, terminal, checkpoint, out, *, original_slot, resident_directory=None):
@@ -120,6 +209,7 @@ def verify_handoff(reference, *, requirement=None):
             or any(item['boot_id']!=owner['boot_id'] for item in identities)
             or [part.decode() for part in bytes.fromhex(owner['argv_hex']).split(b'\0') if part]!=launch.get('argv')):
         raise ValueError('raw handoff changed its exact boot/start/PID/argv owner binding')
+    _verify_process_tree(intent)
     terminal=json.loads(_bound(record['terminal']).read_text())
     if record.get('source_terminal',record['terminal'])['sha256']!=record['terminal']['sha256']:
         raise ValueError('raw handoff terminal snapshot differs from original source')
