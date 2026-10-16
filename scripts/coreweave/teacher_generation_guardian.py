@@ -273,7 +273,7 @@ def live_batch_workers(source):
     return result
 
 
-def config_revision(folder, state, path):
+def config_revision(folder, state, path, *, publish=True):
     raw=Path(path).read_bytes();config=json.loads(raw);current=binding(path)
     if state.get('config')==current: return config
     previous=state.get('config_value')
@@ -291,9 +291,10 @@ def config_revision(folder, state, path):
     history.append({'at':time.time(),'previous':state.get('config_snapshot'),'current':binding(snapshot),
         'changed_fields':sorted(changes),'policy':'active owner retains its actual old actor/runtime until natural boundary'})
     state.update(config=current,config_snapshot=binding(snapshot),config_value=config)
-    write(folder/'state.json',state);return config
+    if publish: write(folder/'state.json',state)
+    return config
 
-def run(config_path):
+def run(config_path, *, external_transition=None, external_reconciliation=None):
     config_path = Path(config_path); config = json.loads(config_path.read_text()); folder = Path(config['control']); folder.mkdir(parents=True, exist_ok=True)
     lock = (folder/'guardian.lock').open('a'); fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     if not config.get('teacher_identity'):raise ValueError('production guardian needs explicit actual teacher execution identity')
@@ -305,6 +306,14 @@ def run(config_path):
         state = {'schema': 'natlang.teacher-generation-guardian/1', 'config': binding(config_path),
                  'owner': public_identity(predecessor) if predecessor else None, 'active_batch': config['predecessor_batch']}
         write(target, state)
+    if bool(external_transition) != bool(external_reconciliation):
+        raise ValueError('external transition requires its authenticated reconciliation')
+    if external_transition is not None:
+        try:
+            from .teacher_external_reconciliation import adopt_external_transition
+        except ImportError:
+            from teacher_external_reconciliation import adopt_external_transition
+        state = adopt_external_transition(folder, config_path, external_transition, external_reconciliation)
     # Preserve older state receipts while introducing explicit same-control revisions.
     if 'config_value' not in state and state.get('config')==binding(config_path):
         state.pop('config',None)
@@ -328,8 +337,9 @@ def run(config_path):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__); parser.add_argument('--config', required=True)
+    parser.add_argument('--external-transition'); parser.add_argument('--external-reconciliation')
     args = parser.parse_args()
-    try: run(args.config)
+    try: run(args.config, external_transition=args.external_transition, external_reconciliation=args.external_reconciliation)
     except BaseException as error:
         try:
             config = json.loads(Path(args.config).read_text()); write(Path(config['control'])/'error.json',

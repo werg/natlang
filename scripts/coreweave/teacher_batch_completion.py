@@ -19,7 +19,7 @@ def _hash(path):
     return result.hexdigest()
 
 
-def batch_completion(entries, journal, returncodes, score):
+def batch_completion(entries, journal, returncodes, score, *, resolve_path=Path):
     """Verify collector accounting; model-budget errors retain exact error bytes.
 
     Completed-result accounting is the existing collector's verifier output.
@@ -55,14 +55,14 @@ def batch_completion(entries, journal, returncodes, score):
             repairs.append({'key': key, 'reason': 'missing or unresolved collector accounting'})
             continue
         try:
-            manifest_path = Path(str(entry['output']) + '.manifest.json')
+            manifest_path = resolve_path(str(entry['output']) + '.manifest.json')
             if str(manifest_path) not in manifests:
                 manifests[str(manifest_path)] = json.loads(manifest_path.read_text())
             manifest = manifests[str(manifest_path)]
-            source = Path(entry['source'])
+            source = resolve_path(entry['source'])
             if str(source) not in source_hashes: source_hashes[str(source)] = _hash(source)
             if (manifest.get('version') != 'natlang.teacher_batch.native/1'
-                    or Path(manifest['source']).resolve() != source.resolve()
+                    or resolve_path(manifest['source']).resolve() != source.resolve()
                     or manifest.get('source_sha256') != source_hashes[str(source)]
                     or manifest.get('range') != {'start': entry['index'], 'count': len(states)}
                     or manifest.get('missing') != [row['index'] for row in states if row['state'] != 'result']):
@@ -71,8 +71,8 @@ def batch_completion(entries, journal, returncodes, score):
             for state in states:
                 if state.get('state') in ('result', 'generation_held'): continue
                 error_binding = state.get('terminal_error') or {}
-                path = Path(error_binding['path'])
-                if not path.resolve().is_relative_to(Path(entry['jobs']).resolve()):
+                path = resolve_path(error_binding['path'])
+                if not path.resolve().is_relative_to(resolve_path(entry['jobs']).resolve()):
                     raise ValueError('budget error escapes its original job directory')
                 if _hash(path) != error_binding['sha256']:
                     raise ValueError('budget error bytes changed after collection')
