@@ -14,13 +14,9 @@ import math
 import copy
 from typing import Mapping
 
+from ..common.hashing import sha256_hex as sha256_bytes
 from .native_graph_conversion import witnessed_pair_graph
 from .records import PortRecordRow
-
-
-def sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
-
 
 def consumer_target_authorization(row: PortRecordRow, *, reviewed_targets: Mapping[str, Mapping] | None = None):
     """Return positive-target evidence, requiring exact occurrence bindings.

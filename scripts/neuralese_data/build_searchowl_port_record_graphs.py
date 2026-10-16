@@ -23,8 +23,8 @@ from scripts.neuralese_data.build_native_graph_text_corpus import GraphWriter  #
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import provision  # noqa: E402
 from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection  # noqa: E402
 from scripts.neuralese_data.decision_holds import load_decision_holds  # noqa: E402
-from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file  # noqa: E402
-from natlang_neuralese.data.port_record_graph import port_record_graph, sha256_bytes  # noqa: E402
+from natlang_neuralese.common.hashing import sha256_file_hex as sha256_file, sha256_hex as sha256_bytes  # noqa: E402
+from natlang_neuralese.data.port_record_graph import port_record_graph  # noqa: E402
 from natlang_neuralese.data.records import RecordError, read_record_rows  # noqa: E402
 from natlang_neuralese.data.text_corpus import tokenizer_fingerprint  # noqa: E402
 
@@ -141,19 +141,25 @@ def load_approved_program_groups(admission_path, index_dir):
     if not paths:
         raise ValueError("admitted Search/OWL program-group index is empty")
     for path in paths:
-        digest = sha256_file(path)
-        if path.stem != digest:
-            raise ValueError(f"program-group index content does not match its filename: {path.name}")
+        index_digest = sha256_file(path)
         index = json.loads(path.read_text())
         source = index.get("source")
         if (index.get("schema") != "natlang.native-program-groups/1"
-                or not isinstance(source, dict) or source.get("sha256") != path.stem):
+                or not isinstance(source, dict) or source.get("sha256") != path.stem
+                or not isinstance(source.get("path"), str)
+                or type(source.get("bytes")) is not int):
             raise ValueError(f"program-group index lacks its source binding: {path}")
+        source_path = Path(source["path"])
+        if (not source_path.is_file() or source_path.stat().st_size != source["bytes"]
+                or sha256_file(source_path) != source["sha256"]):
+            raise ValueError(f"program-group index source bytes fail their immutable binding: {source_path}")
         for values in index.get("programs", {}).values():
             for group in values:
                 if isinstance(group, str) and group.startswith("expansion-d02-task:"):
                     groups.add(group)
-        bindings.append({"path": str(path), "sha256": digest})
+        bindings.append({"path": str(path), "sha256": index_digest,
+            "source_path": str(source_path), "source_sha256": source["sha256"],
+            "source_bytes": source["bytes"]})
     return groups, {"path": str(admission_path), "sha256": sha256_file(admission_path),
         "schema": admission["schema"], "approved_cases": decisions["admitted"],
         "approved_decisions": decisions["approved"], "program_group_index": bindings,

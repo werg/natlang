@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from natlang_neuralese.data.native_graph_schema import parse_graph  # noqa: E402
 from natlang_neuralese.data.port_record_graph import port_record_graph, consumer_target_authorization  # noqa: E402
 from natlang_neuralese.data.records import read_record_rows  # noqa: E402
-from scripts.neuralese_data.build_searchowl_port_record_graphs import load_reviewed_targets, _hold_references, load_hold_details, decision_hold_policy  # noqa: E402
+from scripts.neuralese_data.build_searchowl_port_record_graphs import load_reviewed_targets, _hold_references, load_hold_details, decision_hold_policy, load_approved_program_groups  # noqa: E402
 from neuralese_data import bgkit  # noqa: E402
 from test_neuralese_port_records import squad_row  # noqa: E402
 
@@ -261,3 +261,29 @@ def test_hold_loader_binds_current_file_and_id_reason(tmp_path):
     assert _hold_references({"id": "source:one", "nested": {
         "teacher_trajectory_id": "trajectory:one", "decision_id": "decision:one"}}) == (
             {"source:one", "trajectory:one"}, {"decision:one"})
+
+
+def test_program_group_index_filename_binds_source_not_index_json(tmp_path):
+    source = tmp_path / "source.jsonl.zst"
+    source.write_bytes(b"immutable input")
+    source_sha = hashlib.sha256(source.read_bytes()).hexdigest()
+    index_dir = tmp_path / "indexes"
+    index_dir.mkdir()
+    index_path = index_dir / f"{source_sha}.json"
+    index_path.write_text(json.dumps({"schema": "natlang.native-program-groups/1",
+        "source": {"path": str(source), "sha256": source_sha, "bytes": source.stat().st_size},
+        "programs": {"program:one": ["expansion-d02-task:one"]}}))
+    admission = tmp_path / "admission.json"
+    admission.write_text(json.dumps({"schema": "natlang.search-owl-native-admission-review/1",
+        "approved": True, "native_decisions": {"admitted": 1, "cases": 1,
+            "approved": 1, "decisions": 1}}))
+    groups, binding = load_approved_program_groups(admission, index_dir)
+    assert groups == {"expansion-d02-task:one"}
+    assert binding["program_group_index"][0]["source_sha256"] == source_sha
+    source.write_bytes(b"mutated input")
+    try:
+        load_approved_program_groups(admission, index_dir)
+    except ValueError as exc:
+        assert "immutable binding" in str(exc)
+    else:
+        raise AssertionError("program-group source mutation passed its declared SHA")
