@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exact cache continuation for the default-false internal prefix extension."""
+"""Exact cache continuation for separately qualified native runtime extensions."""
 from __future__ import annotations
 
 import argparse
@@ -16,6 +16,54 @@ from natlang_neuralese.common.jsonio import write_json_durable
 POLICY_FILES = ('data/native_sources.py', 'data/native_graph_schema.py',
     'model/native_graph_plan.py', 'data/native_pair_schema.py',
     'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')
+# Reviewed complete-runtime extension, deliberately separate from prove_extension.
+# These are exact source bytes, not permission to accept any future parser.
+_UNCHANGED = {
+    'data/native_graph_schema.py': '8ad9a94a5429080b3e6e407982517c3bb8cd2f83d2b2bf436e9ce72662e575c3',
+    'data/native_pair_schema.py': '839df4000876a6c0f9ac1283f14fbae07cd66188e170d618b4e6008b8715f91d',
+    'common/row_index.py': 'e592aa380417424c3018f6d1672a2b961e45c1571a7e49bdec9bc4be11123544',
+    'common/jsonio.py': '0716177d8690b53f3ea39f6e6dd3c1ebe5ff7407f02a7d095e9e59d4a1631114',
+}
+_OLD_COMMON = {**_UNCHANGED,
+    'data/native_sources.py': '15b43272e79acf2b73f3793416a87a1b844850f8df22c2c2fe27870c719abe97',
+    'common/hashing.py': '736421674d6c1d9505f14f996e151ef320962bcef80bb0cf741dd9f686dce100'}
+_OLD_COMPILERS = {
+    'lfm-14ca1758': '233e05ae34b68700a1a7e5c973b71b95cfa7b051e27015e2e7abc2752bb69aae',
+    'mellum-b50e8823': '80fa45cadbb455effcbf55260d7a2c31fae0c1cedb5b5dc52ac497e0527a01cc',
+}
+_NEW_COMPLETE = {**_UNCHANGED,
+    'data/native_sources.py': 'e104cda0b7f6cd862bcf5a08bb8f76ee6f99c138b65a4a65dc2b354df5a1aedf',
+    'model/native_graph_plan.py': '1c6d9c826364519fb61869282bf4d786c351dc391a07adc8e6cc9f3299fbcfcc',
+    'common/hashing.py': 'fcb84e31bc6a4d0e681c22d57854d5f7646392325cff486216e01732797018da'}
+_COMPLETE_HELPERS = {
+    'data/native_source_tree.py': 'c8b0afe770bc02bc987d5a9d218556189152e897f9c509fe6eb309f7b6e08cf0'}
+
+
+def prove_reviewed_runtime_extension(old_package, new_package):
+    """Certify only the reviewed old-valid-row extension into canonical64ec.
+
+    Old validated leaves cannot contain a stop_gradient field (the old constructor
+    rejected it). False defaults are omitted from new row bindings. The manifest
+    helper is checked separately because manifests themselves are never cached.
+    Actual execution and geometry qualification remain separate requirements.
+    """
+    old, new = (Path(old_package), Path(new_package))
+    inventories = [{name: sha256_file_hex(root / name) for name in POLICY_FILES}
+                   for root in (old, new)]
+    matched = [name for name, compiler in _OLD_COMPILERS.items()
+               if inventories[0] == {**_OLD_COMMON, 'model/native_graph_plan.py': compiler}]
+    if len(matched) != 1 or inventories[1] != _NEW_COMPLETE:
+        raise ValueError('source policy is not the exact reviewed complete-runtime extension')
+    helpers = {name: sha256_file_hex(new / name) for name in _COMPLETE_HELPERS}
+    if helpers != _COMPLETE_HELPERS:
+        raise ValueError('complete-runtime manifest helper differs from its reviewed bytes')
+    return {'qualification': 'complete-native-runtime-64ec-20261016',
+            'parent': matched[0], 'policy_files': inventories,
+            'new_helpers': helpers,
+            'old_policy_sha256': digest(inventories[0]),
+            'new_policy_sha256': digest(inventories[1])}
+
+
 GUARDS = (
     """if type(node.cache_prefix) is not bool or (node.cache_prefix and
             (node.producing or node.logical_producing or len(node.imports) > 1)):
@@ -143,9 +191,13 @@ def main():
     parser.add_argument('--old-package', type=Path, required=True)
     parser.add_argument('--new-package', type=Path, required=True)
     parser.add_argument('--source-sha256', action='append', required=True)
+    parser.add_argument('--qualification', choices=('prefix-extension', 'complete-native-runtime'),
+                        default='prefix-extension')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
-    receipt = continue_indexes(prove_extension(args.old_package, args.new_package), args.source_sha256)
+    prove = (prove_extension if args.qualification == 'prefix-extension'
+             else prove_reviewed_runtime_extension)
+    receipt = continue_indexes(prove(args.old_package, args.new_package), args.source_sha256)
     write_json_durable(args.output, receipt)
     print(json.dumps({'indexes': len(receipt['indexes']), 'missing_sources': len(receipt['missing_source_sha256']),
                       'receipt': str(args.output)}))
