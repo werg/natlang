@@ -102,7 +102,8 @@ def test_actual_shared_optimizer_updates_native_policy_graph_for_both_ports(tmp_
     assert any(not torch.equal(before[name], value) for name, value in named if name.startswith('interface.'))
 
 
-def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path):
+@pytest.mark.parametrize('shared_parent',[True,False])
+def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,shared_parent):
     """Actual tiny LFM full trainer; fixture reward is NOT an environment result."""
     from test_native_model import tiny_source
     from natlang_neuralese.model.native_model import load_native_model, model_state, native_identity, SHARED_CHECKPOINT_SCHEMA
@@ -115,11 +116,35 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path):
     model, tokenizer, roles, config = load_native_model(base, dtype=torch.float32, rank=4)
     optimizer, _ = make_native_optimizer(model, lr=1e-3, weight_decay=0, in_backward=False)
     parent = tmp_path/'shared.pt'
-    torch.save({'schema': SHARED_CHECKPOINT_SCHEMA,
+    saved = {'schema': SHARED_CHECKPOINT_SCHEMA,
         'participants': {'lfm': {'model_config': config, 'model_state': model_state(model),
                                   'optimizer': optimizer.state_dict(), 'fp8': None}},
         'training': {'step': 1, 'rng': capture_training_rng_state('cpu'),
-                     'config_history': [{'config': {'weight_decay': 0, 'latent_ns': 'quintic'}}]}}, parent)
+                     'config_history': [{'config': {'weight_decay': 0, 'latent_ns': 'quintic'}}]}}
+    if not shared_parent:
+        from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA
+        saved = {'schema': CHECKPOINT_SCHEMA, 'model_config': config, **model_state(model),
+            'training': {'schema':'natlang.neuralese-native-sft-training/1',
+                'step': 1, 'global_step': 1, 'optimizer': optimizer.state_dict(),
+                'identity': {'schema':'natlang.neuralese-native-sft-training/1',
+                    'config':config, 'optimizer':'shared-muon-sr-in-backward-v1',
+                    'schedule':'row-visit-deficit/2','seed':1,'rank':4,
+                    'fp8':{'kind':'off','recipe':'delayed','amax_history_len':16},
+                    'objective':None},
+                'source_row_bindings':{'prior-foundation-row':'exact-prior-binding'},
+                'source_row_order':['prior-foundation-row'],
+                'rng': capture_training_rng_state('cpu'),
+                'options': {'weight_decay':0,'latent_ns':'quintic','stage_id':'full','epochs':4},
+                'exposure_counts': {'prior-foundation-row':3}}}
+    held = tmp_path/'held.jsonl'
+    held.write_text(json.dumps({'schema': SCHEMA, 'id': 'held-fixture', 'split': 'test',
+        'source_groups': ['held'], 'tokenizer_fingerprint': config['tokenizer_fingerprint'],
+        'nodes': [{'name': 'held', 'token_ids': [1, 6, 7], 'target_weights': [0, 0, 1]}]})+'\n')
+    if not shared_parent:
+        from natlang_neuralese.data.native_sources import NativeGraphSource
+        saved['training']['held_row_bindings']=NativeGraphSource(held,config['tokenizer_fingerprint'],
+            required_split='test',role_ids=roles.ids).bindings
+    torch.save(saved, parent)
     identity = native_identity(model, config, checkpoint_sha256=sha256_file_hex(parent))
     with torch.no_grad():
         out = native_step(model, torch.tensor([[1, 4]]))
@@ -137,13 +162,9 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path):
         'turns': [{'messages': [], 'target': {}, 'invocation_id':'ordinary-policy',
                    'sampling': capture, 'replay': {'raw_calls_retained': True}}]}
     source = tmp_path/'rollouts.jsonl'; source.write_text(json.dumps(rollout)+'\n')
-    held = tmp_path/'held.jsonl'
-    held.write_text(json.dumps({'schema': SCHEMA, 'id': 'held-fixture', 'split': 'test',
-        'source_groups': ['held'], 'tokenizer_fingerprint': config['tokenizer_fingerprint'],
-        'nodes': [{'name': 'held', 'token_ids': [1, 6, 7], 'target_weights': [0, 0, 1]}]})+'\n')
     saved_tokenizer = tmp_path/'tokenizer'; tokenizer.save_pretrained(saved_tokenizer)
     argv = ['--rollouts', str(source), '--rl-tokenizer', str(saved_tokenizer), '--rl-mode', 'rft',
-        '--continue-from', str(parent), '--native-participant', 'lfm', '--held-native-graphs', str(held),
+        '--continue-from', str(parent), *(['--native-participant', 'lfm'] if shared_parent else []), '--held-native-graphs', str(held),
         '--out', str(tmp_path/'learner'), '--device', 'cpu', '--epochs', '1', '--rank', '4',
         '--learning-rate', '1e-3', '--weight-decay', '0', '--eval-every', '1',
         '--communication-foundation', '--foundation-native-graphs', str(tmp_path/'parent-only-source')]
@@ -153,6 +174,15 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path):
     assert state['training']['step'] == 1 and state['training']['global_step'] == 2
     assert state['training']['options']['continuation']['checkpoint_sha256'] == sha256_file_hex(parent)
     assert state['training']['optimizer']
+    if not shared_parent:
+        from natlang_neuralese.train.native_continuation import progress_obligations, restore_sft_progress
+        frame=state['training']['sft_progress']['full']
+        assert frame['exposure_counts']['prior-foundation-row']==3
+        assert progress_obligations({'full':frame})['remaining_graph_visits']==1
+        restored=restore_sft_progress(state['training'],'full')
+        assert restored['exposure_counts']['prior-foundation-row']==3
+        assert restored['global_step']==2
+        assert restored['optimizer'] is state['training']['optimizer']
     assert not state['training']['options']['communication_foundation']
     prior_sha = sha256_file_hex(slot)
     assert main(argv) == 0

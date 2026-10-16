@@ -95,6 +95,9 @@ def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_fini
     assert refresh['pairs'] == binding(expanded if separate_refresh else train)
     assert first['models'] == refresh['models']
     assert first['task_eval'] == refresh['task_eval']
+    assert first['policy_schedule'] == refresh['policy_schedule'] == {
+        'id':'policy','epochs':1,'every_semantic_updates':1,'updates_per_refresh':16}
+    assert 'policy_training' not in first and 'policy_training' not in refresh
     if separate_refresh:
         assert bootstrap['semantic_refresh_config']['path'] != config['curriculum']
         assert config['deployment_inputs']['refresh_curriculum'] == binding(refresh_path)

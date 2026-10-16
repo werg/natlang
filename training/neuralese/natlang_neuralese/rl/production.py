@@ -451,13 +451,19 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 values['_run_control'] = control
             from ..train.recipe import stage_parameter_args
             expected_native = None
-            if config.get('native_state'):
+            if config.get('native_state') and config.get('semantic_adapter'):
                 values['semantic_adapter'] = state.get('semantic_adapter', config['semantic_adapter'])
                 values['semantic_adapter_sha256'] = sha256_file_hex(Path(values['semantic_adapter']))
                 export = json.loads(Path(values['semantic_adapter']).read_text())
                 expected_native = expected_native_actor(values['semantic_adapter'], config['native_participant'], policy)
                 values['rl_tokenizer'] = str(Path(values['semantic_adapter']).parent /
                     export['tokenizers'][config['native_participant']]['path'])
+            elif config.get('native_state'):
+                from .native_raw_policy import prepare_raw_policy
+                raw = prepare_raw_policy(state['checkpoint'], base=config['base'],
+                    tokenizer_out=Path(config['out'])/'actor-tokenizers'/policy)
+                expected_native = raw
+                values['rl_tokenizer'] = raw['tokenizer']
             values['trainer_args'] = stage_parameter_args(config.get('trainer_parameters', {}))
             values['seed_trainer_args']=stage_parameter_args(config.get('seed_trainer_parameters',config.get('trainer_parameters',{})))
             if config.get('coefficient_policy'):
@@ -638,7 +644,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                               continue_monitor_reference=str(stage_out / 'monitor-reference.pt'))
             if pending:
                 continue
-            if config.get('native_state') and not (config.get('coefficient_policy') and mode!='seed'):
+            if config.get('native_state') and config.get('semantic_adapter') and not (config.get('coefficient_policy') and mode!='seed'):
                 state.update(phase='awaiting_semantic_refresh', pending_native_checkpoint=str(checkpoint),
                              pending_native_round_dir=str(round_dir))
                 write_json_durable(state_path, state)
@@ -683,15 +689,24 @@ def configure_native(args):
     """Declare both cloud/local native learners using the same trainer and refresh."""
     from ..train.recipe import resolve_recipe_data, effective_stage_parameters, HANDLERS
     from ..common.hashing import sha256_file_hex
-    for name in ('native_participant', 'semantic_adapter', 'semantic_refresh_config',
-                 'seed_native_graphs', 'held_native_graphs'):
+    semantic = getattr(args, 'semantic_adapter', None) is not None
+    required = ('seed_native_graphs', 'held_native_graphs') + (
+        ('native_participant', 'semantic_refresh_config') if semantic else ())
+    for name in required:
         if getattr(args, name, None) is None:
             raise ValueError('native RL configure requires --' + name.replace('_', '-'))
-    adapter = json.loads(args.semantic_adapter.read_text())
-    if (adapter.get('schema') != 'natlang.native-semantic-adapter/1'
-            or adapter['checkpoint']['sha256'] != sha256_file_hex(args.checkpoint)
-            or args.native_participant not in adapter['models']):
-        raise ValueError('native RL parent participant and semantic adapter must bind the same actual shared checkpoint')
+    adapter = None
+    raw = None
+    if semantic:
+        adapter = json.loads(args.semantic_adapter.read_text())
+        if (adapter.get('schema') != 'natlang.native-semantic-adapter/1'
+                or adapter['checkpoint']['sha256'] != sha256_file_hex(args.checkpoint)
+                or args.native_participant not in adapter['models']):
+            raise ValueError('native RL parent participant and semantic adapter must bind the same actual shared checkpoint')
+    else:
+        from .native_raw_policy import prepare_raw_policy
+        raw = prepare_raw_policy(args.checkpoint, base=args.base,
+            tokenizer_out=args.out/'actor-tokenizers'/sha256_file_hex(args.checkpoint))
     recipe = resolve_recipe_data(args.production_recipe)
     stages = [stage for stage in recipe['stages'] if stage['id'] == args.production_stage]
     if len(stages) != 1 or stages[0]['kind'] not in {'native_state_sft', 'native_state_rl','native_offline_preference'}:
@@ -702,17 +717,22 @@ def configure_native(args):
     parameters.pop('memory_qualification',None)  # one-time source-capacity probe already bound to the SFT parent
     parameters.update(base=str(args.base.resolve()))
     parameters.setdefault('epochs', 1)
-    if not parameters.get('task_eval') or not parameters.get('task_eval_every'):
+    cadence = parameters.get('task_eval_every')
+    if not parameters.get('task_eval') or type(cadence) is not int or cadence < 0:
         raise ValueError('native production must retain real task evaluation and its cadence')
     repo, python = str(root('repo')), sys.executable
     endpoint = 'http://127.0.0.1:' + str(args.port)
-    common = ['--continue-from', '{checkpoint}', '--native-participant', '{native_participant}',
+    common = ['--continue-from', '{checkpoint}',
+              *(['--native-participant', '{native_participant}'] if semantic else []),
               '--held-native-graphs', '{held_native_graphs}', '--out', '{learner_out}', '{trainer_args}']
     config = {'schema': 'natlang.rl-production-config/1', 'id': 'native-rl-' + args.model,
         'native_state': True, 'model': args.model, 'out': str(args.out.resolve()),
-        'checkpoint': str(args.checkpoint.resolve()), 'native_participant': args.native_participant,
-        'semantic_adapter': str(args.semantic_adapter.resolve()),
-        'semantic_refresh_config': str(args.semantic_refresh_config.resolve()),
+        'checkpoint': str(args.checkpoint.resolve()),
+        'native_actor_mode': 'shared-semantic' if semantic else 'raw-state',
+        **({'native_participant': args.native_participant,
+            'semantic_adapter': str(args.semantic_adapter.resolve()),
+            'semantic_refresh_config': str(args.semantic_refresh_config.resolve())} if semantic else
+           {'rl_tokenizer': raw['tokenizer']}),
         'seed_native_graphs': str(args.seed_native_graphs.resolve()),
         'held_native_graphs': str(args.held_native_graphs.resolve()), 'base': str(args.base.resolve()),
         'cases': str(args.cases.resolve()), 'runtime': str(args.runtime.resolve()),
@@ -723,8 +743,9 @@ def configure_native(args):
         'actor_command': [python, repo + '/scripts/neuralese_data/serve_direct_checkpoint.py',
             '--native-state', '--store-dir', '{out}/actor-store',
             '--checkpoint', '{checkpoint}', '--checkpoint-sha256', '{policy_id}',
-            '--native-participant', '{native_participant}', '--base', '{base}',
-            '--semantic-adapter', '{semantic_adapter}', '--semantic-adapter-sha256', '{semantic_adapter_sha256}',
+            '--base', '{base}',
+            *(['--native-participant', '{native_participant}',
+               '--semantic-adapter', '{semantic_adapter}', '--semantic-adapter-sha256', '{semantic_adapter_sha256}'] if semantic else []),
             '--port', str(args.port)],
         'learner_command': [python, '-m', 'natlang_neuralese.rl.native_stage',
             '--rollouts', '{rollouts}', '--rl-tokenizer', '{rl_tokenizer}', '--rl-mode', '{mode}',
@@ -755,7 +776,7 @@ def configure_native(args):
     if coefficient_policy is not None:
         from ..model.native_coefficient_policy import policy_core
         core=policy_core(json.loads(Path(coefficient_policy).read_text()))
-        if core['base_native_identity']!=adapter['models'][args.native_participant]['native_identity']:
+        if core['base_native_identity']!=(adapter['models'][args.native_participant]['native_identity'] if semantic else raw['native_identity']):
             raise ValueError('coefficient production policy must bind the actual declared shared participant')
         coefficient_optimizer=getattr(args,'coefficient_optimizer',None)
         if not isinstance(coefficient_optimizer,dict) or coefficient_optimizer.get('name') not in {'adam','sgd'}:

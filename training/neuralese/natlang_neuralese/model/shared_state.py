@@ -573,13 +573,8 @@ class RoleTokens:
         return (self.produce_open, self.produce_close, self.consume_open, self.consume_close)
 
 
-def provision_role_tokens(port, tokenizer):
-    """Add four actual special tokens without stealing meaningful vocabulary rows.
-
-    Existing tokenizer files/checkpoints remain immutable; the caller saves the
-    expanded tokenizer and this model's marker contract with its new lineage.
-    Both HF backbones and the native Mellum/Maple wrapper are supported.
-    """
+def provision_role_tokenizer(tokenizer):
+    """Provision only the shared four role entries, without constructing weights."""
     import inspect
     modern = 'replace_extra_special_tokens' in inspect.signature(tokenizer.add_special_tokens).parameters
     key = 'extra_special_tokens' if modern else 'additional_special_tokens'
@@ -588,6 +583,17 @@ def provision_role_tokens(port, tokenizer):
     ids = tuple(tokenizer.convert_tokens_to_ids(marker) for marker in ROLE_MARKERS)
     if len(set(ids)) != 4 or any(i is None or i == tokenizer.unk_token_id for i in ids):
         raise ValueError('tokenizer failed to provision four distinct Neuralese role markers')
+    return ids
+
+
+def provision_role_tokens(port, tokenizer):
+    """Add four actual special tokens without stealing meaningful vocabulary rows.
+
+    Existing tokenizer files/checkpoints remain immutable; the caller saves the
+    expanded tokenizer and this model's marker contract with its new lineage.
+    Both HF backbones and the native Mellum/Maple wrapper are supported.
+    """
+    ids = provision_role_tokenizer(tokenizer)
     target = max(max(tokenizer.get_vocab().values())+1, port.embedding_weight.shape[0])
     old_input = port.hf.get_input_embeddings()
     old_output = port.hf.get_output_embeddings()

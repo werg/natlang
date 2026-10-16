@@ -55,6 +55,11 @@ def prepare(release_path, curriculum_path, out, *, participants, cases=None, tas
             raise ValueError('native deployment requires the declared semantic curriculum')
         for key in ('pairs', 'held_pairs'):
             _bound(declaration[key])
+        # A refresh quantum controls safe handoff, never production completion.
+        # Collected whole episodes supply the actual policy_training sources;
+        # an empty source declaration must not masquerade as trained exposure.
+        declaration.setdefault('policy_schedule', {'id':'policy', 'epochs':1,
+            'every_semantic_updates':1, 'updates_per_refresh':16})
     out = out.resolve(); out.mkdir(parents=True, exist_ok=True)
     queue = str(Path(namespace)/'shared/bridge-ipc')
     client = [sys.executable, '-m', 'natlang_neuralese.rl.native_bridge', '--queue', queue,
