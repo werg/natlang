@@ -1,0 +1,49 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "qwen-verified-positive-native-graphs-20261015-v9",
+  "owner": "dgx",
+  "path": "runs/qwen-verified-positive-native-graphs-20261015-v9",
+  "files": [
+    {
+      "path": "decision-hold-closure-proof.json",
+      "bytes": 1518,
+      "sha256": "ff578dc32460786317b81db6e86e67dfece2227917b104b3acee2cb8dc9e26d6"
+    },
+    {
+      "path": "lfm25/receipt.json",
+      "bytes": 439399,
+      "sha256": "900bf708fafbf0a3a0c2108e1b7f423ffab951971d23b5b31b56a83ea4805fab"
+    },
+    {
+      "path": "lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 2840799,
+      "sha256": "046ae6ef05d97ff11a532254e082840d92699780c661f7ccb5ecbf7415dea9a2"
+    },
+    {
+      "path": "mellum21/receipt.json",
+      "bytes": 439455,
+      "sha256": "6d30eb490a09e644de3fad51fedc0cbe8ce1186d988be750b812fbe6e6a380a2"
+    },
+    {
+      "path": "mellum21/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 2794167,
+      "sha256": "732a9403133b0c3cac75a93b73d0389bc3fc8ed692a99fc8327f9a5a3cb9c0f1"
+    },
+    {
+      "path": "validation-proof.json",
+      "bytes": 1320,
+      "sha256": "832fa9b21ab02ca15af065cc4be424d33caf8b642478b3c43b6b4ae38ac70e3f"
+    }
+  ],
+  "bytes": 6516684
+}
