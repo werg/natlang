@@ -110251,6 +110251,32 @@
       "split": "original source split and complete cross-source global held-group closure; no truncation",
       "training_admission": true,
       "training_admission_reason": "Source-curated third-party SFT, not oracle or native-execution verified. Exact complete source sessions, full reasoning views and both pinned tokenizer variants preserve current global held/quality/pending and exact decision holds. Eligibility is not training exposure."
+    },
+    {
+      "id": "clef-pools-20261016-v1",
+      "owner": "dgx",
+      "path": "data/neuralese/corpora/clef-pools-20261016-v1",
+      "include": [
+        "*.jsonl",
+        "summary.json"
+      ],
+      "admission": "reference-demonstrations-verified-replay; clef-flash-distilled child labels with per-item confidence gating; action-notes reasoning (not trained); not teacher-sampled",
+      "training_admission": true,
+      "training_admission_reason": "owner 2026-10-11 maximize data: admit unless a concrete defect (broken format, leak into held/eval, protected eval, verified wrong labels); 'pending review' is recorded as review status, not a reason to exclude; splits and source-disjointness kept (plans/neuralese/DATA_INVENTORY_20261011.md)",
+      "review_status": "verified replay 466/466 cases; Clef-flash labels unreviewed",
+      "required_conversion": "render (render_native_turn_corpus.sh, both tokenizers); root rationales in a teacher window",
+      "split": "train only: items drawn from the train side of the shared content partition (source-split.mjs, training/source-split-reservations.json); generated case ids carry the seed",
+      "source_class": "public-dataset-items-with-clef-flash-decisions",
+      "license": "per source: CLINC150 CC-BY-3.0, dair-ai/emotion (dataset card), CoEdIT Apache-2.0, CUAD v1 CC-BY-4.0; Clef-flash outputs (Cloudflare Workers AI terms). Provenance facts only (owner rule 2026-10-10)",
+      "build": {
+        "driver": "scripts/neuralese_data/clef_pools_daily.py",
+        "seed": 8105,
+        "templates": "clef-programs.mjs NEW_POOLS (skill_routing, wellbeing_triage, edit_review, clause_risk)",
+        "model": "@cf/cloudflare/clef-flash",
+        "input_tokens": 800804
+      },
+      "note": "Clef-flash-distilled inline-lambda programs over new source pools, day 20261016: 466 cases, 2964 decisions ({'clef_skill_routing': 165, 'clef_edit_review': 106, 'clef_clause_risk': 83, 'clef_wellbeing_triage': 112}). Files: *.skeletons (Clef requests), *.answers (Clef outputs with usage), *.ir (cases), *.rows (trajectories), *.turns (native training turns).",
+      "consumable_by_direct_stage": false
     }
   ],
   "coverage_backlog": [
