@@ -152,6 +152,14 @@ interruptions or sensible course corrections.
   is not the objective: base-relative KL/agreement are telemetry, never a stop
   or qualification barrier. Exact state and artifact identities support safe
   continuation and debugging; they are not a scientific-purity requirement.
+- **Bring in deferred improvements** (owner, 2026-10-16). Keep a current
+  inventory of deferred data, performance, training and inference work; actively
+  integrate each ready improvement. An old handover, incomplete source census,
+  clean-run boundary or another model's unrelated qualification is not a reason
+  to leave useful work disabled. Preserve real numerical, task-quality and
+  cross-model foundation prerequisites, and resolve their concrete blockers.
+  Independent model improvements may advance independently; propagate shared
+  fixes and retain exact optimizer/RNG/exposure through adaptive continuations.
 - **Share code as much as possible and distribute all generalizable insights
   across all models.** A useful fix, optimization, data improvement or recipe
   insight on one line must promptly be considered and propagated to the other
@@ -314,6 +322,15 @@ afterwards. The rules below are consequences of this one.
 
 # Working practice on shared machines
 
+- DGX launch environments are explicit: project/data tests use
+  `/home/werg/natlang/.venv-neuralese/bin/python`; CoreWeave SDK orchestration
+  uses `/home/werg/.local/share/natlang/cw-venv/bin/python`. Pass
+  `PYTHONPATH=/home/werg/natlang/training/neuralese:/home/werg/natlang` inside
+  the ledger command for project/data entrypoints. Node builds use the Node24
+  bin directory under `/home/werg/.local/share/natlang-dev/`. Do not assume a
+  caller's shell environment is forwarded into a ledger unit. Verify these
+  environments before launching substantial jobs; repeated import/launcher
+  failures are a shared operational bug to fix, not useful qualification.
 - On DGX every build, test and probe runs through the memory ledger
   (`scripts/memory_ledger.py run --unit <family>-<id> --budget-gb N -- ...`;
   units run asynchronously, so wait for the unit to finish and read its log).
