@@ -106,6 +106,9 @@ def test_actual_tiny_stop_append_resume_keeps_optimizer_rng_and_all_row_visits(t
         assert trainer.main(argv)==0
     partial=torch.load(out/'checkpoint.pt',weights_only=False)['training']
     assert partial['global_step']==2 and sum(partial['exposure_counts'].values())==2
+    first_progress=json.loads((out/'progress.json').read_text())
+    assert first_progress['foundation_schedule']['required_graphs']==0
+    assert first_progress['foundation_schedule']['completed_graphs']==0
     assert all(partial['exposure_counts']['lfm:foundation-'+str(i)]==(i<2) for i in range(4))
     second=tmp_path/'second';second.mkdir();new=source_manifest(second,ordinary,[*pairs,*[authenticated_pair('expanded-'+str(i),roles=roles.ids,fingerprint=fp) for i in range(2)]])
     declaration=json.loads(new.read_text());declaration['sources'][0]['training_priority']=1;new.write_text(json.dumps(declaration))
@@ -124,3 +127,44 @@ def test_actual_tiny_stop_append_resume_keeps_optimizer_rng_and_all_row_visits(t
     final=torch.load(out/'checkpoint.pt',weights_only=False)['training']
     assert final['global_step']==10 and all(v==1 for v in final['exposure_counts'].values())
     assert final['optimizer'] and final['metrics']['held']['scope']=='full'
+
+
+
+def test_progress_counts_fixed_completed_graphs_separately_from_expanded_communication(tmp_path,monkeypatch):
+    import torch
+    from test_native_model import tiny_source
+    from test_native_state_sft import graph,authenticated_pair,source_manifest
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+    base=tmp_path/'base';tiny_source(base)
+    _,_,roles,config=load_native_model(base,dtype=torch.float32,rank=4)
+    fp=config['tokenizer_fingerprint']
+    fixed=[authenticated_pair('fixed-'+str(i),roles=roles.ids,fingerprint=fp) for i in range(2)]
+    ordinary=[dict(graph('ordinary'),tokenizer_fingerprint=fp)]
+    first=tmp_path/'first';first.mkdir();source=source_manifest(first,ordinary,fixed)
+    held=tmp_path/'held.jsonl';held.write_text(json.dumps(dict(graph('held'),split='test',tokenizer_fingerprint=fp))+'\n')
+    out=tmp_path/'run'
+    argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(source),'--foundation-native-graphs',str(source),
+        '--communication-foundation','--foundation-communication-batches','4',
+        '--held-native-graphs',str(held),'--epochs','1','--eval-every','100',
+        '--held-eval-tokens','4','--out',str(out)]
+    def stop(policy,step,**kwargs):
+        policy.stop.requested=step==1
+        return False
+    with monkeypatch.context() as patch:
+        patch.setattr(trainer.CheckpointPolicy,'due',stop)
+        assert trainer.main(argv)==0
+    second=tmp_path/'second';second.mkdir()
+    expanded=authenticated_pair('expanded',roles=roles.ids,fingerprint=fp)
+    appended=source_manifest(second,ordinary,[*fixed,expanded])
+    continued=argv.copy();continued[continued.index('--native-graphs')+1]=str(appended)
+    continued+=['--continued-native-graphs',str(source)]
+    assert trainer.main(continued)==0
+    rows=[json.loads(line) for line in (out/'train.jsonl').read_text().splitlines()]
+    assert [row['foundation_schedule']['required_graphs'] for row in rows]==[2,2]
+    assert [row['foundation_schedule']['completed_graphs'] for row in rows]==[1,2]
+    state=torch.load(out/'checkpoint.pt',weights_only=False)['training']
+    assert state['exposure_counts']['lfm:expanded']==0
+    assert rows[-1]['communication_exposure']['graphs']==3
+    assert rows[-1]['communication_exposure']['graph_visits']==2

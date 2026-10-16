@@ -1259,7 +1259,9 @@ def main(argv=None):
                         'communication_exposure': communication_exposure(train.entries, exposure_counts, required_visits)}
             if foundation_priority_ids is not None:
                 progress['foundation_schedule'] = {'communication_batches_per_priority_ordinary': args.foundation_communication_batches,
-                    'fixed_foundation_graphs': sum(train.entries[index]['id'] in foundation_priority_ids for index in indices)}
+                    'fixed_foundation_graphs': sum(train.entries[index]['id'] in foundation_priority_ids for index in indices),
+                    'required_graphs': len((foundation_template or {}).get('rows', {})),
+                    'completed_graphs': len((foundation_template or {}).get('rows', {})) - len(foundation_missing)}
             if mandatory_objective:progress['offline_preference']=details
             progress['learning_rates']=optimizer.native_learning_rates
             progress['checkpoint_input_offload'] = {'enabled': args.checkpoint_input_offload,
