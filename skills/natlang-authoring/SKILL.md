@@ -360,3 +360,12 @@ ordered IDs/scales when evaluating its admitted native-policy objective with
 the current invocation before changing its adapter binding. Mixed adapter
 bindings across one replay graph require per-invocation executor support and
 remain unavailable; keep one fixed actor binding for that graph.
+
+Native coefficient learning may explicitly select
+`adapterGradientPrecision: 'fp32'` in `nativeGraphGradient`. This retains the
+actor's original forward storage values and carries coefficient cotangents in
+FP32 through selected native Linear and dense-expert matrices. The default is
+`storage`; changing this setting does not replace coefficients, bases or
+optimizer moments. For an invalid precision error, select one of those two
+advertised values. It does not enable heterogeneous adapter-policy graphs or
+higher-order objectives.

@@ -162,7 +162,7 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
     engine.store.close();engine.store=TensorStore(directory=tmp_path/'restored')
     restore_bundle(engine,bundle,policy_id=identity['checkpoint_sha256'])
     engine.store.close();engine.store=TensorStore(directory=tmp_path/'restored')
-    body={'schema':'natlang.native-gradient-request/1','graph':graphs[0],
+    body={'schema':'natlang.native-gradient-request/1','graph':graphs[0],'adapter_gradient_precision':'fp32',
           'adapters':entries,'native_identity':engine.native_identity,
           'objective':{'kind':'native-policy','path':str(spec_path),'sha256':sha256_file_hex_cached(spec_path)},
           'target':{'kind':'adapter','id':adapter.id,'names':[name]}}

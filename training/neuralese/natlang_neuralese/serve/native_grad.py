@@ -62,7 +62,8 @@ def native_graph_gradient(engine, body, owner):
                          for name, value in coefficients.items()}
                   for ident, _, _, coefficients, _ in resolved}
         return run_native(engine, lambda: _native_graph_gradient_impl(engine, body, owner, leaves),
-                          body.get('adapters'), leaves=leaves)
+                          body.get('adapters'), leaves=leaves,
+                          gradient_precision=body.get('adapter_gradient_precision', 'storage'))
     except RequestError:
         raise
     except (ValueError, KeyError, TypeError, RuntimeError) as error:
@@ -191,6 +192,7 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
                            else 'native-policy-objective/1'), 'graph_id': example.id,
              'graph_sha256': graph_sha256, 'target_kind': kind,
              'target_names': sorted(tensors), 'effective_native_identity': effective,
+             'adapter_gradient_precision': body.get('adapter_gradient_precision', 'storage'),
              'adapters': body.get('adapters') or [],
              **({'adapter_binding': {'schema': 'natlang.native-adapter/1', 'base_native_identity': expected,
                  'adapters': execution_binding(engine)}}

@@ -170,18 +170,22 @@ class _Operation(nn.Module):
         return self.callback()
 
 
-def run_native(engine, callback, entries=None, *, leaves=None):
+def run_native(engine, callback, entries=None, *, leaves=None, gradient_precision=None):
     """Run one atomic native operation with exact temporary parameter substitution.
 
     Unadapted operations acquire the same lock. torch.func restores original
     parameter objects even if the callback fails. The callback must include its
     backward so activation-checkpoint replay sees the same effective weights.
     """
+    if gradient_precision not in (None, 'storage', 'fp32'):
+        raise ValueError('native adapter gradient precision must be storage or fp32')
     with engine.native_execution_lock:
         active = next((frame for frame in reversed(_ACTIVE.get()) if frame[0] is engine), None)
         if active is not None:
             if entries is not None and entries != active[3]:
                 raise ValueError('nested native execution cannot change its active adapter binding')
+            if gradient_precision is not None and gradient_precision != active[6]:
+                raise ValueError('nested native execution cannot change its coefficient gradient precision')
             return callback()
         try:
             resolved = resolve_adapters(engine, entries, leaves)
@@ -189,7 +193,7 @@ def run_native(engine, callback, entries=None, *, leaves=None):
             raise NativeAdapterError(str(error)) from error
         identity = effective_identity(engine, resolved)
         binding = [{'id': ident, 'scale_hex': scale.hex()} for ident, scale, *_ in resolved]
-        token = _ACTIVE.set((*_ACTIVE.get(), (engine, identity, binding, entries, set())))
+        token = _ACTIVE.set((*_ACTIVE.get(), (engine, identity, binding, entries, set(), {}, gradient_precision or 'storage')))
         try:
             if not resolved:
                 return callback()
@@ -205,8 +209,24 @@ def run_native(engine, callback, entries=None, *, leaves=None):
                         projection.to(device=weight.device) if projection is not None else None)
                     delta = ((left @ core) @ right.transpose(-2, -1)) * scale
                     key = 'model.'+name
-                    replacement[key] = replacement.get(key, weight) + delta.to(weight.dtype)
+                    if gradient_precision == 'fp32' and weight.dtype != torch.float32:
+                        from .native_weight_carrier import rounded_weight_carrier
+                        replacement[key] = rounded_weight_carrier(replacement.get(key, weight), delta, weight.dtype)
+                    else:
+                        replacement[key] = replacement.get(key, weight) + delta.to(weight.dtype)
+            if gradient_precision == 'fp32':
+                for key, value in replacement.items():
+                    dtype = parameters[key.removeprefix('model.')].dtype
+                    if dtype not in (torch.float16, torch.bfloat16, torch.float32):
+                        raise ValueError('FP32 coefficient carriers require FP16, BF16 or FP32 native weights')
+                    if dtype != torch.float32:
+                        _ACTIVE.get()[-1][5][id(value)] = dtype
             _ACTIVE.get()[-1][4].update(id(value) for value in replacement.values())
+            if gradient_precision == 'fp32':
+                from .native_weight_carrier import carrier_linear_modules
+                selected = [parameters[key.removeprefix('model.')] for key in replacement]
+                with carrier_linear_modules(engine.shared_model, selected):
+                    return torch.func.functional_call(_Operation(engine.shared_model, callback), replacement, ())
             return torch.func.functional_call(_Operation(engine.shared_model, callback), replacement, ())
         finally:
             _ACTIVE.reset(token)
@@ -370,3 +390,15 @@ def require_model_execution_actor(model, identity, binding):
     if (frame is None or frame[1] != identity or frame[2] != binding['adapters']
             or frame[0].native_identity != binding['base_native_identity']):
         raise ValueError('adapted native replay requires its exact effective actor scope through backward')
+
+
+def native_forward_storage_dtype(weight):
+    """Explicit forward storage dtype of an active carrier or its bank views."""
+    current = weight
+    while current is not None:
+        for frame in reversed(_ACTIVE.get()):
+            dtype = frame[5].get(id(current))
+            if dtype is not None:
+                return dtype
+        current = getattr(current, '_base', None)
+    return None

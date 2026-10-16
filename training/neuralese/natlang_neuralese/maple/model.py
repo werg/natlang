@@ -364,6 +364,11 @@ class DenseExperts(nn.Module):
     precision_group = None
 
     def _value(self, weight, dtype):
+        from ..model.native_adapters import native_forward_storage_dtype
+        if native_forward_storage_dtype(weight) is not None:
+            if self.precision_group is not None or self.quantize:
+                raise ValueError('native coefficient carriers require unquantized dense expert source weights')
+            return weight
         if self.precision_group is not None:
             from .ternary import precision_value
             return precision_value(weight, self.precision_group).to(dtype)
@@ -407,8 +412,13 @@ class DenseExperts(nn.Module):
         return self._value(self.gate_up, dtype), self._value(self.down, dtype)
 
     def run_weights(self, x: torch.Tensor, gate_up: torch.Tensor, down: torch.Tensor) -> torch.Tensor:
-        y = x @ gate_up.T
-        return swiglu(y[..., :self.ff], y[..., self.ff:], self.clamp) @ down.T
+        from ..model.native_adapters import native_forward_storage_dtype
+        from ..model.native_weight_carrier import stored_linear
+        def project(value, weight):
+            dtype = native_forward_storage_dtype(weight)
+            return stored_linear(value, weight, storage_dtype=dtype) if dtype is not None else value @ weight.T
+        y = project(x, gate_up)
+        return project(swiglu(y[..., :self.ff], y[..., self.ff:], self.clamp), down)
 
 
 # The dense-expert MoE kernel (a trainer's --moe-kernel; recipe parameter ``moe_kernel``): "invariant" (the default:

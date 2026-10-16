@@ -368,3 +368,13 @@ forward, checkpoint recomputation and backward inside the native adapter scope.
 before changing bindings. Heterogeneous per-call adapter graphs and full-backbone
 adapted actor export/rebinding remain explicit unavailable paths. A store lacking named tensor support
 must report `neuralese-native-archive-unavailable` before loading these artifacts.
+
+`nativeGraphGradient({adapterGradientPrecision: 'fp32', ...})` sends the exact
+`adapter_gradient_precision` operational setting. It preserves the existing
+forward weight storage/kernel and retains FP32 coefficient cotangents instead
+of rounding an intermediate dense-weight adjoint to BF16. Artifacts record the
+selected arithmetic; default `storage` retains prior behavior. Preserve the
+same coefficient/basis/optimizer closure across continuations. Invalid values
+require selecting `storage` or `fp32`, rather than dropping requested adapters.
+This setting does not advertise mixed per-invocation actors or changed-base
+adapter rebinding.

@@ -739,3 +739,12 @@ coefficient-policy learning; heterogeneous invocation bindings and full-backbone
 actor export/rebinding remain unavailable. Measure approximately48 live executor
 samples per variant in the next own-model teacher window before capability
 adoption; no external teacher generation and no new prompt instruction.
+
+### 2026-10-16: native adapter coefficient-gradient precision
+
+Unmeasured debt: typed native learning accepts `adapterGradientPrecision`
+(`storage` default or opt-in `fp32`), and invalid settings teach those choices.
+Skills explain preservation of forward weights and optimizer state. Measure
+approximately48 live executor samples per variant in the next own-model teacher
+window; capability/production recipe adoption remains separate. No new prompt
+instruction or external generation is introduced.

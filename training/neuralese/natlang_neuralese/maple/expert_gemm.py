@@ -183,6 +183,10 @@ class Fp8ExpertProjection(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, a, rows, slot_of, top_k, weight, table, offsets, hand=None):
+        from ..model.native_adapters import native_forward_storage_dtype
+        dtype = native_forward_storage_dtype(weight)
+        ctx.carrier = dtype is not None
+        weight = weight.to(dtype) if ctx.carrier else weight
         E, N, K = weight.shape
         aq, sa = rowwise_quant(a)
         wq, sw = rowwise_quant(weight.reshape(E * N, K))
@@ -233,7 +237,11 @@ class Fp8ExpertProjection(torch.autograd.Function):
                                                     TOP_K=ctx.top_k, BLOCK=GLUE_BLOCK)
         if ctx.needs_input_grad[4]:
             # BF16 grouped GEMM in the parameter layout (a Triton reduction kernel measured 2-5x slower here).
-            grad_weight = torch._grouped_mm(grad.t(), a[rows] if rows is not None else a, offs=offsets)
+            if ctx.carrier:
+                from .fp8_experts import grouped_weight_gradient
+                grad_weight = grouped_weight_gradient(grad, a[rows] if rows is not None else a, offsets, weight.shape)
+            else:
+                grad_weight = torch._grouped_mm(grad.t(), a[rows] if rows is not None else a, offs=offsets)
         return grad_a, None, None, None, grad_weight, None, None, None
 
 

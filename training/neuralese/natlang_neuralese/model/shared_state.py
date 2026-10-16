@@ -752,6 +752,8 @@ def _linear_weight(x, weight, *, precision="ieee"):
 
 
 def _linear(module, x):
+    if hasattr(module, 'native_fixed_forward'):
+        return module.native_fixed_forward(x)
     # Preserve custom adapter/quantization forwards rather than bypassing them.
     if type(module) is not nn.Linear:
         return module(x)
@@ -820,8 +822,12 @@ def _compiled_flex(q, k, v, scale):
         capacity_stride = (strides[1] if strides[2] == tensor.shape[-1]
                            and strides[1] != tensor.shape[2]*tensor.shape[-1] else 0)
         return order, capacity_stride
+    # Autograd prunes different Q/K/V adjoints for different selected adapter
+    # targets. These are real compiled contracts, not dynamic sequence lengths.
+    # Inference tensors and global grad/inference scopes have separate guards.
     key = (q.dtype, k.dtype, v.dtype, q.shape[0], q.shape[1], k.shape[1], q.shape[-1], v.shape[-1],
-           scale, layout(q), layout(k), layout(v))
+           scale, layout(q), layout(k), layout(v), torch.is_grad_enabled(), torch.is_inference_mode_enabled(),
+           tuple((tensor.requires_grad, tensor.is_inference()) for tensor in (q, k, v)))
     if key not in _flex:
         name = 'native_flex_' + hashlib.sha256(repr(key).encode()).hexdigest()[:16]
         # A fresh wrapper code object gives each real kernel contract its own

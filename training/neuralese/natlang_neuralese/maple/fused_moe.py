@@ -361,7 +361,8 @@ def dense_grouped_experts(x: torch.Tensor, index: torch.Tensor, weights: torch.T
     # Group ends from the sorted expert ids.
     offsets = torch.searchsorted(flat[order], torch.arange(experts, device=flat.device), right=True).to(torch.int32)
     rows = GatherRows.apply(x, order // top_k, slot_of, top_k) if glue else x[order // top_k]
-    if glue:  # maple/fp8_experts.py: weight grads in parameter layout
+    from ..model.native_adapters import native_forward_storage_dtype
+    if glue or native_forward_storage_dtype(gate_up) is not None or native_forward_storage_dtype(down) is not None:
         from .fp8_experts import GroupedLinear
         project = lambda a, w: GroupedLinear.apply(a, w, offsets, False)
     else:
@@ -440,11 +441,11 @@ def _grouped_dense_mm(a_ptr, rows_ptr, w_ptr, out_ptr, block_expert_ptr,
              mask=(offs_m[:, None] < P) & n_mask[None, :])
 
 
-def _dense_mm(a, rows, weight, plan: Plan, transpose: bool, *, precision="ieee") -> torch.Tensor:
+def _dense_mm(a, rows, weight, plan: Plan, transpose: bool, *, precision="ieee", output_dtype=None) -> torch.Tensor:
     """Grouped A @ W_eᵀ (W_e = weight[e], [N, K]) or, transposed, A @ W_e (the input gradient), with one fixed tile."""
     E, R, C = weight.shape
     N, K = (R, C) if not transpose else (C, R)
-    out = torch.zeros(plan.size, N, device=a.device, dtype=a.dtype)
+    out = torch.zeros(plan.size, N, device=a.device, dtype=output_dtype or a.dtype)
     inner, outer = (weight.stride(2), weight.stride(1)) if not transpose else (weight.stride(1), weight.stride(2))
     ieee = a.dtype == torch.float32 and precision == "ieee"
     dot_precision = precision if a.dtype == torch.float32 else "native"
@@ -479,6 +480,10 @@ class _DenseExpertProjection(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, a, rows, weight, plan):
+        from ..model.native_adapters import native_forward_storage_dtype
+        dtype = native_forward_storage_dtype(weight)
+        ctx.carrier = dtype is not None
+        weight = weight.to(dtype) if ctx.carrier else weight
         ctx.save_for_backward(a, rows, weight)
         ctx.plan = plan
         return _dense_mm(a, rows, weight, plan, transpose=False)
@@ -490,7 +495,12 @@ class _DenseExpertProjection(torch.autograd.Function):
         grad = grad.contiguous()
         grad_weight = None
         if ctx.needs_input_grad[2]:
-            grad_weight = _weight_grad(grad, a[rows] if rows is not None else a, plan, weight.shape).to(weight.dtype)
+            if ctx.carrier:
+                from .fp8_experts import grouped_weight_gradient
+                ends = (plan.start + (plan.count + plan.block - 1) // plan.block * plan.block).to(torch.int32)
+                grad_weight = grouped_weight_gradient(grad, a[rows] if rows is not None else a, ends, weight.shape)
+            else:
+                grad_weight = _weight_grad(grad, a[rows] if rows is not None else a, plan, weight.shape).to(weight.dtype)
         grad_a = None
         if ctx.needs_input_grad[0]:
             grad_rows = _dense_mm(grad, None, weight, plan, transpose=True)
@@ -516,11 +526,25 @@ def invariant_dense_experts(x: torch.Tensor, index: torch.Tensor, weights: torch
     return _gather_sum(out, plan.position, tokens, top_k, weights)
 
 
+def invariant_weight_gradient(x, grad):
+    """Exact stored-operand dW with FP32 output, independent of cuBLAS TF32 flags."""
+    if x.dtype != grad.dtype:
+        x, grad = x.float(), grad.float()
+    rows = grad.shape[1]
+    plan = SimpleNamespace(size=rows, blocks=triton.cdiv(rows, INVARIANT_BLOCK), block=INVARIANT_BLOCK,
+                           block_expert=torch.zeros(triton.cdiv(rows, INVARIANT_BLOCK), dtype=torch.int32,
+                                                    device=grad.device))
+    return _dense_mm(grad.T.contiguous(), None, x.T[None], plan, transpose=False,
+                     precision='ieee', output_dtype=torch.float32)
+
+
 class _InvariantLinear(torch.autograd.Function):
     """x @ wᵀ for every row with the same fixed tile (FP32 inputs in exact FP32): the router's logits."""
 
     @staticmethod
-    def forward(ctx, x, w, precision):
+    def forward(ctx, x, w, precision, forward_storage_dtype):
+        ctx.carrier = forward_storage_dtype is not None
+        w = w.to(forward_storage_dtype) if ctx.carrier else w
         ctx.save_for_backward(x, w)
         ctx.precision = precision
         rows = x.shape[0]
@@ -549,15 +573,17 @@ class _InvariantLinear(torch.autograd.Function):
             precision=backward_precision) if ctx.needs_input_grad[0] else None
         dw = None
         if ctx.needs_input_grad[1]:
-            if x.dtype == torch.float32 and ctx.precision == 'bf16':
+            if ctx.carrier:
+                dw = invariant_weight_gradient(x, grad)
+            elif x.dtype == torch.float32 and ctx.precision == 'bf16':
                 # Cast-forward straight-through derivative, without adjoint rounding.
                 dw = grad.T @ x.to(torch.bfloat16).float()
             else:
                 dw = grad.T @ x
-        return dx, dw, None
+        return dx, dw, None, None
 
 
-def invariant_linear(x: torch.Tensor, w: torch.Tensor, *, precision="ieee") -> torch.Tensor:
+def invariant_linear(x: torch.Tensor, w: torch.Tensor, *, precision="ieee", forward_storage_dtype=None) -> torch.Tensor:
     if precision not in {"ieee", "tf32x3", "tf32", "bf16", "bf16x6"}:
         raise ValueError("native fixed linear requires explicit ieee, tf32x3, tf32, bf16 or bf16x6 arithmetic")
-    return _InvariantLinear.apply(x, w, precision)
+    return _InvariantLinear.apply(x, w, precision, forward_storage_dtype)
