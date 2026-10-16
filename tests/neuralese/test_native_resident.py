@@ -155,7 +155,7 @@ def test_real_resident_sgd_matches_all_data_run_and_recovers_old_checkpoint(tmp_
     base=tmp_path/'base';tiny_source(base)
     _,_,roles,config=load_native_model(base,dtype=torch.float32,rank=4)
     identity={'model_config':config,'batch_graphs':1,'batch_tokens':0,'checkpoint_layers':True,'chunk_tokens':128,'checkpoint_input_offload':False,
-        'fp8':{'kind':'off','recipe':'delayed','amax_history_len':16,'input_gradient_precision':None}}
+        'fp8':{'kind':'off','recipe':'delayed','amax_history_len':16,'input_gradient_precision':None},'runtime':{'torch':torch.__version__,'cuda':torch.version.cuda,'device':'cpu'}}
     paths,directory,manager,recipe=setup(tmp_path,config['tokenizer_fingerprint'],roles.ids,identity)
     held_path=paths['held']
     if held_append:
