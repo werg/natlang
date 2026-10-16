@@ -202,6 +202,16 @@ def decode_native_tensor_artifact(body):
 def native_tensor_dependencies(artifact):
     """Required immutable inputs for interpreting/updating a named artifact."""
     dependencies = []
+    provenance=artifact.provenance or {}
+    if 'query_objective_json' in provenance or 'query_objective_sha256' in provenance:
+        text=provenance.get('query_objective_json')
+        if not isinstance(text,str) or hashlib.sha256(text.encode()).hexdigest()!=provenance.get('query_objective_sha256'):
+            raise ValueError('native query gradient changed its exact objective declaration')
+        query=json.loads(text)
+        if not isinstance(query,dict) or query.get('schema')!='natlang.native-query-objective/1' or query.get('kind')!='native-query':
+            raise ValueError('native query gradient has an unsupported objective declaration')
+        from .native_derivative_contract import query_readout_dependencies
+        dependencies.extend(query_readout_dependencies(query))
     if artifact.kind=='derivative-program':
         from .native_derivative_contract import validate_program_artifact
         validate_program_artifact(artifact.provenance)

@@ -314,3 +314,42 @@ Memory/OPFS/.nz→Python state-program closure passes4cases5.41s, including the
 new inline objective declaration. Queries crossing an import boundary reject
 before forward; no likelihood is invented for an imported slot's forced input.
 Public recorded-turn rendering/lowering and decision capture are still open.
+
+### Actual decision capture
+
+A finite readout records its actual rendered native prompt and all option token
+continuations after scoring, not a fabricated sampled reply. The existing
+batched scorer keeps each caller's recorder/adapters and source-state archive;
+its per-item receipt is finalized before the learning objective sees the result.
+The native agent links that receipt to the existing execution graph using the
+same block-read/model-query mechanism as generation, with deterministic
+readout metadata and no claimed sampling density. This includes coalesced
+concurrent decisions and exact decoded foreign-state dependencies.
+
+### Explicit immutable query readouts
+
+The scalar objective distinguishes an invocation's pre-final-norm hidden state
+from the readout actor that turns it into logits. Current native adapters select
+layer matrices only, so their final norm/head/sparse rows are shared; a distinct
+teacher parameter overlay must not be inferred from hidden.detach. The exact
+mechanism snapshots the COMPLETE named native readout (final norm, full/tied
+vocabulary table and learned sparse overrides) as one existing immutable
+parameter-set artifact. Query NLL, decision options and teacher/student KL may
+select such a readout explicitly. The snapshot's actual base/layout/inventory
+is checked and functional substitution restores the original module objects.
+A stopped teacher stops its own declared readout as well as its hidden rows.
+Artifacts and portable program closures retain every selected readout ID.
+This does not pretend to provide heterogeneous full-BODY parameter overlays:
+the graph's hidden trajectories must still be produced by supported exact
+actors; readout substitution cannot repair a wrong teacher hidden trajectory.
+
+Distinct-readout evidence: the independent linear oracle uses materially different
+teacher/student matrices and checks analytic student-head/hidden adjoints and
+zero teacher-head/hidden adjoints. Actual both-port service tests verify that
+changing the explicit teacher snapshot changes loss and coefficient gradient,
+with original module tensor identities/values restored. CPU20PASS8.34s and
+CUDA16PASS15.32s; four Python→TS file/Memory/OPFS/.nz→Python program cases retain
+the readout dependency. Direct gradient provenance stores exact objective JSON
+bytes plus SHA and dependencies, preserving numeric metadata across languages.
+One operation-local cache shares immutable device copies across inner updates;
+it is released after the derivative operation rather than retained on Engine.

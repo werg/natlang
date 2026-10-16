@@ -153,7 +153,8 @@ def _evaluate(engine,request,bindings,values,roots,target_name,finish,owner):
 def execute_derivative_program(engine,program,owner=None):
     """Evaluate a declared finite program without modifying the serving model."""
     validate_finite_program(program)
-    with engine.native_execution_lock,torch.inference_mode(False),torch.enable_grad(),reference_arithmetic(
+    from ..model.native_readout import readout_scope
+    with engine.native_execution_lock,readout_scope(),torch.inference_mode(False),torch.enable_grad(),reference_arithmetic(
             engine.shared_model,query_chunk_tokens=program['arithmetic']['query_chunk_tokens']) as arithmetic:
         roots={name:_root(engine,value,owner) for name,value in program['inputs'].items()}
         coordinates=[(value.kind,value.ident,name) for value in roots.values() for name in value.names]

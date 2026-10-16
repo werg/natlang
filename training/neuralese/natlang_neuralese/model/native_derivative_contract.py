@@ -161,6 +161,7 @@ def validate_finite_program(program,*,bound=False):
             raise ValueError('native derivative objectives need a complete shared native graph request without a separate target')
         if isinstance(request.get('objective'),dict) and request['objective'].get('kind')!='native-query':
             raise ValueError('native derivative registered-policy objectives require portable bound objective assets')
+        query_readout_dependencies(request.get('objective'))
     for node in nodes:
         if (not isinstance(node,dict) or not isinstance(node.get('name'),str) or not node['name']
                 or node['name'] in all_names):raise ValueError('native derivative nodes require unique ordered names')
@@ -341,4 +342,21 @@ def program_dependencies(program):
         for entries in [request.get('adapters') or [],*(request.get('invocation_adapters') or {}).values()]:
             result.update(entry if isinstance(entry,str) else entry['id'] for entry in entries)
         result.update(value['id'] for value in (request['graph'].get('external_states') or {}).values())
+        result.update(query_readout_dependencies(request.get('objective')))
+    return sorted(result)
+
+
+def query_readout_dependencies(spec):
+    if not isinstance(spec,dict) or spec.get('kind')!='native-query':return []
+    terms=spec.get('terms')
+    if not isinstance(terms,list) or any(not isinstance(term,dict) for term in terms):
+        raise ValueError('native query needs its actual declared term inventory')
+    result=set()
+    for term in terms:
+        declared=term.get('readouts',[])
+        if not isinstance(declared,list):raise ValueError('native query readouts must be an ordered list')
+        for ident in [term.get('readout'),term.get('teacher_readout'),*declared]:
+            if ident is None:continue
+            if not native_id(ident,'nnt1_'):raise ValueError('native query readout needs its exact native tensor artifact ID')
+            result.add(ident)
     return sorted(result)

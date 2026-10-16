@@ -476,3 +476,9 @@ error, provide finite numeric rewards or nonnegative finite probabilities with
 positive total mass, exactly one entry per declared option. Keep the recorded
 conditional token queries bound to their actual graph and avoid assigning a
 likelihood to a forced input after an imported state.
+
+For an explicit native query readout binding error, restore the complete immutable
+readout snapshot for the matching base and layout, including final norm, tied
+vocabulary table and sparse rows. A teacher hidden state alone does not select
+a different teacher head; stop the declared teacher distribution. This does
+not enable arbitrary heterogeneous full-backbone parameter overlays.

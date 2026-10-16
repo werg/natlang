@@ -102,6 +102,9 @@ def test_python_ts_program_state_archive_nz_browser_and_restore(tmp_path,family,
     source=program(engine,adapter,'sgd')
     ident=engine.native_write_text('t5 t6')['id']
     source['inputs']={'a':{'kind':'native-state','id':ident}}
+    if objective_kind=='query':
+        from natlang_neuralese.model.native_readout import snapshot_readout
+        readout_id=snapshot_readout(engine).id
     for objective in [source['outer'],*(node for node in source['nodes'] if node['kind']=='gradient')]:
         objective['request']=copy.deepcopy(objective['request']);objective['request'].pop('adapters')
         graph=objective['request']['graph'];graph['external_states']={'prior':{'id':ident,'token_count':2}}
@@ -109,7 +112,7 @@ def test_python_ts_program_state_archive_nz_browser_and_restore(tmp_path,family,
         if objective_kind=='query':
             from test_native_query_objective import query_spec
             node=graph['nodes'][0]
-            objective['request']['objective']=query_spec(graph,[{'kind':'nll','reduction':'mean','actions':[
+            objective['request']['objective']=query_spec(graph,[{'kind':'nll','reduction':'mean','readout':readout_id,'actions':[
                 {'query':index-1,'token_id':token} for index,(token,weight) in
                 enumerate(zip(node['token_ids'],node['target_weights'])) if weight]}])
     try:

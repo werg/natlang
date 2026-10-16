@@ -12,6 +12,7 @@ from dataclasses import replace
 import torch
 
 from ..common.hashing import canonical_json_sha256_hex, sha256_file_hex_cached
+from ..common.jsonio import canonical_json_bytes
 from ..data.native_graph import graph_loss, parse_graph
 from ..model.native_artifact import NativeTensorArtifact
 from .chat import RequestError
@@ -156,7 +157,9 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
         is_policy = isinstance(objective_request,dict) and objective_request.get('kind')=='native-policy'
         if isinstance(objective_request,dict) and objective_request.get('kind')=='native-query':
             from .native_query_objective import NativeQueryObjective
-            query_objective = NativeQueryObjective(objective_request,row,example,vocabulary=engine.shared_model.port.output_weight.shape[0])
+            from ..model.native_readout import bind_readout
+            query_objective = NativeQueryObjective(objective_request,row,example,vocabulary=engine.shared_model.port.output_weight.shape[0],
+                resolve_readout=lambda ident:bind_readout(engine,ident))
         elif isinstance(objective_request, dict):
             if objective_request.get('kind') != 'native-policy':
                 raise ValueError('only the registered native-policy objective is supported')
@@ -289,7 +292,9 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
         def provenance_for(names):
             return {'objective': (query_objective.spec['schema'].removeprefix('natlang.') if query_objective is not None else
                 'native-graph-token-ce/1' if objective is None else objective.spec['schema'].removeprefix('natlang.')),
-            **({'query_objective_sha256':canonical_json_sha256_hex(query_objective.spec)} if query_objective is not None else {}), 'graph_id': example.id,
+            **({'query_objective_sha256':canonical_json_sha256_hex(query_objective.spec),
+                'query_objective_json':canonical_json_bytes(query_objective.spec).decode()}
+                if query_objective is not None else {}), 'graph_id': example.id,
             'graph_sha256': graph_sha256, 'target_kind': kind,
             'external_source_identities': input_identities,
             'external_adapter_state_contracts': {name: {key: value for key, value in receipt.items()

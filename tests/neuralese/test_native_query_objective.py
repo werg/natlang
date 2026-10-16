@@ -135,3 +135,100 @@ def test_query_masks_and_graph_binding_fail_before_forward():
     with pytest.raises(ValueError,match='excludes its target'):NativeQueryObjective(spec,graph,example,vocabulary=4)
     spec['graph_sha256']='0'*64
     with pytest.raises(ValueError,match='exact graph'):NativeQueryObjective(spec,graph,example,vocabulary=4)
+
+
+def test_distinct_teacher_readout_has_exact_analytic_student_adjoint_and_no_teacher_adjoint():
+    graph={'schema':'natlang.neuralese-native-graph/1','id':'different-heads','split':'train','source_groups':['train'],
+        'tokenizer_fingerprint':'f'*64,'nodes':[
+            {'name':'student','token_ids':[0,1,2],'target_weights':[0,0,0]},
+            {'name':'teacher','token_ids':[3,1,2],'target_weights':[0,0,0]}]}
+    example=parse_graph(graph,tokenizer_fingerprint='f'*64)
+    teacher_id='nnt1_'+'a'*52
+    spec=query_spec(graph,[{'kind':'distill','actions':[{'query':0,'token_id':1},{'query':1,'token_id':2}],
+        'teacher_actions':[{'query':3,'token_id':1},{'query':4,'token_id':2}],'teacher_readout':teacher_id}])
+    torch.manual_seed(49)
+    h=torch.randn(6,3,requires_grad=True)
+    student=torch.randn(3,4,requires_grad=True)
+    teacher=torch.randn(3,4,requires_grad=True)
+    model=SimpleNamespace(logits=lambda value:value@student)
+    objective=NativeQueryObjective(spec,graph,example,vocabulary=4,
+        resolve_readout=lambda ident:(lambda value:value@teacher) if ident==teacher_id else None)
+    value,_=objective(model,example,{'plan':example.plan,'h_final':h[None]})
+    dh,dw,dt=torch.autograd.grad(value,(h,student,teacher),allow_unused=True)
+    goal=(h.detach()[[3,4]]@teacher.detach()).softmax(-1)
+    predicted=(h.detach()[[0,1]]@student.detach()).softmax(-1)
+    delta=(predicted-goal)/2
+    expected_h=torch.zeros_like(h);expected_h[[0,1]]=delta@student.detach().T
+    torch.testing.assert_close(dh,expected_h,rtol=2e-6,atol=2e-7)
+    torch.testing.assert_close(dw,h.detach()[[0,1]].T@delta,rtol=2e-6,atol=2e-7)
+    assert dt is None and dh[3:].count_nonzero()==0
+    wrong_goal=(h.detach()[[3,4]]@student.detach()).softmax(-1)
+    assert (goal-wrong_goal).norm()>.1, 'different teacher head must materially change the target'
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_actual_complete_readout_snapshot_is_distinct_and_restores_every_tensor(tmp_path,family):
+    from natlang_neuralese.model.native_readout import snapshot_readout,bind_readout,readout_layout
+    engine=engine_fixture(tmp_path,family)
+    model=engine.shared_model
+    named,layout=readout_layout(model)
+    originals={name:(id(value),value.detach().clone()) for name,value in model.named_parameters()}
+    hidden=torch.randn(2,model.port.output_weight.shape[1],device=engine.device,dtype=model.port.output_weight.dtype)
+    before=model.logits(hidden).detach()
+    values={name:value.detach().clone() for name,value in named.items()}
+    head_name=next(name for name,value in named.items() if value is model.port.output_weight)
+    values[head_name][1:3]*=-1
+    try:
+        record=snapshot_readout(engine,values=values)
+        from natlang_neuralese.model.native_readout import readout_scope
+        with readout_scope():
+            read=bind_readout(engine,record.id)
+            assert bind_readout(engine,record.id) is read
+        assert bind_readout(engine,record.id) is not read, "no permanent engine cache retains old readout copies"
+        after=read(hidden).detach()
+        assert not torch.equal(after[:,1:3],before[:,1:3])
+        assert torch.equal(model.logits(hidden),before)
+        assert all(id(dict(model.named_parameters())[name])==ident and torch.equal(dict(model.named_parameters())[name],old)
+                   for name,(ident,old) in originals.items())
+        wrong=copy.deepcopy(record.artifact)
+        wrong.provenance={'readout':{**layout,'norm_eps_hex':float(.9).hex()}}
+        bad=engine.store.put_native_tensor_artifact(wrong)
+        with pytest.raises(ValueError,match='exact base/layout'):bind_readout(engine,bad.id)
+    finally:engine.store.close()
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_real_service_distillation_uses_explicit_teacher_head(tmp_path,family):
+    from natlang_neuralese.model.native_readout import snapshot_readout,readout_layout
+    engine=engine_fixture(tmp_path,family)
+    adapter,name=nonzero_adapter(engine)
+    request=copy.deepcopy(program(engine,adapter)['outer']['request'])
+    graph=request['graph']
+    teacher=copy.deepcopy(graph['nodes'][1]);teacher['name']='teacher';teacher['token_ids'][0]=11
+    teacher['target_weights']=[0]*len(teacher['token_ids']);graph['nodes'].append(teacher)
+    named,_=readout_layout(engine.shared_model)
+    values={name:value.detach().clone() for name,value in named.items()}
+    head_name=next(name for name,value in named.items() if value is engine.shared_model.port.output_weight)
+    values[head_name]*=-.8
+    try:
+        readout=snapshot_readout(engine,values=values)
+        term={'kind':'distill','actions':[{'query':7,'token_id':8},{'query':8,'token_id':9}],
+            'teacher_actions':[{'query':12,'token_id':8},{'query':13,'token_id':9}]}
+        request['target']={'kind':'adapter','id':adapter.id}
+        request['objective']=query_spec(graph,[term])
+        current=native_graph_gradient(engine,request,None)
+        request['objective']['terms'][0]['teacher_readout']=readout.id
+        bound=native_graph_gradient(engine,request,None)
+        before=engine.store.get_native_tensor_artifact(current['gradient']['id']).artifact.tensors[name]
+        after=engine.store.get_native_tensor_artifact(bound['gradient']['id']).artifact.tensors[name]
+        assert abs(bound['loss']-current['loss'])>1e-4
+        assert (before-after).double().norm()>1e-6
+        assert torch.isfinite(after).all() and after.norm()>0
+        from natlang_neuralese.model.native_artifact import native_tensor_dependencies
+        artifact=engine.store.get_native_tensor_artifact(bound['gradient']['id']).artifact
+        assert readout.id in native_tensor_dependencies(artifact)
+        bad=copy.deepcopy(artifact);bad.provenance['query_objective_json']+=' '
+        with pytest.raises(ValueError,match='exact objective declaration'):native_tensor_dependencies(bad)
+        engine.store.collect({bound['gradient']['id']})
+        assert engine.store.get_native_tensor_artifact(readout.id) is not None
+    finally:engine.store.close()

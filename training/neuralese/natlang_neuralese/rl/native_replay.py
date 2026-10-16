@@ -359,7 +359,7 @@ def action_logps(model, hidden, actions, *, chunk_tokens=128):
                               device=hidden.device, dtype=torch.float32)
 
 
-def token_action_logps(model, hidden, actions, *, chunk_tokens=128):
+def token_action_logps(model, hidden, actions, *, chunk_tokens=128, readout=None):
     """Exact masked conditional scores; no invented behavior-density field."""
     if chunk_tokens < 1:
         raise ValueError('native RL loss chunks must be positive')
@@ -371,7 +371,7 @@ def token_action_logps(model, hidden, actions, *, chunk_tokens=128):
     logps = [None] * len(actions)
     def score(states,labels,temperature,allowed,banned):
         from ..common.sampling import masked_log_distribution
-        log_probs=masked_log_distribution(model.logits(states),temperature,allowed=allowed,banned=banned)
+        log_probs=masked_log_distribution((readout or model.logits)(states),temperature,allowed=allowed,banned=banned)
         return log_probs.gather(1,labels[:,None]).squeeze(1)
     from ..common.native_higher_order import capture_reference_execution,active_reference_arithmetic
     if active_reference_arithmetic() is not None:

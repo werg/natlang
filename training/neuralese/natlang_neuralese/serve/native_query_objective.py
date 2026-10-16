@@ -18,7 +18,7 @@ SCHEMA = 'natlang.native-query-objective/1'
 
 
 class NativeQueryObjective:
-    def __init__(self, spec, graph, example, *, vocabulary):
+    def __init__(self, spec, graph, example, *, vocabulary, resolve_readout=None):
         if (not isinstance(spec, dict) or set(spec) != {'kind','schema','graph_sha256','terms'}
                 or spec['kind'] != 'native-query' or spec['schema'] != SCHEMA
                 or spec['graph_sha256'] != canonical_json_sha256_hex(graph)):
@@ -55,22 +55,34 @@ class NativeQueryObjective:
         if not isinstance(terms, list) or not terms:
             raise ValueError('native query objective needs finite declared terms')
         self.terms = []
+        self.readouts = {}
+        def readout(ident):
+            if ident is None:return
+            from ..model.native_derivative_contract import native_id
+            if not native_id(ident,"nnt1_") or resolve_readout is None:
+                raise ValueError("native query needs its exact immutable readout resolver")
+            if ident not in self.readouts:self.readouts[ident]=resolve_readout(ident)
         for term in terms:
             if not isinstance(term, dict) or type(term.get('weight',1.)) not in (float,int) or not math.isfinite(term.get('weight',1.)):
                 raise ValueError('native query term needs a finite signed weight')
             kind = term.get('kind')
-            if kind == 'nll' and not set(term)-{'kind','actions','reduction','weight'}:
+            if kind == 'nll' and not set(term)-{'kind','actions','reduction','weight','readout'}:
                 if term.get('reduction') not in {'mean','sum'}:
                     raise ValueError('native NLL reduction must be mean or sum')
+                readout(term.get('readout'))
                 prepared = {**term,'actions':actions(term.get('actions'))}
-            elif kind == 'decision' and not set(term)-{'kind','options','rule','probabilities','rewards','weight'}:
+            elif kind == 'decision' and not set(term)-{'kind','options','rule','probabilities','rewards','weight','readouts'}:
                 options = term.get('options')
                 if not isinstance(options,list) or not options:
                     raise ValueError('native decision needs nonempty option continuations')
-                prepared = {**term,'options':[actions(option) for option in options]}
+                declared=term.get('readouts',[None]*len(options))
+                if not isinstance(declared,list) or len(declared)!=len(options):
+                    raise ValueError('native decisions need one declared readout per option')
+                for ident in declared:readout(ident)
+                prepared = {**term,'options':[actions(option) for option in options],'readouts':declared}
                 decision_loss(torch.zeros(len(options)),rule=term.get('rule'),
                               probabilities=term.get('probabilities'),rewards=term.get('rewards'))
-            elif kind == 'distill' and not set(term)-{'kind','actions','teacher_actions','weight'}:
+            elif kind == 'distill' and not set(term)-{'kind','actions','teacher_actions','weight','readout','teacher_readout'}:
                 student,teacher = actions(term.get('actions')),actions(term.get('teacher_actions'))
                 if (len(student)!=len(teacher) or any(a['token_id']!=b['token_id'] or
                         a['temperature']!=1 or b['temperature']!=1 or
@@ -78,6 +90,7 @@ class NativeQueryObjective:
                         a['banned_token_ids'] is not None or b['banned_token_ids'] is not None
                         for a,b in zip(student,teacher))):
                     raise ValueError('native distillation requires aligned ordinary conditional token distributions')
+                readout(term.get('readout'));readout(term.get('teacher_readout'))
                 prepared = {**term,'actions':student,'teacher_actions':teacher}
             else:
                 raise ValueError('native query kind or fields are unsupported')
@@ -91,17 +104,20 @@ class NativeQueryObjective:
         for term in self.terms:
             kind = term['kind']
             if kind == 'nll':
-                logps = token_action_logps(model,hidden,term['actions'])
+                logps = token_action_logps(model,hidden,term['actions'],readout=self.readouts.get(term.get('readout')))
                 value = -logps.mean() if term['reduction']=='mean' else -logps.sum()
             elif kind == 'decision':
-                scores = torch.stack([token_action_logps(model,hidden,option).sum() for option in term['options']])
+                scores = torch.stack([token_action_logps(model,hidden,option,readout=self.readouts.get(ident)).sum()
+                    for option,ident in zip(term['options'],term['readouts'])])
                 value = decision_loss(scores,rule=term['rule'],probabilities=term.get('probabilities'),rewards=term.get('rewards'))
             else:
                 from torch.utils.checkpoint import checkpoint
-                def distill(student, teacher):
+                student_read=self.readouts.get(term.get('readout'),model.logits)
+                teacher_read=self.readouts.get(term.get('teacher_readout'),model.logits)
+                def distill(student, teacher,student_read=student_read,teacher_read=teacher_read):
                     with torch.no_grad():
-                        goal = model.logits(teacher).float().log_softmax(-1)
-                    predicted = model.logits(student).float().log_softmax(-1)
+                        goal = teacher_read(teacher).float().log_softmax(-1)
+                    predicted = student_read(student).float().log_softmax(-1)
                     return (goal.exp()*(goal-predicted)).sum()
                 from ..common.native_higher_order import capture_reference_execution,active_reference_arithmetic
                 if active_reference_arithmetic() is not None:

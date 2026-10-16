@@ -7,7 +7,7 @@ import { verifyNativeStateDerivation } from './native-state-derivation.js';
  * references (`{ $neuralese: { type, id } }`); bytes move between this store, `.nz` files and model servers.
  */
 import { digest, hexDigest } from './hash.js';
-import { validateNativeStateDerivation, nativeStateDerivationDependencies, validateNativeDerivativeArtifact, validateNativeDerivativeTarget, validateNativeFunctionalActor, type NativeStateDerivation } from './native-derivative-contract.js';
+import { validateNativeStateDerivation, nativeStateDerivationDependencies, validateNativeDerivativeArtifact, validateNativeDerivativeTarget, validateNativeFunctionalActor, nativeQueryReadoutDependencies, type NativeStateDerivation } from './native-derivative-contract.js';
 
 export type NeuraleseDtype = 'f32' | 'f16' | 'bf16';
 
@@ -100,6 +100,15 @@ export function nativeTensorArtifactDependencies(artifact: Pick<NativeTensorArti
   const dependencies = (meta.kind === 'adapter-coefficients' || meta.kind === 'adapter-gradient' ||
       meta.kind === 'optimizer-state' && meta.provenance.scope === 'natlang.native-adapter/1') &&
       meta.source_artifact_id ? [meta.source_artifact_id] : [];
+  if(meta.provenance.query_objective_json!==undefined||meta.provenance.query_objective_sha256!==undefined){
+    const text=meta.provenance.query_objective_json;
+    if(typeof text!=='string'||hexDigest(text)!==meta.provenance.query_objective_sha256)
+      throw new RangeError('native query gradient changed its exact objective declaration');
+    const query=JSON.parse(text) as {schema?:unknown;kind?:unknown};
+    if(query?.schema!=='natlang.native-query-objective/1'||query.kind!=='native-query')
+      throw new RangeError('native query gradient has an unsupported objective declaration');
+    dependencies.push(...nativeQueryReadoutDependencies(query));
+  }
   if (meta.kind === 'derivative-program') {
     validateNativeDerivativeArtifact(meta.provenance);
     dependencies.push(...meta.provenance.dependencies as string[]);

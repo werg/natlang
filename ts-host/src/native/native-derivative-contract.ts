@@ -91,6 +91,7 @@ function finiteProgramDependencies(value:unknown):string[]{
     const request=item.request,graph=request.graph;
     if(request.schema!=='natlang.native-gradient-request/1'||['target','order','derived','create_graph'].some(key=>Object.hasOwn(request,key))||
       !object(graph)||(object(request.objective)&&request.objective.kind!=='native-query'))return fail();
+    for(const id of nativeQueryReadoutDependencies(request.objective))deps.add(id);
     const invocation=request.invocation_adapters;
     if(invocation!==undefined&&(!object(invocation)))return fail();
     for(const entries of [request.adapters??[],...Object.values((invocation??{}) as Obj)]){
@@ -193,4 +194,21 @@ export function validateNativeFunctionalActor(metadata:{native_identity:unknown;
       throw new RangeError('native functional actor differs from actual evaluated coefficient actors');
   }
   return actor;
+}
+
+/** Immutable readout inputs of a declared inline objective. */
+export function nativeQueryReadoutDependencies(value:unknown):string[]{
+  const object=(item:unknown):item is Record<string,unknown>=>!!item&&typeof item==='object'&&!Array.isArray(item);
+  if(!object(value)||value.kind!=='native-query')return [];
+  const fail=():never=>{throw new RangeError('native query readout needs its exact tensor artifact inventory');};
+  if(!Array.isArray(value.terms))return fail();
+  const deps=new Set<string>();
+  for(const term of value.terms){
+    if(!object(term)||(term.readouts!==undefined&&!Array.isArray(term.readouts)))return fail();
+    for(const id of [term.readout,term.teacher_readout,...((term.readouts??[]) as unknown[])]){
+      if(id===undefined||id===null)continue;
+      if(typeof id!=='string'||!TENSOR.test(id))return fail();deps.add(id);
+    }
+  }
+  return [...deps].sort();
 }

@@ -900,3 +900,8 @@ prompt or public higher-order capability is added. These recovery details are
 unmeasured model-facing debt if exposed; include them in the next live executor
 window before adopting a model-facing service surface. Actual numeric/HVP and
 archive tests are mechanism evidence only.
+
+The inline-objective debt also covers existing native-gradient errors for a
+missing or incompatible immutable readout snapshot. Recovery restores its exact
+base/layout and full dependency closure. No readout is silently inferred from
+a detached teacher hidden state, and no model-facing prompt is added.
