@@ -1,15 +1,12 @@
 /** Exact native state service plumbing shared by typed writes, body init and views. */
 import { fetchModel } from '../model/chat-completion.js';
-import { HttpNeuraleseStore, requestNativeStateIds, restoreBlocks } from '../model/neuralese-server.js';
+import { HttpNeuraleseStore, requestNativeStateIds, restoreBlocks, restoreNativeStates } from '../model/neuralese-server.js';
 import { archiveNativeTensorFrom, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlockMeta,
-  type NeuralesePort, type NeuraleseStore, type NativeAdapterBinding } from '../native/neuralese-store.js';
+  type NeuralesePort, type NeuraleseStore, type NativeAdapterStateConsumption, validateNativeAdapterStateConsumption, nativeCanonicalJson } from '../native/neuralese-store.js';
 import { hexDigest } from '../native/hash.js';
 import { neuraleseServerInfo, serves, type NeuraleseServerInfo } from '../model/neuralese-info.js';
 
-export type NativeAdapterStateConsumption = { schema: 'natlang.native-adapter-state-consumption/1';
-  mode: 'same-base-adapter-state'; source_state_id: string; source_native_identity: Record<string, string>;
-  target_native_identity: Record<string, string>; base_native_identity: Record<string, string>;
-  source_adapter_binding: NativeAdapterBinding | null; target_adapter_binding: NativeAdapterBinding | null; target_position_start: number; tokens: number };
+export type { NativeAdapterStateConsumption } from '../native/neuralese-store.js';
 
 export type NativeSourceCapture = { policy: { checkpoint_sha256: string; tokenizer_fingerprint: string;
   embedding_weight_sha256: string; architecture: string };
@@ -43,14 +40,7 @@ export async function archiveNativeState(options: NativeClientOptions, id: strin
 /** Restore every native part before a contextual write, including nested tool arguments. */
 export async function restoreNativeInputs(options: NativeClientOptions, value: unknown): Promise<void> {
   const remote = new HttpNeuraleseStore(options.endpoint, options.headers);
-  for (const id of requestNativeStateIds([value])) {
-    if (await remote.hasNativeState(id)) continue;
-    const artifact = await options.store.getNativeState?.(id);
-    if (!artifact) return failure('neuralese-unknown-native-state', `restore ${id} to the configured native archive before initialization`);
-    const { id: _, ...input } = artifact;
-    if ((await remote.putNativeState(input)).id !== id)
-      return failure('neuralese-block-integrity', `native input ${id} changed during restoration`);
-  }
+  await restoreNativeStates(remote, options.store, requestNativeStateIds([value]));
 }
 
 function validateSource(result: NativeTextResult, artifact: NativeStateArtifact, text: string, info: NeuraleseServerInfo): void {
@@ -109,14 +99,41 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
   if (!/^nzs1_[a-z2-7]{52}$/.test(result.id)) return failure('neuralese-block-integrity', 'native writer returned no native content address');
   const artifact = await archiveNativeState(options, result.id);
   validateSource(result, artifact, body.text, info);
-  for (const segment of result.source_capture.segments) if (segment.kind === 'native_state') {
+  let logicalPosition = 0;
+  const explicitSegments: { id: string; receipt: NativeAdapterStateConsumption }[] = [];
+  for (const segment of result.source_capture.segments) {
+    if (segment.kind === 'tokens') { logicalPosition += segment.token_ids.length; continue; }
     const imported = await archiveNativeState(options, segment.id);
     for (const key of ['checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'] as const)
-      if (segment.native_identity?.[key] !== imported.metadata[key] || segment.native_identity[key] !== result.source_capture.policy[key])
+      if (segment.native_identity?.[key] !== imported.metadata[key])
         return failure('neuralese-native-source-integrity', `source import ${segment.id} has an invalid ${key} binding`);
+    const receipt = segment.adapter_state_consumption;
+    if (receipt) {
+      if ((body.native_state_modes as Record<string, unknown> | undefined)?.[segment.id] !== 'same-base-adapter-state')
+        return failure('neuralese-native-source-integrity', 'adapter-state import was not explicitly requested');
+      validateNativeAdapterStateConsumption(receipt, imported, artifact.metadata);
+      if (receipt.target_position_start !== logicalPosition)
+        return failure('neuralese-native-source-integrity', 'adapter-state import position differs from the actual source stream');
+      explicitSegments.push({ id: segment.id, receipt });
+    } else for (const key of ['checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'] as const)
+      if (segment.native_identity[key] !== result.source_capture.policy[key])
+        return failure('neuralese-native-source-integrity', 'source import differs from the source policy without an explicit actor receipt');
+    logicalPosition += imported.tensors.token_ids!.shape[0]!;
   }
   for (const imported of result.source_capture.imports ?? []) {
     const original = await archiveNativeState(options, imported.id);
+    if (imported.mode === 'same-base-adapter-state') {
+      const receipt = imported.adapter_state_consumption;
+      const index = explicitSegments.findIndex(segment => segment.id === imported.id &&
+        nativeCanonicalJson(segment.receipt) === nativeCanonicalJson(receipt));
+      if (index < 0 || imported.observed_native_state_id !== imported.id || imported.semantic_adaptation || !receipt)
+        return failure('neuralese-native-source-integrity', 'adapter-state import must bind its original artifact and exact source-stream receipt');
+      validateNativeAdapterStateConsumption(receipt, original, artifact.metadata);
+      explicitSegments.splice(index, 1);
+      continue;
+    }
+    if (imported.adapter_state_consumption)
+      return failure('neuralese-native-source-integrity', 'adapter-state receipt requires its explicit consumption mode');
     if (imported.mode === 'best-effort-text-retokenization') {
       if (imported.observed_native_state_id || imported.semantic_adaptation)
         return failure('neuralese-native-source-integrity', 'text fallback cannot attest an imported native KV artifact');
@@ -145,6 +162,8 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
           return failure('neuralese-native-source-integrity', 'learned native import source/target identities differ from their artifacts');
     }
   }
+  if (explicitSegments.length)
+    return failure('neuralese-native-source-integrity', 'adapter-state source-stream receipt is missing its import observation');
   return { result, meta: { ...nativeStateBlockMeta(artifact), ...(typeof body.type === 'string' ? { type: body.type } : {}),
     producer: { ...(body.producer as Record<string, unknown> | undefined), native_source_capture: result.source_capture,
       source_text_sha256: result.source_text_sha256 } } };

@@ -761,5 +761,7 @@ No new prompt policy and no production controller adoption are introduced.
 - 2026-10-16: Native same-base adapter-state transport exposes an explicit
   input-ID keyed declaration and teachable `neuralese-native-state-mode` errors.
   Existing default transport is unchanged; capability is unadvertised pending
-  strict Mellum incremental/flat adjoint repair and independent review. Live
+  independent review and target-runtime qualification; strict local Mellum
+  incremental/flat adjoints now pass. Contextual import-integrity errors require
+  exact declared actor receipts and recursive source coefficient restoration. Live
   executor feedback measurement remains debt for the next own-teacher window.

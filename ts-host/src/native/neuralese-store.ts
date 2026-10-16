@@ -35,6 +35,12 @@ export type NativeStateDtype = 'F16' | 'BF16' | 'F32' | 'F64' | 'I64';
 export type NativeStateTensor = { dtype: NativeStateDtype; shape: number[]; data: Uint8Array };
 export type NativeAdapterBinding = { schema: 'natlang.native-adapter/1'; base_native_identity: NativeModelIdentity;
   adapters: { id: string; scale_hex: string }[] };
+export type NativeAdapterStateConsumption = { schema: 'natlang.native-adapter-state-consumption/1';
+  mode: 'same-base-adapter-state'; source_state_id: string; source_native_identity: Record<string, string>;
+  target_native_identity: Record<string, string>; base_native_identity: Record<string, string>;
+  source_adapter_binding: NativeAdapterBinding | null; target_adapter_binding: NativeAdapterBinding | null; target_position_start: number; tokens: number };
+
+
 export type NativeStateMetadata = { text: string; architecture: string;
   tokenizer_fingerprint: string; checkpoint_sha256: string; embedding_weight_sha256: string; layer_kinds: string[];
   adapter_binding?: NativeAdapterBinding } &
@@ -235,6 +241,29 @@ export function validateNativeAdapterBinding(binding: NativeAdapterBinding, meta
     if (hash !== metadata.checkpoint_sha256) throw new RangeError('native state differs from its exact adapted model identity');
 }
 
+/** Exact actor receipt verifier; importing another actor is always caller-declared. */
+export function validateNativeAdapterStateConsumption(receipt: NativeAdapterStateConsumption,
+    source: NativeStateArtifact, target: NativeStateMetadata): void {
+  const identity = (value: NativeModelIdentity): NativeModelIdentity => ({ checkpoint_sha256: value.checkpoint_sha256,
+    tokenizer_fingerprint: value.tokenizer_fingerprint, embedding_weight_sha256: value.embedding_weight_sha256, architecture: value.architecture });
+  const equal = (a: unknown, b: unknown): boolean => nativeCanonicalJson(a) === nativeCanonicalJson(b);
+  const sourceIdentity = identity(source.metadata), targetIdentity = identity(target);
+  const sourceBinding = source.metadata.adapter_binding ?? null, targetBinding = target.adapter_binding ?? null;
+  if (!receipt || Object.keys(receipt).sort().join(',') !== 'base_native_identity,mode,schema,source_adapter_binding,source_native_identity,source_state_id,target_adapter_binding,target_native_identity,target_position_start,tokens' ||
+      receipt.schema !== 'natlang.native-adapter-state-consumption/1' || receipt.mode !== 'same-base-adapter-state' ||
+      source.metadata.schema !== 'neuralese.native-state/1' || receipt.source_state_id !== source.id ||
+      !equal(receipt.source_native_identity, sourceIdentity) || !equal(receipt.target_native_identity, targetIdentity) ||
+      !equal(receipt.source_adapter_binding, sourceBinding) || !equal(receipt.target_adapter_binding, targetBinding) ||
+      !Number.isSafeInteger(receipt.target_position_start) || receipt.target_position_start < 0 ||
+      receipt.tokens !== source.tensors.token_ids?.shape[0]) throw new RangeError('invalid exact-base adapter-state consumption receipt');
+  if (sourceBinding) validateNativeAdapterBinding(sourceBinding, sourceIdentity);
+  if (targetBinding) validateNativeAdapterBinding(targetBinding, targetIdentity);
+  const sourceBase = sourceBinding?.base_native_identity ?? sourceIdentity;
+  const targetBase = targetBinding?.base_native_identity ?? targetIdentity;
+  if (!equal(sourceBase, targetBase) || !equal(receipt.base_native_identity, sourceBase))
+    throw new RangeError('adapter-state consumption requires the exact same immutable base');
+}
+
 function validateNativeState(metadata: NativeStateMetadata, tensors: Record<string, NativeStateTensor>): void {
   if (!metadata || !['neuralese.native-state/1', 'neuralese.semantic-state/1'].includes(metadata.schema) || typeof metadata.text !== 'string' ||
       typeof metadata.architecture !== 'string' || !metadata.architecture ||
@@ -316,7 +345,7 @@ function joinBytes(parts: readonly Uint8Array[]): Uint8Array {
   const out = new Uint8Array(parts.reduce((n, part) => n + part.length, 0)); let at = 0;
   for (const part of parts) { out.set(part, at); at += part.length; } return out;
 }
-function nativeCanonicalJson(value: unknown): string {
+export function nativeCanonicalJson(value: unknown): string {
   const sort = (item: unknown): unknown => Array.isArray(item) ? item.map(sort) :
     item && typeof item === 'object' ? Object.fromEntries(Object.keys(item).sort().map(key =>
       [key, sort((item as Record<string, unknown>)[key])])) : item;

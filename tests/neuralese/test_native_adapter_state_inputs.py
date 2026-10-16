@@ -96,3 +96,59 @@ def test_gradient_contract_retains_both_actor_dependencies(tmp_path):
         {'external_adapter_state_contracts':{'input':contract}})
     assert set(native_tensor_dependencies(gradient))=={source.id,target.id}
     engine.store.close()
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_explicit_mode_contextual_capture_and_score_service_retains_both_actors(tmp_path,family):
+    from test_native_adapted_rl import post_service
+    engine=engine_fixture(tmp_path,family,service_template=True)
+    source,_=nonzero_adapter(engine);target,_=nonzero_adapter(engine,'tiny')
+    source_id=engine.native_write_text('t5 t6',adapters=[source.id])['id']
+    placeholder=engine.native_write_text('t4')['id']
+    modes={source_id:'same-base-adapter-state'}
+    messages=[{'role':'user','content':[{'type':'text','text':'t4 '},
+        {'type':'native_state','id':source_id},{'type':'text','text':' t5 '},
+        {'type':'native_state','id':placeholder}]}]
+    result=post_service(engine,'/v1/neuralese/native-states/init-body',{
+        'messages':messages,'placeholder':placeholder,'text':'t7 t8','adapters':[target.id],
+        'native_state_modes':modes})
+    imported=result['source_capture']['imports'][0]
+    receipt=imported['adapter_state_consumption']
+    assert imported['mode']=='same-base-adapter-state' and imported['observed_native_state_id']==source_id
+    assert receipt['target_native_identity']==result['source_capture']['policy']
+    assert receipt['source_native_identity']!=receipt['target_native_identity']
+    assert receipt['target_native_identity']['checkpoint_sha256']==result['native_state']['checkpoint_sha256']
+    segments=[segment for segment in result['source_capture']['segments'] if segment['kind']=='native_state']
+    assert segments[0]['adapter_state_consumption']==receipt
+    decision=post_service(engine,'/v1/neuralese/decide',{'messages':messages,'options':['t7','t8'],
+        'adapters':[target.id],'native_state_modes':modes})
+    assert len(decision['log_probs'])==2
+    consumed=decision['native_state_imports'][0]['adapter_state_consumption']
+    assert consumed['source_native_identity']==receipt['source_native_identity']
+    assert consumed['target_native_identity']==receipt['target_native_identity']
+    engine.store.close()
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_actual_typed_contextual_adapter_state_client_and_archive(tmp_path,family):
+    import json,subprocess,threading
+    from pathlib import Path
+    from natlang_neuralese.serve.http import serve
+    engine=engine_fixture(tmp_path,family,service_template=True)
+    source,_=nonzero_adapter(engine);target,_=nonzero_adapter(engine,'tiny')
+    source_id=engine.native_write_text('t5 t6',adapters=[source.id])['id']
+    placeholder=engine.native_write_text('t4')['id']
+    body={'messages':[{'role':'user','content':[{'type':'text','text':'t4 '},
+        {'type':'native_state','id':source_id},{'type':'text','text':' t5 '},
+        {'type':'native_state','id':placeholder}]}], 'placeholder':placeholder,'text':'t7 t8',
+        'adapters':[target.id],'native_state_modes':{source_id:'same-base-adapter-state'}}
+    fixture=tmp_path/'typed-context.json';fixture.write_text(json.dumps(body))
+    engine.start();server=serve(engine,'127.0.0.1',0)
+    thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+    try:
+        repo=Path(__file__).resolve().parents[2]
+        result=subprocess.run(['node',str(repo/'ts-host/test/fixtures/native-adapter-state-client.mjs'),
+            f'http://127.0.0.1:{server.server_address[1]}',str(fixture)],capture_output=True,text=True)
+        assert result.returncode==0,result.stdout+'\n'+result.stderr
+    finally:
+        server.shutdown();server.server_close();engine.stop();engine.store.close()

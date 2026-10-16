@@ -150,7 +150,8 @@ export function privilegeLeak(privileged: unknown, view: unknown): string | unde
 }
 
 /** The adapters a turn ran with, as a term field: replay scores the same adapted model. */
-const adapted = (turn: RecordedTurn): Json => turn.adapters?.length ? { adapters: turn.adapters } : {};
+const adapted = (turn: RecordedTurn): Json => ({ ...(turn.adapters?.length ? { adapters: turn.adapters } : {}),
+  ...(turn.native_state_modes ? { native_state_modes: turn.native_state_modes } : {}) });
 
 function lastTurn(turns: readonly RecordedTurn[] & { failure?: unknown }, where: string): RecordedTurn {
   const turn = turns.filter(item => !item.decision).at(-1);

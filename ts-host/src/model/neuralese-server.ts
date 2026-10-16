@@ -331,14 +331,19 @@ function materializeNativeStateSentinels(value: unknown, key?: string): unknown 
   return value;
 }
 
-async function restoreNativeStates(remote: HttpNeuraleseStore, archive: NeuraleseStore | undefined,
+export async function restoreNativeStates(remote: HttpNeuraleseStore, archive: NeuraleseStore | undefined,
     ids: readonly string[], known?: Set<string>, all = false): Promise<void> {
   if (all) for (const id of ids) known?.delete(id);
   const missing: string[] = [];
   for (const id of ids) {
+    const local = await archive?.getNativeState?.(id);
+    if (local?.metadata.adapter_binding) {
+      const absent = await restoreBlocks(remote, archive, local.metadata.adapter_binding.adapters.map(entry => entry.id));
+      if (absent.length) throw new Error(`neuralese-unknown-native-artifact: restore source adapter coefficients and bases ${absent.join(', ')}`);
+    }
     if (known?.has(id)) continue;
     if (await remote.hasNativeState(id)) { known?.add(id); continue; }
-    const artifact = await archive?.getNativeState?.(id);
+    const artifact = local;
     if (!artifact) { missing.push(id); continue; }
     const { id: _, ...input } = artifact;
     const restored = await remote.putNativeState(input);
@@ -463,7 +468,8 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       if (message) recorder.record({ messages: structuredClone(body.messages as unknown[]),
         tools: body.tools ? structuredClone(body.tools as unknown[]) : undefined, reply: structuredClone(message),
         blocks: structuredClone(((reply.neuralese as Json | undefined)?.blocks ?? []) as Json[]),
-        ...(adapters.length ? { adapters: [...adapters] } : {}) });
+        ...(adapters.length ? { adapters: [...adapters] } : {}),
+        ...(nativeStateModes ? { native_state_modes: { ...nativeStateModes } } : {}) });
     }
     if (store) for (const meta of ((reply.neuralese as Json | undefined)?.blocks ?? []) as NeuraleseBlockMeta[]) {
       if (!(await store.has(meta.id))) {
@@ -521,7 +527,8 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       scope: Scope = here()) => {
     const adapters = await adapterParts(bound ?? [], scope.adapters);
     scope.recorder?.record({ messages: structuredClone(messages), reply: { role: 'assistant', content: null }, blocks: [],
-      decision: { options: [...replies] }, ...(adapters.length ? { adapters: [...adapters] } : {}) });
+      decision: { options: [...replies] }, ...(adapters.length ? { adapters: [...adapters] } : {}),
+        ...(nativeStateModes ? { native_state_modes: { ...nativeStateModes } } : {}) });
     return adapters;
   };
   const decideRequest = async (messages: unknown[], replies: readonly string[], adapters: readonly { id: string; scale: number }[],

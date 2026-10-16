@@ -79,7 +79,8 @@ def _score_rendered(engine, item, plan, continuations, bindings):
     engine._native_prefill(sequence)
     base_cache, base_logits = sequence.cache, sequence.logits
     results = [_score_from_cache(engine, base_cache, base_logits, own) for own in continuations]
-    return {"log_probs": [score for score, _ in results], "tokens": [count for _, count in results]}
+    return {"log_probs": [score for score, _ in results], "tokens": [count for _, count in results],
+            "native_state_imports": sequence.native_imports}
 
 
 def decide_native(engine, body: dict) -> dict:

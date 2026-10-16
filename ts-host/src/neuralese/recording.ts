@@ -17,6 +17,8 @@ export type RecordedTurn = {
   readonly decision?: { readonly options: readonly string[] };
   /** Weight adapters that were active for this turn (`withAdapters`); replay scores the same adapted model. */
   readonly adapters?: readonly AdapterBinding[];
+  /** Explicit transport contract retained for exact native replay. */
+  readonly native_state_modes?: Readonly<Record<string, 'same-base-adapter-state'>>;
 };
 
 /** An adapter block bound for a call, with its scale (serve/grad.py, model/tiny_adapters.py). */

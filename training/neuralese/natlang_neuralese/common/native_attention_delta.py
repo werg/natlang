@@ -38,6 +38,39 @@ def _fake_delta(out, grad):
     return out.new_empty(out.shape[:-1], dtype=torch.float32)
 
 
+def verify_native_kv_gradient_allocations(source):
+    """Bind names, order, shapes, strides and operand dtypes before interception."""
+    import ast
+    import textwrap
+    expected = [
+        ('layout_broadcasted_k', "FixedLayout(key.get_device(), key.get_dtype(), key_size, stride=[sympy.sympify(s) for s in key_strides])"),
+        ('grad_query', "empty_strided(query_size, stride=[sympy.sympify(s) for s in grad_query_strides], dtype=query.get_dtype(), device=query.get_device())"),
+        ('broadcasted_grad_value', "empty_strided(value_size, stride=[sympy.sympify(s) for s in value_strides], dtype=value.get_dtype(), device=value.get_device())"),
+    ]
+    tree = ast.parse(textwrap.dedent(source))
+    top_level = tree.body[0].body
+    actual = []
+    signed_calls = []
+    class Allocations(ast.NodeVisitor):
+        def visit_Assign(self, node):
+            value = node.value
+            function = value.func if isinstance(value, ast.Call) else None
+            name = function.id if isinstance(function, ast.Name) else getattr(function, 'attr', None)
+            if name in {'FixedLayout', 'empty_strided'}:
+                target = node.targets[0].id if node in top_level and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) else None
+                actual.append((target, ast.dump(value, include_attributes=False)))
+                signed_calls.append(value)
+            self.generic_visit(node)
+    Allocations().visit(tree)
+    signature = [(name, ast.dump(ast.parse(expression, mode='eval').body, include_attributes=False))
+                 for name, expression in expected]
+    allocation_calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                        and (node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, 'attr', None))
+                        in {'FixedLayout', 'empty_strided'}]
+    if actual != signature or {id(node) for node in allocation_calls} != {id(node) for node in signed_calls}:
+        raise RuntimeError('native FP32 KV cotangents require review of exact Flex dK/dQ/dV allocation signatures')
+
+
 _installed = False
 
 
@@ -74,6 +107,7 @@ def install_native_delta_lowering():
         args = list(args)
         args[11] = dict(args[11])
         args[11].pop('NATLANG_FIXED_DELTA')
+        fp32_kv = args[11].pop('NATLANG_FP32_KV_GRADS', False)
 
         class DeltaLookup:
             pending = None
@@ -95,6 +129,19 @@ def install_native_delta_lowering():
                 return lowerings[key]
 
         namespace = dict(original.__globals__, lowerings=DeltaLookup())
+        if fp32_kv:
+            verify_native_kv_gradient_allocations(source)
+            fixed_layout = namespace['FixedLayout']
+            empty = namespace['empty_strided']
+            allocations = []
+            def key_layout(device, dtype, *values, **options):
+                return fixed_layout(device, torch.float32, *values, **options)
+            def gradient_empty(*values, **options):
+                allocations.append(None)
+                if len(allocations) == 2:
+                    options['dtype'] = torch.float32
+                return empty(*values, **options)
+            namespace.update(FixedLayout=key_layout, empty_strided=gradient_empty)
         fixed = types.FunctionType(original.__code__, namespace, original.__name__,
                                    original.__defaults__, original.__closure__)
         return fixed(*args, **kwargs)

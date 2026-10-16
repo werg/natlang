@@ -392,3 +392,9 @@ the source coefficient/basis artifacts and correct the exact input-ID declaratio
 use learned semantic adaptation for different bases. This mode remains
 unadvertised pending its full numerical qualification; do not infer support from
 matching tensor dimensions.
+
+An explicit `same-base-adapter-state` contextual import keeps distinct source
+and target actor receipts. Preserve `native_state_modes` when recording or
+replaying the call. For `neuralese-unknown-native-artifact` during restoration,
+restore the source actor's exact coefficient artifacts and frozen bases alongside
+its raw state; restoring only the state cannot authenticate the producing actor.

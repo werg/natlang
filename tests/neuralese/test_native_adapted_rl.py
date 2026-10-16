@@ -25,7 +25,13 @@ def post_service(engine, path, body):
     try:
         request=urllib.request.Request(f'http://127.0.0.1:{server.server_address[1]}'+path,
             data=json.dumps(body).encode(),headers={'content-type':'application/json'})
-        with urllib.request.urlopen(request,timeout=30) as response:return json.loads(response.read())
+        try:
+            with urllib.request.urlopen(request,timeout=30) as response:return json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            import io
+            raw=error.read();error.fp=io.BytesIO(raw);error.file=error.fp;error.read=error.fp.read
+            error.add_note(raw.decode())
+            raise
     finally:
         server.shutdown();server.server_close();thread.join()
 
@@ -210,9 +216,7 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
     assert second_gradient.provenance['effective_native_identity']!=identity
     assert not torch.equal(second_gradient.tensors[name],artifact.tensors[name])
     import os
-    if external_observation=='explicit' and (family=='lfm' or os.environ.get('NATLANG_REQUIRE_MELLUM_ADAPTER_STATE_PARITY')=='1'):
-        # Mellum's known-red strict qualification remains executable through the
-        # explicit flag; ordinary durability tests do not claim adjoint parity.
+    if external_observation=='explicit':
         # Actual current Engine prefill/import/continuation, not detached-KV
         # replay labelled as runtime. The same immutable source is deliberately
         # accepted under the declared exact-base mode on both executions.
@@ -223,12 +227,47 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
         request=GenerationRequest(messages=[{'role':'user','content':[
             {'type':'text','text':'t6 '},{'type':'native_state','id':block_id}]}],
             adapters=current_entries, native_state_modes={block_id:'same-base-adapter-state'}, temperature=.8)
+        trace={'cached_hidden':[],'cached_logits':[],'cached_dw':[],'flat_dw':[]}
+        from contextlib import contextmanager
+        @contextmanager
+        def layer_trace(phase):
+            import natlang_neuralese.model.shared_state as shared
+            original=shared._layer_inputs
+            cursors={}
+            records={}
+            def traced(port,layer,hidden,attention):
+                values=original(port,layer,hidden,attention)
+                index=next(i for i,item in enumerate(port.layers) if item is layer)
+                start=cursors.get(index,0);cursors[index]=start+hidden.shape[1]
+                for name,value in zip(('q','k','v') if attention else ('gated','c'),values):
+                    shaped=value.transpose(1,2)[0] if attention else value[0]
+                    record=records.setdefault((index,name),{'forward':{},'grad':{}})
+                    for pos,row in enumerate(shaped):record['forward'][start+pos]=row.detach().clone()
+                    if value.requires_grad:
+                        def save(gradient,record=record,start=start,attention=attention):
+                            shaped=gradient.transpose(1,2)[0] if attention else gradient[0]
+                            for pos,row in enumerate(shaped):record['grad'][start+pos]=row.detach().clone()
+                        value.register_hook(save)
+                return values
+            shared._layer_inputs=traced
+            try:yield
+            finally:shared._layer_inputs=original;trace[phase+'_layers']=records
         def cached_objective():
+            normalized_inputs=[]
+            original_logits=engine.shared_model.logits
+            def traced_logits(hidden):
+                normalized_inputs.append(hidden.detach().reshape(-1,hidden.shape[-1])[-1])
+                return original_logits(hidden)
+            engine.shared_model.logits=traced_logits
+            weight_handle=target_parameters(engine.shared_model)[name].register_hook(
+                lambda gradient:trace['cached_dw'].append(gradient.detach().clone()))
             seq=Sequence(request,Future(),prompt_plan=engine._prompt_plan(request.messages,None))
             engine._native_prefill(seq)
             actions=spec['rows'][graphs[0]['id']]['actions']
             current=[]
             for index,action in enumerate(actions):
+                trace['cached_hidden'].append(normalized_inputs[-1])
+                trace['cached_logits'].append(seq.logits[0].detach())
                 distribution=seq.logits[0].float().div(action['temperature']).log_softmax(-1)
                 current.append(distribution[action['token_id']])
                 if index+1<len(actions):
@@ -238,10 +277,73 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
             old=new.new_tensor([action['behavior_logp'] for action in actions])
             loss=clipped_token_loss(new,old,spec['rows'][graphs[0]['id']]['advantage'],
                 clip_low=spec.get('clip_low',.2),clip_high=spec.get('clip_high',.28)).mean()
-            return torch.autograd.grad(loss,coefficient)[0]
-        expected_grad=run_native(engine,cached_objective,current_entries,
-            leaves={current_id:{name:coefficient}},gradient_precision='fp32')
+            trace['cached_logps']=new.detach();trace['cached_loss']=loss.detach()
+            try:return torch.autograd.grad(loss,coefficient)[0]
+            finally:engine.shared_model.logits=original_logits;weight_handle.remove()
+        with layer_trace('cached'):
+            expected_grad=run_native(engine,cached_objective,current_entries,
+                leaves={current_id:{name:coefficient}},gradient_precision='fp32')
         actual_grad=second_gradient.tensors[name].to(expected_grad)
+        if os.environ.get('NATLANG_ADAPTER_STATE_DIAGNOSTIC_OUT'):
+            from natlang_neuralese.rl.native_replay import NativePolicyObjective,action_logps
+            from natlang_neuralese.train.native_state_sft import packed_graph_loss
+            from natlang_neuralese.data.native_graph import parse_graph
+            objective=NativePolicyObjective(spec_path)
+            class Traced:
+                def forward_inputs(self,context):return objective.forward_inputs(context)
+                def __call__(self,model,result,context):
+                    actions=objective.rows[graphs[0]['id']]['actions']
+                    positions=[action['query'] for action in actions]
+                    hidden=result['h_final'][0]
+                    trace['flat_hidden']=hidden[positions].detach()
+                    trace['flat_logits']=model.logits(hidden[positions]).detach()
+                    trace['flat_logps']=action_logps(model,hidden,actions)[0].detach()
+                    return objective(model,result,context)
+            def flat_objective():
+                objective.bind_actor(engine);objective.native_state_modes={block_id:'same-base-adapter-state'}
+                handle=target_parameters(engine.shared_model)[name].register_hook(
+                    lambda gradient:trace['flat_dw'].append(gradient.detach().clone()))
+                try:
+                    loss,_=packed_graph_loss(engine.shared_model,[parse_graph(graphs[0],
+                        tokenizer_fingerprint=engine.native_identity['tokenizer_fingerprint'])],objective=Traced())
+                    trace['flat_loss']=loss.detach()
+                    return torch.autograd.grad(loss,coefficient)[0]
+                finally:handle.remove()
+            with layer_trace('flat'):
+                manual=run_native(engine,flat_objective,current_entries,
+                    leaves={current_id:{name:coefficient}},gradient_precision='fp32')
+            assert torch.equal(manual,actual_grad)
+            def differences(left,right):
+                left,right=left.detach().double().cpu(),right.detach().double().cpu()
+                return {'equal':torch.equal(left,right),'max_abs':float((left-right).abs().max()),
+                    'relative_l2':float((left-right).norm()/right.norm().clamp_min(1e-30))}
+            basis_tensors=engine.store.get_native_tensor_artifact(adapter.artifact.source_artifact_id).artifact.tensors
+            left,right=basis_tensors['left.'+name].to(engine.device,torch.float64),basis_tensors['right.'+name].to(engine.device,torch.float64)
+            predicted=((left.T@(trace['flat_dw'][0]-trace['cached_dw'][0]).double()@right)*.85).flatten()
+            observed=(actual_grad-expected_grad).double()
+            report={'family':family,'qualification':False,
+                'hidden':differences(trace['flat_hidden'],torch.stack(trace['cached_hidden'])),
+                'logits':differences(trace['flat_logits'],torch.stack(trace['cached_logits'])),
+                'logps':differences(trace['flat_logps'],trace['cached_logps']),
+                'loss':differences(trace['flat_loss'],trace['cached_loss']),
+                'weight_cotangent':differences(trace['flat_dw'][0],trace['cached_dw'][0]),
+                'coefficient':differences(actual_grad,expected_grad),
+                'weight_chain_residual':differences(observed,predicted)}
+            layer_report={}
+            for key,cached in trace['cached_layers'].items():
+                flat=trace['flat_layers'][key]
+                item={}
+                for side in ('forward','grad'):
+                    positions=sorted(set(cached[side])&set(flat[side]))
+                    if positions:
+                        left=torch.stack([flat[side][pos] for pos in positions])
+                        right=torch.stack([cached[side][pos] for pos in positions])
+                        item[side]={**differences(left,right),'first_different_row':next((pos for pos in positions if not torch.equal(flat[side][pos],cached[side][pos])),None)}
+                layer_report[str(key)]=item
+            report['layer_projection_trace']=layer_report
+            from pathlib import Path
+            Path(os.environ['NATLANG_ADAPTER_STATE_DIAGNOSTIC_OUT']).write_text(json.dumps(report,indent=2))
+            print(json.dumps(report))
         torch.testing.assert_close(actual_grad,expected_grad,atol=3e-6,rtol=2e-5)
         assert (actual_grad-expected_grad).norm()/expected_grad.norm()<2e-5
     reference_optimizer.zero_grad(set_to_none=True)

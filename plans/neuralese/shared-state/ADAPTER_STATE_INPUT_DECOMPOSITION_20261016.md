@@ -45,19 +45,25 @@ Crisp code authenticates identities, transports bytes, constructs exact masks,
 applies proven splices and verifies results. Capabilities remain unadvertised
 until integrated inference/training paths and independent review are complete.
 
-Implementation status: explicit mechanism only; capability remains unadvertised.
-Four both-port source/receipt/inventory cases passed (11.84s), and six CPU
-retained-behavior continuation/durability cases passed (38.74s). Actual CUDA
-current Engine prefill/import/incremental continuation versus second-update
-flat objective passed LFM's strict coefficient test. Mellum **FAILED** that same
-gate: max absolute coefficient difference 3.990344703197479e-5 and maximum
-relative coordinate difference .0013894966104999185. No tolerance was changed.
-Evidence: `/home/werg/data/dgxops/native-adapter-state-runtime-parity-20261016.log`.
-This is an open adjoint qualification blocker, not a claim of runtime parity.
-Run its exact strict qualification with `NATLANG_NATIVE_ADAPTER_TEST_DEVICE=cuda
-NATLANG_REQUIRE_MELLUM_ADAPTER_STATE_PARITY=1`, pytest this file's adapted-policy
-bundle/restart test selected with `-k explicit`. Default durability coverage does
-not enable that known-red numerical certificate. Continue localization of actual
-hidden/logits/logps and weight cotangents before adoption. Heterogeneous
-per-invocation layer parameters remain open separately; no recursive replay is
-being substituted. Local Torch2.11/SM121 checks do not qualify cloud H100/NGC.
+Implementation status: capability remains unadvertised pending independent
+integration review. Initial actual CUDA incremental/current-policy qualification
+failed on Mellum with coefficient max gap 3.990344703197479e-5 and maximum
+relative coordinate gap .0013894966104999185. That failure is retained in
+`/home/werg/data/dgxops/native-adapter-state-runtime-parity-20261016.log`.
+
+The repair retains exact BF16 forward values while accumulating native KV
+cotangents in FP32 in the already explicit FP32 gradient scope. Actual CUDA
+Engine prefill/import/incremental continuation, second-update flat objective,
+source/target receipts, archives and optimizer restart then passed for both ports
+in `native-adapter-state-pure-hop-strict-20261016`: 18 tests, 87.79s. Mellum
+hidden/logits/action logps/loss remained bitwise equal; effective Q dW max gap
+2.9802322387695312e-8 and coefficient max gap 3.725290298461914e-9, relative L2
+4.607152859506737e-8. Original strict gates remain enabled by default, without
+changed tolerances. Contextual initialization and scoring both retain actual
+consumption receipts. See `ADAPTER_KV_COTANGENT_DECOMPOSITION_20261016.md` for
+compiler/checkpoint mechanisms and remaining qualification.
+
+Heterogeneous per-invocation layer parameters remain open separately; no
+recursive replay is substituted. Local Torch2.11.0/cu130/SM121 checks do not
+qualify the cloud H100/NGC2.14 runtime. Neither this numerical evidence nor source
+identity validation is a model-quality claim or full paradigm-cutover claim.

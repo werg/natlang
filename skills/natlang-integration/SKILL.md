@@ -402,3 +402,9 @@ source coefficient/basis closure or correcting the base/input declaration; never
 retry by silently dropping the declaration. Preserve source and target actor
 bindings and consumption receipts in archives. The capability remains
 unadvertised until the outstanding Mellum adjoint qualification is repaired.
+
+An explicit `same-base-adapter-state` contextual import keeps distinct source
+and target actor receipts. Preserve `native_state_modes` when recording or
+replaying the call. For `neuralese-unknown-native-artifact` during restoration,
+restore the source actor's exact coefficient artifacts and frozen bases alongside
+its raw state; restoring only the state cannot authenticate the producing actor.

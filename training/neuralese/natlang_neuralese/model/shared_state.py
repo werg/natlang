@@ -88,6 +88,13 @@ def _finite_convolution(kernel, histories, c):
     return c * out.to(c.dtype)
 
 
+def _fp32_kv_cotangents(port, tensor):
+    if tensor.is_cuda and tensor.dtype == torch.bfloat16:
+        from .native_adapters import native_fp32_state_cotangents
+        return native_fp32_state_cotangents(port)
+    return False
+
+
 def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None = None, *, embeddings=None, external_blocks=None, external_identity=None, retain_states=True):
     """Single layer-major DAG pass. No source trajectory is rerun per import."""
     device = port.embedding_weight.device
@@ -126,7 +133,10 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
                 captured = (k, v)
                 q = _rotate(port, q, query_positions, index)
                 kr = _rotate(port, k[:, :, slots].to(q.dtype), key_positions, index)
-                out = graph_attention(q, kr, v[:, :, slots].to(q.dtype), plan, window,
+                value_slots = v[:, :, slots].to(q.dtype)
+                if _fp32_kv_cotangents(port, q):
+                    kr, value_slots = kr.float(), value_slots.float()
+                out = graph_attention(q, kr, value_slots, plan, window,
                                       layer.self_attn.scaling, prepared_mask=masks[window])
             else:
                 gated, c = values
@@ -138,6 +148,8 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
             return (updated, *captured) if retain_states else (updated,)
 
         if checkpointed:
+            from .native_adapters import capture_native_execution
+            run_layer = capture_native_execution(run_layer)
             from torch.utils.checkpoint import checkpoint
             checkpoint = getattr(port, 'activation_checkpoint', checkpoint)
             updated = checkpoint(run_layer, h, *external_i, use_reentrant=False,
@@ -189,7 +201,10 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                 query_positions = plan.own_positions[offset:offset+count]
                 qr = _rotate(port, q, plan.tensor(query_positions, device), i)
                 layout = AttentionLayout(query_positions, len(logical))
-                out = graph_attention(qr, kr, source_v[:, :, indices].to(q.dtype), layout, window, layer.self_attn.scaling)
+                value_slots = source_v[:, :, indices].to(q.dtype)
+                if _fp32_kv_cotangents(port, q):
+                    kr, value_slots = kr.float(), value_slots.float()
+                out = graph_attention(qr, kr, value_slots, layout, window, layer.self_attn.scaling)
 
             else:
                 gated, c = values
@@ -228,6 +243,13 @@ ROLE_MARKERS = (PRODUCE_OPEN, PRODUCE_CLOSE, CONSUME_OPEN, CONSUME_CLOSE)
 _flex = {}
 
 
+def native_causal_mask(batch, head, q, kv, starts, ends, query_count):
+    """One causal predicate shared by native forward and explicit KV adjoint."""
+    valid = q < query_count
+    safe_q = q.clamp(max=query_count-1)
+    return valid & (kv >= starts[safe_q]) & (kv <= ends[safe_q])
+
+
 def graph_block_mask(plan, device, window=None):
     """Sparse 128-token geometry without allocating a token-by-token matrix."""
     from torch.nn.attention.flex_attention import BlockMask
@@ -253,14 +275,14 @@ def graph_block_mask(plan, device, window=None):
                 torch.argsort(mask.to(torch.int8), dim=-1, descending=True, stable=True).to(torch.int32))
 
     def mask_mod(batch, head, q, kv):
-        valid = q < starts.shape[0]
-        safe_q = q.clamp(max=starts.shape[0]-1)
-        return valid & (kv >= starts[safe_q]) & (kv <= ends[safe_q])
+        return native_causal_mask(batch, head, q, kv, starts, ends, starts.shape[0])
 
     counts, indices = order(partial)
-    return BlockMask.from_kv_blocks(counts, indices,
+    mask = BlockMask.from_kv_blocks(counts, indices,
         BLOCK_SIZE=block, mask_mod=mask_mod,
         seq_lengths=(plan.token_count, len(plan.slot_sources)))
+    mask._natlang_bounds = (starts, ends)
+    return mask
 
 
 def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=None):
@@ -285,12 +307,16 @@ def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=No
                     pieces.append(F.pad(q[:, :, offset:offset+count], (0, 0, 0, (-count) % 128)))
             q = torch.cat(pieces, dim=2)
             plan = workspace
-        compiled = _compiled_flex(q, k, v, scale)
-        (result, _raw_lse) = compiled(q, k, v, block_mask=prepared_mask if prepared_mask is not None else graph_block_mask(plan, q.device, window),
-                     scale=scale,
-                     kernel_options={**flex_kernel_options(float32=q.dtype == torch.float32),
-                                     **({'FLOAT32_PRECISION': "'ieee'"} if q.dtype == torch.float32 else {}),
-                                     'BACKEND': 'TRITON', 'NATLANG_FIXED_DELTA': True})
+        block_mask = prepared_mask if prepared_mask is not None else graph_block_mask(plan, q.device, window)
+        options = {**flex_kernel_options(float32=q.dtype == torch.float32),
+                   **({'FLOAT32_PRECISION': "'ieee'"} if q.dtype == torch.float32 else {}),
+                   'BACKEND': 'TRITON', 'NATLANG_FIXED_DELTA': True}
+        if q.dtype == torch.bfloat16 and k.dtype == v.dtype == torch.float32:
+            from ..common.native_attention_carrier import kv_carrier_attention
+            result = kv_carrier_attention(q,k,v,block_mask=block_mask,scale=scale,kernel_options=options)
+        else:
+            compiled = _compiled_flex(q, k, v, scale)
+            (result, _raw_lse) = compiled(q, k, v, block_mask=block_mask,scale=scale,kernel_options=options)
         result = result[..., :head_width]
         return result if physical_rows is None else result.index_select(2, physical_rows)
 
@@ -539,7 +565,10 @@ def native_step(model, ids, cache=None, *, producing=False):
             q, k, v = values
             captures.append({'kind': 'attention', 'raw_k': k[0].transpose(0, 1), 'v': v[0].transpose(0, 1)})
             q, rotated_k = _rotate(port, q, positions, i), _rotate(port, k.to(q.dtype), positions, i)
-            state = append_kv(previous, rotated_k, v.to(q.dtype), static=not torch.is_grad_enabled())
+            value_slots = v.to(q.dtype)
+            if _fp32_kv_cotangents(port, q):
+                rotated_k, value_slots = rotated_k.float(), value_slots.float()
+            state = append_kv(previous, rotated_k, value_slots, static=not torch.is_grad_enabled())
             window = port.window(i) if hasattr(port, 'window') else None
             if window not in masks:
                 masks[window] = graph_block_mask(layout, ids.device, window) if ids.is_cuda else layout.attention_mask(ids.device, window)
@@ -618,7 +647,10 @@ def splice_block(model, cache, block, *, checkpoint_sha256, tokenizer_fingerprin
             expected_heads = attn.k_proj.out_features // attn.head_dim
             if raw_k.shape[1:] != (expected_heads, count, attn.head_dim):
                 raise ValueError('native state attention head layout disagrees with the consumer')
-            state = append_kv(previous, _rotate(port, raw_k, positions, i), v, static=not torch.is_grad_enabled())
+            rotated_k = _rotate(port, raw_k, positions, i)
+            if _fp32_kv_cotangents(port, raw_k):
+                rotated_k, v = rotated_k.float(), v.float()
+            state = append_kv(previous, rotated_k, v, static=not torch.is_grad_enabled())
         else:
             if payload['kind'] != 'finite_convolution':
                 raise ValueError('native state attention/convolution layout disagrees with the consumer')
@@ -815,6 +847,12 @@ class AttentionLayout:
         return ((keys[None] >= starts[:, None]) & (keys[None] <= ends[:, None]))[None, None]
 
 
+def native_flex_options(options):
+    return {**options, 'PRESCALE_QK': False, 'ROWS_GUARANTEED_SAFE': False,
+            'BLOCKS_ARE_CONTIGUOUS': False, 'WRITE_DQ': True,
+            'OUTPUT_LOGSUMEXP': True, 'OUTPUT_MAX': False}
+
+
 def _flex_entry(q, k, v, *, block_mask, scale, kernel_options):
     # Preserve the backend raw log2 LSE without an extra scaled public-wrapper
     # graph. The fixed per-row delta lowering below supplies the actual
@@ -823,12 +861,29 @@ def _flex_entry(q, k, v, *, block_mask, scale, kernel_options):
     for tensor in (q, k, v):
         torch._dynamo.mark_static(tensor, -3)
         torch._dynamo.mark_static(tensor, -1)
-    options = dict(kernel_options)
-    options.update(PRESCALE_QK=False, ROWS_GUARANTEED_SAFE=False,
-                   BLOCKS_ARE_CONTIGUOUS=False, WRITE_DQ=True,
-                   OUTPUT_LOGSUMEXP=True, OUTPUT_MAX=False)
+    options = native_flex_options(kernel_options)
     out, lse, _ = flex_attention_hop(q, k, v, _identity, block_mask.as_tuple(), scale, options)
     return out, lse
+
+
+def native_attention_layout(tensor):
+    strides = tensor.stride()
+    order = tuple(sorted(range(tensor.ndim), key=lambda i: strides[i]))
+    # Distinguish fixed-capacity allocations, not every decode length.
+    capacity_stride = (strides[1] if strides[2] == tensor.shape[-1]
+                       and strides[1] != tensor.shape[2]*tensor.shape[-1] else 0)
+    return order, capacity_stride
+
+
+def compile_native_attention_contract(cache, entry, key):
+    import hashlib
+    import types
+    if key not in cache:
+        name = entry.__name__ + '_' + hashlib.sha256(repr(key).encode()).hexdigest()[:16]
+        code = entry.__code__.replace(co_name=name, co_qualname=name)
+        function = types.FunctionType(code, entry.__globals__, name, entry.__defaults__, entry.__closure__)
+        cache[key] = torch.compile(function, dynamic=True, fullgraph=True)
+    return cache[key]
 
 
 def _compiled_flex(q, k, v, scale):
@@ -838,32 +893,15 @@ def _compiled_flex(q, k, v, scale):
     precisions and cache layouts until an unfused O(T²) implementation replaces
     native attention. Query/context lengths stay dynamic within each contract.
     """
-    import hashlib
-    import types
     from ..common.native_attention_delta import install_native_delta_lowering
     install_native_delta_lowering()
-    def layout(tensor):
-        strides = tensor.stride()
-        order = tuple(sorted(range(tensor.ndim), key=lambda i: strides[i]))
-        # Native KV buffers have a fixed capacity larger than their current
-        # logical sequence. Distinguish allocations, not every decode length.
-        capacity_stride = (strides[1] if strides[2] == tensor.shape[-1]
-                           and strides[1] != tensor.shape[2]*tensor.shape[-1] else 0)
-        return order, capacity_stride
     # Autograd prunes different Q/K/V adjoints for different selected adapter
     # targets. These are real compiled contracts, not dynamic sequence lengths.
     # Inference tensors and global grad/inference scopes have separate guards.
     key = (q.dtype, k.dtype, v.dtype, q.shape[0], q.shape[1], k.shape[1], q.shape[-1], v.shape[-1],
-           scale, layout(q), layout(k), layout(v), torch.is_grad_enabled(), torch.is_inference_mode_enabled(),
+           scale, native_attention_layout(q), native_attention_layout(k), native_attention_layout(v), torch.is_grad_enabled(), torch.is_inference_mode_enabled(),
            tuple((tensor.requires_grad, tensor.is_inference()) for tensor in (q, k, v)))
-    if key not in _flex:
-        name = 'native_flex_' + hashlib.sha256(repr(key).encode()).hexdigest()[:16]
-        # A fresh wrapper code object gives each real kernel contract its own
-        # dynamic-shape compiler cache; the inner Flex implementation is inlined.
-        code = _flex_entry.__code__.replace(co_name=name, co_qualname=name)
-        entry = types.FunctionType(code, globals(), name)
-        _flex[key] = torch.compile(entry, dynamic=True, fullgraph=True)
-    return _flex[key]
+    return compile_native_attention_contract(_flex, _flex_entry, key)
 
 
 @dataclass(frozen=True)

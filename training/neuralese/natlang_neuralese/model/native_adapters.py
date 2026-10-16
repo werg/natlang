@@ -155,6 +155,30 @@ def execution_binding(engine):
     return active[2] if active is not None else []
 
 
+def capture_native_execution(callback):
+    """Carry exact actor metadata into CUDA checkpoint recomputation threads."""
+    import functools
+    frames = _ACTIVE.get()
+    if not frames:
+        return callback
+    @functools.wraps(callback)
+    def execute(*args, **kwargs):
+        if any(not frame[7]['active'] for frame in frames):
+            raise NativeAdapterError('native checkpoint actor scope expired; complete forward and backward within the same native operation')
+        token = _ACTIVE.set(frames)
+        try:
+            return callback(*args, **kwargs)
+        finally:
+            _ACTIVE.reset(token)
+    return execute
+
+
+def native_fp32_state_cotangents(port=None):
+    """The explicit FP32 adapter-gradient scope also retains shared KV fan-in."""
+    frame = next((frame for frame in reversed(_ACTIVE.get()) if port is None or frame[0].shared_model.port is port), None)
+    return torch.is_grad_enabled() and frame is not None and frame[6] == 'fp32'
+
+
 def substituted_native_weight(weight):
     """Whether a live functional weight must bypass a frozen-value cache."""
     return any(id(weight) in frame[4] for frame in _ACTIVE.get())
@@ -193,7 +217,8 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
             raise NativeAdapterError(str(error)) from error
         identity = effective_identity(engine, resolved)
         binding = [{'id': ident, 'scale_hex': scale.hex()} for ident, scale, *_ in resolved]
-        token = _ACTIVE.set((*_ACTIVE.get(), (engine, identity, binding, entries, set(), {}, gradient_precision or 'storage')))
+        lifecycle = {'active': True}
+        token = _ACTIVE.set((*_ACTIVE.get(), (engine, identity, binding, entries, set(), {}, gradient_precision or 'storage', lifecycle)))
         try:
             if not resolved:
                 return callback()
@@ -229,6 +254,7 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
                     return torch.func.functional_call(_Operation(engine.shared_model, callback), replacement, ())
             return torch.func.functional_call(_Operation(engine.shared_model, callback), replacement, ())
         finally:
+            lifecycle['active'] = False
             _ACTIVE.reset(token)
 
 
