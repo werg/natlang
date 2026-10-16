@@ -59,6 +59,30 @@ def _cached_verification(path,identity):
     return payload.get('result')
 
 
+def _write_owned_json(path,value):
+    """Publish an entrypoint idempotently, accepting only exact prior bytes."""
+    path=Path(path)
+    if path.exists():
+        try:existing=json.loads(path.read_text())
+        except (OSError,json.JSONDecodeError) as error:
+            raise ValueError(f'partial offline proposal file is not valid JSON: {path.name}') from error
+        if canonical_json_sha256_hex(existing)!=canonical_json_sha256_hex(value):
+            raise ValueError(f'offline proposal file belongs to different content: {path.name}')
+        return
+    write_json_durable(path,value)
+
+
+def _proposal_request(models,protection_path,protection,runtime,holds):
+    """Bind a resumable proposal to every declared source and decision input."""
+    return {'schema':'natlang.acquired-offline-preference-request/1',
+        'models':models,
+        'protection':protection['proof'],
+        'decision_holds':decision_contract(holds),
+        'runtime':runtime,
+        'verifier_dependencies':_verification_dependencies(),
+        'protection_path':str(Path(protection_path).resolve())}
+
+
 def verify_conversion(directory,*,protection_path,base,prepared=None,
                       verified_closures=None,verification_receipt_path=None):
     directory=Path(directory);receipt_path=directory/'receipt.json'
@@ -285,8 +309,21 @@ def prepare(args):
     initial_runtime=_runtime()
     initial_holds=load_decision_holds(sorted((ROOT/'training/decision-holds').glob('*.jsonl')))[1]
     if not isinstance(models,dict) or len(models)<2:raise ValueError('offline admission requires both production model views')
-    if any(path.name not in {'.conversion.lock','conversion-verifications'} for path in args.output.iterdir()):
-        raise ValueError('offline admission output must be a new immutable proposal directory')
+    request=_proposal_request(models,args.protection,initial_protection,initial_runtime,initial_holds)
+    request_path=args.output/'.proposal-request.json'
+    if request_path.exists():
+        if json.loads(request_path.read_text())!=request:
+            raise ValueError('offline admission output belongs to a different proposal request')
+    else:
+        if any(path.name not in {'.conversion.lock'} for path in args.output.iterdir()):
+            raise ValueError('offline admission output has files without its durable proposal request')
+        write_json_durable(request_path,request)
+    owned={'.conversion.lock','.proposal-request.json','conversion-verifications','audit.json'}
+    for name in models:
+        owned.update({f'{name}-{split}-sources.json' for split in ('train','test')})
+        owned.add(f'{name}-objective.json')
+    if any(path.name not in owned for path in args.output.iterdir()):
+        raise ValueError('offline admission output contains an unrelated file')
     cache_root=args.output/'conversion-verifications';cache_root.mkdir(exist_ok=True)
     verified_closures=set();verified={};reference=None;all_groups={'train':set(),'test':set()}
     for name,declaration in models.items():
@@ -332,8 +369,8 @@ def prepare(args):
         sources['test'].insert(0,{'kind':'native-graphs','path':os.path.relpath(ordinary['path'],args.output),
                                 'sha256':ordinary['sha256'],'weight':1.,'epochs':1})
         for split in sources:
-            write_json_durable(args.output/f'{name}-{split}-sources.json',{'schema':'natlang.native-graph-sources/1','sources':sources[split]})
-        write_json_durable(args.output/f'{name}-objective.json',{**specification,'offline':True,'native_on_policy':False,'rows':rows})
+            _write_owned_json(args.output/f'{name}-{split}-sources.json',{'schema':'natlang.native-graph-sources/1','sources':sources[split]})
+        _write_owned_json(args.output/f'{name}-objective.json',{**specification,'offline':True,'native_on_policy':False,'rows':rows})
         entrypoints[name]={'kind':'native_offline_preference','native_graphs':_bound(args.output/f'{name}-train-sources.json'),
             'held_native_graphs':_bound(args.output/f'{name}-test-sources.json'),'objective_spec':_bound(args.output/f'{name}-objective.json'),
             'requires_current_shared_participant_and_capacity_qualification':True,'earned_pair_visits':0}
@@ -344,7 +381,7 @@ def prepare(args):
         'source_eligibility_scope':'byte-bound qualified conversion plus all-row original-alternative tokenizer re-render, exact graph/suffix masks and source/split joins',
         'protection':current_protection(args.protection)['proof'],'models':verified,'training_entrypoints':entrypoints,
         'training_sources':'aggregate graph outputs only; durability shards and original chosen SFT are not extra preference visits'}
-    write_json_durable(args.output/'audit.json',result)
+    _write_owned_json(args.output/'audit.json',result)
     return result
 
 

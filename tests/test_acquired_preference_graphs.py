@@ -188,6 +188,12 @@ def test_verified_model_view_cache_skips_rerender_only_for_same_exact_inputs(tmp
     second=admission.verify_conversion(tmp_path/'output',protection_path=tmp_path/'protection.json',
         base=tmp_path/'base',verified_closures=verified,verification_receipt_path=cache)
     assert second==first
+    prepared=admission.prepare_tokenizer(tmp_path/'base')
+    prepared.tokenizer.chat_template+='\n'
+    with pytest.raises(ValueError,match='tokenizer vocabulary/backend/template was mutated'):
+        admission.verify_conversion(tmp_path/'output',protection_path=tmp_path/'protection.json',
+            base=tmp_path/'base',prepared=prepared,verified_closures=verified,
+            verification_receipt_path=cache)
     # A damaged durable attestation cannot authorize reuse.
     record=json.loads(cache.read_text());record['payload']['result']['source_units']+=1
     write_json_durable(cache,record)
@@ -230,6 +236,44 @@ def test_admission_cli_preserves_existing_held_prefix_and_emits_executable_share
     with pytest.raises(ValueError,match='global train/held overlap'):
         admission.main(['--models',json.dumps(models),'--protection',str(tmp_path/'protection.json'),
                         '--output',str(tmp_path/'bad-admission')])
+
+
+def test_admission_resumes_exact_partial_entrypoint_publication_and_rejects_changed_request(tmp_path,monkeypatch):
+    from scripts.neuralese_data import prepare_acquired_preference_admission as admission
+    args,_,_=setup_conversion(tmp_path,monkeypatch)
+    builder.main(args)
+    for name in ('ROOT','current_protection','verify_global_source_closure','load_decision_holds','_runtime'):
+        monkeypatch.setattr(admission,name,getattr(builder,name))
+    held=tmp_path/'ordinary-held.jsonl'
+    receipt=json.loads((tmp_path/'output/receipt.json').read_text())
+    fingerprint=receipt['binding']['prepared_tokenizer']['expanded_fingerprint']
+    held.write_text(json.dumps({'schema':'natlang.neuralese-native-graph/1','id':'held',
+        'split':'test','source_groups':['prior-held'],'tokenizer_fingerprint':fingerprint,
+        'nodes':[{'name':'answer','token_ids':[1,2,3],'target_weights':[0,1,1]}]})+'\n')
+    declaration={'base':str(tmp_path/'base'),'conversions':[str(tmp_path/'output')],
+        'ordinary_held':builder._bound(held)}
+    models={name:declaration for name in ('fixture-view-a','fixture-view-b')}
+    output=tmp_path/'admission-resume'
+    original=admission._write_owned_json;calls=[]
+    def interrupt_after_one(path,value):
+        calls.append(Path(path).name)
+        if len(calls)==2:raise RuntimeError('stop during final proposal publication')
+        return original(path,value)
+    monkeypatch.setattr(admission,'_write_owned_json',interrupt_after_one)
+    with pytest.raises(RuntimeError,match='final proposal publication'):
+        admission.main(['--models',json.dumps(models),'--protection',str(tmp_path/'protection.json'),
+            '--output',str(output)])
+    assert (output/'.proposal-request.json').is_file()
+    assert len(list(output.glob('*-sources.json')))==1
+    monkeypatch.setattr(admission,'_write_owned_json',original)
+    resumed=admission.main(['--models',json.dumps(models),'--protection',str(tmp_path/'protection.json'),
+        '--output',str(output)])
+    assert resumed['status']=='passed' and (output/'audit.json').is_file()
+    changed={name:{**declaration,'ordinary_held':{**builder._bound(held),'sha256':'0'*64}}
+        for name in models}
+    with pytest.raises(ValueError,match='different proposal request'):
+        admission.main(['--models',json.dumps(changed),'--protection',str(tmp_path/'protection.json'),
+            '--output',str(output)])
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
