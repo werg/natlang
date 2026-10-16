@@ -25,7 +25,7 @@ import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore, restoreBlocks } from '../model/neuralese-server.js';
 import * as deltaOps from './deltas.js';
 import { setSystemPromptSource, systemPromptBank, type SystemPromptBank } from '../native/system-prompts.js';
-import { setAdapterSource, setRecorderSource, type AdapterBinding, type RecordedTurn, type TurnRecorder } from './recording.js';
+import { setAdapterSource, setRecorderSource, type AdapterBinding, type RecordedTurn, ModelTurnRecorder } from './recording.js';
 import { archiveNativeTensorArtifact } from './native-tensor-client.js';
 import { createNeuraleseLibrary, type StandardLibrary } from './combinators.js';
 import type { ReplayRecordSink } from './replay-records.js';
@@ -56,19 +56,8 @@ export class LearningError extends Error {
 }
 
 // Recording ------------------------------------------------------------------------------------------
-class Recorder implements TurnRecorder {
-  readonly turns: RecordedTurn[] = [];
-  /** Turns of outputs captured under their own recorder (function outputs): never claimed by an objective, but
-   * producers of the gradient session like any other turn, so a downstream loss reaches their writes. */
-  readonly nested: RecordedTurn[] = [];
-  private claimed = 0;
-  /** Objectives awaiting a promise output right now, and whether two of them overlapped (see `capture`). */
-  active = 0;
-  overlapped = false;
-  record(turn: RecordedTurn): void { this.turns.push(turn); }
-  /** Turns recorded since the previous claim. */
-  claim(): RecordedTurn[] { const out = this.turns.slice(this.claimed); this.claimed = this.turns.length; return out; }
-}
+class Recorder extends ModelTurnRecorder {}
+
 const recording = new AsyncLocalStorage<Recorder>();
 setRecorderSource(() => recording.getStore());
 
@@ -112,6 +101,7 @@ async function capture(rec: Recorder, output: unknown, where: string): Promise<R
     const own = new Recorder();
     const failure = await recording.run(own, () => settle(output));
     rec.nested.push(...own.turns, ...own.nested);
+    rec.absorb(own);
     return Object.assign(own.turns, { failure });
   }
   if (rec.active) rec.overlapped = true;
@@ -151,7 +141,8 @@ export function privilegeLeak(privileged: unknown, view: unknown): string | unde
 
 /** The adapters a turn ran with, as a term field: replay scores the same adapted model. */
 const adapted = (turn: RecordedTurn): Json => ({ ...(turn.adapters?.length ? { adapters: turn.adapters } : {}),
-  ...(turn.native_state_modes ? { native_state_modes: turn.native_state_modes } : {}) });
+  ...(turn.native_state_modes ? { native_state_modes: turn.native_state_modes } : {}),
+  ...(turn.native ? {native_turn_id:turn.native.id} : {}) });
 
 function lastTurn(turns: readonly RecordedTurn[] & { failure?: unknown }, where: string): RecordedTurn {
   const turn = turns.filter(item => !item.decision).at(-1);
@@ -506,13 +497,17 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
   // arguments in the producing call's context (spec/NEURALESE_GRAPH.md, "Replay", step 4).
   const producers = [...rec.turns, ...rec.nested].filter(turn => !turn.decision && turn.blocks.length)
     .map(turn => ({ messages: turn.messages, ...(turn.tools ? { tools: turn.tools } : {}), reply: turn.reply, ...adapted(turn) }));
+  const nativeTurns=rec.nativeTurns(),nativeGraphNodes=structuredClone([...rec.graphNodes.values()]);
   const result = await post(service, '/v1/neuralese/grad', { arguments: arguments_, terms: loss.terms,
+    ...(nativeTurns.length?{native_turns:nativeTurns,native_graph_nodes:nativeGraphNodes}:{}),
     ...(producers.length ? { producers } : {}), ...(derived ? { order: 2, derived } : {}) });
   loss.value = Number(result.loss);
   await service.replayRecords?.record({ arguments: arguments_, terms: loss.terms, producers, order: order ?? 1,
+    ...(nativeTurns.length?{native_turns:nativeTurns,native_graph_nodes:nativeGraphNodes}:{}),
     ...(derived ? { derived } : {}), loss: loss.value });
   const gradients = (result.gradients ?? {}) as Record<string, string>;
-  outer?.push({ kind: 'grad', arguments: arguments_, terms: loss.terms, ...(producers.length ? { producers } : {}), gradients });
+  outer?.push({ kind: 'grad', arguments: arguments_, terms: loss.terms, ...(producers.length ? { producers } : {}), gradients,
+    ...(nativeTurns.length?{native_turns:nativeTurns,native_graph_nodes:nativeGraphNodes}:{}) });
   const grad = mapLeaves(a, (ref): GradientEntry => stopped.has(ref) || !gradients[ref.$neuralese.id] ? null :
     { $gradientBlock: { id: gradients[ref.$neuralese.id]!, of: ref.$neuralese.id, type: ref.$neuralese.type } });
   return { loss, grad: { $gradient: grad } as Gradient<A> };

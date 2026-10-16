@@ -245,3 +245,44 @@ Missing history and altered capture provenance reject. Focused regression passed
 20 cases, production coefficient/stage/policy integration passed 16 cases, and
 the new two-model archive/objective test passed on actual CUDA. These are runtime
 mechanism checks; fixture rewards do not claim a task oracle or model improvement.
+
+### Public recorded-turn lowering (implementation underway; capability guarded)
+
+The natural-language unit remains the caller's existing typed `valueAndGrad`
+function and its loss objectives. The runtime records the actual calls and
+their finite optimizer DAG; crisp compilation authenticates those receipts,
+renders explicit target continuations and builds one shared masked invocation
+graph for each declared objective evaluation. It does not recursively replay a
+writer when a consumer reads it.
+
+1. Preserve native sampling receipts and exact execution-graph occurrence
+   bindings in the existing turn recorder. The agent attaches actual
+   `block_read`/`block_write` source nodes; equal content IDs do not invent an
+   edge. Forced text writers retain their existing source-capture receipts.
+2. Preserve actual decision prompt segments and rendered option continuations.
+   Decisions are finite readouts, not sampled text turns. Scoring and learning
+   must use the same rendered conditional probabilities.
+3. Lower CE, sampled log-likelihood, decision proper scores/expected reward and
+   stopped-teacher distillation into exact query/target specifications over one
+   packed forward. Reuse the shared sampling distribution and objective
+   arithmetic. Producer-only nodes have no invented positive target credit.
+4. Translate recorded inner gradients/optimizer nodes to the finite program,
+   explicitly mapping observed derived artifact aliases to program variables.
+   Preserve actual original/current actors and optimizer histories. The live
+   root state is never reset merely to obtain a clean trace.
+5. Keep public higher-order requests guarded until actual typed nested
+   GradSession calls, transport/restart and both-port gradients are qualified.
+   Raw native KV is deterministic; it cannot silently acquire the legacy
+   projected Gaussian `klPrior` semantics. A genuine semantic posterior
+   objective needs its actual trained VAE posterior and explicit contract.
+
+The capture prerequisite now passes actual both-port HTTP producer/archive/child
+consumer tests. The recorder observes the existing graph nodes, so a parent read
+retains the child's exact block-write occurrence. It rejects conflicting node
+identities. A shared structural-only compile_replay mode reuses the same role,
+input, write-range and causal-edge verifier without creating policy actions.
+Greedy receipts use `natlang.native-structural-capture/1`, temperature0 and null
+behavior logp; ordinary RL continues to reject that schema. No temperature is
+changed to obtain a receipt. Focused typed transport, compact-state, guidance
+and RL replay regression:25PASS17.66s, with unchanged layering baseline. Public
+GradSession objective/decision/derived-turn lowering remains open and guarded.

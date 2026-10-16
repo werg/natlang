@@ -455,3 +455,13 @@ For an ordinary string result rejected with `type-mismatch`, read the imported
 Neuralese through a typed natlang call and return its actual answer text; an
 internal artifact ID is not the answer. Explicit Neuralese returns retain the
 original block. Literal text that merely spells a marker remains literal.
+
+Native recorded learning needs the actual server input/write receipt and a durable
+archive. For `neuralese-native-grad-invalid` reporting a missing receipt or
+conflicting turn occurrence, keep each recorded call with its own execution
+graph and use the matching native server; do not reconstruct producer edges
+from equal text or artifact IDs. For `neuralese-native-archive-unavailable`,
+configure a store supporting native artifacts before recording communication.
+Greedy structural receipts have no behavior probability and cannot be used as
+on-policy RL samples. This capture mechanism does not advertise public order-2
+GradSession support.

@@ -6,6 +6,7 @@
  * Node IDs are unique across one task's traces: an invocation is `call:<call id>`, every other node is
  * `<call id>#<seq>` (its event's position in that call's trace).
  */
+import {activeRecorder} from './model-recording.js';
 import { isNeuraleseRef } from './neuralese.js';
 import type { NativeTraceRecorder, TraceEvent } from './trace.js';
 
@@ -73,6 +74,7 @@ export function graphNode(trace: NativeTraceRecorder | undefined, kind: GraphNod
   const callId = String(trace.events[0]?.run_id ?? 'run');
   const node = id ?? `${callId}#${trace.events.length}`;
   trace.emit(kind, { ...data, node, inputs: [...inputs] });
+  activeRecorder()?.recordGraphNode?.(structuredClone(trace.events.at(-1)!) as Record<string,unknown>);
   if (kind === 'block_write' && typeof data.block === 'string') rememberProducer(data.block, node);
   return node;
 }

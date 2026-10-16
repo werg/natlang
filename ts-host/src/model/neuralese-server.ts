@@ -439,6 +439,9 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     [...requestBlockIds(messages), ...adapters.map(item => item.id)];
   const transport: ChatTransport = async (body, signal, meta) => {
     const capabilities = await serverInfo();
+    const recorder=activeRecorder();
+    const nativeRecording=!!recorder&&(capabilities?.native_state as {enabled?:boolean}|undefined)?.enabled===true;
+    if(nativeRecording)body={...body,x_natlang_native_recording:true};
     if (body.guidance && capabilities && !serves(capabilities, 'guidance.check'))
       throw Object.assign(new Error('neuralese-guidance-unavailable: this model server does not implement the requested guidance; use a server with guidance support'), { code: 'neuralese-guidance-unavailable' });
     if (body.neuralese_template && capabilities) {
@@ -468,15 +471,6 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         const answer = await inner(requestBody, signal);
         return isStream(answer) ? await assembleChatCompletion(answer, onDelta) : answer;
       }, nativeUploaded), uploaded);
-    const recorder = activeRecorder();
-    if (recorder) {
-      const message = (reply.choices as Json[] | undefined)?.[0]?.message as Json | undefined;
-      if (message) recorder.record({ messages: structuredClone(body.messages as unknown[]),
-        tools: body.tools ? structuredClone(body.tools as unknown[]) : undefined, reply: structuredClone(message),
-        blocks: structuredClone(((reply.neuralese as Json | undefined)?.blocks ?? []) as Json[]),
-        ...(adapters.length ? { adapters: [...adapters] } : {}),
-        ...(consumptionModes ? { native_state_modes: { ...consumptionModes } } : {}) });
-    }
     if (store) for (const meta of ((reply.neuralese as Json | undefined)?.blocks ?? []) as NeuraleseBlockMeta[]) {
       if (!(await store.has(meta.id))) {
         const block = await remote.get(meta.id);
@@ -507,6 +501,23 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         throw new Error('neuralese-native-archive-unavailable: configure a store that preserves native-state artifacts');
       await archiveNativeArtifactFrom(remote,store,meta.id);
       nativeUploaded.add(meta.id);
+    }
+    if(recorder){
+      const message=(reply.choices as Json[]|undefined)?.[0]?.message as Json|undefined;
+      const capture=reply.x_natlang_rl_capture as Record<string,unknown>|undefined;
+      if(nativeRecording&&(!capture||!['natlang.native-rl-sampling/1','natlang.native-rl-sampling/2','natlang.native-rl-sampling/3','natlang.native-structural-capture/1'].includes(String(capture.schema))||
+          !Array.isArray(capture.prompt)||!Array.isArray(capture.samples)))
+        throw Object.assign(new Error('neuralese-native-grad-invalid: native learning needs the actual server sampling receipt'),{code:'neuralese-native-grad-invalid'});
+      if(nativeRecording&&archiveIds.size&&!store)
+        throw Object.assign(new Error('neuralese-native-archive-unavailable: configure a durable native store before recording state communication'),{code:'neuralese-native-archive-unavailable'});
+      const native=nativeRecording?{schema:'natlang.native-recorded-turn/1' as const,id:`native-turn:${globalThis.crypto.randomUUID()}`,
+        sampling:structuredClone(capture!),retry:meta?.retry??0,...(meta?.invocation_id?{invocation_id:meta.invocation_id}:{})}:undefined;
+      if(native)reply.x_natlang_native_recorded_turn=native.id;
+      if(message)recorder.record({messages:structuredClone((nativeRecording?preparedMessages:body.messages) as unknown[]),
+        tools:body.tools?structuredClone(body.tools as unknown[]):undefined,reply:structuredClone(message),
+        blocks:structuredClone([...(((reply.neuralese as Json|undefined)?.blocks??[]) as Json[]),...nativeBlocks]),
+        ...(adapters.length?{adapters:[...adapters]}:{}),
+        ...(consumptionModes?{native_state_modes:{...consumptionModes}}:{}),...(native?{native}:{})});
     }
     return normalizeReply(reply);
   };

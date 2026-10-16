@@ -197,6 +197,7 @@ class GenerationRequest:
     # sequence at its next round and fails its future with RequestError("cancelled").
     cancelled: bool = False
     rl_capture: bool = False  # optional exact rollout sampling receipt
+    native_recording: bool = False  # structural receipt also permits greedy, without a sampled density
     native_state_modes: dict | None = None  # explicit input-ID keyed transport declarations
 
 
@@ -771,7 +772,7 @@ class Engine:
             raise RequestError("native-write-controls-unsupported", "native shared-state serving uses sampled role markers, not legacy forced writes")
         if seq.request.neuralese_max_length is not None or seq.request.neuralese_temperature:
             raise RequestError("native-write-controls-unsupported", "native shared-state spans have no legacy write length or temperature control")
-        if seq.request.rl_capture and seq.request.temperature <= 0:
+        if seq.request.rl_capture and seq.request.temperature <= 0 and not seq.request.native_recording:
             raise RequestError("native-rl-sampling-law", "native rollout capture requires positive temperature")
         seq.cache = None
         seq.native_sampling_seed = (int(seq.request.seed) if seq.request.seed is not None else
@@ -1716,7 +1717,8 @@ class Engine:
         if seq.guide is not None:
             response['x_natlang_guidance'] = {'rejections': seq.guide.rejections}
         if seq.request.rl_capture:
-            response["x_natlang_rl_capture"] = {"schema": ("natlang.native-rl-sampling/3"
+            response["x_natlang_rl_capture"] = {"schema": ("natlang.native-structural-capture/1"
+                    if seq.request.temperature <= 0 else "natlang.native-rl-sampling/3"
                     if seq.native_rl_adapter_binding else "natlang.native-rl-sampling/2"),
                 "policy": dict(seq.native_rl_policy),
                 **({'adapter_binding': seq.native_rl_adapter_binding} if seq.native_rl_adapter_binding else {}),
@@ -1725,5 +1727,6 @@ class Engine:
                 "finish_reason": seq.finish_reason,
                 "sample_range_convention": "half-open",
                 "sampling_law": {"temperature": seq.request.temperature, "seed": seq.native_sampling_seed,
-                                 "guidance": seq.guide is not None, "probabilities": "post-processing-normalized"}}
+                                 "guidance": seq.guide is not None, "probabilities": ("greedy-argmax"
+                                     if seq.request.temperature <= 0 else "post-processing-normalized")}}
         return response

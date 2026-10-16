@@ -876,3 +876,15 @@ there is no downstream task-lift claim.
 The same state-optimizer debt includes arithmetic/runtime mismatch recovery:
 restore the bound CPU Torch executor and full ancestry. This detail is not yet
 measured on a live model and does not broaden public order-2 capabilities.
+
+
+## 2026-10-16: native recorded-turn provenance (measurement debt)
+
+Internal native learning capture now retains exact server inputs/writes and
+actual execution-graph occurrence bindings. Existing
+`neuralese-native-grad-invalid` and `neuralese-native-archive-unavailable` codes
+can report missing receipts, conflicting turn identities or missing durable
+archives. No prompt, sampling setting or public higher-order capability changes.
+Greedy capture explicitly reports no policy density. If these recovery details
+reach an executing model, measure them in the next roughly48-sample live window
+before model-facing adoption; transport/graph tests are not behavioral evidence.

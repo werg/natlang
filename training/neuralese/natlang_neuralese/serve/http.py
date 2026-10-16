@@ -535,7 +535,8 @@ def make_handler(engine: Engine):
                 neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"),
                 neuralese_length=body.get("neuralese_length"), neuralese_passes=body.get("neuralese_passes"),
                 template=body.get("neuralese_template"), adapters=body.get("x_natlang_adapters"),
-                rl_capture=bool(body.get('x_natlang_rl_capture', False)),
+                rl_capture=bool(body.get('x_natlang_rl_capture', False) or body.get('x_natlang_native_recording', False)),
+                native_recording=bool(body.get('x_natlang_native_recording', False)),
                 native_state_modes=body.get('x_natlang_native_state_modes'),
                 guidance=Settings.of(body.get("guidance", getattr(engine, "default_guidance", None)), body.get("tools"),
                                      body.get("tool_choice")))

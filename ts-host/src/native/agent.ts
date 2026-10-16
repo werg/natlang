@@ -27,6 +27,7 @@ import { failureFeedback, type RefinementChecker, type RefinementFailure, type R
 import { containsRefinement } from './types.js';
 import { DECISION_SYSTEM_PROMPT, decisionPrompt, decisionScorer, finiteValues, softmax } from './decision.js';
 import type { NeuraleseBlockMeta } from './neuralese-store.js';
+import {activeRecorder} from './model-recording.js';
 import { activeSystemPrompts, softenMessages, renderPromptMessages, type PromptRendering } from './system-prompts.js';
 
 /** The code tools, as offered. Kept here so data collected under earlier wording can be migrated to it exactly. */
@@ -1218,6 +1219,8 @@ export class NativeToolAgent {
       turns++;
       session.runtime.checkInterruption();
       response = await this.decodeNeuralese(response, session, turns, turnNode, availableTools === allTools || lastTurn);
+      const recordedNativeTurn=response.raw_response?.x_natlang_native_recorded_turn;
+      if(turnNode&&typeof recordedNativeTurn==='string')activeRecorder()?.linkNativeTurn?.(recordedNativeTurn,turnNode);
       // A reply that only writes out return_result({...}) is the tool's request; it is carried out as one.
       const written = !response.calls?.length && !response.truncated ? writtenReturnResult(response.text ?? '') : undefined;
       if (written) response = { ...response, text: '', calls: [['return_result', written]] };

@@ -1,11 +1,15 @@
 // Real native HTTP forwards and state splices; deterministic tool readout is not a quality claim.
 import assert from 'node:assert/strict';
+import { writeFile } from 'node:fs/promises';
 import { FileNeuraleseStore } from '../../dist/neuralese/node-block-store.js';
 import { neuraleseServerModelTurn } from '../../dist/model/neuralese-server.js';
 import { NativeToolAgent } from '../../dist/native/agent.js';
 import { session as open } from '../support/natlang.mjs';
+import { ModelTurnRecorder, setRecorderSource } from '../../dist/native/model-recording.js';
 import { nativeStateConsumerFromInfo } from '../../dist/native/neuralese.js';
-const [endpoint, archive] = process.argv.slice(2);
+const [endpoint, archive, recording] = process.argv.slice(2);
+const recorder = recording ? new ModelTurnRecorder() : undefined;
+if (recorder) setRecorderSource(() => recorder);
 const info = await fetch(endpoint+'/v1/neuralese/info').then(r => r.json());
 const store = await FileNeuraleseStore.open(archive, { residentBytes: 0 });
 const neuralese = { store, dialect: info.dialects[0], nativeStateConsumer: nativeStateConsumerFromInfo(info) };
@@ -31,4 +35,31 @@ await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(parent);
 assert.equal(parent.lam.return, 'consumed');
 const read = parent.runtime.trace.events.find(event => event.kind === 'block_read' && event.block === id);
 assert.ok(read?.inputs.some(input => input.node === write.node), 'parent reads the actual child producer, not an invented external edge');
-console.log(JSON.stringify({ state_id: id, parent_result: parent.lam.return, archived: true }));
+if (recorder) {
+  const turns = recorder.nativeTurns();
+  assert.equal(turns.length, 2);
+  const [produced, consumed] = turns.map(turn => turn.native);
+  assert.equal(produced.graph.written_nodes[id], write.node);
+  assert.equal(consumed.graph.read_bindings[id], write.node);
+  for (const turn of turns) {
+    assert.ok(turn.native.sampling.prompt.length);
+    assert.ok(turn.native.sampling.samples.length);
+    assert.equal(turn.native.sampling.schema, 'natlang.native-structural-capture/1');
+    assert.equal(turn.native.sampling.sampling_law.temperature, 0);
+    assert.equal(turn.native.sampling.sampling_law.probabilities, 'greedy-argmax');
+    assert.ok(turn.native.sampling.samples.every(sample => sample.logp === null));
+    assert.equal(recorder.graphNodes.get(turn.native.graph.graph_turn).kind, 'model_turn');
+    for (const output of turn.native.sampling.writes ?? []) {
+      for (const artifactId of [output.state_id, output.raw_state_id].filter(Boolean))
+        assert.ok(await store.getNativeState(artifactId), 'captured producer dependencies are durable');
+    }
+  }
+  assert.throws(() => recorder.linkNativeTurn(produced.id, consumed.graph.graph_turn), /two model-turn occurrences/);
+  await writeFile(archive + '/native-recorded-turns.json', JSON.stringify(turns));
+  const original = recorder.graphNodes.get(write.node);
+  recorder.recordGraphNode({ ...original, length: Number(original.length) + 1 });
+  assert.throws(() => recorder.nativeTurns(), /conflicting source node identities/);
+  setRecorderSource(() => undefined);
+}
+console.log(JSON.stringify({ state_id: id, parent_result: parent.lam.return, archived: true,
+  ...(recorder ? { recorded: true } : {}) }));

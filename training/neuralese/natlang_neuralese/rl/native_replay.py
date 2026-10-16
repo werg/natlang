@@ -103,13 +103,15 @@ def capture_invocation_actors(turns,base):
         'base_native_identity':dict(base),'invocations':actors},base)
 
 
-def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=None):
+def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=None, structural=False):
     """Compile real turn captures, preserving exact producer occurrence bindings.
 
     ``turns`` use graph_replay.producer_turns' graph_turn/written_nodes/read_bindings
     metadata. A repeated content ID needs its actual execution-graph occurrence.
     ``fetch_block`` loads verified NativeStateBlock artifacts from the durable
-    rollout bundle, never a regenerated text approximation.
+    rollout bundle, never a regenerated text approximation. ``structural``
+    compiles the identical causal inputs/edges without policy actions; greedy
+    receipts have no behavior density and are never accepted as RL samples.
     """
     if invocation_actors is not None:
         from ..model.native_actor_graph import validate_invocation_actor_receipt
@@ -125,12 +127,16 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             raise ValueError('native RL graph turn identities must be unique')
         capture = turn.get('sampling') or {}
         actor_identity=(invocation_actors['invocations'][name]['native_identity'] if invocation_actors is not None else identity)
-        if (capture.get('schema') not in {'natlang.native-rl-sampling/1', 'natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3'}
+        greedy = capture.get('schema') == 'natlang.native-structural-capture/1'
+        schemas = {'natlang.native-rl-sampling/1', 'natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3'}
+        if structural:
+            schemas.add('natlang.native-structural-capture/1')
+        if (capture.get('schema') not in schemas
                 or capture.get('policy') != actor_identity
                 or capture.get('sample_range_convention') != 'half-open'):
             raise ValueError('native RL capture has a different policy or unsupported sampling schema')
         binding = capture.get('adapter_binding')
-        if capture['schema'] == 'natlang.native-rl-sampling/3':
+        if capture['schema'] == 'natlang.native-rl-sampling/3' or greedy and binding is not None:
             from types import SimpleNamespace
             from ..model.native_adapters import validate_state_binding
             validate_state_binding(binding, SimpleNamespace(**actor_identity))
@@ -141,7 +147,11 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         adapter_binding, binding_seen = binding, True
         law = capture.get('sampling_law') or {}
         temperature = law.get('temperature')
-        if (type(temperature) not in (int, float) or not math.isfinite(temperature) or temperature <= 0
+        if greedy:
+            if (type(temperature) not in (int, float) or temperature != 0
+                    or law.get('probabilities') != 'greedy-argmax'):
+                raise ValueError('native structural receipt needs its actual greedy decoding law')
+        elif (type(temperature) not in (int, float) or not math.isfinite(temperature) or temperature <= 0
                 or law.get('probabilities') != 'post-processing-normalized'):
             raise ValueError('native RL needs its exact positive-temperature sampling law')
         if set(law) - {'temperature', 'seed', 'guidance', 'probabilities'}:
@@ -181,8 +191,9 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         for index, sample in enumerate(samples):
             token = _tokens([sample.get('token_id')])[0]
             if (sample.get('index') != index or (not sample['forced'] and (
-                    type(sample.get('logp')) not in (int, float)
-                    or not math.isfinite(sample['logp']) or sample.get('logp') > 1e-6))
+                    (sample.get('logp') is not None if greedy else
+                     type(sample.get('logp')) not in (int, float)
+                     or not math.isfinite(sample['logp']) or sample.get('logp') > 1e-6)))
                     or sample.get('input_role') not in {'ordinary', 'produce'}
                     or type(sample.get('terminal')) is not bool
                     or (sample['terminal'] and index != len(samples)-1)):
@@ -218,7 +229,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                 banned = _tokens(banned)
                 if token in banned or len(set(banned)) != len(banned):
                     raise ValueError('native RL banned mask excludes its sampled token or repeats IDs')
-            if not sample['forced']:
+            if not sample['forced'] and not structural:
                 events.append({'local_query': prompt_length + index - 1, 'token_id': token,
                     'behavior_logp': sample['logp'], 'temperature': float(temperature),
                     'allowed_token_ids': allowed, 'banned_token_ids': banned, 'turn': name, 'sample': sample['source_sample']})
