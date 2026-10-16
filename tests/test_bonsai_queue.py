@@ -15,7 +15,7 @@ TS_HOST = ROOT / 'ts-host'
 
 @pytest.fixture(autouse=True)
 def no_live_server_queries(monkeypatch):
-    monkeypatch.setattr(queue_module, 'local_decode_progress', lambda: None)
+    monkeypatch.setattr(queue_module, 'local_decode_progress', lambda *args: None)
     original = queue_module.urllib.request.urlopen
     class Healthy:
         status = 200
@@ -352,13 +352,14 @@ def test_local_decode_metrics_are_finite_and_parse_failures_are_ignored(monkeypa
 
 
 @pytest.mark.parametrize('decoding', [True, False])
-def test_long_reply_decoding_is_activity_but_a_motionless_request_times_out(tmp_path, monkeypatch, decoding):
+@pytest.mark.parametrize('native_server', [True, False])
+def test_long_reply_decoding_is_activity_but_a_motionless_request_times_out(tmp_path, monkeypatch, decoding, native_server):
     queue, journal = tmp_path / 'queue.jsonl', tmp_path / 'journal.jsonl'
     entry = queue_entry(tmp_path, key='long')
     queue.write_text(json.dumps(entry) + '\n')
     clock = [0]
     monkeypatch.setattr('scripts.run_bonsai_queue.time.monotonic', lambda: clock[0])
-    monkeypatch.setattr('scripts.run_bonsai_queue.local_decode_progress', lambda: clock[0] if decoding else None)
+    monkeypatch.setattr('scripts.run_bonsai_queue.local_decode_progress', lambda *args: clock[0] if decoding else None)
     class Child:
         def __init__(self, command, **kwargs): self.terminated = False; self.calls = 0; self.command = command
         def wait(self, timeout=None):
@@ -370,7 +371,8 @@ def test_long_reply_decoding_is_activity_but_a_motionless_request_times_out(tmp_
             return 0
         def terminate(self): self.terminated = True
     install_child(monkeypatch, Child)
-    run_queue(queue, journal, TS_HOST, seconds=600, no_observation_seconds=360)
+    run_queue(queue, journal, TS_HOST, seconds=600, no_observation_seconds=360,
+              **({'server': 'http://127.0.0.1:43217', 'neuralese_server': True} if native_server else {}))
     finish = json.loads(journal.read_text().splitlines()[-1])
     assert finish['status'] == ('complete' if decoding else 'no_observation_limit')
     assert finish['resource_limit_reason'] == (None if decoding else 'no_observation_limit')
@@ -616,3 +618,42 @@ def test_cooperative_drain_finishes_active_case_then_resumes_only_remaining(tmp_
     event=rows[-1];assert event['event']=='operator_drain' and event['completed_keys']==['case-0'] and event['unstarted_keys']==['case-1']
     drain.unlink();assert run_queue(queue,journal,TS_HOST,drain_file=drain)==0
     assert len(calls)==2 and [c[c.index('--start')+1] for c in calls]==['0','1']
+
+
+def test_native_decode_observer_uses_actual_loopback_origin_only(monkeypatch):
+    seen = []
+    def urlopen(url, **kwargs):
+        seen.append(url)
+        return io.BytesIO(b'natlang_native_decode_tokens_total 73\n')
+    monkeypatch.setattr(queue_module.urllib.request, 'urlopen', urlopen)
+    assert read_local_decode_progress('http://127.0.0.1:43217/v1/chat/completions') == 73
+    assert seen == ['http://127.0.0.1:43217/metrics']
+    assert read_local_decode_progress('https://external.example/v1') is None
+    assert len(seen) == 1
+
+
+def test_saved_authored_actions_are_not_counted_as_model_replies(tmp_path):
+    entry = queue_entry(tmp_path, count=2)
+    jobs = queue_module.resolve_entry_jobs(entry, TS_HOST)
+    directory = Path(entry['jobs']); directory.mkdir()
+    rows = [json.loads(line) for line in Path(entry['source']).read_text().splitlines()]
+    authored = {'kind': 'authored_reference_root_eval', 'sampled': False}
+    for index, job in enumerate(jobs):
+        common = {'request_sha256': 'authored', 'action_provenance': authored}
+        real = {'request_sha256': 'actual'}
+        if index == 0:
+            value = {'task': {'program_ir': rows[index]}, 'provenance': {'program_ir_sha256': job['digest']},
+                'trajectory': [{**common, 'raw_response_sha256': 'reference',
+                    'model_response': {'completion_tokens': 0}},
+                    {**real, 'raw_response_sha256': 'real', 'model_response': {'completion_tokens': 7}}]}
+            suffix = '.result.json'
+        else:
+            value = {'program_id': job['program_id'], 'provenance': {'program_ir_sha256': job['digest']},
+                'turns': [{'request_sha256': 'authored', 'response': {
+                    'raw_response': {'natlang_action_provenance': authored}}},
+                    {**real, 'response': {'raw_response': {'sampled': True}, 'completion_tokens': 3}}]}
+            suffix = '.partial.json'
+        (directory / (job['key'] + suffix)).write_text(json.dumps(value))
+    metrics = queue_module.partial_metrics(entry)
+    assert metrics['saved_turns'] == 4
+    assert metrics['fresh_model_replies'] == 2 and metrics['completion_tokens'] == 10

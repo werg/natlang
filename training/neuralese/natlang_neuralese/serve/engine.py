@@ -302,8 +302,18 @@ class Engine:
         self._thread: threading.Thread | None = None
         self._stopping = False
         self._ids = itertools.count()
+        self._native_decoded_tokens = 0  # completed generated-token forwards, including private spans
         self._adapter_bank = None
         self.projections: dict = {}  # name → AdapterProjection (model/projections.py), from --projection
+
+    def progress_metrics(self):
+        """Host-only scheduler observations; never block on actor execution/GPU."""
+        active = tuple(self._active)
+        return {'natlang_native_decode_tokens_total': self._native_decoded_tokens,
+                'natlang_active_sequences': sum(seq.phase != 'done' for seq in active),
+                'natlang_native_open_produce_spans': sum(
+                    seq.phase != 'done' and seq.native_capture_open for seq in active),
+                'natlang_queued_requests': self._incoming.qsize()}
 
     def token_logits(self, hidden, segments=None, *, last_only=False):
         from ..model.neuralese_projection import token_choice_logits
@@ -1129,6 +1139,7 @@ class Engine:
                     output = self._native_forward([token], seq.cache)
                     seq.cache, seq.logits = output['cache'], self._native_logits(output['h_final'])
                     seq.generated_positions += 1
+                    self._native_decoded_tokens += 1
                     self._native_record_input(seq, token,
                         producing=seq.native_capture_open and token not in (
                             self.role_tokens.produce_open, self.role_tokens.produce_close))
@@ -1173,6 +1184,7 @@ class Engine:
                     output = self._native_forward([token], seq.cache)
                     seq.cache, seq.logits = output["cache"], self._native_logits(output["h_final"])
                     seq.generated_positions += 1
+                    self._native_decoded_tokens += 1
                     self._native_record_input(seq, token, producing=False, sample_index=sample_index)
                     self._native_finish_block(seq)
                     continue
@@ -1183,6 +1195,7 @@ class Engine:
                 output = self._native_forward([token], seq.cache, producing=producing)
                 seq.cache, seq.logits = output["cache"], self._native_logits(output["h_final"])
                 seq.generated_positions += 1
+                self._native_decoded_tokens += 1
                 self._native_record_input(seq, token, producing=producing, sample_index=sample_index)
                 if token == marker.produce_open:
                     if seq.native_capture_open:

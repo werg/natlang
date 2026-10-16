@@ -16,6 +16,7 @@ import random
 import shutil
 import tempfile
 import urllib.request
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 import sys as _sys
@@ -377,12 +378,16 @@ process.stdout.write(JSON.stringify(jobs));
     return entry['_resolved_jobs']
 
 
-def local_decode_progress():
+def local_decode_progress(server=None):
     """A long batched reply can be decoding before its next durable checkpoint exists."""
+    endpoint = urllib.parse.urlsplit(server or 'http://127.0.0.1:8081')
+    if endpoint.scheme not in {'http', 'https'} or endpoint.hostname not in {'localhost', '127.0.0.1', '::1'}:
+        return None
+    metrics_url = urllib.parse.urlunsplit((endpoint.scheme, endpoint.netloc, '/metrics', '', ''))
     try:
-        with urllib.request.urlopen('http://127.0.0.1:8081/metrics', timeout=2) as response:
+        with urllib.request.urlopen(metrics_url, timeout=2) as response:
             for line in response.read().decode().splitlines():
-                if line.startswith('llamacpp:n_decode_total '):
+                if line.startswith(('llamacpp:n_decode_total ', 'natlang_native_decode_tokens_total ')):
                     value = float(line.split()[1])
                     return value if math.isfinite(value) and value >= 0 else None
     except (OSError, ValueError):
@@ -421,6 +426,10 @@ def partial_metrics(entry):
             metrics['saved_turns'] += len(turns)
             for turn in turns:
                 response = turn.get('model_response' if completed else 'response', {})
+                provenance = (turn.get('action_provenance') or
+                              (response.get('raw_response') or {}).get('natlang_action_provenance') or {})
+                if provenance.get('sampled') is False or provenance.get('kind') == 'authored_reference_root_eval':
+                    continue
                 if not (turn.get('raw_response_sha256') if completed else response.get('raw_response')):
                     continue
                 note_request(turn)
@@ -714,7 +723,8 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                             record({'event': 'repetition_detected', 'key': entry['key'], 'time': time.time(),
                                     'limit': identical_turn_limit, **repeated})
                             raise IdenticalTurnLimit('same action and observation repeated without progress')
-                        decode = local_decode_progress() if not remote else None
+                        decode = (local_decode_progress(server) if neuralese_server else
+                                  local_decode_progress() if not remote else None)
                         decoding = decode is not None and previous_decode is not None and decode > previous_decode
                         previous_decode = decode
                         stream_delta, observation = observer.poll() if observer else (False, {'pending_requests': []})

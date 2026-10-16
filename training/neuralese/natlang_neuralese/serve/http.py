@@ -171,6 +171,9 @@ def make_handler(engine: Engine):
             return self.rfile.read(int(self.headers.get("content-length") or 0))
 
         def do_GET(self):
+            if self.path == "/metrics":
+                body = ''.join(f'{name} {value}\n' for name, value in engine.progress_metrics().items())
+                return self._send(200, body.encode(), "text/plain; version=0.0.4")
             if self.path in ("/health", "/v1/health"):
                 return self._json(200, {"status": "ok"})
             if self.path == "/v1/models":

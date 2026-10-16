@@ -80,6 +80,12 @@ def test_native_checkpoint_chat_produces_captures_and_consumes_exact_stored_stat
         monkeypatch.setattr(engine, '_native_token', lambda _seq: next(produced))
         reply = post({'messages': [{'role': 'user', 'content': 'write'}],
                       'max_tokens': 8, 'temperature': 1.0, 'seed': 13, 'x_natlang_rl_capture': True})
+        with urllib.request.urlopen(endpoint + '/metrics', timeout=5) as response:
+            metrics = dict(line.split() for line in response.read().decode().splitlines())
+        # Open/payload/close each completed a forward; EOS did not. The private
+        # payload was observable even though it was withheld from text deltas.
+        assert metrics['natlang_native_decode_tokens_total'] == '3'
+        assert metrics['natlang_native_open_produce_spans'] == '0'
         record = engine.store.get_native_state(reply['native_state']['blocks'][0]['id'])
         capture = reply['x_natlang_rl_capture']
         assert capture['schema'] == 'natlang.native-rl-sampling/2'
