@@ -63,6 +63,11 @@ def test_drained_resident_selects_new_priority_plan_and_preserves_exact_parent(a
     assert resident.current(directory) is None and pin.read_bytes()==parentbytes
     assert Path(json.loads(Path(original['path']).read_text())['resident']['current']['path']).read_bytes()==oldbytes
     assert handoff.prepare_drained_recipe_handoff(original,next_recipe,tmp_path/'transition.json',package=package)==proof
+    changed_package=tmp_path/'changed-package'
+    shutil.copytree(package,changed_package,ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
+    (changed_package/'changed.py').write_text('# different requested runtime\n')
+    with pytest.raises(ValueError,match='requested runtime changed'):
+        handoff.prepare_drained_recipe_handoff(original,next_recipe,tmp_path/'transition.json',package=changed_package)
     runtime=tmp_path/'runtime';(runtime/'dist/teacher').mkdir(parents=True);(runtime/'dist/teacher/cli.js').write_text('/* not executed */')
     cases=tmp_path/'cases';cases.write_text('{"id":"private","split":"train"}\n')
     declaration={'model':'lfm','production_stage':'sft','runtime':str(runtime),'base':str(tmp_path/'base'),'port':8097,

@@ -216,6 +216,8 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None):
     if out.exists():
         reference=binding(out);value=verify_drained_recipe_handoff(reference,handoff=handoff)
         if binding(recipe)!=value['recipe']:raise ValueError('drained recipe handoff recipe changed')
+        if resident.code_inventory(package)!=value['new_code']:
+            raise ValueError('drained recipe handoff requested runtime changed')
         return reference
     with resident.locked(directory):
         if resident.current(directory) is not None:
