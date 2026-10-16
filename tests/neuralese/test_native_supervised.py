@@ -97,3 +97,28 @@ def test_interleave_shares_parent_merges_both_partial_updates_and_does_not_repea
         assert state['checkpoint']==str(refreshed) and state['semantic_adapter']==str(next_adapter)
     assert supervised.interleave([],configs,result,tmp_path/'work',cycle=0,latest=latest,device='cpu',stop=stop)==result
     assert len(calls)==2  # resume does not redo either completed quantum
+
+
+def test_pending_metadata_admission_is_not_claimed_as_optimizer_work_and_is_resumable(tmp_path,monkeypatch):
+    from natlang_neuralese.rl import production
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'actual parent numeric fixture')
+    declared=tmp_path/'pending.json';declared.write_text('{}')
+    out=tmp_path/'run';config={'schema':'natlang.native-rl-production/1','out':str(out),
+        'mandatory_sft_only':True,'checkpoint':str(parent),'seed_command':['shared-trainer'],
+        'pending_native_sources':str(declared),'trainer_parameters':{},'native_state':True}
+    path=tmp_path/'config.json';path.write_text(json.dumps(config));calls=[]
+    def trainer(command,values):
+        calls.append(True);directory=Path(values['learner_out']);directory.mkdir(parents=True)
+        child=directory/'checkpoint.pt';child.write_bytes(b'same numeric state plus mandatory source metadata')
+        digest=sha256_file_hex(declared)
+        report={'completed':False,'numerics_ok':True,'continuation_boundary':{'reached':False,'new_optimizer_updates':0},
+            'mandatory_sft':{'complete':False,'stages':{'full':{'pending_source_declarations':{digest:{}}}}},
+            'pending_source_admission':{'schema':'natlang.native-pending-source-admission/1',
+                'parent_checkpoint_sha256':sha256_file_hex(parent),'checkpoint_sha256':sha256_file_hex(child),
+                'new_optimizer_updates':0,'declarations':[digest]}}
+        (directory/'report.json').write_text(json.dumps(report))
+    monkeypatch.setattr(production,'run_command',trainer)
+    state=production.run(path,rounds=1,defer_native_refresh=True)
+    assert state['phase']=='awaiting_semantic_refresh' and not state['mandatory_sft']['complete']
+    assert state['last_learner_progress']['pending_source_admission']['new_optimizer_updates']==0
+    assert production.run(path,rounds=1,defer_native_refresh=True)==state and len(calls)==1
