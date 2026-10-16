@@ -109504,7 +109504,7 @@
       "split": "Train-only. 7,790 unique graphs per model; empty test files; no held evaluation rows are claimed.",
       "admission": "463 verified Qwen3.8-Flash-Next trajectories yielded 7,811 eligible assistant turns. Twenty-one exact token/weight duplicates per model were omitted after comparison with V1–V7 and clean-action V1–V4, leaving 7,790 new train graphs per model. 884 turns per model remain explicit action omissions for failed/unexecuted proposals. Full captured prompts and trajectories remain bound; text emulation is ordinary one-node SFT, not an authentic Neuralese edge capture.",
       "training_admission": true,
-      "training_admission_reason": "Independent terminal validation recomputed source and decision-admission bindings, parsed all graphs under both expanded tokenizer fingerprints, verified identical model graph IDs, exact train-only split and source-group closure, and found zero intersections with current held, quality, pending-review or decision-hold groups.",
+      "training_admission_reason": "Independent terminal validation recomputed source and decision-admission bindings, parsed all graphs under both expanded tokenizer fingerprints, verified identical model graph IDs, exact train-only split and source-group closure, and found zero intersections with current held, quality, and pending-review group closures.",
       "derived_from": [
         "qwen-verified-positive-native-graphs-20261015-v1-v2",
         "qwen-verified-positive-native-graphs-20261015-v3",
