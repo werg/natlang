@@ -46,6 +46,7 @@ import subprocess
 import sys
 import time
 from collections import Counter, defaultdict
+from contextlib import ExitStack
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -526,128 +527,130 @@ def select(args, shard_dir: Path):
     needles = index_needles(reserved_needles(args.reserved)) if args.reserved else None
     reserved_cache, reserved_groups = {}, set()
     protected = json.loads(args.protected.read_text()) if args.protected else None
-    shard_files = [open(shard_dir / f'{i:04d}.jsonl', 'wb') for i in range(args.shards)]
-    omissions, counts = [], Counter()
-    strata = defaultdict(set)  # family -> selected programs (for the full-rendering warm-up sample)
-    blocked = {}  # chain -> fewest messages of an unselected decision in it
-    protected_cache = {}
-    seen_ids = set()
-    test_groups = set()
-    n = 0
-    for source in args.source:
-        with open_jsonl_text(source) as f:
-            for text_line in f:
-                line = text_line.encode('utf-8')
-                if not line.strip():
-                    continue
-                if args.limit and n >= args.limit:
-                    break
-                n += 1
-                row = json.loads(line)
-                rid = row.get('id')
-                counts['source_rows'] += 1
-                if row.get('split') in HELD_SPLIT_ALIASES:
-                    # Held-out under another name (upstream validation/dev): the students' loaders know train and
-                    # test only, so it is rendered as test (held, decontaminated against train) and the original
-                    # name is kept on the row; never dropped.
-                    counts[f"split_mapped:{row['split']}->test"] += 1
-                    row['source_split'], row['split'] = row['split'], 'test'
-                    line = json.dumps(row, ensure_ascii=False).encode()
-                reason = None
-                if include is not None and rid not in include:
-                    counts['not_in_include_set'] += 1  # outside this render's scope: no omission, no chain block
-                    continue
-                if include is not None and args.include_admits and not (
-                        row.get('training_admission') or {}).get('approved'):
-                    # Admitted by the text set it was rendered for (its root receipt), recorded per row.
-                    row['training_admission'] = {**(row.get('training_admission') or {}), 'approved': True,
-                                                 'admitted_through_include_set': [str(x) for x in args.include_ids]}
-                    line = json.dumps(row, ensure_ascii=False).encode()
-                    counts['approved_through_include_set'] += 1
-                candidate_admission = getattr(args, 'candidate_selection_admission', None)
-                if row.get('candidate_selection', {}).get('approved') is True and candidate_admission is not None:
-                    approved = candidate_admission['rows'].get(rid)
-                    if approved is None:
-                        reason = 'not_in_registry_candidate_selection_admission'
-                    else:
-                        validate_candidate_selection_row(row, approved)
-                        row['training_admission'] = {
-                            'approved': True, 'kind': 'registry-bound-candidate-selection',
-                            'status': 'admitted-exact-selected-child-action', 'corpus_id': candidate_admission['corpus_id'],
-                            'packet_manifest_sha256': candidate_admission['packet_manifest_sha256'],
-                            'candidate_selection_review_sha256': candidate_admission['candidate_selection_review_sha256'],
-                            'semantic_review_sha256': candidate_admission['semantic_review_sha256'],
-                            'historical_audit_sha256': candidate_admission['historical_audit_sha256'],
-                            'selection_review_pin_correction_sha256': candidate_admission[
-                                'selection_review_pin_correction_sha256'],
-                            'owner_admission_sha256': candidate_admission['owner_admission_sha256'],
-                            'source_quality_clearance_sha256': candidate_admission['source_quality_clearance_sha256'],
-                            'item_id': approved['item_id'], 'item_sha256': approved['item_sha256'],
-                            'target_sha256': approved['target_sha256'], 'split': approved['split'],
-                            'source_groups': approved['source_groups'],
-                        }
-                        row['decision'] = {**(row.get('decision') or {}), 'training_approved': True,
-                                           'registry_candidate_selection_admission': candidate_admission['corpus_id']}
+    with ExitStack() as stack:
+        compressed = getattr(args, 'compress_text', False)
+        suffix = '.jsonl.zst' if compressed else '.jsonl'
+        shard_files = [stack.enter_context(write_jsonl_text(shard_dir / f'{i:04d}{suffix}'))
+                       for i in range(args.shards)]
+        omissions, counts = [], Counter()
+        strata = defaultdict(set)  # family -> selected programs (for the full-rendering warm-up sample)
+        blocked = {}  # chain -> fewest messages of an unselected decision in it
+        protected_cache = {}
+        seen_ids = set()
+        test_groups = set()
+        n = 0
+        for source in args.source:
+            with open_jsonl_text(source) as f:
+                for text_line in f:
+                    line = text_line.encode('utf-8')
+                    if not line.strip():
+                        continue
+                    if args.limit and n >= args.limit:
+                        break
+                    n += 1
+                    row = json.loads(line)
+                    rid = row.get('id')
+                    counts['source_rows'] += 1
+                    if row.get('split') in HELD_SPLIT_ALIASES:
+                        # Held-out under another name (upstream validation/dev): the students' loaders know train and
+                        # test only, so it is rendered as test (held, decontaminated against train) and the original
+                        # name is kept on the row; never dropped.
+                        counts[f"split_mapped:{row['split']}->test"] += 1
+                        row['source_split'], row['split'] = row['split'], 'test'
                         line = json.dumps(row, ensure_ascii=False).encode()
-                        counts['approved_by_registry_candidate_selection'] += 1
-                if row.get('version') != 'natlang.teacher_training_turn.native/1':
-                    reason = 'not_a_native_teacher_turn'
-                elif rid in seen_ids:
-                    reason = 'duplicate_source_row_id'
-                elif args.train_only and row.get('split') != 'train':
-                    reason = 'held_split_kept_out'
-                elif (args.registry_admits_reason and isinstance(row.get('training_admission'), dict)
-                      and row['training_admission'].get('approved') is False
-                      and str(row['training_admission'].get('reason') or '').startswith(args.registry_admits_reason)):
-                    # The registry's training admission overrides this row-level hold (recorded per row).
-                    row['training_admission'] = {**row['training_admission'], 'approved': True,
-                                                 'row_hold_overridden_by_registry_admission': args.corpus_id}
-                    line = json.dumps(row, ensure_ascii=False).encode()
-                    counts['approved_by_registry_admission'] += 1
-                if reason is not None:
-                    pass
-                elif not (isinstance(row.get('training_admission'), dict)
-                          and row['training_admission'].get('approved') is True):
-                    reason = 'not_approved:' + str((row.get('training_admission') or {}).get('reason') or 'approved=false')[:80]
-                elif {program_key(row), row.get('program_id'), *(row.get('source_program_ids') or [])} & exclude.keys():
-                    hit = sorted({program_key(row), row.get('program_id'), *(row.get('source_program_ids') or [])}
-                                 & exclude.keys())[0]
-                    reason = exclude[hit]
-                    if reason == 'jeff_reserved_test_text' and row.get('split') == 'train':
+                    reason = None
+                    if include is not None and rid not in include:
+                        counts['not_in_include_set'] += 1  # outside this render's scope: no omission, no chain block
+                        continue
+                    if include is not None and args.include_admits and not (
+                            row.get('training_admission') or {}).get('approved'):
+                        # Admitted by the text set it was rendered for (its root receipt), recorded per row.
+                        row['training_admission'] = {**(row.get('training_admission') or {}), 'approved': True,
+                                                     'admitted_through_include_set': [str(x) for x in args.include_ids]}
+                        line = json.dumps(row, ensure_ascii=False).encode()
+                        counts['approved_through_include_set'] += 1
+                    candidate_admission = getattr(args, 'candidate_selection_admission', None)
+                    if row.get('candidate_selection', {}).get('approved') is True and candidate_admission is not None:
+                        approved = candidate_admission['rows'].get(rid)
+                        if approved is None:
+                            reason = 'not_in_registry_candidate_selection_admission'
+                        else:
+                            validate_candidate_selection_row(row, approved)
+                            row['training_admission'] = {
+                                'approved': True, 'kind': 'registry-bound-candidate-selection',
+                                'status': 'admitted-exact-selected-child-action', 'corpus_id': candidate_admission['corpus_id'],
+                                'packet_manifest_sha256': candidate_admission['packet_manifest_sha256'],
+                                'candidate_selection_review_sha256': candidate_admission['candidate_selection_review_sha256'],
+                                'semantic_review_sha256': candidate_admission['semantic_review_sha256'],
+                                'historical_audit_sha256': candidate_admission['historical_audit_sha256'],
+                                'selection_review_pin_correction_sha256': candidate_admission[
+                                    'selection_review_pin_correction_sha256'],
+                                'owner_admission_sha256': candidate_admission['owner_admission_sha256'],
+                                'source_quality_clearance_sha256': candidate_admission['source_quality_clearance_sha256'],
+                                'item_id': approved['item_id'], 'item_sha256': approved['item_sha256'],
+                                'target_sha256': approved['target_sha256'], 'split': approved['split'],
+                                'source_groups': approved['source_groups'],
+                            }
+                            row['decision'] = {**(row.get('decision') or {}), 'training_approved': True,
+                                               'registry_candidate_selection_admission': candidate_admission['corpus_id']}
+                            line = json.dumps(row, ensure_ascii=False).encode()
+                            counts['approved_by_registry_candidate_selection'] += 1
+                    if row.get('version') != 'natlang.teacher_training_turn.native/1':
+                        reason = 'not_a_native_teacher_turn'
+                    elif rid in seen_ids:
+                        reason = 'duplicate_source_row_id'
+                    elif args.train_only and row.get('split') != 'train':
+                        reason = 'held_split_kept_out'
+                    elif (args.registry_admits_reason and isinstance(row.get('training_admission'), dict)
+                          and row['training_admission'].get('approved') is False
+                          and str(row['training_admission'].get('reason') or '').startswith(args.registry_admits_reason)):
+                        # The registry's training admission overrides this row-level hold (recorded per row).
+                        row['training_admission'] = {**row['training_admission'], 'approved': True,
+                                                     'row_hold_overridden_by_registry_admission': args.corpus_id}
+                        line = json.dumps(row, ensure_ascii=False).encode()
+                        counts['approved_by_registry_admission'] += 1
+                    if reason is not None:
+                        pass
+                    elif not (isinstance(row.get('training_admission'), dict)
+                              and row['training_admission'].get('approved') is True):
+                        reason = 'not_approved:' + str((row.get('training_admission') or {}).get('reason') or 'approved=false')[:80]
+                    elif {program_key(row), row.get('program_id'), *(row.get('source_program_ids') or [])} & exclude.keys():
+                        hit = sorted({program_key(row), row.get('program_id'), *(row.get('source_program_ids') or [])}
+                                     & exclude.keys())[0]
+                        reason = exclude[hit]
+                        if reason == 'jeff_reserved_test_text' and row.get('split') == 'train':
+                            reserved_groups.update(row.get('source_groups') or [])
+                    elif needles is not None and row.get('split') == 'train' and (
+                            reserved_cache[program_key(row)] if program_key(row) in reserved_cache
+                            else reserved_cache.setdefault(program_key(row), reserved_hit(row, needles))):
+                        reason = 'jeff_reserved_test_text:' + reserved_cache[program_key(row)]
                         reserved_groups.update(row.get('source_groups') or [])
-                elif needles is not None and row.get('split') == 'train' and (
-                        reserved_cache[program_key(row)] if program_key(row) in reserved_cache
-                        else reserved_cache.setdefault(program_key(row), reserved_hit(row, needles))):
-                    reason = 'jeff_reserved_test_text:' + reserved_cache[program_key(row)]
-                    reserved_groups.update(row.get('source_groups') or [])
-                elif protected is not None:
-                    key = program_key(row)
-                    if key not in protected_cache:
-                        protected_cache[key] = protected_hits(row, protected)
-                    if protected_cache[key]:
-                        reason = 'protected_benchmark_overlap:' + protected_cache[key][0][:120]
-                if reason is not None:
-                    omissions.append({'id': rid, 'program': program_key(row), 'split': row.get('split'),
-                                      'reason': reason, 'stage': 'selection'})
-                    counts['omitted:' + reason.split(':', 1)[0]] += 1
-                    if reason != 'duplicate_source_row_id':
-                        # A later copy of a selected ID is not an unselected decision: its first occurrence (an
-                        # earlier source, e.g. a replacement overlay) was selected. Blocking its chain cut the
-                        # selected copy and every longer decision out of whole-trajectory documents (the 4962
-                        # render kept 32 of 4962 rows, 2026-10-12).
-                        chain = chain_key(row)
-                        blocked[chain] = min(blocked.get(chain, 1 << 30), len(row.get('messages') or []))
-                    continue
-                seen_ids.add(rid)
-                if row.get('split') == 'test':
-                    test_groups.update(g for g in row.get('source_groups') or [] if isinstance(g, str))
-                counts['selected'] += 1
-                counts['selected:' + str(row.get('split'))] += 1
-                strata[str(row.get('family') or row.get('task_family') or '')].add(program_key(row))
-                shard = int(sha(str(row.get('teacher_trajectory_id') or chain_key(row)).encode())[:8], 16) % args.shards
-                shard_files[shard].write(line.rstrip(b'\n') + b'\n')
-    for f in shard_files:
-        f.close()
+                    elif protected is not None:
+                        key = program_key(row)
+                        if key not in protected_cache:
+                            protected_cache[key] = protected_hits(row, protected)
+                        if protected_cache[key]:
+                            reason = 'protected_benchmark_overlap:' + protected_cache[key][0][:120]
+                    if reason is not None:
+                        omissions.append({'id': rid, 'program': program_key(row), 'split': row.get('split'),
+                                          'reason': reason, 'stage': 'selection'})
+                        counts['omitted:' + reason.split(':', 1)[0]] += 1
+                        if reason != 'duplicate_source_row_id':
+                            # A later copy of a selected ID is not an unselected decision: its first occurrence (an
+                            # earlier source, e.g. a replacement overlay) was selected. Blocking its chain cut the
+                            # selected copy and every longer decision out of whole-trajectory documents (the 4962
+                            # render kept 32 of 4962 rows, 2026-10-12).
+                            chain = chain_key(row)
+                            blocked[chain] = min(blocked.get(chain, 1 << 30), len(row.get('messages') or []))
+                        continue
+                    seen_ids.add(rid)
+                    if row.get('split') == 'test':
+                        test_groups.update(g for g in row.get('source_groups') or [] if isinstance(g, str))
+                    counts['selected'] += 1
+                    counts['selected:' + str(row.get('split'))] += 1
+                    strata[str(row.get('family') or row.get('task_family') or '')].add(program_key(row))
+                    shard = int(sha(str(row.get('teacher_trajectory_id') or chain_key(row)).encode())[:8], 16) % args.shards
+                    shard_files[shard].write(line.rstrip(b'\n').decode('utf-8') + '\n')
     counts['reserved_programs_hit'] = sum(bool(v) for v in reserved_cache.values())
     counts['reserved_groups'] = len(reserved_groups)
     return omissions, counts, blocked, protected_cache, test_groups, reserved_groups, full_sample(strata, args.full_sample)
