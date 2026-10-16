@@ -450,11 +450,6 @@ For a native optimizer arithmetic/runtime mismatch, restore the state with its
 bound CPU Torch/runtime; do not relabel it for another executor or discard its
 history. Archive byte integrity is distinct from numeric optimizer verification.
 
-Assistant-only producer blocks follow the same typed result checks as tool returns.
-For an ordinary string result rejected with `type-mismatch`, read the imported
-Neuralese through a typed natlang call and return its actual answer text; an
-internal artifact ID is not the answer. Explicit Neuralese returns retain the
-original block. Literal text that merely spells a marker remains literal.
 
 Native recorded learning needs the actual server input/write receipt and a durable
 archive. For `neuralese-native-grad-invalid` reporting a missing receipt or
