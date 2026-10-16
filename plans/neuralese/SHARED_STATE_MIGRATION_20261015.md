@@ -49,17 +49,29 @@ through the projected-value implementation.
 ## Current status
 
 Raw native-state production training is deployed on BOTH sandboxes through
-shared `native_state_sft` jobs under `/work/native-production`. At16:01 UTC
-October16 LFM was advancing at7663 (GPU100%) and Mellum at10328 (GPU94%).
-Their original producer/consumer foundations had13,450 and12,101 graph visits
-respectively, out of26,312 each. These are live update counters, not a claim of
-whole-recipe completion. The latest independently PUT/GET verified full parents
-were LFM7500 and Mellum10000. Both runs recovered from earlier host-memory
-failures; preparation and qualification now preserve actual runtime headroom.
-Native interface rows use
-FP32 AdamW masters at.0003; LFM reasoning rows use.0003, while Mellum reasoning,
-backbone and adapter rates remain3e-6. These are current settings, not evidence
-of optimal rates or downstream task lift.
+shared `native_state_sft` jobs under `/work/native-production`. On October16,
+LFM reached8451 and Mellum11368 before the current controlled handoff. LFM's
+original owner and all five captured descendants exited successfully; its exact
+full parent is independently pinned and actual-parent normal comparison is
+running. Mellum has written its new full48.28GB checkpoint and is still draining
+at18:47UTC. These are actual update/save counters, not whole-recipe completion
+or a claim that the replacement RL controller has begun policy updates.
+
+Mellum earlier lost250 completed updates when a held-source metadata check
+failed before a save. Current held bytes match the original source identity.
+The shared source repair revalidates identical bytes under stable fullSHA and
+strict initial parsing; its cloud runtime/index adoption remains pending.
+`cc34edb23` also preserves a completed optimizer update on held-evaluation
+failure, with exact optimizer/RNG/exposure, then rethrows the original error.
+Its actual interruption/resume and failed-save checks pass. Partial optimizer
+failures never enter this checkpoint recovery path.
+
+Native interface and reasoning rows have FP32 masters with the backbone's
+activation casts. Exact row learning rates belong to the bound production
+configuration and progress telemetry; neither token presence nor nonzero
+gradients establish useful parameter updates or task quality. Actual LF7750
+reasoning-row separation rules out the original frozen-QAD pairwise output
+ceiling as the explanation for current failures; behavioral diagnosis continues.
 
 Neither foundation is complete; no model is ready for shared-dialect training.
 Additional admitted sources are obligations, not earned exposure. Current

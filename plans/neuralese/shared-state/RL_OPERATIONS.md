@@ -1,15 +1,29 @@
 # Shared-state RL operations
 
-The executable path is native actor → existing natlang collector/verifier →
-exact sampled graph admission → shared `native_state_sft` full backbone update
-→ existing VAE/joint/distillation refresh → new shared actor checkpoint and
-bound semantic adapter. It replaces the old projected RL deployment path.
-No new prompts are introduced: the existing native runtime is activated.
+Raw whole-graph RL can improve each student before either communication
+foundation or the joint VAE is complete. Its executable path is native actor →
+existing natlang collector/verifier → exact whole-episode admission → shared
+`native_state_sft` full-backbone update → mandatory supervised continuation →
+the actual new checkpoint. Preserve one optimizer owner and all evolving recipe
+obligations. The two students progress independently. Follow
+[the early raw RL deployment contract](EARLY_RAW_RL_DECOMPOSITION_20261016.md)
+and the capacity/handoff procedure below; completing joint semantic training is
+not a raw-RL prerequisite.
 
-## Prepare each model configuration
+Correct tasks earn reward without Neuralese. When an execution has a graph,
+policy updates retain every captured sampled/forced producer and consumer turn,
+exact occurrence bindings and gradients through the actual dependencies. Missing
+graph capture must be repaired before using that episode for an update.
 
-After the two full native production recipes and initial shared semantic stage
-have produced their actual export, run the following for each participant.
+Once at least two models have genuinely completed their producer/consumer
+foundations, their joint VAE/adaptation and behavioral stages add shared-dialect
+refresh to the same training/serving mechanism. The semantic configuration below
+applies to that later path. It does not delay useful raw-state training or RL.
+
+## Prepare each semantic model configuration
+
+After the participating foundations and initial shared semantic stage have
+produced their actual export, run the following for each participant.
 Use its exact participant name from `semantic-adapter.json`, the current
 production recipe and its native stage, admitted whole-trajectory graph seed,
 held graph file and train-only task packet. The adapter checkpoint must be the
