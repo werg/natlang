@@ -43,13 +43,30 @@ def validate_ready(path, requirement):
             raise ValueError('native participant trainer did not drain successfully')
         if requirement.get('trainer_launch'):
             launch = json.loads(_bound(requirement['trainer_launch']).read_text())
+            trainer_recipe = requirement.get('trainer_recipe')
+            launch_recipes = {trainer_recipe}
+            if requirement.get('resident_adoption'):
+                from .native_resident import current
+                adoption_path = _bound(requirement['resident_adoption'])
+                adoption = current(adoption_path.parent)
+                if not adoption or adoption_path.name != 'current.json' or adoption['payload']['recipe']['path'] != trainer_recipe:
+                    raise ValueError('resident launch adoption names another current recipe')
+                launch_recipes = {adoption['payload']['prior_recipe']['path'],
+                                  *(row['recipe']['path'] for row in adoption['history'])}
             if (type(exited.get('at')) not in (int, float) or exited['at'] < launch['at']
-                    or requirement.get('trainer_recipe') not in launch.get('argv', [])):
+                    or not launch_recipes.intersection(launch.get('argv', []))):
                 raise ValueError('native participant terminal exit belongs to a different trainer launch')
     path = Path(path).resolve(strict=True)
     receipt = json.loads(path.read_text())
     if receipt.get('schema') != 'natlang.native-training-readiness/1':
         raise ValueError('unsupported native training readiness receipt')
+    from .native_resident import current as resident_current
+    adoption_directory = path.parent.parent/'resident-data'
+    adoption = resident_current(adoption_directory)
+    if adoption and adoption['payload']['stage_id'] == receipt.get('stage_id'):
+        if ((receipt.get('resident_adoption') or {}).get('generation') != adoption['generation']
+                or receipt.get('recipe') != adoption['payload']['recipe']):
+            return None  # Prior-generation readiness never certifies a new data adoption.
     foundation_boundary = requirement.get('readiness_boundary') == 'communication-foundation'
     if receipt.get('completed') is not True and not (foundation_boundary and receipt.get('foundation_ready') is True):
         return None

@@ -42,7 +42,7 @@ HANDLERS = {
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'seed', 'task_eval',
-                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'communication_foundation', 'refresh_at_checkpoint', 'learn_reasoning_boundaries'}, 'result': 'checkpoint.pt'},
+                             'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'communication_foundation', 'refresh_at_checkpoint', 'learn_reasoning_boundaries'}, 'result': 'checkpoint.pt'},
     # Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md): plain target SFT from a base model with the
     # NeuraleseProjection; the TokenChoiceProjection is declared per stage (off in v1).
     # Its data is either prepared text (text_data, the shared declared input of neuralese-direct-v2) or records and
@@ -1327,7 +1327,7 @@ DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'coho
 def direct_windowing_handoffs(old_recipe, new_recipe, out):
     """Declared trainer-supported tuning, preserving each trainer's resume checks."""
     tuning = {'neuralese_direct': DIRECT_WINDOWING_PARAMETERS,
-              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'learn_reasoning_boundaries', 'native_linear_precision'),
+              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'learn_reasoning_boundaries', 'native_linear_precision', 'fp8_recipe', 'resident_geometry_qualification'),
               'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'learned_row_learning_rate', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'native_linear_precision')}
     def parameters(recipe, stage):
         merged = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
@@ -2132,6 +2132,16 @@ def main(argv=None):
                         help='resolve and hash every stage input and validate the resume (or --handoff) against the '
                              'existing recipe-plan.json, print the resulting plan, and exit without writing or launching')
     args = parser.parse_args(argv)
+    from .native_resident import recover as recover_resident
+    resident_state = recover_resident(args.out / 'resident-data') if (args.out / 'resident-data/current.json').exists() else None
+    if resident_state and args.handoff:
+        raise ValueError('retire resident generation with its exact saved checkpoint and trainer terminal receipt before runtime handoff')
+    if resident_state and not args.handoff:
+        allowed = {item['recipe']['path'] for item in resident_state['history']}
+        allowed.add(resident_state['payload']['prior_recipe']['path'])
+        if str(args.recipe.resolve()) not in allowed:
+            raise ValueError('resident recovery was launched with an unrelated recipe')
+        args.recipe = Path(resident_state['payload']['recipe']['path'])
     recipe = load_recipe(args.recipe)
     if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
         if args.inspect:
@@ -2189,6 +2199,8 @@ def main(argv=None):
     plan_path = args.out / 'recipe-plan.json'
     plan = {'schema': 'natlang.neuralese-recipe-plan/1', 'recipe': recipe,
             'recipe_sha256': recipe_identity_sha256(args.recipe), 'inputs': inputs, 'device': args.device}
+    if resident_state and not args.handoff:
+        plan['recipe_sha256'] = resident_state['payload']['plan']['recipe_sha256']
     declared_environment = declared_runtime_environment(recipe)
     if declared_environment:
         plan['runtime_environment'] = declared_environment
@@ -2380,6 +2392,8 @@ def main(argv=None):
                         prerequisites.append({'id': prior['id'], 'completed': receipt.get('completed') is True,
                             'exposure_receipt': {'path': str(receipt_path.resolve()),
                                                  'sha256': sha(receipt_path)}})
+                    if kind == 'native_state_sft':
+                        command += ['--resident-data-directory', str(args.out / 'resident-data')]
                     recipe_binding = native_recipe_binding(args.recipe, plan['recipe_sha256'])
                     command += ['--recipe-binding', json.dumps(recipe_binding, sort_keys=True,
                                                                separators=(',', ':')),
@@ -2410,6 +2424,13 @@ def main(argv=None):
                 print(json.dumps({'stage': stage['id'], 'command': command}), flush=True)
                 result = signal_forwarder.run(command, env=environment)
                 code = result.returncode
+                adopted = recover_resident(args.out / 'resident-data') if (args.out / 'resident-data/current.json').exists() else None
+                if adopted:
+                    plan = adopted['payload']['plan']
+                    recipe = plan['recipe']
+                    stage_inputs = plan['stage_inputs']
+                    inputs = plan['inputs']
+                    args.recipe = Path(adopted['payload']['recipe']['path'])
                 if stopped[0]:
                     print(json.dumps({'status': 'interrupted', 'stage': stage['id'],
                                       'child_exit_code': code}), flush=True)
