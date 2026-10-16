@@ -26,3 +26,5 @@ old dependency/quota preservation, mutation/reclassification rejection, and cras
 before/after the sole commit point. Independent review precedes deployment.
 
 Qualification: 67 focused tests passed (26.40s), including actual tiny SFT updates, full parameter/optimizer/RNG equality to the all-data baseline, post-commit crash/recovery, pending-only transactions, and preserved quota activation. A quota above the current epoch count remains executable through the existing exposure scheduler, rather than becoming an unschedulable readiness deficit.
+
+Independent root review identified a pre-commit withdrawal gap. Preparation now uses persisted actual withdrawal history and the unchanged bound proof; the live manager independently uses the restored SFT history before commit. Negative tests cover both active and pending reintroduction, including a stale CPU history that cannot bypass the live verifier. Final four-file focused run: 69 passed (24.34s); quick passed.

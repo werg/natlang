@@ -1091,7 +1091,8 @@ def main(argv=None):
         resident = ResidentAdoption(args.resident_data_directory, stage_id=args.stage_id,
             recipe_binding=json.loads(args.recipe_binding), train=train, held=held,
             geometry_qualification=args.resident_geometry_qualification,
-            geometry_identity=capacity_identity(config,args,backend))
+            geometry_identity=capacity_identity(config,args,backend),
+            withdrawal_history=checkpoint_options['withdrawal_history'])
         if resident.state:
             checkpoint_options['resident_adoption'] = {'generation': resident.generation,
                 'history': resident.state['history']}

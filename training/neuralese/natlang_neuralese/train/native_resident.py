@@ -163,6 +163,23 @@ def pending_declarations(plan, stage_id, tokenizer_fingerprint):
             if reference else [])
 
 
+def validate_source_obligations(plan, stage_id, train, declarations, withdrawal_history=()):
+    """Reject withdrawn active/pending targets before the sole commit point."""
+    from .native_continuation import _retain_pending_sources, reject_withdrawn_targets
+    history = copy.deepcopy(list(withdrawal_history))
+    reference = plan['stage_inputs'][stage_id].get('withdrawn_native_graphs')
+    if reference:
+        proof = json.loads(bound(reference).read_text())
+        if proof.get('schema') != 'natlang.native-graph-withdrawal/1':
+            raise ValueError('resident withdrawal proof schema differs')
+        history.append({'rows': proof['rows']})
+    frame = {'source_row_bindings':train.bindings, 'source_row_order':train.ordered_ids(),
+        'exposure_counts':{}, 'options':{'withdrawal_history':history,
+        '_pending_native_source_declarations':declarations}}
+    reject_withdrawn_targets(frame, train.bindings)
+    return _retain_pending_sources(frame, {})
+
+
 def geometry_capacity(value, *, identity, code):
     certificate = json.loads(bound(value).read_text())
     if (certificate.get('schema') != 'natlang.native-resident-geometry-qualification/1'
@@ -352,12 +369,10 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
     if train.groups & held.groups:
         raise ValueError('resident train/held groups overlap')
     declarations = pending_declarations(proposed, stage_id, tokenizer_fingerprint)
-    from .native_continuation import _retain_pending_sources
     # Reject conflicts before publishing, with no earned visits or model action.
-    _retain_pending_sources({'source_row_bindings':train.bindings,
-        'source_row_order':train.ordered_ids(), 'exposure_counts':{},
-        'options':{'_pending_native_source_declarations':declarations}}, {})
     initial = json.loads((directory/'initial.json').read_text())
+    validate_source_obligations(proposed, stage_id, train, declarations,
+        initial.get('withdrawal_history') or ())
     capacity_binding = initial.get('geometry_qualification')
     if not capacity_binding:
         raise ValueError('resident append needs an explicit current geometry qualification')
@@ -408,10 +423,11 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
 
 
 class ResidentAdoption:
-    def __init__(self, directory, *, stage_id, recipe_binding, train, held, package=None, geometry_qualification=None, geometry_identity=None):
+    def __init__(self, directory, *, stage_id, recipe_binding, train, held, package=None, geometry_qualification=None, geometry_identity=None, withdrawal_history=()):
         self.directory = Path(directory)
         self.stage_id, self.recipe_binding = stage_id, recipe_binding
         self.train, self.held = train, held
+        self.withdrawal_history = copy.deepcopy(list(withdrawal_history))
         self.package = Path(package or Path(__file__).resolve().parents[1])
         self.state = current(directory)
         self.plan = self.state['payload']['plan'] if self.state else json.loads(
@@ -427,9 +443,11 @@ class ResidentAdoption:
                 write_json(initial, {'recipe': recipe_binding, 'stage_id': stage_id,
                     'geometry_qualification': binding(geometry_qualification) if geometry_qualification else None,
                     'geometry_identity': geometry_identity, 'plan_sha256': digest(self.plan),
-                    'owner': process_owner()})
+                    'owner': process_owner(), 'withdrawal_history':self.withdrawal_history})
             else:
-                write_json(initial, {**prior, 'owner': process_owner()})
+                if any(item not in self.withdrawal_history for item in prior.get('withdrawal_history') or []):
+                    raise ValueError('resident restart lost actual carried withdrawal history')
+                write_json(initial, {**prior, 'owner': process_owner(), 'withdrawal_history':self.withdrawal_history})
         self.initial = json.loads((self.directory/'initial.json').read_text())
         if self.initial.get('geometry_identity') != geometry_identity:
             raise ValueError('resident geometry identity changed; use drained runtime handoff')
@@ -509,10 +527,8 @@ class ResidentAdoption:
                     or len(train) != payload['rows'] or digest(train.entries) != payload['entries_sha256']):
                 raise ValueError('resident rows are not an exact protected append')
             declarations = pending_declarations(payload['plan'], self.stage_id, train.tokenizer_fingerprint)
-            from .native_continuation import _retain_pending_sources
-            _retain_pending_sources({'source_row_bindings':train.bindings,
-                'source_row_order':train.ordered_ids(), 'exposure_counts':{},
-                'options':{'_pending_native_source_declarations':declarations}}, {})
+            validate_source_obligations(payload['plan'], self.stage_id, train, declarations,
+                self.withdrawal_history)
             with locked(self.directory):
                 actual = current(self.directory)
                 generation = actual['generation'] if actual else digest(json.loads(
