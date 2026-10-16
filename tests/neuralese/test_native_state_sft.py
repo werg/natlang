@@ -563,6 +563,7 @@ def test_priority_deficits_repack_resume_and_append_have_exact_row_credits():
 
 
 def test_real_resume_appends_pair_ahead_of_backlog_without_losing_optimizer_rng_or_credits(tmp_path, monkeypatch):
+    from collections import Counter
     import json
     import torch
     from test_native_model import tiny_source
@@ -626,8 +627,8 @@ def test_real_resume_appends_pair_ahead_of_backlog_without_losing_optimizer_rng_
     with monkeypatch.context() as patch:
         patch.setattr(trainer,'packed_graph_loss',record_order)
         assert trainer.main(continued)==0
-    assert observed[:3] == ['lfm:new','qwen-new','qwen-new']
-    assert observed[3:] == ['b','a','b']
+    assert observed[0] == 'lfm:new'
+    assert Counter(observed)=={'a':1,'b':2,'lfm:new':1,'qwen-new':2}
     final = torch.load(out/'checkpoint.pt',weights_only=False)
     assert final['training']['exposure_counts']=={'a':2,'b':2,'lfm:new':2,'qwen-new':2}
     assert final['training']['metrics']['held']['scope']=='full'
@@ -758,8 +759,8 @@ def test_priority_teacher_interleave_preserves_deficits_across_resume_and_append
     credits = {'pair1':1,'teacher':1}
     quotas,batches = pending_exposure_batches(entries,credits,epochs=2,batch_tokens=8)
     names = [entries[index]['id'] for _,indices,_ in batches for index in indices]
-    assert names[:4] == ['pair2','urgent','pair1','urgent']
-    assert names[-2:] == ['ordinary','ordinary']
+    assert names[:6] == ['pair2','urgent','pair1','urgent','ordinary','pair2']
+    assert names.count('ordinary') == 2
     assert Counter(names) == {entry['id']:quotas[entry['id']]-credits.get(entry['id'],0)
                               for entry in entries}
     # Stop after a mixed prefix, append teacher data, then change packing.
@@ -773,6 +774,33 @@ def test_priority_teacher_interleave_preserves_deficits_across_resume_and_append
                         for entry in entries if quotas[entry['id']]>credits.get(entry['id'],0)}
     for index,(visit,_,last) in enumerate(resumed):
         assert last == all(other_visit!=visit for other_visit,_,_ in resumed[index+1:])
+
+
+def test_priority_interleave_uses_saved_step_across_repeated_appends():
+    from collections import Counter
+    from natlang_neuralese.train.native_state_sft import pending_exposure_batches
+    entries=[dict(id=f'old-{i}',forward_tokens=3,training_priority=0) for i in range(12)]
+    entries += [dict(id=f'new-{i}',forward_tokens=3,training_priority=1) for i in range(12)]
+    credits={}
+    def emitted(offset):
+        _,batches=pending_exposure_batches(entries,credits,epochs=1,batch_graphs=1,schedule_offset=offset)
+        return [entries[index]['id'] for _,indices,_ in batches for index in indices]
+    first=emitted(0)
+    assert first[:6]==['new-0','new-1','new-2','new-3','old-0','new-4']
+    # A stop after three updates resumes in the same five-update cycle; it
+    # must not reset to the first priority row.
+    for name in first[:3]: credits[name]=credits.get(name,0)+1
+    second=emitted(3)
+    assert second[:2]==['new-3','old-0']
+    for name in second[:2]: credits[name]=credits.get(name,0)+1
+    entries.append(dict(id='new-after-append',forward_tokens=3,training_priority=1))
+    third=emitted(5)
+    assert third[0]=='new-4'
+    assert 'old-2' in third and 'new-after-append' in third
+    quotas,remaining=pending_exposure_batches(entries,credits,epochs=1,batch_graphs=1,schedule_offset=5)
+    assert Counter(entries[index]['id'] for _,indices,_ in remaining for index in indices)=={
+        entry['id']:quotas[entry['id']]-credits.get(entry['id'],0)
+        for entry in entries if quotas[entry['id']]>credits.get(entry['id'],0)}
 
 
 @pytest.mark.parametrize('paired', [False,True])

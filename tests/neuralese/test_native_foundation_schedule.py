@@ -17,16 +17,26 @@ def names(rows,batches):
     return [rows[index]['id'] for _,indices,_ in batches for index in indices]
 
 
-def test_fixed_cohort_first_four_to_one_then_normal_mix_and_exact_all_quotas():
+def test_fixed_cohort_first_four_to_one_with_bounded_ordinary_debt_service():
     rows=entries();fixed={e['id'] for e in rows if e['id'].startswith('fixed-')}
     quotas,batches=pending_exposure_batches(rows,{},epochs=1,foundation_ids=fixed,foundation_communication_batches=4)
     actual=names(rows,batches)
-    assert actual[:10]==['fixed-0','fixed-1','fixed-2','fixed-3','teacher-0','fixed-4','fixed-5','teacher-1','expanded-0','teacher-2']
-    assert actual[-1]=='ordinary'
+    fast=[name for name in actual if name!='ordinary']
+    assert fast[:10]==['fixed-0','fixed-1','fixed-2','fixed-3','expanded-0','fixed-4','fixed-5','expanded-1','expanded-2','teacher-0']
+    assert actual.index('ordinary') < len(actual)-1
     assert Counter(actual)==quotas
     _,legacy=pending_exposure_batches(rows,{},epochs=1)
     assert sorted(tuple(indices) for _,indices,_ in batches)==sorted(tuple(indices) for _,indices,_ in legacy)
     assert all(last==(index==len(batches)-1) for index,(_,_,last) in enumerate(batches))
+
+
+def test_priority_communication_and_priority_zero_debt_share_four_to_one():
+    rows=([dict(id=f'old-{i}',forward_tokens=3,training_priority=0) for i in range(8)]
+          +[dict(id=f'new-{i}',forward_tokens=3,communication=True,training_priority=1) for i in range(8)])
+    quotas,batches=pending_exposure_batches(rows,{},epochs=1,batch_graphs=1)
+    actual=names(rows,batches)
+    assert actual[:6]==['new-0','new-1','new-2','new-3','old-0','new-4']
+    assert Counter(actual)==quotas
 
 
 def test_resume_and_new_high_priority_append_preserve_every_credit_and_packing():

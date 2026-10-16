@@ -1574,6 +1574,124 @@ def _data_continuation(old, new):
     return rest(old) == rest(new)
 
 
+def _priority_only_native_source_continuation(old, new):
+    """Permit a drained scheduling-only revision of an existing train manifest.
+
+    The source files and their order remain byte-bound. Only explicit top-level
+    source priority may rise, and the old train manifest is retained as the
+    declared predecessor. The trainer independently verifies every row ID,
+    row binding and order against the checkpoint before continuing.
+    """
+    role = 'native_graphs'
+    old_ref, new_ref = old.get(role), new.get(role)
+    if (not isinstance(old_ref, dict) or not isinstance(new_ref, dict)
+            or new_ref.get('sha256') == old_ref.get('sha256')
+            or new.get('continued_native_graphs', {}).get('sha256') != old_ref.get('sha256')
+            or old.get('held_native_graphs') != new.get('held_native_graphs')):
+        return False
+    def manifest(reference):
+        if not all(reference.get(key) for key in ('path', 'sha256', 'binding')):
+            return None
+        path = Path(reference['path']).resolve(strict=True)
+        if path.suffix.lower() != '.json':
+            return None
+        if sha(path) != reference['sha256']:
+            raise ValueError('native scheduling continuation manifest changed')
+        value = json.loads(path.read_text())
+        if value.get('schema') != 'natlang.native-graph-sources/1' or not isinstance(value.get('sources'), list):
+            return None
+        return path, value
+    def compare(old_path, old_manifest, new_path, new_manifest, ancestors=frozenset()):
+        if (not isinstance(old_manifest, dict) or not isinstance(new_manifest, dict)
+                or set(old_manifest) != set(new_manifest)
+                or old_manifest.get('schema') != 'natlang.native-graph-sources/1'
+                or new_manifest.get('schema') != 'natlang.native-graph-sources/1'):
+            return False, False
+        pair=(old_path.resolve(),new_path.resolve())
+        if pair in ancestors:
+            return False, False
+        ancestors=ancestors|{pair}
+        prior_rows, next_rows = old_manifest.get('sources'), new_manifest.get('sources')
+        if not isinstance(prior_rows, list) or not isinstance(next_rows, list) or len(prior_rows) != len(next_rows):
+            return False, False
+        # All manifest metadata except the ordered source declarations is exact.
+        if {key:value for key,value in old_manifest.items() if key != 'sources'} != {
+                key:value for key,value in new_manifest.items() if key != 'sources'}:
+            return False, False
+        any_changed = False
+        for prior, current in zip(prior_rows, next_rows):
+            if not isinstance(prior, dict) or not isinstance(current, dict):
+                return False, False
+            prior_priority, current_priority = prior.get('training_priority', 0), current.get('training_priority', 0)
+            if (type(prior_priority) is not int or prior_priority < 0 or type(current_priority) is not int
+                    or current_priority < prior_priority):
+                return False, False
+            priority_changed = current_priority != prior_priority
+            if priority_changed:
+                any_changed = True
+            old_child_path = Path(prior['path'])
+            if not old_child_path.is_absolute(): old_child_path = old_path.parent / old_child_path
+            new_child_path = Path(current['path'])
+            if not new_child_path.is_absolute(): new_child_path = new_path.parent / new_child_path
+            identity_fields = {key:value for key,value in prior.items()
+                               if key not in {'training_priority', 'path', 'sha256'}}
+            current_fields = {key:value for key,value in current.items()
+                              if key not in {'training_priority', 'path', 'sha256'}}
+            if identity_fields != current_fields:
+                return False, False
+            if (old_child_path.resolve() == new_child_path.resolve()
+                    and prior.get('sha256') == current.get('sha256')):
+                continue
+            # A changed child binding is allowed only when it is itself a
+            # source manifest whose sole semantic delta is a priority increase.
+            old_child, new_child = manifest({'path':str(old_child_path), 'sha256':prior.get('sha256'), 'binding':'nested'}), \
+                manifest({'path':str(new_child_path), 'sha256':current.get('sha256'), 'binding':'nested'})
+            if old_child is None or new_child is None:
+                return False, False
+            valid, child_changed = compare(old_child[0], old_child[1], new_child[0], new_child[1], ancestors)
+            if not valid or not child_changed:
+                return False, False
+            any_changed = True
+        return True, any_changed
+    before, after = manifest(old_ref), manifest(new_ref)
+    if not before or not after:
+        return False
+    valid, changed = compare(before[0], before[1], after[0], after[1])
+    if not valid or not changed:
+        return False
+    def effective_leaves(path, value, ancestry=frozenset()):
+        path=path.resolve()
+        if path in ancestry:
+            return None
+        ancestry=ancestry|{path}
+        result={}
+        for source in value['sources']:
+            source_path=Path(source['path'])
+            if not source_path.is_absolute(): source_path=path.parent/source_path
+            child=manifest({'path':str(source_path),'sha256':source.get('sha256'),'binding':'nested'})
+            if child is not None:
+                leaves=effective_leaves(child[0],child[1],ancestry)
+                if leaves is None:
+                    return None
+                override=source.get('training_priority')
+                for key,priority in leaves.items():
+                    result[key]=override if override is not None else priority
+            else:
+                identity=(str(source_path.resolve()),source.get('sha256'),source.get('kind'),source.get('model'))
+                result[identity]=source.get('training_priority',0)
+        return result
+    old_priorities=effective_leaves(before[0],before[1])
+    new_priorities=effective_leaves(after[0],after[1])
+    if old_priorities is None or new_priorities is None or old_priorities.keys()!=new_priorities.keys():
+        return False
+    if (any(type(priority) is not int or priority < 0 for priority in (*old_priorities.values(),*new_priorities.values()))
+            or any(new_priorities[key] < priority for key,priority in old_priorities.items())
+            or not any(new_priorities[key] > priority for key,priority in old_priorities.items())):
+        return False
+    return {key: value for key, value in old.items() if key not in {'native_graphs', 'continued_native_graphs'}} == {
+        key: value for key, value in new.items() if key not in {'native_graphs', 'continued_native_graphs'}}
+
+
 def _pending_source_continuation(old, new):
     """A drained recipe may add mandatory work without changing active sources.
 
@@ -1714,12 +1832,15 @@ def unstarted_stage_input_changes(existing, plan, out):
             continue
         if stage_started(out, stage_id):
             if stage_finished(out, stage_id) or not (
-                    _data_continuation(old, new) or _pending_source_continuation(old, new)
+                    _priority_only_native_source_continuation(old, new) or _data_continuation(old, new)
+                    or _pending_source_continuation(old, new)
                     or _combined_native_source_continuation(old, new)):
                 raise ValueError('handoff refused: inputs of started stage ' + stage_id + ' changed; only a stage '
                                  'that has not started may take new inputs, and the active stage only by a declared '
                                  'data continuation (' + DATA_CONTINUATION_ROLE + ' = the text data it trained on)')
-            changes[stage_id] = {'kind': 'data_continuation', 'old': old, 'new': new}
+            changes[stage_id] = {'kind': ('scheduling_priority_continuation'
+                if _priority_only_native_source_continuation(old, new) else 'data_continuation'),
+                'old': old, 'new': new}
             continue
         if set(old) != set(new) or any(old[role].get('binding') != new[role].get('binding') for role in new):
             raise ValueError('handoff refused: ' + stage_id + ' changes its input roles or bindings; only their '
@@ -1752,8 +1873,8 @@ def _without_unstarted_bindings(old_recipe, new_recipe, changes):
         for name in changed:
             value.get('input_bindings', {}).pop(name, None)
         for stage in value.get('stages', []):
-            if changes.get(stage['id'], {}).get('kind') == 'data_continuation':
-                stage.pop('inputs', None)  # its role map moves text_data and declares continued_text_data
+            if changes.get(stage['id'], {}).get('kind') in {'data_continuation', 'scheduling_priority_continuation'}:
+                stage.pop('inputs', None)  # exact old inputs are preserved by the continuation predecessor binding
     return old_value, new_value
 
 

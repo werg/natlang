@@ -77,17 +77,23 @@ def batch_boundaries(entries, *, batch_graphs=1, batch_tokens=0):
 
 
 def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1, batch_tokens=0,
-                             foundation_ids=None, foundation_communication_batches=1, minimum_visits=None):
+                             foundation_ids=None, foundation_communication_batches=1, minimum_visits=None,
+                             schedule_offset=0):
     """Schedule only missing row visits, including rows appended after completion.
 
     Communication starts first and alternates with explicitly prioritized
-    ordinary data; priority-zero ordinary data follows both streams. Preserve
-    source order within each class. Completed visits remain credits across
-    changed packing and appended sources; fractional epochs cover the declared
-    source prefix. The checkpoint's actual row counts determine what remains.
+    ordinary data. When both positive-priority and priority-zero ordinary rows
+    remain, preserve a 4:1 prompt-progress/debt mix, offset by the saved update
+    count so a resumed or appended schedule does not restart at the urgent lane.
+    Preserve source order within each class. Completed visits remain credits
+    across changed packing and appended sources; fractional epochs cover the
+    declared source prefix. The checkpoint's actual row counts determine what
+    remains.
     """
     if type(foundation_communication_batches) is not int or foundation_communication_batches < 1:
         raise ValueError('foundation communication batches must be a positive integer')
+    if type(schedule_offset) is not int or schedule_offset < 0:
+        raise ValueError('native schedule offset must be a nonnegative optimizer step')
     foundation_ids = set(foundation_ids or ())
     if any(entry['id'] in foundation_ids and not entry.get('communication') for entry in entries):
         raise ValueError('fixed foundation priority requires genuine communication rows')
@@ -120,8 +126,13 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
     communication, urgent, ordinary = [], [], []
     for batch in batches:
         entry = entries[batch[1][0]]
-        destination = (communication if entry.get('communication') else
-                       urgent if entry.get('training_priority', 0) > 0 else ordinary)
+        is_foundation = bool(foundation_ids) and entry['id'] in foundation_ids
+        if entry.get('communication') and (is_foundation or entry.get('training_priority', 0) == 0):
+            destination = communication
+        elif entry.get('training_priority', 0) > 0:
+            destination = urgent
+        else:
+            destination = ordinary
         destination.append(batch)
     def foundational(batch):
         return bool(foundation_ids) and any(entries[index]['id'] in foundation_ids for index in batch[1])
@@ -142,9 +153,33 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
             if ordinary_cursor < len(urgent):
                 interleaved.append(urgent[ordinary_cursor])
                 ordinary_cursor += 1
-        batches = interleaved + ordinary
+        fast = interleaved
     else:
-        batches = communication + urgent + ordinary
+        fast = communication + urgent
+    if urgent and ordinary:
+        # Keep priority useful without letting an ongoing stream of new rows
+        # turn already-admitted ordinary work into permanent debt. Four fast
+        # batches receive slots in each five-update cycle; ordinary receives
+        # the fifth. `schedule_offset` is the checkpointed optimizer step,
+        # so safe stops and resident appends continue the same cycle position.
+        cycle = (True, True, True, True, False)
+        cursor = schedule_offset % len(cycle)
+        interleaved = []
+        fast_cursor = ordinary_cursor = 0
+        while fast_cursor < len(fast) or ordinary_cursor < len(ordinary):
+            want_fast = cycle[cursor]
+            if want_fast and fast_cursor < len(fast):
+                interleaved.append(fast[fast_cursor]); fast_cursor += 1
+            elif not want_fast and ordinary_cursor < len(ordinary):
+                interleaved.append(ordinary[ordinary_cursor]); ordinary_cursor += 1
+            elif fast_cursor < len(fast):
+                interleaved.append(fast[fast_cursor]); fast_cursor += 1
+            else:
+                interleaved.append(ordinary[ordinary_cursor]); ordinary_cursor += 1
+            cursor = (cursor + 1) % len(cycle)
+        batches = interleaved
+    else:
+        batches = fast + ordinary
     last_by_visit = {visit: index for index, (visit, _, _) in enumerate(batches)}
     batches = [(visit, indices, last_by_visit[visit] == index)
                for index, (visit, indices, _) in enumerate(batches)]
@@ -1123,7 +1158,7 @@ def main(argv=None):
         epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens,
         foundation_ids=foundation_priority_ids,
         foundation_communication_batches=args.foundation_communication_batches or 1,
-        minimum_visits=pending_frame.get('required_visits'))
+        minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step)
     target_rows = sum(required_visits.values())
     total_end = step + len(pending_batches)
     if step > total_end:
@@ -1222,7 +1257,7 @@ def main(argv=None):
                         epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens,
                         foundation_ids=foundation_priority_ids,
                         foundation_communication_batches=args.foundation_communication_batches or 1,
-                        minimum_visits=pending_frame.get('required_visits'))
+                        minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step)
                     total_end = step + len(pending_batches)
                     target_rows = sum(required_visits.values())
                     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids)

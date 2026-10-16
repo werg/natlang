@@ -1,12 +1,14 @@
 import copy
 import json
+from pathlib import Path
 
 import pytest
 
 from natlang_neuralese.common.hashing import sha256_file_hex_cached as sha
 from natlang_neuralese.train.native_pending_sources import declaration, pending_source_dependencies
 from natlang_neuralese.train.recipe import (_pending_source_continuation, _data_continuation,
-    unstarted_stage_input_changes, _without_unstarted_bindings, _combined_native_source_continuation)
+    _priority_only_native_source_continuation, unstarted_stage_input_changes,
+    _without_unstarted_bindings, _combined_native_source_continuation)
 from test_native_state_sft import graph
 
 
@@ -76,6 +78,63 @@ def test_started_recipe_uses_existing_data_continuation_projection(tmp_path):
     assert changes['full']['kind']=='data_continuation'
     assert _without_unstarted_bindings(before['recipe'],after['recipe'],changes)[0]==\
         _without_unstarted_bindings(before['recipe'],after['recipe'],changes)[1]
+
+
+def test_drained_priority_revision_binds_exact_same_sources_and_predecessor(tmp_path):
+    leaf=tmp_path/'leaf.jsonl';leaf.write_text('{}\n')
+    def reference(name, priority):
+        source={'kind':'native-graphs','path':str(leaf),'sha256':sha(leaf),
+                'training_priority':priority}
+        path=tmp_path/name
+        path.write_text(json.dumps({'schema':'natlang.native-graph-sources/1','sources':[source]}))
+        return {'path':str(path),'sha256':sha(path),'binding':'native'}
+    old_train=reference('old.json',0);new_train=reference('new.json',1)
+    old={**inputs(),'native_graphs':old_train}
+    new={**old,'native_graphs':new_train,'continued_native_graphs':old_train}
+    assert _priority_only_native_source_continuation(old,new)
+    recipe={'stages':[{'id':'full','kind':'native_state_sft','inputs':{
+        key:value['binding'] for key,value in old.items()},'parameters':{}}],
+        'input_bindings':{value['binding']:{'path':value['path'],'sha256':value['sha256']}
+            for value in old.values()}}
+    before={'recipe':recipe,'stage_inputs':{'full':old}}
+    after_recipe=copy.deepcopy(recipe)
+    after_recipe['stages'][0]['inputs']={key:value['binding'] for key,value in new.items()}
+    after_recipe['input_bindings'].update({value['binding']:{'path':value['path'],'sha256':value['sha256']}
+        for value in new.values()})
+    after={'recipe':after_recipe,'stage_inputs':{'full':new}}
+    stage=tmp_path/'full';stage.mkdir();(stage/'checkpoint.pt').write_text('started')
+    assert unstarted_stage_input_changes(before,after,tmp_path)['full']['kind']=='scheduling_priority_continuation'
+    changed=reference('changed.json',1)
+    changed_path=Path(changed['path']);value=json.loads(changed_path.read_text())
+    altered_leaf=tmp_path/'different-leaf.jsonl';altered_leaf.write_text('{"different":true}\n')
+    value['sources'][0].update(path=str(altered_leaf),sha256=sha(altered_leaf))
+    changed_path.write_text(json.dumps(value))
+    changed={'path':str(changed_path),'sha256':sha(changed_path),'binding':'native'}
+    assert not _priority_only_native_source_continuation(old,{**new,'native_graphs':changed})
+    lowered=reference('lowered.json',0)
+    assert not _priority_only_native_source_continuation(new,{**new,'native_graphs':lowered,
+        'continued_native_graphs':new_train})
+
+
+def test_priority_revision_can_follow_nested_source_manifest_closure(tmp_path):
+    leaf=tmp_path/'leaf.jsonl';leaf.write_text('{}\n')
+    def write_manifest(name, sources):
+        path=tmp_path/name
+        path.write_text(json.dumps({'schema':'natlang.native-graph-sources/1','sources':sources}))
+        return {'path':str(path),'sha256':sha(path),'binding':name}
+    leaf_row={'kind':'native-graphs','path':str(leaf),'sha256':sha(leaf),
+              'training_priority':0}
+    old_child=write_manifest('old-child.json',[leaf_row])
+    new_child=write_manifest('new-child.json',[{**leaf_row,'training_priority':1}])
+    old_train=write_manifest('old-train.json',[{'kind':'native-graphs',**{key:old_child[key] for key in ('path','sha256')}}])
+    new_train=write_manifest('new-train.json',[{'kind':'native-graphs',**{key:new_child[key] for key in ('path','sha256')}}])
+    old={**inputs(),'native_graphs':old_train}
+    new={**old,'native_graphs':new_train,'continued_native_graphs':old_train}
+    assert _priority_only_native_source_continuation(old,new)
+    overridden_train=write_manifest('overridden-train.json',[{'kind':'native-graphs',
+        'path':new_child['path'],'sha256':new_child['sha256'],'training_priority':0}])
+    ineffective={**old,'native_graphs':overridden_train,'continued_native_graphs':old_train}
+    assert not _priority_only_native_source_continuation(old,ineffective)
 
 
 def expanded_active(old, pending):
