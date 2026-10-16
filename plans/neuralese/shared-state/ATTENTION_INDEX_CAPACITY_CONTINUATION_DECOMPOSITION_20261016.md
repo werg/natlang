@@ -20,3 +20,11 @@ parent. The existing capacity continuation verifier remains the one mechanism.
 
 These are crisp byte, schema, equality, and memory-bound checks. The adoption
 decision and its practical timing remain the supervising natlang policy.
+
+The paired qualifier uses the existing `native_memory.qualify_capacity` engine
+for gradient release, optimizer gating, RNG restoration, and parameter-version
+checks. It loads the exact bound old shared-state module as a reference, with
+all remaining package files required identical. Separate diagnostic forwards
+are explicit. It selects a complete admitted graph, compares streamed output
+and full named-gradient digests, then records synchronized timings and a CUDA
+trace without gradient hashing. No trainer or checkpoint is modified.
