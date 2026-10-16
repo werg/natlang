@@ -1,6 +1,6 @@
 # DGX current state
 
-Generated 2026-10-16 11:23 UTC by `python3 scripts/current_state.py --machine dgx`. Do not edit by hand: regenerate.
+Generated 2026-10-16 11:46 UTC by `python3 scripts/current_state.py --machine dgx`. Do not edit by hand: regenerate.
 This page holds the present only. History is in git (`git log -p -- plans/neuralese/HANDOVER.md`), in the
 decision records and in the coordination log. Live processes and the status pages are the authority.
 
@@ -19,9 +19,23 @@ decision records and in the coordination log. Live processes and the status page
 
 ## DGX status page (this machine)
 
-Updated 2026-10-16T11:23:55.053192Z by dgx-codex-01a13659.
+Updated 2026-10-16T11:46:18.461459Z by dgx-codex-01a13659.
 
-DGX 2026-10-16 11:24UTC, continuous supervision ACTIVE. Owner: integrate ALL deferred improvements. Exactly two training sandboxes and one stronger self-hosted Qwen generation sandbox; Pop closed. Mellum actual7759 progressing, runtime4bda74b8c99a, active26907newtrain+169held (adoption is not exposure). LF hostOOM after6654: simultaneous CPU resident index materialization plus trained-parent prefix qualifier exceeded host RAM; last immutable6620 parent retained, unsaved34updates not credited. LF restoredactualSGD6623/GPU100%11:22:25,native649181; a secondOOM killedCPUadopter649481 duringrestore, nowALLLFadopter/qualifierjobsstopped. VMactualMemAvailable11.44GiB vs misleadingcgroupfree31.6GiB; existingBig2CPU3.88GiB needsaccounting. VM-wideMemAvailableguardandexclusivecheckpointedhandoffrequired. New LF actual three-tier capacity94236physical/157075KV certified01386db6c736592e6d69584a39b48d3414a126d65e5949a6522ee8e8e4e07bdd;75700train+156held append pending actual safe adoption. All previous pending quotas survive. NVIDIA CSF teacher switch ACTUAL: oldengine drained/cancelled at564finished/6interrupted/454unstarted inbatch14, frontier preserved; pinnedvLLM actualCSF startup failed; automatic oldSGLang rollback691016 loading on samegenerationVM, exact frontier retained. No throughput claim. Persistent guardian actualactor checks and drain armed. LFM trained-parent prefix candidate8fc03eb2c250 passes64focused/quick, qualifier051b4cc88 preserves actualtrainedcheckpoint; H1006620actualqualificationPASS:13431to8188physical(-39.04%),bitwisehidden/logits/loss,inputgradrelL2 4.14e-6; no isolatedthroughputclaim. PrefixstillOFF untilsafeadoption. Hostheavy jobs now serialized, no falseclaimGPUoptimal. SourceindexASTcontinuation399162917+182a9ecfd integrated,published,16focused+quickPASS,independentreview complete; actual3042to8fc policyproofPASS. Tool preservesexactentries/sourcekeys, noadmission/exposure. File-backed non-reentrant checkpoint input storage integrated a7f7bc66b+72957ded9 with exact strides/repeatedunpack/storeleases,69focusedPASS and independent actualnativeCUDAHVP43PASS14.60s; no actualcloudlonggraphcapacity or productionenablement. Frozenfilecandidate248cd0924 has34focusedPASS7.10s,6runtimefilesonly, actualcloudqualificationstillpending. Order2 reference arithmetic d2f9d1baa+781180f4d validated, publicnatlang.grad completecapture/derivativeartifact path still agentwork; capabilityguard remains. D24full147985SFT+12413preferencepairs normalized; ZIPbytecontentmultiset proof62e918569. D24v3d boundedCPU466581 convertingMtwinafterverifiedLFview, correctedlauncherheldSHA; bothheldactual==expected, incrementalmemberadmission under existingfullprojection/source/token verifiers; no admittedD24/exposure claim yet. SWEexactchildwitness proves one parent→childrequest edge, asyncresult is not fabricated childanswer. Offlinepreference objective/interleave/sourceproof integrated; actualpaircapacity/stageadoption pending. Original26312communicationfoundation incomplete BOTH, noVAEreadiness or traineddialect claim. Mellum7500heldproduceopenP.00111 despite realFP32updates; diagnosing samecohort history. Consumeclosezero supervision intentional forced marker afterimport without ownedpredecessor. Full74e47f187 GREEN all11steps, standing72957ded91 GREEN all11steps exit0; current399162917 fullcheckrunning (itsredundantSHAwrapperratchetfixed182a9ecfd; rerunneeded). Localcompletedpytestfixtureprune20500574208bytes (6deadOct13-15roots,noopen/mapped/cwd/repopins) executingunderledger. HFmanualD09pending403,next12:45UTC throughOct19. Continuoussourcepreparation/Searchadmission, protectedsplits/fulltrajectories retained. No whole-recipe/qualitylift claim.
+DGX 2026-10-16 11:46UTC. Continuous supervision ACTIVE. Owner: integrate all deferred improvements; entire evolving recipe on both students, two training sandboxes plus one stronger self-hosted Qwen generation sandbox.
+
+Training: LFM drained exact6711 parent SHA e764d30a... (2366517423bytes,27287creditedvisits) then standardcontinuation plan passed18.53s; recipe655642 restoring992297train (+75700),25955held (+156),all2449pending retained. Earlier6654 hostOOM lost34unsavedupdates, restored6620; secondOOM killedadopter notusefultrainer. Cgroupfree31.6GiB overstatedactualVMMemAvailable11.44GiB; allfurtherLFpreparation serialized. A pendingpointer was provenalreadyretired, notnewadmission. Sharedretirefixb14e91e8e removesonlyexactretiredrequest underlock,preservesnewer,rejectscorrupt;26tests+quickPASS. Mellumcontinuescurrent4bda runtime,7759lastfreshstep;26907newtrain+169held adopted, actualvisitsseparate. NativeinterfaceFP32AdamW.0003both;LFreasoning.0003,Mreasoning/backbone3e-6. Original26312communicationfoundation incompleteBOTH; noVAEreadiness/qualitylift claim.
+
+Efficiency: actualLFH1006620 prefixqualificationPASS candidate8fc:13431to8188physical(-39.04%),bitwisehidden/logits/loss,inputgradrelL2 4.14e-6. PrefixOFFpendingseparateadoption. Exactsource-indexcontinuation399162917+182a9ecfd published,independentreview,16focused+quickPASS,actual3042to8fcpolicyproofPASS; avoidsunchangedsourceparse withoutadmission/exposure. Filecheckpointstoragea7f/729 strideexact/holderlease validated,43actualnativeCUDAderivativePASS. Frozen3042-basedcandidate248cd0924 has6changedruntimefiles,34focusedPASS7.10s,independentreviewclear; actualcloudlonggraphcapacity/throughputstillpending, no truncation/exposureclaim.
+
+Data: D24 full147985SFT+12413preferencepairs normalized,ZIPcontentmultisetproof62e918. FIRST6187sessions/model completeverifiedproposalSHA8ae110f91cd1ac7584660c2521553a977b10a3e8070201f15d42ce00f60ad009;LF65.25Mtokens/max54642,M70.90M/max79772. Cloudownerrequestedregister/stage/adoptthismemberNOW,notwaitall15exports. No actualD24admission/exposureyet. Latermemberresumeexactpathbindingfixprepared; MhostexportpeaktemporarilyblocksnewCPUwork. Six-refjob577921 hadfailedatD14wrongVMroot; sourcesactuallyLF:D13/D32,M:D14/D19/D36/D37. Splitretryguarded;Mrefsjobexited75guard,preservingoutputs. D20boundedretryalsohit4GiBRSS; rootlocalizedauxiliaryParquetdecodebeforerejection. Metadata-onlyexactrowaccounting52e991264 passes46tests;exportercovered-ID/set(range) retentionalsofixingbeforefreshretry. Searchr7/rollingadmissionactive,shard0014registered. Protectedheld/fulltrajectoriesretained. HFmanualD09still403,automatic3hcheckthroughOct19,next12:45UTC.
+
+Teacher: oldRadixArkengineactualfedagain11:22:42 afterNVIDIAstartupfailure;564oldbatch14finished preserved+460casecontinuationwithownrollbackactor/f01runtime. NVIDIAexactfailureio_uringregisterbuffersENOMEM,memlock8MiB,nohostOOM. ShippedInstantTensorMMAPreaderCPUpreflightPASS; secondactualpinnedCSFvLLMstartup694949 now74.48GBGPU/hostAnon8.7GB,VMavailable29.9GiB, noio_uringfailureyet;servingnotqualified. SamegenerationVM,nofourthallocation. V18oldbatch14verified-successdeltaexport2529active. Sharedconverterb5c61b973 nowacceptsexacttransferfile.collection_source boundverifiedcollection+selection/protectionpacket,legacylayoutunchanged;36tests+quickPASS. Newcontinuationrawrowsneedthatbindingbeforeadmission, no source relabel.
+
+Behavior: fixedDGXdispatcherandMingesterhadbeenINACTIVE witholdLF5500/M5000activepointers. Explicitlysuperseded/droppedthoseunscoredrequests;bothcorrectedservicesnowACTIVE,f01exact699files43e248 verified. LF6620verified2.36GBexport fetched+sealed11:35:46,actualtaskeval-6ca5c1c6-0006620running.14results:1accepted/13answerrejections;case3repeatedactions hitcollectioncap,case11stillrunning/8192tokenreply. No completed16-taskscoreyet. Analyzeerrors/materializationbeforeattributingqualityorchangingobjective. Mnextcurrentcheckpointweights-onlyexportscheduledusingexisting96abpruner,actualsavedstep/parenthashdeterminedfromimmutablepin,notmislabelled7500. CorrectedMingesterwaitsNEWexport;evalout /mnt/external/natlang-development-data/native-mellum-corrected-eval-20261016 avoids24GBNVMeexhaustion. ThosehistoricalchecksdoNOTqualifycurrentcloudweights.
+
+Nativelearning: e4a7ecc00 internalfiniteDAG/optimizedstate/semanticarchive/typedHTTPcomponentreviewing,NOTadoptedyet. Rootfoundnumericverifieronlycomparedstate==updateartifact;agentaddingactualsharedoptimizerrecompute/jointforgerytests andexplicitqualifiedarithmeticcontract(nofakeCPU/CUDA/crossCPUexactness). Receipt-onlymixedarchivefollowupPASSbothports. RLbundledependency/topologicalrestoreandnativeexternalderivationvalidationgapsalsoagent-owned. Publicnatlang.grad captured-turnloweringandorder2remainOPEN/guarded. NofullsizecloudRL/liftclaim.
+
+Checks/storage: full72957ded91 GREENall11steps. Stale399fullcheckstoppedbecauseknownhelperratchetfixed182;current99da4b04a fullcheckrunning. Mainlatestb5c61b973 own26+36focused/quickPASS. RemovedsixdeadOct13-15pytestfixtures20500574208bytes(no liveopen/maps/cwd/repopins),anddiscardedoldprojectedMellumv2servingexport23423608631bytes plusstalesymlink/manifest/archiveindexrecord;activeparents/reusabledataunchanged. Root29GiB/external71GiBfree. No whole-recipe/completedarchitecture/optimalutilizationclaim.
 
 ## POP status page
 
@@ -33,16 +47,16 @@ Pop generation closeout complete (2026-10-15 12:20 UTC): Luna seed52118 terminal
 
 | Unit | Priority | Budget / used GB | Recipe |
 | --- | --- | --- | --- |
-| `completed-pytest-fixture-audit-root-20261016` | low | 1.0 / 0.0 |  |
-| `completed-pytest-fixture-prune-root-20261016` | low | 1.0 / 0.0 |  |
+| `corrected-mellum-eval-ingest-root-20261016` | medium | 3.0 / 0.3 |  |
+| `corrected-native-task-dispatch-root-20261016` | medium | 3.0 / 0.3 |  |
 | `cw-lfm-foundation-ferry-2264` | low | 1.0 / 0.1 |  |
-| `cw-teacher-frontier-live-2516` | medium | 1.0 / 0.0 |  |
-| `d24-admission-fullcheck-20261016` | medium | 13.0 / 4.4 |  |
-| `natlang-full-check-3991629178` | low | 13.5 / 4.6 |  |
+| `cw-mellum-current-inference-export-2526` | medium | 1.0 / 0.1 |  |
+| `natlang-full-check-99da4b04ac` | low | 13.5 / 4.3 |  |
 | `natlang-memory-guard` |  |  |  |
 | `search-completed-selection-dedup2-20261016` | low | 2.0 / 0.0 |  |
 | `search-completed-shards-admission-current-root-20261016` | low | 8.0 / 0.7 |  |
-| `searchowl-native-render-optimized-resume-20261016-r7` | low | 16.0 / 4.4 |  |
+| `searchowl-native-render-optimized-resume-20261016-r7` | low | 16.0 / 4.5 |  |
+| `taskeval-6ca5c1c6-0006620` | medium | 66.7 / 10.7 |  |
 
 ## Declared lineages (training/neuralese/line-parity.json: next launch per line)
 
@@ -59,7 +73,7 @@ Recipes on disk (77): `diag-e2e-lfm-u10006-r4-ph-heads-3e-6`, `diag-e2e-lfm-u100
 
 ## Corpus registry
 
-1762 live entries in `training/neuralese_corpora.json` (316 dgx, 1446 pop); 405 carry training admission.
+1763 live entries in `training/neuralese_corpora.json` (317 dgx, 1446 pop); 406 carry training admission.
 
 ## Open coordination requests to dgx
 
@@ -68,9 +82,9 @@ Recipes on disk (77): `diag-e2e-lfm-u10006-r4-ph-heads-3e-6`, `diag-e2e-lfm-u100
 
 ## Latest decisions (coord)
 
-- 2026-10-16T09:26 dgx-codex-01a13659: Adopt live pending obligations and offline objective shared mechanisms
 - 2026-10-16T10:00 dgx-codex-01a13659: Deploy adaptive source and restore improvements with exact current-parent binding
 - 2026-10-16T10:20 dgx-codex-01a13659: Shared source reader and numerical context 74e47f187
 - 2026-10-16T10:25 dgx-codex-01a13659: Combined active and pending recipe handoff 60ecb1505
 - 2026-10-16T10:32 dgx-codex-01a13659: Explicit higher-order reference arithmetic d2f9d1baa
 - 2026-10-16T11:18 dgx-codex-01a13659: Exact prefix source-index continuation 399162917
+- 2026-10-16T11:24 dgx-codex-01a13659: Deferred integration and completed-fixture cleanup 99da4b04a
