@@ -155,9 +155,11 @@ def test_real_materializer_and_streaming_wrapper_are_byte_equivalent(tmp_path, m
     modes = ('full', 'program-header', 'whole-trajectory')
     blocked = {renderer.split_chain_key(rows[2]): len(rows[2]['messages'])}
     sql_traces = []
+    sqlite_paths = []
     real_connect = renderer.sqlite3.connect
 
     def traced_connect(*args, **kwargs):
+        sqlite_paths.append(args[0])
         connection = real_connect(*args, **kwargs)
         statements = []
         connection.set_trace_callback(statements.append)
@@ -171,9 +173,12 @@ def test_real_materializer_and_streaming_wrapper_are_byte_equivalent(tmp_path, m
                    None, modes, False, set())
         ref_receipt = renderer._render_shard_materialized(job_ref)
         renderer._G['cross_trajectory_writer_sources'] = {}
+        sqlite_scratch = tmp_path / f'sqlite-scratch-{tokenizer_name}'
         job_stream = (str(selected), str(stream_dir), tokenizer_name, blocked, 'fixture', set(), {'b0'}, False,
-                      None, modes, False, set())
+                      None, modes, False, set(), None, None, sqlite_scratch)
         stream_receipt = renderer.render_shard(job_stream)
+        assert Path(sqlite_paths[-1]).is_relative_to(sqlite_scratch)
+        assert not Path(sqlite_paths[-1]).exists()
         for mode in modes:
             reference_rows = _read(ref_dir / mode / tokenizer_name / 'actual-selected.jsonl')
             streamed_rows = _read(stream_dir / mode / tokenizer_name / 'actual-selected.jsonl')
@@ -190,6 +195,7 @@ def test_real_materializer_and_streaming_wrapper_are_byte_equivalent(tmp_path, m
                _read(stream_dir / 'omissions' / tokenizer_name / 'actual-selected.jsonl')
 
     assert len(sql_traces) == 2
+    assert len(sqlite_paths) == 2
     for statements in sql_traces:
         normalized = [statement.strip().upper() for statement in statements]
         assert 'PRAGMA CACHE_SIZE=-65536' in normalized

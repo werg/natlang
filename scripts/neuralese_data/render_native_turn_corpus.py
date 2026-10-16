@@ -1491,6 +1491,7 @@ def render_shard(job):
     compress_text = bool(storage_options and storage_options[0])
     target_exclude = storage_options[1] if len(storage_options) > 1 else set()
     input_binding = storage_options[3] if len(storage_options) > 3 else None
+    sqlite_temp_root = Path(storage_options[4]) if len(storage_options) > 4 and storage_options[4] else None
     shard_path, out_dir = Path(shard_path), Path(out_dir)
     stem = shard_path.name.removesuffix('.zst').removesuffix('.jsonl')
     outer = out_dir / 'trajectory-stream' / tok_name / stem
@@ -1521,7 +1522,13 @@ def render_shard(job):
     if legacy_renderer_sha:
         legacy_job_binding = _legacy_render_job_binding(job, source_file_sha, legacy_renderer_sha)
 
-    with tempfile.TemporaryDirectory(prefix=f'natlang-{stem}-', dir=outer) as temporary:
+    # The SQLite row index is wholly rebuildable from the selected shard. Keep
+    # it on a caller-selected fast local scratch volume when supplied; durable
+    # trajectory outputs and receipts remain under `outer`.
+    if sqlite_temp_root is not None:
+        sqlite_temp_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=f'natlang-{stem}-',
+                                     dir=sqlite_temp_root or outer) as temporary:
         db = sqlite3.connect(str(Path(temporary) / 'rows.sqlite'))
         db.execute('PRAGMA journal_mode=OFF')
         db.execute('PRAGMA synchronous=OFF')
@@ -1961,6 +1968,8 @@ def main(argv=None):
     p.add_argument('--held-text', type=Path, nargs='*', default=[])
     p.add_argument('--workers', type=int, default=8)
     p.add_argument('--compress-text', action='store_true', help='compress shard and merged text while writing; exact decoded rows unchanged')
+    p.add_argument('--sqlite-temp-root', type=Path,
+                   help='local scratch directory for rebuildable per-shard SQLite indexes (durable outputs stay in --out-dir)')
     p.add_argument('--shards', type=int, default=64)
     p.add_argument('--limit', type=int)
     p.add_argument('--keep-work', action='store_true', help='keep the per-shard work files after the merge')
@@ -2064,7 +2073,7 @@ def main(argv=None):
         input_binding = _render_input_binding(tokenizers, pieces)
         all_jobs = [(str(shard_paths[s]), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
                      a.program_header_as_full, full_set, tuple(a.renderings), a.compress_text, target_exclude,
-                     a.legacy_renderer_sha256, input_binding)
+                     a.legacy_renderer_sha256, input_binding, str(a.sqlite_temp_root) if a.sqlite_temp_root else None)
                 for s in shards for name in tokenizers]
         if a.render_shards is not None:
             if len(a.render_shards) != len(set(a.render_shards)):
