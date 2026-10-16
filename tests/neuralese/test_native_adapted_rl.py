@@ -211,7 +211,7 @@ def test_bf16_mellum_coefficient_adjoint_gap_is_accounted_by_weight_cotangent(tm
         finally:
             handle.remove()
         assert len(cotangents)==1 and cotangents[0].dtype==torch.bfloat16
-        return grad.detach(),cotangents[0]
+        return grad.detach().cpu(),cotangents[0].cpu()
     packed=run_native(engine,lambda:execute(False),entries,leaves={adapter.id:{name:coefficient}})
     cached=run_native(engine,lambda:execute(True),entries,leaves={adapter.id:{name:coefficient}})
     basis=engine.store.get_native_tensor_artifact(adapter.artifact.source_artifact_id).artifact.tensors

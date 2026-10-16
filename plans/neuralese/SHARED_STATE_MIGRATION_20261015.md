@@ -50,11 +50,13 @@ through the projected-value implementation.
 
 Raw native-state production training is deployed on BOTH sandboxes. These are
 the shared `native_state_sft` jobs under `/work/native-production`, currently
-on qualified runtime `cf7c53d6019a`; they are not continuing the old projected
-trainer. On October 15 at 22:52 UTC, the live LFM and Mellum updates were 3340
-and 3094. Their initial genuine communication foundation remains 26,312 pairs;
-neither model has completed it. The larger active source has 46,899 genuine
-communication pairs, with further admitted data entering explicit continuations.
+on LFM runtime `69c888c682bc` and Mellum target-qualified `f2348dee2`;
+they are not continuing the old projected trainer. On October 16 at 00:54 UTC,
+LFM was approaching its safe update4150 continuation and Mellum was saving
+full state at3750. Their initial genuine communication foundation remains
+26,312 pairs; neither model has completed it. The active source has57,144
+genuine communication pairs. Another5,044 ordinary rows per model are staged
+for exact-state continuations, with held15,827 unchanged.
 Only checkpointed row exposure, full optimizer/RNG and real readiness receipts
 count toward completion. Native SFT, typed durable child handoffs, contextual
 writes, empty values and hierarchical views are integrated.
@@ -66,8 +68,13 @@ local strict checks; Mellum's remaining adjoint differences are localized to
 BF16 fan-in rounding and nonlinear FP8 input-adjoint quantization. Prefix reuse
 remains off in current production. See
 `shared-state/CAUSAL_PREFIX_QUALIFICATION_20261016.md`; do not transfer a
-qualification between arithmetic modes or silently claim the optional new
-FP8 path is already deployed. The standing full check of `bdadc5a203` is green.
+qualification between arithmetic modes. Mellum actual trained-parent3505
+qualification passed with392 executedFP8projections/67,200routed rows,
+BF16 input adjoints, zero forward/consumer-loss gap and adapter gradient
+maximum4.66e-10 under unchanged gates; subsequent productionSGD reached3750.
+This qualifies that target path, not prefix reuse or task-quality lift.
+Standing fullcheckafb97fe793 is green; bcf9fb1d1d failed one stale queue
+fixture, repaired in7705015aa with focused tests; current main awaits fullsuite.
 
 The shared semantic stage now implements VAE, joint producer/write-out/consumer
 adaptation, behavioral distillation, deferred full-model optimizers, complete
@@ -94,7 +101,14 @@ artifact store, with text/tokenizer/embedding/adapter identities and decoded
 target state; see `shared-state/SEMANTIC_WIRE_DECOMPOSITION.md`. Its existence
 does not establish a trained shared dialect. First-order native graph gradients,
 named immutable parameter/optimizer application, portable continuation and
-guided generation are implemented. Native adapter/direct application and
+guided generation are implemented. Functional native adapter application,
+exact actor capture/replay and immutable coefficient optimizer continuation
+are integrated (11fa82aff/e31371cdb). Optional FP32 coefficient cotangent
+carriers preserve stored BF16 forward values and fix cached/flat adjoint gaps;
+independent root actualCUDA integration passed26cases plus the repaired
+CPU-reference diagnostic oracle. Forward values remain bitwise identical;
+this does not enable production adaptedRL or claim task lift. Multi-update GRPO behavior/current actor
+separation, heterogeneous per-call bindings, full-backbone adapted export and
 higher-order derived graphs remain explicit unfinished paths in
 `shared-state/NATIVE_LEARNING_SERVICE_DECOMPOSITION_20261015.md`. Capability
 denial is not completion. The independent review and actual trained-weight
