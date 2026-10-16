@@ -204,6 +204,9 @@ def test_real_resident_sgd_matches_all_data_run_and_recovers_old_checkpoint(tmp_
     actual=torch.load(out/'checkpoint.pt',weights_only=False)
     assert actual['training']['exposure_counts']=={'a':1,'b':1,'c':1}
     assert actual['training']['global_step']==3
+    assert actual['training']['options']['source_predecessors']=={
+        'continued_native_graphs':resident.sha(paths['old']),
+        'continued_held_native_graphs':resident.sha(paths['held'])}
     assert actual['training']['options']['resident_adoption']['generation']==resident.current(directory)['generation']
     baseline=tmp_path/'baseline'
     clean=argv[:]
