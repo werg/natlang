@@ -51,8 +51,35 @@ def bind_seed_objective(config,kind,sources):
     return config
 
 
+def recipe_lineage(config):
+    """Preserved lineage is separate from the current recipe policy identity."""
+    identities=[]
+    if config.get('recipe_lineage_sha256'):identities.append(config['recipe_lineage_sha256'])
+    for key in ('trainer_parameters','seed_trainer_parameters'):
+        reference=(config.get(key) or {}).get('recipe_binding')
+        if isinstance(reference,str):reference=json.loads(reference)
+        if reference:
+            identities.append(reference.get('lineage_sha256',reference['sha256']))
+    if identities:
+        if any(value!=identities[0] for value in identities):
+            raise ValueError('native continuation contains conflicting preserved recipe lineages')
+        return identities[0]
+    from ..train.recipe import recipe_identity_sha256
+    return recipe_identity_sha256(config['production_recipe'])
+
+
+def bind_recipe_lineage(config,lineage):
+    from ..train.recipe import native_recipe_binding
+    if config.get('recipe_lineage_sha256') not in (None,lineage):
+        raise ValueError('native raw continuation cannot change its authenticated recipe lineage')
+    config['recipe_lineage_sha256']=lineage
+    for key in ('trainer_parameters','seed_trainer_parameters'):
+        config[key]={**config.get(key,{}),'recipe_binding':native_recipe_binding(Path(config['production_recipe']),lineage)}
+    return config
+
+
 def continuation_config(config,stage,*,checkpoint,adapter,out):
-    from ..train.recipe import resolve_recipe_data,resolve_stage_inputs,effective_stage_parameters,native_recipe_binding,recipe_identity_sha256
+    from ..train.recipe import resolve_recipe_data,resolve_stage_inputs,effective_stage_parameters,native_recipe_binding
     recipe=resolve_recipe_data(config['production_recipe'])
     sources=resolve_stage_inputs(recipe,stage,{})
     parameters=effective_stage_parameters(stage,[],recipe)
@@ -61,8 +88,8 @@ def continuation_config(config,stage,*,checkpoint,adapter,out):
     parameters.pop('memory_qualification',None)  # one restored-parent capacity check, not every CE quantum
     parameters['refresh_at_checkpoint']=True
     parameters['stage_id']=stage['id']
-    parameters['recipe_binding']=native_recipe_binding(Path(config['production_recipe']),recipe_identity_sha256(config['production_recipe']))
-    result={**config,'mandatory_sft_only':True,'out':str(Path(out).resolve()),'checkpoint':checkpoint,
+    parameters['recipe_binding']=native_recipe_binding(Path(config['production_recipe']),recipe_lineage(config))
+    result={**config,'recipe_lineage_sha256':parameters['recipe_binding']['lineage_sha256'],'mandatory_sft_only':True,'out':str(Path(out).resolve()),'checkpoint':checkpoint,
         'semantic_adapter':adapter,'production_stage':stage['id'],'trainer_parameters':parameters,
         'seed_native_graphs':sources['native_graphs']['path'],
         'held_native_graphs':sources['held_native_graphs']['path']}

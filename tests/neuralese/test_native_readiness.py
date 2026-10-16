@@ -226,3 +226,18 @@ def test_handed_off_recipe_readiness_binds_current_policy_and_preserves_lineage(
     parent.write_text(json.dumps(parent_data))
     with pytest.raises(ValueError, match='inheritance changed'):
         validate_ready(path, requirement)
+
+
+def test_current_policy_readiness_cannot_be_replaced_by_equal_lineage(tmp_path):
+    from natlang_neuralese.train.recipe import native_recipe_binding
+    path,receipt,requirement=ready(tmp_path,'lfm')
+    recipe=Path(receipt['recipe']['path'])
+    receipt['recipe']=native_recipe_binding(recipe,'a'*64)
+    requirement['recipe_lineage_sha256']='a'*64
+    path.write_text(json.dumps(receipt))
+    assert validate_ready(path,requirement)
+    with pytest.raises(ValueError,match='preserved recipe lineage'):
+        validate_ready(path,{**requirement,'recipe_lineage_sha256':'b'*64})
+    newer=tmp_path/'current-policy';newer.write_text('actual changed recipe policy')
+    with pytest.raises(ValueError,match='declared production recipe'):
+        validate_ready(path,{**requirement,'recipe_sha256':sha256_file_hex(newer)})

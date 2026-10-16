@@ -817,6 +817,16 @@ def main(argv=None):
     if args.native_attention_precision is not None:
         config['native_attention_precision'] = attention_precision
     saved_training = resume or shared_resume or {}
+    previous_recipe=(saved_training.get('options') or {}).get('recipe_binding')
+    if previous_recipe is not None:
+        old_recipe=json.loads(previous_recipe) if isinstance(previous_recipe,str) else previous_recipe
+        if args.recipe_binding is None:
+            args.recipe_binding=(previous_recipe if isinstance(previous_recipe,str) else json.dumps(previous_recipe))
+            checkpoint_options['recipe_binding']=args.recipe_binding
+        else:
+            new_recipe=json.loads(args.recipe_binding)
+            if old_recipe.get('lineage_sha256',old_recipe['sha256'])!=new_recipe.get('lineage_sha256',new_recipe['sha256']):
+                raise ValueError('native continuation changed its preserved recipe lineage')
     checkpoint_options['withdrawal_history']=list((saved_training.get('options') or {}).get('withdrawal_history') or [])
     token_history = list((saved_training.get('options') or {}).get('token_row_upgrade_history') or [])
     if token_upgrade and (token_upgrade['added'] or token_upgrade.get('promoted_parameters')):

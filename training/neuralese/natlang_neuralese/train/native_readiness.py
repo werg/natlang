@@ -87,6 +87,9 @@ def validate_ready(path, requirement):
         _bound(recipe_binding)
     if receipt['recipe']['sha256'] != requirement['recipe_sha256']:
         raise ValueError('native readiness did not finish the declared production recipe')
+    if (requirement.get('recipe_lineage_sha256') is not None and
+            recipe_binding.get('lineage_sha256',recipe_binding['sha256'])!=requirement['recipe_lineage_sha256']):
+        raise ValueError('native readiness changed its declared preserved recipe lineage')
     required = set(requirement['stage_ids'])
     if not required or receipt['stage_id'] not in required:
         raise ValueError('native readiness must name a declared required native stage')

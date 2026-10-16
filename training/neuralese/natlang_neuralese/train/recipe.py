@@ -2468,10 +2468,12 @@ def main(argv=None):
         if args.handoff:
             plan = lineage_handoff(existing, plan, frozen, package, plan_path, args.out, dry_run=args.plan_only)
         else:
+            approved_current = (existing.get('handoffs') or [{}])[-1].get('recipe_sha256')
             if (existing.get('recipe') == plan['recipe'] and existing.get('recipe_sha256') != plan['recipe_sha256'] and
-                    'extends' in json.loads(args.recipe.read_text())):
-                # A recipe converted to extends/overrides after this lineage began: identical resolved content keeps
-                # the lineage and its originally recorded recipe hash.
+                    ('extends' in json.loads(args.recipe.read_text()) or approved_current == plan['recipe_sha256'])):
+                # An already committed exact handoff (or equivalent inheritance
+                # conversion) retains lineage on normal restart. Every other
+                # plan field and the frozen runtime remain checked below.
                 plan['recipe_sha256'] = existing['recipe_sha256']
             if any(existing[key] != value for key, value in plan.items()):
                 raise ValueError('recipe or input identity changed; use a new stage lineage (or --handoff for '

@@ -45,12 +45,21 @@ def configure_model(plan_path,declaration,handoff,out):
     actual=saved['model_config']['architecture']+':'+saved['model_config']['base_inventory_sha256']
     if actual!=declaration['handoff_requirement']['model_id']:
         raise ValueError('raw bootstrap drained another student/base identity')
+    recipe_binding=(saved['training'].get('options') or {}).get('recipe_binding')
+    if isinstance(recipe_binding,str):recipe_binding=json.loads(recipe_binding)
+    lineage=(recipe_binding.get('lineage_sha256',recipe_binding['sha256']) if recipe_binding else
+        declaration['handoff_requirement'].get('recipe_lineage_sha256',declaration['handoff_requirement']['recipe_sha256']))
+    installed_plan=None
+    if (record.get('resident') or {}).get('initial'):
+        from .native_raw_handoff import _drained_plan_authority
+        _,installed_plan,_=_drained_plan_authority(record,saved)
     del saved  # release mapped weight references before actor/model construction
     active_declaration=declaration
     if declaration.get('drained_recipe_handoff'):
         from .native_raw_handoff import verify_drained_recipe_handoff
         transition=verify_drained_recipe_handoff(declaration['drained_recipe_handoff'],handoff=handoff)
         plan=json.loads(_bound(transition['new_plan']).read_text())
+        lineage=plan['recipe_sha256']
         stage_inputs=plan['stage_inputs'][declaration['production_stage']]
         active_declaration={**declaration,'production_recipe':transition['recipe'],
             'seed_native_graphs':stage_inputs['native_graphs'],'held_native_graphs':stage_inputs['held_native_graphs']}
@@ -60,8 +69,17 @@ def configure_model(plan_path,declaration,handoff,out):
         _release_requirement(declaration,{'resident_current':reference})
         resident=current(_bound(reference).parent)['payload']
         recipe=resident['recipe']
+        lineage=resident['plan']['recipe_sha256']
         active_declaration={**declaration,'production_recipe':{'path':recipe['path'],'sha256':recipe['file_sha256']},
             'seed_native_graphs':resident['train'],'held_native_graphs':resident['held']}
+    elif installed_plan is not None:
+        lineage=installed_plan['recipe_sha256']
+        initial=json.loads(_bound(record['resident']['initial']).read_text())
+        recipe=initial['recipe'];stage_inputs=installed_plan['stage_inputs'][declaration['production_stage']]
+        active_declaration={**declaration,'production_recipe':{'path':recipe['path'],'sha256':recipe.get('file_sha256',recipe['sha256'])},
+            'seed_native_graphs':stage_inputs['native_graphs'],'held_native_graphs':stage_inputs['held_native_graphs']}
+    if recipe_binding and recipe_binding.get('lineage_sha256',recipe_binding['sha256'])!=lineage:
+        raise ValueError('raw handoff saved optimizer recipe lineage differs from its installed plan')
     inputs=_inputs(active_declaration)
     runtime=Path(declaration['runtime']).resolve(strict=True)
     if not (runtime/'dist/teacher/cli.js').is_file():raise ValueError('raw bootstrap needs its actual built collector runtime')
@@ -70,7 +88,16 @@ def configure_model(plan_path,declaration,handoff,out):
         prior=json.loads(path.read_text())
         if (prior.get('bootstrap_binding') or {}).get('handoff')!=handoff:
             raise ValueError('raw bootstrap original optimizer handoff changed')
-        if prior.get('bootstrap_binding')==owner:return path
+        if prior.get('bootstrap_binding')==owner:
+            if prior.get('recipe_lineage_sha256')==lineage:
+                from .native_supervised import recipe_lineage
+                recipe_lineage(prior)
+                return path
+            cursor=json.loads((out/'cycle.json').read_text()) if (out/'cycle.json').exists() else {}
+            if cursor.get('phase')=='sft' or cursor.get('pending_rl_round'):return path
+            from .native_supervised import bind_recipe_lineage
+            bind_recipe_lineage(prior,lineage);write_json_durable(path,prior)
+            return path
         cursor=json.loads((out/'cycle.json').read_text()) if (out/'cycle.json').exists() else {}
         if cursor.get('phase')=='sft' or cursor.get('pending_rl_round'):
             return path  # Finish the already sealed exact operation before hot config adoption.
@@ -79,6 +106,8 @@ def configure_model(plan_path,declaration,handoff,out):
         production_stage=declaration['production_stage'],runtime=runtime,out=out/'production',config=path,
         port=declaration['port'],coefficient_policy=None,coefficient_optimizer=None,coefficient_task_eval=None)
     config=configure_native(args)
+    from .native_supervised import bind_recipe_lineage
+    bind_recipe_lineage(config,lineage)
     config['seed_trainer_parameters']['refresh_at_checkpoint']=True
     if record.get('resident'):
         config['resident_data_directory']=record['resident']['directory']
@@ -242,6 +271,8 @@ def _supervised_job(continuation,jobdir,config,cursor,stop):
             # Follow the already validated shared resident policy. No new rows
             # earn credit here, and pending.json remains with its existing owner.
             config['production_recipe']=state['payload']['recipe']['path']
+            from .native_supervised import bind_recipe_lineage
+            bind_recipe_lineage(config,state['payload']['plan']['recipe_sha256'])
             from ..train.recipe import resolve_recipe_data
             recipe=resolve_recipe_data(config['production_recipe'])
             stage=next(stage for stage in recipe['stages'] if stage['id']==config['production_stage'])
@@ -266,6 +297,7 @@ def _release_requirement(declaration,value):
         transition=verify_drained_recipe_handoff(transition_ref,handoff=transition['handoff'])
         from ..train.recipe import recipe_identity_sha256
         requirement['recipe_sha256']=recipe_identity_sha256(_bound(transition['recipe']))
+        requirement['recipe_lineage_sha256']=json.loads(_bound(transition['new_plan']).read_text())['recipe_sha256']
     reference=value.get('resident_current')
     if reference is None:return requirement
     from ..train.native_resident import current,_contract
@@ -273,12 +305,18 @@ def _release_requirement(declaration,value):
     path=_bound(reference);state=current(path.parent)
     if not state:raise ValueError('raw release lost its exact committed resident source')
     payload=state['payload'];stage=payload['stage_id']
+    lineage=payload['plan']['recipe_sha256']
+    if requirement.get('recipe_lineage_sha256',lineage)!=lineage:
+        raise ValueError('raw release resident plan changed its preserved recipe lineage')
+    requirement['recipe_lineage_sha256']=lineage
     if stage not in requirement['stage_ids']:raise ValueError('raw release adopted another production stage')
     bindings=[payload['prior_recipe'],*[item['recipe'] for item in state['history']]]
     start=next((index for index,item in enumerate(bindings) if item['sha256']==requirement['recipe_sha256']),None)
     if start is None:raise ValueError('raw release resident history omitted its declared original recipe')
     def plan(reference):
         recipe_path=_bound({'path':reference['path'],'sha256':reference.get('file_sha256',reference['sha256'])})
+        if reference.get('lineage_sha256',reference['sha256'])!=lineage:
+            raise ValueError('raw resident recipe history changed its preserved lineage')
         if recipe_identity_sha256(recipe_path)!=reference['sha256']:raise ValueError('raw resident recipe identity changed')
         recipe=resolve_recipe_data(recipe_path)
         inputs={item['id']:({} if item.get('admitted') is False else resolve_stage_inputs(recipe,item,{})) for item in recipe['stages']}

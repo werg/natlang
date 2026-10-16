@@ -207,6 +207,14 @@ def test_real_rl_sft_rl_bridge_uses_latest_weights_and_retains_full_source_credi
         '--device',device,'--dtype',str(dtype).removeprefix('torch.'),'--rank','4','--stage-id','full','--epochs','2','--seed','1',
         '--learning-rate','1e-3','--weight-decay','0','--eval-every','1','--checkpoint-every','1','--refresh-at-checkpoint',
         '--forward-atol','1e-4','--gradient-atol','1e-5',*backend_args]
+    from natlang_neuralese.train.recipe import native_recipe_binding
+    policy=tmp_path/'policy.json'
+    write_json_durable(policy,{'schema':'natlang.neuralese-training-recipe/1','id':'saved-lineage',
+        'identity_qualification':'native_state_runtime_qualified',
+        'stages':[{'id':'full','kind':'native_state_sft','requires':[],'parameters':{'epochs':2}}]})
+    recipe_binding=native_recipe_binding(policy,'e'*64)
+    assert recipe_binding['sha256']!=recipe_binding['lineage_sha256']
+    sft_args+=['--recipe-binding',json.dumps(recipe_binding)]
     initial=tmp_path/'initial'
     assert native_state_sft.main([*sft_args,'--out',str(initial)])==0
     parent=initial/'checkpoint.pt';saved=torch.load(parent,weights_only=False)
@@ -257,6 +265,7 @@ def test_real_rl_sft_rl_bridge_uses_latest_weights_and_retains_full_source_credi
     first=policy_round(0);saved=torch.load(first,weights_only=False)
     assert saved['training']['sft_progress']['full']['exposure_counts']['full-row']==1
     assert saved['training']['global_step']==2
+    assert json.loads(saved['training']['options']['recipe_binding'])==recipe_binding
     continued=tmp_path/'continued'
     assert native_state_sft.main([*sft_args,'--out',str(continued),'--continue-from',str(first)])==0
     executed(continued)
@@ -268,6 +277,15 @@ def test_real_rl_sft_rl_bridge_uses_latest_weights_and_retains_full_source_credi
     second=policy_round(1);saved=torch.load(second,weights_only=False)
     assert saved['training']['sft_progress']['full']['exposure_counts']['full-row']==2
     assert saved['training']['global_step']==4 and saved['training']['optimizer'] and saved['training']['rng']
+    assert json.loads(saved['training']['options']['recipe_binding'])==recipe_binding
+    # Explicit metadata overrides cannot silently relabel the same optimizer.
+    wrong={**recipe_binding,'lineage_sha256':'f'*64}
+    original=parent.read_bytes()
+    rejected=tmp_path/'rejected-lineage'
+    with pytest.raises(ValueError,match='preserved recipe lineage'):
+        native_state_sft.main([*sft_args,'--recipe-binding',json.dumps(wrong),
+            '--out',str(rejected),'--continue-from',str(parent)])
+    assert parent.read_bytes()==original and not (rejected/'checkpoint.pt').exists()
 
 
 def test_raw_release_follows_actual_monotone_resident_source_policy_without_moving_foundation(tmp_path,monkeypatch):
@@ -311,12 +329,14 @@ def test_live_raw_task_plan_adopts_after_sealed_operation_without_resetting_curr
         'seed_native_graphs':files['seed'],'held_native_graphs':files['held'],'cases':files['cases1']}
     witness={'path':'original-handoff','sha256':'b'*64}
     monkeypatch.setattr(raw,'verify_handoff',lambda *a,**kw:({'checkpoint':raw.binding(parent)},
-        {'model_config':{'architecture':'lfm2','base_inventory_sha256':'a'*64}}))
+        {'model_config':{'architecture':'lfm2','base_inventory_sha256':'a'*64},
+         'training':{'options':{'recipe_binding':{'sha256':files['recipe']['sha256'],'lineage_sha256':'c'*64}}}}))
     calls=[]
     def configure(args):
         calls.append(args.cases)
         return {'native_state':True,'checkpoint':str(args.checkpoint),'out':str(args.out),
-            'cases':str(args.cases),'seed_trainer_parameters':{},'trainer_parameters':{}}
+            'cases':str(args.cases),'production_recipe':str(args.production_recipe),
+            'seed_trainer_parameters':{},'trainer_parameters':{}}
     monkeypatch.setattr(production,'configure_native',configure)
     plan=tmp_path/'plan';write_json_durable(plan,{'models':[declaration]})
     directory=tmp_path/'student'
@@ -333,6 +353,18 @@ def test_live_raw_task_plan_adopts_after_sealed_operation_without_resetting_curr
     raw.configure_model(plan,declaration,witness,directory)
     assert len(calls)==2 and json.loads(path.read_text())['cases']==files['cases2']['path']
     assert (out/'state.json').read_bytes()==state_bytes
+    # Older raw configs acquire the authenticated lineage only after their
+    # already sealed supervised operation completes, without resampling tasks.
+    upgraded=json.loads(path.read_text());upgraded.pop('recipe_lineage_sha256')
+    for key in ('trainer_parameters','seed_trainer_parameters'):upgraded[key].pop('recipe_binding')
+    write_json_durable(path,upgraded)
+    write_json_durable(directory/'cycle.json',{'phase':'sft','cycle':8,'next_stage':0})
+    raw.configure_model(plan,declaration,witness,directory)
+    assert 'recipe_lineage_sha256' not in json.loads(path.read_text())
+    write_json_durable(directory/'cycle.json',{'phase':'rl','cycle':9,'next_stage':0})
+    raw.configure_model(plan,declaration,witness,directory)
+    assert json.loads(path.read_text())['recipe_lineage_sha256']=='c'*64
+    assert (out/'state.json').read_bytes()==state_bytes and len(calls)==2
 
 
 def test_independent_students_keep_working_until_two_ready_then_drain(tmp_path,monkeypatch):

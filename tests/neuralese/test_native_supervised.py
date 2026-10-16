@@ -147,10 +147,12 @@ def test_offline_continuation_binds_actual_objective_and_effective_revision(tmp_
     recipe.write_text(json.dumps({'schema':'natlang.neuralese-training-recipe/1','id':'test-offline',
         'input_bindings':{name:{'path':str(path),'sha256':sha256_file_hex(path)}
                           for name,path in [('train',train),('held',held),('objective',objective)]},'stages':[stage]}))
-    config={'production_recipe':str(recipe),'seed_command':['python','-m','natlang_neuralese.train.native_state_sft',
+    config={'recipe_lineage_sha256':'a'*64,'production_recipe':str(recipe),'seed_command':['python','-m','natlang_neuralese.train.native_state_sft',
         '--native-graphs','{seed_native_graphs}','{trainer_args}']}
     declaration,sources=supervised.continuation_config(config,stage,checkpoint='current',adapter='adapter',out=tmp_path/'out')
     assert declaration['seed_command'][2]=='natlang_neuralese.train.native_preference'
+    assert declaration['trainer_parameters']['recipe_binding']['lineage_sha256']=='a'*64
+    assert declaration['trainer_parameters']['recipe_binding']['sha256']==sha256_file_hex(recipe)
     assert declaration['objective_spec']==str(objective)
     assert '--objective-spec' in declaration['seed_command']
     contract=NativePreferenceObjective(objective,beta=.7,margin=.2).binding()

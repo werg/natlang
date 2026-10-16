@@ -84,7 +84,25 @@ def test_drained_resident_selects_new_priority_plan_and_preserves_exact_parent(a
             'production_recipe':str(args.production_recipe),'seed_trainer_parameters':{},'trainer_parameters':{}}
     monkeypatch.setattr(production,'configure_native',configure)
     plan=tmp_path/'bootstrap.json';write(plan,{'models':[declaration]})
-    raw.configure_model(plan,declaration,original,tmp_path/'raw')
+    config_path=raw.configure_model(plan,declaration,original,tmp_path/'raw')
+    configured=json.loads(config_path.read_text())
+    assert configured['recipe_lineage_sha256']==newplan['recipe_sha256']
+    assert configured['recipe_lineage_sha256']!=checked['recipe']['sha256']
+    for key in ('trainer_parameters','seed_trainer_parameters'):
+        assert configured[key]['recipe_binding']['sha256']==checked['recipe']['sha256']
+        assert configured[key]['recipe_binding']['lineage_sha256']==newplan['recipe_sha256']
+    from natlang_neuralese.rl.native_supervised import continuation_config
+    configured['seed_command']=['python','-m','natlang_neuralese.train.native_state_sft']
+    continued,_=continuation_config(configured,newplan['recipe']['stages'][0],checkpoint=str(pin),adapter=None,out=tmp_path/'continue')
+    assert continued['trainer_parameters']['recipe_binding']['lineage_sha256']==newplan['recipe_sha256']
+    assert continued['trainer_parameters']['recipe_binding']['sha256']==checked['recipe']['sha256']
+    from natlang_neuralese.train.recipe import main as recipe_main
+    assert recipe_main(['--recipe',str(next_recipe),'--out',str(directory.parent),'--device','cpu','--plan-only'])==0
+    assert pin.read_bytes()==parentbytes
+    changed=copy.deepcopy(newplan['recipe']);changed['stages'][0]['parameters']['epochs']=9
+    wrong_recipe=root/'unapproved-policy.json';write(wrong_recipe,changed)
+    with pytest.raises(ValueError,match='recipe or input identity changed'):
+        recipe_main(['--recipe',str(wrong_recipe),'--out',str(directory.parent),'--device','cpu','--plan-only'])
     assert calls[0].production_recipe==next_recipe and calls[0].seed_native_graphs==priority
     assert raw._release_requirement(declaration,{})['recipe_sha256']==checked['recipe']['sha256']
     for field in ('checkpoint','new_code','new_plan'):
@@ -157,6 +175,25 @@ def test_initial_only_owner_carries_certificate_successor_into_raw_recipe(actual
     declaration={'drained_recipe_handoff':proof,'handoff_requirement':{'recipe_sha256':initial['recipe']['sha256']}}
     assert raw._release_requirement(declaration,{})['recipe_sha256']==checked['recipe']['sha256']
     assert handoff.prepare_drained_recipe_handoff(original,successor,proof_path,package=package)==proof
+    runtime=tmp_path/'collector';(runtime/'dist/teacher').mkdir(parents=True)
+    (runtime/'dist/teacher/cli.js').write_text('/* protocol fixture only */')
+    cases=tmp_path/'cases.jsonl';cases.write_text('{"id":"private","split":"train"}\n')
+    declaration={'model':'lfm','production_stage':'sft','runtime':str(runtime),'base':str(tmp_path/'base'),'port':8097,
+        'handoff_requirement':{'model_id':'fixture:'+'a'*64,'recipe_sha256':initial['recipe']['sha256'],
+            'trainer_launch':tree['source_launch'],'trainer_exit':str(terminal)},
+        'cases':resident.binding(cases),'production_recipe':resident.binding(successor),
+        'seed_native_graphs':resident.binding(paths['new']),'held_native_graphs':resident.binding(paths['held'])}
+    from natlang_neuralese.rl import production
+    def configure(args):
+        return {'native_state':True,'production_recipe':str(args.production_recipe),'seed_native_graphs':str(args.seed_native_graphs),
+            'checkpoint':str(args.checkpoint),'out':str(args.out),'trainer_parameters':{},'seed_trainer_parameters':{}}
+    monkeypatch.setattr(production,'configure_native',configure)
+    bootstrap=tmp_path/'bootstrap.json';write(bootstrap,{'models':[declaration]})
+    configured=json.loads(raw.configure_model(bootstrap,declaration,original,tmp_path/'raw-initial').read_text())
+    assert configured['production_recipe']==initial['recipe']['path']
+    assert configured['seed_native_graphs']==str(paths['old'])
+    assert configured['recipe_lineage_sha256']==initial['recipe']['lineage_sha256']
+    assert configured['trainer_parameters']['recipe_binding']==initial['recipe']
     # Later runtime replacement cannot invalidate an exact historical proof.
     (frozen/'future-runtime-change.py').write_text('# later runtime replacement\n')
     assert handoff.verify_drained_recipe_handoff(proof,handoff=original)==checked
