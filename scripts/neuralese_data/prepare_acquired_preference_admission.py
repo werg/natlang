@@ -31,29 +31,32 @@ CODE_ROOT=Path(__file__).resolve().parents[2]
 # D24 verification work produced immediately before it. All other module syntax
 # must remain identical, and both changed functions are pinned as exact ASTs.
 _HELD_ROLE_PLUMBING_TRANSITION={
-    'old_module_sha256':'33867580e99b742a792326836a26185b0f1d545ded9c36c6d656354a0f9628be',
-    'old_module_bytes':47330,
-    'old_stable_module_ast_sha256':'ece4c1263659abe974bb8983179900ea3c1a62c7fb6cda0328123345f09f4a7a',
-    'old_prepare_ast_sha256':'ddcaa98cbcd74020c52d2eaf24ba2d3eeffd33bd85f50dbe969218860a62ba31',
+    'old_module_sha256':'4dc3a5f64cee9d906e3778b0be8112690ad34964a8ef8abd0bac20e7b17dd151',
+    'old_module_bytes':46839,
+    'old_stable_module_ast_sha256':'065d4ffb48fd5d1e58805c051a288f5c214f639ab43cc87542536e1e1d0d6510',
+    'old_prepare_ast_sha256':'d28c737969a6882549f7818e042bc7acc1912360ff7e058153173a624decde2b',
     'new_prepare_ast_sha256':'b58bd64354a499ad39d253ad142e90a151c09c5737a466ea57f2116df2c5d231',
     'new_held_loader_ast_sha256':'8946d489284f6da5e4e6e9e6a32507612a3e9302be0d828e3339f392c63047cb',
-    'new_transition_constant_ast_sha256':'f8a03d1ca2d17d8a3512ac9378d92493ed7bcb78bfab25486d9b36163af664e0',
+    'new_transition_constant_ast_sha256':'caecb6b7ae3e7d38c248076ca0ff14fb71d7ba65d2c516ff8a53b1996e129705',
     'prior_function_ast_sha256':{
-        'prepare':'ddcaa98cbcd74020c52d2eaf24ba2d3eeffd33bd85f50dbe969218860a62ba31',
+        '_source_eligibility_index':'62a87495e2f723505b34e0e44b2ab8f209c41e7a19b420611a39f9f1abbb5bf6',
+        'prepare':'d28c737969a6882549f7818e042bc7acc1912360ff7e058153173a624decde2b',
         '_cached_verification':'23ce0833d997749613934e06e8432419f6263cdcec648f968d7ba56bbf87ab1d',
-        'verify_conversion':'b209ab88baf835674841ee24f11bbede7acb5f57e2eb1db883f9f920390e9b9b'},
+        'verify_conversion':'5d88d18d696d7da4181638069356ed597935ab6166a9b94e2e71747afb6e4af5'},
     'current_function_ast_sha256':{
+        '_source_eligibility_index':'55993a93344b1a8514e69115559ec00e8715fa6d50a53c283cef9f81791fb970',
         'prepare':'b58bd64354a499ad39d253ad142e90a151c09c5737a466ea57f2116df2c5d231',
         '_cached_verification':'a914e44bfdd9854de16192da97739f07a0426356da2483224e7166680490b388',
         'verify_conversion':'09a36bf05052cb56b5ca37122a0a8a3a255b6e3e087ad27fb2b67326455319b6',
-        '_held_role_plumbing_transition':'7b61fe8a1754263943eae64aba0b8b2b1fc185e11c0a4eb1f95aa34817a7c4e3',
+        '_held_role_plumbing_transition':'ad6dd409cab760ac3a246c1952adf3183d325d8e0cba0b0cc2593214715b206e',
         '_prior_role_plumbing_identity':'0a7ccb3d3a453889cc7b5850d3fd7d99b21710dced89b847deae995cef575fd6',
+        '_json_request':'ae833d5281488f3342b5ac53e5ef41d60da4627fd222d6640b706175b81887e7',
         '_load_held_graph_source':'8946d489284f6da5e4e6e9e6a32507612a3e9302be0d828e3339f392c63047cb'},
 }
 
 
 def _held_role_plumbing_transition():
-    """Prove this exact held-loader-only edit before reusing prior D24 work."""
+    """Prove the exact admission-resume and held-role transition before reuse."""
     path=Path(__file__)
     old_bytes=_HELD_ROLE_PLUMBING_TRANSITION['old_module_bytes']
     old_sha=_HELD_ROLE_PLUMBING_TRANSITION['old_module_sha256']
@@ -95,7 +98,7 @@ def _held_role_plumbing_transition():
         'current_transition_constant_ast_sha256':transition_sha,
         'prior_function_ast_sha256':_HELD_ROLE_PLUMBING_TRANSITION['prior_function_ast_sha256'],
         'current_function_ast_sha256':function_shas,
-        'scope':'only held NativeGraphSource role-token provisioning and its call site changed; verifier, source eligibility, rendering and proposal dependencies are unchanged'}
+        'scope':'exact pinned admission continuation: durable source-index/request normalization, cache identity resume, and held NativeGraphSource role-token plumbing; source eligibility implementation, conversion renders, per-pair rerenders and global joins remain independently bound and fully checked'}
     if (stable_sha!=_HELD_ROLE_PLUMBING_TRANSITION['old_stable_module_ast_sha256']
             or prepare_sha!=_HELD_ROLE_PLUMBING_TRANSITION['new_prepare_ast_sha256']
             or loader_sha!=_HELD_ROLE_PLUMBING_TRANSITION['new_held_loader_ast_sha256']
