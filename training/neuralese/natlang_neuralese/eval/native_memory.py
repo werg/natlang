@@ -118,8 +118,10 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
             try:
                 with _HostPeak() as host:
                     with backend.autocast() if backend is not None else contextlib.nullcontext():
+                        packing = ({'share_causal_prefixes':True}
+                            if getattr(model,'share_causal_prefixes',False) else {})
                         loss,_=packed_graph_loss(model,[example],checkpoint_layers=checkpoint_layers,
-                            chunk_tokens=chunk_tokens,share_causal_prefixes=getattr(model,'share_causal_prefixes',False))
+                            chunk_tokens=chunk_tokens,**packing)
                     loss.backward()
                     if device.type=='cuda':torch.cuda.synchronize(device)
                 if not observed or not math.isfinite(float(loss.detach())):

@@ -169,3 +169,16 @@ def test_memory_request_is_strict_bound_recipe_metadata():
     for bad in ('unbound',{'path':'a','sha256':'bad'},{**good,'bytes':23}):
         with pytest.raises(ValueError,match='exact path/sha256'):
             validate_stage_parameters('native_state_sft',{'memory_qualification':bad})
+
+
+def test_default_capacity_check_retains_qualified_nonprefix_packer_signature(monkeypatch):
+    from natlang_neuralese.train import native_state_sft
+    original=native_state_sft.packed_graph_loss
+    def qualified(model,rows,*,checkpoint_layers=True,chunk_tokens=128):
+        return original(model,rows,checkpoint_layers=checkpoint_layers,chunk_tokens=chunk_tokens)
+    monkeypatch.setattr(native_state_sft,'packed_graph_loss',qualified)
+    model=SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4)
+    optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
+    result=qualify_capacity(model,optimizer,examples()[:1],chunk_tokens=3,
+        checkpoint_sha256='a'*64,source_binding={})
+    assert result['passed']
