@@ -269,3 +269,20 @@ def test_noncheckpointed_numerical_failure_requires_explicit_exact_state_fallbac
         memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
     with pytest.raises(ValueError,match='checkpointed fallback required'):
         memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
+
+
+def test_capacity_identity_binds_exact_causal_prefix_packing_mode(monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.eval import native_memory as memory
+    monkeypatch.setattr(memory,'memory_runtime',lambda device:{'device':device})
+    args=SimpleNamespace(batch_graphs=1,batch_tokens=65536,checkpoint_layers=True,
+        chunk_tokens=1024,checkpoint_input_offload=False,device='cpu',
+        fp8_training='off',fp8_recipe='delayed',fp8_amax_history_len=16)
+    legacy=memory.capacity_identity({},args,None)
+    assert 'share_causal_prefixes' not in legacy
+    args.share_causal_prefixes=False
+    assert memory.capacity_identity({},args,None)==legacy
+    args.share_causal_prefixes=True
+    shared=memory.capacity_identity({},args,None)
+    assert shared['share_causal_prefixes'] is True and shared!=legacy
+    assert {k:v for k,v in shared.items() if k!='share_causal_prefixes'}=={k:v for k,v in legacy.items() if k!='share_causal_prefixes'}

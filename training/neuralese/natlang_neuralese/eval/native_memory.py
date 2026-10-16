@@ -242,7 +242,9 @@ def capacity_identity(config,args,backend):
         **({'checkpoint_input_offload_directory':args.checkpoint_input_offload_directory}
            if getattr(args,'checkpoint_input_offload_directory',None) else {}),'model_config':config,'batch_graphs':args.batch_graphs,'batch_tokens':args.batch_tokens,
         'checkpoint_layers':args.checkpoint_layers,'chunk_tokens':args.chunk_tokens,
-        'checkpoint_input_offload':args.checkpoint_input_offload,'runtime':memory_runtime(args.device),
+        'checkpoint_input_offload':args.checkpoint_input_offload,
+        **({'share_causal_prefixes':True} if getattr(args,'share_causal_prefixes',False) else {}),
+        'runtime':memory_runtime(args.device),
         'fp8':{'kind':args.fp8_training,'recipe':args.fp8_recipe,'amax_history_len':args.fp8_amax_history_len,
                'input_gradient_precision':getattr(backend,'input_gradient_precision',None)}}
 
