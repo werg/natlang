@@ -21,3 +21,18 @@ source eligibility only, never numeric re-rendering, execution or exposure.
 
 The verifier and proposal attachment are exact durability/protocol plumbing;
 there is no new learned admission policy or model-facing change.
+
+## First complete audit after a protection correction
+
+A cohort without an earlier passed audit cannot inherit a fictional one. The
+full source-admission verifier accepts an explicit `--conversion-protection`
+for the old numeric receipts, alongside the current `--protection`. It uses the
+same transition verifier, requires complete current global closure, and checks
+EVERY original source occurrence (including omitted failures) has unchanged
+eligibility and split. It then performs the normal complete graph/source,
+view/target, mask-bearing output, receipt, runtime and decision-hold checks.
+The new audit records both protections and bundles exact portable projection
+evidence; conversion receipt bytes remain untouched. Existing source-backed
+sample qualification re-renders its exact selected full views without a special
+or weakened path. Later continuation certificates understand this original
+numeric provenance separately from the audit's current eligibility proof.

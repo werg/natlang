@@ -158,14 +158,18 @@ def verify_graph_source(graph, value, *, protection, held_sources, fingerprint):
     return expected_ids, len(example.target_weights), split
 
 
-def verify_conversion(directory, export_path, *, protection, held_sources, decision_bindings, source_rows):
+def verify_conversion(directory, export_path, *, protection, held_sources, decision_bindings, source_rows, conversion_protection=None):
     directory = Path(directory).resolve(strict=True); receipt_path = directory / 'receipt.json'
     receipt = json.loads(receipt_path.read_text())
     if receipt.get('schema') != 'natlang.acquired-full-session-graphs/1':
         raise ValueError('cohort member needs a completed native conversion receipt')
     bound(export_path, receipt['export_receipt'])
     source = bound(export_path.parent / 'full-trajectories.jsonl.zst', receipt['source'])
-    if receipt['protection'] != protection['proof'] or decision_contract(receipt['decision_holds']) != decision_contract(decision_bindings):
+    numeric_protection = conversion_protection or protection
+    if conversion_protection is not None:
+        from scripts.neuralese_data.continue_acquired_protection import verify_protection_sets
+        verify_protection_sets(numeric_protection, protection)
+    if receipt['protection'] != numeric_protection['proof'] or decision_contract(receipt['decision_holds']) != decision_contract(decision_bindings):
         raise ValueError('native cohort conversion uses stale global protection or decision holds')
     state_path = bound(directory / 'resume-state.json', {'sha256': receipt['resume_state_sha256']})
     state = json.loads(state_path.read_text())
@@ -186,12 +190,15 @@ def verify_conversion(directory, export_path, *, protection, held_sources, decis
     frontier, shards = completed_shards(directory / 'session-shards', state['binding'], len(source_rows))
     if frontier != len(source_rows) or shards != receipt['shards']:
         raise ValueError('native cohort conversion shard completion proof differs')
-    if receipt['held_group_closure_sha256'] != canonical_json_sha256_hex(sorted(protection['held'])):
+    if receipt['held_group_closure_sha256'] != canonical_json_sha256_hex(sorted(numeric_protection['held'])):
         raise ValueError('native cohort was not converted with the complete global held closure')
     bound(directory / 'omissions.jsonl', {'sha256': receipt['omissions_sha256']})
     expected_counts = Counter(); expected_sources = {}
     expected_omissions = {}
     for value in source_rows:
+        if conversion_protection is not None:
+            from scripts.neuralese_data.continue_acquired_protection import verify_session_transition
+            verify_session_transition(value, numeric_protection, protection, held_sources)
         reason = session_exclusion(value, protection, held_sources)
         if reason:
             expected_counts[reason] += 1
@@ -250,6 +257,7 @@ def main(argv=None):
     parser.add_argument('--exports', type=Path, required=True, help='one complete declared source cohort, e.g. D12')
     parser.add_argument('--native-root', type=Path, required=True, help='same cohort conversion directory')
     parser.add_argument('--protection', type=Path, required=True)
+    parser.add_argument('--conversion-protection', type=Path, help='exact prior projection bound by unchanged numeric conversion receipts; eligibility uses --protection')
     parser.add_argument('--id', required=True)
     parser.add_argument('--registry-path', required=True)
     parser.add_argument('--original-root', type=Path, required=True)
@@ -264,7 +272,15 @@ def main(argv=None):
     if {str(path) for path in paths} != {row['receipt'] for row in complete['files'] if row['status'] in {'exported', 'reused'}}:
         raise ValueError('declared cohort must cover its complete normalized source file inventory')
     protection = current_protection(args.protection)
-    global_accounting = verify_global_source_closure(args.protection, protection)
+    conversion_protection = None
+    if args.conversion_protection is None:
+        global_accounting = verify_global_source_closure(args.protection, protection)
+    else:
+        from scripts.neuralese_data.continue_acquired_protection import verify_protection_transition
+        conversion_protection, current, global_accounting = verify_protection_transition(
+            args.conversion_protection, args.protection)
+        if current != protection:
+            raise ValueError('current eligibility protection changed before cohort audit')
     held_ids, decision_bindings = load_decision_holds(sorted((ROOT / 'training/decision-holds').glob('*.jsonl')))
     held_sources = held_ids | {value.split(':decision:', 1)[0] for value in held_ids}
     out = args.native_root / ('admission-' + args.id)
@@ -296,7 +312,8 @@ def main(argv=None):
         for model in models:
             directory = args.native_root / export_path.parent.name / model
             receipt, outputs, proofs, groups = verify_conversion(directory, export_path, protection=protection,
-                held_sources=held_sources, decision_bindings=decision_bindings, source_rows=rows)
+                held_sources=held_sources, decision_bindings=decision_bindings, source_rows=rows,
+                conversion_protection=conversion_protection)
             if receipt['prepared_tokenizer']['base_files'] != inventories[model]:
                 raise ValueError('native cohort model selector differs from its exact tokenizer base inventory')
             identities = {(p['id'], p['normalized_session_sha256'], p['split'], p['view']) for p in proofs if p['view'] == 'whole-trajectory'}
@@ -315,9 +332,12 @@ def main(argv=None):
             for name in ('receipt.json', 'omissions.jsonl', 'resume-state.json'):
                 include.append(str((directory / name).relative_to(args.native_root)))
             bindings.append({'model': model, 'receipt': {'path': str(directory / 'receipt.json'),
-                'sha256': sha256_file_hex(directory / 'receipt.json')}, 'outputs': outputs})
+                'sha256': sha256_file_hex(directory / 'receipt.json')}, 'outputs': outputs,
+                **({'conversion_protection': receipt['protection']} if conversion_protection is not None else {})})
             proof_rows.extend({**proof, 'model': model, 'original_source': original} for proof in proofs)
     if all_groups['train'] & all_groups['test']: raise ValueError('cohort global train/held group intersection')
+    if (conversion_protection is not None and current_protection(args.conversion_protection) != conversion_protection):
+        raise ValueError('prior numeric conversion protection changed during cohort verification')
     if current_protection(args.protection) != protection or load_decision_holds(
             sorted((ROOT / 'training/decision-holds').glob('*.jsonl')))[1] != decision_bindings:
         raise ValueError('current protections changed during cohort verification')
@@ -339,6 +359,22 @@ def main(argv=None):
         'model_tokenizer_inventories': inventories,
         'train_held_group_intersections': 0, 'row_proof_sha256': sha256_file_hex(out / 'row-proof.jsonl'),
         'training_sources': 'aggregate outputs only; durability shards are not additional sources'}
+    if conversion_protection is not None:
+        from scripts.neuralese_data.continue_acquired_protection import projection_evidence
+        bundles = {role: projection_evidence(path, out) for role, path in (
+            ('conversion', args.conversion_protection), ('eligibility', args.protection))}
+        for bundle in bundles.values():
+            include.extend(str((out / item['path']).relative_to(args.native_root))
+                           for item in [bundle['manifest'], *bundle['files']])
+        audit['conversion_protection_transition'] = {
+            'schema': 'natlang.acquired-conversion-protection-transition/1',
+            'prior_conversion_protection': conversion_protection['proof'],
+            'portable_projections': bundles,
+            'eligibility_protection': protection['proof'], 'numeric_rerendered': False,
+            'all_original_source_records_checked': normalized_count,
+            'all_original_source_eligibility_and_splits_unchanged': True,
+            'original_conversion_receipts_unchanged': True,
+            'new_global_source_closure': global_accounting}
     write_json_durable(out / 'audit.json', audit)
     include.extend(str(path.relative_to(args.native_root)) for path in out.iterdir() if path.is_file())
     entry = {'id': args.id, 'owner': 'dgx', 'path': args.registry_path, 'include': sorted(include),

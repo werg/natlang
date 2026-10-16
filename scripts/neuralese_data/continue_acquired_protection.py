@@ -53,6 +53,57 @@ def verify_certificate(path, *, audit_sha256=None):
     return value
 
 
+def verify_protection_transition(old_path, new_path):
+    """One exact eligibility transition for existing audits and first-time audits."""
+    old_path, new_path = Path(old_path), Path(new_path)
+    old, new = current_protection(old_path), current_protection(new_path)
+    verify_protection_sets(old, new)
+    return old, new, verify_global_source_closure(new_path, new)
+
+
+def verify_protection_sets(old, new):
+    if (not old['held'] <= new['held'] or old['quality'] != new['quality']
+            or old['pending'] != new['pending']
+            or old['proof'].get('source_review_sha256') != new['proof'].get('source_review_sha256')):
+        raise ValueError('protection continuation released held groups or changed quality/pending review policy')
+
+
+def copy_evidence(source, target):
+    source, target = Path(source), Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        if sha256_file_hex(target) != sha256_file_hex(source):
+            raise ValueError('immutable protection evidence changed')
+    else:
+        shutil.copyfile(source, target)
+        with target.open('rb') as stream: os.fsync(stream.fileno())
+    return target
+
+
+def projection_evidence(projection, directory):
+    """Copy immutable protection files with their relative roles intact."""
+    projection, directory = Path(projection), Path(directory)
+    destination = directory / 'protection-continuation-evidence' / sha256_file_hex(projection)
+    files = []
+    manifest = _binding(copy_evidence(projection, destination / 'protection-manifest.json'), directory)
+    for child in json.loads(projection.read_text())['files']:
+        relative = Path(child['path'])
+        if relative.is_absolute() or '..' in relative.parts:
+            raise ValueError('unsafe protection evidence path')
+        source = bound(projection.parent / relative, child)
+        files.append(_binding(copy_evidence(source, destination / relative), directory))
+    return {'manifest': manifest, 'files': files}
+
+
+def verify_session_transition(value, old, new, held_sources):
+    from scripts.neuralese_data.build_acquired_full_session_graphs import session_exclusion
+    groups = set(value['trajectory']['split_groups'])
+    if (not groups or ('test' if groups & old['held'] else 'train') !=
+            ('test' if groups & new['held'] else 'train')
+            or session_exclusion(value, old, held_sources) != session_exclusion(value, new, held_sources)):
+        raise ValueError('protection continuation affects an original source split or eligibility: ' + value['trajectory']['id'])
+
+
 def certify(audit_path, old_path, new_path, output, *, decision_paths=None):
     with acquire_output_lease(Path(output).parent):
         return _certify(audit_path, old_path, new_path, output, decision_paths=decision_paths)
@@ -69,13 +120,9 @@ def _certify(audit_path, old_path, new_path, output, *, decision_paths=None):
             or audit.get('oracle_verified') is not False):
         raise ValueError('protection continuation requires an original passed source audit')
     bound(old_path, audit['protection'])
-    old, new = current_protection(old_path), current_protection(new_path)
-    if (not old['held'] <= new['held'] or old['quality'] != new['quality']
-            or old['pending'] != new['pending']
-            or old['proof']['source_review_sha256'] != new['proof']['source_review_sha256']
-            or audit['pending_source_groups_sha256'] != canonical_json_sha256_hex(sorted(old['pending']))):
-        raise ValueError('protection continuation released held groups or changed quality/pending review policy')
-    closure = verify_global_source_closure(new_path, new)
+    old, new, closure = verify_protection_transition(old_path, new_path)
+    if audit['pending_source_groups_sha256'] != canonical_json_sha256_hex(sorted(old['pending'])):
+        raise ValueError('original audit differs from prior pending protection')
     decisions = sorted((ROOT / 'training/decision-holds').glob('*.jsonl')) if decision_paths is None else decision_paths
     _, decision_bindings = load_decision_holds(decisions)
     if decision_contract(decision_bindings) != decision_contract(audit['decision_holds']):
@@ -92,24 +139,10 @@ def _certify(audit_path, old_path, new_path, output, *, decision_paths=None):
     projection_refs = []
     # Keep the actual projection files and all policy children, not merely labels.
     for projection in (old_path, new_path):
-        destination = output.parent / 'protection-continuation-evidence' / sha256_file_hex(projection)
-        destination.mkdir(parents=True, exist_ok=True)
-        def copy_evidence(source, target):
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if target.exists():
-                if sha256_file_hex(target) != sha256_file_hex(source):
-                    raise ValueError('immutable protection evidence changed')
-            else:
-                shutil.copyfile(source, target)
-                with target.open('rb') as stream: os.fsync(stream.fileno())
-            return target
-        projection_refs.append(keep(copy_evidence(projection, destination / 'protection-manifest.json')))
-        for child in json.loads(projection.read_text())['files']:
-            source = bound(projection.parent / child['path'], child)
-            relative = Path(child['path'])
-            if relative.is_absolute() or '..' in relative.parts:
-                raise ValueError('unsafe protection evidence path')
-            keep(copy_evidence(source, destination / relative), child)
+        bundle = projection_evidence(projection, output.parent)
+        projection_refs.append(keep(output.parent / bundle['manifest']['path'], bundle['manifest']))
+        for child in bundle['files']:
+            keep(output.parent / child['path'], child)
     old_ref, new_ref = projection_refs
     for item in decision_bindings:
         source = bound(item['path'], item)
@@ -122,7 +155,7 @@ def _certify(audit_path, old_path, new_path, output, *, decision_paths=None):
         keep(receipt_path, conversion['receipt'])
         receipt = json.loads(receipt_path.read_text())
         if (receipt.get('schema') != 'natlang.acquired-full-session-graphs/1'
-                or receipt.get('protection') != audit['protection']
+                or receipt.get('protection') != conversion.get('conversion_protection', audit['protection'])
                 or decision_contract(receipt['decision_holds']) != decision_contract(audit['decision_holds'])
                 or len(receipt['outputs']) != len(conversion['outputs'])):
             raise ValueError('original conversion receipt differs from qualified audit')
