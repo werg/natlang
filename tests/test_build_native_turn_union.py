@@ -264,8 +264,9 @@ def test_exact_text_dedup_only_compares_eligible_rows_and_honors_supersedes():
     assert selected == {('complete', 'b')}
     assert omissions[('incomplete', 'a')]['reason'] == 'missing_tokenizer_twin'
 
-    first = member('first', {tok: {'a': identity('shared')} for tok in TOKENS})
-    later = member('later', {tok: {'b': identity('shared')} for tok in TOKENS})
+    bound = {**identity('shared'), 'source_record_ids': ('same-source',)}
+    first = member('first', {tok: {'a': dict(bound)} for tok in TOKENS})
+    later = member('later', {tok: {'b': dict(bound)} for tok in TOKENS})
     selected, omissions = decide(['first', 'later'], first | later)
     assert selected == {('first', 'a')}
     assert omissions[('later', 'b')]['reason'] == 'exact_duplicate_document'
@@ -273,6 +274,19 @@ def test_exact_text_dedup_only_compares_eligible_rows_and_honors_supersedes():
                                  supersedes={'later': {'first'}})
     assert selected == {('later', 'b')}
     assert omissions[('first', 'a')]['reason'] == 'superseded_exact_duplicate_document'
+
+
+def test_equal_text_keeps_distinct_source_or_group_provenance():
+    for later_groups, later_source in ((['g2'], 'source-a'), (['g1'], 'source-b')):
+        first_row = {'id': 'a', 'split': 'train', 'source_groups': ['g1'],
+                     'source_record_ids': ['source-a'], 'text': 'same text'}
+        later_row = {'id': 'b', 'split': 'train', 'source_groups': later_groups,
+                     'source_record_ids': [later_source], 'text': 'same text'}
+        first = member('first', {tok: {'a': _row_identity(first_row)} for tok in TOKENS})
+        later = member('later', {tok: {'b': _row_identity(later_row)} for tok in TOKENS})
+        selected, omissions = decide(['first', 'later'], first | later)
+        assert selected == {('first', 'a'), ('later', 'b')}
+        assert not omissions
 
 
 def test_same_split_but_conflicting_source_groups_are_explicitly_omitted():

@@ -380,6 +380,7 @@ def merge_parts(out: Path, *, compress_all: bool = False) -> dict:
     held document of ANY part, or equal in text to one, is dropped; exact duplicates (split, text) across parts are kept
     once; twin alignment: a document dropped for one tokenizer is dropped for all. Part text files are removed after
     the merge (their receipts and omissions stay). The union builder applies the same rules across corpora."""
+    from text_tokenizer_twin import document_dedup_identity
     toks = sorted({p.parent.name for p in (out / 'parts').glob('p*/*/*/text-data.jsonl*')})
     held_groups, held_texts = set(), set()
     for rendering in RENDERINGS:
@@ -396,7 +397,9 @@ def merge_parts(out: Path, *, compress_all: bool = False) -> dict:
             seen = set()
             for path in part_files(out, rendering, tok):
                 for _, row in read_rows(path):
-                    key = (row['split'], text_sha(row), tuple(row.get('context_only_assistant_turns', [])))
+                    key = (row['split'], text_sha(row), tuple(row.get('context_only_assistant_turns', [])),
+                           tuple(row.get('context_only_reasoning_turns', [])),
+                           json.dumps(document_dedup_identity(row), sort_keys=True, separators=(',', ':')))
                     if row['split'] == 'train' and set(row.get('source_groups') or []) & held_groups:
                         drop.setdefault(row['id'], 'train_document_shares_held_source_group_across_parts')
                     elif row['split'] == 'train' and key[1] in held_texts:

@@ -94,7 +94,7 @@ def test_renderer_dedup_exclusion_is_distinct_from_target_holds():
         render.whole_trajectory_target_holds(final, list(records), [], records, hashes, {'old'})
 
 
-@pytest.mark.parametrize('change', ['wrong_target', 'duplicate_ordinal', 'split', 'groups'])
+@pytest.mark.parametrize('change', ['wrong_target', 'duplicate_ordinal', 'split', 'empty_groups'])
 def test_member_authentication_rejects_false_targets_and_cross_source_credit(change):
     render = load_renderer()
     prefix = [{'role': 'user', 'content': 'question'}]
@@ -107,7 +107,7 @@ def test_member_authentication_rejects_false_targets_and_cross_source_credit(cha
     if change == 'wrong_target': earlier['target'] = {'role': 'assistant', 'content': 'unrelated'}
     elif change == 'duplicate_ordinal': records['alias'] = {**earlier, 'id': 'alias'}
     elif change == 'split': earlier['split'] = 'test'
-    else: earlier['source_groups'] = ['different-case']
+    else: earlier['source_groups'] = []
     with pytest.raises(ValueError):
         render.whole_trajectory_target_holds(final, list(records), final['messages'], records,
                                            {key: '1'*64 for key in records}, {'held'})

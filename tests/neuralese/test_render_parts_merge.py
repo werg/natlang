@@ -167,20 +167,23 @@ def test_cross_part_held_group_duplicate_and_twin_alignment(tmp_path, compress_a
     for tok in ('lfm25', 'mellum21'):
         write(tmp_path, 'p00', tok, [
             {'id': 'a', 'split': 'train', 'source_groups': ['g1'], 'text': 'A' + tok},
-            {'id': 'b', 'split': 'train', 'source_groups': ['g2'], 'text': 'B' + tok}])
+            {'id': 'b', 'split': 'train', 'source_groups': ['g2'], 'text': 'B' + tok,
+             'source_record_ids': ['source-b']}])
         write(tmp_path, 'p01', tok, [
             {'id': 'c', 'split': 'test', 'source_groups': ['g1'], 'text': 'C' + tok},
             {'id': 'd', 'split': 'train', 'source_groups': ['g3'], 'text': 'B' + tok},
+            {'id': 'f', 'split': 'train', 'source_groups': ['g2'], 'text': 'B' + tok,
+             'source_record_ids': ['source-b']},
             {'id': 'e', 'split': 'train', 'source_groups': ['g4'], 'text': ('E' + tok) if tok == 'lfm25' else ('B' + tok)}])
     merged = render_parts.merge_parts(tmp_path, compress_all=compress_all)
     filename = 'text-data.jsonl.zst' if compress_all else 'text-data.jsonl'
     ids = {tok: [row['id'] for _, row in render_parts.read_rows(tmp_path / 'program-header' / tok / filename)]
            for tok in ('lfm25', 'mellum21')}
-    # a: shares held group g1 with test doc c of another part; d: duplicate of b; e: duplicate only for mellum21,
-    # so it is dropped for both twins.
-    assert ids == {'lfm25': ['b', 'c'], 'mellum21': ['b', 'c']}
+    # a shares held group g1; f is the same exact source as b. d/e have
+    # independent source/group identities and survive even if one text matches.
+    assert ids == {'lfm25': ['b', 'c', 'd', 'e'], 'mellum21': ['b', 'c', 'd', 'e']}
     assert merged['merged']['program-header/lfm25']['merge_omissions'] == {
-        'exact_duplicate_document_across_parts': 2, 'train_document_shares_held_source_group_across_parts': 1}
+        'exact_duplicate_document_across_parts': 1, 'train_document_shares_held_source_group_across_parts': 1}
     assert not list((tmp_path / 'parts').glob('*/*/*/text-data.jsonl'))
     for tok in ('lfm25', 'mellum21'):
         path = tmp_path / 'program-header' / tok / filename
