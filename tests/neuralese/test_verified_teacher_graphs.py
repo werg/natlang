@@ -608,3 +608,28 @@ def test_nested_continuation_rejects_conflicting_actor(tmp_path):
                             'actor': {**flat['actor'], 'sha256': 'f'*64}}
     with pytest.raises(ValueError, match='conflicts with outer actor'):
         converter.collection_provenance(flat, transferred)
+
+
+def test_scaffold_source_stream_is_exact_and_immutable(tmp_path):
+    root = tmp_path / 'harvest'
+    accepted = ['scaffold-00-repeat-0', 'scaffold-01-repeat-0']
+    (root / 'accepted').mkdir(parents=True)
+    (root / 'harvest.json').write_text(json.dumps({
+        'schema': 'natlang.teacher-scaffold-qualification-harvest/1',
+        'accepted_keys': accepted,
+    }))
+    raw = []
+    for key, payload in zip(accepted, ['完整 trajectory', 'second trajectory']):
+        result = root / 'accepted' / key / 'results.jsonl'
+        result.parent.mkdir()
+        line = json.dumps({'id': key, 'trajectory': payload}, ensure_ascii=False).encode()
+        result.write_bytes(line + b'\n')
+        raw.append(line + b'\n')
+
+    source = tmp_path / 'accepted.jsonl'
+    converter.prepare_scaffold_source(source, root)
+    assert source.read_bytes() == b''.join(raw)
+    before = source.read_bytes()
+    with pytest.raises(ValueError, match='refusing to overwrite'):
+        converter.prepare_scaffold_source(source, root)
+    assert source.read_bytes() == before

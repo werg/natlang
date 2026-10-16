@@ -260,6 +260,8 @@ def collection_provenance(collection, transferred, *, seen=()):
 
 
 def source_binding(args):
+    if getattr(args, 'scaffold_harvest', None) is not None:
+        return scaffold_source_binding(args)
     root = args.source.parent
     batch_map = root / 'batch-source-bindings.json'
     proof_paths = {name: root / filename for name, filename in {
@@ -344,6 +346,190 @@ def source_binding(args):
             'held_groups': set().union(*(value['held_groups'] for value in packets.values())),
             'proof_paths': proof_paths, 'proof_sha256': proof_sha, 'collections': collections,
             'packets': packets, 'current': current_protection(args.protection_manifest)}
+
+
+def scaffold_source_binding(args):
+    """Bind the separately harvested 48-case scaffold batch without inventing a Qwen batch receipt.
+
+    The harvest index is the exact source authority: it separates accepted and
+    repair keys, binds every transferred byte, and points to each result
+    manifest's original queue slot. We then feed those original trajectory
+    rows through the same current protection and rendering path as other
+    verified teacher data.
+    """
+    root = args.scaffold_harvest.resolve(strict=True)
+    source = args.source.resolve(strict=True)
+    harvest_path = root / 'harvest.json'
+    ferry_path = root / 'ferry-receipt.json'
+    harvest = json.loads(harvest_path.read_text())
+    ferry = json.loads(ferry_path.read_text())
+    if (harvest.get('schema') != 'natlang.teacher-scaffold-qualification-harvest/1'
+            or ferry.get('verified') is not True or ferry.get('accepted') != 44
+            or ferry.get('repair') != 4 or ferry.get('sha256') is None
+            or sha256_file(root / 'harvest.tar.gz') != ferry['sha256']
+            or (root / 'harvest.tar.gz').stat().st_size != ferry.get('bytes')):
+        raise ValueError('scaffold harvest archive or terminal ferry receipt is not exact')
+    files = harvest.get('files')
+    if not isinstance(files, dict) or len(files) != ferry.get('verified_files'):
+        raise ValueError('scaffold harvest file inventory differs from its terminal ferry receipt')
+    for relative, binding in files.items():
+        path = (root / relative).resolve(strict=True)
+        if root not in path.parents or not path.is_file() or type(binding.get('bytes')) is not int:
+            raise ValueError('scaffold harvest contains an unsafe or incomplete file binding')
+        if path.stat().st_size != binding['bytes'] or sha256_file(path) != binding.get('sha256'):
+            raise ValueError('scaffold harvest artifact differs from its immutable inventory: ' + relative)
+    accepted, repair = harvest.get('accepted_keys'), harvest.get('repair_keys')
+    if (not isinstance(accepted, list) or len(accepted) != 44 or len(set(accepted)) != 44
+            or not isinstance(repair, list) or len(repair) != 4 or len(set(repair)) != 4
+            or set(accepted) & set(repair) or set(accepted) | set(repair) != {
+                str(Path(name).parts[1]) for name in files if name.startswith(('accepted/', 'repair-private-writer-return/'))}):
+        raise ValueError('scaffold accepted/repair inventory does not partition all returned task keys')
+
+    metadata = root / 'metadata'
+    cases_path, queue_path = metadata / 'qualification-cases.jsonl', metadata / 'queue.jsonl'
+    cases = [row for _, row in file_rows(cases_path)]
+    queue = [row for _, row in file_rows(queue_path)]
+    if len(cases) != 12 or len(queue) != 48:
+        raise ValueError('scaffold source packet/queue is not the complete 12-task/48-case batch')
+    case_by_id = {row['id']: row for row in cases}
+    queue_by_key = {row.get('key'): row for row in queue}
+    if len(case_by_id) != 12 or len(queue_by_key) != 48 or set(queue_by_key) != set(accepted) | set(repair):
+        raise ValueError('scaffold queue does not uniquely cover every accepted and repair key')
+    identity_path = metadata / 'teacher-execution-identity.json'
+    actor_path = metadata / 'teacher-serving-actor.json'
+    execution_identity, actor = json.loads(identity_path.read_text()), json.loads(actor_path.read_text())
+    actor_ref = execution_identity.get('actor') or {}
+    if (actor.get('schema') != 'natlang.self-hosted-teacher-actor/1'
+            or actor.get('teacher') != 'nvidia/Qwen3.8-Flash-Next-FP4-Local'
+            or actor.get('revision') != 'b9ce18a6887e18c089fdea8509a33e63429a3300'
+            or actor_ref.get('sha256') != sha256_file(actor_path)
+            or actor_ref.get('bytes') != actor_path.stat().st_size
+            or execution_identity.get('model_id') != 'pennyroyal'):
+        raise ValueError('scaffold teacher actor and execution identity do not authenticate one another')
+    launch = json.loads((metadata / 'launch-nodepath-retry.json').read_text())
+    if (launch.get('actor', {}).get('sha256') != sha256_file(identity_path)
+            or launch.get('queue', {}).get('sha256') != sha256_file(queue_path)
+            or launch.get('queue', {}).get('rows') != 48):
+        raise ValueError('scaffold actual launch does not bind this actor and complete queue')
+
+    # The prepared JSONL is only a byte-exact concatenation of accepted
+    # originals. Every row remains independently tied to its original result
+    # file and collector manifest below.
+    source_rows = [row for _, row in file_rows(source)]
+    if len(source_rows) != 44 or len({row.get('id') for row in source_rows}) != 44:
+        raise ValueError('scaffold combined source must contain 44 unique accepted full trajectories')
+    row_bindings, source_files = [], {}
+    selected_ids, train_groups, packet_programs = set(), set(), {}
+    collections_key = 'scaffold-harvest:' + sha256_file(harvest_path)
+    for key in accepted:
+        task = queue_by_key[key]
+        program_id = task.get('source_program_id')
+        program = case_by_id.get(program_id)
+        if program is None or program.get('split') != 'train' or program.get('version') != 'natlang.program/2':
+            raise ValueError('scaffold queue points outside its exact train task packet')
+        result_path = root / 'accepted' / key / 'results.jsonl'
+        manifest_path = result_path.with_name('results.jsonl.manifest.json')
+        manifest = json.loads(manifest_path.read_text())
+        index = task['index']
+        result_rows = [row for _, row in file_rows(result_path)]
+        if (manifest.get('version') != 'natlang.teacher_batch.native/1'
+                or manifest.get('source_sha256') != sha256_file(cases_path)
+                or manifest.get('range') != {'start': index, 'count': 1}
+                or manifest.get('completed') != 1 or manifest.get('missing')
+                or manifest.get('output_sha256') != sha256_file(result_path)
+                or len(result_rows) != 1):
+            raise ValueError('accepted scaffold result lacks its exact completed queue-slot receipt: ' + key)
+        row = result_rows[0]
+        if row.get('id') != source_rows[len(row_bindings)].get('id'):
+            raise ValueError('combined scaffold source order differs from exact accepted-key order')
+        if (row.get('task', {}).get('program_ir') != program
+                or row.get('provenance', {}).get('program_ir_sha256') != canonical_json_sha256_hex(program)):
+            raise ValueError('accepted trajectory task differs from the exact original train task')
+        selected_ids.add(program_id)
+        packet_programs[program_id] = canonical_json_sha256_hex(program)
+        groups = program.get('source_groups')
+        if not isinstance(groups, list) or not groups or len(groups) != len(set(groups)):
+            raise ValueError('scaffold program lacks unique source groups')
+        train_groups.update(groups)
+        source_files[row['id']] = {'row_id': row['id'], 'path': str(result_path),
+            'sha256': sha256_file(result_path), 'bytes': result_path.stat().st_size,
+            'source': str(result_path), 'collection_source': collections_key}
+        row_bindings.append({'key': key, 'id': row['id'], 'program_id': program_id,
+            'result': {'path': str(result_path), 'sha256': sha256_file(result_path),
+                       'bytes': result_path.stat().st_size},
+            'manifest': {'path': str(manifest_path), 'sha256': sha256_file(manifest_path),
+                         'bytes': manifest_path.stat().st_size}})
+    if {row.get('id') for row in source_rows} != {item['id'] for item in row_bindings}:
+        raise ValueError('combined scaffold source changed row membership')
+    current = current_protection(args.protection_manifest)
+    if train_groups & (current['held'] | current['quality'] | current['pending']):
+        raise ValueError('scaffold train groups intersect current protection')
+    selection = {'schema': 'natlang.teacher-scaffold-accepted-selection/1',
+        'accepted_keys': accepted, 'repair_keys_excluded': repair,
+        'selected_ids': sorted(selected_ids), 'train_groups': sorted(train_groups),
+        'qualification_cases_sha256': sha256_file(cases_path), 'queue_sha256': sha256_file(queue_path),
+        'training_admission': 'pending independent source and current-protection validation'}
+    packet = {'selection': selection, 'packet_sha256': sha256_file(cases_path),
+        'protection': {'schema': 'natlang.scaffold-current-protection-join/1', 'status': 'passed',
+            'accepted_keys': len(accepted), 'held_intersections': 0, 'quality_intersections': 0},
+        'selected_ids': selected_ids, 'program_sha256': packet_programs,
+        'train_groups': train_groups, 'held_groups': set(),
+        'proofs': {'selection': {'path': str(harvest_path), 'sha256': sha256_file(harvest_path)},
+                   'global_protection_join': {'path': str(args.protection_manifest),
+                                              'sha256': current['proof']['sha256']}}}
+    proofs = {'harvest': harvest_path, 'ferry': ferry_path, 'transfer': ferry_path, 'source': source,
+        'qualification_cases': cases_path, 'queue': queue_path,
+        'teacher_execution_identity': identity_path, 'teacher_actor': actor_path,
+        'teacher_configuration_basis': metadata / 'teacher-configuration-basis.json',
+        'launch': metadata / 'launch-nodepath-retry.json'}
+    for item in row_bindings:
+        proofs['accepted:' + item['key'] + ':result'] = Path(item['result']['path'])
+        proofs['accepted:' + item['key'] + ':manifest'] = Path(item['manifest']['path'])
+    proof_sha = {name: sha256_file(path) for name, path in proofs.items()}
+    return {'source_sha256': sha256_file(source), 'transfer': {'schema': 'natlang.scaffold-accepted-source-binding/1',
+            'training_admission': False, 'combined': {'path': str(source), 'sha256': sha256_file(source),
+            'bytes': source.stat().st_size}, 'files': list(source_files.values())},
+        'teacher': {'schema': actor.get('schema'), 'teacher': actor['teacher'], 'revision': actor['revision'],
+                    'actor_path': str(actor_path), 'actor_sha256': sha256_file(actor_path),
+                    'execution_identity_path': str(identity_path),
+                    'execution_identity_sha256': sha256_file(identity_path)},
+        'evidence': {}, 'source_files': source_files, 'selected_ids': selected_ids,
+        'train_groups': train_groups, 'held_groups': set(), 'proof_paths': proofs,
+        'proof_sha256': proof_sha, 'collections': {collections_key: {'path': str(harvest_path),
+            'sha256': sha256_file(harvest_path), 'accepted_rows': len(row_bindings),
+            'repair_rows_excluded': len(repair)}}, 'packets': {collections_key: packet},
+        'current': current, 'scaffold': {'row_bindings': row_bindings, 'selection': selection}}
+
+
+def prepare_scaffold_source(source: Path, harvest_root: Path):
+    """Create one deterministic JSONL stream from the accepted original result rows."""
+    root = harvest_root.resolve(strict=True)
+    harvest = json.loads((root / 'harvest.json').read_text())
+    if harvest.get('schema') != 'natlang.teacher-scaffold-qualification-harvest/1':
+        raise ValueError('unsupported scaffold harvest')
+    if source.exists():
+        raise ValueError('refusing to overwrite an existing scaffold source stream')
+    source.parent.mkdir(parents=True, exist_ok=True)
+    temporary = source.with_name(source.name + '.tmp')
+    try:
+        with temporary.open('xb') as output:
+            for key in harvest.get('accepted_keys', []):
+                result = root / 'accepted' / key / 'results.jsonl'
+                rows = list(file_rows(result))
+                if len(rows) != 1:
+                    raise ValueError('accepted scaffold key must contain one whole trajectory: ' + key)
+                output.write(rows[0][0].rstrip(b'\r\n') + b'\n')
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, source)
+        directory = os.open(source.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def teacher_collection_source(file_receipt, binding):
@@ -656,12 +842,16 @@ def seed_content_fingerprints(paths, fingerprint):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument('--scaffold-harvest', type=Path,
+                        help='authenticate a separately harvested scaffold batch; never treats it as a standard Qwen batch')
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--base-tokenizer", type=Path, required=True)
     parser.add_argument("--protection-manifest", type=Path, required=True)
     parser.add_argument('--deduplicate-against', type=Path, action='append', default=[])
     parser.add_argument("--model-key", choices=("lfm25", "mellum21"), required=True)
     args = parser.parse_args()
+    if args.scaffold_harvest is not None and not args.source.exists():
+        prepare_scaffold_source(args.source, args.scaffold_harvest)
     if args.output.exists() and any(args.output.iterdir()):
         raise ValueError(f"refusing to overwrite nonempty output: {args.output}")
     binding = source_binding(args)
@@ -743,8 +933,10 @@ def main():
                     "selection_proof_sha256": binding['packets'][collection_source]['proofs']['selection']['sha256'],
                     "global_protection_join_sha256": binding['packets'][collection_source]['proofs']['global_protection_join']['sha256'],
                     "transfer_receipt_sha256": binding["proof_sha256"]["transfer"],
-                    "teacher_model": (binding["teacher"].get("source") or {}).get("model_repo"),
-                    "teacher_revision": (binding["teacher"].get("source") or {}).get("model_revision"),
+                    "teacher_model": ((binding["teacher"].get("source") or {}).get("model_repo")
+                                      or binding["teacher"].get('teacher')),
+                    "teacher_revision": ((binding["teacher"].get("source") or {}).get("model_revision")
+                                         or binding["teacher"].get('revision')),
                     "teacher_run_id": row.get("execution_identity", {}).get("execution_run_id"),
                     "teacher_turn_index": index, "teacher_invocation_id": turn.get("invocation_id"),
                     'decision_admission': decision,
