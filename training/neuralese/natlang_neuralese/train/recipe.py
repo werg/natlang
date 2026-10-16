@@ -1550,6 +1550,39 @@ def _data_continuation(old, new):
     return rest(old) == rest(new)
 
 
+def _pending_source_continuation(old, new):
+    """A drained recipe may add mandatory work without changing active sources.
+
+    Kept separate from _data_continuation: resident polling does not load new
+    pending declarations, so accepting this there would lose obligations.
+    """
+    role = 'pending_native_sources'
+    if ('native_graphs' not in old or 'native_graphs' not in new
+            or role not in new or old.get(role) == new[role]
+            or {k:v for k,v in old.items() if k != role} !=
+               {k:v for k,v in new.items() if k != role}):
+        return False
+    from .native_pending_sources import load_pending_sources
+    def load(reference):
+        if not all(reference.get(key) for key in ('path','sha256','binding')):
+            raise ValueError('pending continuation needs an exact declared binding')
+        path = Path(reference['path']).resolve(strict=True)
+        if sha(path) != reference['sha256']:
+            raise ValueError('pending continuation declaration changed')
+        value = json.loads(path.read_text())
+        return load_pending_sources(path, tokenizer_fingerprint=value['tokenizer_fingerprint']), value['tokenizer_fingerprint']
+    added, fingerprint = load(new[role])
+    if role in old:
+        prior, old_fingerprint = load(old[role])
+        if old_fingerprint != fingerprint or any(added['rows'].get(key) != row
+                for key,row in prior['rows'].items()):
+            return False
+        dependencies = {(item['path'],item['sha256']) for item in added['dependencies']}
+        if any((item['path'],item['sha256']) not in dependencies for item in prior['dependencies']):
+            return False
+    return True
+
+
 def appended_training_stages(old_recipe, new_recipe, out):
     """Future dependent stages may extend a running recipe without rewriting its existing stages."""
     old = old_recipe.get('stages', [])
@@ -1641,7 +1674,8 @@ def unstarted_stage_input_changes(existing, plan, out):
         if old == new:
             continue
         if stage_started(out, stage_id):
-            if stage_finished(out, stage_id) or not _data_continuation(old, new):
+            if stage_finished(out, stage_id) or not (
+                    _data_continuation(old, new) or _pending_source_continuation(old, new)):
                 raise ValueError('handoff refused: inputs of started stage ' + stage_id + ' changed; only a stage '
                                  'that has not started may take new inputs, and the active stage only by a declared '
                                  'data continuation (' + DATA_CONTINUATION_ROLE + ' = the text data it trained on)')
