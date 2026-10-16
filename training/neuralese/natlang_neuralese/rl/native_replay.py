@@ -22,6 +22,7 @@ class NativeReplay:
     actions: tuple[dict, ...]
     external_blocks: dict
     identity: dict
+    adapter_binding: dict | None = None
 
 
 def _tokens(ids):
@@ -93,15 +94,27 @@ def compile_replay(turns, *, identity, roles, fetch_block):
     rollout bundle, never a regenerated text approximation.
     """
     prepared, writers = {}, {}
+    adapter_binding = None
+    binding_seen = False
     for number, turn in enumerate(turns):
         name = turn.get('graph_turn') or f'turn-{number}'
         if name in prepared:
             raise ValueError('native RL graph turn identities must be unique')
         capture = turn.get('sampling') or {}
-        if (capture.get('schema') not in {'natlang.native-rl-sampling/1', 'natlang.native-rl-sampling/2'}
+        if (capture.get('schema') not in {'natlang.native-rl-sampling/1', 'natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3'}
                 or capture.get('policy') != identity
                 or capture.get('sample_range_convention') != 'half-open'):
             raise ValueError('native RL capture has a different policy or unsupported sampling schema')
+        binding = capture.get('adapter_binding')
+        if capture['schema'] == 'natlang.native-rl-sampling/3':
+            from types import SimpleNamespace
+            from ..model.native_adapters import validate_state_binding
+            validate_state_binding(binding, SimpleNamespace(**identity))
+        elif binding is not None:
+            raise ValueError('adapted native RL capture requires its explicit adapter-bound sampling schema')
+        if binding_seen and binding != adapter_binding:
+            raise ValueError('native RL graph requires one exact adapter binding; heterogeneous actors need per-invocation executor support')
+        adapter_binding, binding_seen = binding, True
         law = capture.get('sampling_law') or {}
         temperature = law.get('temperature')
         if (type(temperature) not in (int, float) or not math.isfinite(temperature) or temperature <= 0
@@ -196,6 +209,8 @@ def compile_replay(turns, *, identity, roles, fetch_block):
             block_id = write['state_id']
             block = fetch_block(write.get('raw_state_id', block_id))
             block.require_native(**identity)
+            if getattr(block, 'adapter_binding', None) != adapter_binding:
+                raise ValueError('native RL producer state adapter binding differs from its actor')
             if write.get('raw_state_id', block_id) != block_id:
                 from ..model.semantic_message import SemanticStateMessage
                 message = fetch_block(block_id)
@@ -242,6 +257,8 @@ def compile_replay(turns, *, identity, roles, fetch_block):
                         externals[source] = fetch_block(block_id)
                     block = externals[source]
                     block.require_native(**identity)
+                    if getattr(block, 'adapter_binding', None) != adapter_binding:
+                        raise ValueError('native RL external state adapter binding differs from its actor')
                     start, stop = 0, len(block.token_ids)
                 imports.append(ImportSpan(at, source, start, stop))
             if any(dependency in pending for dependency in dependencies):
@@ -262,11 +279,13 @@ def compile_replay(turns, *, identity, roles, fetch_block):
     plan = compile_graph(nodes, external_sizes={name: len(block.token_ids) for name, block in externals.items()})
     actions = tuple({**event, 'query': offset + event['local_query']}
         for offset, item in zip(plan.offsets, ordered) for event in item['events'])
-    return NativeReplay(plan, actions, externals, dict(identity))
+    return NativeReplay(plan, actions, externals, dict(identity), adapter_binding)
 
 
 def replay_logps(model, replay, *, checkpoint_layers=True, chunk_tokens=128):
     """Score every actual sample, including markers and terminal tokens, once."""
+    from ..model.native_adapters import require_model_execution_actor
+    require_model_execution_actor(model, replay.identity, replay.adapter_binding)
     model.port.checkpoint_layers = checkpoint_layers
     result = model(replay.plan, external_blocks=replay.external_blocks,
                    external_identity=replay.identity, retain_states=False)
@@ -312,6 +331,11 @@ class NativePolicyObjective:
         if not self.rows:
             raise ValueError('native policy objective has no admitted episodes')
         self.identity = self.spec['policy']
+        self.adapter_binding = self.spec.get('adapter_binding')
+        if self.adapter_binding is not None:
+            from types import SimpleNamespace
+            from ..model.native_adapters import validate_state_binding
+            validate_state_binding(self.adapter_binding, SimpleNamespace(**self.identity))
         self.bundle = None
         self.external_state_overrides = {}
         if self.spec.get('block_bundle'):
@@ -355,6 +379,8 @@ class NativePolicyObjective:
 
     def __call__(self, model, result, context):
         from .full_policy import clipped_token_loss
+        from ..model.native_adapters import require_model_execution_actor
+        require_model_execution_actor(model, self.identity, self.adapter_binding)
         hidden = result['h_final'][0]
         losses, count = [], 0
         for example in context['examples']:
@@ -412,6 +438,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             raise ValueError('native RL episode lacks task identity or exact raw-call replay')
         grouped.setdefault((rollout['task_id'], rollout.get('group')), []).append(rollout)
     graphs, objective_rows = [], {}
+    adapter_binding, binding_seen = None, False
     for members in grouped.values():
         advantages, stats = group_advantages([row['reward']['quality'] for row in members])
         if mode == 'grpo' and not stats['spread']:
@@ -420,6 +447,11 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             if mode == 'rft' and rollout['reward']['quality'] != 1:
                 continue
             replay = compile_replay(producer_turns(rollout), identity=identity, roles=roles, fetch_block=fetch_block)
+            if binding_seen and adapter_binding != replay.adapter_binding:
+                raise ValueError('native RL objective cannot mix different adapter-bound actors')
+            adapter_binding, binding_seen = replay.adapter_binding, True
+            if replay.adapter_binding and block_bundle is None:
+                raise ValueError('adapted native RL requires its durable coefficient/basis actor bundle')
             identifier = canonical_json_sha256_hex(rollout)
             if identifier in objective_rows:
                 raise ValueError('native RL episodes duplicated without distinct sampling provenance')
@@ -445,4 +477,5 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             graphs.append(graph)
     return graphs, {'schema': 'natlang.native-policy-objective/1', 'kind': 'native-policy',
         'mode': mode, 'policy': dict(identity), 'rows': objective_rows,
+        **({'adapter_binding': adapter_binding} if adapter_binding else {}),
         'block_bundle': str(block_bundle) if block_bundle else None}

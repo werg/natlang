@@ -236,6 +236,8 @@ class Sequence:
     native_rl_prompt: list = field(default_factory=list)
     native_rl_inputs: list = field(default_factory=list)
     native_rl_writes: list = field(default_factory=list)
+    native_rl_policy: dict | None = None
+    native_rl_adapter_binding: dict | None = None
     native_write_start_sample: int | None = None
     native_write_close_sample: int | None = None
     native_write_start_own: int | None = None
@@ -349,7 +351,8 @@ class Engine:
 
     def generate(self, request: GenerationRequest) -> dict:
         """Run one request to completion on the calling thread (no scheduler)."""
-        sequence = Sequence(request, Future())
+        request.request_id = request.request_id or f"chatcmpl-{next(self._ids)}"
+        sequence = Sequence(request, Future(), prompt_plan=self._prompt_plan(request.messages, request.tools))
         with torch.inference_mode():
             while not sequence.future.done():
                 self._round([sequence])
@@ -715,9 +718,12 @@ class Engine:
         return self._native_run(lambda: self._native_prefill_impl(seq), seq.request.adapters)
 
     def _native_prefill_impl(self, seq):
-        if seq.request.adapters and seq.request.rl_capture:
-            raise RequestError('neuralese-native-adapter-rl-unavailable',
-                'adapted policy capture needs matching adapter-aware replay; use graph coefficient gradients instead')
+        if seq.request.rl_capture:
+            from ..model.native_adapters import execution_binding, SCHEMA
+            seq.native_rl_policy = dict(self.execution_native_identity)
+            bindings = execution_binding(self)
+            seq.native_rl_adapter_binding = ({'schema': SCHEMA, 'base_native_identity': dict(self.native_identity),
+                'adapters': bindings} if bindings else None)
         if seq.request.forced or seq.request.neuralese_length is not None or seq.request.neuralese_passes is not None:
             raise RequestError("native-write-controls-unsupported", "native shared-state serving uses sampled role markers, not legacy forced writes")
         if seq.request.neuralese_max_length is not None or seq.request.neuralese_temperature:
@@ -1046,6 +1052,10 @@ class Engine:
             if seq.phase == "done":
                 continue
             try:
+                if (seq.request.rl_capture and seq.native_rl_policy is not None
+                        and self.execution_native_identity != seq.native_rl_policy):
+                    raise RequestError('neuralese-native-actor-changed',
+                        'keep the exact adapter binding unchanged until this invocation finishes')
                 if seq.phase == "prefill":
                     self._native_prefill(seq)
                     continue
@@ -1661,11 +1671,10 @@ class Engine:
         if seq.guide is not None:
             response['x_natlang_guidance'] = {'rejections': seq.guide.rejections}
         if seq.request.rl_capture:
-            response["x_natlang_rl_capture"] = {"schema": "natlang.native-rl-sampling/2",
-                "policy": {"checkpoint_sha256": self.checkpoint_sha256,
-                           "tokenizer_fingerprint": self.model_config["tokenizer_fingerprint"],
-                           "embedding_weight_sha256": self.embedding_weight_sha256,
-                           "architecture": self.model_config["architecture"]},
+            response["x_natlang_rl_capture"] = {"schema": ("natlang.native-rl-sampling/3"
+                    if seq.native_rl_adapter_binding else "natlang.native-rl-sampling/2"),
+                "policy": dict(seq.native_rl_policy),
+                **({'adapter_binding': seq.native_rl_adapter_binding} if seq.native_rl_adapter_binding else {}),
                 "prompt": seq.native_rl_prompt, "samples": seq.rl_samples,
                 "generated_inputs": seq.native_rl_inputs, "writes": seq.native_rl_writes,
                 "finish_reason": seq.finish_reason,

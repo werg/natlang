@@ -527,10 +527,8 @@ class TensorStore:
             record = self._load(block_id)
             dependencies = []
             if isinstance(record, NativeTensorRecord):
-                meta = record.artifact
-                if (meta.kind in ('adapter-coefficients', 'adapter-gradient') or
-                        meta.kind == 'optimizer-state' and (meta.provenance or {}).get('scope') == 'natlang.native-adapter/1'):
-                    dependencies = [meta.source_artifact_id] if meta.source_artifact_id else []
+                from ..model.native_artifact import native_tensor_dependencies
+                dependencies = native_tensor_dependencies(record.artifact)
             elif isinstance(record, NativeStateRecord):
                 binding = getattr(record.block, 'adapter_binding', None)
                 dependencies = [entry['id'] for entry in binding['adapters']] if binding else []

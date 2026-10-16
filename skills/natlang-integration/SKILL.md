@@ -359,7 +359,12 @@ reencode its text. Never reuse a base-bound semantic decoder as if it had been
 qualified for changed weights. For `neuralese-native-adapter-invalid`, restore
 matching coefficients/bases and use actual native matrix names. For
 `neuralese-native-tensor-as-state`, bind the adapter with `withAdapters` instead
-of sending it as communication state. `neuralese-native-adapter-rl-unavailable`
-means use first-order native graph objectives; adapted-policy capture/replay is
-not implemented by direct adapter serving. A store lacking named tensor support
+of sending it as communication state. Adapted-policy sampling/3 receipts bind
+an effective actor SHA, exact base identity and ordered coefficient IDs/hex
+scales. Retain its recursive RL artifact bundle, then evaluate the admitted
+native-policy objective with the same adapters and a coefficient target. Keep
+forward, checkpoint recomputation and backward inside the native adapter scope.
+`neuralese-native-actor-changed` requires finishing or cancelling that invocation
+before changing bindings. Heterogeneous per-call adapter graphs and full-backbone
+adapted actor export/rebinding remain explicit unavailable paths. A store lacking named tensor support
 must report `neuralese-native-archive-unavailable` before loading these artifacts.

@@ -169,7 +169,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
             errors = []
             for server in servers:
                 try:
-                    kind = 'native-states' if block_id.startswith('nzs1_') else 'blocks'
+                    kind = ('native-states' if block_id.startswith('nzs1_') else
+                            'native-tensor-artifacts' if block_id.startswith('nnt1_') else 'blocks')
                     raw = server.get_bytes('/v1/neuralese/' + kind + '/' + block_id)
                     origins[block_id] = server.base
                     return raw

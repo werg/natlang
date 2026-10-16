@@ -25,6 +25,8 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo'):
     if not policies or any(policy != policies[0] for policy in policies):
         raise ValueError('native RL requires one exact captured actor identity')
     identity = policies[0]
+    if any((turn.get('sampling') or {}).get('adapter_binding') for row in rollouts for turn in row.get('turns', [])):
+        raise ValueError('adapted actors require native coefficient-policy learning; full-backbone trainer export/rebinding is not yet supported')
     if (identity['checkpoint_sha256'] != sha256_file_hex_cached(checkpoint)
             or identity['tokenizer_fingerprint'] != fingerprint):
         raise ValueError('native RL checkpoint/tokenizer differs from actual sampled policy')

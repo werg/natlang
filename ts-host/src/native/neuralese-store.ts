@@ -33,10 +33,11 @@ export type NeuraleseBlockInput = Omit<NeuraleseBlockMeta, 'id'> & { data: Uint8
 
 export type NativeStateDtype = 'F16' | 'BF16' | 'F32' | 'F64' | 'I64';
 export type NativeStateTensor = { dtype: NativeStateDtype; shape: number[]; data: Uint8Array };
+export type NativeAdapterBinding = { schema: 'natlang.native-adapter/1'; base_native_identity: NativeModelIdentity;
+  adapters: { id: string; scale_hex: string }[] };
 export type NativeStateMetadata = { text: string; architecture: string;
   tokenizer_fingerprint: string; checkpoint_sha256: string; embedding_weight_sha256: string; layer_kinds: string[];
-  adapter_binding?: { schema: 'natlang.native-adapter/1'; base_native_identity: NativeModelIdentity;
-    adapters: { id: string; scale_hex: string }[] } } &
+  adapter_binding?: NativeAdapterBinding } &
   ({ schema: 'neuralese.native-state/1' } | { schema: 'neuralese.semantic-state/1';
     source_model: string; adapter_sha256: string; offsets: number[][]; posterior: 'mean';
     offset_policy: 'exact-tokenizer-offsets' | 'actual-token-decoder-alignment' | 'actual-token-decoder-text-alignment' });
@@ -84,9 +85,15 @@ export function nativeTensorArtifactBlockMeta(artifact: Pick<NativeTensorArtifac
 /** Required executable dependencies, distinct from historical provenance references. */
 export function nativeTensorArtifactDependencies(artifact: Pick<NativeTensorArtifact, 'metadata'>): string[] {
   const meta = artifact.metadata;
-  return (meta.kind === 'adapter-coefficients' || meta.kind === 'adapter-gradient' ||
+  const dependencies = (meta.kind === 'adapter-coefficients' || meta.kind === 'adapter-gradient' ||
       meta.kind === 'optimizer-state' && meta.provenance.scope === 'natlang.native-adapter/1') &&
       meta.source_artifact_id ? [meta.source_artifact_id] : [];
+  const binding = meta.kind === 'adapter-gradient' ? meta.provenance.adapter_binding as NativeAdapterBinding | undefined : undefined;
+  if (binding) {
+    validateNativeAdapterBinding(binding, meta.provenance.effective_native_identity as NativeModelIdentity);
+    dependencies.push(...binding.adapters.map(entry => entry.id));
+  }
+  return [...new Set(dependencies)];
 }
 
 /** Archive one immutable named native artifact and its executable dependencies. */
@@ -202,16 +209,10 @@ function validNativeAdapterScaleHex(value: unknown): boolean {
   return match[1] === '1' || exponent === -1022 && Number.parseInt(match[2]!, 16) !== 0;
 }
 
-function validateNativeState(metadata: NativeStateMetadata, tensors: Record<string, NativeStateTensor>): void {
-  if (!metadata || !['neuralese.native-state/1', 'neuralese.semantic-state/1'].includes(metadata.schema) || typeof metadata.text !== 'string' ||
-      typeof metadata.architecture !== 'string' || !metadata.architecture ||
-      !SHA256.test(metadata.tokenizer_fingerprint) || !SHA256.test(metadata.checkpoint_sha256) ||
-      !SHA256.test(metadata.embedding_weight_sha256) || !Array.isArray(metadata.layer_kinds) ||
-      (metadata.schema === 'neuralese.native-state/1' && !metadata.layer_kinds.length))
-    throw new RangeError('invalid native-state metadata');
-  if (metadata.adapter_binding !== undefined) {
-    const binding = metadata.adapter_binding, base = binding?.base_native_identity;
-    if (!binding || binding.schema !== 'natlang.native-adapter/1' || !base ||
+export function validateNativeAdapterBinding(binding: NativeAdapterBinding, metadata: NativeModelIdentity): void {
+    const base = binding?.base_native_identity;
+    if (!metadata || !binding || binding.schema !== 'natlang.native-adapter/1' || !base ||
+        Object.keys(base).sort().join(',') !== 'architecture,checkpoint_sha256,embedding_weight_sha256,tokenizer_fingerprint' ||
         !SHA256.test(base.checkpoint_sha256) || !nativeModelIdentityEqual(base, {
           checkpoint_sha256: base.checkpoint_sha256, tokenizer_fingerprint: metadata.tokenizer_fingerprint,
           embedding_weight_sha256: metadata.embedding_weight_sha256, architecture: metadata.architecture }) ||
@@ -222,7 +223,16 @@ function validateNativeState(metadata: NativeStateMetadata, tensors: Record<stri
       throw new RangeError('invalid native adapter state binding');
     const hash = [...digest(new TextEncoder().encode(nativeCanonicalJson(binding)))].map(value => value.toString(16).padStart(2, '0')).join('');
     if (hash !== metadata.checkpoint_sha256) throw new RangeError('native state differs from its exact adapted model identity');
-  }
+}
+
+function validateNativeState(metadata: NativeStateMetadata, tensors: Record<string, NativeStateTensor>): void {
+  if (!metadata || !['neuralese.native-state/1', 'neuralese.semantic-state/1'].includes(metadata.schema) || typeof metadata.text !== 'string' ||
+      typeof metadata.architecture !== 'string' || !metadata.architecture ||
+      !SHA256.test(metadata.tokenizer_fingerprint) || !SHA256.test(metadata.checkpoint_sha256) ||
+      !SHA256.test(metadata.embedding_weight_sha256) || !Array.isArray(metadata.layer_kinds) ||
+      (metadata.schema === 'neuralese.native-state/1' && !metadata.layer_kinds.length))
+    throw new RangeError('invalid native-state metadata');
+  if (metadata.adapter_binding !== undefined) validateNativeAdapterBinding(metadata.adapter_binding, metadata);
   const expected = new Set(['token_ids', 'positions', 'embeddings']);
   const count = (name: string, rank: number): number[] => {
     const tensor = tensors[name];
@@ -315,6 +325,12 @@ function validateNativeTensorArtifact(metadata: NativeTensorArtifactMetadata,
       !metadata.provenance || typeof metadata.provenance !== 'object' || Array.isArray(metadata.provenance) ||
       !tensors || typeof tensors !== 'object' || !Object.keys(tensors).length)
     throw new RangeError('invalid native tensor artifact metadata');
+  if (metadata.kind === 'adapter-gradient' && metadata.provenance.adapter_binding !== undefined) {
+    const binding = metadata.provenance.adapter_binding as NativeAdapterBinding;
+    validateNativeAdapterBinding(binding, metadata.provenance.effective_native_identity as NativeModelIdentity);
+    if (!nativeModelIdentityEqual(binding.base_native_identity, metadata.native_identity))
+      throw new RangeError('native adapter gradient changed its exact base identity');
+  }
   const inventory = Object.keys(tensors).sort().map(name => {
     const tensor = tensors[name]!;
     if (!name || !tensor || !(tensor.dtype in NATIVE_FLOAT_DTYPE_BYTES) || !Array.isArray(tensor.shape) ||

@@ -218,6 +218,15 @@ def optimize_adapter(engine, gradient, options, state_id, owner=None):
     if gradient.native_identity != engine.native_identity or gradient.kind != 'adapter-gradient':
         raise ValueError('adapter update requires a gradient bound to this exact live native base')
     adapter_id = gradient.source_artifact_id
+    actor_binding = (gradient.provenance or {}).get('adapter_binding')
+    if actor_binding is not None:
+        from types import SimpleNamespace
+        validate_state_binding(actor_binding, SimpleNamespace(**gradient.provenance['effective_native_identity']))
+        if (actor_binding['base_native_identity'] != engine.native_identity
+                or adapter_id not in [entry['id'] for entry in actor_binding['adapters']]):
+            raise ValueError('adapter policy gradient does not bind its exact coefficient parent and base')
+        resolve_adapters(engine, [{'id':entry['id'], 'scale':float.fromhex(entry['scale_hex'])}
+                                 for entry in actor_binding['adapters']])
     resolved = resolve_adapters(engine, [adapter_id])[0]
     _, _, spec, coefficients, _ = resolved
     if not set(gradient.tensors) <= coefficients.keys():
@@ -307,12 +316,21 @@ def optimize_adapter(engine, gradient, options, state_id, owner=None):
         next_state, updated.id, {'scope': SCHEMA, 'optimizer': algorithm, 'step': step,
           'gradient_id': engine.store.put_native_tensor_artifact(gradient, owner).id,
           'parent_adapter_id': adapter_id, 'optimizer_options': options}), owner)
+    next_entries = ([{'id': updated.id if entry['id'] == adapter_id else entry['id'],
+                      'scale': float.fromhex(entry['scale_hex'])} for entry in actor_binding['adapters']]
+                    if actor_binding else [updated.id])
+    next_resolved = resolve_adapters(engine, next_entries)
+    next_binding = {'schema': SCHEMA, 'base_native_identity': dict(engine.native_identity),
+                    'adapters': [{'id': ident, 'scale_hex': scale.hex()} for ident, scale, *_ in next_resolved]}
     return {'adapter': updated.meta(), 'optimizer_state_id': state.id, 'step': step,
-            'native_identity': engine.native_identity,
-            'effective_native_identity': effective_identity(engine, resolve_adapters(engine, [updated.id]))}
+            'native_identity': engine.native_identity, 'adapter_binding': next_binding,
+            'effective_native_identity': effective_identity(engine, next_resolved)}
+
 
 
 def validate_state_binding(binding, block):
+    if not all(hasattr(block, name) for name in ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')):
+        raise ValueError('adapted native actor is missing its effective four-field identity')
     if (not isinstance(binding, dict) or set(binding) != {'schema', 'base_native_identity', 'adapters'}
             or binding.get('schema') != SCHEMA or not isinstance(binding.get('base_native_identity'), dict)
             or not isinstance(binding.get('adapters'), list) or not binding['adapters']):
@@ -339,3 +357,16 @@ def validate_state_binding(binding, block):
             raise ValueError('adapted native state scale must be finite and canonical')
     if canonical_json_sha256_hex(binding) != block.checkpoint_sha256:
         raise ValueError('adapted native state effective identity differs from its exact adapter binding')
+
+
+def require_model_execution_actor(model, identity, binding):
+    """Reject adapted replay outside its exact functional forward/backward scope."""
+    if binding is None:
+        # Base replay cannot silently inherit adapter weights from an outer call.
+        if any(frame[0].shared_model is model and frame[2] for frame in _ACTIVE.get()):
+            raise ValueError('native replay base actor differs from the active adapted model')
+        return
+    frame = next((frame for frame in reversed(_ACTIVE.get()) if frame[0].shared_model is model), None)
+    if (frame is None or frame[1] != identity or frame[2] != binding['adapters']
+            or frame[0].native_identity != binding['base_native_identity']):
+        raise ValueError('adapted native replay requires its exact effective actor scope through backward')

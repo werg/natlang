@@ -64,6 +64,13 @@ class NativeTensorArtifact:
                 raise ValueError(f'native tensor {name!r} contains non-finite values')
         if self.provenance is not None and not isinstance(self.provenance, dict):
             raise ValueError('native artifact provenance must be an object')
+        binding = (self.provenance or {}).get('adapter_binding') if self.kind == 'adapter-gradient' else None
+        if binding is not None:
+            from types import SimpleNamespace
+            from .native_adapters import validate_state_binding
+            validate_state_binding(binding, SimpleNamespace(**self.provenance.get('effective_native_identity', {})))
+            if binding['base_native_identity'] != self.native_identity:
+                raise ValueError('adapter gradient actor binding changed its exact base identity')
         return self
 
     def metadata(self):
@@ -171,3 +178,16 @@ def decode_native_tensor_artifact(body):
         return artifact, actual_id
     except (KeyError, TypeError, IndexError, OverflowError, AttributeError, json.JSONDecodeError) as error:
         raise ValueError(f'malformed native tensor artifact: {error}') from error
+
+
+def native_tensor_dependencies(artifact):
+    """Required immutable inputs for interpreting/updating a named artifact."""
+    dependencies = []
+    if (artifact.kind in ('adapter-coefficients', 'adapter-gradient') or
+            artifact.kind == 'optimizer-state' and
+            (artifact.provenance or {}).get('scope') == 'natlang.native-adapter/1'):
+        dependencies = [artifact.source_artifact_id] if artifact.source_artifact_id else []
+    binding = (artifact.provenance or {}).get('adapter_binding') if artifact.kind == 'adapter-gradient' else None
+    if binding:
+        dependencies.extend(entry['id'] for entry in binding['adapters'])
+    return list(dict.fromkeys(dependencies))

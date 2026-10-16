@@ -353,5 +353,10 @@ coefficient, basis and optimizer artifacts together when saving or restoring.
 basis artifacts for the current checkpoint and selecting its advertised matrix
 names. `neuralese-native-tensor-as-state` requires binding adapters with
 `withAdapters`, rather than passing named tensor artifacts as communication
-state. `neuralese-native-adapter-rl-unavailable` requires using native graph
-coefficient objectives until an adapter-aware policy replay service is available.
+state. Native adapter policy learning retains sampling/3 receipts and a durable
+actor bundle containing coefficients and frozen bases. Bind the exact same
+ordered IDs/scales when evaluating its admitted native-policy objective with
+`nativeGraphGradient`. `neuralese-native-actor-changed` means finish or cancel
+the current invocation before changing its adapter binding. Mixed adapter
+bindings across one replay graph require per-invocation executor support and
+remain unavailable; keep one fixed actor binding for that graph.

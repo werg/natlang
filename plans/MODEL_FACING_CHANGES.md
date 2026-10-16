@@ -728,3 +728,14 @@ graph coefficient objectives. Both integration skills include recovery. No
 prompt instruction was added. Live 48-sample executor measurement of these new
 error/recovery forms remains debt for the next useful own-model teacher window;
 functional CPU/CUDA and typed HTTP transport checks qualify mechanisms only.
+
+### 2026-10-16: adapted native actor capture/replay recovery
+
+Unmeasured debt: `neuralese-native-actor-changed` teaches keeping an invocation's
+exact adapter binding until it finishes. Adapter policy graph mismatch errors
+now distinguish effective/base identities and ordered coefficient bindings.
+The former adapter RL blanket error is replaced only for fixed-actor first-order
+coefficient-policy learning; heterogeneous invocation bindings and full-backbone
+actor export/rebinding remain unavailable. Measure approximately48 live executor
+samples per variant in the next own-model teacher window before capability
+adoption; no external teacher generation and no new prompt instruction.

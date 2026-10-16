@@ -424,7 +424,7 @@ def make_handler(engine: Engine):
                         response = engine.submit(request).result()
                         if native:
                             receipt = response.get("x_natlang_rl_capture")
-                            if not isinstance(receipt, dict) or receipt.get("schema") != "natlang.native-rl-sampling/2":
+                            if not isinstance(receipt, dict) or receipt.get("schema") not in {"natlang.native-rl-sampling/2", "natlang.native-rl-sampling/3"}:
                                 raise RequestError("neuralese-view-source", "native view must retain its actual template sampling receipt")
                             source_turns.append({"messages": messages, "tools": TOOLS, "template": dict(TEMPLATE),
                                                  "response": response})

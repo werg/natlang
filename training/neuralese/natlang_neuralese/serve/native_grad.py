@@ -91,7 +91,7 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
         if body.get('graph_sha256') not in (None, graph_sha256):
             raise ValueError('declared graph digest differs from the supplied graph row')
         expected = _identity(engine)
-        from ..model.native_adapters import execution_identity
+        from ..model.native_adapters import execution_identity, execution_binding
         effective = execution_identity(engine)
         if body.get('native_identity') not in (None, expected):
             raise ValueError('gradient request is bound to another exact live checkpoint')
@@ -159,8 +159,6 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
         if not target_tensors:
             raise ValueError('gradient target has no tensors')
         if isinstance(objective_request, dict):
-            if body.get('adapters'):
-                raise ValueError('native-policy replay does not yet bind adapted actor weights; use graph-ce for coefficient gradients')
             if objective_request.get('kind') != 'native-policy':
                 raise ValueError('only the registered native-policy objective is supported')
             spec_path = objective_request.get('path')
@@ -171,8 +169,13 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
             from ..rl.native_replay import NativePolicyObjective
             from ..train.native_state_sft import packed_graph_loss
             objective = NativePolicyObjective(spec_path)
-            if objective.identity != expected:
+            if objective.identity != effective:
                 raise ValueError('native-policy objective is bound to another exact actor checkpoint')
+            from ..model.native_adapters import execution_binding, SCHEMA
+            active = execution_binding(engine)
+            binding = ({'schema': SCHEMA, 'base_native_identity': expected, 'adapters': active} if active else None)
+            if objective.adapter_binding != binding:
+                raise ValueError('native-policy objective adapter binding differs from the exact active actor')
             objective.external_state_overrides = state_overrides
             loss, stats = packed_graph_loss(engine.shared_model, [example], objective=objective)
         else:
@@ -188,7 +191,11 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
                            else 'native-policy-objective/1'), 'graph_id': example.id,
              'graph_sha256': graph_sha256, 'target_kind': kind,
              'target_names': sorted(tensors), 'effective_native_identity': effective,
-             'adapters': body.get('adapters') or [], 'loss': float(loss.detach()), 'stats': stats,
+             'adapters': body.get('adapters') or [],
+             **({'adapter_binding': {'schema': 'natlang.native-adapter/1', 'base_native_identity': expected,
+                 'adapters': execution_binding(engine)}}
+                if body.get('adapters') else {}),
+             'loss': float(loss.detach()), 'stats': stats,
              **({'objective_spec_sha256': objective_request['sha256']} if isinstance(objective_request, dict) else {})}).validate()
         stored = engine.store.put_native_tensor_artifact(artifact, owner)
         return {'loss': float(loss.detach()), 'stats': stats, 'gradient': stored.meta(),

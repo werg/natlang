@@ -65,7 +65,7 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
       const written = new Set<string>();
       for (const [index, turn] of result.source_turns.entries()) {
         const receipt = turn.response?.x_natlang_rl_capture;
-        if (receipt?.schema !== 'natlang.native-rl-sampling/2' || !Array.isArray(receipt.writes))
+        if (!['natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3'].includes(receipt?.schema) || !Array.isArray(receipt.writes))
           throw new Error('neuralese-view-source-integrity: native view turn lacks exact sampled producer provenance');
         const imports = requestNativeStateIds(turn.messages);
         for (const id of imports) await archiveNativeState(client, id);
