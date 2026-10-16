@@ -175,3 +175,140 @@ def verify_handoff(reference, *, requirement=None):
             if not actual or not any(all(actual.get(key)==item[key] for key in ('pid','boot_id','start_ticks')) for item in identities):
                 raise ValueError('raw handoff resident optimizer owner differs from the drained process tree')
     return record,saved
+
+
+RECIPE_HANDOFF='natlang.native-raw-drained-recipe-handoff/1'
+
+
+def _recipe_plan(recipe_path, device):
+    from ..train.recipe import load_recipe, resolve_stage_inputs, _binding_files, recipe_identity_sha256
+    recipe=load_recipe(recipe_path)
+    stages={stage['id']:({} if stage.get('admitted') is False else
+        resolve_stage_inputs(recipe,stage,{'records':None,'pieces':None,'text_data':None}))
+        for stage in recipe['stages']}
+    inputs={item['path']:item['sha256'] for roles in stages.values()
+        for value in roles.values() for item in _binding_files(value)}
+    return {'schema':'natlang.neuralese-recipe-plan/1','recipe':recipe,
+        'recipe_sha256':recipe_identity_sha256(recipe_path),'device':device,
+        'stage_inputs':stages,'inputs':inputs}
+
+
+def _stable_handoff_plan(plan):
+    import copy
+    value=copy.deepcopy(plan)
+    # The existing verifier stamps the wall clock and its archive directory.
+    # All identities, changes and prior inputs remain compared exactly.
+    for entry in value.get('handoffs',[])[-1:]:
+        entry.pop('time',None);entry.pop('superseded_runtime',None)
+    return value
+
+
+def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None):
+    """Persist an existing verified lineage handoff, never a resident rewrite."""
+    from ..train import native_resident as resident
+    from ..train.recipe import lineage_handoff
+    record,saved=verify_handoff(handoff);del saved
+    state_ref=(record.get('resident') or {}).get('current')
+    if state_ref is None:raise ValueError('drained recipe handoff requires its original resident generation')
+    state=json.loads(_bound(state_ref).read_text());directory=Path(record['resident']['directory'])
+    package=Path(package or Path(__file__).resolve().parents[1]).resolve()
+    out=Path(out);out.parent.mkdir(parents=True,exist_ok=True)
+    if out.exists():
+        reference=binding(out);value=verify_drained_recipe_handoff(reference,handoff=handoff)
+        if binding(recipe)!=value['recipe']:raise ValueError('drained recipe handoff recipe changed')
+        return reference
+    with resident.locked(directory):
+        if resident.current(directory) is not None:
+            raise ValueError('retire the saved resident generation before recipe handoff')
+        initial=json.loads((directory/'initial.json').read_text())
+        if resident.owner_alive(initial.get('owner') or {}):
+            raise ValueError('drained recipe handoff has a live optimizer owner')
+        retired=directory/'retired'/(state['generation']+'.json')
+        retirement=json.loads(retired.read_text())
+        if ({k:v for k,v in retirement.items() if k not in ('checkpoint','terminal')}!=state
+                or retirement.get('checkpoint')!=record['checkpoint']
+                or retirement.get('terminal',{}).get('sha256')!=record['terminal']['sha256']):
+            raise ValueError('drained recipe handoff retirement differs from original owner/checkpoint')
+        from ..train.recipe import stage_started
+        if not stage_started(directory.parent,state['payload']['stage_id']):
+            raise ValueError('drained recipe handoff lost the actual started-stage boundary')
+        old_plan=state['payload']['plan'];plan_path=directory.parent/'recipe-plan.json'
+        proposed=_recipe_plan(_bound(binding(recipe)),old_plan['device'])
+        frozen=directory.parent/'runtime/natlang_neuralese'
+        # Validate first; the existing implementation owns runtime archival and
+        # the durable plan commit, including priority/source continuation rules.
+        old_copy=out.with_name(out.stem+'-old-plan.json')
+        installed=json.loads(plan_path.read_text())
+        if installed==old_plan:
+            lineage_handoff(old_plan,proposed,frozen,package,plan_path,directory.parent,dry_run=True)
+            write_json_durable(old_copy,old_plan)
+            updated=lineage_handoff(old_plan,proposed,frozen,package,plan_path,directory.parent)
+        else:
+            # Recover the exact already committed handoff after interruption
+            # between the existing plan commit and this receipt publication.
+            if not old_copy.exists() or json.loads(old_copy.read_text())!=old_plan:
+                raise ValueError('drained recipe handoff requires the final adopted original plan')
+            previous=installed.get('handoffs',[{}])[-1].get('superseded_runtime')
+            old_runtime=directory.parent/previous/'natlang_neuralese' if previous else frozen
+            expected=lineage_handoff(old_plan,proposed,old_runtime,package,plan_path,directory.parent,dry_run=True)
+            if _stable_handoff_plan(expected)!=_stable_handoff_plan(installed):
+                raise ValueError('drained recipe handoff found another installed plan')
+            updated=installed
+        new_copy=out.with_name(out.stem+'-new-plan.json');write_json_durable(new_copy,updated)
+        previous=updated['handoffs'][-1].get('superseded_runtime')
+        old_package=(directory.parent/previous/'natlang_neuralese') if previous else frozen
+        value={'schema':RECIPE_HANDOFF,'handoff':handoff,'checkpoint':record['checkpoint'],
+            'retirement':binding(retired),'old_plan':binding(old_copy),'recipe':binding(recipe),
+            'new_plan':binding(new_copy),'old_package':str(old_package.resolve()),
+            'new_package':str(package),'old_code':resident.code_inventory(old_package),
+            'new_code':resident.code_inventory(package)}
+        write_json_durable(out,value)
+    verify_drained_recipe_handoff(binding(out),handoff=handoff)
+    return binding(out)
+
+
+def verify_drained_recipe_handoff(reference, *, handoff):
+    """Recompute the existing policy verifier; a self-consistent receipt is insufficient."""
+    from ..train import native_resident as resident
+    from ..train.recipe import lineage_handoff
+    value=json.loads(_bound(reference).read_text())
+    if value.get('schema')!=RECIPE_HANDOFF or value.get('handoff')!=handoff:
+        raise ValueError('drained recipe handoff belongs to another original owner')
+    record,saved=verify_handoff(handoff);del saved
+    if value.get('checkpoint')!=record['checkpoint']:
+        raise ValueError('drained recipe handoff changed its exact parent')
+    state=json.loads(_bound(record['resident']['current']).read_text())
+    retirement=json.loads(_bound(value['retirement']).read_text())
+    if ({k:v for k,v in retirement.items() if k not in ('checkpoint','terminal')}!=state
+            or retirement.get('checkpoint')!=record['checkpoint']
+            or retirement.get('terminal',{}).get('sha256')!=record['terminal']['sha256']):
+        raise ValueError('drained recipe handoff retirement changed')
+    prior=json.loads(_bound(value['old_plan']).read_text())
+    if prior!=state['payload']['plan']:
+        raise ValueError('drained recipe handoff lost its final original plan')
+    old_package,new_package=Path(value['old_package']),Path(value['new_package'])
+    if (resident.code_inventory(old_package)!=value['old_code'] or value['old_code']!=prior['code']
+            or resident.code_inventory(new_package)!=value['new_code']):
+        raise ValueError('drained recipe handoff runtime changed')
+    next_plan=json.loads(_bound(value['new_plan']).read_text())
+    proposed=_recipe_plan(_bound(value['recipe']),prior['device'])
+    out=Path(record['resident']['directory']).parent
+    expected=lineage_handoff(prior,proposed,old_package,new_package,out/'recipe-plan.json',out,dry_run=True)
+    if (_stable_handoff_plan(expected)!=_stable_handoff_plan(next_plan)
+            or next_plan['code']!=value['new_code']):
+        raise ValueError('drained recipe handoff plan differs from verified continuation')
+    return value
+
+
+def main(argv=None):
+    import argparse
+    parser=argparse.ArgumentParser(description='Verify and persist a drained recipe/runtime handoff without model updates.')
+    parser.add_argument('--handoff',required=True,help='JSON binding of the original immutable optimizer handoff')
+    parser.add_argument('--recipe',type=Path,required=True)
+    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--package',type=Path)
+    args=parser.parse_args(argv)
+    print(json.dumps(prepare_drained_recipe_handoff(json.loads(args.handoff),args.recipe,args.output,package=args.package)))
+
+
+if __name__=='__main__':main()

@@ -47,7 +47,14 @@ def configure_model(plan_path,declaration,handoff,out):
         raise ValueError('raw bootstrap drained another student/base identity')
     del saved  # release mapped weight references before actor/model construction
     active_declaration=declaration
-    if (record.get('resident') or {}).get('current'):
+    if declaration.get('drained_recipe_handoff'):
+        from .native_raw_handoff import verify_drained_recipe_handoff
+        transition=verify_drained_recipe_handoff(declaration['drained_recipe_handoff'],handoff=handoff)
+        plan=json.loads(_bound(transition['new_plan']).read_text())
+        stage_inputs=plan['stage_inputs'][declaration['production_stage']]
+        active_declaration={**declaration,'production_recipe':transition['recipe'],
+            'seed_native_graphs':stage_inputs['native_graphs'],'held_native_graphs':stage_inputs['held_native_graphs']}
+    elif (record.get('resident') or {}).get('current'):
         from ..train.native_resident import current
         reference=record['resident']['current']
         _release_requirement(declaration,{'resident_current':reference})
@@ -252,6 +259,13 @@ def _supervised_job(continuation,jobdir,config,cursor,stop):
 def _release_requirement(declaration,value):
     """Recheck the existing resident append contract, preserving fixed foundation."""
     requirement={**declaration['handoff_requirement'],'trainer_exit':None,'trainer_launch':None,'resident_adoption':None}
+    transition_ref=declaration.get('drained_recipe_handoff')
+    if transition_ref:
+        from .native_raw_handoff import verify_drained_recipe_handoff
+        transition=json.loads(_bound(transition_ref).read_text())
+        transition=verify_drained_recipe_handoff(transition_ref,handoff=transition['handoff'])
+        from ..train.recipe import recipe_identity_sha256
+        requirement['recipe_sha256']=recipe_identity_sha256(_bound(transition['recipe']))
     reference=value.get('resident_current')
     if reference is None:return requirement
     from ..train.native_resident import current,_contract
