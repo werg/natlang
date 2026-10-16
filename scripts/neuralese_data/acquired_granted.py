@@ -270,6 +270,10 @@ def swe_raw_contexts(records, *, source_id=None):
     Returns (representative original row, normalized messages, event evidence).
     Nonconversational events remain byte-addressed evidence, not model targets.
     """
+    if len(records)==1 and isinstance(records[0][1],dict) and isinstance(records[0][1].get('sessionId'),str) and isinstance(records[0][1].get('messages'),list):
+        from .acquired_swe_formats import gemini_session_context
+        yield gemini_session_context(records)
+        return
     if any(value.get('type') == 'response_item' for _, value in records if isinstance(value,dict)):
         from .acquired_swe_formats import codex_context
         yield codex_context(records,source_id)

@@ -72,8 +72,22 @@ def iter_acquired_file_rows(path):
         opener=gzip.open if str(path).endswith('.gz') else open_jsonl_text
         options={'mode':'rt','encoding':'utf-8'} if str(path).endswith('.gz') else {}
         with opener(path,**options) as stream:
+            first=stream.readline()
+            # Some released SWE transcript files use a .jsonl suffix while
+            # containing one pretty-printed session document. Recognize only
+            # an isolated top-level opener; ordinary one-object-per-line JSONL
+            # remains on the streaming path below.
+            if first.strip() in ('{','['):
+                document=json.loads(first+stream.read())
+                if isinstance(document,list):
+                    yield from enumerate(document)
+                else:
+                    yield 0,document
+                return
+            if first.strip():
+                yield 0,json.loads(first)
             for number,line in enumerate(stream):
-                if line.strip():yield number,json.loads(line)
+                if line.strip():yield number+1,json.loads(line)
     else:
         raise Reject('unsupported acquired source file: '+path.name)
 
@@ -94,8 +108,14 @@ def iter_acquired_file_row_ids(path):
         opener=gzip.open if str(path).endswith('.gz') else open_jsonl_text
         options={'mode':'rt','encoding':'utf-8'} if str(path).endswith('.gz') else {}
         with opener(path,**options) as stream:
+            first=stream.readline()
+            if first.strip() in ('{','['):
+                document=json.loads(first+stream.read())
+                yield from range(len(document)) if isinstance(document,list) else (0,)
+                return
+            if first.strip():yield 0
             for number,line in enumerate(stream):
-                if line.strip():yield number
+                if line.strip():yield number+1
         return
     raise Reject('metadata-only row accounting supports Parquet and JSONL files only')
 

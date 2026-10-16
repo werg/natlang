@@ -199,6 +199,46 @@ def test_codex_original_instructions_tool_code_results_and_redacted_input_retain
     assert messages[-1]['content']=='Original final' and evidence['redacted_context_rows']==[2]
 
 
+def test_pretty_printed_jsonl_session_document_is_read_as_one_original_row(tmp_path):
+    from scripts.neuralese_data.acquired_agents import iter_acquired_file_rows,iter_acquired_file_row_ids
+    path=tmp_path/'session.jsonl'
+    document={'sessionId':'session-1','messages':[{'type':'user','content':[{'text':'Full task'}]},
+        {'type':'gemini','content':'Full answer','thoughts':[]}], 'kind':'session'}
+    path.write_text(json.dumps(document,indent=2,ensure_ascii=False)+'\n')
+    assert list(iter_acquired_file_rows(path))==[(0,document)]
+    assert list(iter_acquired_file_row_ids(path))==[0]
+    # The ordinary line-delimited case remains streaming and keeps row ordinals.
+    path.write_text(json.dumps({'row':0})+'\n'+json.dumps({'row':1})+'\n')
+    assert list(iter_acquired_file_rows(path))==[(0,{'row':0}),(1,{'row':1})]
+    assert list(iter_acquired_file_row_ids(path))==[0,1]
+
+
+def test_gemini_session_preserves_reasoning_tool_results_warnings_and_source_ordinals():
+    from scripts.neuralese_data.acquired_granted import swe_raw_contexts
+    result={'functionResponse':{'id':'call-1','name':'shell','response':{'output':'Observed output','status':'error'}}}
+    document={'sessionId':'session-1','projectHash':'project-sha','kind':'session','messages':[
+        {'id':'u','type':'user','content':[{'text':'Complete task'}]},
+        {'id':'a1','type':'gemini','model':'original-model','content':'I will inspect.',
+         'thoughts':[{'subject':'Plan','description':'Exact source reasoning','timestamp':'2026-01-01T00:00:00Z'}],
+         'toolCalls':[{'id':'call-1','name':'shell','args':{'command':'ls -la'},'result':[result],'status':'error'}]},
+        {'id':'warning','type':'warning','content':'Original runtime warning.'},
+        {'id':'a2','type':'gemini','model':'original-model','content':'Final answer.','thoughts':[]} ]}
+    _,messages,evidence=next(swe_raw_contexts([(0,document)]))
+    assert messages[0]=={'role':'user','content':'Complete task'}
+    assert messages[1]['role']=='assistant' and messages[1]['reasoning']=='Plan\nExact source reasoning'
+    assert messages[1]['tool_calls'][0]['id']=='call-1'
+    assert json.loads(messages[1]['tool_calls'][0]['function']['arguments'])=={'command':'ls -la'}
+    assert messages[2]=={'role':'tool','tool_call_id':'call-1','name':'shell',
+        'content':json.dumps([result],ensure_ascii=False,separators=(',',':'))}
+    assert messages[3]=={'role':'system','content':'Original runtime warning.'}
+    assert messages[-1]=={'role':'assistant','content':'Final answer.'}
+    assert evidence['source_format']=='gemini-session-document'
+    assert evidence['original_message_rows']==[0,1,2,3]
+    assert evidence['warning_message_rows']==[2]
+    assert evidence['full_source_turn_count']==4
+    assert evidence['gemini_tool_call_bindings'][0]['status']=='error'
+
+
 def test_swe_real_reader_index_join_all_events_accounted_and_no_inferred_edges(tmp_path,monkeypatch):
     import hashlib
     from datetime import datetime,timezone

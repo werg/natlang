@@ -88,3 +88,94 @@ def codex_context(records,session_id):
         'original_message_rows':rows,'missing_ancestry':{},'original_models':sorted(models),
         'redacted_context_rows':redacted,'source_format':'codex-response-items',
         'raw_context_not_normalized_table':True,'custom_tool_argument_adaptation':'exact-input-field'}
+
+
+def gemini_session_context(records):
+    """Read one released pretty-printed Gemini session as a full trajectory.
+
+    The filename suffix is misleading for this source family: each file is a
+    single JSON session document. Keep source turn order, reasoning, tool
+    dispatches, and the result nested on each original dispatch.
+    """
+    from .acquired_granted import complete_messages
+    if len(records)!=1:
+        raise Reject('Gemini session document must have one source row')
+    row_index,document=records[0]
+    if not isinstance(document,dict) or not isinstance(document.get('sessionId'),str) or not isinstance(document.get('messages'),list):
+        raise Reject('unsupported pretty-printed SWE session document')
+    raw_messages=document['messages']
+    normalized=[];models=set();warning_rows=[];turn_rows=[];call_bindings=[]
+    for index,original in enumerate(raw_messages):
+        if not isinstance(original,dict):
+            raise Reject('original Gemini session turn is not an object')
+        kind=original.get('type')
+        if kind=='user':
+            content=original.get('content')
+            if not isinstance(content,list):
+                raise Reject('original Gemini user turn lacks structured content')
+            # Normalize only the released text-only user block shape. Other
+            # blocks remain addressable JSON through the common block reader.
+            blocks=[]
+            for block in content:
+                if isinstance(block,dict) and isinstance(block.get('text'),str) and set(block)<= {'text'}:
+                    blocks.append({'type':'text','text':block['text']})
+                else:
+                    blocks.append(block)
+            normalized.append({'role':'user','content':blocks})
+        elif kind=='gemini':
+            content=original.get('content')
+            if content is not None and not isinstance(content,str):
+                raise Reject('original Gemini assistant content is not text')
+            reasoning=original.get('thoughts') or []
+            if not isinstance(reasoning,list):
+                raise Reject('original Gemini thoughts are not a list')
+            reasoning_parts=[]
+            for thought in reasoning:
+                if not isinstance(thought,dict) or not isinstance(thought.get('description'),str):
+                    raise Reject('original Gemini thought lacks exact description text')
+                subject=thought.get('subject')
+                reasoning_parts.append((str(subject)+'\n' if isinstance(subject,str) and subject else '')+thought['description'])
+            calls=[];results=[]
+            tool_calls=original.get('toolCalls') or []
+            if not isinstance(tool_calls,list):
+                raise Reject('original Gemini toolCalls is not a list')
+            for call in tool_calls:
+                if not isinstance(call,dict) or not isinstance(call.get('id'),str) or not call['id'] or not isinstance(call.get('name'),str) or not call['name']:
+                    raise Reject('original Gemini tool call lacks exact id or name')
+                if 'args' not in call:
+                    raise Reject('original Gemini tool call lacks original arguments')
+                calls.append({'id':call['id'],'function':{'name':call['name'],'arguments':call['args']}})
+                call_bindings.append({'message_index':index,'call_id':call['id'],'name':call['name'],
+                    'arguments_sha256':__import__('hashlib').sha256(__import__('json').dumps(call['args'],ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest(),
+                    'status':call.get('status'),'result_sha256':__import__('hashlib').sha256(__import__('json').dumps(call.get('result'),ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest() if 'result' in call else None})
+                # The released result is explicitly nested under this exact
+                # call, so retain the complete object as observed tool output.
+                if 'result' in call and call['result'] is not None:
+                    results.append({'role':'tool','tool_call_id':call['id'],'name':call['name'],
+                                    'content':__import__('json').dumps(call['result'],ensure_ascii=False,separators=(',',':'))})
+            assistant={'role':'assistant','content':content}
+            if reasoning_parts:assistant['reasoning']='\n\n'.join(reasoning_parts)
+            if calls:assistant['tool_calls']=calls
+            normalized.append(assistant);normalized.extend(results)
+            if original.get('model'):models.add(str(original['model']))
+        elif kind=='warning':
+            content=original.get('content')
+            if not isinstance(content,str):
+                raise Reject('original Gemini warning lacks exact text')
+            # Warnings are system context, never assistant targets.
+            normalized.append({'role':'system','content':content});warning_rows.append(index)
+        else:
+            raise Reject('unsupported original Gemini session turn type: '+str(kind))
+        turn_rows.append(index)
+    messages=complete_messages(normalized)
+    if not any(message['role']=='user' for message in messages) or not any(message['role']=='assistant' for message in messages):
+        raise Reject('Gemini source lacks original request/assistant context')
+    from .acquired_granted import _digest
+    session_id=document['sessionId']
+    return row_index,messages,{'session_id':session_id,'leaf_uuid':session_id,
+        'original_message_rows':turn_rows,'missing_ancestry':{},'original_models':sorted(models),
+        'source_format':'gemini-session-document','raw_context_not_normalized_table':True,
+        'source_project_hash':document.get('projectHash'),'source_document_kind':document.get('kind'),
+        'source_document_sha256':_digest(document),'warning_message_rows':warning_rows,
+        'gemini_tool_call_bindings':call_bindings,'reasoning_source_field':'thoughts',
+        'full_source_turn_count':len(raw_messages)}
