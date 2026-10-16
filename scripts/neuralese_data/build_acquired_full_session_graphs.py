@@ -124,7 +124,9 @@ def _stop_writer_without_deleting_temp(writer):
         writer.out.close()
 
 
-def completed_shards(shard_root, binding, expected_sessions):
+def completed_shards(shard_root, binding, expected_sessions, *,
+                     schema='natlang.acquired-full-session-shard/1',
+                     additional_outputs=()):
     """Return a contiguous, content-verified session frontier; reject broken committed receipts."""
     binding_sha = canonical_json_sha256_hex(binding)
     frontier = 0
@@ -137,14 +139,14 @@ def completed_shards(shard_root, binding, expected_sessions):
             shutil.rmtree(directory)
             continue
         receipt = json.loads(receipt_path.read_text())
-        if receipt.get('schema') != 'natlang.acquired-full-session-shard/1' or receipt.get('binding_sha256') != binding_sha:
+        if receipt.get('schema') != schema or receipt.get('binding_sha256') != binding_sha:
             raise ValueError(f'completed session shard has different source/policy/runtime binding: {directory}')
         start, stop = receipt.get('source_record_start'), receipt.get('source_record_stop')
         if (start != frontier or directory.name != f'shard-{start:08d}' or type(stop) is not int
                 or stop <= start or stop > expected_sessions or receipt.get('source_record_count') != stop - start):
             raise ValueError(f'completed session shards are not a contiguous in-range prefix: {directory}')
         if {item.get('path') for item in receipt.get('outputs', [])} != {
-                'train/native-graphs.jsonl.zst', 'test/native-graphs.jsonl.zst'}:
+                'train/native-graphs.jsonl.zst', 'test/native-graphs.jsonl.zst', *additional_outputs}:
             raise ValueError(f'completed session shard has an unexpected output set: {directory}')
         output_row_counts = {}
         for output in receipt.get('outputs', []):

@@ -1,0 +1,193 @@
+"""Exact source-curated offline preference eligibility; no numerical/capacity claim."""
+from __future__ import annotations
+
+import argparse
+from collections import Counter
+import json
+import os
+from pathlib import Path
+
+import torch
+
+from natlang_neuralese.common.hashing import canonical_json_sha256_hex,sha256_file_hex
+from natlang_neuralese.common.jsonio import write_json_durable
+from natlang_neuralese.data.native_graph_schema import parse_graph
+from natlang_neuralese.model.native_model import tokenizer_inventory
+from natlang_neuralese.train.native_preference import NativePreferenceObjective,SCHEMA,KIND
+from scripts.neuralese_data.acquired_preferences import normalized_preference_records
+from scripts.neuralese_data.build_acquired_full_session_graphs import sessions,completed_shards
+from scripts.neuralese_data.build_acquired_preference_graphs import (
+    SHARD_SCHEMA,ADDITIONAL,protected_pair,_runtime,_bound,ROOT)
+from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
+from scripts.neuralese_data.decision_holds import load_decision_holds
+from scripts.neuralese_data.prepare_acquired_session_admission import bound,verify_global_source_closure,decision_contract
+
+
+def verify_conversion(directory,*,protection_path,base):
+    directory=Path(directory);receipt_path=directory/'receipt.json'
+    receipt=json.loads(receipt_path.read_text());binding=receipt.get('binding') or {}
+    if (receipt.get('schema')!='natlang.acquired-offline-preference-graphs/1'
+            or receipt.get('training_admission') is not False or receipt.get('capacity_qualified') is not False
+            or binding.get('runtime')!=_runtime()):
+        raise ValueError('offline admission requires its exact qualified renderer and complete conversion receipt')
+    protection=current_protection(protection_path)
+    verify_global_source_closure(protection_path,protection)
+    if binding.get('protection')!=protection['proof']:
+        raise ValueError('offline preference conversion uses different current source protection')
+    holds=sorted((ROOT/'training/decision-holds').glob('*.jsonl'))
+    decision_ids,decision_bindings=load_decision_holds(holds)
+    if decision_contract(binding['decision_holds'])!=decision_contract(decision_bindings):
+        raise ValueError('offline preference conversion uses different decision holds')
+    if binding['prepared_tokenizer']['base_files']!=tokenizer_inventory(base):
+        raise ValueError('offline model selector differs from its exact tokenizer base inventory')
+    export_path=bound(binding['export_receipt']['path'],binding['export_receipt'])
+    export=json.loads(export_path.read_text())
+    source=bound(binding['source']['path'],binding['source'])
+    if (source.resolve()!= (export_path.parent/'full-trajectories.jsonl.zst').resolve()
+            or export['outputs'][source.name]!=binding['source']['sha256']):
+        raise ValueError('offline source differs from its complete normalized source contract')
+    expected={};omitted=[];frontier=0;units=0
+    for indices,record,error in normalized_preference_records(source):
+        if tuple(indices)!=tuple(range(frontier,frontier+len(indices))):
+            raise ValueError('offline normalized source rows are omitted, duplicated or reordered')
+        frontier+=len(indices);units+=1
+        record,reason=(None,str(error)) if error else protected_pair(record,protection,decision_ids)
+        if reason:
+            omitted.append({'normalized_source_rows':list(indices),'reason':reason});continue
+        sha=canonical_json_sha256_hex(record)
+        if sha in expected:raise ValueError('offline preference source repeats an immutable source occurrence')
+        expected[sha]={'split':record['split'],'groups':record['source_groups'],
+            'source':record['source'],'normalized_source_rows':list(indices)}
+    if (frontier!=export['complete_sessions'] or frontier!=binding['normalized_sessions']
+            or units!=binding['source_units']):
+        raise ValueError('offline preference complete source accounting differs')
+    actual_sessions=0
+    for value in sessions(source):
+        if value['source_file']!=export['contract']['source'] or value['source_revision']!=export['contract']['revision']:
+            raise ValueError('offline normalized session changed its original source binding')
+        actual_sessions+=1
+    if actual_sessions!=frontier:raise ValueError('offline source session count differs')
+    end,shards=completed_shards(directory/'pair-shards',binding,units,schema=SHARD_SCHEMA,additional_outputs=ADDITIONAL)
+    if end!=units or shards!=receipt['shards']:
+        raise ValueError('offline conversion lacks its exact completed durable source frontier')
+    for item in [*receipt['outputs'],receipt['objective'],receipt['row_proof'],receipt['omissions']]:
+        bound(item['path'],item)
+    if list(sessions(receipt['omissions']['path']))!=omitted:
+        raise ValueError('offline omission ledger differs from current exact source eligibility')
+    objective=NativePreferenceObjective(receipt['objective']['path'])
+    if {'kind':objective.kind,'beta':objective.beta,'margin':objective.margin}!=binding['objective']:
+        raise ValueError('offline objective differs from declared conversion objective')
+    proofs={};groups={'train':set(),'test':set()};counts=Counter();seen_source=set();seen_ids=set();outputs=[]
+    for output in receipt['outputs']:
+        path=Path(output['path']);split=path.parent.name
+        if split not in groups or path.resolve()!=(directory/split/'native-graphs.jsonl.zst').resolve():
+            raise ValueError('offline admission consumes aggregate outputs only')
+        rows=0;tokens=0;maximum=0
+        for row in sessions(path):
+            example=parse_graph(row,tokenizer_fingerprint=binding['prepared_tokenizer']['expanded_fingerprint'])
+            conversion=row.get('conversion') or {};source_sha=conversion.get('source_record_sha256')
+            original=expected.get(source_sha)
+            if (original is None or source_sha in seen_source or example.id in seen_ids
+                    or row.get('required_objective')!=KIND or conversion.get('ordinary_ce_targets')!=0
+                    or conversion.get('native_on_policy') is not False or example.split!=split
+                    or split!=original['split'] or set(example.source_groups)!=set(original['groups'])
+                    or conversion.get('source_preference')!=original['source']):
+                raise ValueError('offline graph source, split, alternatives or objective admission differs')
+            with torch.no_grad():objective.forward_inputs({'examples':[example]})
+            spec=objective.rows[example.id]
+            if spec['source_record_sha256']!=source_sha or spec['source_preference']!=original['source']:
+                raise ValueError('offline objective changed original preference provenance')
+            seen_source.add(source_sha);seen_ids.add(example.id);groups[split].update(example.source_groups)
+            proofs[example.id]={'id':example.id,'graph_sha256':canonical_json_sha256_hex(row),
+                'source_groups':list(example.source_groups),'split':split,
+                'normalized_source_rows':original['normalized_source_rows'],'source_record_sha256':source_sha}
+            rows+=1;tokens+=example.plan.token_count;maximum=max(maximum,example.plan.token_count)
+        if rows!=output['rows']:raise ValueError('offline aggregate row count differs from its conversion receipt')
+        counts['pairs:'+split]+=rows;counts['tokens:'+split]+=tokens;counts['max_tokens']=max(counts['max_tokens'],maximum)
+        outputs.append({**output,'split':split,'tokens':tokens,'max_tokens':maximum})
+    if seen_source!=set(expected) or seen_ids!=set(objective.rows):
+        raise ValueError('offline admission lost or added jointly bound source preferences')
+    row_proofs=list(sessions(receipt['row_proof']['path']))
+    if len(row_proofs)!=len(proofs) or {p['id'] for p in row_proofs}!=set(proofs) or any(proofs[p['id']]!=p for p in row_proofs):
+        raise ValueError('offline row proof inventory differs from complete exact graph/source joins')
+    if groups['train'] & groups['test']:raise ValueError('offline train/held groups overlap')
+    if current_protection(protection_path)!=protection or decision_contract(load_decision_holds(holds)[1])!=decision_contract(decision_bindings):
+        raise ValueError('offline protections changed during admission')
+    for item in [binding['export_receipt'],binding['source'],*receipt['outputs'],receipt['objective'],receipt['row_proof'],receipt['omissions']]:
+        bound(item['path'],item)
+    return {'receipt':_bound(receipt_path),'objective':receipt['objective'],'source':binding['source'],
+        'outputs':outputs,'counts':dict(counts),'groups':{key:sorted(value) for key,value in groups.items()},
+        'proofs':proofs,'source_membership':sorted(expected),'source_units':units,'normalized_sessions':frontier}
+
+
+def main(argv=None):
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--models',required=True,help='JSON model->{base,conversions:[directory],ordinary_held:{path,sha256}}')
+    parser.add_argument('--protection',required=True,type=Path);parser.add_argument('--output',required=True,type=Path)
+    args=parser.parse_args(argv)
+    from scripts.neuralese_data.conversion_output_lease import acquire_output_lease
+    with acquire_output_lease(args.output):return prepare(args)
+
+
+def prepare(args):
+    models=json.loads(args.models)
+    initial_protection=current_protection(args.protection)
+    initial_runtime=_runtime()
+    initial_holds=load_decision_holds(sorted((ROOT/'training/decision-holds').glob('*.jsonl')))[1]
+    if not isinstance(models,dict) or len(models)<2:raise ValueError('offline admission requires both production model views')
+    if any(path.name!='.conversion.lock' for path in args.output.iterdir()):
+        raise ValueError('offline admission output must be a new immutable proposal directory')
+    verified={};reference=None;all_groups={'train':set(),'test':set()}
+    for name,declaration in models.items():
+        views=[verify_conversion(path,protection_path=args.protection,base=declaration['base']) for path in declaration['conversions']]
+        membership=[source for view in views for source in view['source_membership']]
+        if len(set(membership))!=len(membership):raise ValueError('offline admission repeats source pairs across conversions')
+        if reference is not None and set(membership)!=reference:raise ValueError('offline model views differ in exact source pair membership')
+        reference=set(membership);verified[name]=views
+        for split in all_groups:
+            all_groups[split].update(group for view in views for group in view['groups'][split])
+        held=bound(declaration['ordinary_held']['path'],declaration['ordinary_held'])
+        from natlang_neuralese.data.native_sources import NativeGraphSource
+        first=json.loads(Path(views[0]['receipt']['path']).read_text())
+        fingerprint=first['binding']['prepared_tokenizer']['expanded_fingerprint']
+        held_source=NativeGraphSource(held,fingerprint,required_split='test')
+        all_groups['test'].update(held_source.groups)
+    if all_groups['train']&all_groups['test']:raise ValueError('offline cohort global train/held overlap')
+    if (current_protection(args.protection)!=initial_protection or _runtime()!=initial_runtime
+            or decision_contract(load_decision_holds(sorted((ROOT/'training/decision-holds').glob('*.jsonl')))[1])!=decision_contract(initial_holds)):
+        raise ValueError('offline source protection/holds/runtime changed across model verification')
+    entrypoints={}
+    for name,views in verified.items():
+        rows={};specification=None;sources={'train':[],'test':[]}
+        for view in views:
+            objective=json.loads(Path(view['objective']['path']).read_text())
+            declaration={key:objective[key] for key in ('schema','kind','beta','margin')}
+            if specification is not None and declaration!=specification:raise ValueError('offline objective declarations differ')
+            specification=declaration
+            if set(rows)&objective['rows'].keys():raise ValueError('offline aggregate objective repeats a pair graph')
+            rows.update(objective['rows'])
+            for output in view['outputs']:
+                if output['rows']:
+                    sources[output['split']].append({'kind':'native-graphs','path':os.path.relpath(output['path'],args.output),
+                        'sha256':output['sha256'],'weight':1.,'epochs':1})
+        if not sources['train']:raise ValueError('offline cohort has no eligible training pairs')
+        ordinary=models[name]['ordinary_held']
+        sources['test'].insert(0,{'kind':'native-graphs','path':os.path.relpath(ordinary['path'],args.output),
+                                'sha256':ordinary['sha256'],'weight':1.,'epochs':1})
+        for split in sources:
+            write_json_durable(args.output/f'{name}-{split}-sources.json',{'schema':'natlang.native-graph-sources/1','sources':sources[split]})
+        write_json_durable(args.output/f'{name}-objective.json',{**specification,'offline':True,'native_on_policy':False,'rows':rows})
+        entrypoints[name]={'kind':'native_offline_preference','native_graphs':_bound(args.output/f'{name}-train-sources.json'),
+            'held_native_graphs':_bound(args.output/f'{name}-test-sources.json'),'objective_spec':_bound(args.output/f'{name}-objective.json'),
+            'requires_current_shared_participant_and_capacity_qualification':True,'earned_pair_visits':0}
+    result={'schema':'natlang.acquired-offline-preference-admission/1','status':'passed','training_admission':False,
+        'admission_class':'source-curated-offline-pairwise-preferences','oracle_verified':False,
+        'numerical_rerender_claimed':False,'native_execution_verified':False,'capacity_qualified':False,
+        'source_eligibility_scope':'byte-bound qualified conversion plus all-row exact source/split/objective joins; separate actual-tokenizer samples',
+        'protection':current_protection(args.protection)['proof'],'models':verified,'training_entrypoints':entrypoints,
+        'training_sources':'aggregate graph outputs only; durability shards and original chosen SFT are not extra preference visits'}
+    write_json_durable(args.output/'audit.json',result)
+    return result
+
+
+if __name__=='__main__':main()

@@ -92,3 +92,38 @@ SFT selectors. Resident hot append remains its existing CE-only exact
 transaction; preference source/objective append uses safe stop and the same
 shared trainer resume until an objective-aware resident transaction is qualified.
 No preference graph may qualify a producer/consumer foundation.
+
+
+## Durable source conversion and source eligibility
+
+`build_acquired_preference_graphs` consumes the already authenticated complete
+normalized source exports, retaining both alternatives once. Exact adjacent
+source file/row/revision/pair bindings join them; no similarity join or guessed
+reward creates a pair. A failed chosen trajectory cannot become preferred
+behavior. An explicitly rejected failed trajectory remains a negative
+alternative and receives no positive CE credit. Existing quality, pending,
+decision and connected held protection apply jointly to both histories.
+
+The builder reuses the full-session durable shard verifier with explicit schema
+and additional immutable objective/row-proof files. It streams one pair at a
+time, even within a100-record durability shard. Resume authenticates completed
+source frontier and every bound output before skipping work. Aggregate graph
+files are the only training sources; durability shards are not additional
+exposure. `prepare_acquired_preference_admission` independently checks all
+normalized source memberships, omissions, row bindings, exact objective masks,
+protected splits, both model views and current ordinary held prefix. It emits
+bound shared-trainer entrypoints and a source-curated eligibility audit.
+
+These exact verifiers do not independently re-render every stored token, run
+models or grant memory capacity. Actual complete Miro source samples are
+rendered through both production tokenizers in focused tests; actual target
+capacity and production registration remain separate explicit prerequisites.
+Use `--export-receipt`, `--base-tokenizer`, `--protection`, the complete repeated
+`--decision-hold` set and `--output` for conversion. The admission command takes
+`--models` JSON entries with `base`, `conversions` and byte-bound
+`ordinary_held`, plus current `--protection` and a new immutable `--output`.
+After source registration and whole-pair capacity qualification, declare kind
+`native_offline_preference` with `native_graphs`, `held_native_graphs`,
+`objective_spec` and the actual prior participant checkpoint. Existing recipe
+and mandatory interleave consume its remaining pair visits through later
+semantic/RL/SFT cycles; no separate preference trainer or frozen model is used.
