@@ -279,12 +279,19 @@ def sparse_row_updates(model, before):
         parameter = getattr(model, name)
         old, current = previous.float(), parameter.detach().float()
         gradient = parameter.grad
+        gradient_present = gradient is not None
         gradient = torch.zeros_like(current) if gradient is None else gradient.detach().float()
-        values = torch.stack((gradient.norm(dim=-1), (current-old).norm(dim=-1),
-                              current.norm(dim=-1), (current != old).sum(dim=-1).float()), dim=-1).cpu().tolist()
+        delta = current - old
+        values = torch.stack((gradient.norm(dim=-1), delta.norm(dim=-1),
+                              current.norm(dim=-1), (current != old).sum(dim=-1).float(),
+                              (gradient * delta).sum(dim=-1)), dim=-1).cpu().tolist()
         ids = model.token_override_ids if name.startswith('extra_') else model.marker_ids
         result[name] = {'dtype': str(parameter.dtype), 'rows': [
             {'token_id': token, 'gradient_l2': row[0], 'update_l2': row[1],
+             'gradient_present': gradient_present,
+             'gradient_update_dot': row[4] if gradient_present else None,
+             'gradient_update_cosine': row[4] / (row[0] * row[1])
+                 if gradient_present and row[0] > 0 and row[1] > 0 else None,
              'weight_l2': row[2], 'changed_elements': int(row[3]), 'elements': current.shape[-1]}
             for token, row in zip(ids, values)]}
     return result
@@ -327,16 +334,22 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         return loss, details
     hidden = result['h_final'][0]
     losses, details = [], []
+    boundary_ids = set((*getattr(model, 'marker_ids', ()), *getattr(model, 'token_override_ids', ())))
     for graph_index, example in enumerate(examples):
         queries, targets, weights = [], [], []
+        boundary_targets = {str(token): {'count': 0, 'weight': 0.} for token in sorted(boundary_ids)}
         for node, offset in zip(example.plan.invocations, example.plan.offsets):
             for local in range(1, len(node.token_ids)):
                 target = offset + local
                 weight = example.target_weights[target]
                 if weight > 0:
                     queries.append(physical_rows[graph_index][target - 1])
-                    targets.append(int(node.token_ids[local]))
+                    token = int(node.token_ids[local])
+                    targets.append(token)
                     weights.append(weight)
+                    if token in boundary_ids:
+                        boundary_targets[str(token)]['count'] += 1
+                        boundary_targets[str(token)]['weight'] += float(weight)
         if not queries:
             raise ValueError(f'native graph {examples[graph_index].id!r} has no supervised target')
         query_ids = torch.tensor(queries, device=hidden.device)
@@ -358,6 +371,7 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         denominator = token_weights.sum()
         losses.append(total / denominator)
         details.append({'weight': float(denominator.detach()),
+                        'boundary_targets': boundary_targets,
                         'supervised_tokens': len(queries),
                         'packed_physical_tokens': plan.token_count,
                         'original_physical_tokens': sum(item.plan.token_count for item in examples),
@@ -1088,6 +1102,13 @@ def main(argv=None):
                 progress['physical_forward_tokens'] = physical_tokens
                 progress['reused_prefix_tokens'] = details[0]['original_physical_tokens'] - physical_tokens
                 progress['physical_forward_tokens_per_second'] = physical_tokens / max(seconds, 1e-9)
+                progress['communication_graphs'] = sum(bool(train.entries[index].get('communication')) for index in indices)
+                progress['boundary_targets'] = {
+                    token: {'count': sum(item['boundary_targets'][token]['count'] for item in details),
+                            'weight': sum(item['boundary_targets'][token]['weight'] for item in details),
+                            'objective_weight': sum(item['boundary_targets'][token]['weight'] / item['weight']
+                                                    for item in details) / len(details)}
+                    for token in details[0]['boundary_targets']}
             if str(args.device).startswith('cuda'):
                 progress['cuda_memory_bytes'] = {'allocated': torch.cuda.memory_allocated(args.device),
                     'reserved': torch.cuda.memory_reserved(args.device),

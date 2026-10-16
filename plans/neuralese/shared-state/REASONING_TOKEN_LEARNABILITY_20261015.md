@@ -1,5 +1,19 @@
 # Frozen reasoning-token rows prevent reliable delimiter learning
 
+## Per-update diagnosis (2026-10-16)
+
+Read actual positive control targets and parameter changes together. The shared
+packed loss records each boundary's gold count and weight, excluding masked and
+forced targets. Training progress also records its coefficient in the actual
+mean-of-graph weighted objective and the communication graph count. This is
+exact accounting in the existing forward, not a separate evaluation or a new
+loss weight. Per-row telemetry reports gradient presence, gradient dot committed
+parameter delta and their cosine. A zero gradient with a nonzero momentum-driven
+update stays distinct from a missing gradient; neither is described as descent.
+Only tiny existing sparse-row snapshots are used, with no extra model forward,
+RNG draw or optimizer action. Compare these facts before blaming model capacity
+or changing the learning objective. Both architecture ports share this mechanism.
+
 The LFM QAD native training lineage needs learned input and output rows for its
 existing thinking delimiters. Do not remove teacher reasoning or discard the
 useful backbone training. Continue from the latest exact parent after an explicit,
