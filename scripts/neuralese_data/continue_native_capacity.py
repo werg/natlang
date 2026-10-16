@@ -28,6 +28,7 @@ METADATA_CHANGES = {
     'train/native_state_sft.py', 'train/recipe.py', 'train/native_source_streams.py',
     'train/native_pending_sources.py', 'train/native_continuation.py',
     'train/native_readiness.py', 'train/native_resident.py',
+    'train/native_source_preparation.py', 'data/native_source_tree.py',
     'rl/native_supervised.py', 'rl/production.py',
 }
 LOADER_IO_POLICY = 'native-resident-mmap-advice-v1'

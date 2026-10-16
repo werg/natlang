@@ -34,3 +34,9 @@ or new training admission decision.
 The immediate consumer is the SHA-bound external CoreWeave CPU preparer. It may
 use the unchanged frozen leaf parser/index policy and explicitly staged metadata
 modules. No numerical capacity, task quality or training exposure is inferred.
+
+The inherited-capacity verifier permits these two CPU metadata modules only
+under an independently approved exact runtime review, alongside unchanged
+optimizer/layout and explicit memory allowance. The frozen seven-file leaf
+parser/index policy remains unchanged. Review the trainer's two progress-counter
+fields as an exact byte transform; this is not a new numerical measurement.

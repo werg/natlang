@@ -181,6 +181,22 @@ def test_metadata_chain_rejects_changed_optimizer_unbound_math_and_lost_reserves
     with pytest.raises(ValueError):invoke(phase,old,new,review)
 
 
+@pytest.mark.parametrize('name',['train/native_source_preparation.py','data/native_source_tree.py','data/native_sources.py'])
+def test_metadata_helpers_require_review_and_leaf_parser_still_cannot_inherit(tmp_path,name):
+    phase,old,new,review,_=metadata_chain(tmp_path)
+    path=new/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('# reviewed CPU metadata helper\n')
+    review['new_code']=code_inventory(new)
+    review['changes'][name]={'old':review['old_code'].get(name),'new':review['new_code'][name]}
+    if name=='data/native_sources.py':
+        with pytest.raises(ValueError,match='unreviewed forward/runtime'):
+            invoke(phase,old,new,review)
+    else:
+        result=invoke(phase,old,new,review)
+        certificate=json.loads(result.read_text())
+        assert 'new parent not measured' in certificate['scope']
+        assert geometry_capacity(binding(result),identity=review['identity'],code=code_inventory(new))==certificate['limits']
+
+
 @pytest.mark.parametrize('injected',[-(16<<30),0,1<<30])
 def test_raw_measurement_cannot_forge_an_inherited_memory_allowance(tmp_path,injected):
     old,new,review,proof=fixture(tmp_path)
