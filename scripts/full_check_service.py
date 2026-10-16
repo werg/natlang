@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -118,7 +119,28 @@ def clean_temporary(run: dict) -> None:
     if (path.name != run['sha'][:10] or path.is_symlink()
             or not marker.is_file() or marker.read_text() != run['sha']):
         raise ValueError('refusing to remove unowned full-check temporary directory')
-    shutil.rmtree(path)
+    # Frozen runtime fixtures deliberately remove write permission. Restore it
+    # only on this verified terminal run's own directories, never symlink targets.
+    for current, directories, _ in os.walk(path, followlinks=False):
+        for directory in [Path(current), *(Path(current)/name for name in directories)]:
+            info = directory.lstat()
+            if stat.S_ISLNK(info.st_mode):
+                continue
+            if info.st_uid != os.getuid():
+                raise ValueError(f'refusing to change another owner\'s fixture: {directory}')
+            if info.st_mode & 0o700 != 0o700:
+                directory.chmod(stat.S_IMODE(info.st_mode) | 0o700)
+    # Keep the ownership witness until every child is gone, so a failed cleanup
+    # remains safely retryable instead of stranding an unmarked partial tree.
+    for child in path.iterdir():
+        if child == marker:
+            continue
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+    marker.unlink()
+    path.rmdir()
 
 
 def failures(text: str) -> dict:

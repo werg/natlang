@@ -61,6 +61,32 @@ def test_waiting_admission_service_counts_as_live(monkeypatch, tmp_path):
     assert module.unit_live('natlang-full-check-aaaaaaaaaa')
 
 
+def test_cleanup_removes_frozen_fixtures_without_following_symlinks(monkeypatch,tmp_path):
+    module=service(monkeypatch,tmp_path)
+    root=tmp_path/('c'*10);root.mkdir()
+    (root/'.full-check-owner').write_text('c'*40)
+    frozen=root/'frozen';frozen.mkdir()
+    program=frozen/'program';program.mkdir();(program/'source').write_text('fixture')
+    outside=tmp_path/'outside';outside.mkdir();(outside/'kept').write_text('live')
+    (frozen/'linked').symlink_to(outside,target_is_directory=True)
+    program.chmod(0o500);frozen.chmod(0o500);outside.chmod(0o500)
+    try:
+        module.clean_temporary({'sha':'c'*40,'temporary_directory':str(root)})
+        assert not root.exists()
+        assert (outside/'kept').read_text()=='live' and outside.stat().st_mode&0o777==0o500
+    finally:outside.chmod(0o700)
+
+
+def test_cleanup_failure_retains_owner_witness(monkeypatch,tmp_path):
+    module=service(monkeypatch,tmp_path)
+    root=tmp_path/('d'*10);root.mkdir();marker=root/'.full-check-owner'
+    marker.write_text('d'*40);(root/'fixture').mkdir()
+    monkeypatch.setattr(module.shutil,'rmtree',lambda path:(_ for _ in ()).throw(PermissionError('busy fixture')))
+    with pytest.raises(PermissionError,match='busy fixture'):
+        module.clean_temporary({'sha':'d'*40,'temporary_directory':str(root)})
+    assert marker.read_text()=='d'*40
+
+
 @pytest.mark.parametrize('contents', ['FAILED tests/test_something.py::test_partial\n', 'exit=137\n'])
 def test_interrupted_check_does_not_answer_requests_or_advance_last_sha(monkeypatch, tmp_path, contents):
     module = service(monkeypatch, tmp_path)
