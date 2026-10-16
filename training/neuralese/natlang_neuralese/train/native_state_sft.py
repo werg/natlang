@@ -417,40 +417,35 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None)
 
 
 def held_cadence_indices(entries, cursor=0, *, token_budget=0, graph_budget=0):
-    """Rotate complete held graphs; never truncate a graph to fit a cadence."""
-    if min(cursor, token_budget, graph_budget) < 0 or not entries:
-        raise ValueError('held cadence needs nonempty data and nonnegative budgets/cursor')
-    indices, tokens = [], 0
-    for advance in range(len(entries)):
-        index = (cursor+advance) % len(entries)
-        size = entries[index]['forward_tokens']
-        if indices and ((token_budget and tokens+size > token_budget)
-                        or (graph_budget and len(indices) >= graph_budget)):
-            break
-        indices.append(index)
-        tokens += size
-    return indices, (indices[-1]+1) % len(entries)
+    """Compatibility view of the shared selector's single-class rotation."""
+    from .native_held import held_selection
+    if cursor < 0 or not entries:
+        raise ValueError('held cadence needs nonempty data and nonnegative cursor')
+    position = cursor % len(entries)
+    coverage = {'cursor': position, 'completed_sweeps': cursor//len(entries),
+                'graph_visits': cursor}
+    indices, state, _ = held_selection([{**e, 'communication': False} for e in entries],
+        coverage, source_sha256=None, token_budget=token_budget, graph_budget=graph_budget)
+    return sorted(indices, key=lambda i: (i-position) % len(entries)), state['cursor']
 
 
-def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backend=None):
+def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backend=None,
+                      previous_result=None):
+    from .native_held import held_selection
     coverage = coverage or {}
-    if final:
-        indices, cursor = list(range(len(source))), 0
-    else:
-        indices, cursor = held_cadence_indices(source.entries, int(coverage.get('cursor', 0)),
-            token_budget=args.held_eval_tokens, graph_budget=args.held_eval_graphs)
+    indices, next_coverage, selection = held_selection(source.entries, coverage,
+        source_sha256=source.file_sha256, token_budget=args.held_eval_tokens,
+        graph_budget=args.held_eval_graphs, final=final, previous_result=previous_result)
+    cursor = next_coverage['cursor']
     started = time.monotonic()
     result = _evaluate(model, source.iter_indices(indices), checkpoint_layers=args.checkpoint_layers,
                        chunk_tokens=args.chunk_tokens, backend=backend)
     result.update(scope='full' if len(indices) == len(source) else 'cadence-subset',
                   source_sha256=source.file_sha256,
                   source_graphs=len(source), cursor_before=int(coverage.get('cursor', 0)),
-                  cursor_after=cursor, seconds=time.monotonic()-started)
-    coverage = {'cursor': cursor, 'graph_visits': int(coverage.get('graph_visits', 0))+len(indices),
-        'forward_token_visits': int(coverage.get('forward_token_visits', 0))+result['forward_tokens'],
-        'completed_sweeps': int(coverage.get('completed_sweeps', 0)) +
-            (1 if final else (int(coverage.get('cursor', 0)) % len(source)+len(indices))//len(source))}
-    return result, coverage
+                  cursor_after=cursor, seconds=time.monotonic()-started,
+                  selection=selection)
+    return result, next_coverage
 
 
 def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, source_receipts,
@@ -981,7 +976,7 @@ def main(argv=None):
             due_eval = step % eval_at == 0 or step == total_end or due_task
             if due_eval:
                 held_metrics, held_coverage = _evaluate_cadence(model, held, args=args,
-                    coverage=metrics.get('held_coverage'), final=step == total_end, backend=backend)
+                    coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end, backend=backend)
                 metrics = {'train_loss': train_loss, 'held': held_metrics, 'held_coverage': held_coverage,
                            'step': step, 'epoch': epoch, 'cursor': cursor,
                            'elapsed_seconds': time.time() - started,
@@ -1039,7 +1034,7 @@ def main(argv=None):
     if (step != resumed_step or policy.signaled) and last_saved_step != step:
         if not policy.signaled and not metrics.get('held'):
             metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
-                coverage=metrics.get('held_coverage'), final=step == total_end, backend=backend)
+                coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end, backend=backend)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
               global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
               source_hash=source_hash, source_row_bindings=source_row_bindings,
@@ -1052,7 +1047,7 @@ def main(argv=None):
     if completed and not policy.signaled and (metrics.get('held', {}).get('scope') != 'full'
             or metrics.get('held', {}).get('source_sha256') != held.file_sha256):
         metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
-            coverage=metrics.get('held_coverage'), final=True, backend=backend)
+            coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=True, backend=backend)
         metrics.pop('task_checkpoint_sha256', None)
         metrics.pop('task_native_identity', None)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
