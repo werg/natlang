@@ -35,11 +35,93 @@ LOADER_IO_POLICY = 'native-resident-mmap-advice-v1'
 LOADER_IO_CHANGES = METADATA_CHANGES | {
     'train/checkpoint_policy.py', 'train/checkpoint_readahead.py',
 }
+ATTENTION_INDEX_POLICY = 'native-graph-attention-index-reuse-v1'
+ATTENTION_INDEX_REVIEW_SHA256 = 'e100c0814676e340b6c2bf3341dee101d02958a249757304ca3fb2df16a0b7a2'
+ATTENTION_INDEX_COMPOSITIONS = {
+    'lfm': ('14ca1758cacf99a4dc8f237fea7b8005d2123c40',
+            '21d878c9c8e7b1345d813b0827b05513cf8c9b55',
+            'cac5df15b82939c4d618e70cdf1b82db00dd2fbf66a73e0ee5a3985eb6ee369d',
+            '7cb9ab4fb9ea7e4c882f9021c0dc81507e33c4ecfde1e85ff4024f58c3644693'),
+    'mellum': ('b50e8823aaa1f92d2d3be853afc1955948a8fd1f',
+               '92c7b4ae03d13baab1d88f83df20c0b185f9439e',
+               '0dd5044fe1a3d232c4160edbe9da92240c18f3341178d0f252503043bae5078a',
+               'd663389095b4fe6fa4d6ec991f2a9c6f47697995f4d887978d0e57fb13b5f96d'),
+}
 
 
 def allowed_changes(policy):
     return {POLICY: ALLOWED_CHANGES, METADATA_POLICY: METADATA_CHANGES,
-            LOADER_IO_POLICY: LOADER_IO_CHANGES}.get(policy, set())
+            LOADER_IO_POLICY: LOADER_IO_CHANGES,
+            ATTENTION_INDEX_POLICY: {'model/shared_state.py'}}.get(policy, set())
+
+
+def _attention_index_contract(review, limits):
+    if review['optimizer_policy'] != ATTENTION_INDEX_POLICY:
+        return
+    basis = review.get('attention_index_basis') or {}
+    composition = ATTENTION_INDEX_COMPOSITIONS.get(basis.get('model'))
+    reference = basis.get('review') or {}
+    if composition is None or reference.get('sha256') != ATTENTION_INDEX_REVIEW_SHA256:
+        raise ValueError('attention index continuation requires its exact independently approved frozen review')
+    approved = json.loads(bound(reference).read_text())
+    parent, candidate, old_sha, new_sha = composition
+    report = next((row for row in approved.get('reports', []) if row.get('model') == basis['model']), {})
+    if (basis.get('parent_commit') != parent or basis.get('candidate_commit') != candidate
+            or report.get('parent') != parent or report.get('candidate') != candidate
+            or report.get('shared_state_sha256') != new_sha
+            or review['old_code'].get('model/shared_state.py') != old_sha
+            or review['new_code'].get('model/shared_state.py') != new_sha):
+        raise ValueError('attention index continuation changed the exact reviewed composition')
+    regressions = json.loads(bound(basis.get('cuda_regressions')).read_text())
+    expected = {(values[1], port) for values in ATTENTION_INDEX_COMPOSITIONS.values()
+                for port in ('lfm', 'mellum')}
+    cases = regressions.get('cases') or []
+    if (regressions.get('schema') != 'natlang.attention-index-cuda-regressions/1'
+            or len(cases) != 4 or {(row.get('candidate_commit'), row.get('port')) for row in cases} != expected):
+        raise ValueError('attention index continuation requires all four frozen both-port CUDA cases')
+    for case in cases:
+        if any(case.get(key) is not True for key in ('passed', 'cuda', 'outputs_bitwise',
+                'all_named_adjoints_bitwise', 'checkpoint_recompute', 'distinct_graph_lifetime')):
+            raise ValueError('attention index CUDA regression is not strict bitwise qualification')
+        bound(case.get('log'))
+    paired = json.loads(bound(basis.get('normal_batch_paired')).read_text())
+    normal = paired.get('batch') or {}
+    if (paired.get('schema') != 'natlang.attention-index-production-paired/1'
+            or paired.get('passed') is not True or paired.get('identity') != review['identity']
+            or paired.get('old_runtime_code_sha256') != digest(review['old_code'])
+            or paired.get('new_runtime_code_sha256') != digest(review['new_code'])
+            or paired.get('parent_checkpoint_sha256') != basis.get('normal_probe_parent_checkpoint_sha256')
+            or not isinstance(paired.get('parent_checkpoint_sha256'), str)
+            or len(paired['parent_checkpoint_sha256']) != 64
+            or paired.get('optimizer_updates') != 0
+            or any(paired.get(key) is not True for key in ('cuda_synchronized', 'outputs_bitwise',
+                'loss_bitwise', 'all_named_adjoints_bitwise', 'optimizer_state_unchanged',
+                'rng_restored', 'source_credits_unchanged'))):
+        raise ValueError('attention index continuation lacks an exact unchanged-state production paired result')
+    for key in ('forward_tokens', 'kv_slots'):
+        if type(normal.get(key)) is not int or not 0 < normal[key] <= limits[key]:
+            raise ValueError('attention index paired batch differs from the inherited geometry')
+    if normal != basis.get('normal_batch_geometry'):
+        raise ValueError('attention index paired batch differs from the independently reviewed normal batch')
+    bound(paired.get('source'))
+    for key in ('old_seconds', 'new_seconds'):
+        value = paired.get(key)
+        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            raise ValueError('attention index paired timings require actual synchronized positive durations')
+    memory = basis.get('index_memory') or {}
+    old_count = memory.get('old_attention_index_allocations')
+    index_bytes = limits['forward_tokens'] * 8
+    extra = review.get('metadata_extra_bytes')
+    if (type(old_count) is not int or old_count < 1
+            or memory.get('new_attention_index_allocations') != 1
+            or memory.get('index_dtype') != 'torch.int64'
+            or memory.get('max_index_elements') != limits['forward_tokens']
+            or memory.get('new_index_bytes') != index_bytes
+            or memory.get('old_index_bytes') != old_count * index_bytes
+            or type(memory.get('host_workspace_extra_bytes_upper_bound')) is not int
+            or type(extra) is not int or extra < (1 << 30)
+            or not 0 <= memory['host_workspace_extra_bytes_upper_bound'] <= extra):
+        raise ValueError('attention index continuation requires conservative explicit index/workspace memory bounds')
 
 
 def _memory_allowance(review):
@@ -50,7 +132,7 @@ def _memory_allowance(review):
         if (parameter.get('dtype') != 'torch.float32' or not parameter.get('shape')
                 or any(type(n) is not int or n < 1 for n in parameter['shape'])):
             raise ValueError('capacity continuation requires the unchanged FP32 ordinary layout')
-    if review['optimizer_policy'] in {METADATA_POLICY, LOADER_IO_POLICY}:
+    if review['optimizer_policy'] in {METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY}:
         extra = review.get('metadata_extra_bytes')
         if (review.get('optimizer_state_unchanged') is not True
                 or type(extra) is not int or extra < (64 << 20)):
@@ -101,6 +183,7 @@ def _proof_cases(reference, *, identity, code_sha, parent, seen=()):
             raise ValueError('inherited capacity changed its actual measured origin')
         if {key: max(case[key] for case in cases) for key in ('forward_tokens', 'kv_slots')} != value['limits']:
             raise ValueError('inherited capacity limits differ from actual source cases')
+        _attention_index_contract(review, value['limits'])
         extra = value.get('extra_bytes_per_memory_domain')
         if type(extra) is not int or extra != _memory_allowance(review):
             raise ValueError('inherited capacity lost its additional memory allowance')
@@ -134,7 +217,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     if (review.get('schema') != 'natlang.native-capacity-continuation-review/1'
             or review.get('approved') is not True
             or review.get('parameter_layout_unchanged') is not True
-            or review.get('optimizer_policy') not in {POLICY, METADATA_POLICY, LOADER_IO_POLICY}):
+            or review.get('optimizer_policy') not in {POLICY, METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY}):
         raise ValueError('capacity continuation requires an approved exact optimizer review')
     old, new = code_inventory(old_package), code_inventory(new_package)
     if old != review.get('old_code') or new != review.get('new_code'):
@@ -156,6 +239,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     limits = {key: max(case[key] for case in cases) for key in ('forward_tokens', 'kv_slots')}
     if (source.get('limits') != limits or any(type(v) is not int or v < 1 for v in limits.values())):
         raise ValueError('capacity limits differ from actual source cases')
+    _attention_index_contract(review, limits)
     # Adam first/second moments, retained old buffers, telemetry snapshots and
     # per-parameter update intermediates. No backbone-sized copy is authorized.
     extra = _memory_allowance(review)
@@ -202,7 +286,9 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
         'passed': True, 'identity': identity, 'runtime_code_sha256': digest(new),
         'limits': limits, 'evidence': binding(evidence),
         'scope': 'inherited actual capacity through explicitly reviewed ' +
-            ('optimizer/telemetry-only' if policy == POLICY else 'CPU scheduling/pending-obligation-only') +
+            ('optimizer/telemetry-only' if policy == POLICY else
+             'exact frozen attention-index-only' if policy == ATTENTION_INDEX_POLICY else
+             'CPU scheduling/pending-obligation-only') +
             ' continuation; new parent not measured'})
     return certificate
 
