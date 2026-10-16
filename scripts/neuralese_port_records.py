@@ -137,12 +137,20 @@ def cmd_convert_swe(args):
 
 
 def cmd_convert_agents(args):
+    if getattr(args, 'expansion_root', None) is not None:
+        agents.EXPANSION_ROOT = Path(args.expansion_root).resolve(strict=True)
+    from neuralese_data import acquired_agents
+    acquired_agents.ACQUIRED_FILES = (frozenset(args.acquired_file)
+        if getattr(args, 'acquired_file', None) is not None else None)
     summaries = []
     for name in args.corpora or list(agents.CORPORA):
         adapter, windows = agents.CORPORA[name]
         sink = Sink(args.out, f"upstream.{name}")
         try:
             for row, traj in adapter(args.limit):
+                if isinstance(traj, Reject):
+                    sink.reject(name, row, str(traj))
+                    continue
                 flags = traj.lineage.get('notes', {}).get('source_quality_flags', []) if getattr(args, 'exclude_source_quality_flags', False) else []
                 if flags and traj.split == 'train':
                     sink.reject(name, row, 'source-quality-flags: ' + ','.join(sorted(flags)))
@@ -439,6 +447,8 @@ def main(argv=None):
     p.add_argument("--out", type=Path, default=sample_root)
     p.set_defaults(func=cmd_convert_swe)
     p = sub.add_parser("convert-agents")
+    p.add_argument('--expansion-root', type=Path, help='root of pinned Dxx acquisition snapshots')
+    p.add_argument('--acquired-file', action='append', help='exact receipt file for resumable per-file conversion; repeat to select several')
     p.add_argument("--corpora", nargs="*", choices=list(agents.CORPORA))
     p.add_argument("--limit", type=int, default=None, help="trajectories per corpus; default all")
     p.add_argument("--windows", type=int, default=None, help="windows per trajectory; default per corpus")

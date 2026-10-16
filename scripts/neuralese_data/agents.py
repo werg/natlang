@@ -922,3 +922,10 @@ CORPORA.update({'gatc-sessions': (gatc_sessions, 4), "wideseek": (wideseek, 4), 
                 'deepnlp-orchestration': (deepnlp_orchestration, 4),
                 'finding-right-fit': (finding_right_fit, 4),
                 'agentic-coding-sessions': (agentic_coding_sessions, 4)})
+
+from .acquired_agents import (open_swe_acquired, swe_rebench_acquired,
+                              nemotron_terminal_acquired, cooperdata_acquired)
+CORPORA.update({'open-swe-acquired': (open_swe_acquired, 4),
+                'swe-rebench-acquired': (swe_rebench_acquired, 4),
+                'nemotron-terminal-acquired': (nemotron_terminal_acquired, 4),
+                'cooperdata-acquired': (cooperdata_acquired, 4)})
