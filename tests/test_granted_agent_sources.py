@@ -245,6 +245,29 @@ def test_swe_real_reader_index_join_all_events_accounted_and_no_inferred_edges(t
     changed=list(swe_chat_acquired());assert all(isinstance(value,Reject) for _,value in changed)
 
 
+def test_swe_rejects_nontranscript_tables_as_rows_without_file_buffer(monkeypatch):
+    from scripts.neuralese_data import acquired_agents
+    from scripts.neuralese_data.acquired_granted import swe_chat_acquired
+
+    # Model the large conversations/commits tables as a lazy stream. The
+    # adapter must yield accounting as it consumes rows and must not invoke
+    # whole-file ancestry conversion for these source-index tables.
+    count = 20_000
+    def rows(ref, limit=None):
+        assert ref == 'D20'
+        for index in range(count):
+            yield RECEIPT, f'conversations.parquet:{index}', {'payload': index}
+
+    monkeypatch.setattr(acquired_agents, 'acquired_rows', rows)
+    monkeypatch.setattr('scripts.neuralese_data.acquired_granted.swe_source_index',
+                        lambda receipt: (_ for _ in ()).throw(AssertionError('index loaded for rejected table')))
+    result = swe_chat_acquired()
+    observed = 0
+    for rid, value in result:
+        assert rid == f'conversations.parquet:{observed}'
+        assert isinstance(value, Reject)
+        observed += 1
+    assert observed == count
 def test_standalone_preference_record_retains_both_histories_once_and_hash_binds_pair(monkeypatch):
     from scripts.neuralese_data import acquired_agents
     from scripts.neuralese_data.acquired_preferences import miroverse_preference_records

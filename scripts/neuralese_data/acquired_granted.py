@@ -433,11 +433,23 @@ def swe_chat_acquired(limit=None):
     # Callers select exact receipt files with ACQUIRED_FILES for durable shards.
     if limit is not None:
         raise Reject('SWE complete contexts require exact file selection, not a raw-event limit')
+    transcript_prefixes = ('transcripts/', 'transcripts_subagent/', 'transcripts_compact/')
     for current, rid, row in acquired_rows('D20'):
         path, index = rid.rsplit(':', 1)
         if previous is not None and path != previous:
-            yield from finish(receipt, previous, buffered); buffered = []
-        receipt = current; previous = path; buffered.append((int(index), row))
+            if buffered:
+                yield from finish(receipt, previous, buffered)
+            buffered = []
+        receipt = current
+        previous = path
+        if not path.startswith(transcript_prefixes):
+            # Tables such as conversations.parquet and commits.parquet are
+            # source evidence, not transcript events. Account for each row as
+            # it streams; never build a multi-gigabyte list just to reject it
+            # after the file has been read.
+            yield rid, Reject('SWE source index/alternate view; raw complete transcripts are consumers')
+            continue
+        buffered.append((int(index), row))
     if previous is not None:
         yield from finish(receipt, previous, buffered)
 
