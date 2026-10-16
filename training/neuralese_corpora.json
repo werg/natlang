@@ -119529,6 +119529,73 @@
       },
       "admission_proof": "admission-proof.json",
       "notes": "Incremental completed shard only; remaining source shards and actual training exposure are separate obligations."
+    },
+    {
+      "build": {
+        "audit": "admission-acquired-d24-sft-member-00372b569325-20261016-v1/audit.json",
+        "audit_sha256": "d8cc13ce2b1c755aa5d5022ab6328d53a1ecc33369da14eefd4b11d4d30a5e52",
+        "local_publication_check": {
+          "path": "admission-acquired-d24-sft-member-00372b569325-20261016-v1/local-publication-check.json",
+          "sha256": "446fd70041e038e4134f69fc69a2e1751cacad54aeac8d8b0b63581810d44861"
+        }
+      },
+      "documents": {
+        "lfm25": {
+          "graphs:train": 6187,
+          "max_row_tokens": 54642,
+          "positive_sessions": 6187,
+          "tokens:test": 0,
+          "tokens:train": 65254644
+        },
+        "mellum21": {
+          "graphs:train": 6187,
+          "max_row_tokens": 79772,
+          "positive_sessions": 6187,
+          "tokens:test": 0,
+          "tokens:train": 70901087
+        }
+      },
+      "id": "acquired-d24-sft-member-00372b569325-20261016-v1",
+      "include": [
+        "00372b569325c3cb75eff9e91377e4c8e762b516a00e2f6e6e61663da7e92738/lfm25/omissions.jsonl",
+        "00372b569325c3cb75eff9e91377e4c8e762b516a00e2f6e6e61663da7e92738/lfm25/receipt.json",
+        "00372b569325c3cb75eff9e91377e4c8e762b516a00e2f6e6e61663da7e92738/lfm25/resume-state.json",
+        "00372b569325c3cb75eff9e91377e4c8e762b516a00e2f6e6e61663da7e92738/lfm25/test/native-graphs.jsonl.zst",
+        "00372b569325c3cb75eff9e91377e4c8e762b516a00e2f6e6e61663da7e92738/lfm25/train/native-graphs.jsonl.zst",
+        "00372b569325c3cb75eff9e91377e4c8e762b516a00e2f6e6e61663da7e92738/mellum21/omissions.jsonl",
+        "00372b569325c3cb75eff9e91377e4c8e762b516a00e2f6e6e61663da7e92738/mellum21/receipt.json",
+        "00372b569325c3cb75eff9e91377e4c8e762b516a00e2f6e6e61663da7e92738/mellum21/resume-state.json",
+        "00372b569325c3cb75eff9e91377e4c8e762b516a00e2f6e6e61663da7e92738/mellum21/test/native-graphs.jsonl.zst",
+        "00372b569325c3cb75eff9e91377e4c8e762b516a00e2f6e6e61663da7e92738/mellum21/train/native-graphs.jsonl.zst",
+        "admission-acquired-d24-sft-member-00372b569325-20261016-v1/audit.json",
+        "admission-acquired-d24-sft-member-00372b569325-20261016-v1/independent-native-parse-proof.json",
+        "admission-acquired-d24-sft-member-00372b569325-20261016-v1/lfm25-train-sources.json",
+        "admission-acquired-d24-sft-member-00372b569325-20261016-v1/local-publication-check.json",
+        "admission-acquired-d24-sft-member-00372b569325-20261016-v1/mellum21-train-sources.json",
+        "admission-acquired-d24-sft-member-00372b569325-20261016-v1/row-proof.jsonl",
+        "protection/decision-holds/native-non-success-20261015-v1.jsonl",
+        "protection/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+        "protection/held-union/acquired-connected-source-groups.jsonl",
+        "protection/held-union/acquired-remaining-complete-source/source-groups.jsonl",
+        "protection/held-union/full/source-groups/text-data.jsonl",
+        "protection/held-union/program-header/source-groups/text-data.jsonl",
+        "protection/held-union/whole-trajectory/source-groups/text-data.jsonl",
+        "protection/inherited-components.jsonl",
+        "protection/inherited-projection.json",
+        "protection/protection-manifest.json",
+        "protection/quality-groups.jsonl",
+        "protection/source-group-components.jsonl",
+        "protection/source-reviews/datasets.json",
+        "protection/source-reviews/family-holds.json",
+        "protection/source-reviews/holds.jsonl"
+      ],
+      "license": "exact source license facts retained in each graph acquired_session provenance",
+      "owner": "dgx",
+      "path": "runs/acquired-d24-sft-member-00372b569325-20261016-v1",
+      "source_class": "source-curated-complete-acquired-agent-native-session-graphs",
+      "split": "original source split and complete cross-source global held-group closure; no truncation",
+      "training_admission": true,
+      "training_admission_reason": "One complete normalized SFT source member is source-curated, not oracle or native-execution verified. Both pinned tokenizer views preserve the full global 15-export held/quality/pending closure and exact decision holds. Other normalized source members remain explicitly pending. Locally rechecked all 6,187 graph rows in both exact tokenizer views, current connected protection and exact decision holds; all rows fit the certified per-model physical-token envelopes. Local publication proof is included."
     }
   ],
   "coverage_backlog": [
