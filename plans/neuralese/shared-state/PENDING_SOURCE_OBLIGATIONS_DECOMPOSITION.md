@@ -34,3 +34,10 @@ Crisp code implements exact parsing, hashing, binding/credit verification,
 checkpoint durability and existing service invocation. No new model-facing text,
 new decision policy, separate optimizer or parallel exposure authority is added.
 The source declaration is independently reviewed before recipe adoption.
+
+The capacity derivative receives a new immutable corpus ID. It retains the
+original source-eligibility evidence and unchanged full-cohort identity, declares
+ONLY fit manifests as training entrypoints, and binds all remaining rows to the
+same pending obligations. The full aggregate is provenance, never another source
+to mix with its partition. Registration and execution qualification remain
+separate; no live registry is written by the proposal helper.
