@@ -194,6 +194,8 @@ export const objectives = {
     const teacher = lastTurn(await capture(rec, withFullSource, 'selfDistill'), 'selfDistill (full source)');
     return new Loss([{ kind: 'selfDistill', messages: student.messages, tools: student.tools, target: student.reply,
       teacher_messages: teacher.messages, ...adapted(student),
+      ...(teacher.native ? { teacher_native_turn_id: teacher.native.id } : {}),
+      ...(teacher.native_state_modes ? { teacher_native_state_modes: teacher.native_state_modes } : {}),
       ...(teacher.adapters?.length ? { teacher_adapters: teacher.adapters } : {}) }]);
   },
   /**
@@ -217,7 +219,7 @@ export const objectives = {
     const leak = privilegeLeak(options.privileged, own.messages);
     if (leak) throw new LearningError('learning-privilege-leak', `conditionedDistill: the student's view contains privileged text ${JSON.stringify(leak.slice(0, 80))}`);
     const teacherSide = { messages: privileged.messages, ...(privileged.tools ? { tools: privileged.tools } : {}),
-      ...(privileged.adapters?.length ? { adapters: privileged.adapters } : {}) };
+      ...adapted(privileged) };
     if (own.decision) {
       if (!privileged.decision || JSON.stringify(privileged.decision.options) !== JSON.stringify(own.decision.options))
         throw new LearningError('learning-teacher-mismatch', 'conditionedDistill: the teacher must make the same decision readout (same options) as the student');
@@ -227,6 +229,8 @@ export const objectives = {
     if (privileged.decision) throw new LearningError('learning-teacher-mismatch', 'conditionedDistill: the student generated a reply but the teacher made a decision readout');
     return new Loss([{ kind: 'selfDistill', messages: own.messages, tools: own.tools, target: own.reply,
       teacher_messages: privileged.messages, ...adapted(own),
+      ...(privileged.native ? { teacher_native_turn_id: privileged.native.id } : {}),
+      ...(privileged.native_state_modes ? { teacher_native_state_modes: privileged.native_state_modes } : {}),
       ...(privileged.adapters?.length ? { teacher_adapters: privileged.adapters } : {}) }]);
   },
   /**
@@ -263,14 +267,15 @@ export const objectives = {
       const weight = (reward - baseline) / samples.length;
       if (weight === 0) continue;
       for (const turn of trajectory.turns) if (!turn.decision)
-        terms.push({ kind: 'logLikelihood', messages: turn.messages, tools: turn.tools, target: turn.reply, weight, ...adapted(turn) });
+        terms.push({ kind: 'logLikelihood', messages: turn.messages, tools: turn.tools, target: turn.reply, weight,
+          likelihood_law: 'sampled-policy', ...adapted(turn) });
     }
     return new Loss(terms);
   },
   /** Negative log-probability of a recorded trajectory: text, stop decisions, sampled payloads. */
   async logLikelihood(trajectory: Trajectory, weight = 1): Promise<Loss> {
     return new Loss(trajectory.turns.map(turn => ({ kind: 'logLikelihood', messages: turn.messages, tools: turn.tools,
-      target: turn.reply, weight, ...adapted(turn) })));
+      target: turn.reply, weight, likelihood_law: 'model-conditional', ...adapted(turn) })));
   },
   /** KL of Gaussian blocks to N(0, I): written blocks use their recorded mean and scale. */
   async klPrior(blocks: NeuraleseRef | NeuraleseRef[]): Promise<Loss> {

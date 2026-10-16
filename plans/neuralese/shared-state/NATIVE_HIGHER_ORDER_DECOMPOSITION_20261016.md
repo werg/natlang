@@ -384,3 +384,13 @@ Node tests11PASS and native typed HTTP regression8PASS17.77s. An initially
 mis-scoped legacy full-server test exceeded its own3GiB unit cap and was not
 claimed green; the focused rerun excludes that unrelated full-model fixture.
 Public term→query rendering and nested GradSession lowering remain guarded/open.
+
+The public objective builder must preserve exact teacher occurrences as well as
+student occurrences. Teacher message equality is never an occurrence identity.
+Before lowering, record the teacher receipt ID and its explicitly requested
+state-consumption modes. Distinguish model conditional likelihood from the
+actual sampled-policy law: REINFORCE selects the latter, while ordinary
+logLikelihood selects the former. The lowerer must reject a sampled-policy
+objective on a greedy structural capture, which has no behavior density. These
+are internal exact metadata fields; they do not change prompts or enable the
+still-guarded public native gradient route.
