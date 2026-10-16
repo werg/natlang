@@ -39,7 +39,7 @@ export function verifyNativeStateDerivationRecords(artifact:Omit<NativeStateArti
         nativeCanonicalJson(identity(artifact.metadata))!==nativeCanonicalJson(identity(parent.metadata))||
         ['token_ids','positions','embeddings'].some(name=>!equalTensor(artifact.tensors[name],parent.tensors[name])))
         throw new RangeError('derived semantic encoding changed tokens, embeddings or adapter');
-    }else if(artifact.metadata.schema!=='neuralese.native-state/1'||parent.metadata.schema==='neuralese.semantic-state/1'&&parent.metadata.adapter_sha256!==value.adapter_sha256)
+    }else if(artifact.metadata.schema!=='neuralese.native-state/1'||parent.metadata.schema==='neuralese.semantic-state/1'&&parent.metadata.adapter_sha256!==(value.source_adapter_sha256??value.adapter_sha256))
       throw new RangeError('derived semantic decode changed trained adapter or target format');
     return;
   }

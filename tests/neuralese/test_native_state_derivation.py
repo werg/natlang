@@ -174,18 +174,24 @@ def test_actual_http_typed_state_updates_and_restart(tmp_path,family):
     finally:server.shutdown();server.server_close();engine.stop();engine.store.close()
 
 
-@pytest.mark.parametrize('compact',[False,True])
-def test_optimized_state_semantic_encoding_decoding_preserves_actual_source(tmp_path,compact):
+@pytest.mark.parametrize('compact,training',[(False,False),(True,False),(True,True)])
+@pytest.mark.parametrize('target_name',['lfm','mellum'])
+def test_optimized_state_semantic_encoding_decoding_preserves_actual_source(tmp_path,compact,training,target_name):
     from types import SimpleNamespace
     from test_native_semantic import setup_pair
     from natlang_neuralese.train.native_semantic import parse_pair,producer
     from natlang_neuralese.model.semantic_channel import SemanticChannel
     participants,row,vae=setup_pair()
-    source=participants['lfm'];target=participants['mellum']
+    import os
+    device=os.environ.get('NATLANG_NATIVE_ADAPTER_TEST_DEVICE','cpu')
+    vae.to(device)
+    for participant in participants.values():participant.model.to(device)
+    source_name='mellum' if target_name=='lfm' else 'lfm'
+    source=participants[source_name];target=participants[target_name]
     channel=SemanticChannel(vae,{name:item.identity for name,item in participants.items()},
         {name:item.tokenizer for name,item in participants.items()},adapter_sha256='a'*64)
     store=TensorStore(tmp_path/'states')
-    example,view=parse_pair(row,participants)['lfm']
+    example,view=parse_pair(row,participants)[source_name]
     with torch.no_grad():block=producer(source,example,view,supervise=False)[0]
     original=store.put_native_state(block)
     name=next(iter(state_values(block)))
@@ -200,13 +206,44 @@ def test_optimized_state_semantic_encoding_decoding_preserves_actual_source(tmp_
                 with pytest.raises(ValueError,match='exact source state ID'):channel.message(current.block)
                 current=store.put_native_state(channel.message(current.block,source_state_id=current.id))
                 assert current.block.derivation['kind']=='semantic-encode'
-            decoded,receipt=channel.adapt(current.block,source_state_id=current.id,target_name='mellum',target_model=target.model,
-                target_tokenizer=target.tokenizer,target_identity=target.identity)
+        execution=None;decoder=channel;target_identity=target.identity
+        if training:
+            bindings={name:{**item.identity,'checkpoint_sha256':'d'*64} for name,item in participants.items()}
+            decoder=SemanticChannel(copy.deepcopy(vae),bindings,channel.tokenizers,adapter_sha256='c'*64)
+            with torch.no_grad():next(decoder.vae.shared_decoder.parameters()).add_(.01)
+            target_identity=bindings[target_name]
+            execution={'schema':'natlang.native-semantic-policy-execution/1','parent_checkpoint_sha256':'d'*64,
+                'parent_adapter_sha256':'c'*64,'behavior_adapter_sha256':'a'*64,'parent_step':2,'step':3}
+        decoded,receipt=decoder.adapt(current.block,source_state_id=current.id,target_name=target_name,target_model=target.model,
+            target_tokenizer=target.tokenizer,target_identity=target_identity,
+            **({'source_channel':channel,'training_execution':execution} if training else {}))
+        if training:
+            assert decoded.derivation['source_adapter_sha256']=='a'*64
+            assert decoded.derivation['adapter_sha256']=='c'*64
+            assert decoded.derivation['training_execution']==execution
+            assert receipt['source_native_identity']==source.identity
+            from natlang_neuralese.model.shared_state import Invocation,ImportSpan,compile_graph
+            _,_,consume_open,consume_close=target.model.marker_ids
+            reader=compile_graph([Invocation('reader',(4,consume_open,consume_close,7),imports=(
+                ImportSpan(2,'external',0,len(decoded.token_ids)),))],external_sizes={'external':len(decoded.token_ids)})
+            observed=target.model(reader,external_blocks={'external':decoded},external_identity=target_identity)
+            target.model.logits(observed['h_final'][0,-1]).float().log_softmax(-1)[8].neg().backward()
+            assert any(value.grad is not None and value.grad.norm()>0 for value in decoder.vae.shared_decoder.parameters())
         actual=store.put_native_state(decoded)
         assert actual.block.derivation['kind']=='semantic-adapt'
         assert actual.block.derivation['parent_state_id']==current.id
         assert actual.block.derivation['origin_state_ids']==[original.id]
         verify_state_derivation(store,actual.block)
+        if training:
+            for mutate in ('source-adapter','decoder-adapter','step','parent','missing','source-identity'):
+                wrong=copy.deepcopy(actual.block.derivation)
+                if mutate=='source-adapter':wrong['source_adapter_sha256']='b'*64
+                elif mutate=='decoder-adapter':wrong['adapter_sha256']='b'*64
+                elif mutate=='step':wrong['training_execution']['step']=1
+                elif mutate=='parent':wrong['training_execution']['parent_checkpoint_sha256']='b'*64
+                elif mutate=='missing':wrong.pop('training_execution')
+                else:wrong['source_native_identity']=target_identity
+                with pytest.raises(ValueError):store.put_native_state(replace(actual.block,derivation=wrong))
         wrong=copy.deepcopy(actual.block.derivation);wrong['source_native_identity']=target.identity
         with pytest.raises(ValueError,match='source, target'):store.put_native_state(replace(actual.block,derivation=wrong))
         store.collect({actual.id})

@@ -122,12 +122,14 @@ def _verify_optimizer_derivation(store,block):
     return parent.block,moments,prior
 
 
-def semantic_derivation(block,parent_id,adapter_sha256,source_identity,target_identity,kind):
+def semantic_derivation(block,parent_id,adapter_sha256,source_identity,target_identity,kind,*,training_execution=None):
     from .native_derivative_contract import validate_derivation
     validate_derivation(block.derivation)
     result={'schema':DERIVATION,'kind':kind,'parent_state_id':parent_id,'adapter_sha256':adapter_sha256,
         'origin_state_ids':block.derivation['origin_state_ids'] if block.derivation else [parent_id],
         'source_native_identity':dict(source_identity),'target_native_identity':dict(target_identity)}
+    if training_execution is not None:
+        result.update(source_adapter_sha256=block.adapter_sha256,training_execution=dict(training_execution))
     validate_derivation(result)
     return result
 
@@ -147,7 +149,7 @@ def _verify_semantic_derivation(store,block):
                     parent.block.tensors()[name].detach().cpu()) for name in ('token_ids','positions','embeddings'))):
             raise ValueError('derived semantic encoding changed source text, tokens, embeddings or adapter')
     elif (block.metadata()['schema']!='neuralese.native-state/1' or parent.block.metadata()['schema']=='neuralese.semantic-state/1'
-            and parent.block.adapter_sha256!=value['adapter_sha256']):
+            and parent.block.adapter_sha256!=value.get('source_adapter_sha256',value['adapter_sha256'])):
         raise ValueError('derived semantic decode changed its trained adapter or native target format')
     return parent.block
 

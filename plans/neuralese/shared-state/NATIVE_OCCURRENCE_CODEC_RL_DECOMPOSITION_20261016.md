@@ -174,3 +174,28 @@ It performs exactly the additional owed policy update, preserves earlier semanti
 exposure and repeats the full final held evaluation for the new boundary. The
 combined CPU suite passed60 cases18.48s. Final quick checks cover the staged
 source. These checks do not qualify full-size cloud policy geometry or transfer.
+
+Historical optimized external values use the same typed derivation and archive
+lifecycle; no new value kind or payload conversion is introduced. The natural
+language curriculum still decides whether/how much to train. Exact plumbing:
+1. Verify the optimized source's original raw parent, numeric optimizer update
+   and immutable compact encoding under the behavior codec as before.
+2. Decode its unchanged compact code with the current training decoder, retaining
+   the original source identity and adding the exact source adapter SHA alongside
+   the current parent adapter SHA and parent/actual training-step receipt.
+3. Validate this optional all-or-nothing extension in Python and TypeScript,
+   including source-parent codec identity, decoder parent checkpoint and monotone
+   step. Preserve every original origin/update artifact through store and .nz.
+4. Verify provenance/format here, as with other semantic derivations; this does
+   not attest recomputation of a neural decoder from a hash or equate intermediate
+   step weights with the frozen parent. New inference weights/codecs are published
+   by the existing joint checkpoint/export, not by relabeling intermediate state.
+Existing non-training derivation bytes and strict inference codec law are
+unchanged. The historical optimized-state case exercises a real scalar state
+update, compact encoding, changed current decoder, nonzero decoder gradient,
+Python-to-Node store/file/OPFS/.nz-to-Python roundtrip and adversarial bindings.
+
+Historical derived-codec qualification: combined CPU31 passed13.30s; stronger
+both-direction imported-consumer loss/adjoint and exact archive cases CPU6
+passed3.93s and actual CUDA6 passed9.02s (2.5GiB peak). TS build and final
+22-ratchet/typecheck quick passed. No tolerance or production arithmetic changed.

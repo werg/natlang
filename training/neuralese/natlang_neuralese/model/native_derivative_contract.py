@@ -94,6 +94,20 @@ def validate_derivation(value):
         validate_state_optimizer_arithmetic(value['arithmetic'])
     elif kind in ('semantic-encode','semantic-adapt'):
         required={'schema','kind','origin_state_ids','parent_state_id','adapter_sha256','source_native_identity','target_native_identity'}
+        if 'training_execution' in value or 'source_adapter_sha256' in value:
+            required|={'training_execution','source_adapter_sha256'}
+            execution=value.get('training_execution')
+            if (kind!='semantic-adapt' or not isinstance(execution,dict)
+                    or set(execution)!={'schema','parent_checkpoint_sha256','parent_adapter_sha256','parent_step','step','behavior_adapter_sha256'}
+                    or execution['schema']!='natlang.native-semantic-policy-execution/1'
+                    or any(not isinstance(execution[key],str) or _SHA.fullmatch(execution[key]) is None
+                           for key in ('parent_checkpoint_sha256','parent_adapter_sha256','behavior_adapter_sha256'))
+                    or any(type(execution[key]) is not int or execution[key]<0 for key in ('parent_step','step'))
+                    or execution['step']<execution['parent_step']
+                    or value.get('source_adapter_sha256')!=execution['behavior_adapter_sha256']
+                    or value.get('adapter_sha256')!=execution['parent_adapter_sha256']
+                    or (value.get('target_native_identity') or {}).get('checkpoint_sha256')!=execution['parent_checkpoint_sha256']):
+                raise ValueError('training semantic derivation needs exact immutable behavior and current decoder execution')
         if (set(value)!=required or not native_id(value['parent_state_id'],'nzs1_')
                 or not isinstance(value['origin_state_ids'],list) or not value['origin_state_ids']
                 or any(not native_id(item,'nzs1_') for item in value['origin_state_ids'])

@@ -40,6 +40,18 @@ const bad=structuredClone(states.get(data.root));delete bad.id;
 if(bad.metadata.derivation.kind==='optimizer')bad.metadata.derivation.step+=1;
 else bad.metadata.derivation.source_native_identity.checkpoint_sha256='b'.repeat(64);
 await assert.rejects(()=>memory.putNativeState(bad),/optimizer|binding|history|source|producer/);
+if(states.get(data.root).metadata.derivation.training_execution){
+  for(const mutation of ['source-adapter','decoder-adapter','step','parent','missing']){
+    const bad=structuredClone(states.get(data.root));delete bad.id;
+    const value=bad.metadata.derivation;
+    if(mutation==='source-adapter')value.source_adapter_sha256='b'.repeat(64);
+    else if(mutation==='decoder-adapter')value.adapter_sha256='b'.repeat(64);
+    else if(mutation==='step')value.training_execution.step=value.training_execution.parent_step-1;
+    else if(mutation==='parent')value.training_execution.parent_checkpoint_sha256='b'.repeat(64);
+    else delete value.training_execution;
+    await assert.rejects(()=>memory.putNativeState(bad),/semantic|decoder/);
+  }
+}
 const declaration=[...tensors.values()].find(value=>value.metadata.provenance.schema==='natlang.native-derivative-program/1');
 if(declaration){
 const omitted=structuredClone(declaration);delete omitted.id;omitted.metadata.provenance.dependencies=[];

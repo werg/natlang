@@ -160,6 +160,7 @@ class SemanticChannel:
             from .native_state_derivation import semantic_derivation
             if source_state_id is None:raise ValueError('optimized semantic decoding needs its exact source state ID')
             decoded=replace(decoded,derivation=semantic_derivation(block,source_state_id,self.adapter_sha256,
-                self.bindings[source_name],target_identity,'semantic-adapt'))
+                source_channel.bindings[source_name],target_identity,'semantic-adapt',
+                training_execution=training_execution if source_channel is not self else None))
         return decoded, {**receipt, 'target_model': target_name, 'alignment': matching,
                          'mode': 'learned-semantic-state-deltas', 'target_native_identity': target_identity}

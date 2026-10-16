@@ -9,7 +9,9 @@ export type NativeStateOptimizationDerivation={schema:typeof DERIVATION;kind:'op
   parent_state_id:string;gradient_id:string;update_artifact_id:string;program_id:string|null;
   optimizer_state_parent_id:string|null;step:number;optimizer:Record<string,string>;updated_tensor_names:string[];arithmetic:Record<string,string>};
 export type NativeStateSemanticDerivation={schema:typeof DERIVATION;kind:'semantic-encode'|'semantic-adapt';origin_state_ids:string[];
-  parent_state_id:string;adapter_sha256:string;source_native_identity:Record<string,string>;target_native_identity:Record<string,string>};
+  parent_state_id:string;adapter_sha256:string;source_native_identity:Record<string,string>;target_native_identity:Record<string,string>;
+  source_adapter_sha256?:string;training_execution?:{schema:'natlang.native-semantic-policy-execution/1';parent_checkpoint_sha256:string;
+    parent_adapter_sha256:string;behavior_adapter_sha256:string;parent_step:number;step:number}};
 export type NativeStateDerivation=NativeStateOptimizationDerivation|NativeStateSemanticDerivation;
 const keys=(value:object)=>Object.keys(value).sort().join(',');
 const sortedUnique=(value:unknown,pattern:RegExp):value is string[]=>Array.isArray(value)&&value.every(item=>typeof item==='string'&&pattern.test(item))&&
@@ -41,12 +43,25 @@ export function validateNativeStateDerivation(value:NativeStateDerivation|undefi
   if(value===undefined)return;
   if(value&&['semantic-encode','semantic-adapt'].includes(value.kind)){
     const item=value as NativeStateSemanticDerivation;
-    if(keys(item)!=='adapter_sha256,kind,origin_state_ids,parent_state_id,schema,source_native_identity,target_native_identity'||item.schema!==DERIVATION||
+    const training=item.training_execution!==undefined||item.source_adapter_sha256!==undefined;
+    const expected=['adapter_sha256','kind','origin_state_ids','parent_state_id','schema','source_native_identity','target_native_identity',
+      ...(training?['source_adapter_sha256','training_execution']:[])].sort().join(',');
+    if(keys(item)!==expected||item.schema!==DERIVATION||
       !STATE.test(item.parent_state_id)||!sortedUnique(item.origin_state_ids,STATE)||!item.origin_state_ids.length||!/^[0-9a-f]{64}$/.test(item.adapter_sha256))
       throw new RangeError('native semantic derivation needs exact origins, source and adapter');
     for(const identity of [item.source_native_identity,item.target_native_identity])if(!identity||keys(identity)!=='architecture,checkpoint_sha256,embedding_weight_sha256,tokenizer_fingerprint'||
       !identity.architecture||['checkpoint_sha256','tokenizer_fingerprint','embedding_weight_sha256'].some(key=>typeof identity[key]!=='string'||!/^[0-9a-f]{64}$/.test(identity[key]!)))
       throw new RangeError('native semantic derivation needs exact source/target model identities');
+    if(training){
+      const execution=item.training_execution;
+      if(item.kind!=='semantic-adapt'||!execution||keys(execution)!=='behavior_adapter_sha256,parent_adapter_sha256,parent_checkpoint_sha256,parent_step,schema,step'||
+        execution.schema!=='natlang.native-semantic-policy-execution/1'||
+        [execution.parent_checkpoint_sha256,execution.parent_adapter_sha256,execution.behavior_adapter_sha256].some(value=>typeof value!=='string'||!/^[0-9a-f]{64}$/.test(value))||
+        !Number.isSafeInteger(execution.parent_step)||execution.parent_step<0||!Number.isSafeInteger(execution.step)||execution.step<execution.parent_step||
+        item.source_adapter_sha256!==execution.behavior_adapter_sha256||item.adapter_sha256!==execution.parent_adapter_sha256||
+        item.target_native_identity.checkpoint_sha256!==execution.parent_checkpoint_sha256)
+        throw new RangeError('training semantic derivation needs exact immutable behavior and current decoder execution');
+    }
     return;
   }
   if(!value||value.kind!=='optimizer'||keys(value)!=='arithmetic,gradient_id,kind,optimizer,optimizer_state_parent_id,origin_state_ids,parent_state_id,program_id,schema,step,update_artifact_id,updated_tensor_names'||
