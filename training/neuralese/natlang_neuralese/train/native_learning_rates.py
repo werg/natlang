@@ -3,21 +3,24 @@ from __future__ import annotations
 import math
 from .optim_restore import set_learning_rates,_children
 
+INTERFACE_ROWS=frozenset(('interface.input_rows','interface.output_rows'))
+
 LEARNED_ROWS=frozenset('interface.'+name for name in
     ('input_rows','output_rows','extra_input_rows','extra_output_rows'))
 
 
-def validate_learned_row_rate(rate):
+def validate_learned_row_rate(rate, *, name='learned_row_learning_rate'):
     if rate is not None and (type(rate) not in (int,float) or not math.isfinite(rate) or rate<=0):
-        raise ValueError('learned_row_learning_rate must be finite and positive, or omitted to retain saved rates')
+        raise ValueError(name+' must be finite and positive, or omitted to retain saved rates')
     return rate
 
 
-def apply_native_learning_rates(optimizer,*,backbone_lr,learned_row_lr=None):
+def apply_native_learning_rates(optimizer,*,backbone_lr,learned_row_lr=None,interface_row_lr=None):
     named=getattr(optimizer,'_native_named_parameters',None)
     if named is None:
         raise ValueError('native learning rates require the actual named native optimizer inventory')
     validate_learned_row_rate(learned_row_lr)
+    validate_learned_row_rate(interface_row_lr,name='interface_row_learning_rate')
     for rate in (backbone_lr,):
         if rate is not None and (type(rate) not in (int,float) or not math.isfinite(rate) or rate<=0):
             raise ValueError('native learning rates must be finite and positive')
@@ -26,7 +29,10 @@ def apply_native_learning_rates(optimizer,*,backbone_lr,learned_row_lr=None):
              for group in child.param_groups for parameter in group['params']}
     rates={name:(learned_row_lr if learned_row_lr is not None else current[name])
            if name in LEARNED_ROWS else backbone_lr for name in current}
+    if interface_row_lr is not None:
+        rates.update({name:interface_row_lr for name in rates if name in INTERFACE_ROWS})
     changes=set_learning_rates(optimizer,named,rates)
     optimizer.native_learning_rates={'backbone_lr':backbone_lr,'declared_learned_row_lr':learned_row_lr,
+        'declared_interface_row_lr':interface_row_lr,
         'effective_learned_rows':{name:rate for name,rate in rates.items() if name in LEARNED_ROWS}}
     return changes
