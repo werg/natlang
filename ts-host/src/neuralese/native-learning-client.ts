@@ -29,6 +29,7 @@ async function post<T>(endpoint: string, path: string, body: unknown,
 export async function nativeGraphGradient(endpoint: string, store: NeuraleseStore, request: {
   graph: NativeGraphRow; target: NativeGradientTarget; nativeIdentity: NativeModelIdentity;
   adapterGradientPrecision?: 'storage' | 'fp32';
+  nativeStateModes?: Record<string, 'same-base-adapter-state'>;
   objective?: 'graph-ce' | NativePolicyObjectiveBinding; adapters?: (string | { id: string; scale?: number })[]; headers?: Record<string, string>;
 }): Promise<{ loss: number; stats: unknown; gradient: NativeTensorArtifact; native_identity: NativeModelIdentity; objective: string }> {
   if (request.graph.split !== 'train') throw new RangeError('native graph gradients accept train rows only');
@@ -41,7 +42,7 @@ export async function nativeGraphGradient(endpoint: string, store: NeuraleseStor
     native_identity: NativeModelIdentity; objective: string }>(
     endpoint, '/v1/neuralese/grad', { schema: 'natlang.native-gradient-request/1', graph: request.graph,
       target: request.target, native_identity: request.nativeIdentity, adapters: request.adapters,
-      adapter_gradient_precision: request.adapterGradientPrecision, objective: request.objective ?? 'graph-ce' }, request.headers);
+      adapter_gradient_precision: request.adapterGradientPrecision, native_state_modes: request.nativeStateModes, objective: request.objective ?? 'graph-ce' }, request.headers);
   if (!nativeModelIdentityEqual(reply.native_identity, request.nativeIdentity))
     throw new Error('neuralese-native-identity: gradient reply is bound to another checkpoint');
   const gradient = await archiveNativeTensorArtifact(endpoint, store, reply.gradient.id, request.headers);

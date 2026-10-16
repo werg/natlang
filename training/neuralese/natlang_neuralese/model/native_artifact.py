@@ -190,4 +190,9 @@ def native_tensor_dependencies(artifact):
     binding = (artifact.provenance or {}).get('adapter_binding') if artifact.kind == 'adapter-gradient' else None
     if binding:
         dependencies.extend(entry['id'] for entry in binding['adapters'])
+    for contract in ((artifact.provenance or {}).get('external_adapter_state_contracts') or {}).values():
+        for key in ('source_adapter_binding', 'target_adapter_binding'):
+            binding = contract.get(key)
+            if binding:
+                dependencies.extend(entry['id'] for entry in binding['adapters'])
     return list(dict.fromkeys(dependencies))

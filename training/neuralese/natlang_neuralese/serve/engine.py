@@ -197,6 +197,7 @@ class GenerationRequest:
     # sequence at its next round and fails its future with RequestError("cancelled").
     cancelled: bool = False
     rl_capture: bool = False  # optional exact rollout sampling receipt
+    native_state_modes: dict | None = None  # explicit input-ID keyed transport declarations
 
 
 @dataclass
@@ -640,6 +641,17 @@ class Engine:
         block = record.block
         exact = self._native_exact(block)
         adaptation = None
+        state_receipt = None
+        declared_mode = (seq.request.native_state_modes or {}).get(block_id)
+        if declared_mode is not None:
+            from ..model.native_adapters import adapter_state_input_receipt, SAME_BASE_STATE_MODE
+            if declared_mode != SAME_BASE_STATE_MODE:
+                raise RequestError('neuralese-native-state-mode', 'use same-base-adapter-state only for exact-base raw native state exchange')
+            try:
+                state_receipt = adapter_state_input_receipt(self, block, block_id,
+                    target_position_start=(int(seq.cache.lengths[0]) if seq.cache is not None else 0) + 1)
+            except ValueError as error:
+                raise RequestError('neuralese-native-state-mode', str(error)) from error
         observed_id = block_id if exact else None
         open_out = self._native_forward([self.role_tokens.consume_open], seq.cache)
         seq.cache = open_out["cache"]
@@ -647,7 +659,20 @@ class Engine:
             seq.native_rl_prompt.append({"kind": "tokens", "token_ids": [self.role_tokens.consume_open],
                                          "producing": [False]})
         seq.native_own_position += 1
-        if exact:
+        if state_receipt is not None:
+            # Validate and splice with the authenticated SOURCE identity. The
+            # target actor stays unchanged; the source artifact is never relabelled.
+            source = state_receipt['source_native_identity']
+            seq.cache = splice_block(self.shared_model, seq.cache, block,
+                checkpoint_sha256=source['checkpoint_sha256'],
+                tokenizer_fingerprint=source['tokenizer_fingerprint'],
+                embedding_weight_sha256=source['embedding_weight_sha256'])
+            mode = 'same-base-adapter-state'
+            observed_id = block_id
+            if seq.request.rl_capture:
+                seq.native_rl_prompt.append({'kind': 'native_state', 'id': block_id,
+                    'native_identity': source, 'adapter_state_consumption': state_receipt})
+        elif exact:
             seq.cache = splice_block(self.shared_model, seq.cache, block,
                                      checkpoint_sha256=self.execution_native_identity["checkpoint_sha256"],
                                      tokenizer_fingerprint=self.model_config["tokenizer_fingerprint"],
@@ -699,7 +724,8 @@ class Engine:
         seq.logits = self._native_logits(close_out["h_final"])
         seq.native_imports.append({"id": block_id, "mode": mode,
                                    **({'observed_native_state_id': observed_id} if observed_id is not None else {}),
-                                   **({'semantic_adaptation': adaptation} if adaptation is not None else {})})
+                                   **({'semantic_adaptation': adaptation} if adaptation is not None else {}),
+                                   **({'adapter_state_consumption': state_receipt} if state_receipt is not None else {})})
 
     @staticmethod
     def _native_block_identity(block):
@@ -717,7 +743,17 @@ class Engine:
     def _native_prefill(self, seq):
         return self._native_run(lambda: self._native_prefill_impl(seq), seq.request.adapters)
 
+    @staticmethod
+    def _validate_native_state_modes(modes, input_ids):
+        if modes is not None and (not isinstance(modes, dict) or
+                any(not isinstance(key, str) or key not in input_ids or value != 'same-base-adapter-state'
+                    for key, value in modes.items())):
+            raise RequestError('neuralese-native-state-mode',
+                'native_state_modes must map actual native input IDs to same-base-adapter-state')
+
     def _native_prefill_impl(self, seq):
+        self._validate_native_state_modes(seq.request.native_state_modes,
+            {value for kind, value in seq.prompt_plan or () if kind == 'native_state'})
         if seq.request.rl_capture:
             from ..model.native_adapters import execution_binding, SCHEMA
             seq.native_rl_policy = dict(self.execution_native_identity)
@@ -915,11 +951,11 @@ class Engine:
         result["source_text_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
         return result
 
-    def native_init_body(self, messages, tools, placeholder: str, text: str, *, value_type: str | None = None, placeholder_occurrence: int | None = None, adapters=None):
+    def native_init_body(self, messages, tools, placeholder: str, text: str, *, value_type: str | None = None, placeholder_occurrence: int | None = None, adapters=None, native_state_modes=None):
         return self._native_run(lambda: self._native_init_body_impl(messages, tools, placeholder, text,
-            value_type=value_type, placeholder_occurrence=placeholder_occurrence), adapters)
+            value_type=value_type, placeholder_occurrence=placeholder_occurrence, native_state_modes=native_state_modes), adapters)
 
-    def _native_init_body_impl(self, messages, tools, placeholder: str, text: str, *, value_type: str | None = None, placeholder_occurrence: int | None = None):
+    def _native_init_body_impl(self, messages, tools, placeholder: str, text: str, *, value_type: str | None = None, placeholder_occurrence: int | None = None, native_state_modes=None):
         """Capture supplied body tokens at their actual rendered causal position in a soft call."""
         if not getattr(self, "native_state_enabled", False):
             raise RequestError("neuralese-native-state-unavailable", "native body initialization requires shared-state serving")
@@ -951,6 +987,8 @@ class Engine:
                 return json.dumps(replaced, ensure_ascii=False, separators=(",", ":")) if found != before else value
             return value
         rendered = self.render_request(replace(messages), tools)
+        self._validate_native_state_modes(native_state_modes, {block_id for block_id, kind in
+            zip(rendered.blocks, rendered.block_kinds or ['neuralese'] * len(rendered.blocks)) if kind == 'native_state'})
         if (placeholder_occurrence is None and found != 1) or (placeholder_occurrence is not None and found <= placeholder_occurrence):
             raise RequestError("neuralese-native-state-placeholder", f"found {found} matching parts; pass placeholder_occurrence to select the exact body occurrence when its content ID is also imported")
         matches = [(index, segment) for index, segment in enumerate(rendered.segments)
@@ -987,7 +1025,7 @@ class Engine:
                     block_id = rendered.blocks[segment]
                     if kinds[segment] != "native_state":
                         raise RequestError("neuralese-native-state-text", "legacy projected blocks cannot initialize native state")
-                    temp = Sequence(GenerationRequest(messages=[], rl_capture=True), Future(), cache=cache)
+                    temp = Sequence(GenerationRequest(messages=[], rl_capture=True, native_state_modes=native_state_modes), Future(), cache=cache)
                     self._native_consume(temp, block_id)
                     cache = temp.cache
                     source_segments.extend(temp.native_rl_prompt)

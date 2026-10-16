@@ -23,6 +23,7 @@ class NativeReplay:
     external_blocks: dict
     identity: dict
     adapter_binding: dict | None = None
+    external_receipts: dict | None = None
 
 
 def _tokens(ids):
@@ -131,12 +132,22 @@ def compile_replay(turns, *, identity, roles, fetch_block):
                     raise ValueError('native RL prompt requires exact per-token embedding roles')
                 own.extend(ids); mask.extend(flags)
             elif segment.get('kind') == 'native_state':
-                if segment.get('native_identity') != identity:
+                receipt = segment.get('adapter_state_consumption')
+                if receipt is not None:
+                    from ..model.native_adapters import validate_adapter_state_receipt
+                    block = fetch_block(segment['id'])
+                    validate_adapter_state_receipt(block, receipt, target_identity=identity, target_binding=adapter_binding)
+                    if segment.get('native_identity') != receipt['source_native_identity']:
+                        raise ValueError('native RL input source identity differs from its consumption receipt')
+                    logical_position = len(own) + sum(len(fetch_block(ident).token_ids) for _, ident, _ in reads)
+                    if receipt['target_position_start'] != logical_position:
+                        raise ValueError('native RL consumption receipt changed actual consumer position')
+                elif segment.get('native_identity') != identity:
                     raise ValueError('foreign native RL state needs an explicit adaptation/reencoding capture')
-                reads.append((len(own), segment['id']))
+                reads.append((len(own), segment['id'], receipt))
             else:
                 raise ValueError('unknown native RL prompt segment')
-        if not own or any(at == len(own) for at, _ in reads):
+        if not own or any(at == len(own) for at, _, _ in reads):
             raise ValueError('native RL prompt must end in its own consumer query token')
         prompt_length = len(own)
         samples, writes = _input_stream(capture, prompt_length)
@@ -233,13 +244,13 @@ def compile_replay(turns, *, identity, roles, fetch_block):
                           'events': events, 'spans': spans}
     if not prepared:
         raise ValueError('native RL graph has no captured turns')
-    externals, nodes, ordered = {}, [], []
+    externals, nodes, ordered, external_receipts = {}, [], [], {}
     pending = dict(prepared)
     while pending:
         progress = False
         for name, item in list(pending.items()):
             imports, dependencies = [], set()
-            for at, block_id in item['reads']:
+            for at, block_id, receipt in item['reads']:
                 choices = writers.get(block_id, [])
                 binding = (item['turn'].get('read_bindings') or {}).get(block_id)
                 if binding is not None:
@@ -256,9 +267,12 @@ def compile_replay(turns, *, identity, roles, fetch_block):
                     if source not in externals:
                         externals[source] = fetch_block(block_id)
                     block = externals[source]
-                    block.require_native(**identity)
-                    if getattr(block, 'adapter_binding', None) != adapter_binding:
-                        raise ValueError('native RL external state adapter binding differs from its actor')
+                    if receipt is not None:
+                        external_receipts.setdefault(source, []).append(receipt)
+                    else:
+                        block.require_native(**identity)
+                        if getattr(block, 'adapter_binding', None) != adapter_binding:
+                            raise ValueError('native RL external state adapter binding differs from its actor')
                     start, stop = 0, len(block.token_ids)
                 imports.append(ImportSpan(at, source, start, stop))
             if any(dependency in pending for dependency in dependencies):
@@ -279,7 +293,7 @@ def compile_replay(turns, *, identity, roles, fetch_block):
     plan = compile_graph(nodes, external_sizes={name: len(block.token_ids) for name, block in externals.items()})
     actions = tuple({**event, 'query': offset + event['local_query']}
         for offset, item in zip(plan.offsets, ordered) for event in item['events'])
-    return NativeReplay(plan, actions, externals, dict(identity), adapter_binding)
+    return NativeReplay(plan, actions, externals, dict(identity), adapter_binding, external_receipts)
 
 
 def replay_logps(model, replay, *, checkpoint_layers=True, chunk_tokens=128):
@@ -288,7 +302,8 @@ def replay_logps(model, replay, *, checkpoint_layers=True, chunk_tokens=128):
     require_model_execution_actor(model, replay.identity, replay.adapter_binding)
     model.port.checkpoint_layers = checkpoint_layers
     result = model(replay.plan, external_blocks=replay.external_blocks,
-                   external_identity=replay.identity, retain_states=False)
+                   external_identity={name: {key: getattr(block, key) for key in replay.identity}
+                       for name, block in replay.external_blocks.items()}, retain_states=False)
     return action_logps(model, result['h_final'][0], replay.actions, chunk_tokens=chunk_tokens)
 
 
@@ -340,6 +355,8 @@ class NativePolicyObjective:
         self.evaluation_adapter_binding = self.adapter_binding
         self.bundle = None
         self.external_state_overrides = {}
+        self.engine = None
+        self.native_state_modes = {}
         if self.spec.get('block_bundle'):
             bundle_path = Path(self.spec['block_bundle']).resolve()
             self.bundle = (bundle_path, json.loads(bundle_path.read_text()))
@@ -350,6 +367,7 @@ class NativePolicyObjective:
     def bind_actor(self, engine):
         """Separate immutable sampled behavior from current same-basis coefficients."""
         from ..model.native_adapters import execution_identity, execution_binding, SCHEMA
+        self.engine = engine
         current = execution_identity(engine)
         active = execution_binding(engine)
         if self.adapter_binding is None:
@@ -400,12 +418,10 @@ class NativePolicyObjective:
         from pathlib import Path
         from ..common.hashing import sha256_file_hex_cached
         from ..serve.store import decode_native_state
-        blocks = {}
+        blocks, identities = {}, {}
         for example in context['examples']:
             if example.id not in self.rows:
                 raise ValueError('native objective has no captured policy row for this graph')
-            if example.external_states and self.evaluation_identity != self.identity:
-                raise ValueError('changed adapter policy with external behavior KV requires a fresh rollout under strict transport; same-base adapter-state transport must be explicitly supported and requested')
             for name, binding in example.external_states.items():
                 if self.bundle is None:
                     raise ValueError('native RL external observations require their durable state bundle')
@@ -417,18 +433,32 @@ class NativePolicyObjective:
                 if sha256_file_hex_cached(artifact) != entry['sha256']:
                     raise ValueError('native RL external artifact bytes changed')
                 block, block_id = decode_native_state(artifact.read_bytes())
-                block.require_native(**self.identity)
+                receipts = self.rows[example.id].get('external_consumption_receipts', {}).get(name)
+                mode = self.native_state_modes.get(binding['id'])
+                if mode is not None:
+                    from ..model.native_adapters import adapter_state_input_receipt, validate_adapter_state_receipt, SAME_BASE_STATE_MODE
+                    if mode != SAME_BASE_STATE_MODE or not isinstance(receipts, list) or not receipts or self.engine is None:
+                        raise ValueError('same-base adapter-state evaluation requires its actual behavior consumption receipt')
+                    for receipt in receipts:
+                        validate_adapter_state_receipt(block, receipt, target_identity=self.identity, target_binding=self.adapter_binding)
+                        adapter_state_input_receipt(self.engine, block, binding['id'], target_position_start=receipt['target_position_start'])
+                else:
+                    if self.evaluation_identity != self.identity:
+                        raise ValueError('changed adapter policy with external behavior KV requires a fresh rollout under strict transport; same-base adapter-state transport must be explicitly supported and requested')
+                    block.require_native(**self.identity)
+                source_identity = {key: getattr(block, key) for key in self.identity}
                 if block_id != binding['id'] or len(block.token_ids) != binding['token_count']:
                     raise ValueError('native RL archived state differs from graph input binding')
                 override = self.external_state_overrides.get(binding['id'])
                 if override is not None:
-                    override.require_native(**self.identity)
+                    override.require_native(**source_identity)
                     if len(override.token_ids) != binding['token_count']:
                         raise ValueError('native RL state-gradient override differs from admitted graph binding')
                     block = override
                 packed_name = context['external_names'][example.id][name]
                 blocks[packed_name] = block
-        return {'external_blocks': blocks, 'external_identity': self.identity} if blocks else {}
+                identities[packed_name] = source_identity
+        return {'external_blocks': blocks, 'external_identity': identities} if blocks else {}
 
     def __call__(self, model, result, context):
         from .full_policy import clipped_token_loss
@@ -526,6 +556,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             example = parse_graph(graph, tokenizer_fingerprint=identity['tokenizer_fingerprint'])
             objective_rows[identifier] = {'graph_sha256': canonical_json_sha256_hex(graph_identity(example)),
                 'actions': list(replay.actions), 'advantage': float(advantage or 0.),
+                'external_consumption_receipts': replay.external_receipts or {},
                 'task_id': rollout['task_id'], 'sample': rollout.get('sample')}
             graphs.append(graph)
     return graphs, {'schema': 'natlang.native-policy-objective/1', 'kind': 'native-policy',

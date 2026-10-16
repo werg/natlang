@@ -74,7 +74,7 @@ def _score_item(engine, item, adapters=None):
 
 def _score_rendered(engine, item, plan, continuations, bindings):
     request = GenerationRequest(messages=item.get("messages") or [], tools=item.get("tools"), max_tokens=0,
-                                adapters=bindings)
+                                adapters=bindings, native_state_modes=item.get('native_state_modes'))
     sequence = Sequence(request, None, prompt_plan=plan)
     engine._native_prefill(sequence)
     base_cache, base_logits = sequence.cache, sequence.logits
@@ -85,7 +85,7 @@ def _score_rendered(engine, item, plan, continuations, bindings):
 def decide_native(engine, body: dict) -> dict:
     """Score candidate replies from a single exact native prompt cache."""
     return _score_item(engine, {"messages": body.get("messages") or [], "tools": body.get("tools"),
-                                "options": body.get("options") or []}, body.get('adapters'))
+                                "options": body.get("options") or [], "native_state_modes": body.get("native_state_modes")}, body.get('adapters'))
 
 
 def decide_many_native(engine, body: dict) -> dict:
@@ -96,7 +96,7 @@ def decide_many_native(engine, body: dict) -> dict:
     results = []
     for item in items:
         try:
-            results.append(_score_item(engine, item, body.get("adapters")))
+            results.append(_score_item(engine, {"native_state_modes": body.get("native_state_modes"), **item}, body.get("adapters")))
         except Exception as error:  # item failures are part of the shared score contract
             code = error.code if isinstance(error, RequestError) else "internal"
             results.append({"error": f"{code}: {error}"[:500]})

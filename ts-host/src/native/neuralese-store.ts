@@ -93,6 +93,16 @@ export function nativeTensorArtifactDependencies(artifact: Pick<NativeTensorArti
     validateNativeAdapterBinding(binding, meta.provenance.effective_native_identity as NativeModelIdentity);
     dependencies.push(...binding.adapters.map(entry => entry.id));
   }
+  const contracts = meta.provenance.external_adapter_state_contracts as Record<string, {
+    source_adapter_binding?: NativeAdapterBinding; target_adapter_binding?: NativeAdapterBinding;
+    source_native_identity: NativeModelIdentity; target_native_identity: NativeModelIdentity }> | undefined;
+  for (const contract of Object.values(contracts ?? {})) for (const side of ['source', 'target'] as const) {
+    const actor = contract[`${side}_adapter_binding`];
+    if (actor) {
+      validateNativeAdapterBinding(actor, contract[`${side}_native_identity`]);
+      dependencies.push(...actor.adapters.map(entry => entry.id));
+    }
+  }
   return [...new Set(dependencies)];
 }
 

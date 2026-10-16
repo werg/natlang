@@ -566,6 +566,26 @@ def native_step(model, ids, cache=None, *, producing=False):
             'token_ids': ids[0], 'embeddings': raw[0], 'positions': positions, 'layers': tuple(captures)}
 
 
+def validate_native_state_layout(port, block):
+    """Check the entire raw profile before any mutable cached append occurs."""
+    block.validate()
+    if block.architecture != str(getattr(port.config, 'model_type', type(port).__name__)):
+        raise ValueError('native state architecture differs from the consumer')
+    if len(block.layers) != port.num_layers:
+        raise ValueError('native state decoder depth disagrees with the consumer')
+    if block.embeddings.shape[1] != port.embedding_weight.shape[1]:
+        raise ValueError('native state embedding width disagrees with the consumer')
+    if bool((block.token_ids >= port.embedding_weight.shape[0]).any()):
+        raise ValueError('native state token IDs are outside the target vocabulary')
+    for index, payload in enumerate(block.layers):
+        if port.is_attention(index):
+            attn = port.layers[index].self_attn
+            if payload['kind'] != 'attention' or payload['raw_k'].shape[1:] != (attn.k_proj.out_features // attn.head_dim, attn.head_dim):
+                raise ValueError('native state attention head layout disagrees with the consumer')
+        elif payload['kind'] != 'finite_convolution' or payload['gated_inputs'].shape[1] != port.layers[index].conv.conv.weight.shape[0]:
+            raise ValueError('native state convolution channels disagree with the consumer')
+
+
 def splice_block(model, cache, block, *, checkpoint_sha256, tokenizer_fingerprint, embedding_weight_sha256):
     """Append a verified native block with consumer-local positional encoding."""
     from .lfm2_port import PortCache, ConvState, append_kv
@@ -576,6 +596,7 @@ def splice_block(model, cache, block, *, checkpoint_sha256, tokenizer_fingerprin
         if getattr(block, field) != expected:
             raise ValueError(f'native Neuralese {field} differs; re-encode text with this model before consuming it')
     port = model.port
+    validate_native_state_layout(port, block)
     if block.architecture != str(getattr(port.config, 'model_type', type(port).__name__)):
         raise ValueError('native state architecture differs from the consumer')
     cache = cache or PortCache.empty(port.num_layers)
@@ -642,11 +663,18 @@ def _external_layers(port, plan, external_blocks, external_identity):
         raise ValueError('external state names must exactly match the compiled graph contract')
     if blocks and external_identity is None:
         raise ValueError('external native state requires the explicit target model identity')
+    identity_fields = {'checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture'}
+    per_input_identity = (isinstance(external_identity, dict) and
+                          set(external_identity) == set(plan.external_names) and
+                          all(isinstance(value, dict) and set(value) == identity_fields for value in external_identity.values()))
+    if blocks and not per_input_identity and (not isinstance(external_identity, dict) or set(external_identity) != identity_fields):
+        raise ValueError('external identities must provide one exact four-field identity or exact per-input identities')
     result = []
     kinds = tuple('attention' if port.is_attention(i) else 'finite_convolution' for i in range(port.num_layers))
     for name, count in zip(plan.external_names, plan.external_sizes):
         block = blocks[name]
-        block.require_native(**external_identity, layer_kinds=kinds)
+        identity = external_identity[name] if per_input_identity else external_identity
+        block.require_native(**identity, layer_kinds=kinds)
         if block.architecture != str(getattr(port.config, 'model_type', type(port).__name__)):
             raise ValueError('external native state architecture disagrees with the target decoder')
         if len(block.token_ids) != count or len(block.layers) != port.num_layers:

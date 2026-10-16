@@ -30,7 +30,7 @@ def post_service(engine, path, body):
         server.shutdown();server.server_close();thread.join()
 
 
-def capture_actor(engine, entries, monkeypatch):
+def capture_actor(engine, entries, monkeypatch, *, explicit_state_mode=False):
     roles = engine.role_tokens
     selected = iter([roles.produce_open, 5, 6, roles.produce_close, 2])
     # Select deterministic actions, but retain their ACTUAL normalized behavior
@@ -45,8 +45,9 @@ def capture_actor(engine, entries, monkeypatch):
     selected = iter([7, 2])
     reader = engine.generate(GenerationRequest(messages=[{'role':'user','content':[
         {'type':'text','text':'t6 '}, {'type':'native_state','id':block_id}]}],
-        adapters=entries, temperature=.8, seed=22, max_tokens=8, rl_capture=True))
-    assert reader['native_state']['imports'][0]['mode'] == 'exact-native-state'
+        adapters=entries, temperature=.8, seed=22, max_tokens=8, rl_capture=True,
+        native_state_modes={block_id:'same-base-adapter-state'} if explicit_state_mode else None))
+    assert reader['native_state']['imports'][0]['mode'] == ('same-base-adapter-state' if explicit_state_mode else 'exact-native-state')
     turns = [{'graph_turn':'writer','sampling':writer['x_natlang_rl_capture'],
               'written_nodes':{block_id:'writer-occurrence'}},
              {'graph_turn':'reader','sampling':reader['x_natlang_rl_capture'],
@@ -133,7 +134,7 @@ def test_fp32_actual_adapted_actor_capture_replay_and_consumer_producer_coeffici
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
-@pytest.mark.parametrize('external_observation',[False,True])
+@pytest.mark.parametrize('external_observation',[False,True,'explicit'])
 def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,monkeypatch,family,external_observation):
     torch.manual_seed(1701)
     engine=engine_fixture(tmp_path,family,service_template=True)
@@ -141,7 +142,7 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
     peer,_=nonzero_adapter(engine,'tiny')
     entries=[{'id':adapter.id,'scale':.75},{'id':peer.id,'scale':-.25},{'id':adapter.id,'scale':.1}]
     identity=effective_identity(engine,resolve_adapters(engine,entries))
-    block_id,turns=capture_actor(engine,entries,monkeypatch)
+    block_id,turns=capture_actor(engine,entries,monkeypatch,explicit_state_mode=external_observation=='explicit')
     selected=turns[1:] if external_observation else turns
     rows=[{'messages':[],'target':{},'invocation_id':turn['graph_turn'],
            'sampling':turn['sampling'],'replay':{'raw_calls_retained':True}} for turn in selected]
@@ -168,6 +169,7 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
           'adapters':entries,'native_identity':engine.native_identity,
           'objective':{'kind':'native-policy','path':str(spec_path),'sha256':sha256_file_hex_cached(spec_path)},
           'target':{'kind':'adapter','id':adapter.id,'names':[name]}}
+    if external_observation=='explicit':body['native_state_modes']={block_id:'same-base-adapter-state'}
     reference=torch.nn.Parameter(adapter.artifact.tensors[name].clone())
     reference_optimizer=torch.optim.Adam([reference],lr=.01)
     original_spec=spec_path.read_bytes()
@@ -192,7 +194,7 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
     current_entries=[{**entry,'id':current_id if entry['id']==adapter.id else entry['id']} for entry in entries]
     next_body={**body,'adapters':current_entries,'target':{'kind':'adapter','id':current_id,'names':[name]}}
     engine.store.close();engine.store=TensorStore(directory=tmp_path/'restored')
-    if external_observation:
+    if external_observation is True:
         from urllib.error import HTTPError
         with pytest.raises(HTTPError) as error:
             post_service(engine,'/v1/neuralese/grad',next_body)
@@ -207,6 +209,41 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
     assert second_gradient.provenance['effective_native_identity']==updated['effective_native_identity']
     assert second_gradient.provenance['effective_native_identity']!=identity
     assert not torch.equal(second_gradient.tensors[name],artifact.tensors[name])
+    import os
+    if external_observation=='explicit' and (family=='lfm' or os.environ.get('NATLANG_REQUIRE_MELLUM_ADAPTER_STATE_PARITY')=='1'):
+        # Mellum's known-red strict qualification remains executable through the
+        # explicit flag; ordinary durability tests do not claim adjoint parity.
+        # Actual current Engine prefill/import/continuation, not detached-KV
+        # replay labelled as runtime. The same immutable source is deliberately
+        # accepted under the declared exact-base mode on both executions.
+        from concurrent.futures import Future
+        from natlang_neuralese.serve.engine import Sequence
+        from natlang_neuralese.rl.full_policy import clipped_token_loss
+        coefficient=engine.store.get_native_tensor_artifact(current_id).artifact.tensors[name].clone().requires_grad_(True)
+        request=GenerationRequest(messages=[{'role':'user','content':[
+            {'type':'text','text':'t6 '},{'type':'native_state','id':block_id}]}],
+            adapters=current_entries, native_state_modes={block_id:'same-base-adapter-state'}, temperature=.8)
+        def cached_objective():
+            seq=Sequence(request,Future(),prompt_plan=engine._prompt_plan(request.messages,None))
+            engine._native_prefill(seq)
+            actions=spec['rows'][graphs[0]['id']]['actions']
+            current=[]
+            for index,action in enumerate(actions):
+                distribution=seq.logits[0].float().div(action['temperature']).log_softmax(-1)
+                current.append(distribution[action['token_id']])
+                if index+1<len(actions):
+                    output=engine._native_forward([action['token_id']],seq.cache)
+                    seq.cache=output['cache'];seq.logits=engine._native_logits(output['h_final'])
+            new=torch.stack(current)
+            old=new.new_tensor([action['behavior_logp'] for action in actions])
+            loss=clipped_token_loss(new,old,spec['rows'][graphs[0]['id']]['advantage'],
+                clip_low=spec.get('clip_low',.2),clip_high=spec.get('clip_high',.28)).mean()
+            return torch.autograd.grad(loss,coefficient)[0]
+        expected_grad=run_native(engine,cached_objective,current_entries,
+            leaves={current_id:{name:coefficient}},gradient_precision='fp32')
+        actual_grad=second_gradient.tensors[name].to(expected_grad)
+        torch.testing.assert_close(actual_grad,expected_grad,atol=3e-6,rtol=2e-5)
+        assert (actual_grad-expected_grad).norm()/expected_grad.norm()<2e-5
     reference_optimizer.zero_grad(set_to_none=True)
     reference.grad=second_gradient.tensors[name].clone();reference_optimizer.step()
     continued=post_service(engine,'/v1/neuralese/optim',{'schema':'natlang.native-optimizer-request/1',

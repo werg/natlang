@@ -384,3 +384,11 @@ external behavior KV requires a fresh rollout. Internal producer state is
 replayed under current coefficients; external KV cannot be silently relabelled.
 An explicitly supported/requested same-base adapter-state mode is required to
 retain external KV across actor changes.
+
+Native adapter-state exchange: an explicit `same-base-adapter-state` declaration
+may import raw state from another adapter actor only on the exact same base,
+tokenizer, embedding and architecture. For `neuralese-native-state-mode`, restore
+the source coefficient/basis artifacts and correct the exact input-ID declaration;
+use learned semantic adaptation for different bases. This mode remains
+unadvertised pending its full numerical qualification; do not infer support from
+matching tensor dimensions.

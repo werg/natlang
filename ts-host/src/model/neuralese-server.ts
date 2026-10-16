@@ -248,6 +248,8 @@ export type NeuraleseServerOptions = Omit<HttpChatOptions, 'stream'> & Pick<Chat
   neuraleseTemperature?: number;
   /** Requested maximum block length; the server caps it by its hard maximum. */
   neuraleseMaxLength?: number;
+  /** Explicit raw-state exchange between actors of the exact same native base. */
+  nativeStateModes?: Record<string, 'same-base-adapter-state'>;
   /** Extra request fields. */
   request?: Json;
   /**
@@ -388,7 +390,7 @@ function normalizeReply(body: Json): Json {
 /** A model-turn driver for a Neuralese server. It advertises `neuralese: true`. */
 export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     ((request: ModelTurnRequest, signal?: AbortSignal, options?: ModelTurnOptions) => Promise<ModelTurn>) & { neuralese: true; blocks: HttpNeuraleseStore; decide: DecisionScorer } {
-  const { store, neuraleseTemperature, neuraleseMaxLength, request: extra, onExchange, onTurn, adapterLoras, owner,
+  const { store, neuraleseTemperature, neuraleseMaxLength, request: extra, onExchange, onTurn, adapterLoras, owner, nativeStateModes,
     ...connection } = options;
   const http = { ...connection, headers: { ...connection.headers,
     ...(connection.apiKey ? { authorization: 'Bearer ' + connection.apiKey } : {}),
@@ -438,6 +440,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         throw Object.assign(new Error(`neuralese-${capability.replaceAll('.', '-')}-unavailable: use a server that implements this typed readout`),
           { code: `neuralese-${capability.replaceAll('.', '-')}-unavailable` });
     }
+    if (nativeStateModes) body = { ...body, x_natlang_native_state_modes: nativeStateModes };
     const adapters = await adapterParts((body.x_natlang_adapters ?? []) as { id: string; scale: number }[]);
     const inner = (await serverInfo())?.stream === true ? streamed : whole;
     // A streamed reply is assembled here, where its body is post-processed; its deltas go to the turn's observer, and a
@@ -524,12 +527,15 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   const decideRequest = async (messages: unknown[], replies: readonly string[], adapters: readonly { id: string; scale: number }[],
       signal?: AbortSignal) =>
     await withRestoredBlocks(remote, store, blockIds(messages, adapters), async () => {
+      return await withRestoredNativeStates(remote, store, requestNativeStateIds(messages), async () => {
       const response = await fetchModel(http.endpoint.replace(/\/$/, '') + '/v1/neuralese/decide', { method: 'POST', signal,
         headers: { 'content-type': 'application/json', ...http.headers },
-        body: JSON.stringify({ messages, options: replies, ...(adapters.length ? { adapters } : {}) }) });
+        body: JSON.stringify({ messages, options: replies, ...(adapters.length ? { adapters } : {}),
+          ...(nativeStateModes ? { native_state_modes: nativeStateModes } : {}) }) });
       if (response.status === 404 || response.status === 501) throw new Error('decision-unsupported: the server does not serve /v1/neuralese/decide');
       if (!response.ok) throw new Error(`neuralese decide HTTP ${response.status}: ${(await response.text()).slice(0, 2000)}`);
       return await response.json() as DecisionScores;
+      }, nativeUploaded);
     }, uploaded);
   const decide: DecisionScorer = async ({ messages, options: replies, adapters: bound }, signal) =>
     decideRequest(messages, replies, await prepare(messages, replies, bound), signal);

@@ -757,3 +757,9 @@ scope/bundle or collecting new admitted behavior. Skills explain continuing
 coefficient updates without rewriting old logps/receipts. Measure approximately
 48 live executor samples per variant in the next own-model teacher window.
 No new prompt policy and no production controller adoption are introduced.
+
+- 2026-10-16: Native same-base adapter-state transport exposes an explicit
+  input-ID keyed declaration and teachable `neuralese-native-state-mode` errors.
+  Existing default transport is unchanged; capability is unadvertised pending
+  strict Mellum incremental/flat adjoint repair and independent review. Live
+  executor feedback measurement remains debt for the next own-teacher window.

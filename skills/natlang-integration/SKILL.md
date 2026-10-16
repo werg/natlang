@@ -394,3 +394,11 @@ external behavior KV requires a fresh rollout. Internal producer state is
 replayed under current coefficients; external KV cannot be silently relabelled.
 An explicitly supported/requested same-base adapter-state mode is required to
 retain external KV across actor changes.
+
+Native adapter-state transport uses `x_natlang_native_state_modes` on chat and
+`native_state_modes` on scoring/gradient/context-init requests, mapping actual
+input IDs to `same-base-adapter-state`. A mode error requires restoring exact
+source coefficient/basis closure or correcting the base/input declaration; never
+retry by silently dropping the declaration. Preserve source and target actor
+bindings and consumption receipts in archives. The capability remains
+unadvertised until the outstanding Mellum adjoint qualification is repaired.

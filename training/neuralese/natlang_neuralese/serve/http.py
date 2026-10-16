@@ -337,7 +337,7 @@ def make_handler(engine: Engine):
                     body = self._object()
                     return self._json(201, engine.native_init_body(body.get("messages") or [], body.get("tools"),
                         body.get("placeholder"), body.get("text"), value_type=body.get("type"),
-                        placeholder_occurrence=body.get("placeholder_occurrence"), adapters=body.get('adapters')))
+                        placeholder_occurrence=body.get("placeholder_occurrence"), adapters=body.get('adapters'), native_state_modes=body.get('native_state_modes')))
                 if self.path == "/v1/chat/completions":
                     return self._chat(self._object())
                 if self.path == "/v1/neuralese/collect":
@@ -535,6 +535,7 @@ def make_handler(engine: Engine):
                 neuralese_length=body.get("neuralese_length"), neuralese_passes=body.get("neuralese_passes"),
                 template=body.get("neuralese_template"), adapters=body.get("x_natlang_adapters"),
                 rl_capture=bool(body.get('x_natlang_rl_capture', False)),
+                native_state_modes=body.get('x_natlang_native_state_modes'),
                 guidance=Settings.of(body.get("guidance", getattr(engine, "default_guidance", None)), body.get("tools"),
                                      body.get("tool_choice")))
             if body.get("stream"):

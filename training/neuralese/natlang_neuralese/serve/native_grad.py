@@ -108,8 +108,14 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
             from ..rl.native_replay import NativePolicyObjective
             objective = NativePolicyObjective(spec_path)
             objective.bind_actor(engine)
+            objective.native_state_modes = body.get('native_state_modes') or {}
         observation_identity = objective.identity if objective is not None else effective
-        imported, leaf_map, state_overrides = {}, {}, {}
+        modes = body.get('native_state_modes')
+        if modes is not None and (not isinstance(modes, dict) or any(
+                key not in {value['id'] for value in example.external_states.values()} or value != 'same-base-adapter-state'
+                for key, value in modes.items())):
+            raise ValueError('native_state_modes must declare actual external IDs and same-base-adapter-state')
+        imported, leaf_map, state_overrides, input_identities, consumption_receipts = {}, {}, {}, {}, {}
         for name, binding in example.external_states.items():
             record = engine.store.get_native_state(binding['id'])
             if record is None:
@@ -119,7 +125,13 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
             block = record.block
             if len(block.token_ids) != binding['token_count']:
                 raise ValueError(f'external state token count changed for {name}')
-            block.require_native(**observation_identity)
+            if (modes or {}).get(binding['id']) is not None:
+                from ..model.native_adapters import adapter_state_input_receipt
+                consumption_receipts[name] = adapter_state_input_receipt(engine, block, binding['id'], target_position_start=0)
+                input_identities[name] = consumption_receipts[name]['source_native_identity']
+            else:
+                block.require_native(**observation_identity)
+                input_identities[name] = observation_identity
             copied, leaves = _leaf_block(block)
             leaf_map.update({f'external.{name}.{key}': value for key, value in leaves.items()})
             if isinstance(objective_request, dict):
@@ -178,7 +190,7 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
             loss, stats = packed_graph_loss(engine.shared_model, [example], objective=objective)
         else:
             loss, stats = graph_loss(engine.shared_model, example, external_blocks=imported,
-                                     external_identity=effective)
+                                     external_identity=input_identities)
         grads = torch.autograd.grad(loss, tuple(target_tensors.values()), allow_unused=True)
         tensors = {name: grad.detach() for name, grad in zip(target_tensors, grads) if grad is not None}
         if set(tensors) != set(target_tensors):
@@ -188,6 +200,9 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
             {'objective': ('native-graph-token-ce/1' if not isinstance(objective_request, dict)
                            else 'native-policy-objective/1'), 'graph_id': example.id,
              'graph_sha256': graph_sha256, 'target_kind': kind,
+             'external_source_identities': input_identities,
+             'external_adapter_state_contracts': {name: {key: value for key, value in receipt.items()
+                 if key not in {'target_position_start', 'tokens'}} for name, receipt in consumption_receipts.items()},
              'target_names': sorted(tensors), 'effective_native_identity': effective,
              'adapter_gradient_precision': body.get('adapter_gradient_precision', 'storage'),
              'adapters': body.get('adapters') or [],

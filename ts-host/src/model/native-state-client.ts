@@ -2,15 +2,21 @@
 import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore, requestNativeStateIds, restoreBlocks } from '../model/neuralese-server.js';
 import { archiveNativeTensorFrom, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlockMeta,
-  type NeuralesePort, type NeuraleseStore } from '../native/neuralese-store.js';
+  type NeuralesePort, type NeuraleseStore, type NativeAdapterBinding } from '../native/neuralese-store.js';
 import { hexDigest } from '../native/hash.js';
 import { neuraleseServerInfo, serves, type NeuraleseServerInfo } from '../model/neuralese-info.js';
+
+export type NativeAdapterStateConsumption = { schema: 'natlang.native-adapter-state-consumption/1';
+  mode: 'same-base-adapter-state'; source_state_id: string; source_native_identity: Record<string, string>;
+  target_native_identity: Record<string, string>; base_native_identity: Record<string, string>;
+  source_adapter_binding: NativeAdapterBinding | null; target_adapter_binding: NativeAdapterBinding | null; target_position_start: number; tokens: number };
 
 export type NativeSourceCapture = { policy: { checkpoint_sha256: string; tokenizer_fingerprint: string;
   embedding_weight_sha256: string; architecture: string };
   segments: ({ kind: 'tokens'; token_ids: number[]; producing: boolean[] } |
-    { kind: 'native_state'; id: string; native_identity: Record<string, string> })[];
+    { kind: 'native_state'; id: string; native_identity: Record<string, string>; adapter_state_consumption?: NativeAdapterStateConsumption })[];
   payload_start: number; payload_stop: number; imports?: { id: string; mode: string; observed_native_state_id?: string;
+    adapter_state_consumption?: NativeAdapterStateConsumption;
     semantic_adaptation?: { adapter_sha256: string; source_native_identity: Record<string, string>; target_native_identity: Record<string, string> } }[] };
 export type NativeTextResult = { id: string; native_state: Record<string, unknown>; source_capture: NativeSourceCapture;
   source_text_sha256: string; init?: Record<string, unknown>; gate?: null };

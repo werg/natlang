@@ -402,3 +402,64 @@ def native_forward_storage_dtype(weight):
                 return dtype
         current = getattr(current, '_base', None)
     return None
+
+
+SAME_BASE_STATE_MODE = 'same-base-adapter-state'
+
+
+def adapter_state_input_receipt(engine, block, state_id, *, target_position_start):
+    """Authenticate an explicitly requested raw-state exchange, never relabel it.
+
+    Geometry is checked by the existing splice/graph executor before committing
+    the new cache. This verifier binds the source coefficient closure and both
+    actors to the exact same immutable base, independent of matching widths.
+    """
+    from .state_block import NativeStateBlock
+    if type(block) is not NativeStateBlock:
+        raise NativeAdapterError('same-base adapter-state mode requires raw native state; use the learned semantic consumer for semantic messages')
+    from .shared_state import validate_native_state_layout
+    validate_native_state_layout(engine.shared_model.port, block)
+    fields = ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')
+    source = {key: getattr(block, key) for key in fields}
+    source_binding = block.adapter_binding
+    base = source_binding['base_native_identity'] if source_binding else source
+    if base != engine.native_identity:
+        raise NativeAdapterError('same-base adapter-state mode requires the exact same base checkpoint, tokenizer, embeddings and architecture')
+    if source_binding:
+        validate_state_binding(source_binding, block)
+        resolved = resolve_adapters(engine, [{'id': item['id'], 'scale': float.fromhex(item['scale_hex'])}
+                                            for item in source_binding['adapters']])
+        if effective_identity(engine, resolved) != source:
+            raise NativeAdapterError('source native state does not match its restored coefficient and basis closure')
+    target_binding = execution_binding(engine)
+    target_binding = ({'schema': SCHEMA, 'base_native_identity': dict(engine.native_identity),
+                       'adapters': target_binding} if target_binding else None)
+    if type(target_position_start) is not int or target_position_start < 0:
+        raise NativeAdapterError('same-base adapter-state target position must be a nonnegative integer')
+    return {'schema': 'natlang.native-adapter-state-consumption/1',
+            'mode': SAME_BASE_STATE_MODE, 'source_state_id': state_id,
+            'source_native_identity': source, 'target_native_identity': dict(execution_identity(engine)),
+            'base_native_identity': dict(engine.native_identity),
+            'source_adapter_binding': source_binding, 'target_adapter_binding': target_binding,
+            'target_position_start': target_position_start, 'tokens': len(block.token_ids)}
+
+
+def validate_adapter_state_receipt(block, receipt, *, target_identity, target_binding):
+    """Exact immutable capture verifier; execution also resolves basis artifacts."""
+    from ..serve.store import native_state_id
+    source = {name: getattr(block, name) for name in
+              ('checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')}
+    base = block.adapter_binding['base_native_identity'] if block.adapter_binding else source
+    target_base = target_binding['base_native_identity'] if target_binding else target_identity
+    if (not isinstance(receipt, dict) or set(receipt) != {
+            'schema', 'mode', 'source_state_id', 'source_native_identity', 'target_native_identity',
+            'base_native_identity', 'source_adapter_binding', 'target_adapter_binding', 'target_position_start', 'tokens'}
+            or receipt['schema'] != 'natlang.native-adapter-state-consumption/1'
+            or receipt['mode'] != SAME_BASE_STATE_MODE or receipt['source_state_id'] != native_state_id(block)
+            or receipt['source_native_identity'] != source or receipt['source_adapter_binding'] != block.adapter_binding
+            or receipt['base_native_identity'] != base or base != target_base
+            or receipt['target_native_identity'] != target_identity or receipt['target_adapter_binding'] != target_binding
+            or type(receipt['target_position_start']) is not int or receipt['target_position_start'] < 0
+            or type(receipt['tokens']) is not int or receipt['tokens'] != len(block.token_ids)):
+        raise ValueError('same-base adapter-state receipt differs from exact source, target or positional contract')
+    block.validate()
