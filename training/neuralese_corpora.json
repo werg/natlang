@@ -121258,6 +121258,172 @@
           "empty_test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
         }
       }
+    },
+    {
+      "id": "qwen-public-return-repair48-native-graphs-20261017-v1",
+      "owner": "dgx",
+      "path": "runs/qwen-public-return-repair48-native-20261017",
+      "include": [
+        "source/**/*",
+        "source-binding-validation.json",
+        "connected-protection-manifest.json",
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "mellum21/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst"
+      ],
+      "source_class": "self-hosted-Qwen3.8-Flash-Next-verified-full-trajectory-scaffold-TRAIN",
+      "split": "TRAIN only; 48 accepted full trajectories, 47 original action turns, and 46 emitted unique native training graphs per tokenizer after one exact content/target dedup against the registered 44-row predecessor. The shared decision gate held 12 actions for separate authored-root approval and omitted 41 authored-root-guided actions; no held/test graph was emitted.",
+      "admission": "A distinct accepted 48-case self-hosted Qwen batch, source-bound to the authenticated raw harvest, actor, execution identity, successful launch, complete queue and original per-case result/manifests. The common current connected-protection and shared decision-admission gate were applied; held groups and pending groups each have zero intersections. Both model-specific native conversions passed. One exact graph per tokenizer is retained as an omission against the predecessor; prior 44-row corpus remains separately registered.",
+      "training_admission": true,
+      "training_admission_reason": "Authorized source admission for exact accepted self-hosted teacher trajectories only. Validation proved all 48 accepted rows and queue/result bindings, current protection, and both full-context tokenizer conversions. Outputs preserve all non-duplicate admitted actions and make the one exact duplicate omission explicit. Registration is data admission only; it makes no claim of visits or model exposure.",
+      "derived_from": [
+        "rl-execution-curriculum-20261016-v1",
+        "qwen-scaffold-accepted-native-graphs-20261016-v1"
+      ],
+      "license_provenance": "Project-collected trajectories from the pinned self-hosted RadixArk/Qwen3.8-Flash-Next teacher; license provenance is retained as a source fact.",
+      "source_binding": {
+        "harvest_archive": {
+          "path": "source/harvest.tar.gz",
+          "sha256": "3fe2ee76b9c18fcc06bd8342e8994fdd41b9e12c36ba4f3a67624161c560600f",
+          "bytes": 1726119
+        },
+        "accepted_trajectories": {
+          "path": "source/accepted-trajectories.jsonl",
+          "sha256": "15132ef18944d39e41a60c0a07f7e736878cb171d82d5039df47c0b3ad483ca8",
+          "bytes": 5314652,
+          "rows": 48
+        },
+        "validation": {
+          "path": "source-binding-validation.json",
+          "sha256": "2d28e4f11bd6ff44e0d953ae199a259d5401f15148afcc8d2b34af6993b42e78",
+          "accepted_rows": 48,
+          "held_intersections": 0,
+          "pending_intersections": 0
+        },
+        "actor": "RadixArk/Qwen3.8-Flash-Next-FP4-Local",
+        "actor_revision": "b9ce18a6887e18c089fdea8509a33e63429a3300",
+        "execution_identity": "pennyroyal",
+        "execution_identity_sha256": "92ea5ba665b6e927f285838f773f828cc508a1b1085af9e1fb0a5cce4c4f71c2",
+        "current_protection": {
+          "path": "connected-protection-manifest.json",
+          "sha256": "1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704",
+          "held_groups": 16777,
+          "quality_groups": 65161,
+          "source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593"
+        },
+        "decision_admission": {
+          "path": "/home/werg/data/dgxops/qwen-public-return-repair48-harvest-20261016/decision-admission-cache/11b3a298d4323c55ebd30f87b066a948246727f30b97c0d2e0da1ee9fb086b12/receipt.json",
+          "sha256": "56b165a05244bae530f41d227af22efef0e2aa55ccf76115e44f84bdb0c2cf3f",
+          "output_sha256": "264f3122d92394934f9dfc1538b3ce311b2a629bc9a6f06bdca756cc9d8e90c9",
+          "summary": {
+            "accepted_rows": 48,
+            "authored_actions_held": 12,
+            "authored_actions_output": "/home/werg/data/dgxops/qwen-public-return-repair48-harvest-20261016/decision-admission-cache/.materializing-othyc2ng/decisions.jsonl.authored-actions.jsonl",
+            "eligible_decisions": 47,
+            "output": "decisions.jsonl",
+            "rejected_rows": 0,
+            "replayed_context_decisions": 0,
+            "training_decisions": 88
+          }
+        }
+      },
+      "conversion": {
+        "lfm25": {
+          "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+          "train_sha256": "9d08dcf2cf5153e65951d5e7ce85398c382c9d0cb40d9c4fcd89131b078ae8ab",
+          "rows": 46,
+          "tokens": 265246,
+          "empty_test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+          "source_rows": 48,
+          "action_turns": 47,
+          "action_omissions": 53
+        },
+        "mellum21": {
+          "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+          "train_sha256": "d565f68e3c7f0f2da944e6192fd45addaec8e042d6fcc5e45e7d6595055733c4",
+          "rows": 46,
+          "tokens": 266673,
+          "empty_test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+          "source_rows": 48,
+          "action_turns": 47,
+          "action_omissions": 53
+        }
+      },
+      "deduplication": {
+        "lfm25": {
+          "inputs": [
+            {
+              "path": "/mnt/external/natlang-development-data/qwen-scaffold-accepted-44-20261016/graphs/lfm25/train/native-graphs.jsonl.zst",
+              "sha256": "cb037e10a804aef9119ad967a9a4d686db97dd212f38f3dee0dcf132c06078c6",
+              "rows": 47
+            }
+          ],
+          "omissions": [
+            {
+              "id": "text:teacher-program:c70ae406b1d342195af2:action:0000",
+              "content_sha256": "9ad70a33542beaccc3f63faaae421865b3101f5dda184fc1fc803202f06944c5",
+              "reason": "exact token IDs and target weights already represented",
+              "represented_by": {
+                "path": "/mnt/external/natlang-development-data/qwen-scaffold-accepted-44-20261016/graphs/lfm25/train/native-graphs.jsonl.zst",
+                "id": "text:teacher-program:c70ae406b1d342195af2:action:0000"
+              }
+            }
+          ],
+          "omitted_rows": 1,
+          "emitted_rows": 46
+        },
+        "mellum21": {
+          "inputs": [
+            {
+              "path": "/mnt/external/natlang-development-data/qwen-scaffold-accepted-44-20261016/graphs/mellum21/train/native-graphs.jsonl.zst",
+              "sha256": "ba73409057114b39df66effb51783a4abde4cfe92fd0753ba3078927cd264664",
+              "rows": 47
+            }
+          ],
+          "omissions": [
+            {
+              "id": "text:teacher-program:c70ae406b1d342195af2:action:0000",
+              "content_sha256": "812a697eb3569f9a2ac5c1a67ef407500751c4486287e4e0d2fa82100d3b80fd",
+              "reason": "exact token IDs and target weights already represented",
+              "represented_by": {
+                "path": "/mnt/external/natlang-development-data/qwen-scaffold-accepted-44-20261016/graphs/mellum21/train/native-graphs.jsonl.zst",
+                "id": "text:teacher-program:c70ae406b1d342195af2:action:0000"
+              }
+            }
+          ],
+          "omitted_rows": 1,
+          "emitted_rows": 46
+        }
+      }
+    },
+    {
+      "id": "decision-rich-train-20261017-v3-scaffold",
+      "owner": "dgx",
+      "path": "runs/decision-rich-train-20261017-v3-scaffold",
+      "include": [
+        "cases.jsonl",
+        "union-audit.json",
+        "broad-selection-proof.json",
+        "task-source-manifest.json",
+        "additional-scaffold-cases.jsonl",
+        "additional-scaffold-qualification.json"
+      ],
+      "source_class": "immutable-RL-task-source-with-source-bound-live-qualified-curriculum-extension",
+      "split": "Train-only 140-task source; preserves all 128 prior train tasks and adds 12 distinct exact task IDs with accepted Qwen live qualification.",
+      "admission": "RL-task-source-only; no native SFT graph rows or student exposure claim.",
+      "training_admission": true,
+      "training_admission_reason": "The original 128-task source remains intact. Twelve additional train-only task rows are bound to the accepted 48-row source-qualified Qwen scaffold run; decision, held-group and quality-group intersections are empty.",
+      "derived_from": [
+        "decision-rich-train-20261016-v2-curriculum",
+        "qwen-public-return-repair48-native-graphs-20261017-v1"
+      ],
+      "task_source_manifest": "runs/decision-rich-train-20261017-v3-scaffold/task-source-manifest.json",
+      "snapshot_manifest": "training/corpus-manifests/decision-rich-train-20261017-v3-scaffold.json",
+      "license_provenance": "The 128 original task rows retain their source license facts. The 12 authored curriculum tasks are project-generated; Qwen qualification source uses the separately registered teacher-data corpus provenance.",
+      "notes": "Scheduling metadata is inherited from exact task definitions. The 48 accepted teacher trajectories qualify the 12 tasks but are not used as RL targets; the 44 older accepted teacher trajectories remain separately converted. Registration does not claim task execution or model exposure."
     }
   ],
   "coverage_backlog": [

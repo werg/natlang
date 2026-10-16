@@ -89,6 +89,64 @@ def test_held_pair_cannot_receive_training_gradient(tmp_path):
     assert torch.isfinite(loss) and model.calls==1
 
 
+def test_offline_admission_prepares_held_manifest_with_actual_role_ids(monkeypatch, tmp_path):
+    from scripts.neuralese_data import prepare_acquired_preference_admission as admission
+
+    calls=[]
+    class Prepared:
+        expanded_fingerprint='prepared-fingerprint'
+        tokenizer=object()
+        def validate(self, base):
+            calls.append(('validate', base))
+
+    expected=(101,102,103,104)
+    monkeypatch.setattr('natlang_neuralese.model.shared_state.provision_role_tokenizer',
+        lambda tokenizer: (calls.append(('provision', tokenizer)) or expected))
+
+    class CapturedSource:
+        def __init__(self, path, fingerprint, *, required_split, role_ids):
+            calls.append(('source', path, fingerprint, required_split, role_ids))
+            self.groups={'held:fixture'}
+
+    monkeypatch.setattr('natlang_neuralese.data.native_sources.NativeGraphSource', CapturedSource)
+    source=admission._load_held_graph_source(tmp_path/'held-sources.json',base=tmp_path/'base',prepared=Prepared())
+    assert source.groups=={'held:fixture'}
+    assert calls==[
+        ('validate',tmp_path/'base'),
+        ('provision',Prepared.tokenizer),
+        ('validate',tmp_path/'base'),
+        ('source',tmp_path/'held-sources.json','prepared-fingerprint','test',expected),
+    ]
+
+
+def test_held_role_plumbing_continuation_reuses_only_exact_prior_verification(tmp_path):
+    from scripts.neuralese_data import prepare_acquired_preference_admission as admission
+
+    identity={'verifier_dependencies':{'admission':{'path':'scripts/neuralese_data/prepare_acquired_preference_admission.py',
+        'bytes':1,'sha256':'current'}},'other':'unchanged'}
+    prior=admission._prior_role_plumbing_identity(identity)
+    assert prior['verifier_dependencies']['admission']['sha256']==admission._HELD_ROLE_PLUMBING_TRANSITION['old_module_sha256']
+    payload={'identity':prior,'identity_sha256':admission.canonical_json_sha256_hex(prior),'result':{'verified':1}}
+    path=tmp_path/'cache.json'
+    path.write_text(json.dumps({'schema':'natlang.offline-preference-view-verification/1','payload':payload,
+        'payload_sha256':admission.canonical_json_sha256_hex(payload)}))
+    assert admission._cached_verification(path,identity)=={'verified':1}
+    assert admission._cached_verification(path,{**identity,'other':'changed'}) is None
+
+
+def test_held_role_plumbing_transition_rejects_other_admission_edits(monkeypatch, tmp_path):
+    from scripts.neuralese_data import prepare_acquired_preference_admission as admission
+
+    original=admission.Path(admission.__file__).read_text()
+    altered=original.replace('role_ids=provision_role_tokenizer(prepared.tokenizer)',
+        'role_ids={"assistant":0}',1)
+    assert altered!=original
+    path=tmp_path/'prepare_acquired_preference_admission.py';path.write_text(altered)
+    monkeypatch.setattr(admission,'__file__',str(path))
+    with pytest.raises(ValueError,match='outside the exact held-role plumbing'):
+        admission._held_role_plumbing_transition()
+
+
 @pytest.mark.parametrize('family',['lfm','mellum'])
 def test_both_actual_ports_one_forward_matches_cached_independent_history_loss_and_gradients(tmp_path,family):
     from test_shared_state import tiny

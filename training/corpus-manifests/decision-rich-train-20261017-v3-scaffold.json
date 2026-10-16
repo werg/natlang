@@ -1,0 +1,41 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "decision-rich-train-20261017-v3-scaffold",
+  "owner": "dgx",
+  "path": "runs/decision-rich-train-20261017-v3-scaffold",
+  "files": [
+    {
+      "path": "additional-scaffold-cases.jsonl",
+      "bytes": 14573,
+      "sha256": "e0cb8e5847a70f0ec764558a217db30dcf6773771773d54652b51684775f89a1",
+      "lines": 12
+    },
+    {
+      "path": "additional-scaffold-qualification.json",
+      "bytes": 4860,
+      "sha256": "eff2b42847f29a19f37ee6be6eff71947e43b4cbd2ffe9339d4ba10f7fd2ebec"
+    },
+    {
+      "path": "broad-selection-proof.json",
+      "bytes": 15186,
+      "sha256": "64159bebab0fe0ce493e9a8b401641a5af29085d9a672d0441c9281f35ffa54d"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 14006064,
+      "sha256": "a8dab9a7baa7d1962446390ea1a33a7c81ddb66b618271ced1d0e34d6d6eb989",
+      "lines": 140
+    },
+    {
+      "path": "task-source-manifest.json",
+      "bytes": 1853,
+      "sha256": "53c79bca7a1f7ad35f68cd8ead6d17b399e2b7b4aedfd89c454a13b5096c444a"
+    },
+    {
+      "path": "union-audit.json",
+      "bytes": 70056,
+      "sha256": "4dc478257698f9b9c9a9874ae00a0ac8e4cc11320adc2e9afd4a9eefeae1e166"
+    }
+  ],
+  "bytes": 14112592
+}

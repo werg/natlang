@@ -363,9 +363,12 @@ def scaffold_source_binding(args):
     ferry_path = root / 'ferry-receipt.json'
     harvest = json.loads(harvest_path.read_text())
     ferry = json.loads(ferry_path.read_text())
+    accepted, repair = harvest.get('accepted_keys'), harvest.get('repair_keys')
     if (harvest.get('schema') != 'natlang.teacher-scaffold-qualification-harvest/1'
-            or ferry.get('verified') is not True or ferry.get('accepted') != 44
-            or ferry.get('repair') != 4 or ferry.get('sha256') is None
+            or not isinstance(accepted, list) or not isinstance(repair, list)
+            or ferry.get('verified') is not True
+            or ferry.get('accepted') != len(accepted)
+            or ferry.get('repair') != len(repair) or ferry.get('sha256') is None
             or sha256_file(root / 'harvest.tar.gz') != ferry['sha256']
             or (root / 'harvest.tar.gz').stat().st_size != ferry.get('bytes')):
         raise ValueError('scaffold harvest archive or terminal ferry receipt is not exact')
@@ -378,9 +381,8 @@ def scaffold_source_binding(args):
             raise ValueError('scaffold harvest contains an unsafe or incomplete file binding')
         if path.stat().st_size != binding['bytes'] or sha256_file(path) != binding.get('sha256'):
             raise ValueError('scaffold harvest artifact differs from its immutable inventory: ' + relative)
-    accepted, repair = harvest.get('accepted_keys'), harvest.get('repair_keys')
-    if (not isinstance(accepted, list) or len(accepted) != 44 or len(set(accepted)) != 44
-            or not isinstance(repair, list) or len(repair) != 4 or len(set(repair)) != 4
+    if (len(accepted) < 1 or len(set(accepted)) != len(accepted)
+            or len(set(repair)) != len(repair)
             or set(accepted) & set(repair) or set(accepted) | set(repair) != {
                 str(Path(name).parts[1]) for name in files if name.startswith(('accepted/', 'repair-private-writer-return/'))}):
         raise ValueError('scaffold accepted/repair inventory does not partition all returned task keys')
@@ -406,18 +408,28 @@ def scaffold_source_binding(args):
             or actor_ref.get('bytes') != actor_path.stat().st_size
             or execution_identity.get('model_id') != 'pennyroyal'):
         raise ValueError('scaffold teacher actor and execution identity do not authenticate one another')
-    launch = json.loads((metadata / 'launch-nodepath-retry.json').read_text())
+    launch_path = metadata / 'launch.json'
+    if not launch_path.exists():
+        launch_path = metadata / 'launch-nodepath-retry.json'
+    launch = json.loads(launch_path.read_text())
+    queue_binding = launch.get('queue') or {}
+    source_binding = launch.get('source') or {}
+    argv = launch.get('argv')
+    source_mismatch = bool(source_binding) and (
+        source_binding.get('sha256') != sha256_file(cases_path)
+        or source_binding.get('rows') != len(cases))
     if (launch.get('actor', {}).get('sha256') != sha256_file(identity_path)
-            or launch.get('queue', {}).get('sha256') != sha256_file(queue_path)
-            or launch.get('queue', {}).get('rows') != 48):
+            or queue_binding.get('sha256') != sha256_file(queue_path)
+            or queue_binding.get('rows') != len(queue)
+            or source_mismatch or not isinstance(argv, list) or not argv):
         raise ValueError('scaffold actual launch does not bind this actor and complete queue')
 
     # The prepared JSONL is only a byte-exact concatenation of accepted
     # originals. Every row remains independently tied to its original result
     # file and collector manifest below.
     source_rows = [row for _, row in file_rows(source)]
-    if len(source_rows) != 44 or len({row.get('id') for row in source_rows}) != 44:
-        raise ValueError('scaffold combined source must contain 44 unique accepted full trajectories')
+    if len(source_rows) != len(accepted) or len({row.get('id') for row in source_rows}) != len(accepted):
+        raise ValueError('scaffold combined source must contain every accepted unique full trajectory')
     row_bindings, source_files = [], {}
     selected_ids, train_groups, packet_programs = set(), set(), {}
     collections_key = 'scaffold-harvest:' + sha256_file(harvest_path)
@@ -481,7 +493,7 @@ def scaffold_source_binding(args):
         'qualification_cases': cases_path, 'queue': queue_path,
         'teacher_execution_identity': identity_path, 'teacher_actor': actor_path,
         'teacher_configuration_basis': metadata / 'teacher-configuration-basis.json',
-        'launch': metadata / 'launch-nodepath-retry.json'}
+        'launch': launch_path}
     for item in row_bindings:
         proofs['accepted:' + item['key'] + ':result'] = Path(item['result']['path'])
         proofs['accepted:' + item['key'] + ':manifest'] = Path(item['manifest']['path'])

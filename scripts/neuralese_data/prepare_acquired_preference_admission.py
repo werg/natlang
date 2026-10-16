@@ -27,6 +27,110 @@ from scripts.neuralese_data.prepare_acquired_session_admission import bound,veri
 
 CODE_ROOT=Path(__file__).resolve().parents[2]
 
+# This narrowly allows the current held-source role-token fix to resume durable
+# D24 verification work produced immediately before it. All other module syntax
+# must remain identical, and both changed functions are pinned as exact ASTs.
+_HELD_ROLE_PLUMBING_TRANSITION={
+    'old_module_sha256':'33867580e99b742a792326836a26185b0f1d545ded9c36c6d656354a0f9628be',
+    'old_module_bytes':47330,
+    'old_stable_module_ast_sha256':'ece4c1263659abe974bb8983179900ea3c1a62c7fb6cda0328123345f09f4a7a',
+    'old_prepare_ast_sha256':'ddcaa98cbcd74020c52d2eaf24ba2d3eeffd33bd85f50dbe969218860a62ba31',
+    'new_prepare_ast_sha256':'b58bd64354a499ad39d253ad142e90a151c09c5737a466ea57f2116df2c5d231',
+    'new_held_loader_ast_sha256':'8946d489284f6da5e4e6e9e6a32507612a3e9302be0d828e3339f392c63047cb',
+    'new_transition_constant_ast_sha256':'f8a03d1ca2d17d8a3512ac9378d92493ed7bcb78bfab25486d9b36163af664e0',
+    'prior_function_ast_sha256':{
+        'prepare':'ddcaa98cbcd74020c52d2eaf24ba2d3eeffd33bd85f50dbe969218860a62ba31',
+        '_cached_verification':'23ce0833d997749613934e06e8432419f6263cdcec648f968d7ba56bbf87ab1d',
+        'verify_conversion':'b209ab88baf835674841ee24f11bbede7acb5f57e2eb1db883f9f920390e9b9b'},
+    'current_function_ast_sha256':{
+        'prepare':'b58bd64354a499ad39d253ad142e90a151c09c5737a466ea57f2116df2c5d231',
+        '_cached_verification':'a914e44bfdd9854de16192da97739f07a0426356da2483224e7166680490b388',
+        'verify_conversion':'09a36bf05052cb56b5ca37122a0a8a3a255b6e3e087ad27fb2b67326455319b6',
+        '_held_role_plumbing_transition':'7b61fe8a1754263943eae64aba0b8b2b1fc185e11c0a4eb1f95aa34817a7c4e3',
+        '_prior_role_plumbing_identity':'0a7ccb3d3a453889cc7b5850d3fd7d99b21710dced89b847deae995cef575fd6',
+        '_load_held_graph_source':'8946d489284f6da5e4e6e9e6a32507612a3e9302be0d828e3339f392c63047cb'},
+}
+
+
+def _held_role_plumbing_transition():
+    """Prove this exact held-loader-only edit before reusing prior D24 work."""
+    path=Path(__file__)
+    old_bytes=_HELD_ROLE_PLUMBING_TRANSITION['old_module_bytes']
+    old_sha=_HELD_ROLE_PLUMBING_TRANSITION['old_module_sha256']
+    if path.stat().st_size==old_bytes and sha256_file_hex(path)==old_sha:
+        return None
+    source=path.read_text();tree=ast.parse(source)
+    definitions=[node for node in tree.body if isinstance(node,ast.FunctionDef)]
+    by_name={node.name:node for node in definitions}
+    if any(sum(node.name==name for node in definitions)!=1 for name in ('prepare','_load_held_graph_source')):
+        raise ValueError('held-role continuation has missing or duplicate function definitions')
+    changed=set(_HELD_ROLE_PLUMBING_TRANSITION['current_function_ast_sha256'])
+    stable=ast.parse(source)
+    stable.body=[node for node in stable.body if not (
+        isinstance(node,ast.FunctionDef) and node.name in changed
+        or isinstance(node,ast.Assign) and any(isinstance(target,ast.Name)
+            and target.id=='_HELD_ROLE_PLUMBING_TRANSITION' for target in node.targets))]
+    stable_sha=hashlib.sha256(ast.dump(stable,include_attributes=False).encode()).hexdigest()
+    prepare_sha=hashlib.sha256(ast.dump(by_name['prepare'],include_attributes=False).encode()).hexdigest()
+    loader_sha=hashlib.sha256(ast.dump(by_name['_load_held_graph_source'],include_attributes=False).encode()).hexdigest()
+    transition_node=next((node for node in tree.body if isinstance(node,ast.Assign) and any(
+        isinstance(target,ast.Name) and target.id=='_HELD_ROLE_PLUMBING_TRANSITION' for target in node.targets)),None)
+    transition_sha=None
+    if transition_node is not None and isinstance(transition_node.value,ast.Dict):
+        normalized=ast.parse(ast.unparse(transition_node)).body[0]
+        normalized.value.keys=[key for key in normalized.value.keys
+            if not (isinstance(key,ast.Constant) and key.value=='new_transition_constant_ast_sha256')]
+        normalized.value.values=[value for key,value in zip(transition_node.value.keys,transition_node.value.values)
+            if not (isinstance(key,ast.Constant) and key.value=='new_transition_constant_ast_sha256')]
+        transition_sha=hashlib.sha256(ast.dump(normalized,include_attributes=False).encode()).hexdigest()
+    function_shas={name:hashlib.sha256(ast.dump(by_name[name],include_attributes=False).encode()).hexdigest()
+                   for name in changed}
+    proof={'kind':'exact-held-role-plumbing-continuation',
+        'prior_module_sha256':old_sha,'prior_module_bytes':old_bytes,
+        'prior_stable_module_ast_sha256':_HELD_ROLE_PLUMBING_TRANSITION['old_stable_module_ast_sha256'],
+        'current_stable_module_ast_sha256':stable_sha,
+        'prior_prepare_ast_sha256':_HELD_ROLE_PLUMBING_TRANSITION['old_prepare_ast_sha256'],
+        'current_prepare_ast_sha256':prepare_sha,
+        'current_held_loader_ast_sha256':loader_sha,
+        'current_transition_constant_ast_sha256':transition_sha,
+        'prior_function_ast_sha256':_HELD_ROLE_PLUMBING_TRANSITION['prior_function_ast_sha256'],
+        'current_function_ast_sha256':function_shas,
+        'scope':'only held NativeGraphSource role-token provisioning and its call site changed; verifier, source eligibility, rendering and proposal dependencies are unchanged'}
+    if (stable_sha!=_HELD_ROLE_PLUMBING_TRANSITION['old_stable_module_ast_sha256']
+            or prepare_sha!=_HELD_ROLE_PLUMBING_TRANSITION['new_prepare_ast_sha256']
+            or loader_sha!=_HELD_ROLE_PLUMBING_TRANSITION['new_held_loader_ast_sha256']
+            or transition_sha!=_HELD_ROLE_PLUMBING_TRANSITION['new_transition_constant_ast_sha256']
+            or function_shas!=_HELD_ROLE_PLUMBING_TRANSITION['current_function_ast_sha256']):
+        raise ValueError('admission module changed outside the exact held-role plumbing continuation')
+    return proof
+
+
+def _prior_role_plumbing_identity(identity):
+    proof=_held_role_plumbing_transition()
+    if proof is None:return None
+    prior=json.loads(json.dumps(identity))
+    dependencies=prior.get('verifier_dependencies')
+    if not isinstance(dependencies,dict) or 'admission' not in dependencies:
+        raise ValueError('offline verifier identity lacks its admission dependency')
+    dependencies['admission']={'path':'scripts/neuralese_data/prepare_acquired_preference_admission.py',
+        'bytes':_HELD_ROLE_PLUMBING_TRANSITION['old_module_bytes'],
+        'sha256':_HELD_ROLE_PLUMBING_TRANSITION['old_module_sha256']}
+    return prior
+
+
+def _load_held_graph_source(path, *, base, prepared):
+    """Validate a held manifest with the same role-token contract as training."""
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from natlang_neuralese.model.shared_state import provision_role_tokenizer
+
+    prepared.validate(base)
+    role_ids=provision_role_tokenizer(prepared.tokenizer)
+    # Provisioning is idempotent for the already prepared tokenizer. Keep the
+    # postcondition explicit so a role-token helper cannot mutate its binding.
+    prepared.validate(base)
+    return NativeGraphSource(path,prepared.expanded_fingerprint,
+        required_split='test',role_ids=role_ids)
+
 # D24's durable six-view conversion was produced before three shared helpers
 # changed. Those views are reusable only through the full source/eligibility
 # and per-pair current-tokenizer rerender below; every other runtime byte must
@@ -189,9 +293,12 @@ def _cached_verification(path,identity):
     if (record.get('schema')!='natlang.offline-preference-view-verification/1'
             or not isinstance(payload,dict)
             or record.get('payload_sha256')!=canonical_json_sha256_hex(payload)
-            or payload.get('identity_sha256')!=canonical_json_sha256_hex(identity)
-            or canonical_json_sha256_hex(payload.get('identity'))!=canonical_json_sha256_hex(identity)):
+            or payload.get('identity_sha256')!=canonical_json_sha256_hex(payload.get('identity'))):
         return None
+    expected=canonical_json_sha256_hex(identity)
+    if payload.get('identity_sha256')!=expected:
+        prior=_prior_role_plumbing_identity(identity)
+        if prior is None or payload.get('identity_sha256')!=canonical_json_sha256_hex(prior):return None
     return payload.get('result')
 
 
@@ -491,10 +598,16 @@ def verify_conversion(directory,*,protection_path,base,prepared=None,
     if verification_receipt_path is not None:
         cached=_cached_verification(Path(verification_receipt_path),identity)
         if cached is not None:return cached
-    render_checkpoint=None;verified_renders={}
+    render_checkpoint=None;render_identity_sha=identity_sha;verified_renders={}
     if verification_receipt_path is not None:
-        render_checkpoint=Path(verification_receipt_path).with_name(
-            Path(verification_receipt_path).stem+'-'+identity_sha+'.renders.jsonl')
+        checkpoint_base=Path(verification_receipt_path)
+        render_checkpoint=checkpoint_base.with_name(checkpoint_base.stem+'-'+identity_sha+'.renders.jsonl')
+        prior_identity=_prior_role_plumbing_identity(identity)
+        if prior_identity is not None:
+            prior_sha=canonical_json_sha256_hex(prior_identity)
+            prior_checkpoint=checkpoint_base.with_name(checkpoint_base.stem+'-'+prior_sha+'.renders.jsonl')
+            if prior_checkpoint.is_file():
+                render_checkpoint=prior_checkpoint;render_identity_sha=prior_sha
         if render_checkpoint.exists():
             # Only newline-terminated, individually fsynced records are
             # committed. Recover a torn final append without losing prior rows.
@@ -507,7 +620,7 @@ def verify_conversion(directory,*,protection_path,base,prepared=None,
                         stream.seek(valid_end);stream.truncate();stream.flush();os.fsync(stream.fileno());break
                     record=json.loads(line)
                     if (record.get('schema')!='natlang.offline-preference-render-checkpoint/1'
-                            or record.get('identity_sha256')!=identity_sha
+                            or record.get('identity_sha256')!=render_identity_sha
                             or not isinstance(record.get('source_record_sha256'),str)
                             or not isinstance(record.get('id'),str)
                             or not isinstance(record.get('graph_sha256'),str)
@@ -577,7 +690,7 @@ def verify_conversion(directory,*,protection_path,base,prepared=None,
                            'objective_sha256':expected_render['objective_sha256']}
             if render_checkpoint is not None:
                 line={'schema':'natlang.offline-preference-render-checkpoint/1',
-                    'identity_sha256':identity_sha,'source_record_sha256':source_sha,**cached_render}
+                    'identity_sha256':render_identity_sha,'source_record_sha256':source_sha,**cached_render}
                 with render_checkpoint.open('ab') as stream:
                     stream.write((json.dumps(line,sort_keys=True,separators=(',',':'))+'\n').encode())
                     stream.flush();os.fsync(stream.fileno())
@@ -628,7 +741,9 @@ def prepare(args):
     request=_json_request(_proposal_request(models,args.protection,initial_protection,initial_runtime,initial_holds))
     request_path=args.output/'.proposal-request.json'
     if request_path.exists():
-        if json.loads(request_path.read_text())!=request:
+        existing_request=json.loads(request_path.read_text())
+        prior_request=_prior_role_plumbing_identity(request)
+        if existing_request!=request and (prior_request is None or existing_request!=prior_request):
             raise ValueError('offline admission output belongs to a different proposal request')
     else:
         if any(path.name not in {'.conversion.lock'} for path in args.output.iterdir()):
@@ -658,10 +773,11 @@ def prepare(args):
         for split in all_groups:
             all_groups[split].update(group for view in views for group in view['groups'][split])
         held=bound(declaration['ordinary_held']['path'],declaration['ordinary_held'])
-        from natlang_neuralese.data.native_sources import NativeGraphSource
         first=json.loads(Path(views[0]['receipt']['path']).read_text())
         fingerprint=first['binding']['prepared_tokenizer']['expanded_fingerprint']
-        held_source=NativeGraphSource(held,fingerprint,required_split='test')
+        if fingerprint!=prepared.expanded_fingerprint:
+            raise ValueError('offline held source tokenizer differs from its verified conversion view')
+        held_source=_load_held_graph_source(held,base=declaration['base'],prepared=prepared)
         all_groups['test'].update(held_source.groups)
     if all_groups['train']&all_groups['test']:raise ValueError('offline cohort global train/held overlap')
     if (current_protection(args.protection)!=initial_protection or _runtime()!=initial_runtime

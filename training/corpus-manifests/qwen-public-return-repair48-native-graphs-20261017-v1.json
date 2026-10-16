@@ -1,0 +1,1186 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "qwen-public-return-repair48-native-graphs-20261017-v1",
+  "owner": "dgx",
+  "path": "runs/qwen-public-return-repair48-native-20261017",
+  "files": [
+    {
+      "path": "connected-protection-manifest.json",
+      "bytes": 364774,
+      "sha256": "1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704"
+    },
+    {
+      "path": "lfm25/receipt.json",
+      "bytes": 92635,
+      "sha256": "631937c7597007222171d736fa3323f06902f360b23a1ba56cf3daff0eb4088b"
+    },
+    {
+      "path": "lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 32689,
+      "sha256": "9d08dcf2cf5153e65951d5e7ce85398c382c9d0cb40d9c4fcd89131b078ae8ab"
+    },
+    {
+      "path": "mellum21/receipt.json",
+      "bytes": 92652,
+      "sha256": "cd3fe39be77801138eff3b82a4b860d056eba3b8ebb80fa5e86d526b56facb62"
+    },
+    {
+      "path": "mellum21/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 31730,
+      "sha256": "d565f68e3c7f0f2da944e6192fd45addaec8e042d6fcc5e45e7d6595055733c4"
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-0/jobs/000000-a6941da501db217c.result.json",
+      "bytes": 55897,
+      "sha256": "4a5b2935d6fae0cebdcd05503242d7a08d547326fff00c41a9a13e49fb573403"
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-0/jobs/000000-a6941da501db217c.trace.jsonl",
+      "bytes": 7602,
+      "sha256": "5f862040d339935a208d72fb5cf0106df4ebb62d74f94b845b4c509ca54ff653",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-0/results.jsonl",
+      "bytes": 55897,
+      "sha256": "4a5b2935d6fae0cebdcd05503242d7a08d547326fff00c41a9a13e49fb573403",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-0/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "34ff2b231062512dd8ced1d08b5ef6d815536d2b87ad430b4058585287f9cc25"
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-1/jobs/000000-a6941da501db217c.result.json",
+      "bytes": 55828,
+      "sha256": "09e026ab6fc2ca2814281752b5a4ab627c21a60d470f60f31815e130c00551e9"
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-1/jobs/000000-a6941da501db217c.trace.jsonl",
+      "bytes": 7583,
+      "sha256": "d89441196aedbb7d9a9356aa674550da083c6addfc43c9ac27be447319438438",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-1/results.jsonl",
+      "bytes": 55828,
+      "sha256": "09e026ab6fc2ca2814281752b5a4ab627c21a60d470f60f31815e130c00551e9",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-1/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "fffa17121e8fde02a7f6901d62b4f37f91df9f2da593def0d0ee58bbdb51e18c"
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-2/jobs/000000-a6941da501db217c.result.json",
+      "bytes": 55865,
+      "sha256": "7a59614c9350bd4af45271b553b44ce9858afe52fd79bc83f264b9a6612c65d6"
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-2/jobs/000000-a6941da501db217c.trace.jsonl",
+      "bytes": 7602,
+      "sha256": "e81e5fa1e9cf878574fd74565c5eae080629fe77380a04abee162b182a4ee3ca",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-2/results.jsonl",
+      "bytes": 55865,
+      "sha256": "7a59614c9350bd4af45271b553b44ce9858afe52fd79bc83f264b9a6612c65d6",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-2/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "96d1bb3f94daed678aa181b9cc5c992c38d8a929e47a87c918ae999004f2ab8a"
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-3/jobs/000000-a6941da501db217c.result.json",
+      "bytes": 56030,
+      "sha256": "5d6facbe5aaec0d209477a067b917421d149821495aec024cf5b92272085fe9b"
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-3/jobs/000000-a6941da501db217c.trace.jsonl",
+      "bytes": 7615,
+      "sha256": "be563b66c282a8bbf198db57bc9c99ecc62ba09b179c20495b9e4d56443b60ba",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-3/results.jsonl",
+      "bytes": 56030,
+      "sha256": "5d6facbe5aaec0d209477a067b917421d149821495aec024cf5b92272085fe9b",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-00-repeat-3/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "434267ff6f328ae7bef547102d386e125f84e032b16b3d7e6b76ad2a4fb83065"
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-0/jobs/000001-46403900098a7b32.result.json",
+      "bytes": 56184,
+      "sha256": "ffabf7e406d182a4d3556e03a01eb28a217afbafd30d28412d95b51101c6cc5e"
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-0/jobs/000001-46403900098a7b32.trace.jsonl",
+      "bytes": 7780,
+      "sha256": "069c958f3e236c39114e9b05342a43f0b9be90eddc30246f13cf0a9862dbbfd3",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-0/results.jsonl",
+      "bytes": 56184,
+      "sha256": "ffabf7e406d182a4d3556e03a01eb28a217afbafd30d28412d95b51101c6cc5e",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-0/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "b693200a3a995fd2488d0b98ccbf576fb77b638fa16d79a6b05a8f0267c65419"
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-1/jobs/000001-46403900098a7b32.result.json",
+      "bytes": 56323,
+      "sha256": "0a70cbc4882db81e26e12db8b3c0a7d5e0fe21b118e322a0aabfb16a3e343e2a"
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-1/jobs/000001-46403900098a7b32.trace.jsonl",
+      "bytes": 7773,
+      "sha256": "79e5ceaaa7643856206ccf964cca0aec46abf5f2258c0e44cc399c06354660ce",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-1/results.jsonl",
+      "bytes": 56323,
+      "sha256": "0a70cbc4882db81e26e12db8b3c0a7d5e0fe21b118e322a0aabfb16a3e343e2a",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-1/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "077abef242374732c4cb042d426d718bacc2dc82979cc5ca90493df5f9e1468e"
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-2/jobs/000001-46403900098a7b32.result.json",
+      "bytes": 56311,
+      "sha256": "d6d20b235cc42cd2e7f1ec9e82aed824941dfa4be5d5c3af2bf46f5ac530ad93"
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-2/jobs/000001-46403900098a7b32.trace.jsonl",
+      "bytes": 7760,
+      "sha256": "b11c8762a8a8c59ae98497d1ebe9fe39675bff0bb50588ad0bd27ec462f9a668",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-2/results.jsonl",
+      "bytes": 56311,
+      "sha256": "d6d20b235cc42cd2e7f1ec9e82aed824941dfa4be5d5c3af2bf46f5ac530ad93",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-2/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "8d4030a7958c91f6257c9e18588894b272625e14131236df3f8ca8278f43088b"
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-3/jobs/000001-46403900098a7b32.result.json",
+      "bytes": 56168,
+      "sha256": "408ade22c4dbdf432cb9688f4b56da4b89746dca9dffb169517f8a2d694114c1"
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-3/jobs/000001-46403900098a7b32.trace.jsonl",
+      "bytes": 7757,
+      "sha256": "753192a44617ce7a966a0efa5a4a2dd956d26d06580d9cc212f1582a1ea01a1a",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-3/results.jsonl",
+      "bytes": 56168,
+      "sha256": "408ade22c4dbdf432cb9688f4b56da4b89746dca9dffb169517f8a2d694114c1",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-01-repeat-3/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "152e7f3e77bd453f579b9447c966eead8d22958df4368a85707c3d3339c80f4d"
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-0/jobs/000002-54fbe1807299d2e5.result.json",
+      "bytes": 56264,
+      "sha256": "e3560465ac34a2a249272d3d4d1e237ac71adca44fc9e6997f37fb5a68db7972"
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-0/jobs/000002-54fbe1807299d2e5.trace.jsonl",
+      "bytes": 7868,
+      "sha256": "49a0eb1a0dfcb85a650b1d67c7b0ebbff551e065f32b9d0eb4ea5f2755536c91",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-0/results.jsonl",
+      "bytes": 56264,
+      "sha256": "e3560465ac34a2a249272d3d4d1e237ac71adca44fc9e6997f37fb5a68db7972",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-0/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "bd0d82562f0bb4b24790479e6f33b91f4ec8f587e84b29149459ad60d8f9c666"
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-1/jobs/000002-54fbe1807299d2e5.result.json",
+      "bytes": 55856,
+      "sha256": "4300be02b7f14a3b29fe86edf00eaf42a4d7f5bec4fa1cc043adbad9170b1286"
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-1/jobs/000002-54fbe1807299d2e5.trace.jsonl",
+      "bytes": 7595,
+      "sha256": "407d87ee62996a647df310d1eb896cabf8ba7c42be4d220417c4b35489907fed",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-1/results.jsonl",
+      "bytes": 55856,
+      "sha256": "4300be02b7f14a3b29fe86edf00eaf42a4d7f5bec4fa1cc043adbad9170b1286",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-1/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "f7fd8c7bf46c561cf0b8a8b04ca801fad08f2b81de8d820b91e02d8f82120072"
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-2/jobs/000002-54fbe1807299d2e5.result.json",
+      "bytes": 55836,
+      "sha256": "dc04f994ca127084e7c26f8068043ec9b0a8b4dc916a188a394a932d39df89ad"
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-2/jobs/000002-54fbe1807299d2e5.trace.jsonl",
+      "bytes": 7595,
+      "sha256": "bb553830bfbad7ecbf55f013495a04a86e700c4a2d45099a6469554b612e9dd6",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-2/results.jsonl",
+      "bytes": 55836,
+      "sha256": "dc04f994ca127084e7c26f8068043ec9b0a8b4dc916a188a394a932d39df89ad",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-2/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "ae4748bc4f2d88ea97ae08f819f2bf1db35f4d07108700f2ba86d2d1e3790497"
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-3/jobs/000002-54fbe1807299d2e5.result.json",
+      "bytes": 109458,
+      "sha256": "fd0f923631fa29edc3d822271c208a218e4a44a08f48a8f4c9e7ba0be801669a"
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-3/jobs/000002-54fbe1807299d2e5.trace.jsonl",
+      "bytes": 11386,
+      "sha256": "7adc202791cf3c371aad0daf01d79686b3c7439a9105927461fe9c223dd1a3e7",
+      "lines": 24
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-3/results.jsonl",
+      "bytes": 109458,
+      "sha256": "fd0f923631fa29edc3d822271c208a218e4a44a08f48a8f4c9e7ba0be801669a",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-02-repeat-3/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "d08edf010fd27286d5d9e4007e089c71ef9a77bd66395867eb4bd3725d82f528"
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-0/jobs/000003-0a3a27858439501d.result.json",
+      "bytes": 55907,
+      "sha256": "9a27aed58d266bf55d0b38c3d6abe8e6fc0b952000eaee4f69987ee60933854d"
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-0/jobs/000003-0a3a27858439501d.trace.jsonl",
+      "bytes": 7827,
+      "sha256": "71ab47875f1b1bf760b0c2ce1b81968239aa2082af7164a8bc6f71889f8c97ca",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-0/results.jsonl",
+      "bytes": 55907,
+      "sha256": "9a27aed58d266bf55d0b38c3d6abe8e6fc0b952000eaee4f69987ee60933854d",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-0/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "bc61a30fd890bad80bde14ee7e219fd4bf6785a8c435db4a1c17b5cdeeb72890"
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-1/jobs/000003-0a3a27858439501d.result.json",
+      "bytes": 55944,
+      "sha256": "c2c9927bc708cef663bc914b1861265049634348b2569fcb7fb972878796cf15"
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-1/jobs/000003-0a3a27858439501d.trace.jsonl",
+      "bytes": 7853,
+      "sha256": "6c48446f9d52d00ec9f1a176fce8770e1b2b8adc54d52795a8f8c3efd30836bc",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-1/results.jsonl",
+      "bytes": 55944,
+      "sha256": "c2c9927bc708cef663bc914b1861265049634348b2569fcb7fb972878796cf15",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-1/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "18eca1e6a9314bbc37f3488ffe564230d880adde72a5a9625c4188fddd136500"
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-2/jobs/000003-0a3a27858439501d.result.json",
+      "bytes": 55894,
+      "sha256": "79518902b5d0babe7d86283b65bf18fd3ac29fac095b77b37eb0938a35b3cecd"
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-2/jobs/000003-0a3a27858439501d.trace.jsonl",
+      "bytes": 7621,
+      "sha256": "2ff0cc4d4b4d7382db3d50c673f763994ebfca11ebf77c6891dffcb348cedef7",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-2/results.jsonl",
+      "bytes": 55894,
+      "sha256": "79518902b5d0babe7d86283b65bf18fd3ac29fac095b77b37eb0938a35b3cecd",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-2/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "228ae502f61e144c81f05dc5ffb5f7c981e31ab9819c17145563e8eb14ca6186"
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-3/jobs/000003-0a3a27858439501d.result.json",
+      "bytes": 55933,
+      "sha256": "8c0027d52d10ebf83b3ce4f5724d747b77004a5089e7938a32f56e2816d7e93a"
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-3/jobs/000003-0a3a27858439501d.trace.jsonl",
+      "bytes": 7827,
+      "sha256": "bec1be365dd46e17002817e7d13f28376580cb40a169b8bdb0aa18380cf89e92",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-3/results.jsonl",
+      "bytes": 55933,
+      "sha256": "8c0027d52d10ebf83b3ce4f5724d747b77004a5089e7938a32f56e2816d7e93a",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-03-repeat-3/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "1c05300e556aca9c1bc5d907ea9053f7d1703761f55b4a2abee0f91f0bab6393"
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-0/jobs/000004-c31f8d4fc2378d41.result.json",
+      "bytes": 56339,
+      "sha256": "3255e2b367eaec43fae9d0bd665e158554c600805acd64e266b301cd0a7ea2d1"
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-0/jobs/000004-c31f8d4fc2378d41.trace.jsonl",
+      "bytes": 8345,
+      "sha256": "799cb6d3dc83a65f18e385d89c9a513942e3eec5fcb53e1137db3ead009e2cd6",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-0/results.jsonl",
+      "bytes": 56339,
+      "sha256": "3255e2b367eaec43fae9d0bd665e158554c600805acd64e266b301cd0a7ea2d1",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-0/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "176036fcb0d4fc1fad5cddcf4068b98e0793a1ac747895faf41deb36f944afc4"
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-1/jobs/000004-c31f8d4fc2378d41.result.json",
+      "bytes": 56404,
+      "sha256": "6adbf257d417eddbfab1205caf54b329417fa4d730689cf4e9518572640e49ef"
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-1/jobs/000004-c31f8d4fc2378d41.trace.jsonl",
+      "bytes": 8358,
+      "sha256": "f7c0d173d4d948adc1d9fa28a7779dfe81ab380dc013978a4d784cf3e7c4ec8c",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-1/results.jsonl",
+      "bytes": 56404,
+      "sha256": "6adbf257d417eddbfab1205caf54b329417fa4d730689cf4e9518572640e49ef",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-1/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "6714015a2aa6028e957d73afb4baedc3b9ae773a548511172944ed8907a300e6"
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-2/jobs/000004-c31f8d4fc2378d41.result.json",
+      "bytes": 56365,
+      "sha256": "7c4032c2900212df7c27e832e2ece85ef0aac2256a75303eb7e95678589fd77f"
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-2/jobs/000004-c31f8d4fc2378d41.trace.jsonl",
+      "bytes": 8356,
+      "sha256": "d282a60671892cee0e4df34b58d9518bf7800211c2c6cabb6b3a2f51ffad7b76",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-2/results.jsonl",
+      "bytes": 56365,
+      "sha256": "7c4032c2900212df7c27e832e2ece85ef0aac2256a75303eb7e95678589fd77f",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-2/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "216928cc8583017e665f03d779ccbf32783760f4ec00d132a857838e838b4000"
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-3/jobs/000004-c31f8d4fc2378d41.result.json",
+      "bytes": 56281,
+      "sha256": "38004cb2faa5ae44d982a9be1cb67ed66cd41d2be0d642f7874d3af17837bcdf"
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-3/jobs/000004-c31f8d4fc2378d41.trace.jsonl",
+      "bytes": 8096,
+      "sha256": "86cfa94fa33e3f5c9005ac48816e905f57872c6d39cf48e50d486b3085cae7e0",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-3/results.jsonl",
+      "bytes": 56281,
+      "sha256": "38004cb2faa5ae44d982a9be1cb67ed66cd41d2be0d642f7874d3af17837bcdf",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-04-repeat-3/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "2beaefa839b1d50eda319780332ecb1a90ae4ea249d54bf53bcd286237b5dc41"
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-0/jobs/000005-7577299206d0398f.result.json",
+      "bytes": 109238,
+      "sha256": "b4312581abafc88d2991e6a02f6873277b223da8118c75b5edb2556dd629f6d0"
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-0/jobs/000005-7577299206d0398f.trace.jsonl",
+      "bytes": 12168,
+      "sha256": "5c065678d019b40411fa4261b6e8a3d36dbcc457b20a68d4b284f0aece999038",
+      "lines": 24
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-0/results.jsonl",
+      "bytes": 109238,
+      "sha256": "b4312581abafc88d2991e6a02f6873277b223da8118c75b5edb2556dd629f6d0",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-0/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "6dfb304c4cb867d5a291d612a51d7a22a25975d7d9981bac6a09490d828362f3"
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-1/jobs/000005-7577299206d0398f.result.json",
+      "bytes": 56422,
+      "sha256": "536994e6a05a9ab2e8f166054d75e3319354ef92326966b0fe3fe104d2cacd94"
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-1/jobs/000005-7577299206d0398f.trace.jsonl",
+      "bytes": 8453,
+      "sha256": "dc1aad1ed651b031ef30216841694fd5e51a1c47414e1d4cf46f66f27c103878",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-1/results.jsonl",
+      "bytes": 56422,
+      "sha256": "536994e6a05a9ab2e8f166054d75e3319354ef92326966b0fe3fe104d2cacd94",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-1/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "0f1d662b1f94c221fe13a63cd6cb34abb7a2e3a5b5eaa75407dcbff9d63485f5"
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-2/jobs/000005-7577299206d0398f.result.json",
+      "bytes": 56737,
+      "sha256": "edc6da2d53078ec1d12ced3f339f633dbbc1253b0d21498ee7989d727c94bb4e"
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-2/jobs/000005-7577299206d0398f.trace.jsonl",
+      "bytes": 8502,
+      "sha256": "8d94244497155e04675ecee1774e25f2b6b9145961e33c689cb2aa51e552805f",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-2/results.jsonl",
+      "bytes": 56737,
+      "sha256": "edc6da2d53078ec1d12ced3f339f633dbbc1253b0d21498ee7989d727c94bb4e",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-2/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "c045dc0d9931b04550095d63c8c50f9ea0b79a69b497e7867fcd12428e94b7d0"
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-3/jobs/000005-7577299206d0398f.result.json",
+      "bytes": 109052,
+      "sha256": "d69196c6ab5704a4a89750d74089cf475a1a684c64f740482498de78c5ad7e2f"
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-3/jobs/000005-7577299206d0398f.trace.jsonl",
+      "bytes": 12104,
+      "sha256": "e5c4524712cc393f8fdd407000fc134a33a27ecdc227ae1fc175ea4c78bca6f8",
+      "lines": 24
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-3/results.jsonl",
+      "bytes": 109052,
+      "sha256": "d69196c6ab5704a4a89750d74089cf475a1a684c64f740482498de78c5ad7e2f",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-05-repeat-3/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "aa3294f29c947c727109217cf260fa8273931cef834d914884819c8d927abc73"
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-0/jobs/000006-3dfbf9b9362fe5d1.result.json",
+      "bytes": 57295,
+      "sha256": "c099011e43143086cbb85d582338afde38300736b55a3255824a0f9a84cc8300"
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-0/jobs/000006-3dfbf9b9362fe5d1.trace.jsonl",
+      "bytes": 9260,
+      "sha256": "e8d4762a6e3ecc0d5cfdf52cfdeffb33cbe53d6c0f9e78ca29d670de665fde05",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-0/results.jsonl",
+      "bytes": 57295,
+      "sha256": "c099011e43143086cbb85d582338afde38300736b55a3255824a0f9a84cc8300",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-0/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "d24c522ffecc0875b8855852d069c419300f7127afbb053a62f7a5a238e73bcd"
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-1/jobs/000006-3dfbf9b9362fe5d1.result.json",
+      "bytes": 109538,
+      "sha256": "3b4e21631eb5892e3c67e19e554689ee0d0626855c8c7a73967cdaffd4023b0f"
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-1/jobs/000006-3dfbf9b9362fe5d1.trace.jsonl",
+      "bytes": 12924,
+      "sha256": "8eaf790859faf07057a5db14424de612e3039b329484a887b67e64f566eed909",
+      "lines": 24
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-1/results.jsonl",
+      "bytes": 109538,
+      "sha256": "3b4e21631eb5892e3c67e19e554689ee0d0626855c8c7a73967cdaffd4023b0f",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-1/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "0e5ed71563bca8677d519ee9bf238234a8e23754ff706fe0005dd20bbf1957c3"
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-2/jobs/000006-3dfbf9b9362fe5d1.result.json",
+      "bytes": 56778,
+      "sha256": "0c757d6a7ce0c27697678fdba3f939dacacf8e5587b34bf6680e22b66c80d952"
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-2/jobs/000006-3dfbf9b9362fe5d1.trace.jsonl",
+      "bytes": 8813,
+      "sha256": "33281f63b772344d407a038895c8dfd1112c2818930d052022ae02121676320d",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-2/results.jsonl",
+      "bytes": 56778,
+      "sha256": "0c757d6a7ce0c27697678fdba3f939dacacf8e5587b34bf6680e22b66c80d952",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-2/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "94431c6c7f1c9578e2fdbf659fd3179aa057a7050e94f2bee8c33607505bf5cb"
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-3/jobs/000006-3dfbf9b9362fe5d1.result.json",
+      "bytes": 109278,
+      "sha256": "cb694a6d843be74c6ddd68ff3d8f7f48991cd911b154ce425031406dd789c11e"
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-3/jobs/000006-3dfbf9b9362fe5d1.trace.jsonl",
+      "bytes": 12536,
+      "sha256": "f40cd0fd5e880d7569cef0695ac7a1e2723044a94ba0e49b19403f16a15a0348",
+      "lines": 24
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-3/results.jsonl",
+      "bytes": 109278,
+      "sha256": "cb694a6d843be74c6ddd68ff3d8f7f48991cd911b154ce425031406dd789c11e",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-06-repeat-3/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "61aa2e42b9728574d38cdf10e22491af49ac50127b1582f52df040bbdbbad29a"
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-0/jobs/000007-80d7724d97ee0178.result.json",
+      "bytes": 56583,
+      "sha256": "54a5205df4a469125fc8fb1f6297790318d516960515e3482888d2e8a2704994"
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-0/jobs/000007-80d7724d97ee0178.trace.jsonl",
+      "bytes": 8532,
+      "sha256": "7da50bad3ec7c40525f20bb6873be6ffd9e349059c6a5efb5e36a5ebf0c40136",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-0/results.jsonl",
+      "bytes": 56583,
+      "sha256": "54a5205df4a469125fc8fb1f6297790318d516960515e3482888d2e8a2704994",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-0/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "99c5229157399ba2d020a06212af347603510fb738b95fe2f0c1dbfd72f84c5f"
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-1/jobs/000007-80d7724d97ee0178.result.json",
+      "bytes": 108964,
+      "sha256": "64ea72bc0ab858dec271d988dbecac2a81b1bb26fde96219cb47a0ef284891ef"
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-1/jobs/000007-80d7724d97ee0178.trace.jsonl",
+      "bytes": 12220,
+      "sha256": "eaf27478dd81001cf34af548fa73da7ef1c768812e6dfdf5983b7b7bf0f7d99c",
+      "lines": 24
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-1/results.jsonl",
+      "bytes": 108964,
+      "sha256": "64ea72bc0ab858dec271d988dbecac2a81b1bb26fde96219cb47a0ef284891ef",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-1/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "9738c159d43b43e4078a7b652f375497c94b8e2995811f18f91858ab25be68df"
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-2/jobs/000007-80d7724d97ee0178.result.json",
+      "bytes": 56684,
+      "sha256": "520e8c0c2634d66ea2789427d4679ced1376d5aa228fd4abc65e6007d893fc1b"
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-2/jobs/000007-80d7724d97ee0178.trace.jsonl",
+      "bytes": 8572,
+      "sha256": "7c127e6f37db73561871d689bd254707f0e453ce5198ba121c4fdcbd6a39b8e8",
+      "lines": 16
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-2/results.jsonl",
+      "bytes": 56684,
+      "sha256": "520e8c0c2634d66ea2789427d4679ced1376d5aa228fd4abc65e6007d893fc1b",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-2/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "82772d20c3e0c539d4eb370127783726778768e188eea8c685f6eade0d2d5468"
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-3/jobs/000007-80d7724d97ee0178.result.json",
+      "bytes": 108862,
+      "sha256": "98f7baaca0467519f5c7ef9f461aae84091c6c7598ee349bf6a8e6f3dac28f34"
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-3/jobs/000007-80d7724d97ee0178.trace.jsonl",
+      "bytes": 12224,
+      "sha256": "d2b103616a0ddc4132b4d183df9a75750ca3fb1f298f19d678bf025e9252755a",
+      "lines": 24
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-3/results.jsonl",
+      "bytes": 108862,
+      "sha256": "98f7baaca0467519f5c7ef9f461aae84091c6c7598ee349bf6a8e6f3dac28f34",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-07-repeat-3/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "7fde98a37b79417875902689f75627246f8cd00409c119bdf57db95fbbd73b48"
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-0/jobs/000008-93064665bb053d9f.result.json",
+      "bytes": 111172,
+      "sha256": "b2e22adeccd2cf0d5b5141c05d0a40e2b8e0306bbb30acad6f81fc6ce860fae6"
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-0/jobs/000008-93064665bb053d9f.trace.jsonl",
+      "bytes": 12842,
+      "sha256": "3e4cdf6198c7b8a5fea7bcdf592dc421c72882822e1a6fd704780acb407ea86b",
+      "lines": 23
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-0/results.jsonl",
+      "bytes": 111172,
+      "sha256": "b2e22adeccd2cf0d5b5141c05d0a40e2b8e0306bbb30acad6f81fc6ce860fae6",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-0/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "d24bbbd30516ec8d4eb57b26b54a0b3ebc87c198f87045e710028144889a9b54"
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-1/jobs/000008-93064665bb053d9f.result.json",
+      "bytes": 109277,
+      "sha256": "7ff6d88ccb7428c78e66f52c4f2094e52a1d060413ecdb4d9731a260e2fd57ce"
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-1/jobs/000008-93064665bb053d9f.trace.jsonl",
+      "bytes": 10808,
+      "sha256": "221a94dbba800eae9fcea5afb407e4d7fda7cc7180a2cdc1913b063249ea06c7",
+      "lines": 20
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-1/results.jsonl",
+      "bytes": 109277,
+      "sha256": "7ff6d88ccb7428c78e66f52c4f2094e52a1d060413ecdb4d9731a260e2fd57ce",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-1/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "56c152d9b2a742fa74b1857f35e1510fde7a3a347c05badbcd665900b3b5331a"
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-2/jobs/000008-93064665bb053d9f.result.json",
+      "bytes": 109231,
+      "sha256": "bf1b500a1ff3b1e6b42128dad0e6f2ef8552796ced6be94c4a52e4ea223df276"
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-2/jobs/000008-93064665bb053d9f.trace.jsonl",
+      "bytes": 10708,
+      "sha256": "ac3646a661fa4257adb07be5e9f5a99f2a066c7f814b2d56f30d9feb3995c742",
+      "lines": 20
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-2/results.jsonl",
+      "bytes": 109231,
+      "sha256": "bf1b500a1ff3b1e6b42128dad0e6f2ef8552796ced6be94c4a52e4ea223df276",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-2/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "6947637fa0558c438b46d6d73f0c57d397b23eac2a6b7d73ec5b5326bbd503a8"
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-3/jobs/000008-93064665bb053d9f.result.json",
+      "bytes": 110955,
+      "sha256": "13cbb92f6c7d1ed113cfe69fb26d69ee4da45c6f96d8538fa6c08a0a9b224765"
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-3/jobs/000008-93064665bb053d9f.trace.jsonl",
+      "bytes": 12832,
+      "sha256": "f9fa5c538a7c43390240d858b6286b048a634d0075790064ff13a598bcddd0ac",
+      "lines": 23
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-3/results.jsonl",
+      "bytes": 110955,
+      "sha256": "13cbb92f6c7d1ed113cfe69fb26d69ee4da45c6f96d8538fa6c08a0a9b224765",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-08-repeat-3/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "08ee7f3b5aa3cca32660bd077ab5a2983fccccca477ec8a30cbee8f8d785252b"
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-0/jobs/000009-81bfc5e2d3e108e2.result.json",
+      "bytes": 88132,
+      "sha256": "2a6103a4de9341c1a1a257a296baa24c9149d6bbb595968689eb504468308e35"
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-0/jobs/000009-81bfc5e2d3e108e2.trace.jsonl",
+      "bytes": 17100,
+      "sha256": "deb50f70b83969fbb53489e7b8fe20a39ec27a9a92d712bbf9af9b5955d7e21c",
+      "lines": 32
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-0/results.jsonl",
+      "bytes": 88132,
+      "sha256": "2a6103a4de9341c1a1a257a296baa24c9149d6bbb595968689eb504468308e35",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-0/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "1221e97daee19325ec2d05f3200b195e908f5a3500ec3e80238c1c7b68e04a71"
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-1/jobs/000009-81bfc5e2d3e108e2.result.json",
+      "bytes": 88349,
+      "sha256": "13bb58385caef643ff96a5a99f4afc1facbaa883805315b18294229889cf21bc"
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-1/jobs/000009-81bfc5e2d3e108e2.trace.jsonl",
+      "bytes": 17100,
+      "sha256": "df860056e448a092fb6e4d799ce0fc445fd0cd4404aba7dea9820d7130b70d0d",
+      "lines": 32
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-1/results.jsonl",
+      "bytes": 88349,
+      "sha256": "13bb58385caef643ff96a5a99f4afc1facbaa883805315b18294229889cf21bc",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-1/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "bbc6c134c2e6d510d8197ca3cff611ded3dea6d4afdb7a6990f7308ec08d187d"
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-2/jobs/000009-81bfc5e2d3e108e2.result.json",
+      "bytes": 88211,
+      "sha256": "f0c012fcf441bb9fa57aa2550a142641a9b6de013af95d9e4c36e72fd7322948"
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-2/jobs/000009-81bfc5e2d3e108e2.trace.jsonl",
+      "bytes": 17099,
+      "sha256": "a0a061bb3901767626a8a123c2c44686b52cf5d133943532944ef49f311b6a9d",
+      "lines": 32
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-2/results.jsonl",
+      "bytes": 88211,
+      "sha256": "f0c012fcf441bb9fa57aa2550a142641a9b6de013af95d9e4c36e72fd7322948",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-2/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "c04fd25f548586de1bbcf78c1cb634e292b2e57a2696dfb88b319dd6d9c9b359"
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-3/jobs/000009-81bfc5e2d3e108e2.result.json",
+      "bytes": 88589,
+      "sha256": "a7dc3ccf0176e046683eaa04f62465e21643144aa423b2f439b60e34e852004c"
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-3/jobs/000009-81bfc5e2d3e108e2.trace.jsonl",
+      "bytes": 17100,
+      "sha256": "217780e335450a691e5497c11f76328bf52b3c2e3f797d0a3aaa222166cf6802",
+      "lines": 32
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-3/results.jsonl",
+      "bytes": 88589,
+      "sha256": "a7dc3ccf0176e046683eaa04f62465e21643144aa423b2f439b60e34e852004c",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-09-repeat-3/results.jsonl.manifest.json",
+      "bytes": 1671,
+      "sha256": "8cb49c61f0f7dfd9d3e781ba97dd18e9157a31f76ac2a9656a7fda5b691caaf3"
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-0/jobs/000010-46c71bd3400a2090.result.json",
+      "bytes": 145877,
+      "sha256": "1805ccdc3edb73af4e74cd652fe63f470673b08e9d3075bb988034af2960cb42"
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-0/jobs/000010-46c71bd3400a2090.trace.jsonl",
+      "bytes": 30033,
+      "sha256": "098e02ea9790fcfdfb849fba3d7a9e13f9660fd5f4e3ea975317dffa1684d451",
+      "lines": 50
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-0/results.jsonl",
+      "bytes": 145877,
+      "sha256": "1805ccdc3edb73af4e74cd652fe63f470673b08e9d3075bb988034af2960cb42",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-0/results.jsonl.manifest.json",
+      "bytes": 1672,
+      "sha256": "8365d3672fd6bd6bb366cd4f1a7ba6e6a528555a48c2e0c692f5a138685c7348"
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-1/jobs/000010-46c71bd3400a2090.result.json",
+      "bytes": 257072,
+      "sha256": "408ec814b5c63017d3164d5decbbd421b4153d9510e6c5a036518c1e06ce508a"
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-1/jobs/000010-46c71bd3400a2090.trace.jsonl",
+      "bytes": 44846,
+      "sha256": "fdcd3260de827fb6df18aa51a4e4a0a2596eb89f22ff76387a70fb8dfc76e576",
+      "lines": 79
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-1/results.jsonl",
+      "bytes": 257072,
+      "sha256": "408ec814b5c63017d3164d5decbbd421b4153d9510e6c5a036518c1e06ce508a",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-1/results.jsonl.manifest.json",
+      "bytes": 1672,
+      "sha256": "8f8e2d375adffa36767ca2aeace401e5ebf7edf2b7eef69f928cb89fa057f467"
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-2/jobs/000010-46c71bd3400a2090.result.json",
+      "bytes": 256927,
+      "sha256": "c8f3f540206c60f718f510b99f4bccb5986725349cfa5fc479acaaecf32d54bc"
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-2/jobs/000010-46c71bd3400a2090.trace.jsonl",
+      "bytes": 44956,
+      "sha256": "0d3aa2f0d6a91e684f9c39f086d28c0314a6cd10abac320ce239bacdabeff318",
+      "lines": 79
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-2/results.jsonl",
+      "bytes": 256927,
+      "sha256": "c8f3f540206c60f718f510b99f4bccb5986725349cfa5fc479acaaecf32d54bc",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-2/results.jsonl.manifest.json",
+      "bytes": 1672,
+      "sha256": "23a44643552f3a5c3825709bfdb34608cd1d038862ee6616282299f54ea54576"
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-3/jobs/000010-46c71bd3400a2090.result.json",
+      "bytes": 257481,
+      "sha256": "7c09c501a8c1ca540eb326b2e926d6653eb4cca6eb6995a3b0b1036e72e61b4e"
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-3/jobs/000010-46c71bd3400a2090.trace.jsonl",
+      "bytes": 44952,
+      "sha256": "343f03c04933740a6ae96cbda15b9235ccf62ea158814da5f61b124335876a7c",
+      "lines": 79
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-3/results.jsonl",
+      "bytes": 257481,
+      "sha256": "7c09c501a8c1ca540eb326b2e926d6653eb4cca6eb6995a3b0b1036e72e61b4e",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-10-repeat-3/results.jsonl.manifest.json",
+      "bytes": 1672,
+      "sha256": "ecd21c19cb073e6cf5974d22c2569ea297fb4aa6d12a44a0a36c6fa7de33edc7"
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-0/jobs/000011-1a19989ccaab747d.result.json",
+      "bytes": 371237,
+      "sha256": "8e76bfb8f15c879ddb5fce4ce98ef8a313ff66f8df1cef7d5a0495bac2ec0ca9"
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-0/jobs/000011-1a19989ccaab747d.trace.jsonl",
+      "bytes": 66972,
+      "sha256": "44036a951db5931de2fb769ee7377eec18a90325a6d22160b6e6afe48ed68d3f",
+      "lines": 114
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-0/results.jsonl",
+      "bytes": 371237,
+      "sha256": "8e76bfb8f15c879ddb5fce4ce98ef8a313ff66f8df1cef7d5a0495bac2ec0ca9",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-0/results.jsonl.manifest.json",
+      "bytes": 1672,
+      "sha256": "3e4d9ea59216bade914dca0d5566863329ed5dd1acbdc67723f04e964e138cfd"
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-1/jobs/000011-1a19989ccaab747d.result.json",
+      "bytes": 371552,
+      "sha256": "d379698a028c042fd31aa3056f676962fc9879cb7d9a252290af91313f01b69b"
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-1/jobs/000011-1a19989ccaab747d.trace.jsonl",
+      "bytes": 68880,
+      "sha256": "3450fe019b8d4f26b3c406fb449ef66f504b3895cb2b511bf263d037270baa95",
+      "lines": 118
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-1/results.jsonl",
+      "bytes": 371552,
+      "sha256": "d379698a028c042fd31aa3056f676962fc9879cb7d9a252290af91313f01b69b",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-1/results.jsonl.manifest.json",
+      "bytes": 1672,
+      "sha256": "745c0bb8249a530eee01dc1f81289d6bf4341b5c65993a49c5185b9074a1461c"
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-2/jobs/000011-1a19989ccaab747d.result.json",
+      "bytes": 317354,
+      "sha256": "2115e0d054aa0d6dc0fceaa6e10552be55902de28e795fc4443c7a3280941990"
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-2/jobs/000011-1a19989ccaab747d.trace.jsonl",
+      "bytes": 64651,
+      "sha256": "0036e1514e90fea20945431b6a46c1ba07ad5f3df9dc1144189f583e55b4220d",
+      "lines": 108
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-2/results.jsonl",
+      "bytes": 317354,
+      "sha256": "2115e0d054aa0d6dc0fceaa6e10552be55902de28e795fc4443c7a3280941990",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-2/results.jsonl.manifest.json",
+      "bytes": 1672,
+      "sha256": "1dda21ffdfd63d84b52c0f5a1a41fce26d61149ff38382ebcdbeee1e68b604e8"
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-3/jobs/000011-1a19989ccaab747d.result.json",
+      "bytes": 372718,
+      "sha256": "55dcc0a732390f6529cbd59e8cf9ad1c80fbe30be22ac3d830f34ad44ba25cca"
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-3/jobs/000011-1a19989ccaab747d.trace.jsonl",
+      "bytes": 69551,
+      "sha256": "7615331ff864f992557d9571646a37a02ce9b955a53d0b1a2c880b0c54777468",
+      "lines": 118
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-3/results.jsonl",
+      "bytes": 372718,
+      "sha256": "55dcc0a732390f6529cbd59e8cf9ad1c80fbe30be22ac3d830f34ad44ba25cca",
+      "lines": 1
+    },
+    {
+      "path": "source/accepted/scaffold-11-repeat-3/results.jsonl.manifest.json",
+      "bytes": 1672,
+      "sha256": "3aa88335c626c1d5f67c4474a00a1979dd1afb2c0c47b9916a1eb586e592f20e"
+    },
+    {
+      "path": "source/accepted-trajectories.jsonl",
+      "bytes": 5314652,
+      "sha256": "15132ef18944d39e41a60c0a07f7e736878cb171d82d5039df47c0b3ad483ca8",
+      "lines": 48
+    },
+    {
+      "path": "source/decision-admission-cache/11b3a298d4323c55ebd30f87b066a948246727f30b97c0d2e0da1ee9fb086b12/decisions.jsonl",
+      "bytes": 6000318,
+      "sha256": "264f3122d92394934f9dfc1538b3ce311b2a629bc9a6f06bdca756cc9d8e90c9",
+      "lines": 88
+    },
+    {
+      "path": "source/decision-admission-cache/11b3a298d4323c55ebd30f87b066a948246727f30b97c0d2e0da1ee9fb086b12/decisions.jsonl.authored-actions.jsonl",
+      "bytes": 391824,
+      "sha256": "e1cdb508ddc96302f2183baf00236e6cd94b429f9fbf66430ece70b9e7dbcdab",
+      "lines": 12
+    },
+    {
+      "path": "source/decision-admission-cache/11b3a298d4323c55ebd30f87b066a948246727f30b97c0d2e0da1ee9fb086b12/receipt.json",
+      "bytes": 41606,
+      "sha256": "56b165a05244bae530f41d227af22efef0e2aa55ccf76115e44f84bdb0c2cf3f"
+    },
+    {
+      "path": "source/ferry-receipt.json",
+      "bytes": 420,
+      "sha256": "4a70bfa93d71489d6b4a9bfa999dacdf766e0777ddbd2c18f3ec82a7155c4270"
+    },
+    {
+      "path": "source/harvest.json",
+      "bytes": 64170,
+      "sha256": "2aa10a62220720a75a1a3cd9ee652f4d62b9c34a4de35aa8ec0d3d795ae6dd83"
+    },
+    {
+      "path": "source/harvest.tar.gz",
+      "bytes": 1726119,
+      "sha256": "3fe2ee76b9c18fcc06bd8342e8994fdd41b9e12c36ba4f3a67624161c560600f"
+    },
+    {
+      "path": "source/metadata/journal.jsonl",
+      "bytes": 138666,
+      "sha256": "2c36be923021daa0e4673636c3a88a348e9ce5076d2299d9b2606bdd2e2fe85a",
+      "lines": 103
+    },
+    {
+      "path": "source/metadata/launch.json",
+      "bytes": 2821,
+      "sha256": "b0c4d7b8a17885c0d993214f47656967886fe10d5dbd7392c7a3165d19b1aba6"
+    },
+    {
+      "path": "source/metadata/preparation.json",
+      "bytes": 2537,
+      "sha256": "25fd9fe77abf7894a0ab74de9a7e51766b70ea66b36ed1284d1e9e7f10db0c00"
+    },
+    {
+      "path": "source/metadata/qualification-cases.jsonl",
+      "bytes": 14561,
+      "sha256": "079b1279232f211294922265e88eca187066899a09360af84e43ace9e9b84dee",
+      "lines": 12
+    },
+    {
+      "path": "source/metadata/queue.jsonl",
+      "bytes": 32868,
+      "sha256": "a9cdb37b3c98a9a88fbccb6ccb775bb643dac5fbccf3b49e576740214713d34a",
+      "lines": 48
+    },
+    {
+      "path": "source/metadata/teacher-configuration-basis.json",
+      "bytes": 587881,
+      "sha256": "c67d81315c3f791c4d1a6f44da77e617bf8c86d4c216adbb09245782e59e0614"
+    },
+    {
+      "path": "source/metadata/teacher-execution-identity.json",
+      "bytes": 638,
+      "sha256": "92ea5ba665b6e927f285838f773f828cc508a1b1085af9e1fb0a5cce4c4f71c2"
+    },
+    {
+      "path": "source/metadata/teacher-serving-actor.json",
+      "bytes": 3701,
+      "sha256": "91974acc87608823ac3b97c66d9107ac41e1f6c5cffdeea40b304750508fcf5a"
+    },
+    {
+      "path": "source-binding-validation.json",
+      "bytes": 31507,
+      "sha256": "2d28e4f11bd6ff44e0d953ae199a259d5401f15148afcc8d2b34af6993b42e78"
+    }
+  ],
+  "bytes": 26515252
+}
