@@ -9,6 +9,7 @@ from .common import Reject
 from .records import group_key
 
 ACQUIRED_FILES = None  # Optional exact receipt-file shard, never an implicit row limit.
+ACQUIRED_RECEIPTS = {}  # Explicit immutable selected-file snapshots; never the mutable download journal.
 
 
 def supported_acquired_file(name):
@@ -61,12 +62,66 @@ def cooperation_trajectory_file(ref,name,known_files):
     return ref in ('D13','D14')
 
 
+def load_acquisition(ref):
+    """Verify complete acquisitions or explicit byte-bound catalogue subsets."""
+    from . import agents
+    root = agents.EXPANSION_ROOT/ref
+    receipt_path = Path(ACQUIRED_RECEIPTS.get(ref, root/'acquisition.json'))
+    receipt = json.loads(receipt_path.read_text())
+    return validate_acquisition(ref, receipt, receipt_path, root=root)
+
+
+def validate_acquisition(ref, receipt, receipt_path, *, root):
+    """Shared prepublication and read-time acquisition verifier."""
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    root=Path(root);receipt_path=Path(receipt_path)
+    if receipt.get('status') == 'acquired' and receipt.get('revision'):
+        return receipt
+    if (receipt.get('schema') != 'natlang.acquired-file-snapshot/1'
+            or receipt.get('status') != 'acquired-file-snapshot'
+            or receipt.get('source_complete') is not False or not receipt.get('revision')):
+        raise Reject('source snapshot is not completely acquired and pinned: '+ref)
+    binding = receipt.get('catalogue') or {}
+    catalogue_path = receipt_path.parent / binding.get('path', '')
+    if (not catalogue_path.is_file() or catalogue_path.stat().st_size != binding.get('bytes')
+            or sha256_file_hex_cached(catalogue_path) != binding.get('sha256')):
+        raise Reject('selected source snapshot catalogue binding differs')
+    catalogue = json.loads(catalogue_path.read_text())
+    sources = [source for source in catalogue.get('sources', []) if source.get('ref') == ref]
+    if len(sources) != 1:
+        raise Reject('selected source snapshot lacks unique original catalogue source')
+    source = sources[0]
+    if source.get('repo') != receipt.get('repo') or source.get('revision') != receipt['revision']:
+        raise Reject('selected source snapshot differs from pinned catalogue identity')
+    known = {entry['path']:entry for entry in source['files']}
+    if len(known) != len(source['files']):
+        raise Reject('duplicate original catalogue source path')
+    selected = {entry['path']:entry for entry in receipt.get('files', [])}
+    if not selected or len(selected) != len(receipt['files']) or not selected.keys() <= known.keys():
+        raise Reject('invalid selected source file inventory')
+    if sorted(receipt.get('pending_files', [])) != sorted(known.keys()-selected.keys()):
+        raise Reject('selected source snapshot loses unacquired catalogue obligations')
+    for name, entry in selected.items():
+        expected = known[name]
+        if entry.get('bytes') != expected.get('bytes') or not isinstance(entry.get('sha256'), str) or len(entry['sha256']) != 64:
+            raise Reject('selected source file differs from catalogue size/digest contract')
+        path = _bound_acquired_path(root, entry)
+        if expected.get('lfs_sha256'):
+            if entry['sha256'] != expected['lfs_sha256']:
+                raise Reject('selected source file differs from pinned LFS digest')
+        elif expected.get('blob_id'):
+            from .acquired_snapshot import git_blob_hex
+            if git_blob_hex(path) != expected['blob_id']:
+                raise Reject('selected source file differs from pinned Git blob')
+        else:
+            raise Reject('selected source catalogue lacks immutable remote file identity')
+    return receipt
+
+
 def acquired_rows(ref, limit=None):
     from . import agents
     root = agents.EXPANSION_ROOT / ref
-    receipt = json.loads((root / 'acquisition.json').read_text())
-    if receipt.get('status') != 'acquired' or not receipt.get('revision'):
-        raise Reject('source snapshot is not completely acquired and pinned: '+ref)
+    receipt = load_acquisition(ref)
     known = {entry['path'] for entry in receipt['files'] if supported_acquired_file(entry['path'])}
     if ACQUIRED_FILES is not None and not ACQUIRED_FILES <= known:
         raise Reject('requested file is not a bound source in this receipt')

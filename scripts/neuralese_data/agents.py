@@ -975,3 +975,9 @@ CORPORA['cooper-archive-acquired']=(cooper_archive_acquired,4)
 
 from .acquired_transformed_coop import qwen_comm4_acquired
 CORPORA['qwen-comm4-acquired']=(qwen_comm4_acquired,4)
+
+from .acquired_granted import miroverse_acquired, midtool_acquired
+CORPORA.update({'miroverse-acquired':(miroverse_acquired,4),
+                'midtool-acquired':(midtool_acquired,4)})
+from .acquired_granted import swe_chat_acquired
+CORPORA['swe-chat-acquired']=(swe_chat_acquired,4)
