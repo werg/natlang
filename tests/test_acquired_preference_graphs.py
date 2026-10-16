@@ -50,6 +50,18 @@ def test_exact_adjacent_normalized_source_join_and_false_pair_rejected(tmp_path)
         list(normalized_preference_records(source))
 
 
+def test_durable_admission_request_roundtrips_json_and_rejects_changed_hold_binding():
+    from scripts.neuralese_data.prepare_acquired_preference_admission import _json_request,_proposal_request
+    hold={'path':'/immutable/hold.jsonl','sha256':'a'*64,'bytes':17,'kind':'decision-hold'}
+    request=_proposal_request({'lfm25':{'conversions':[]}},'/immutable/protection.json',
+        {'proof':{'sha256':'b'*64}},{'fingerprint':'c'*64},[hold])
+    durable=json.loads(json.dumps(_json_request(request)))
+    assert durable==_json_request(request)
+    changed=_proposal_request({'lfm25':{'conversions':[]}},'/immutable/protection.json',
+        {'proof':{'sha256':'b'*64}},{'fingerprint':'c'*64},[{**hold,'sha256':'d'*64}])
+    assert durable!=_json_request(changed)
+
+
 def test_source_failure_never_becomes_positive_pair_and_both_original_rows_accounted(tmp_path):
     source,_,values=normalized(tmp_path,count=1)
     values[0]['trajectory']['outcome']['label']='failed'

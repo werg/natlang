@@ -302,6 +302,7 @@ def _source_eligibility_index(source,export_path,export,source_binding,closure_b
         'protection_sets':{key:sorted(protection[key]) for key in ('held','quality','pending')},
         'decision_holds':decision_contract(decision_bindings),
         'implementation':_source_index_implementation()}
+    identity=_json_request(identity)
     identity_sha=canonical_json_sha256_hex(identity)
     root=Path(index_root);root.mkdir(parents=True,exist_ok=True)
     index_path=root/(identity_sha+'.jsonl');receipt_path=index_path.with_suffix('.receipt.json')
@@ -393,6 +394,16 @@ def _proposal_request(models,protection_path,protection,runtime,holds):
         'protection_path':str(Path(protection_path).resolve())}
 
 
+def _json_request(value):
+    """Return the exact JSON value written to disk for a resumable request.
+
+    Decision-hold contracts contain tuples in memory. JSON encodes those as
+    arrays, so comparing a freshly-built request directly with json.loads of
+    its durable copy otherwise rejects an identical retry.
+    """
+    return json.loads(json.dumps(value,sort_keys=True,separators=(',',':')))
+
+
 def verify_conversion(directory,*,protection_path,base,prepared=None,
                       verified_closures=None,verification_receipt_path=None,
                       source_index_root=None):
@@ -475,6 +486,7 @@ def verify_conversion(directory,*,protection_path,base,prepared=None,
         'tokenizer_base':tokenizer_inventory(base),'prepared_tokenizer':prepared.binding,
         'source_artifacts':[{'path':str(Path(item['path']).resolve()),'bytes':item.get('bytes',Path(item['path']).stat().st_size),
                              'sha256':item['sha256']} for item in source_artifacts if item and item.get('path')]}
+    identity=_json_request(identity)
     identity_sha=canonical_json_sha256_hex(identity)
     if verification_receipt_path is not None:
         cached=_cached_verification(Path(verification_receipt_path),identity)
@@ -613,7 +625,7 @@ def prepare(args):
     initial_runtime=_runtime()
     initial_holds=load_decision_holds(sorted((ROOT/'training/decision-holds').glob('*.jsonl')))[1]
     if not isinstance(models,dict) or len(models)<2:raise ValueError('offline admission requires both production model views')
-    request=_proposal_request(models,args.protection,initial_protection,initial_runtime,initial_holds)
+    request=_json_request(_proposal_request(models,args.protection,initial_protection,initial_runtime,initial_holds))
     request_path=args.output/'.proposal-request.json'
     if request_path.exists():
         if json.loads(request_path.read_text())!=request:
