@@ -1603,6 +1603,21 @@ def _pending_source_continuation(old, new):
     return True
 
 
+
+def _combined_native_source_continuation(old, new):
+    """Compose exact active and pending continuations at a drained handoff only.
+
+    Resident polling deliberately keeps using _data_continuation, since its
+    transaction cannot independently load new pending obligations.
+    """
+    role = 'pending_native_sources'
+    if role not in new or old.get(role) == new[role]:
+        return False
+    pending_only = {**old, role: new[role]}
+    return (_data_continuation(pending_only, new)
+            and _pending_source_continuation(old, pending_only))
+
+
 def appended_training_stages(old_recipe, new_recipe, out):
     """Future dependent stages may extend a running recipe without rewriting its existing stages."""
     old = old_recipe.get('stages', [])
@@ -1695,7 +1710,8 @@ def unstarted_stage_input_changes(existing, plan, out):
             continue
         if stage_started(out, stage_id):
             if stage_finished(out, stage_id) or not (
-                    _data_continuation(old, new) or _pending_source_continuation(old, new)):
+                    _data_continuation(old, new) or _pending_source_continuation(old, new)
+                    or _combined_native_source_continuation(old, new)):
                 raise ValueError('handoff refused: inputs of started stage ' + stage_id + ' changed; only a stage '
                                  'that has not started may take new inputs, and the active stage only by a declared '
                                  'data continuation (' + DATA_CONTINUATION_ROLE + ' = the text data it trained on)')

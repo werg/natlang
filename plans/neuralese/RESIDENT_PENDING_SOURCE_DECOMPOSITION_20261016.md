@@ -28,3 +28,21 @@ before/after the sole commit point. Independent review precedes deployment.
 Qualification: 67 focused tests passed (26.40s), including actual tiny SFT updates, full parameter/optimizer/RNG equality to the all-data baseline, post-commit crash/recovery, pending-only transactions, and preserved quota activation. A quota above the current epoch count remains executable through the existing exposure scheduler, rather than becoming an unschedulable readiness deficit.
 
 Independent root review identified a pre-commit withdrawal gap. Preparation now uses persisted actual withdrawal history and the unchanged bound proof; the live manager independently uses the restored SFT history before commit. Negative tests cover both active and pending reintroduction, including a stale CPU history that cannot bypass the live verifier. Final four-file focused run: 69 passed (24.34s); quick passed.
+
+## Combined drained recipe handoff (2026-10-16)
+
+The supervisor should adopt newly fitting training rows and new whole pending
+rows at the same safe stop boundary. Separate exact verifiers already admit
+each change, but their unchanged-other-role requirements reject the combination.
+
+1. Keep the old mandatory pending rows, quotas and dependency evidence.
+2. Verify the new active/held sources against their exact declared predecessors,
+   with every unrelated role and the original foundation unchanged.
+3. Independently verify the pending expansion against the old pending declaration.
+4. Accept both together only through the drained recipe handoff. The resident
+   active-source-only predicate remains unchanged because it cannot load pending
+   obligations itself. Existing continuation preserves optimizer, RNG and credits.
+
+This is supervisor policy expressed above; the crisp helper composes the two
+existing exact verifiers and the existing durable recipe handoff. No new data
+selector, checkpoint format or model-facing text is introduced.

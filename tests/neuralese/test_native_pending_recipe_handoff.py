@@ -6,7 +6,7 @@ import pytest
 from natlang_neuralese.common.hashing import sha256_file_hex_cached as sha
 from natlang_neuralese.train.native_pending_sources import declaration, pending_source_dependencies
 from natlang_neuralese.train.recipe import (_pending_source_continuation, _data_continuation,
-    unstarted_stage_input_changes, _without_unstarted_bindings)
+    unstarted_stage_input_changes, _without_unstarted_bindings, _combined_native_source_continuation)
 from test_native_state_sft import graph
 
 
@@ -76,3 +76,48 @@ def test_started_recipe_uses_existing_data_continuation_projection(tmp_path):
     assert changes['full']['kind']=='data_continuation'
     assert _without_unstarted_bindings(before['recipe'],after['recipe'],changes)[0]==\
         _without_unstarted_bindings(before['recipe'],after['recipe'],changes)[1]
+
+
+def expanded_active(old, pending):
+    return {**old, 'native_graphs': {'path':'expanded','sha256':'e'*64,'binding':'train'},
+        'continued_native_graphs':old['native_graphs'],
+        'held_native_graphs': {'path':'expanded-held','sha256':'f'*64,'binding':'held'},
+        'continued_held_native_graphs':old['held_native_graphs'],
+        'pending_native_sources':pending}
+
+
+def test_combined_started_handoff_preserves_full_pending_and_exact_active_predecessors(tmp_path):
+    prior=declared(tmp_path,'prior',['long'])
+    old={**inputs(),'pending_native_sources':prior}
+    added=declared(tmp_path,'added',['long','later'],evidence=pending_source_dependencies(prior['path']))
+    new=expanded_active(old,added)
+    assert not _data_continuation(old,new)
+    assert not _pending_source_continuation(old,new)
+    assert _combined_native_source_continuation(old,new)
+    recipe={'stages':[{'id':'full','kind':'native_state_sft','parameters':{}}]}
+    before={'recipe':recipe,'stage_inputs':{'full':old}}
+    after={'recipe':recipe,'stage_inputs':{'full':new}}
+    stage=tmp_path/'full';stage.mkdir();(stage/'checkpoint.pt').write_text('started')
+    assert unstarted_stage_input_changes(before,after,tmp_path)['full']['kind']=='data_continuation'
+
+
+@pytest.mark.parametrize('mutation',['prior_train','prior_held','foundation','unrelated','drop_rows','quota','dependencies'])
+def test_combined_handoff_rejects_loss_of_any_existing_invariant(tmp_path,mutation):
+    prior=declared(tmp_path,'prior',['long']);old={**inputs(),'pending_native_sources':prior}
+    evidence=pending_source_dependencies(prior['path'])
+    ids=['later'] if mutation=='drop_rows' else ['long','later']
+    added=declared(tmp_path,'added',ids,evidence=() if mutation=='dependencies' else evidence,
+        mutate=(lambda v:v['sources'][0]['rows'][0].update(required_visits=2)) if mutation=='quota' else None)
+    new=expanded_active(old,added)
+    if mutation=='prior_train':new['continued_native_graphs']={**old['native_graphs'],'sha256':'0'*64}
+    if mutation=='prior_held':new['continued_held_native_graphs']={**old['held_native_graphs'],'sha256':'0'*64}
+    if mutation=='foundation':new['foundation_native_graphs']={**old['foundation_native_graphs'],'sha256':'0'*64}
+    if mutation=='unrelated':new['arbitrary_new_role']={'path':'x','sha256':'0'*64,'binding':'x'}
+    assert not _combined_native_source_continuation(old,new)
+
+
+def test_combined_handoff_can_add_first_pending_but_checks_its_immutable_bytes(tmp_path):
+    old=inputs();pending=declared(tmp_path,'new',['long']);new=expanded_active(old,pending)
+    assert _combined_native_source_continuation(old,new)
+    (tmp_path/'new.json').write_text('{}')
+    with pytest.raises(ValueError,match='declaration changed'):_combined_native_source_continuation(old,new)
