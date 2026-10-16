@@ -358,8 +358,16 @@ actor bundle containing coefficients and frozen bases. Bind the exact same
 ordered IDs/scales when evaluating its admitted native-policy objective with
 `nativeGraphGradient`. `neuralese-native-actor-changed` means finish or cancel
 the current invocation before changing its adapter binding. Mixed adapter
-bindings across one replay graph require per-invocation executor support and
-remain unavailable; keep one fixed actor binding for that graph.
+bindings across one replay graph require explicit per-invocation declarations
+and a versioned immutable behavior policy. The typed native learning service accepts `invocationAdapters` with a
+`native-policy-objective/2` binding admitted from actual sampling receipts. Keep
+each invocation's ordered scales and frozen bases; current coefficient IDs may
+advance through `nativeAdapterOptimizerStep`. On
+`neuralese-native-grad-invalid`, restore its behavior bundle and match the
+admitted graph, invocation inventory and basis/scales. External observations
+require the original consumer occurrence and explicit `same-base-adapter-state`
+when actors differ. Production full-backbone stage admission still rejects
+adapted actors until its separate coefficient-policy stage is implemented.
 
 Native coefficient learning may explicitly select
 `adapterGradientPrecision: 'fp32'` in `nativeGraphGradient`. This retains the

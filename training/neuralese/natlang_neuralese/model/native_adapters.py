@@ -373,10 +373,6 @@ def optimize_adapter(engine, gradient, options, state_id, owner=None):
     parent = engine.store.get_native_tensor_artifact(adapter_id).artifact
     updated = engine.store.put_native_tensor_artifact(NativeTensorArtifact('adapter-coefficients', engine.native_identity,
         next_coefficients, parent.source_artifact_id, {'adapter_spec': spec}), owner)
-    state = engine.store.put_native_tensor_artifact(NativeTensorArtifact('optimizer-state', engine.native_identity,
-        next_state, updated.id, {'scope': SCHEMA, 'optimizer': algorithm, 'step': step,
-          'gradient_id': engine.store.put_native_tensor_artifact(gradient, owner).id,
-          'parent_adapter_id': adapter_id, 'optimizer_options': options}), owner)
     next_entries = ([{'id': updated.id if entry['id'] == adapter_id else entry['id'],
                       'scale': float.fromhex(entry['scale_hex'])} for entry in actor_binding['adapters']]
                     if actor_binding else [updated.id])
@@ -394,8 +390,17 @@ def optimize_adapter(engine, gradient, options, state_id, owner=None):
             resolved_actor=resolve_adapters(engine,[{'id':entry['id'],'scale':float.fromhex(entry['scale_hex'])} for entry in binding['adapters']])
             actor['native_identity']=effective_identity(engine,resolved_actor)
         validate_invocation_actor_receipt(continued,engine.native_identity)
+    state = engine.store.put_native_tensor_artifact(NativeTensorArtifact('optimizer-state', engine.native_identity,
+        next_state, updated.id, {'scope': SCHEMA, 'optimizer': algorithm, 'step': step,
+          'gradient_id': engine.store.put_native_tensor_artifact(gradient, owner).id,
+          'parent_adapter_id': adapter_id, 'optimizer_options': options,
+          **({'invocation_actors':continued,'actor_graph_sha256':canonical_json_sha256_hex(continued),
+              **({'invocation_source_names':gradient.provenance['invocation_source_names']} if 'invocation_source_names' in gradient.provenance else {})}
+             if invocation_actors is not None else {})}), owner)
+    if invocation_actors is not None:
         return {'adapter':updated.meta(),'optimizer_state_id':state.id,'step':step,'native_identity':engine.native_identity,
-                'invocation_actors':continued,'actor_graph_sha256':canonical_json_sha256_hex(continued)}
+                'invocation_actors':continued,'actor_graph_sha256':canonical_json_sha256_hex(continued),
+                **({'invocation_source_names':gradient.provenance['invocation_source_names']} if 'invocation_source_names' in gradient.provenance else {})}
     return {'adapter': updated.meta(), 'optimizer_state_id': state.id, 'step': step,
             'native_identity': engine.native_identity, 'adapter_binding': next_binding,
             'effective_native_identity': effective_identity(engine, next_resolved)}

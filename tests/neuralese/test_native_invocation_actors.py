@@ -232,3 +232,34 @@ def test_actual_typed_invocation_gradient_optimizer_service_and_durable_restart(
 def test_executed_fp8_distinct_actor_graph_matches_actual_cached_adjoints(tmp_path,monkeypatch,recipe):
     monkeypatch.setenv('NATLANG_NATIVE_ADAPTER_TEST_DEVICE','cuda')
     return test_layer_major_distinct_actor_graph_matches_cached_and_source_adjoints(tmp_path,monkeypatch,'mellum',True,backend_recipe=recipe)
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_actual_distinct_actor_sampling_receipts_replay_behavior_and_source_gradient(tmp_path,monkeypatch,family):
+    import copy
+    from test_native_adapted_rl import capture_actor
+    from natlang_neuralese.rl.native_replay import capture_invocation_actors,compile_replay,replay_logps
+    engine=engine_fixture(tmp_path,family,service_template=True)
+    source,target=adapters(engine)
+    _,turns=capture_actor(engine,[source.id],monkeypatch,reader_entries=[target.id],explicit_state_mode=True)
+    actors=capture_invocation_actors(turns,engine.native_identity)
+    assert actors['invocations']['writer']['native_identity']!=actors['invocations']['reader']['native_identity']
+    fetch=lambda ident:engine.store.get_native_state(ident).block
+    replay=compile_replay(turns,identity=engine.native_identity,roles=engine.role_tokens,fetch_block=fetch,invocation_actors=actors)
+    assert not replay.external_blocks and replay.adapter_binding is None
+    assert replay.invocation_actors==actors
+    name=next(name for name in source.artifact.tensors if name.endswith('v_proj.weight'))
+    leaf=source.artifact.tensors[name].clone().requires_grad_(True)
+    bindings={'writer':[source.id],'reader':[target.id]}
+    def execute(bank):
+        actual,behavior=replay_logps(engine.shared_model,replay,chunk_tokens=2)
+        torch.testing.assert_close(actual.detach(),behavior,atol=3e-6,rtol=2e-5)
+        selected=[index for index,action in enumerate(replay.actions) if action['turn']=='reader']
+        gradient=torch.autograd.grad(-actual[selected].mean(),leaf)[0]
+        assert gradient.norm()>0
+    run_invocation_actors(engine,list(bindings),bindings,execute,leaves={source.id:{**source.artifact.tensors,name:leaf}},gradient_precision='fp32')
+    with pytest.raises(ValueError,match='per-invocation actor scope'):replay_logps(engine.shared_model,replay)
+    forged=copy.deepcopy(actors);forged['invocations']['reader']=forged['invocations']['writer']
+    with pytest.raises(ValueError,match='captured behavior'):
+        compile_replay(turns,identity=engine.native_identity,roles=engine.role_tokens,fetch_block=fetch,invocation_actors=forged)
+    engine.store.close()

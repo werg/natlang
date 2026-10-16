@@ -777,3 +777,12 @@ No new prompt policy and no production controller adoption are introduced.
   rendered as `[object Object]`, preserving their actual code and recovery text.
   Real HTTP adversarial fixtures verify the structured error contract; live
   teacher-feedback measurement remains part of the entry above.
+
+- 2026-10-16: Heterogeneous native coefficient-policy service requests accept
+  explicit invocation adapters and an immutable objective/2 behavior descriptor.
+  Existing `neuralese-native-grad-invalid` errors teach restoration of the actual
+  actor bundle, invocation occurrences and unchanged frozen basis/scales; strict
+  external transport still requires a fresh rollout after an actor changes.
+  Both-port actual sampling/runtime/HTTP and Python–TypeScript archive fixtures
+  qualify mechanism only. Live48-sample executor feedback is debt for the next
+  own-teacher window. No cloud, full-size or production-stage claim is made.

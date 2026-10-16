@@ -24,6 +24,8 @@ class NativeReplay:
     identity: dict
     adapter_binding: dict | None = None
     external_receipts: dict | None = None
+    invocation_actors: dict | None = None
+    external_invocations: dict | None = None
 
 
 def _tokens(ids):
@@ -86,7 +88,22 @@ def _input_stream(capture, prompt_length):
     return stream, writes
 
 
-def compile_replay(turns, *, identity, roles, fetch_block):
+def capture_invocation_actors(turns,base):
+    """Exact host-capture actor inventory; graph/state proof is compile_replay's."""
+    import copy
+    from ..model.native_actor_graph import validate_invocation_actor_receipt
+    actors={}
+    for number,turn in enumerate(turns):
+        name=turn.get('graph_turn') or f'turn-{number}'
+        if name in actors:raise ValueError('native RL graph turn identities must be unique')
+        capture=turn.get('sampling') or {}
+        actors[name]={'native_identity':copy.deepcopy(capture.get('policy')),
+                     'adapter_binding':copy.deepcopy(capture.get('adapter_binding'))}
+    return validate_invocation_actor_receipt({'schema':'natlang.native-invocation-actors/1',
+        'base_native_identity':dict(base),'invocations':actors},base)
+
+
+def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=None):
     """Compile real turn captures, preserving exact producer occurrence bindings.
 
     ``turns`` use graph_replay.producer_turns' graph_turn/written_nodes/read_bindings
@@ -94,6 +111,11 @@ def compile_replay(turns, *, identity, roles, fetch_block):
     ``fetch_block`` loads verified NativeStateBlock artifacts from the durable
     rollout bundle, never a regenerated text approximation.
     """
+    if invocation_actors is not None:
+        from ..model.native_actor_graph import validate_invocation_actor_receipt
+        validate_invocation_actor_receipt(invocation_actors,identity)
+        if invocation_actors!=capture_invocation_actors(turns,identity):
+            raise ValueError('native RL declared invocation actors differ from actual captured behavior')
     prepared, writers = {}, {}
     adapter_binding = None
     binding_seen = False
@@ -102,18 +124,19 @@ def compile_replay(turns, *, identity, roles, fetch_block):
         if name in prepared:
             raise ValueError('native RL graph turn identities must be unique')
         capture = turn.get('sampling') or {}
+        actor_identity=(invocation_actors['invocations'][name]['native_identity'] if invocation_actors is not None else identity)
         if (capture.get('schema') not in {'natlang.native-rl-sampling/1', 'natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3'}
-                or capture.get('policy') != identity
+                or capture.get('policy') != actor_identity
                 or capture.get('sample_range_convention') != 'half-open'):
             raise ValueError('native RL capture has a different policy or unsupported sampling schema')
         binding = capture.get('adapter_binding')
         if capture['schema'] == 'natlang.native-rl-sampling/3':
             from types import SimpleNamespace
             from ..model.native_adapters import validate_state_binding
-            validate_state_binding(binding, SimpleNamespace(**identity))
+            validate_state_binding(binding, SimpleNamespace(**actor_identity))
         elif binding is not None:
             raise ValueError('adapted native RL capture requires its explicit adapter-bound sampling schema')
-        if binding_seen and binding != adapter_binding:
+        if invocation_actors is None and binding_seen and binding != adapter_binding:
             raise ValueError('native RL graph requires one exact adapter binding; heterogeneous actors need per-invocation executor support')
         adapter_binding, binding_seen = binding, True
         law = capture.get('sampling_law') or {}
@@ -136,13 +159,13 @@ def compile_replay(turns, *, identity, roles, fetch_block):
                 if receipt is not None:
                     from ..model.native_adapters import validate_adapter_state_receipt
                     block = fetch_block(segment['id'])
-                    validate_adapter_state_receipt(block, receipt, target_identity=identity, target_binding=adapter_binding)
+                    validate_adapter_state_receipt(block, receipt, target_identity=actor_identity, target_binding=binding)
                     if segment.get('native_identity') != receipt['source_native_identity']:
                         raise ValueError('native RL input source identity differs from its consumption receipt')
                     logical_position = len(own) + sum(len(fetch_block(ident).token_ids) for _, ident, _ in reads)
                     if receipt['target_position_start'] != logical_position:
                         raise ValueError('native RL consumption receipt changed actual consumer position')
-                elif segment.get('native_identity') != identity:
+                elif segment.get('native_identity') != actor_identity:
                     raise ValueError('foreign native RL state needs an explicit adaptation/reencoding capture')
                 reads.append((len(own), segment['id'], receipt))
             else:
@@ -213,14 +236,14 @@ def compile_replay(turns, *, identity, roles, fetch_block):
                     or lo != begin+1 or hi != end-1
                     or samples[begin]['token_id'] != roles.produce_open
                     or samples[end-1]['token_id'] != roles.produce_close
-                    or write.get('native_identity') != identity
+                    or write.get('native_identity') != actor_identity
                     or not all(mask[prompt_length+i] for i in range(lo, hi))
                     or mask[prompt_length+begin] or mask[prompt_length+end-1]):
                 raise ValueError('native RL write boundaries/embedding roles differ from the captured payload')
             block_id = write['state_id']
             block = fetch_block(write.get('raw_state_id', block_id))
-            block.require_native(**identity)
-            if getattr(block, 'adapter_binding', None) != adapter_binding:
+            block.require_native(**actor_identity)
+            if getattr(block, 'adapter_binding', None) != binding:
                 raise ValueError('native RL producer state adapter binding differs from its actor')
             if write.get('raw_state_id', block_id) != block_id:
                 from ..model.semantic_message import SemanticStateMessage
@@ -228,7 +251,7 @@ def compile_replay(turns, *, identity, roles, fetch_block):
                 if not isinstance(message, SemanticStateMessage):
                     raise ValueError('native RL semantic write must reference its actual compact message')
                 message.validate()
-                if (any(getattr(message, key) != value for key, value in identity.items())
+                if (any(getattr(message, key) != value for key, value in actor_identity.items())
                         or message.text != block.text
                         or not torch.equal(message.token_ids, block.token_ids)
                         or not torch.equal(message.embeddings, block.embeddings)
@@ -241,20 +264,21 @@ def compile_replay(turns, *, identity, roles, fetch_block):
             occurrence = (turn.get('written_nodes') or {}).get(block_id)
             writers.setdefault(block_id, []).append((name, *span, occurrence))
         prepared[name] = {'turn': turn, 'own': tuple(own), 'mask': mask, 'reads': reads,
-                          'events': events, 'spans': spans}
+                          'events': events, 'spans': spans, 'actor_identity':actor_identity,'adapter_binding':binding}
     if not prepared:
         raise ValueError('native RL graph has no captured turns')
-    externals, nodes, ordered, external_receipts = {}, [], [], {}
+    externals, nodes, ordered, external_receipts, external_invocations = {}, [], [], {}, {}
     pending = dict(prepared)
     while pending:
         progress = False
         for name, item in list(pending.items()):
+            actor_identity,binding=item['actor_identity'],item['adapter_binding']
             imports, dependencies = [], set()
             for at, block_id, receipt in item['reads']:
                 choices = writers.get(block_id, [])
-                binding = (item['turn'].get('read_bindings') or {}).get(block_id)
-                if binding is not None:
-                    choices = [choice for choice in choices if choice[3] == binding]
+                occurrence_binding = (item['turn'].get('read_bindings') or {}).get(block_id)
+                if occurrence_binding is not None:
+                    choices = [choice for choice in choices if choice[3] == occurrence_binding]
                     if len(choices) != 1:
                         raise ValueError('native RL read has no unique captured writer occurrence')
                 elif len(choices) > 1:
@@ -267,11 +291,12 @@ def compile_replay(turns, *, identity, roles, fetch_block):
                     if source not in externals:
                         externals[source] = fetch_block(block_id)
                     block = externals[source]
+                    external_invocations.setdefault(source, []).append({'invocation':name,'at':at,'receipt':receipt})
                     if receipt is not None:
                         external_receipts.setdefault(source, []).append(receipt)
                     else:
-                        block.require_native(**identity)
-                        if getattr(block, 'adapter_binding', None) != adapter_binding:
+                        block.require_native(**actor_identity)
+                        if getattr(block, 'adapter_binding', None) != binding:
                             raise ValueError('native RL external state adapter binding differs from its actor')
                     start, stop = 0, len(block.token_ids)
                 imports.append(ImportSpan(at, source, start, stop))
@@ -293,13 +318,19 @@ def compile_replay(turns, *, identity, roles, fetch_block):
     plan = compile_graph(nodes, external_sizes={name: len(block.token_ids) for name, block in externals.items()})
     actions = tuple({**event, 'query': offset + event['local_query']}
         for offset, item in zip(plan.offsets, ordered) for event in item['events'])
-    return NativeReplay(plan, actions, externals, dict(identity), adapter_binding, external_receipts)
+    return NativeReplay(plan, actions, externals, dict(identity), adapter_binding if invocation_actors is None else None, external_receipts, invocation_actors, external_invocations)
 
 
 def replay_logps(model, replay, *, checkpoint_layers=True, chunk_tokens=128):
     """Score every actual sample, including markers and terminal tokens, once."""
     from ..model.native_adapters import require_model_execution_actor
-    require_model_execution_actor(model, replay.identity, replay.adapter_binding)
+    if replay.invocation_actors is None:
+        require_model_execution_actor(model, replay.identity, replay.adapter_binding)
+    else:
+        from ..model.native_actor_graph import invocation_actor_bank
+        bank=invocation_actor_bank(model.port)
+        if bank is None or bank.receipt()!=replay.invocation_actors:
+            raise ValueError('native heterogeneous replay needs its exact per-invocation actor scope')
     model.port.checkpoint_layers = checkpoint_layers
     result = model(replay.plan, external_blocks=replay.external_blocks,
                    external_identity={name: {key: getattr(block, key) for key in replay.identity}
@@ -332,6 +363,51 @@ def action_logps(model, hidden, actions, *, chunk_tokens=128):
                                            device=hidden.device, dtype=torch.float32)
 
 
+def _validate_adapter_transition(engine,before_identity,before_binding,after_identity,after_binding,bundle,archive_owner):
+    """One exact current/behavior adapter contract for uniform and call graphs."""
+    from types import SimpleNamespace
+    from ..model.native_adapters import validate_state_binding
+    if before_binding is None:
+        if after_binding is not None or before_identity!=engine.native_identity or after_identity!=before_identity:
+            raise ValueError('native-policy objective is bound to another exact actor checkpoint')
+        return
+    validate_state_binding(before_binding,SimpleNamespace(**before_identity))
+    if (before_binding['base_native_identity']!=engine.native_identity or after_binding is None
+            or len(after_binding['adapters'])!=len(before_binding['adapters'])):
+        raise ValueError('native-policy evaluation changed the exact behavior base or adapter scope')
+    validate_state_binding(after_binding,SimpleNamespace(**after_identity))
+    if after_binding['base_native_identity']!=engine.native_identity:
+        raise ValueError('native-policy evaluation changed the exact behavior base or adapter scope')
+    if bundle is None:
+        raise ValueError('adapted native policy evaluation requires its original behavior artifact bundle')
+    from .graph_replay import verified_bundle_bytes
+    from ..model.native_artifact import decode_native_tensor_artifact
+    checked={}
+    def archived(ident):
+        if ident not in checked:
+            raw=verified_bundle_bytes(bundle[0],ident,policy_id=archive_owner)
+            if raw is None:raise ValueError('native-policy archive is missing exact behavior adapter dependencies')
+            artifact,actual=decode_native_tensor_artifact(raw)
+            if actual!=ident or artifact.native_identity!=engine.native_identity:
+                raise ValueError('native-policy behavior adapter archive changed identity')
+            checked[ident]=artifact
+        return checked[ident]
+    for before,after in zip(before_binding['adapters'],after_binding['adapters']):
+        if before['scale_hex']!=after['scale_hex']:
+            raise ValueError('native-policy evaluation changed an ordered behavior adapter scale')
+        behavior=archived(before['id'])
+        record=engine.store.get_native_tensor_artifact(after['id'])
+        if record is None:raise ValueError('native-policy current adapter coefficients are unavailable')
+        current=record.artifact.validate()
+        if (behavior.kind!='adapter-coefficients' or current.kind!='adapter-coefficients'
+                or current.native_identity!=engine.native_identity or behavior.source_artifact_id!=current.source_artifact_id
+                or (behavior.provenance or {}).get('adapter_spec')!=(current.provenance or {}).get('adapter_spec')):
+            raise ValueError('native-policy evaluation changed the exact frozen basis or matrix specification')
+        basis=archived(behavior.source_artifact_id)
+        if basis.kind!='adapter-basis' or (basis.provenance or {}).get('adapter_spec')!=(behavior.provenance or {}).get('adapter_spec'):
+            raise ValueError('native-policy behavior archive does not bind its actual frozen basis')
+
+
 class NativePolicyObjective:
     """Native GRPO/RFT loss plugged into the shared native trainer's ONE forward."""
     def __init__(self, spec_path):
@@ -339,13 +415,29 @@ class NativePolicyObjective:
         from pathlib import Path
         self.path = Path(spec_path).resolve()
         self.spec = json.loads(self.path.read_text())
-        if (self.spec.get('schema') != 'natlang.native-policy-objective/1'
+        if (self.spec.get('schema') not in {'natlang.native-policy-objective/1','natlang.native-policy-objective/2'}
                 or self.spec.get('kind') != 'native-policy' or self.spec.get('mode') not in {'grpo', 'rft'}):
             raise ValueError('native policy objective schema/kind/mode is unsupported')
         self.rows = self.spec['rows']
         if not self.rows:
             raise ValueError('native policy objective has no admitted episodes')
-        self.identity = self.spec['policy']
+        self.behavior_policy=self.spec.get('behavior_policy') if self.spec['schema']=='natlang.native-policy-objective/2' else None
+        if self.spec['schema']=='natlang.native-policy-objective/2':
+            self.identity=self.spec['base_native_identity']
+            validate_invocation_behavior_policy(self.behavior_policy,self.identity)
+            from ..common.hashing import canonical_json_sha256_hex
+            if ('policy' in self.spec or self.spec.get('adapter_binding') is not None
+                    or self.spec.get('behavior_policy_sha256')!=canonical_json_sha256_hex(self.behavior_policy)):
+                raise ValueError('native invocation objective must retain its exact behavior descriptor, not one effective model')
+            for key,row in self.rows.items():
+                if key not in self.behavior_policy['episodes'] or row.get('invocation_actors')!=self.behavior_policy['episodes'][key]:
+                    raise ValueError('native invocation objective row changed its captured behavior actor inventory')
+            self.archive_owner=self.spec['behavior_policy_sha256']
+        else:
+            self.identity=self.spec['policy']
+            self.archive_owner=self.identity['checkpoint_sha256']
+        self.bound_example=None
+        self.evaluation_invocation_actors=None
         self.adapter_binding = self.spec.get('adapter_binding')
         if self.adapter_binding is not None:
             from types import SimpleNamespace
@@ -357,17 +449,45 @@ class NativePolicyObjective:
         self.external_state_overrides = {}
         self.engine = None
         self.native_state_modes = {}
+        self.evaluation_external_contracts = {}
         if self.spec.get('block_bundle'):
             bundle_path = Path(self.spec['block_bundle']).resolve()
             self.bundle = (bundle_path, json.loads(bundle_path.read_text()))
             if (self.bundle[1].get('schema') != 'natlang.rl-block-bundle/1'
-                    or self.bundle[1].get('policy_id') != self.identity['checkpoint_sha256']):
+                    or self.bundle[1].get('policy_id') != self.archive_owner):
                 raise ValueError('native objective archive belongs to a different actor policy')
+        if self.behavior_policy is not None and self.bundle is None:
+            raise ValueError('native invocation policy requires its immutable actor bundle')
 
-    def bind_actor(self, engine):
+    def bind_actor(self, engine, *, example=None):
         """Separate immutable sampled behavior from current same-basis coefficients."""
         from ..model.native_adapters import execution_identity, execution_binding, SCHEMA
         self.engine = engine
+        if self.behavior_policy is not None:
+            if example is None:raise ValueError('native invocation policy needs its exact source graph during actor binding')
+            from ..model.native_actor_graph import invocation_actor_bank
+            from ..common.hashing import canonical_json_sha256_hex
+            bank=invocation_actor_bank(engine.shared_model.port)
+            row=self.rows.get(example.id)
+            if (bank is None or bank.engine is not engine or row is None
+                    or canonical_json_sha256_hex(graph_identity(example))!=row['graph_sha256']):
+                raise ValueError('native invocation policy needs its exact source graph and actual actor bank')
+            before=row['invocation_actors']
+            names=getattr(bank,'source_names',{name:name for name in bank.actors})
+            if set(names)!=set(before['invocations']) or set(names.values())!=set(bank.actors):
+                raise ValueError('native invocation current actor inventory differs from its behavior graph')
+            current_receipt=bank.receipt()
+            for name,actor in before['invocations'].items():
+                after=current_receipt['invocations'][names[name]]
+                _validate_adapter_transition(engine,actor['native_identity'],actor['adapter_binding'],
+                    after['native_identity'],after['adapter_binding'],self.bundle,self.archive_owner)
+            self.bound_example=example.id
+            self.evaluation_invocation_actors=current_receipt
+            self.invocation_source_names=dict(names)
+            return
+        from ..model.native_actor_graph import invocation_actor_bank
+        if invocation_actor_bank(engine.shared_model.port) is not None:
+            raise ValueError('per-invocation policy execution requires its versioned actual behavior descriptor')
         current = execution_identity(engine)
         active = execution_binding(engine)
         if self.adapter_binding is None:
@@ -375,50 +495,64 @@ class NativePolicyObjective:
                 raise ValueError('native-policy objective is bound to another exact actor checkpoint')
             self.evaluation_identity, self.evaluation_adapter_binding = current, None
             return
-        if (self.adapter_binding['base_native_identity'] != engine.native_identity or not active
-                or len(active) != len(self.adapter_binding['adapters'])):
-            raise ValueError('native-policy evaluation changed the exact behavior base or adapter scope')
-        if self.bundle is None:
-            raise ValueError('adapted native policy evaluation requires its original behavior artifact bundle')
-        from .graph_replay import verified_bundle_bytes
-        from ..model.native_artifact import decode_native_tensor_artifact
-        checked = {}
-        def archived(ident):
-            if ident not in checked:
-                raw = verified_bundle_bytes(self.bundle[0], ident, policy_id=self.identity['checkpoint_sha256'])
-                if raw is None:
-                    raise ValueError('native-policy archive is missing exact behavior adapter dependencies')
-                artifact, actual = decode_native_tensor_artifact(raw)
-                if actual != ident or artifact.native_identity != engine.native_identity:
-                    raise ValueError('native-policy behavior adapter archive changed identity')
-                checked[ident] = artifact
-            return checked[ident]
-        for before, after in zip(self.adapter_binding['adapters'], active):
-            if before['scale_hex'] != after['scale_hex']:
-                raise ValueError('native-policy evaluation changed an ordered behavior adapter scale')
-            behavior = archived(before['id'])
-            record = engine.store.get_native_tensor_artifact(after['id'])
-            if record is None:
-                raise ValueError('native-policy current adapter coefficients are unavailable')
-            current_adapter = record.artifact
-            if (behavior.kind != 'adapter-coefficients' or current_adapter.kind != 'adapter-coefficients'
-                    or behavior.source_artifact_id != current_adapter.source_artifact_id
-                    or (behavior.provenance or {}).get('adapter_spec') !=
-                       (current_adapter.provenance or {}).get('adapter_spec')):
-                raise ValueError('native-policy evaluation changed the exact frozen basis or matrix specification')
-            basis = archived(behavior.source_artifact_id)
-            if (basis.kind != 'adapter-basis' or (basis.provenance or {}).get('adapter_spec') !=
-                    (behavior.provenance or {}).get('adapter_spec')):
-                raise ValueError('native-policy behavior archive does not bind its actual frozen basis')
-        self.evaluation_identity = current
-        self.evaluation_adapter_binding = {'schema': SCHEMA, 'base_native_identity': dict(engine.native_identity),
-                                          'adapters': active}
+        current_binding={'schema':SCHEMA,'base_native_identity':dict(engine.native_identity),'adapters':active} if active else None
+        _validate_adapter_transition(engine,self.identity,self.adapter_binding,current,current_binding,self.bundle,self.archive_owner)
+        self.evaluation_identity,self.evaluation_adapter_binding=current,current_binding
+
+    def _invocation_external_contracts(self, example, name, binding, block):
+        """Verify each actual imported occurrence against its own behavior/current actor."""
+        from ..model.native_actor_graph import invocation_actor_bank
+        from ..model.native_adapters import adapter_state_input_receipt, validate_adapter_state_receipt, SAME_BASE_STATE_MODE
+        bank=invocation_actor_bank(self.engine.shared_model.port)
+        if bank is None or bank.receipt()!=self.evaluation_invocation_actors:
+            raise ValueError('native invocation external state requires the exact current actor bank')
+        captured=self.rows[example.id].get('external_invocations',{}).get(name)
+        actual=[(node,span) for node in example.plan.invocations for span in node.imports if span.source==name]
+        if (not isinstance(captured,list) or len(captured)!=len(actual) or not captured):
+            raise ValueError('native invocation external observation lost its exact consumer occurrence inventory')
+        mode=self.native_state_modes.get(binding['id'])
+        before_actors=self.rows[example.id]['invocation_actors']['invocations']
+        for occurrence,(node,span) in zip(captured,actual):
+            if (set(occurrence)!={'invocation','at','receipt'} or occurrence['invocation']!=node.name
+                    or occurrence['at']!=span.at or span.start!=0 or span.stop!=len(block.token_ids)):
+                raise ValueError('native invocation external observation changed its exact consumer or imported span')
+            before=before_actors[node.name]
+            packed_name=self.invocation_source_names[node.name]
+            after=self.evaluation_invocation_actors['invocations'][packed_name]
+            receipt=occurrence['receipt']
+            # Import order, including earlier spans at the same own-token
+            # position, is the causal logical position used by the Engine.
+            position=span.at
+            for prior in node.imports:
+                if prior is span:break
+                position+=prior.stop-prior.start
+            if receipt is not None:
+                validate_adapter_state_receipt(block,receipt,target_identity=before['native_identity'],target_binding=before['adapter_binding'])
+                if receipt['target_position_start']!=position:
+                    raise ValueError('native invocation external observation changed its actual logical position')
+            else:
+                block.require_native(**before['native_identity'])
+                if block.adapter_binding!=before['adapter_binding']:
+                    raise ValueError('native invocation strict behavior observation changed its adapter binding')
+            if mode is not None:
+                if mode!=SAME_BASE_STATE_MODE or receipt is None:
+                    raise ValueError('same-base adapter-state evaluation requires its actual behavior consumption receipt')
+                current=bank.execute(packed_name,lambda:adapter_state_input_receipt(self.engine,block,binding['id'],target_position_start=position))
+                self.evaluation_external_contracts[f'{example.id}:{name}:{len(self.evaluation_external_contracts)}']={
+                    'invocation':node.name,'input_name':name,**current}
+            else:
+                if before!=after:
+                    raise ValueError('changed adapter policy with external behavior KV requires a fresh rollout under strict transport; same-base adapter-state transport must be explicitly supported and requested')
+                block.require_native(**after['native_identity'])
+                if block.adapter_binding!=after['adapter_binding']:
+                    raise ValueError('native invocation strict current observation changed its adapter binding')
 
     def forward_inputs(self, context):
         from pathlib import Path
         from ..common.hashing import sha256_file_hex_cached
         from ..serve.store import decode_native_state
         blocks, identities = {}, {}
+        self.evaluation_external_contracts = {}
         for example in context['examples']:
             if example.id not in self.rows:
                 raise ValueError('native objective has no captured policy row for this graph')
@@ -435,7 +569,9 @@ class NativePolicyObjective:
                 block, block_id = decode_native_state(artifact.read_bytes())
                 receipts = self.rows[example.id].get('external_consumption_receipts', {}).get(name)
                 mode = self.native_state_modes.get(binding['id'])
-                if mode is not None:
+                if self.behavior_policy is not None:
+                    self._invocation_external_contracts(example,name,binding,block)
+                elif mode is not None:
                     from ..model.native_adapters import adapter_state_input_receipt, validate_adapter_state_receipt, SAME_BASE_STATE_MODE
                     if mode != SAME_BASE_STATE_MODE or not isinstance(receipts, list) or not receipts or self.engine is None:
                         raise ValueError('same-base adapter-state evaluation requires its actual behavior consumption receipt')
@@ -463,7 +599,21 @@ class NativePolicyObjective:
     def __call__(self, model, result, context):
         from .full_policy import clipped_token_loss
         from ..model.native_adapters import require_model_execution_actor
-        require_model_execution_actor(model, self.evaluation_identity, self.evaluation_adapter_binding)
+        if self.behavior_policy is None:
+            require_model_execution_actor(model, self.evaluation_identity, self.evaluation_adapter_binding)
+        else:
+            from ..model.native_actor_graph import invocation_actor_bank
+            bank=invocation_actor_bank(model.port)
+            if (self.bound_example is None or len(context['examples'])!=1 or context['examples'][0].id!=self.bound_example
+                    or bank is None or bank.receipt()!=self.evaluation_invocation_actors
+                    or result.get('invocation_actors')!=self.evaluation_invocation_actors):
+                raise ValueError('native invocation objective requires its actual bound current actor graph')
+            example=context['examples'][0]
+            bounds=context['row_offsets'][example.id]
+            actual=context['plan'].invocations[bounds['node_start']:bounds['node_stop']]
+            names={before.name:after.name for before,after in zip(example.plan.invocations,actual)}
+            if names!=self.invocation_source_names:
+                raise ValueError('native invocation objective actor names differ from exact packed ownership')
         hidden = result['h_final'][0]
         losses, count = [], 0
         for example in context['examples']:
@@ -498,7 +648,37 @@ def graph_identity(example):
             'target_weights': list(example.target_weights), 'external_states': example.external_states}
 
 
-def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo'):
+from ..model.native_actor_graph import validate_invocation_behavior_policy
+
+
+def _require_scored_training_episode(rollout, identity):
+    if (rollout.get('split') != 'train' or rollout.get('training_admission') not in (None, 'grpo')
+            or not isinstance(rollout.get('reward'), dict) or rollout['reward'].get('quality') not in (0, 1)
+            or (rollout.get('policy') or {}).get('checkpoint_sha256') != identity['checkpoint_sha256']):
+        raise ValueError('native RL requires exact scored train-only actor episodes')
+    if not rollout.get('task_id') or not rollout.get('turns') or any(
+            not (turn.get('replay') or {}).get('raw_calls_retained') for turn in rollout['turns']):
+        raise ValueError('native RL episode lacks task identity or exact raw-call replay')
+
+
+def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block):
+    """Bind actual scored train calls; a collector base header is not behavior."""
+    from .graph_replay import producer_turns
+    from ..common.hashing import canonical_json_sha256_hex
+    episodes={}
+    for rollout in rollouts:
+        _require_scored_training_episode(rollout,identity)
+        turns=producer_turns(rollout)
+        actors=capture_invocation_actors(turns,identity)
+        compile_replay(turns,identity=identity,roles=roles,fetch_block=fetch_block,invocation_actors=actors)
+        key=canonical_json_sha256_hex(rollout)
+        if key in episodes:raise ValueError('native invocation behavior duplicated an original episode')
+        episodes[key]=actors
+    return validate_invocation_behavior_policy({'schema':'natlang.native-invocation-policy/1',
+        'base_native_identity':dict(identity),'collector_policy_role':'base-runtime-metadata','episodes':episodes},identity)
+
+
+def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=None, mode='grpo', behavior_policy=None):
     """Admit whole training episodes and retain real graph/action provenance."""
     from ..model.native_graph_plan import invocation_dict
     from ..data.native_graph import SCHEMA, parse_graph
@@ -506,19 +686,22 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     from .graph_replay import producer_turns
     from .grpo import group_advantages
     from ..serve.store import native_state_id
+    if behavior_policy is not None:
+        validate_invocation_behavior_policy(behavior_policy,identity)
+        if block_bundle is None:raise ValueError('native invocation behavior requires its complete immutable actor bundle')
+        import json
+        from pathlib import Path
+        bundle_manifest=json.loads(Path(block_bundle).read_text())
+        if (bundle_manifest.get('schema')!='natlang.rl-block-bundle/1' or
+                bundle_manifest.get('policy_id')!=canonical_json_sha256_hex(behavior_policy)):
+            raise ValueError('native invocation behavior archive differs from its actual policy descriptor')
     if mode not in {'grpo', 'rft'}:
         raise ValueError('native replay objective must be grpo or rft')
     grouped = {}
     for rollout in rollouts:
         if rollout.get('reward') is None:
             continue
-        if (rollout.get('split') != 'train' or rollout.get('training_admission') not in (None, 'grpo')
-                or rollout['reward'].get('quality') not in (0, 1)
-                or (rollout.get('policy') or {}).get('checkpoint_sha256') != identity['checkpoint_sha256']):
-            raise ValueError('native RL requires exact scored train-only actor episodes')
-        if not rollout.get('task_id') or not rollout.get('turns') or any(
-                not (turn.get('replay') or {}).get('raw_calls_retained') for turn in rollout['turns']):
-            raise ValueError('native RL episode lacks task identity or exact raw-call replay')
+        _require_scored_training_episode(rollout,identity)
         grouped.setdefault((rollout['task_id'], rollout.get('group')), []).append(rollout)
     graphs, objective_rows = [], {}
     adapter_binding, binding_seen = None, False
@@ -529,7 +712,12 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
         for rollout, advantage in zip(members, advantages):
             if mode == 'rft' and rollout['reward']['quality'] != 1:
                 continue
-            replay = compile_replay(producer_turns(rollout), identity=identity, roles=roles, fetch_block=fetch_block)
+            episode_key=canonical_json_sha256_hex(rollout)
+            actors=behavior_policy['episodes'].get(episode_key) if behavior_policy is not None else None
+            if behavior_policy is not None and actors is None:
+                raise ValueError('native invocation behavior descriptor omits an admitted source episode')
+            replay = compile_replay(producer_turns(rollout), identity=identity, roles=roles, fetch_block=fetch_block,
+                                    invocation_actors=actors)
             if binding_seen and adapter_binding != replay.adapter_binding:
                 raise ValueError('native RL objective cannot mix different adapter-bound actors')
             adapter_binding, binding_seen = replay.adapter_binding, True
@@ -557,9 +745,13 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             objective_rows[identifier] = {'graph_sha256': canonical_json_sha256_hex(graph_identity(example)),
                 'actions': list(replay.actions), 'advantage': float(advantage or 0.),
                 'external_consumption_receipts': replay.external_receipts or {},
-                'task_id': rollout['task_id'], 'sample': rollout.get('sample')}
+                **({'external_invocations':replay.external_invocations or {}} if replay.invocation_actors is not None else {}),
+                'task_id': rollout['task_id'], 'sample': rollout.get('sample'),
+                **({'invocation_actors':replay.invocation_actors} if replay.invocation_actors is not None else {})}
             graphs.append(graph)
-    return graphs, {'schema': 'natlang.native-policy-objective/1', 'kind': 'native-policy',
-        'mode': mode, 'policy': dict(identity), 'rows': objective_rows,
+    return graphs, {'schema': 'natlang.native-policy-objective/2' if behavior_policy is not None else 'natlang.native-policy-objective/1', 'kind': 'native-policy',
+        'mode': mode, 'rows': objective_rows,
+        **({'base_native_identity':dict(identity),'behavior_policy':behavior_policy,'behavior_policy_sha256':canonical_json_sha256_hex(behavior_policy)}
+           if behavior_policy is not None else {'policy':dict(identity)}),
         **({'adapter_binding': adapter_binding} if adapter_binding else {}),
         'block_bundle': str(block_bundle) if block_bundle else None}

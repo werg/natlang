@@ -55,6 +55,53 @@ new actor-selection policy in crisp code.
    public capability unadvertised until independent review and required target
    runtime checks. No full-size or cloud claim follows from tiny local fixtures.
 
-Implementation is pending. Existing policy/1 rejects heterogeneous actors; that
-honest rejection stays until this entire admission/archive/current-vs-behavior
-contract is implemented. Graph-CE support alone is not RL completion.
+The typed coefficient-policy service implementation is under qualification.
+Existing policy/1 keeps its uniform contract. Production native_stage still
+rejects adapted actors: executable coefficient-policy collection/admission/
+learner scheduling is the next assigned work, not completed by this service.
+
+Concrete contract: keep the existing generic block-bundle/1, whose policy_id is
+already an opaque ownership identifier. For invocation policies, that identifier
+is the SHA of `natlang.native-invocation-policy/1`: exact common base, explicit
+`collector_policy_role: base-runtime-metadata`, and canonical original-episode
+SHA → actual invocation actor receipts. Original collection rows are untouched;
+their header describes collection runtime, while the new descriptor describes
+the actual behavior of every call. Admission verifies both independently and
+never treats the base header as evidence of unadapted on-policy samples.
+Native-policy-objective/2 stores `base_native_identity` and this immutable
+behavior descriptor/SHA; it has no single effective behavior-model identity.
+Uniform objective/1 and archive consumers retain their existing contracts.
+
+Implementation evidence (local Torch2.11/cu130, SM121; not target cloud proof):
+- Actual distinct-adapter Engine sampling and one-graph behavior replay: both
+  ports,2PASS14.92s.
+- Actual two GRPO/Adam updates, exact moments and current actor store restart:
+  both ports with internal differentiable producer and external explicitly
+  imported raw state,4PASS39.52s.
+- Independent actual per-token Engine cached current-policy loss and coefficient
+  adjoints at BOTH updates, initial sampled logps, unchanged elementwise gates
+  and global relative-L2<2e-5:4PASS43.27s.
+- Python→TypeScript exact numeric wire plus recursive .nz gradient/optimizer
+  closure, immutable behavior dependencies, stale SHA/scales/admission rejection:
+  build+4PASS49.51s.
+- Full typed HTTP two-update eviction/reopen, raw external restoration and .nz
+  fixture: build+4PASS59.32s; absolute-WT quick PASS, unit
+  `native-invocation-policy-typed-archive-fix-20261016`.
+- Combined uniform-policy regression:13PASS with the single new external typed
+  case exposing missing archival, now repaired by the existing shared native
+  archival helper and rerun above. Original failed check is not called green.
+  Capabilities/default recipes remain unchanged.
+
+Current policy artifacts bind a source-name→actual packed-name bijection. The
+optimizer publishes and archives the whole continued actor inventory, including
+unrelated current actors; it does not invent a global effective identity.
+Gradient archives retain original behavior coefficient/basis dependencies as well
+as current actors. Per-external-occurrence checks bind the source, original
+consumer, current consumer and actual logical position. Full-size multi-actor
+memory/cost and target NGC/H100 numerics remain unqualified.
+
+A live typed fixture found that nativeGraphGradient restored remote raw inputs
+without archiving them locally. After remote GC the next update lost the input.
+The client now calls the existing archiveNativeState helper for every restored
+external input, preserving source coefficient/basis closure and exact raw bytes.
+No replacement zero state or reencoded text is permitted.

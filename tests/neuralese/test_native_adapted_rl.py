@@ -36,7 +36,7 @@ def post_service(engine, path, body):
         server.shutdown();server.server_close();thread.join()
 
 
-def capture_actor(engine, entries, monkeypatch, *, explicit_state_mode=False):
+def capture_actor(engine, entries, monkeypatch, *, explicit_state_mode=False, reader_entries=None):
     roles = engine.role_tokens
     selected = iter([roles.produce_open, 5, 6, roles.produce_close, 2])
     # Select deterministic actions, but retain their ACTUAL normalized behavior
@@ -51,7 +51,7 @@ def capture_actor(engine, entries, monkeypatch, *, explicit_state_mode=False):
     selected = iter([7, 2])
     reader = engine.generate(GenerationRequest(messages=[{'role':'user','content':[
         {'type':'text','text':'t6 '}, {'type':'native_state','id':block_id}]}],
-        adapters=entries, temperature=.8, seed=22, max_tokens=8, rl_capture=True,
+        adapters=entries if reader_entries is None else reader_entries, temperature=.8, seed=22, max_tokens=8, rl_capture=True,
         native_state_modes={block_id:'same-base-adapter-state'} if explicit_state_mode else None))
     assert reader['native_state']['imports'][0]['mode'] == ('same-base-adapter-state' if explicit_state_mode else 'exact-native-state')
     turns = [{'graph_turn':'writer','sampling':writer['x_natlang_rl_capture'],

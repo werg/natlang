@@ -365,8 +365,15 @@ scales. Retain its recursive RL artifact bundle, then evaluate the admitted
 native-policy objective with the same adapters and a coefficient target. Keep
 forward, checkpoint recomputation and backward inside the native adapter scope.
 `neuralese-native-actor-changed` requires finishing or cancelling that invocation
-before changing bindings. Heterogeneous per-call adapter graphs and full-backbone
-adapted actor export/rebinding remain explicit unavailable paths. A store lacking named tensor support
+before changing bindings. Heterogeneous coefficient-policy requests use explicit `invocationAdapters`
+and an admitted `native-policy-objective/2`, with immutable per-call behavior
+receipts and a descriptor-owned bundle. Preserve original behavior coefficients
+as well as current actors when archiving gradients. For
+`neuralese-native-grad-invalid`, restore the exact bundle, actual invocation
+occurrences and frozen basis/scales; changed external consumers need explicit
+`same-base-adapter-state` and their authentic original consumption receipts.
+Full-backbone adapted actor export/rebinding and production coefficient-stage
+scheduling remain explicit unavailable paths. A store lacking named tensor support
 must report `neuralese-native-archive-unavailable` before loading these artifacts.
 
 `nativeGraphGradient({adapterGradientPrecision: 'fp32', ...})` sends the exact

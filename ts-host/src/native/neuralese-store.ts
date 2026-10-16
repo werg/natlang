@@ -105,10 +105,14 @@ export function nativeTensorArtifactDependencies(artifact: Pick<NativeTensorArti
   const actors = meta.provenance.invocation_actors as NativeInvocationActorReceipt | undefined;
   if (actors) {
     validateNativeInvocationActorReceipt(actors,meta.native_identity);
+    validateNativeInvocationSourceNames(meta,actors);
     if (meta.provenance.actor_graph_sha256 !== hexDigest(nativeCanonicalJson(actors))) throw new RangeError('native invocation actor graph digest differs from its receipt');
     for (const actor of Object.values(actors.invocations))
       dependencies.push(...(actor.adapter_binding?.adapters ?? []).map(entry => entry.id));
   }
+  const behavior = validateNativeInvocationBehaviorProvenance(meta);
+  if (behavior) for (const receipt of Object.values(behavior.episodes)) for (const actor of Object.values(receipt.invocations))
+    dependencies.push(...(actor.adapter_binding?.adapters ?? []).map(entry => entry.id));
   const contracts = meta.provenance.external_adapter_state_contracts as Record<string, {
     source_adapter_binding?: NativeAdapterBinding; target_adapter_binding?: NativeAdapterBinding;
     source_native_identity: NativeModelIdentity; target_native_identity: NativeModelIdentity }> | undefined;
@@ -293,6 +297,43 @@ export function validateNativeInvocationActorReceipt(receipt: NativeInvocationAc
   }
 }
 
+export type NativeInvocationBehaviorPolicy = { schema: 'natlang.native-invocation-policy/1';
+  base_native_identity: NativeModelIdentity; collector_policy_role: 'base-runtime-metadata';
+  episodes: Record<string, NativeInvocationActorReceipt> };
+
+export function validateNativeInvocationBehaviorPolicy(policy: NativeInvocationBehaviorPolicy, base: NativeModelIdentity): void {
+  if (!policy || Object.keys(policy).sort().join(',') !== 'base_native_identity,collector_policy_role,episodes,schema' ||
+      policy.schema !== 'natlang.native-invocation-policy/1' || policy.collector_policy_role !== 'base-runtime-metadata' ||
+      !nativeModelIdentityEqual(policy.base_native_identity,base) || !policy.episodes || typeof policy.episodes !== 'object' ||
+      Array.isArray(policy.episodes) || !Object.keys(policy.episodes).length)
+    throw new RangeError('native invocation behavior policy needs its exact base and immutable episode inventory');
+  for (const [episode,actors] of Object.entries(policy.episodes)) {
+    if (!SHA256.test(episode)) throw new RangeError('native invocation behavior episode must bind exact original row bytes');
+    validateNativeInvocationActorReceipt(actors,base);
+  }
+}
+
+function validateNativeInvocationBehaviorProvenance(metadata: NativeTensorArtifactMetadata): NativeInvocationBehaviorPolicy | undefined {
+  const policy = metadata.provenance.behavior_policy as NativeInvocationBehaviorPolicy | undefined;
+  if (policy === undefined) {
+    if (metadata.provenance.behavior_policy_sha256 !== undefined)
+      throw new RangeError('native invocation behavior digest lacks its actual descriptor');
+    return undefined;
+  }
+  validateNativeInvocationBehaviorPolicy(policy,metadata.native_identity);
+  if (metadata.provenance.behavior_policy_sha256 !== hexDigest(nativeCanonicalJson(policy)))
+    throw new RangeError('native invocation behavior descriptor digest changed');
+  return policy;
+}
+
+function validateNativeInvocationSourceNames(metadata: NativeTensorArtifactMetadata, actors: NativeInvocationActorReceipt): void {
+  const names=metadata.provenance.invocation_source_names as Record<string,string> | undefined;
+  if (names !== undefined && (!names || typeof names !== 'object' || Array.isArray(names) ||
+      Object.keys(names).some(key => !key) || Object.keys(names).length !== Object.keys(actors.invocations).length ||
+      nativeCanonicalJson(Object.values(names).sort()) !== nativeCanonicalJson(Object.keys(actors.invocations).sort())))
+    throw new RangeError('native invocation source names changed exact packed ownership');
+}
+
 function validateNativeState(metadata: NativeStateMetadata, tensors: Record<string, NativeStateTensor>): void {
   if (!metadata || !['neuralese.native-state/1', 'neuralese.semantic-state/1'].includes(metadata.schema) || typeof metadata.text !== 'string' ||
       typeof metadata.architecture !== 'string' || !metadata.architecture ||
@@ -393,9 +434,11 @@ function validateNativeTensorArtifact(metadata: NativeTensorArtifactMetadata,
       !metadata.provenance || typeof metadata.provenance !== 'object' || Array.isArray(metadata.provenance) ||
       !tensors || typeof tensors !== 'object' || !Object.keys(tensors).length)
     throw new RangeError('invalid native tensor artifact metadata');
+  validateNativeInvocationBehaviorProvenance(metadata);
   const actors = metadata.provenance.invocation_actors as NativeInvocationActorReceipt | undefined;
   if (actors) {
     validateNativeInvocationActorReceipt(actors,metadata.native_identity);
+    validateNativeInvocationSourceNames(metadata,actors);
     if (metadata.provenance.actor_graph_sha256 !== hexDigest(nativeCanonicalJson(actors))) throw new RangeError('native invocation actor graph digest differs from its receipt');
     if (metadata.kind === 'adapter-gradient' && !Object.values(actors.invocations).some(actor =>
         actor.adapter_binding?.adapters.some(entry => entry.id === metadata.source_artifact_id)))

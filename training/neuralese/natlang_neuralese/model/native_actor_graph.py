@@ -18,7 +18,7 @@ def invocation_actor_bank(port):
 
 
 class NativeInvocationActors:
-    def __init__(self, engine, names, bindings, *, default=None, leaves=None, gradient_precision='storage'):
+    def __init__(self, engine, names, bindings, *, default=None, leaves=None, gradient_precision='storage', source_names=None):
         if gradient_precision not in ('storage','fp32'):
             raise NativeAdapterError('native adapter gradient precision must be storage or fp32')
         if (not isinstance(bindings,dict) or any(name not in names for name in bindings)
@@ -26,6 +26,10 @@ class NativeInvocationActors:
             raise NativeAdapterError('invocation adapters must bind unique actual graph invocation names')
         if any(frame[0] is engine for frame in _ACTIVE.get()):
             raise NativeAdapterError('prepare invocation actors outside any active native functional substitution')
+        if source_names is None:source_names={name:name for name in names}
+        if (not isinstance(source_names,dict) or len(source_names)!=len(names) or set(source_names.values())!=set(names)):
+            raise NativeAdapterError('native invocation source names must bind exact actual packed ownership')
+        self.source_names=dict(source_names)
         self.engine,self.precision=engine,gradient_precision
         self.lifecycle={'active':True}
         self.actors={}
@@ -94,10 +98,10 @@ class NativeInvocationActors:
         return [(name,torch.tensor(rows,device=device,dtype=torch.long)) for name,rows in groups.values() if rows]
 
 
-def run_invocation_actors(engine,names,bindings,callback,*,default=None,leaves=None,gradient_precision='storage'):
+def run_invocation_actors(engine,names,bindings,callback,*,default=None,leaves=None,gradient_precision='storage',source_names=None):
     """One operation lease includes every actor's forward and checkpoint backward."""
     with engine.native_execution_lock:
-        bank=NativeInvocationActors(engine,names,bindings,default=default,leaves=leaves,gradient_precision=gradient_precision)
+        bank=NativeInvocationActors(engine,names,bindings,default=default,leaves=leaves,gradient_precision=gradient_precision,source_names=source_names)
         frame=(engine,dict(engine.native_identity),[],None,set(),{},gradient_precision,bank.lifecycle)
         active=_ACTIVE.set((*_ACTIVE.get(),frame));token=_BANKS.set((*_BANKS.get(),bank))
         try:
@@ -137,6 +141,37 @@ def validate_invocation_actor_provenance(provenance,base):
     if receipt is None:return None
     from ..common.hashing import canonical_json_sha256_hex
     validate_invocation_actor_receipt(receipt,base)
+    names=provenance.get('invocation_source_names')
+    if names is not None and (not isinstance(names,dict) or any(not isinstance(key,str) or not key for key in names)
+            or len(names)!=len(receipt['invocations']) or set(names.values())!=set(receipt['invocations'])):
+        raise NativeAdapterError('native invocation source names changed exact packed ownership')
     if provenance.get('actor_graph_sha256')!=canonical_json_sha256_hex(receipt):
         raise NativeAdapterError('native invocation actor graph digest differs from its exact receipt')
     return receipt
+
+
+def validate_invocation_behavior_policy(policy,base):
+    import re
+    if (not isinstance(policy,dict) or set(policy)!={'schema','base_native_identity','collector_policy_role','episodes'}
+            or policy.get('schema')!='natlang.native-invocation-policy/1'
+            or policy.get('base_native_identity')!=base or policy.get('collector_policy_role')!='base-runtime-metadata'
+            or not isinstance(policy.get('episodes'),dict) or not policy['episodes']):
+        raise ValueError('native invocation behavior policy needs its exact base and immutable episode inventory')
+    for episode,actors in policy['episodes'].items():
+        if not isinstance(episode,str) or not re.fullmatch('[0-9a-f]{64}',episode):
+            raise ValueError('native invocation behavior episode must bind exact original row bytes')
+        validate_invocation_actor_receipt(actors,base)
+    return policy
+
+
+def validate_invocation_behavior_provenance(provenance,base):
+    policy=(provenance or {}).get('behavior_policy')
+    if policy is None:
+        if 'behavior_policy_sha256' in (provenance or {}):
+            raise NativeAdapterError('native invocation behavior digest lacks its actual descriptor')
+        return None
+    from ..common.hashing import canonical_json_sha256_hex
+    validate_invocation_behavior_policy(policy,base)
+    if provenance.get('behavior_policy_sha256')!=canonical_json_sha256_hex(policy):
+        raise NativeAdapterError('native invocation behavior descriptor digest changed')
+    return policy

@@ -7,6 +7,7 @@ import { nativeCanonicalJson, validateNativeInvocationActorReceipt, type NativeI
 import { providerErrorBody } from '../model/chat-completion.js';
 import { hexDigest } from '../native/hash.js';
 import { HttpNeuraleseStore, restoreNativeStates } from '../model/neuralese-server.js';
+import { archiveNativeState } from '../model/native-state-client.js';
 import { archiveNativeTensorArtifact, restoreNativeTensorArtifacts } from './native-tensor-client.js';
 
 export type NativeGraphRow = Record<string, unknown> & { schema: 'natlang.neuralese-native-graph/1'; split: string };
@@ -47,7 +48,11 @@ export async function nativeGraphGradient(endpoint: string, store: NeuraleseStor
     if (missing.length) throw new Error(`neuralese-unknown-native-artifact: restore adapter coefficients and bases for ${missing.join(', ')}`);
   }
   const external = request.graph.external_states as Record<string, {id:string}> | undefined;
-  if (external) await restoreNativeStates(new HttpNeuraleseStore(endpoint,request.headers),store,Object.values(external).map(binding => binding.id));
+  if (external) {
+    const ids=Object.values(external).map(binding => binding.id);
+    await restoreNativeStates(new HttpNeuraleseStore(endpoint,request.headers),store,ids);
+    for (const id of ids) await archiveNativeState({endpoint,headers:request.headers,store},id);
+  }
   const reply = await post<{ loss: number; stats: unknown; gradient: { id: string };
     native_identity: NativeModelIdentity; objective: string }>(
     endpoint, '/v1/neuralese/grad', { schema: 'natlang.native-gradient-request/1', graph: request.graph,
@@ -131,7 +136,7 @@ export async function nativeAdapterOptimizerStep(endpoint: string, store: Neural
   optimizerStateId?: string; headers?: Record<string, string>;
 }): Promise<{ adapter: NativeTensorArtifact; optimizer_state_id: string; step: number;
   native_identity: NativeModelIdentity; effective_native_identity?: NativeModelIdentity; adapter_binding?: NativeAdapterBinding;
-  invocation_actors?: NativeInvocationActorReceipt; actor_graph_sha256?: string }> {
+  invocation_actors?: NativeInvocationActorReceipt; actor_graph_sha256?: string; invocation_source_names?: Record<string,string> }> {
   if (request.gradient.metadata.kind !== 'adapter-gradient' ||
       !nativeModelIdentityEqual(request.gradient.metadata.native_identity, request.nativeIdentity))
     throw new RangeError('native coefficient update requires an exact-base adapter gradient');
@@ -144,7 +149,7 @@ export async function nativeAdapterOptimizerStep(endpoint: string, store: Neural
   if (missing.length) throw new Error(`neuralese-unknown-native-artifact: restore exact adapter/optimizer artifacts ${missing.join(', ')}`);
   const reply = await post<{ adapter: { id: string }; optimizer_state_id: string; step: number;
     native_identity: NativeModelIdentity; effective_native_identity?: NativeModelIdentity; adapter_binding?: NativeAdapterBinding;
-  invocation_actors?: NativeInvocationActorReceipt; actor_graph_sha256?: string }>(endpoint, '/v1/neuralese/optim', {
+  invocation_actors?: NativeInvocationActorReceipt; actor_graph_sha256?: string; invocation_source_names?: Record<string,string> }>(endpoint, '/v1/neuralese/optim', {
     schema: 'natlang.native-optimizer-request/1', native_identity: request.nativeIdentity,
     gradient_id: request.gradient.id, optimizer_state_id: request.optimizerStateId, optimizer: request.optimizer }, request.headers);
   const adapter = await archiveNativeTensorArtifact(endpoint, store, reply.adapter.id, request.headers);
@@ -162,6 +167,10 @@ export async function nativeAdapterOptimizerStep(endpoint: string, store: Neural
     if (!reply.invocation_actors || reply.actor_graph_sha256 !== hexDigest(nativeCanonicalJson(reply.invocation_actors)))
       throw new Error('neuralese-native-update-binding: invocation actor continuation needs its exact receipt hash');
     validateNativeInvocationActorReceipt(reply.invocation_actors,request.nativeIdentity);
+    if (nativeCanonicalJson(reply.invocation_source_names ?? null) !== nativeCanonicalJson(request.gradient.metadata.provenance.invocation_source_names ?? null) ||
+        nativeCanonicalJson(state.metadata.provenance.invocation_actors) !== nativeCanonicalJson(reply.invocation_actors) ||
+        state.metadata.provenance.actor_graph_sha256 !== reply.actor_graph_sha256)
+      throw new Error('neuralese-native-update-binding: optimizer archive changed its exact invocation continuation');
     if (Object.keys(priorActors.invocations).sort().join('\0') !== Object.keys(reply.invocation_actors.invocations).sort().join('\0'))
       throw new Error('neuralese-native-update-binding: invocation inventory changed during coefficient update');
     for (const [name,before] of Object.entries(priorActors.invocations)) {

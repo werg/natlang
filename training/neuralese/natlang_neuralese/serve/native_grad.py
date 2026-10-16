@@ -61,13 +61,18 @@ def native_graph_gradient(engine, body, owner):
         if 'invocation_adapters' in body and not isinstance(declarations,dict):
             raise ValueError('invocation_adapters must declare an actual invocation-to-adapter map')
         if declarations is not None:
-            if body.get('objective','graph-ce') not in ('graph-ce',None):
-                raise ValueError('heterogeneous policy objectives require an admitted per-invocation behavior binding')
             example=parse_graph(body.get('graph'),tokenizer_fingerprint=engine.model_config['tokenizer_fingerprint'])
             names=[node.name for node in example.plan.invocations]
             if (not isinstance(declarations,dict) or any(name not in names for name in declarations)
                     or any(not isinstance(entries,list) for entries in declarations.values())):
                 raise ValueError('invocation_adapters must map actual invocation names to explicit adapter lists')
+            source_names={name:name for name in names}
+            if isinstance(body.get('objective'),dict):
+                from ..train.native_state_sft import pack_native_graphs
+                packed,_,_,_=pack_native_graphs([example])
+                source_names={before.name:after.name for before,after in zip(example.plan.invocations,packed.invocations)}
+                declarations={source_names[name]:value for name,value in declarations.items()}
+                names=[node.name for node in packed.invocations]
             entries=[body.get('adapters'),*declarations.values()]
         else:
             entries=[body.get('adapters')]
@@ -88,7 +93,7 @@ def native_graph_gradient(engine, body, owner):
                 return run_invocation_actors(engine,names,declarations,
                     lambda bank:_native_graph_gradient_impl(engine,body,owner,leaves,actor_bank=bank),
                     default=body.get('adapters'),leaves=leaves,
-                    gradient_precision=body.get('adapter_gradient_precision','storage'))
+                    gradient_precision=body.get('adapter_gradient_precision','storage'),source_names=source_names)
             finally:
                 for parameter,enabled in restore.items():parameter.requires_grad_(enabled)
         return run_native(engine, lambda: _native_graph_gradient_impl(engine, body, owner, leaves),
@@ -137,7 +142,7 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
                 raise ValueError('native-policy objective bytes differ from the admitted SHA-256')
             from ..rl.native_replay import NativePolicyObjective
             objective = NativePolicyObjective(spec_path)
-            objective.bind_actor(engine)
+            objective.bind_actor(engine,example=example)
             objective.native_state_modes = body.get('native_state_modes') or {}
         observation_identity = objective.identity if objective is not None else effective
         modes = body.get('native_state_modes')
@@ -161,10 +166,10 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
                 for consumer in consumers:
                     if (modes or {}).get(binding['id']) is not None:
                         from ..model.native_adapters import adapter_state_input_receipt
-                        receipt=actor_bank.execute(consumer,lambda:adapter_state_input_receipt(engine,block,binding['id'],target_position_start=0))
+                        receipt=actor_bank.execute(actor_bank.source_names[consumer],lambda:adapter_state_input_receipt(engine,block,binding['id'],target_position_start=0))
                         consumption_receipts[canonical_json_sha256_hex([consumer,name])]={'invocation':consumer,'input_name':name,**receipt}
                     else:
-                        block.require_native(**actor_bank.actors[consumer][0][1])
+                        block.require_native(**actor_bank.actors[actor_bank.source_names[consumer]][0][1])
                 input_identities[name]=source_identity
             elif (modes or {}).get(binding['id']) is not None:
                 from ..model.native_adapters import adapter_state_input_receipt
@@ -239,13 +244,15 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
             raise ValueError(f'objective has no gradient path to requested tensors: {absent}')
         artifact = NativeTensorArtifact(artifact_kind, expected, tensors, source_id,
             {'objective': ('native-graph-token-ce/1' if not isinstance(objective_request, dict)
-                           else 'native-policy-objective/1'), 'graph_id': example.id,
+                           else objective.spec['schema'].removeprefix('natlang.')), 'graph_id': example.id,
              'graph_sha256': graph_sha256, 'target_kind': kind,
              'external_source_identities': input_identities,
              'external_adapter_state_contracts': {name: {key: value for key, value in receipt.items()
-                 if key not in {'target_position_start', 'tokens'}} for name, receipt in consumption_receipts.items()},
+                 if key not in {'target_position_start', 'tokens'}} for name, receipt in {**consumption_receipts, **(objective.evaluation_external_contracts if objective is not None else {})}.items()},
+             **({'external_consumption_receipts':objective.evaluation_external_contracts}
+                if objective is not None and objective.behavior_policy is not None else {}),
              'target_names': sorted(tensors),
-             **({'invocation_actors':actor_bank.receipt(),'actor_graph_sha256':canonical_json_sha256_hex(actor_bank.receipt())}
+             **({'invocation_actors':actor_bank.receipt(),'actor_graph_sha256':canonical_json_sha256_hex(actor_bank.receipt()),'invocation_source_names':actor_bank.source_names}
                 if actor_bank is not None else {'effective_native_identity':effective}),
              'adapter_gradient_precision': body.get('adapter_gradient_precision', 'storage'),
              **({'invocation_adapter_declarations':body['invocation_adapters'],'default_adapters':body.get('adapters') or []}
@@ -254,9 +261,10 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
                  'adapters': execution_binding(engine)}}
                 if body.get('adapters') and actor_bank is None else {}),
              'loss': float(loss.detach()), 'stats': stats,
-             **({'objective_spec_sha256': objective_request['sha256'],
-                 'behavior_native_identity': objective.identity,
-                 'behavior_adapter_binding': objective.adapter_binding} if objective is not None else {})}).validate()
+             **({'objective_spec_sha256':objective_request['sha256'],
+                 **({'behavior_policy':objective.behavior_policy,'behavior_policy_sha256':objective.spec['behavior_policy_sha256']}
+                    if objective.behavior_policy is not None else {'behavior_native_identity':objective.identity,'behavior_adapter_binding':objective.adapter_binding})}
+                if objective is not None else {})}).validate()
         stored = engine.store.put_native_tensor_artifact(artifact, owner)
         return {'loss': float(loss.detach()), 'stats': stats, 'gradient': stored.meta(),
                 'native_identity': expected, 'objective': artifact.provenance['objective'],
