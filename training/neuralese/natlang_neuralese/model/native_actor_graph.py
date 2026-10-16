@@ -31,7 +31,10 @@ class NativeInvocationActors:
             raise NativeAdapterError('native invocation source names must bind exact actual packed ownership')
         self.source_names=dict(source_names)
         self.engine,self.precision=engine,gradient_precision
-        self.lifecycle={'active':True}
+        from ..common.native_higher_order import active_reference_arithmetic
+        reference=active_reference_arithmetic()
+        self.reference_lifetime=reference is not None
+        self.lifecycle=reference.lifetime if reference is not None else {'active':True}
         self.actors={}
         self.parameters=target_parameters(engine.shared_model)
         # Capture immutable base parameters BEFORE entering any actor scope.
@@ -75,7 +78,8 @@ class NativeInvocationActors:
         try:
             if not replacement:
                 return callback()
-            if self.precision=='fp32':
+            from ..common.native_higher_order import active_reference_arithmetic
+            if self.precision=='fp32' or active_reference_arithmetic() is not None:
                 from .native_weight_carrier import carrier_linear_modules
                 with carrier_linear_modules(self.engine.shared_model,selected):
                     return torch.func.functional_call(_Operation(self.engine.shared_model,callback),replacement,())
@@ -107,7 +111,7 @@ def run_invocation_actors(engine,names,bindings,callback,*,default=None,leaves=N
         try:
             return callback(bank)
         finally:
-            bank.lifecycle['active']=False
+            if not bank.reference_lifetime:bank.lifecycle['active']=False
             _BANKS.reset(token);_ACTIVE.reset(active)
 
 

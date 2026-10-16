@@ -105,6 +105,10 @@ def graph_loss_from_result(model, example, result, *, chunk_tokens=128, boundary
                 (weighted * (-ce.detach()).exp()[None, :]).sum(-1)), dim=-1)
         return (*loss_outputs, summary)
     from torch.utils.checkpoint import checkpoint
+    from ..common.native_higher_order import capture_reference_execution,active_reference_arithmetic
+    if active_reference_arithmetic() is not None:
+        from ..model.native_adapters import capture_native_execution
+        loss_chunk=capture_reference_execution(capture_native_execution(loss_chunk))
     for start in range(0, len(queries), chunk_tokens):
         stop = start + chunk_tokens
         # Save hidden rows, not a vocabulary-sized softmax per graph token.

@@ -906,7 +906,7 @@ def make_muon_optimizer(model, *, lr, momentum=0.95, ns_steps=5):
 
 
 def named_service_optimizer(named_parameters, *, name, learning_rate, weight_decay=0.,
-                            beta1=.9, beta2=.999, eps=1e-8, momentum=0.):
+                            beta1=.9, beta2=.999, eps=1e-8, momentum=0., differentiable=False):
     """Standard explicitly requested optimizers for named native service updates.
 
     Production MuonSR remains the native trainer's policy. Service SGD/Adam use
@@ -914,8 +914,104 @@ def named_service_optimizer(named_parameters, *, name, learning_rate, weight_dec
     """
     parameters = [parameter for _, parameter in named_parameters]
     if name == 'sgd':
-        return torch.optim.SGD(parameters, lr=learning_rate, weight_decay=weight_decay, momentum=momentum)
+        return torch.optim.SGD(parameters, lr=learning_rate, weight_decay=weight_decay, momentum=momentum,
+                               **({'differentiable':True,'foreach':False} if differentiable else {}))
     if name == 'adam':
         return torch.optim.Adam(parameters, lr=learning_rate, weight_decay=weight_decay,
-                                betas=(beta1,beta2), eps=eps)
+                                betas=(beta1,beta2), eps=eps,
+                                **({'differentiable':True,'foreach':False} if differentiable else {}))
     raise ValueError('native named optimizer must be sgd or adam')
+
+
+def functional_named_service_step(parameters, gradients, state_tensors, *, name,
+                                  learning_rate, weight_decay=0., beta1=.9,beta2=.999,
+                                  eps=1e-8,momentum=0.):
+    """The same PyTorch service optimizer on independent differentiable copies.
+
+    Exact named moments and per-parameter counters survive partial updates. No
+    input parameter, gradient or prior optimizer tensor is modified in place.
+    """
+    if not parameters or set(parameters)!=set(gradients):
+        raise ValueError('functional native update needs matching nonempty named parameters and gradients')
+    for key,value in parameters.items():
+        gradient=gradients[key]
+        if (not isinstance(key,str) or not isinstance(value,torch.Tensor) or not value.is_floating_point()
+                or gradient.shape!=value.shape or not torch.isfinite(gradient).all()):
+            raise ValueError('functional native update needs finite matching named floating gradients')
+    for key,value in state_tensors.items():
+        if not isinstance(value,torch.Tensor) or not torch.isfinite(value).all():
+            raise ValueError('functional native optimizer history must contain finite tensors')
+    prior_counter=state_tensors.get('optimizer.step')
+    if prior_counter is not None and (prior_counter.numel()!=1 or prior_counter.item()<0
+            or prior_counter.item()!=int(prior_counter.item())):
+        raise ValueError('functional native optimizer history has an invalid global counter')
+    for key,value in parameters.items():
+        if name=='adam':
+            present=[prefix+key in state_tensors for prefix in ('m.','v.','step.')]
+            if any(present) and not all(present):
+                raise ValueError('functional Adam requires complete named moments and counters')
+            if all(present):
+                m,v,count=(state_tensors[prefix+key] for prefix in ('m.','v.','step.'))
+                if (m.shape!=value.shape or v.shape!=value.shape or (v<0).any() or count.numel()!=1
+                        or count.item()<0 or count.item()!=int(count.item())
+                        or prior_counter is None or count.item()>prior_counter.item()):
+                    raise ValueError('functional Adam history has invalid named geometry, moments or counters')
+        elif name=='sgd' and 'momentum.'+key in state_tensors:
+            if state_tensors['momentum.'+key].shape!=value.shape:
+                raise ValueError('functional SGD momentum geometry differs from its named parameter')
+    updated={key:value.clone() for key,value in parameters.items()}
+    named=sorted(updated.items())
+    optimizer=named_service_optimizer(named,name=name,learning_rate=learning_rate,
+        weight_decay=weight_decay,beta1=beta1,beta2=beta2,eps=eps,momentum=momentum,
+        differentiable=True)
+    output_state={key:value.clone() for key,value in state_tensors.items()}
+    prior=state_tensors.get('optimizer.step')
+    step=int(prior.item())+1 if prior is not None else 1
+    output_state['optimizer.step']=torch.tensor([step],dtype=torch.float64)
+    for key,parameter in named:
+        gradient=gradients[key]
+        if gradient.shape!=parameter.shape:
+            raise ValueError('functional native update has a mismatched gradient shape')
+        parameter.grad=gradient.to(parameter)
+        if name=='adam' and 'm.'+key in state_tensors:
+            if any(prefix+key not in state_tensors for prefix in ('m.','v.','step.')):
+                raise ValueError('functional Adam requires complete named moments and counters')
+            optimizer.state[parameter]={'exp_avg':state_tensors['m.'+key].to(parameter).clone(),
+                'exp_avg_sq':state_tensors['v.'+key].to(parameter).clone(),
+                'step':state_tensors['step.'+key].reshape(()).cpu().clone()}
+        elif name=='sgd' and momentum:
+            # Torch SGD initializes its first momentum buffer with
+            # grad.detach().clone() even in differentiable mode. With native
+            # dampening=0, an explicit zero buffer has IDENTICAL first values
+            # and preserves the real first gradient's dependency.
+            previous=state_tensors.get('momentum.'+key)
+            optimizer.state[parameter]={'momentum_buffer':(previous.to(parameter).clone()
+                if previous is not None else torch.zeros_like(parameter))}
+    with torch.enable_grad():
+        if name=='adam':
+            # Select the native scalar bias-correction arithmetic, while grad
+            # mode remains enabled around the functional primitive. The
+            # optimizer's differentiable branch instead exponentiates FP32
+            # counters and folds the step size into its denominator.
+            from torch.optim import _functional
+            from ..common.native_higher_order import adam_zero_moment_root
+            for key,parameter in named:
+                values=optimizer.state[parameter]
+                if not values:
+                    values.update(exp_avg=torch.zeros_like(parameter),
+                        exp_avg_sq=torch.zeros_like(parameter),step=torch.zeros((),dtype=torch.float32))
+                with adam_zero_moment_root():
+                    _functional.adam([parameter],[parameter.grad],[values['exp_avg']],
+                        [values['exp_avg_sq']],[],[values['step']],foreach=False,fused=False,
+                        differentiable=False,capturable=False,amsgrad=False,beta1=beta1,beta2=beta2,
+                        lr=learning_rate,weight_decay=weight_decay,eps=eps,maximize=False)
+        else:optimizer.step()
+    for key,parameter in named:
+        values=optimizer.state[parameter]
+        if name=='adam':
+            for prefix,source in (('m.','exp_avg'),('v.','exp_avg_sq'),('step.','step')):
+                value=values[source]
+                output_state[prefix+key]=value.reshape(1) if source=='step' else value
+        elif 'momentum_buffer' in values:
+            output_state['momentum.'+key]=values['momentum_buffer']
+    return updated,output_state

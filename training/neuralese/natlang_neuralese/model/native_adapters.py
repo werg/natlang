@@ -161,13 +161,33 @@ def capture_native_execution(callback):
     frames = _ACTIVE.get()
     if not frames:
         return callback
+    from ..common.native_higher_order import active_reference_arithmetic
+    reference=active_reference_arithmetic()
+    snapshots=[]
+    if reference is not None:
+        # A later derivative may recompute this earlier layer while another
+        # functional update is active. Retain exact tensor references, never
+        # detached copies, and re-enter their complete module bindings.
+        seen=set()
+        for frame in frames:
+            engine=frame[0]
+            if id(engine) in seen:continue
+            seen.add(id(engine))
+            model=engine.shared_model
+            values={**dict(model.named_parameters(remove_duplicate=False)),
+                    **dict(model.named_buffers(remove_duplicate=False))}
+            snapshots.append((model,{'model.'+name:value for name,value in values.items()}))
     @functools.wraps(callback)
     def execute(*args, **kwargs):
         if any(not frame[7]['active'] for frame in frames):
             raise NativeAdapterError('native checkpoint actor scope expired; complete forward and backward within the same native operation')
         token = _ACTIVE.set(frames)
         try:
-            return callback(*args, **kwargs)
+            def replay(index):
+                if index==len(snapshots):return callback(*args,**kwargs)
+                model,values=snapshots[index]
+                return torch.func.functional_call(_Operation(model,lambda:replay(index+1)),values,())
+            return replay(0)
         finally:
             _ACTIVE.reset(token)
     return execute
@@ -207,13 +227,20 @@ def _effective_replacements(parameters, resolved, gradient_precision):
                 projection.to(device=weight.device) if projection is not None else None)
             delta = ((left @ core) @ right.transpose(-2, -1)) * scale
             key = 'model.'+name
-            if gradient_precision == 'fp32' and weight.dtype != torch.float32:
+            from ..common.native_higher_order import active_reference_arithmetic
+            if active_reference_arithmetic() is not None:
+                # The declared mathematical reference differentiates actual
+                # stored base values plus the unrounded FP32 low-rank delta.
+                # It does not claim the rounded fast actor's VJP/Hessian.
+                replacement[key] = replacement.get(key,weight).float() + delta.float()
+            elif gradient_precision == 'fp32' and weight.dtype != torch.float32:
                 from .native_weight_carrier import rounded_weight_carrier
                 replacement[key] = rounded_weight_carrier(replacement.get(key, weight), delta, weight.dtype)
             else:
                 replacement[key] = replacement.get(key, weight) + delta.to(weight.dtype)
     storage_dtypes = {}
-    if gradient_precision == 'fp32':
+    from ..common.native_higher_order import active_reference_arithmetic
+    if gradient_precision == 'fp32' or active_reference_arithmetic() is not None:
         for key, value in replacement.items():
             dtype = parameters[key.removeprefix('model.')].dtype
             if dtype not in (torch.float16, torch.bfloat16, torch.float32):
@@ -246,7 +273,9 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
             raise NativeAdapterError(str(error)) from error
         identity = effective_identity(engine, resolved)
         binding = [{'id': ident, 'scale_hex': scale.hex()} for ident, scale, *_ in resolved]
-        lifecycle = {'active': True}
+        from ..common.native_higher_order import active_reference_arithmetic
+        reference=active_reference_arithmetic()
+        lifecycle = reference.lifetime if reference is not None else {'active': True}
         token = _ACTIVE.set((*_ACTIVE.get(), (engine, identity, binding, entries, set(), {}, gradient_precision or 'storage', lifecycle)))
         try:
             if not resolved:
@@ -255,14 +284,15 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
             replacement, storage_dtypes = _effective_replacements(parameters, resolved, gradient_precision)
             _ACTIVE.get()[-1][5].update(storage_dtypes)
             _ACTIVE.get()[-1][4].update(id(value) for value in replacement.values())
-            if gradient_precision == 'fp32':
+            from ..common.native_higher_order import active_reference_arithmetic
+            if gradient_precision == 'fp32' or active_reference_arithmetic() is not None:
                 from .native_weight_carrier import carrier_linear_modules
                 selected = [parameters[key.removeprefix('model.')] for key in replacement]
                 with carrier_linear_modules(engine.shared_model, selected):
                     return torch.func.functional_call(_Operation(engine.shared_model, callback), replacement, ())
             return torch.func.functional_call(_Operation(engine.shared_model, callback), replacement, ())
         finally:
-            lifecycle['active'] = False
+            if reference is None:lifecycle['active'] = False
             _ACTIVE.reset(token)
 
 

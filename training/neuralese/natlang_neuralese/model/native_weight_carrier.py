@@ -52,6 +52,9 @@ class _TorchStoredLinear(torch.autograd.Function):
 
 
 def stored_linear(x, weight, bias=None, *, storage_dtype, fixed=False, precision='ieee'):
+    from ..common.native_higher_order import active_reference_arithmetic,reference_linear
+    if active_reference_arithmetic() is not None:
+        return reference_linear(x,weight,bias)
     if fixed:
         if x.is_cuda and x.dtype in (torch.float32, torch.bfloat16):
             from ..maple.fused_moe import invariant_linear

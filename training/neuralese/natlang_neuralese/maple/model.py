@@ -102,6 +102,9 @@ class RMSNorm(nn.Module):
 
     def _forward(self, x):
         weight = self.gain()
+        from ..common.native_higher_order import active_reference_arithmetic
+        if active_reference_arithmetic() is not None:
+            return _rms_norm(x,weight,self.eps)
         if (x.is_cuda and not _eager_depth and x.dtype in (torch.bfloat16, torch.float16)
                 and os.environ.get("NATLANG_MAPLE_FUSED_NORM", "1") != "0"):
             # One Triton kernel each way (maple/norm_kernels.py), same rule; NATLANG_MAPLE_FUSED_NORM=0: eager/compiled.
@@ -400,7 +403,8 @@ class DenseExperts(nn.Module):
         # A functional native adapter replaces these exact bank tensors for
         # one call. Its effective weights must neither read nor populate the
         # immutable base generation cache.
-        if QUANT_MIX.get("cache") is not None:
+        from ..common.native_higher_order import active_reference_arithmetic
+        if QUANT_MIX.get("cache") is not None and active_reference_arithmetic() is None:
             from ..model.native_adapters import substituted_native_weight
             adapted = substituted_native_weight(self.gate_up) or substituted_native_weight(self.down)
             if not adapted:
@@ -415,6 +419,9 @@ class DenseExperts(nn.Module):
         from ..model.native_adapters import native_forward_storage_dtype
         from ..model.native_weight_carrier import stored_linear
         def project(value, weight):
+            from ..common.native_higher_order import active_reference_arithmetic,reference_linear
+            if active_reference_arithmetic() is not None:
+                return reference_linear(value,weight)
             dtype = native_forward_storage_dtype(weight)
             return stored_linear(value, weight, storage_dtype=dtype) if dtype is not None else value @ weight.T
         y = project(x, gate_up)
@@ -489,7 +496,8 @@ class SparseMoE(nn.Module):
     def _fused(self, x):
         """The fused grouped kernel (maple/fused_moe.py) for frozen experts on CUDA: their weights, or None (the
         reference loop below, which also trains learned block scales)."""
-        if (not x.is_cuda or isinstance(self.experts, DenseExperts)
+        from ..common.native_higher_order import active_reference_arithmetic
+        if (active_reference_arithmetic() is not None or not x.is_cuda or isinstance(self.experts, DenseExperts)
                 or os.environ.get("NATLANG_MAPLE_FUSED_MOE", "1") == "0"):
             return None
         from .fused_moe import expert_weights
@@ -497,12 +505,14 @@ class SparseMoE(nn.Module):
 
     def _invariant(self, x) -> bool:
         """Dense experts on CUDA under the "invariant" kernel (the default): maple/fused_moe.invariant_dense_experts."""
-        return DENSE_MOE["kernel"] == "invariant" and x.is_cuda and isinstance(self.experts, DenseExperts)
+        from ..common.native_higher_order import active_reference_arithmetic
+        return active_reference_arithmetic() is None and DENSE_MOE["kernel"] == "invariant" and x.is_cuda and isinstance(self.experts, DenseExperts)
 
     def _grouped(self, x) -> bool:
         """Dense (BF16, trainable) experts on CUDA under ``set_dense_moe_kernel("grouped")`` run as two grouped GEMMs
         (maple/fused_moe.dense_grouped_experts) instead of the per-expert loop below (the reference, the default)."""
-        return (DENSE_MOE["kernel"] == "grouped" and x.is_cuda and x.dtype == torch.bfloat16
+        from ..common.native_higher_order import active_reference_arithmetic
+        return (active_reference_arithmetic() is None and DENSE_MOE["kernel"] == "grouped" and x.is_cuda and x.dtype == torch.bfloat16
                 and isinstance(self.experts, DenseExperts) and hasattr(torch, "_grouped_mm"))
 
     def forward(self, h):

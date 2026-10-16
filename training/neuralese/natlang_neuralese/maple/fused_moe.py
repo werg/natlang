@@ -584,6 +584,9 @@ class _InvariantLinear(torch.autograd.Function):
 
 
 def invariant_linear(x: torch.Tensor, w: torch.Tensor, *, precision="ieee", forward_storage_dtype=None) -> torch.Tensor:
+    from ..common.native_higher_order import active_reference_arithmetic,reference_linear
+    if active_reference_arithmetic() is not None:
+        return reference_linear(x,w)
     if precision not in {"ieee", "tf32x3", "tf32", "bf16", "bf16x6"}:
         raise ValueError("native fixed linear requires explicit ieee, tf32x3, tf32, bf16 or bf16x6 arithmetic")
     return _InvariantLinear.apply(x, w, precision, forward_storage_dtype)

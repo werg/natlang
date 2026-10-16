@@ -154,7 +154,9 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
         attention = port.is_attention(i)
         window = port.window(i) if attention and hasattr(port, 'window') else None
         if attention and window not in masks:
-            masks[window] = graph_block_mask(plan, device, window) if h.is_cuda else plan.attention_mask(device, window)
+            from ..common.native_higher_order import active_reference_arithmetic
+            masks[window] = (None if active_reference_arithmetic() is not None else
+                graph_block_mask(plan, device, window) if h.is_cuda else plan.attention_mask(device, window))
         convolution_index = None
         if not attention:
             width = layer.conv.conv.weight.shape[-1]
@@ -190,7 +192,8 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
 
         if checkpointed:
             from .native_adapters import capture_native_execution
-            run_layer = capture_native_execution(run_layer)
+            from ..common.native_higher_order import capture_reference_execution
+            run_layer = capture_reference_execution(capture_native_execution(run_layer))
             from torch.utils.checkpoint import checkpoint
             checkpoint = getattr(port, 'activation_checkpoint', checkpoint)
             updated = checkpoint(run_layer, h, *external_i, use_reentrant=False,
@@ -335,6 +338,9 @@ def graph_block_mask(plan, device, window=None):
 
 def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=None):
     global _flex
+    from ..common.native_higher_order import active_reference_arithmetic,reference_attention
+    if active_reference_arithmetic() is not None:
+        return reference_attention(q,k,v,plan,window,scale)
     head_width = q.shape[-1]
     if q.is_cuda and head_width < 16:
         q, k, v = (F.pad(value, (0, 16-head_width)) for value in (q, k, v))
@@ -860,6 +866,9 @@ def restore_channel_checkpoint(model, state):
 
 
 def _linear_weight(x, weight, *, precision="ieee"):
+    from ..common.native_higher_order import active_reference_arithmetic,reference_linear
+    if active_reference_arithmetic() is not None:
+        return reference_linear(x,weight)
     if x.is_cuda and x.dtype in (torch.float32, torch.bfloat16):
         from ..maple.fused_moe import invariant_linear
         shape = x.shape
