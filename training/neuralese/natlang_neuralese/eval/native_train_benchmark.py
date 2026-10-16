@@ -8,7 +8,6 @@ pretending to be frozen scientific comparisons.
 """
 from __future__ import annotations
 import argparse
-import itertools
 import json
 import time
 from pathlib import Path
@@ -137,7 +136,7 @@ def main(argv=None):
         first,last = batch_boundaries(source.entries[args.start_index:],batch_graphs=size if kind=='graphs' else 1,
                                       batch_tokens=size if kind=='tokens' else 0)[0]
         first += args.start_index; last += args.start_index
-        cases.append((case,list(itertools.islice(source,first,last))))
+        cases.append((case,list(source.iter_indices(range(first,last)))))
     if args.read_only:
         if len(cases) != 1: raise ValueError('read-only comparison uses one complete packed batch')
         optimizer, _ = make_native_optimizer(model, lr=3e-6, in_backward=False)
@@ -145,7 +144,9 @@ def main(argv=None):
         restore_training_rng_state(parent_state['training']['rng'], 'cuda')
         report = read_only_comparison(model, cases[0][1], repeats=args.repeats)
         report.update(checkpoint={'path':args.checkpoint,'sha256':sha256_file_hex_cached(args.checkpoint)},
-                      model_config=config, hardware=torch.cuda.get_device_name(), torch=torch.__version__)
+                      model_config=config, graphs=source.receipt(),
+                      code_sha256=sha256_file_hex_cached(__file__),
+                      hardware=torch.cuda.get_device_name(), torch=torch.__version__)
         args.out.parent.mkdir(parents=True,exist_ok=True)
         args.out.write_text(json.dumps(report,indent=2)+'\n')
         print(json.dumps(report),flush=True)
