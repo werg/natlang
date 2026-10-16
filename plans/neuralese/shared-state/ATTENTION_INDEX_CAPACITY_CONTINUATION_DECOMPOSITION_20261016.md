@@ -28,3 +28,8 @@ all remaining package files required identical. Separate diagnostic forwards
 are explicit. It selects a complete admitted graph, compares streamed output
 and full named-gradient digests, then records synchronized timings and a CUDA
 trace without gradient hashing. No trainer or checkpoint is modified.
+
+Standalone CLI bootstrap includes both the repository root and its Neuralese
+package directory. Subprocesses cannot inherit pytest's in-process import path.
+This is execution plumbing; importing ordinary saved-parent helpers remains
+independent of the optional prefix-packing runtime.

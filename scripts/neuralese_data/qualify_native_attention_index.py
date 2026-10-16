@@ -13,6 +13,7 @@ import sys
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'training' / 'neuralese'))
 from scripts.neuralese_data.qualify_native_causal_prefixes import load_qualification_model
 from natlang_neuralese.common.checkpoint_offload import configure_checkpoint_input_offload
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex

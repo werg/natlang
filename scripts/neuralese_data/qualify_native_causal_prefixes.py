@@ -17,6 +17,7 @@ import sys
 import time
 import torch
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'training'/'neuralese'))
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex,sha256_file_hex_cached
 from natlang_neuralese.common.jsonio import open_jsonl_text,write_json_durable
 from natlang_neuralese.data.native_graph import parse_graph
