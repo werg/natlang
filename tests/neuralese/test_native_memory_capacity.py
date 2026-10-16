@@ -182,3 +182,25 @@ def test_default_capacity_check_retains_qualified_nonprefix_packer_signature(mon
     result=qualify_capacity(model,optimizer,examples()[:1],chunk_tokens=3,
         checkpoint_sha256='a'*64,source_binding={})
     assert result['passed']
+
+
+def test_later_novel_oom_retains_independently_qualified_cohort_capacity(tmp_path,monkeypatch):
+    import json
+    from natlang_neuralese.eval import native_memory as memory
+    model,optimizer,train,roles,config,args=prepared_fixture(tmp_path,monkeypatch)
+    first=json.loads(args.memory_qualification);second={**first,'path':'/second-request.json'}
+    args.memory_qualification=json.dumps([first,second]);original=args.memory_qualification;seen=[]
+    def cohort(*a,**kwargs):
+        seen.append(json.loads(args.memory_qualification))
+        if len(seen)==1:args.resident_geometry_qualification=tmp_path/'qualified-smaller-cohort.json'
+        return {'passed':len(seen)==1,'request':seen[-1],'parent_checkpoint_sha256':'a'*64}
+    monkeypatch.setattr(memory,'_run_one_prepared',cohort)
+    result=memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
+    assert not result['passed'] and result['checks'][0]['passed'] and not result['checks'][1]['passed']
+    assert result['retained_capacity'].endswith('qualified-smaller-cohort.json')
+    assert args.memory_qualification==original and seen==[first,second]
+    from natlang_neuralese.train.recipe import validate_stage_parameters
+    validate_stage_parameters('native_state_sft',{'memory_qualification':[first,second]})
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    encoded=stage_parameter_args({'memory_qualification':[first,second]})
+    assert encoded[0]=='--memory-qualification' and json.loads(encoded[1])==[first,second]

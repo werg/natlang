@@ -214,11 +214,15 @@ def validate_stage_parameters(kind, parameters):
         if parameters['checkpoint_input_offload'] is not None and type(parameters['checkpoint_input_offload']) is not bool:
             raise ValueError('checkpoint_input_offload must be a boolean or omitted for inheritance')
     if kind == 'native_state_sft' and parameters.get('memory_qualification') is not None:
-        value=parameters['memory_qualification']
-        if (not isinstance(value,dict) or set(value)!={'path','sha256'}
-                or not isinstance(value['path'],str) or not value['path']
-                or not isinstance(value['sha256'],str) or not re.fullmatch(r'[0-9a-f]{64}',value['sha256'])):
-            raise ValueError('memory_qualification must be an exact path/sha256 binding')
+        declared=parameters['memory_qualification']
+        values=declared if isinstance(declared,list) else [declared]
+        if not values:
+            raise ValueError('memory_qualification requires a nonempty binding list')
+        for value in values:
+            if (not isinstance(value,dict) or set(value)!={'path','sha256'}
+                    or not isinstance(value['path'],str) or not value['path']
+                    or not isinstance(value['sha256'],str) or not re.fullmatch(r'[0-9a-f]{64}',value['sha256'])):
+                raise ValueError('memory_qualification must be an exact path/sha256 binding')
     if kind not in ('core_text_warmup', 'raw_recurrence_training'):
         return
     if kind == 'raw_recurrence_training':
@@ -1869,6 +1873,9 @@ def stage_parameter_args(parameters):
     """Serialize a validated stage's typed options into CLI arguments."""
     command = []
     for key, value in parameters.items():
+        if key=='memory_qualification':
+            command += ['--memory-qualification',json.dumps(value,sort_keys=True,separators=(',',':'))]
+            continue
         if key=='cohort_weights':
             if not isinstance(value,dict):
                 raise ValueError('cohort_weights must be an object of explicit fractions')
