@@ -111,7 +111,7 @@ def _source_closure_implementation_bindings():
         'jsonl_io': root / 'training/neuralese/natlang_neuralese/common/jsonio.py',
         'hashing': root / 'training/neuralese/natlang_neuralese/common/hashing.py',
     }
-    return {name: {'path': str(path.resolve(strict=True)), 'sha256': sha256_file_hex(path),
+    return {name: {'path': path.resolve(strict=True).relative_to(root).as_posix(), 'sha256': sha256_file_hex(path),
                    'bytes': path.stat().st_size} for name, path in sorted(paths.items())}
 
 
