@@ -54,3 +54,12 @@ def test_parallel_coefficient_cycles_resume_without_fabricating_semantic_or_back
     receipt=json.loads((tmp_path/'joint/coefficient-latest.json').read_text())
     assert receipt['next_round']==3 and all(value['trained_rounds']==3 for value in receipt['policies'].values())
     assert not (tmp_path/'joint/latest.json').exists() and len(calls)==6
+
+
+def test_direct_coefficient_learner_cannot_share_an_owned_update_slot(tmp_path):
+    import fcntl
+    from natlang_neuralese.rl.native_coefficient_stage import train
+    with (tmp_path/'learner.lock').open('w') as owner:
+        fcntl.flock(owner,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        with pytest.raises(BlockingIOError):train(None,out=tmp_path)
+        assert not (tmp_path/'checkpoint.pt').exists()

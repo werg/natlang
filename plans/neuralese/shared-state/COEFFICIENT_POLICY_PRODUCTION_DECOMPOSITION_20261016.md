@@ -133,3 +133,10 @@ its original full SFT parameters. Cloud dependency ferry integration and actual
 target-runtime qualification remain OPEN, with the shared exact alias-preserving
 `policy_dependencies` helper available for provider reuse. Completed or explicitly
 cancelled old behavior inputs are not executable deployment dependencies.
+
+Direct CLI and recipe learners acquire an exclusive output-slot lock, in addition
+to the existing controller lock. A superseded unpublished policy bundle and its
+sidecar are removed only after the replacement checkpoint/report commit. The
+prune receipt lists exact private paths before deletion. Input/initial policies
+and qualified publications are retained; this does not delete externally
+published parents or pending source/objective dependencies.

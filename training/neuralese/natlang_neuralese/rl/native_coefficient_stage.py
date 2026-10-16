@@ -36,7 +36,37 @@ def bind_policy(engine,path):
     return policy
 
 
-def train(engine,*,policy,graphs,objective,out,epochs,optimizer,evaluate,stop=None,backend=None,after_commit=None,evaluate_every=None,held_groups=(),held_row_bindings=None,held_receipts=None):
+def train(engine,**kwargs):
+    """One owner of this actual output slot, including direct CLI/recipe runs."""
+    import fcntl
+    directory=Path(kwargs['out']).resolve();directory.mkdir(parents=True,exist_ok=True)
+    with (directory/'learner.lock').open('w') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        return _train_locked(engine,**kwargs)
+
+
+def _prune_previous_private_policy(previous,current,*,out,protected,qualified):
+    """Delete only this learner's superseded unpublished policy and sidecar."""
+    if qualified:return
+    previous,current=Path(previous),Path(current)
+    if previous==current or previous in protected or previous.parent.parent!=out/'policies':return
+    old=json.loads(previous.read_text())
+    frame=resolve_composite_artifact(old['training_state'],previous) if old.get('training_state') else None
+    paths=[previous.parent]
+    current_frame=resolve_composite_artifact(json.loads(current.read_text())['training_state'],current)
+    if frame is not None and frame.parent==out/'training-state' and frame!=current_frame:
+        paths.append(frame)
+    # Owner storage policy requires listing exact owned paths before deletion.
+    write_json_durable(out/'pruned-private-policy.json',{'schema':'natlang.native-coefficient-prune/1',
+        'reason':'superseded private intermediate after durable whole-policy checkpoint/report commit',
+        'retained_policy':str(current),'paths':[str(path) for path in paths]})
+    import shutil
+    for path in paths:
+        if path.is_dir():shutil.rmtree(path)
+        else:path.unlink()
+
+
+def _train_locked(engine,*,policy,graphs,objective,out,epochs,optimizer,evaluate,stop=None,backend=None,after_commit=None,evaluate_every=None,held_groups=(),held_row_bindings=None,held_receipts=None):
     """Commit whole graph updates; resume every owed row without replaying credit.
 
     `evaluate(engine, policy_path, final=...)` executes declared actual held/task
@@ -127,6 +157,10 @@ def train(engine,*,policy,graphs,objective,out,epochs,optimizer,evaluate,stop=No
         raise ValueError('coefficient training has no admitted whole-trajectory rows')
 
     def save():
+        previous=Path(state['policy']['path'])
+        previous_report=out/'report.json'
+        published=json.loads(previous_report.read_text()) if previous_report.exists() else {}
+        previous_qualified=published.get('qualification_complete') is True and published.get('policy')==state['policy']
         state['rng']=capture_training_rng_state(engine.device)
         state['fp8']=backend.extra_state() if backend is not None else None
         # Completed trajectories compact to exact source/objective identities;
@@ -155,6 +189,8 @@ def train(engine,*,policy,graphs,objective,out,epochs,optimizer,evaluate,stop=No
             'cumulative_train_exposure':{key:state['trained_tokens'] for key in ('supervised_tokens','target_tokens')},
             'this_stage_updates':state['step']-state['stage_start_step']}
         write_json_durable(out/'report.json',report)
+        _prune_previous_private_policy(previous,policy_path,out=out,
+            protected={source_policy,Path(state['initial_policy']['path'])},qualified=previous_qualified)
         return report
     def measure(final):
         saved=capture_training_rng_state(engine.device)

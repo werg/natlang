@@ -7,6 +7,7 @@ import signal
 
 import pytest
 import torch
+from natlang_neuralese.common.paths import root as logical_root
 
 from test_native_coefficient_stage import adapters
 from test_native_serving_adapters import engine_fixture
@@ -44,7 +45,7 @@ def test_actual_coefficient_stage_cli_sigterm_resume_and_real_held_collector(tmp
         'tokenizer_fingerprint':engine.native_identity['tokenizer_fingerprint'],
         'nodes':[{'name':'held','token_ids':[4,5,6],'target_weights':[0,1,1]}]})+'\n')
     packet=tmp_path/'held-task.jsonl'
-    original=Path('/home/werg/natlang/runs/natlang-held-task-packet-v3-20261012/cases.jsonl')
+    original=logical_root('repo')/'runs/natlang-held-task-packet-v3-20261012/cases.jsonl'
     packet.write_text(original.open().readline())
     spec={'packet':{'path':str(packet),'sha256':sha256_file_hex_cached(packet)},'cases':[0],
         'workers':1,'noise_repeats':1,'neuralese_server':True,'runtime':str(Path(__file__).resolve().parents[2]/'ts-host'),
@@ -176,12 +177,19 @@ def test_actual_managed_actor_policy_cli_and_durable_restart(tmp_path,family):
     import time
     import urllib.request
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
-    from natlang_neuralese.model.native_coefficient_policy import initialize_policy,runtime_binding
+    from natlang_neuralese.model.native_coefficient_policy import initialize_policy,runtime_binding,policy_core,publish_policy
     engine=engine_fixture(tmp_path,family,service_template=True)
     actor,_=adapters(engine)
     name=next(name for name in actor.artifact.tensors if name.endswith('v_proj.weight'))
     policy=initialize_policy(engine,{actor.id:[name]},defaults=[actor.id],out=tmp_path/'policy')
+    from dataclasses import replace
+    changed=engine.store.put_native_tensor_artifact(replace(actor.artifact,tensors={key:value+.01 for key,value in actor.artifact.tensors.items()}))
+    core=policy_core(json.loads(policy.read_text()));core['handles'][actor.id]['current_id']=changed.id
+    policy=publish_policy(engine,core,tmp_path/'current-policy')
     expected=runtime_binding(json.loads(policy.read_text()),policy)
+    fixture=tmp_path/'runtime-fixture.json'
+    fixture.write_text(json.dumps({'runtime':expected,'handle':actor.id,'current':changed.id,
+                                  'defaults':[{'id':changed.id,'scale':1}]}))
     command=[sys.executable,str(Path(__file__).resolve().parents[2]/'scripts/neuralese_data/serve_direct_checkpoint.py'),
         '--native-state','--checkpoint',engine.native_checkpoint,
         '--checkpoint-sha256',sha256_file_hex_cached(engine.native_checkpoint),
@@ -210,11 +218,14 @@ def test_actual_managed_actor_policy_cli_and_durable_restart(tmp_path,family):
         process,receipt=start(1)
         info=json.loads(request(receipt['listening']+'/v1/neuralese/info'))
         assert info['rl_policy_binding']['coefficient_policy']==expected
-        result=json.loads(request(receipt['listening']+'/v1/neuralese/native-states/write-text',{'text':'t5 t6','adapters':[actor.id]}))
+        runtime=subprocess.run(['node',str(Path(__file__).resolve().parents[2]/'ts-host/test/fixtures/native-coefficient-runtime.mjs'),
+            receipt['listening'],str(fixture)],capture_output=True,text=True)
+        assert runtime.returncode==0,runtime.stdout+'\n'+runtime.stderr
+        result=json.loads(request(receipt['listening']+'/v1/neuralese/native-states/write-text',{'text':'t5 t6','adapters':[changed.id]}))
         raw=request(receipt['listening']+'/v1/neuralese/native-states/'+result['id'])
         from natlang_neuralese.serve.store import decode_native_state
         block,ident=decode_native_state(raw)
-        assert ident==result['id'] and block.adapter_binding['adapters'][0]['id']==actor.id
+        assert ident==result['id'] and block.adapter_binding['adapters'][0]['id']==changed.id
         process.terminate();process.wait(30);process=None
         process,receipt=start(2)
         assert request(receipt['listening']+'/v1/neuralese/native-states/'+ident)==raw

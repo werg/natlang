@@ -1,6 +1,7 @@
 """Production coefficient learning uses the existing graph and named optimizers."""
 import pytest
 import torch
+from natlang_neuralese.common.paths import root as logical_root
 from test_native_serving_adapters import engine_fixture
 from test_native_invocation_actors import adapters
 from natlang_neuralese.serve.native_grad import native_graph_gradient,native_coefficient_gradients
@@ -102,6 +103,8 @@ def test_whole_policy_stop_restart_preserves_all_moments_rng_and_exposure(tmp_pa
     partial=train(engine,out=tmp_path/'resume',stop=stop,after_commit=lambda state:stop.request(),
                   **{**options,'graphs':graphs[:1]})
     assert partial['step']==1 and not partial['completed'] and not evaluations
+    assert len(list((tmp_path/'resume/policies').glob('*/policy.json')))==1
+    assert len(list((tmp_path/'resume/training-state').glob('*.pt')))==1
     saved=torch.load(tmp_path/'resume/checkpoint.pt',weights_only=False)
     assert sum(item['visits'] for item in saved['obligations'])==1
     from natlang_neuralese.model.native_coefficient_policy import policy_dependencies
@@ -128,6 +131,7 @@ def test_whole_policy_stop_restart_preserves_all_moments_rng_and_exposure(tmp_pa
     # A complete resumed stage does not repeat a single optimizer step.
     repeated=train(engine,out=tmp_path/'portable-resume',**{**options,'policy':partial['policy']['path']})
     assert repeated['step']==4 and repeated['coefficient_policy_sha256']==resumed['coefficient_policy_sha256']
+    assert __import__('pathlib').Path(resumed['policy']['path']).exists(),'qualified published parent must survive metadata refresh'
     # Independent uninterrupted continuation starts from the same exact initial
     # coefficients; neither process initialization nor held inference may alter
     # the actual resulting coefficients/moments/RNG.
@@ -326,7 +330,7 @@ def test_real_task_collector_receives_current_coefficient_policy(tmp_path,monkey
     # Bound this mechanism fixture's output and resource demand. The action has
     # its real actual-model probability; this is no task-quality/lift claim.
     monkeypatch.setattr(engine,'_native_token',lambda sequence:(2,float(sequence.logits[0].float().log_softmax(-1)[2])))
-    original_packet=Path('/home/werg/natlang/runs/natlang-held-task-packet-v3-20261012/cases.jsonl')
+    original_packet=logical_root('repo')/'runs/natlang-held-task-packet-v3-20261012/cases.jsonl'
     packet=tmp_path/'held-case.jsonl';packet.write_text(original_packet.open().readline())
     spec=parse_task_eval({'packet':{'path':str(packet),'sha256':sha256_file_hex_cached(packet)},'cases':[0],
         'workers':1,'noise_repeats':1,'neuralese_server':True,'runtime':str(Path(__file__).resolve().parents[2]/'ts-host'),
