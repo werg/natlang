@@ -124,7 +124,7 @@ def verify_graph_source(graph, value, *, protection, held_sources, fingerprint):
 
 
 def verify_conversion(directory, export_path, *, protection, held_sources, decision_bindings, source_rows):
-    directory = Path(directory); receipt_path = directory / 'receipt.json'
+    directory = Path(directory).resolve(strict=True); receipt_path = directory / 'receipt.json'
     receipt = json.loads(receipt_path.read_text())
     if receipt.get('schema') != 'natlang.acquired-full-session-graphs/1':
         raise ValueError('cohort member needs a completed native conversion receipt')
@@ -220,6 +220,10 @@ def main(argv=None):
     parser.add_argument('--original-root', type=Path, required=True)
     parser.add_argument('--model', action='append', required=True, help='NAME=exact local tokenizer base directory')
     args = parser.parse_args(argv)
+    # Registry paths are logical aliases; durable converter receipts name the
+    # physical output directory. Compare the same exact files through either
+    # entrypoint without treating symlink spelling as changed shard content.
+    args.native_root = args.native_root.resolve(strict=True)
     complete = json.loads((args.exports / 'complete.json').read_text())
     paths = sorted(args.exports.glob('*/export.json'))
     if {str(path) for path in paths} != {row['receipt'] for row in complete['files'] if row['status'] == 'exported'}:

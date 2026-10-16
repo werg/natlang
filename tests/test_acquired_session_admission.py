@@ -110,3 +110,7 @@ def test_actual_completed_durable_conversion_rejoins_all_positive_and_failed_sou
     assert checked['counts']['positive_sessions']==1 and checked['counts']['source-reported-non-positive']==1
     assert all(p['source_outcome']['label']!='failed' for p in proofs)
     assert len(proofs)==sum(item['rows'] for item in outputs) and not groups['test']
+    alias=tmp_path/'logical-graphs';alias.symlink_to(output,target_is_directory=True)
+    assert verify_conversion(alias,receipt,protection=protection,
+        held_sources=ids|{v.split(':decision:',1)[0] for v in ids},decision_bindings=bindings,
+        source_rows=rows)==(checked,outputs,proofs,groups)
