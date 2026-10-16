@@ -115,6 +115,34 @@ Policy is this declared source-to-pair derivation. Authentication, exact value
 replacement, rendering and hash/offset receipts are crisp mechanisms shared
 with ordinary text conversion; there is no separate relaxed renderer.
 
+## Acquired full-session reasoning coverage (2026-10-16)
+
+The objective is complete source-session supervision while avoiding auxiliary
+copies of reasoning the actual serving chat template already exposes and the
+whole-trajectory graph already targets. Preserve the entire original session
+as the whole view. Add a full-prefix reasoning packet only for an assistant
+reasoning message that the pinned, probed serving template omits from that
+whole view. The final assistant reasoning remains covered by the whole graph.
+
+1. For each nonempty assistant reasoning field, replace only that field in a
+   copy of the conversation with a unique source-bound sentinel. Render the
+   complete conversation through the shared serving/native render path without
+   tokenizing. The sentinel's exact presence proves that specific message is
+   represented; duplicate reasoning text or echoes in other roles cannot count
+   as coverage. Reject collisions and repeated sentinel output. Add a
+   full-prefix packet only for sentinels absent from the whole rendering.
+2. Preserve each auxiliary packet's original prefix, tool schemas, source
+   identity, split, and source groups. Its target is the exact original
+   reasoning-bearing assistant message, rendered through the existing serving
+   packet renderer. Do not shorten context or deduplicate by string matching.
+3. Record the declared history policy, per-message sentinel result, and exact
+   covered/auxiliary assistant ordinals in each view's provenance and receipt
+   counts. The original complete session remains immutable evidence.
+
+This is a source-coverage decision encoded in natural-language policy; the
+existing serving probe, native graph renderers, exact source hashes, and split
+verifiers are crisp mechanisms. It changes no prompts or serving behavior.
+
 The whole original trajectory supplies `writer_context_records` to the shared
 authenticated writer index; only the chosen endpoints become target rows. A
 reader may need an earlier approved writer beyond the selected edge endpoints.

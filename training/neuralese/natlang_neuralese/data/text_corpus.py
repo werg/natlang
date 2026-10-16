@@ -478,9 +478,9 @@ def tokenizer_fingerprint(tokenizer) -> str:
                             "tokenizer_backend": json.loads(tokenizer.backend_tokenizer.to_str())}).encode("utf-8"))
 
 
-def _native_gold_render(tokenizer, turns, tools, *, empty_thought=True, prompt_rendering="full"):
-    """Use the serving renderer; content markers remain ordinary content tokens."""
-    from ..serve.chat import bind_history_reasoning, render_messages, render_with_empty_thought, split_escaped
+def _native_gold_segments(tokenizer, turns, tools, *, empty_thought=True, prompt_rendering="full"):
+    """Run the shared serving/native renderer and return its escaped segments."""
+    from ..serve.chat import bind_history_reasoning, render_messages, render_with_empty_thought
     from .prompt_rendering import apply_prompt_rendering
     bind_history_reasoning(tokenizer)
     turns, tools = apply_prompt_rendering(turns, tools, prompt_rendering)
@@ -494,6 +494,23 @@ def _native_gold_render(tokenizer, turns, tools, *, empty_thought=True, prompt_r
                                specials=(*tokenizer.all_special_tokens, "<|neuralese|>", "<|/neuralese|>"))
     if rendered.blocks:
         raise ValueError("ordinary gold text contains unresolved neuralese blocks")
+    return rendered
+
+
+def native_gold_rendered_text(tokenizer, turns, tools, *, empty_thought=True, prompt_rendering="full"):
+    """Render a complete conversation through the native serving path without tokenizing it."""
+    from ..serve.chat import split_escaped
+    rendered = _native_gold_segments(tokenizer, turns, tools, empty_thought=empty_thought,
+                                     prompt_rendering=prompt_rendering)
+    return "".join(run for segment in rendered.segments
+                   for run, _escaped in split_escaped(segment, rendered.escape_nonce))
+
+
+def _native_gold_render(tokenizer, turns, tools, *, empty_thought=True, prompt_rendering="full"):
+    """Use the serving renderer; content markers remain ordinary content tokens."""
+    from ..serve.chat import split_escaped
+    rendered = _native_gold_segments(tokenizer, turns, tools, empty_thought=empty_thought,
+                                     prompt_rendering=prompt_rendering)
     text, ids = [], []
     for segment in rendered.segments:
         for run, escaped in split_escaped(segment, rendered.escape_nonce):

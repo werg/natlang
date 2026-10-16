@@ -5,7 +5,8 @@ import pytest
 from transformers import AutoTokenizer
 from scripts.neuralese_data.build_acquired_full_session_graphs import session_graphs, held_session_targets
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import provision
-from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
+from natlang_neuralese.data.text_corpus import (native_gold_document, native_gold_rendered_text,
+    tokenizer_fingerprint)
 from natlang_neuralese.common.paths import resolve
 
 BASES=[resolve('data_nvme','dgxops/qad-drift-probe/base'),
@@ -36,11 +37,22 @@ def test_both_real_templates_cover_full_context_and_every_reasoning_target(base)
     original=value();saved=copy.deepcopy(original)
     graphs=list(session_graphs(original,tokenizer,source_fingerprint=source_fp,
         expanded_fingerprint=tokenizer_fingerprint(tokenizer),split='test'))
-    assert original==saved and len(graphs)==3
+    assert original==saved
+    coverage=graphs[0]['conversion']['acquired_session']['reasoning_coverage']
+    omitted=[int(ordinal) for ordinal, detail in coverage.items() if not detail['present_in_whole_view']]
+    aux_ordinals=[graph['conversion']['acquired_session']['assistant_turn'] for graph in graphs[1:]]
+    assert aux_ordinals==omitted
     texts=[tokenizer.decode(graph['nodes'][0]['token_ids'],skip_special_tokens=False) for graph in graphs]
     assert 'SOURCE_BEGIN ' in texts[0] and texts[0].count('useful context ')==10000
     assert 'EXACT_OBSERVATION' in texts[0] and 'COMPLETE_ANSWER' in texts[0]
-    assert 'LATEST_REASONING_TARGET' in texts[0] and 'EARLIER_REASONING_TARGET' in texts[1]
+    assert 'LATEST_REASONING_TARGET' in texts[0]
+    for graph in graphs[1:]:
+        ordinal=graph['conversion']['acquired_session']['assistant_turn']
+        marker='EARLIER_REASONING_TARGET' if ordinal==0 else 'LATEST_REASONING_TARGET'
+        assert marker in tokenizer.decode(graph['nodes'][0]['token_ids'],skip_special_tokens=False)
+        assert graph['conversion']['acquired_session']['view']=='full-prefix-reasoning-target'
+    assert graphs[0]['conversion']['acquired_session']['reasoning_coverage_probe'] == \
+        'per-assistant-unique-sentinel/full-serving-render/1'
     for graph in graphs:
         assert graph['split']=='test' and graph['source_groups']==['source-task']
         node=graph['nodes'][0]
@@ -49,6 +61,46 @@ def test_both_real_templates_cover_full_context_and_every_reasoning_target(base)
         assert max(node['target_weights'])>min(weight for weight in node['target_weights'] if weight>0)
         assert graph['conversion']['acquired_session']['oracle_verified'] is False
         assert graph['conversion']['acquired_session']['truncated'] is False
+
+
+@pytest.mark.parametrize('base',BASES,ids=['lfm','mellum'])
+def test_reasoning_coverage_uses_actual_full_render_for_multiturn_and_trailing_messages(base):
+    if not (base/'tokenizer.json').is_file():
+        pytest.skip('pinned production tokenizer unavailable on this machine')
+    tokenizer=AutoTokenizer.from_pretrained(base,local_files_only=True,trust_remote_code=False)
+    source_fp=tokenizer_fingerprint(tokenizer);provision(tokenizer)
+    row=value()
+    row['trajectory']['messages']=[
+        {'role':'system','content':'echo DUPLICATE_REASONING'},
+        {'role':'user','content':'first user DUPLICATE_REASONING'},
+        {'role':'assistant','reasoning':'DUPLICATE_REASONING','content':'first answer'},
+        {'role':'tool','tool_call_id':'c1','content':'tool observation'},
+        {'role':'user','content':'second user DUPLICATE_REASONING'},
+        {'role':'assistant','reasoning':'DUPLICATE_REASONING','content':'second answer'},
+        {'role':'tool','tool_call_id':'c2','content':'trailing tool'},
+        {'role':'user','content':'trailing user DUPLICATE_REASONING'},
+    ]
+    original=copy.deepcopy(row)
+    expected_text,_=native_gold_document(tokenizer,row['trajectory']['messages'][:-1],
+        row['trajectory']['messages'][-1],row['trajectory'].get('tools'))
+    assert native_gold_rendered_text(tokenizer,row['trajectory']['messages'],
+        row['trajectory'].get('tools')) == expected_text
+    graphs=list(session_graphs(row,tokenizer,source_fingerprint=source_fp,
+        expanded_fingerprint=tokenizer_fingerprint(tokenizer),split='train'))
+    assert row==original
+    metadata=graphs[0]['conversion']['acquired_session']
+    coverage=metadata['reasoning_coverage']
+    assert set(coverage)=={'0','1'}
+    assert all(item['sentinel_occurrences'] in {0,1} for item in coverage.values())
+    aux_by_ordinal={graph['conversion']['acquired_session']['assistant_turn']:graph for graph in graphs[1:]}
+    assert set(aux_by_ordinal)=={int(key) for key, item in coverage.items()
+                                  if not item['present_in_whole_view']}
+    whole_text=tokenizer.decode(graphs[0]['nodes'][0]['token_ids'],skip_special_tokens=False)
+    assert 'trailing tool' in whole_text and 'trailing user DUPLICATE_REASONING' in whole_text
+    for ordinal, graph in aux_by_ordinal.items():
+        text=tokenizer.decode(graph['nodes'][0]['token_ids'],skip_special_tokens=False)
+        assert text.count('DUPLICATE_REASONING') >= 1
+        assert graph['nodes'][0]['target_weights'][-1] > 0
 
 
 def test_failure_is_never_positive_sft():

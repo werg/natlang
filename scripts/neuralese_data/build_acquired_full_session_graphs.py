@@ -10,7 +10,8 @@ from transformers import AutoTokenizer
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
 from natlang_neuralese.common.jsonio import open_jsonl_text, write_json_durable
 from natlang_neuralese.data.native_graph_conversion import text_row_graph, whole_trajectory_text_row_graph
-from natlang_neuralese.data.text_corpus import native_gold_document, native_gold_packet, tokenizer_fingerprint
+from natlang_neuralese.data.text_corpus import (native_gold_document, native_gold_packet,
+    native_gold_rendered_text, tokenizer_fingerprint)
 from scripts.neuralese_data.build_native_graph_text_corpus import GraphWriter
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import provision
 from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
@@ -38,13 +39,16 @@ def held_session_targets(value, held_sources):
 
 
 def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint, split):
-    """No window limit; auxiliary targets recover earlier reasoning per template."""
+    """Keep the full session and add packets only for reasoning hidden by serving."""
     if (value.get('schema') != 'natlang.normalized-agent-trajectory/1'
             or value.get('whole_trajectory') is not True or value.get('windowed') is not False):
         raise ValueError('expected a complete normalized source session')
     trajectory = value['trajectory']
     if value.get('positive_candidate') is not True or trajectory['outcome'].get('label') == 'failed':
         raise ValueError('non-positive source session is not positive SFT')
+    from natlang_neuralese.serve.chat import bind_history_reasoning
+    bind_history_reasoning(tokenizer)
+    history_policy = tokenizer.natlang_history_reasoning['policy']
     messages = []
     for original in trajectory['messages']:
         item = dict(original)
@@ -63,6 +67,31 @@ def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint
     text, ids = native_gold_document(tokenizer, messages[:-1], messages[-1], trajectory.get('tools'))
     whole = {**common, 'id': identifier, 'supervision': 'whole-trajectory', 'text': text, 'token_ids': ids}
     graph = whole_trajectory_text_row_graph(whole, **convert)
+    # Probe the actual full-conversation template one message at a time. A unique
+    # sentinel travels in the original reasoning field, so duplicate text in a
+    # user/system/tool message cannot make an omitted assistant turn look covered.
+    # This render-only pass uses the same serving path as native_gold_document.
+    probe_messages = [dict(message) for message in messages]
+    sentinels = {}
+    original_render = json.dumps(messages, ensure_ascii=False, sort_keys=True)
+    for ordinal, index in enumerate(assistants):
+        reasoning = messages[index].get('reasoning_content')
+        if not isinstance(reasoning, str) or not reasoning:
+            continue
+        sentinel = 'NATLANG_REASONING_COVERAGE_' + canonical_json_sha256_hex(
+            [occurrence, index, reasoning]) + '_END'
+        if sentinel in original_render or sentinel in sentinels.values():
+            raise ValueError('reasoning coverage sentinel collides with source content')
+        probe_messages[index]['reasoning_content'] = sentinel
+        sentinels[ordinal] = sentinel
+    probed_text = native_gold_rendered_text(tokenizer, probe_messages, trajectory.get('tools'))
+    reasoning_coverage = {str(ordinal): {'present_in_whole_view': probed_text.count(sentinel) == 1,
+        'sentinel_occurrences': probed_text.count(sentinel)} for ordinal, sentinel in sentinels.items()}
+    if any(item['sentinel_occurrences'] > 1 for item in reasoning_coverage.values()):
+        raise ValueError('a source reasoning sentinel rendered more than once')
+    auxiliary_reasoning_ordinals = [ordinal for ordinal, item in reasoning_coverage.items()
+        if not item['present_in_whole_view']]
+    auxiliary_reasoning_ordinals = [int(ordinal) for ordinal in auxiliary_reasoning_ordinals]
     provenance = {'normalized_session_sha256': canonical_json_sha256_hex(value),
         'original_source_row': value['source_row'], 'original_target_ids': source_target_ids(value),
         'original_source_file': value['source_file'], 'source_revision': value['source_revision'],
@@ -70,18 +99,26 @@ def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint
         'original_messages': len(messages), 'original_assistant_turns': len(assistants),
         'admission_class': 'source-curated-third-party-SFT', 'oracle_verified': False,
         'native_execution_verified': False, 'observed_actor_state_exchange': False,
-        'history_reasoning': tokenizer.natlang_history_reasoning, 'truncated': False}
+        'history_reasoning': tokenizer.natlang_history_reasoning,
+        'reasoning_coverage_probe': 'per-assistant-unique-sentinel/full-serving-render/1',
+        'reasoning_coverage': reasoning_coverage,
+        'whole_view_reasoning_assistant_ordinals': [ordinal for ordinal, index in enumerate(assistants)
+            if messages[index].get('reasoning_content') and ordinal not in auxiliary_reasoning_ordinals],
+        'auxiliary_reasoning_assistant_ordinals': auxiliary_reasoning_ordinals,
+        'truncated': False}
     graph['conversion']['acquired_session'] = {**provenance, 'view': 'whole-trajectory'}
     yield graph
     for ordinal, index in enumerate(assistants):
-        if not messages[index].get('reasoning_content'):
+        if ordinal not in auxiliary_reasoning_ordinals:
             continue
         text, ids, boundary = native_gold_packet(tokenizer, messages[:index], messages[index], trajectory.get('tools'))
         row = {**common, 'id': identifier + ':reasoning-turn:' + str(ordinal),
                'text': text, 'token_ids': ids, 'supervised_suffix_start': boundary}
         graph = text_row_graph(row, **convert)
         graph['conversion']['acquired_session'] = {**provenance,
-            'view': 'full-prefix-reasoning-target', 'assistant_turn': ordinal}
+            'view': 'full-prefix-reasoning-target', 'assistant_turn': ordinal,
+            'whole_view_reasoning_coverage': reasoning_coverage[str(ordinal)],
+            'history_reasoning_policy': history_policy}
         yield graph
 
 
@@ -149,10 +186,14 @@ def main():
                     counts[reason] += 1
                     continue
                 split = 'test' if groups & held else 'train'
-                for graph in session_graphs(value, tokenizer, source_fingerprint=source_fp,
-                        expanded_fingerprint=expanded_fp, split=split):
+                rendered = session_graphs(value, tokenizer, source_fingerprint=source_fp,
+                        expanded_fingerprint=expanded_fp, split=split)
+                for graph in rendered:
                     writers[split].write(graph)
                     counts['graphs:'+split] += 1
+                    if (graph.get('conversion', {}).get('acquired_session', {}).get('view')
+                            == 'full-prefix-reasoning-target'):
+                        counts['auxiliary_reasoning_graphs:'+split] += 1
                 counts['positive_sessions'] += 1
         outputs = [writer.finish() for writer in writers.values()]
     except BaseException:
