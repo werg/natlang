@@ -400,13 +400,17 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None,
                 if graph_classes is not None:
                     name = graph_classes[example.id]
                     sums = classes.setdefault(name, {'loss_sum': 0., 'correct_sum': 0., 'weight': 0.,
-                        'graphs': 0, 'supervised_tokens': 0, 'forward_tokens': 0})
+                        'graphs': 0, 'supervised_tokens': 0, 'forward_tokens': 0,
+                        'boundaries': {token: dict.fromkeys(values, 0.) for token, values in boundary_sums.items()}})
                     sums['loss_sum'] += float(loss) * weight
                     sums['correct_sum'] += detail['accuracy'] * weight
                     sums['weight'] += weight
                     sums['graphs'] += 1
                     sums['supervised_tokens'] += detail['supervised_tokens']
                     sums['forward_tokens'] += example.plan.token_count
+                    for token, values in detail['boundary_sums'].items():
+                        for key, value in values.items():
+                            sums['boundaries'][token][key] += value
                 total_loss += float(loss) * weight
                 total_correct += detail['accuracy'] * weight
                 total_weight += weight
@@ -417,15 +421,17 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None,
         model.train(previous_mode)
     if not math.isfinite(total_loss) or total_weight <= 0:
         raise FloatingPointError('native held evaluation is nonfinite or empty')
-    boundaries = {token: {**sums, 'count': int(sums['count']),
+    def summarize_boundaries(values):
+        return {token: {**sums, 'count': int(sums['count']),
         'mean_nll': sums['nll_sum']/sums['weight'] if sums['weight'] else None,
         'weighted_accuracy': sums['correct_weight']/sums['weight'] if sums['weight'] else None,
         'mean_probability': sums['probability_sum']/sums['weight'] if sums['weight'] else None}
-        for token, sums in boundary_sums.items()}
+        for token, sums in values.items()}
+    boundaries = summarize_boundaries(boundary_sums)
     return {'loss': total_loss / total_weight, 'weighted_accuracy': total_correct / total_weight,
             'weight': total_weight, 'supervised_tokens': total_tokens, 'examples': total_graphs,
             'forward_tokens': forward_tokens, 'boundaries': boundaries,
-            'classes': {name: {**sums, 'loss': sums['loss_sum']/sums['weight'] if sums['weight'] else None,
+            'classes': {name: {**sums, 'boundaries': summarize_boundaries(sums['boundaries']), 'loss': sums['loss_sum']/sums['weight'] if sums['weight'] else None,
                 'weighted_accuracy': sums['correct_sum']/sums['weight'] if sums['weight'] else None}
                 for name, sums in classes.items()}}
 
