@@ -1,23 +1,126 @@
-# CoreWeave supervision — 2026-10-15 23:35 UTC
+# CoreWeave supervision — 2026-10-16 00:16 UTC
 
-DGX owns all execution; Pop closed. Exactly two students plus self-hosted stronger Qwen teacher, no further allocations. Goal is comprehensive adaptive training of both models; retain optimizer/RNG and valid row exposure, original 26,312-graph foundation fixed, later data and ordinary CE mandatory through shared/RL refresh.
+DGX owns all operations; Pop closed. Exactly two student sandboxes and one
+stronger self-hosted Qwen teacher. Comprehensive adaptive training of both
+models remains the objective. Preserve optimizer/RNG and actual row exposure.
+Original 26,312 train / 9,896 held communication foundation stays fixed; later
+communication refresh and ordinary-data exposure remain mandatory.
 
-23:25 UTC: urgent source IO/V6 cutover completed with both actual resumed optimizer updates on Git runtime a62ce17581bc7bce06640e6f4db8e39ac7252cbc (cf7 arithmetic and admission policy retained; shared stream cursors and safe stop fixed). LFM final parent3480 SHA2c9a60e02ef56a9d93106a1e09c5f9e37b9b4971210e45e0cf744cc0d636dd60/2068263175B; actual child426522 restored and completed3555/loss.16054/5984 supervisedTPS at23:25UTC. After55updates and checkpoint3500 process reads3.26GB; old reader accumulated1.43TB. Not disk-byte or long-window TPS claim. New train count253046 LFM after8639 QwenV6 append. M final parent3208 verified47802833765B SHA72a1d82ff284929250ac5c1b31f448ccfbe5a60c1da9152882d3a8261c3e3073; full optimizer/RNG verified. New actual child254204/recipe254145 launched23:20:29; actual3212/loss.11287/4426 supervisedTPS at23:25:05UTC. Both optimizers now confirmed advancing on253046/253047 train rows. Routine task cadence LFasync/M5000, held/checkpoint250 plus3600s; exact-current foundation/refresh/final checks remain. All sparse masters FP32; effective rates still3e-6 pending complete named-rate capability. Prefix sharing OFF, current expert arithmetic BF16 invariant.
+## Training and scheduling
 
-Source continuation initially failed safely before stopping because continued held predecessor referred two handoffs back. Corrected both train and held predecessors to actual active bindings; both hot prewarm and live guards passed. All old credits retained. Do not relax identity guards or repeat full validation unnecessarily.
+Both students resumed on runtime `69c888c682bc`, retaining cf7 admission and
+arithmetic bytes, with named optimizer state and learned-row rate support.
+Actual live sources: LFM 787,449 / Mellum 787,450 train, 15,827 held, including
+57,144 genuine communication graphs. This appends 19,801 Big2 and 514,602
+view-qualified evidence rows after the exact prior prefix. QwenV6 was already
+active. Availability and source admission are distinct from completed exposure.
 
-QwenV6 admitted da9771b3a,8639train/model0held, manifest33be5afd6adad81c94f11040052f87202a75cd96b2aca2fb95c279a2799540f8; both staged SHA/size verified. Big2 disjoint1000 chains admitted4a39a97d9:9556/826 ordinary train/held and10245/909 paired/model; both cloud staged12artifacts bundle35e5babc5f4add35e52947fcb0d56c9a638db454553f966767818a21267d0439, not yet active exposure. Next5000chain interval61000:66000 reserved and extracting; combined6000exclusion preserves durable3500cloudchains80605edges and4workers. Cloud whole Big2 builder23:02:3300chains75986edges, source cursor10.804GB/185.637GB. Dolci322/644shards progressing. Teacher batch12 healthy23:21:2083finished1883success36semantic158invalid6budget,~7inflight3826queued,GPU96%90.6GB. Generation continues independently of student fixes.
+Handoff proof at 23:58 UTC: LFM parent3874 SHA3b2b7e2b…d4bfae6,
+recipe438352/trainer438363; actual3878, loss.18859, 5,061 supervisedTPS,
+peak17.44GB/GPU100%. Batch target65,536, complete oversized graphs retained.
+LFM learned row LR.003/backbone3e-6 verified from actual groups and nonzero FP32
+updates (all1,024 reasoning-row coordinates changed). Mellum parent3341
+SHA846d1110…094c5, recipe261085/trainer261187; actual3400, loss.15122,
+4,544 supervisedTPS, peak64.10GB/GPU100%. Mellum inherited3e-6, batch32,768.
+Exact identities and restore proof:
+`/home/werg/data/dgxops/coreweave-rates-live-proof-20261016.json`.
+These are health/update observations, not controlled throughput or task gains.
 
-Semantic expandedv2 admitted b076317df:57144train11278held, exact old46899/10369 compressed prefix; original26312/9896 unchanged. Root deployment15876fda3 now explicitly binds separate initial curriculum and expanded refresh;13tests+quick passed. Actual initial cloud26312 was verified correct, not silently expanded. Expandedv2 staged, controller rebind completed23:29:12, supervisor256669 atreadiness-supervisor-4820-source-stream-v6-refresh-v2-20261016. First26312/9896 exact and separate57144/11278 refresh verified;0ready/nojointchild. Metadata builder15876, readiness runtime4820.
+Last saved original-foundation exposure: LFM3874=6,038/26,312;
+Mellum3341=4,404/26,312. Ask cloud for actual coverage rate/ETA and check sampler
+weights so newly added ordinary views do not drown communication coverage.
+Routine task cadence LFasync/M5000; held/checkpoint250 plus3600s fallback;
+exact-current foundation/refresh/final checks remain. Prefix sharing OFF.
+Actual production experts remain BF16 despite the historical backend label.
 
-Full source index inventory both ports: only17048 FULL/header duplicate IDs, all differing bindings; every train/held group intersection across22views is zero. Earlier held/held overlap warning was explicitly retracted. FULL derived source admitted b3c821e45 with deterministic view-qualified IDs, all17048rows/model independently compared non-ID identical, crosswalk receipts and disjoint indexed IDs. Manifestc5d9b50343b464af8aeb10593fbacc1f92802d8c7787cd7d3a78ab59e9c70819; proofc1dabbc9aa8699e68917139d69b8dc9ab36ad892f4e0acb50a5a6b3a3213aaeb. Coordinate cloud before using original/derived so no credit reset/replay. Large338989header and158565whole views retained/staged; not trained. Whole CPU prewarms both completed with exact cf7 admission policy. HeaderV2 references originalV1 datafiles: retain those required files.
+Controller rebind terminalPASS00:05:46: supervisor266342 at
+`/work/native-production/shared/deployment/readiness-supervisor-69c-all-views-rates-refresh-v2-20261016`.
+Builderbcf9 supports new rate schema; waiter69c monitors currentv1 receipts and
+named state. Initial26,312 SHA6ec7db… and separate expanded57,144 SHAf50eaf…
+verified. Full current-main execution closure is staged on both, with new-policy
+CPU index prewarm1880 in progress. Before foundation, adopt matching SFT emitter,
+verifier and semantic/RL runtime together: old4820 cannot restore split named
+optimizer groups. No model ready, no joint child, no trainedVAE/lift claim.
 
-Diverse sparse-rate diagnostic from exact LF2000:32distinct train graphs16protected held controls,16updates preserving moments/RNG. Final ordinary/communication held CE baseline .434922/.450897; sparse.0003 .424869/.438445; sparse.003 .387543/.386023. Eight untouched Qwen TRAIN-source controls thinking open .0004219→.9896,close .0005439→.432 for.003; not protected task quality. Root selected .003 for next LFM production candidate, not yet applied. Reviewer feature integrated/pushed410afdb26, preserving source-stream helper and backend qualifier.60focused+6actual NGC CUDA+validator checks passed; root114 integrated source/backend/recipe/named-state tests and quick passed. Exact named slots correct historical split-group positional ambiguity and in-backward stale group hooks. Cloud authorized LFM .003 at next useful Big2 append continuation; M mechanism shared with inherited rate unchanged. Both models use same capability; M rate/quality requires actual parent monitoring.
+Readiness fix76014f35f distinguishes accounted execution from result exports in
+v2 receipts: known task failures remain failures but no longer masquerade as
+infrastructure gaps. Recompute proof from exact score bytes/case outcomes and
+current identity; v1 behavior unchanged. Integrated67tests and final18tests,
+quick and independent review passed. Adopt with complete82e0445c0 collector and
+37029f801 current-record terminal-error binding; unbound errors stay unresolved.
+Held-boundary telemetryc4326d7a0 reuses existing CE/readout, no extra forward.
 
-HOLD01541e856 scorer alone; fail-closed guard integrated37029f801: independent review found unsuffixed error artifacts currently lack source/record digest binding despite index/ID/SHA match. Guard23focusedtests and quick passed. Full collector/queue repair82e0445c0 now published: same source snapshot parsed/hashed at CLI, same error bytes hashed/parsed, current source+record checked before attestation. Root50queue/scorer tests+actualNode terminal/spoof+build+quick passed. Legacy unbound native errors stay unresolved. The separate LF3000 report verifies artifactSHA/content and isolated run paths, but is diagnostic, not immutable-record qualification. Original reports unchanged. Initial root01541e856 scorer classifies only exact manifest-bound single-job native termination errors with recorded SHA: request ceiling inside producer→budget_exhaustion; sampled EOS inside producer→model_incomplete. Unknown/mixed errors unresolved, transport precedence.17focusedtests+quick pass. Separate artifact-SHA-verified historical LF3000 reclassification:1success5semantic5incomplete5budget0unresolved. Original reports unchanged; not current-weight qualification, exported results remain incomplete. Private proof /home/werg/data/dgxops/lfm3000-native-terminal-reclassification-20261016.json. First diagnostic script included already-budget case in unresolved count and rejected itself; corrected to skip explicit existing limits, then passed. Initial test interpreter lacked torch; rerun correct neuralese environment passed.
+Guarded target backend runtimef2348dee2 is staged, not active. Mellum guardian
+266868/prewarm266867 waits committedcheckpoint>=3500, then qualifies actual
+restored parent before any SGD with forward1e-4/gradient1e-5, current-bf16-dX
+and actual execution counters. Failure resumes69c with exact saved state and
+recipe unchanged. Pass permits guarded continuation. No target FP8 qualification
+claim yet; do not substitute local primitive tests for this proof.
 
-Optional BF16 incoming adjoint main464621f04, unchanged default FP8dX;22actual CUDA/backend+6update/resume tests and quick pass, fullshape oracle error .001677 versus.025109 with~22.7% primitive cost, not fullTPS/task gain. Parent-bound backend qualification helper da3097ea4 and integrated52tests pass. Still needs cloud SM120/NGC2.14 actualparent qualification before enablement. Prefix LFM strict local pass but H100 parent not qualified; M actual full forward bitwise, gradients fail at BF16 fan-in plus FP8adjoint quantization; stays OFF.
+## Data and generation
 
-Both private exporters fullGET/SHA verified (LF3250 SHAe31c3059…2ba7d, M3000 SHA9ab1a8f0f4c31d5430933ced0c3ff6809216eb87c3b530a021c1e17f8cb7e21d/47802833061B). No47GB local M download. Async evaluator active, LF3000 finished23:06. Standing fullsuite bdadc5a203 GREEN includingGPU/TS; suite7422c09a78 fully GREEN including493s TS tests; next single suiteafb97fe793 active, no duplicate. Full checks pending are never reported passed. Disk73GiB NVMe/67GiB external. Completed diagnostic checkpoint only reclaimed2029333909B; LF2000 retained for current rate work. Inbox ACK23:23, next by00:13UTC. Owner untracked expansion-plan file never staged.
+All evidence views now active, including derivedFULL17,048/model (b3c821e45,
+manifestc5d9b503…70819) and header338,989 / whole158,565. All22-view group
+intersections are zero; earlier held/held warning retracted. DerivedFULL keeps
+all non-ID fields with immutable crosswalk; do not replay originalFULL under a
+second identity. HeaderV2 depends on V1 datafiles: keep required files.
 
-Publishedc4326d7a0 boundary telemetry reuses existing held graph forward/readout and weights, reporting per-role/reasoning-token support/NLL/gold probability/accuracy with absent support null.49focused tests+quick and independent inspection passed; no sampled closure or task-lift claim. Cloud can adopt at useful boundary without holding rate/Big2 release. Operational69c888c68 branch prepared froma62 with complete named-rate/backend helper,7admission files and all arithmetic bytes unchanged;59focused+quick passed, staging. Root rate candidate .003LF unchanged backbone, M inherited unchanged. Reviewer now implementing remaining native adapter service gap comprehensively in isolated WT; unadvertised until actual both-port generation/scoring/gradient/durability validation and independent review. Current production runtime unaffected.
+Search/OWL admitted40,818 cases /658,396 decisions was absent from the active
+recipe. Exact protection prep completed:164 immutable turn shards+164 indexes,
+zero quality/pending program intersections, zero current decision-hold IDs.
+Proof `runs/search-owl-native-text-20261016-v1/source-protection-preparation.json`.
+Initial render filled51,337,396,628B raw selection scratch before compression.
+Stopped exact unit before disk exhaustion, verified no selection checkpoint,
+removed only incomplete scratch and recovered NVMe71GiB. Sources/protection and
+exact launch binding preserved. Fix3781f6eca streams zstd from first selected
+byte;24focused+quick passed. Data agent relaunches with32GB initial ledger claim
+for128 shard writers, measures actual peak, keeps2 rendering workers. Restart
+`searchowl-native-render-20261016-v3.service` is live, output
+`runs/search-owl-native-render-20261016-v2`. No giant
+raw intermediate. Search/OWL graphs are not yet admitted or trained.
+
+Search/OWL7,002 over-cap omissions (7,001 unique IDs) remain repair work, not
+invalid data: historical120,000-character evidence cap. Full raw19,843,676,176B
+source is on cloud; recover paged/full contexts with provenance. Big2 disjoint
+next5,000 chains[61,000:66,000] extraction completed00:03:56,55,808 edges;
+7.35GB record bundle packing/ferry in progress, no conversion/exposure claim.
+Existing disjoint1,000-chain continuation is active. Dolci331/644 at00:00UTC,
+processes progressing. Cloud-front Big2 durable3,500 chains80,605 edges retained.
+
+Curateds52110–12 were admitted but absent from actual active indexes. PH1,282
+train graphs/model now parsed/registeredc897c3b96, manifest7c47aedb…7d97,
+validationc581a134…6cf6. Queued cloud safe append, not yet active exposure.
+WT743/model is separate conversion debt; use current shared role-weight converter
+and immutable source/protection closure, no dependency on an irrelevant new flag.
+
+Teacher measured00:11–14 window: GPUmean92.7%, median97%, range72–99,
+3–4 running requests+2–5 queued at serverC4, decode250.6/log310.7TPS,
+actualKV3–4%, Mamba50–67%, GPU90.6GB, host~10GB. Eight collectors keep it fed;
+more would only queue. Batch12 latest2,249finished/2,021success/3,826queued;
+continuous verified Qwen generation continues. Proof
+`/home/werg/data/dgxops/coreweave-teacher-capacity-window-20261016.json`.
+
+## Shared implementation and validation
+
+78ff21303 explicit target holds preserve full recovery context and zero held
+assistant loss. Dedup exclusions keep their original meaning. Every member
+answer/ordinal and split/full-group provenance is authenticated; positive source
+bindings must name successful unheld spans. Independent review found and fixed
+prefix-only false-credit and mixed-group gaps before publish.56focused+quick and
+both pinned-tokenizer actual render/conversion paths passed. No model prompt
+change; unmasked rows retain prior behavior.
+
+11fa82aff native inference adapter lifecycle independently reviewed and merged:
+shared functional tiny/XS coefficient substitution, exact effective actor/state
+identity, graph gradients/SGD+Adam continuation, generation/scoring, cache
+isolation, complete Node/File/Memory archive+portable.nz dependencies. Reviewer
+realCUDA/referenceadjoint tests passed. Root canonical build+20integration tests
+passed39.20s; initial3failures were staleTSdist, rebuilt correctly. Higher-order,
+adapted-policyRL and legacy export remain explicit gaps, not completion claims.
+Reviewer now implements exact adapter-aware actor capture/replay, then addresses
+heterogeneous per-call bindings without recursive graph replay shortcuts.
+
+Standing full suiteafb97fe793 terminalGREEN includingGPU/TS; singlebcf9fb1d1
+suite active, newer commits queued automatically. No duplicate broad suite.
+All probes/tests/data use memory ledger. Current disk71GiB NVMe/67GiB external.
+InboxACK00:11UTC; next by01:01UTC. Owner untracked expansion plan never staged.
