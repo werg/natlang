@@ -33,3 +33,12 @@ collection or relabel the raw source. Existing canonical layouts keep their
 parent-directory lookup. Validation and emitted graph provenance use the same
 join. Malformed, missing and cross-packet bindings fail explicitly. This admits
 verified continuation layouts without moving their original response files.
+
+Continuation receipts keep their actual `continuation/1` schema. Authenticate
+their exact original collection, queue, drain frontier, serving actor and
+execution-identity artifacts through the immutable transfer inventory. The
+original selected packet and source indices/seeds remain bound; the current
+teacher/runtime remains the continuation's own identity. Original collection
+receipts supplied only as parent evidence are not new response collections.
+This extends the same exact source verifier, without relabeling a continuation
+as a fresh collection or granting training credit to interrupted work.

@@ -486,3 +486,95 @@ def test_fresh_authored_packet_rejects_incomplete_or_forged_witnesses(tmp_path,m
     refs={name:{'path':str(path),'sha256':converter.sha256_file(path)} for name,path in paths.items()}
     with pytest.raises(ValueError,match='fresh authored'):
         converter.packet_binding(tmp_path,refs)
+
+
+def continuation_fixture(tmp_path, schema='natlang.sandbox-strong-teacher-continuation/1'):
+    parent={'schema':'natlang.sandbox-strong-teacher-collection/1',
+            'source_cases_sha256':'c'*64,'protected_selection':{'selected_ids':['task']},'seed_base':31,
+            'teacher':{'checkpoint':'original'}}
+    collection={**parent,'schema':schema,'teacher':{'checkpoint':'current'},
+                'source_indices_seeds_preserved':True,'entries':2}
+    transferred={}
+    for name in ('original_source','original_queue','drain_frontier','actor','actual_teacher_execution_identity'):
+        path=tmp_path/(name+'.json')
+        path.write_text(json.dumps(parent if name=='original_source' else {'fixture':name}))
+        reference={'path':'/remote/'+name+'.json','sha256':converter.sha256_file(path),'bytes':path.stat().st_size}
+        collection[name]=reference
+        transferred[reference['path']]=[{**reference,'source':reference['path'],'path':str(path)}]
+    execution=collection['actual_teacher_execution_identity']
+    path=Path(transferred[execution['path']][0]['path'])
+    path.write_text(json.dumps({'actor':collection['actor']}))
+    execution.update(sha256=converter.sha256_file(path),bytes=path.stat().st_size)
+    transferred[execution['path']][0].update(sha256=execution['sha256'],bytes=execution['bytes'])
+    return collection,transferred
+
+
+@pytest.mark.parametrize('schema',['natlang.sandbox-strong-teacher-continuation/1',
+                                   'natlang.sandbox-strong-teacher-collection/1'])
+def test_continuation_keeps_its_actual_actor_and_all_exact_parent_inputs(tmp_path,schema):
+    collection,transferred=continuation_fixture(tmp_path,schema)
+    before=copy.deepcopy(collection)
+    proofs=converter.collection_provenance(collection,transferred)
+    assert set(proofs)=={'original_source','original_queue','drain_frontier','actor','actual_teacher_execution_identity'}
+    assert collection==before and collection['teacher']['checkpoint']=='current'
+
+
+@pytest.mark.parametrize('name',['original_source','original_queue','drain_frontier','actor','actual_teacher_execution_identity'])
+def test_continuation_rejects_missing_or_changed_provenance(tmp_path,name):
+    collection,transferred=continuation_fixture(tmp_path)
+    missing={key:value for key,value in transferred.items() if key!=collection[name]['path']}
+    with pytest.raises(ValueError,match='not transferred'):
+        converter.collection_provenance(collection,missing)
+    Path(transferred[collection[name]['path']][0]['path']).write_text('changed')
+    with pytest.raises(ValueError,match='provenance differs'):
+        converter.collection_provenance(collection,transferred)
+
+
+@pytest.mark.parametrize('mutation',[{'source_indices_seeds_preserved':False},
+    {'source_cases_sha256':'f'*64},{'seed_base':32},{'entries':0}])
+def test_continuation_cannot_reinterpret_source_or_seed_preservation(tmp_path,mutation):
+    collection,transferred=continuation_fixture(tmp_path)
+    collection.update(mutation)
+    with pytest.raises(ValueError,match='source or seed contract'):
+        converter.collection_provenance(collection,transferred)
+
+
+def test_continuation_cannot_pair_an_unrelated_valid_actor_descriptor(tmp_path):
+    collection,transferred=continuation_fixture(tmp_path)
+    reference=collection['actual_teacher_execution_identity']
+    item=transferred[reference['path']][0];path=Path(item['path'])
+    path.write_text(json.dumps({'actor':{**collection['actor'],'sha256':'0'*64}}))
+    reference.update(sha256=converter.sha256_file(path),bytes=path.stat().st_size)
+    item.update(sha256=reference['sha256'],bytes=reference['bytes'])
+    with pytest.raises(ValueError,match='different actor'):
+        converter.collection_provenance(collection,transferred)
+
+
+def test_continuation_parent_is_evidence_not_an_unmapped_response_collection(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    collection,transferred=continuation_fixture(tmp_path)
+    old=collection['original_source']['path']; new='/remote/original/teacher-source.json'
+    collection['original_source']['path']=new
+    transferred[new]=transferred.pop(old)
+    for item in transferred[new]:item['source']=new
+    collection['teacher']={'teacher_role':'independent stronger open teacher; not either student/onpolicy',
+                           'checkpoint':'current'}
+    path=tmp_path/'teacher-source.json';path.write_text(json.dumps(collection))
+    source=tmp_path/'rows.jsonl';source.write_text('{}\n')
+    remote='/remote/continued/teacher-source.json'
+    files=[item for copies in transferred.values() for item in copies]
+    files.append({'path':str(path),'source':remote,'sha256':converter.sha256_file(path),'bytes':path.stat().st_size})
+    transfer={'schema':'natlang.verified-teacher-trajectory-transfer/1','training_admission':False,
+              'combined':{'path':str(source),'sha256':converter.sha256_file(source),'bytes':source.stat().st_size},
+              'files':files}
+    (tmp_path/'transfer-receipt.json').write_text(json.dumps(transfer))
+    (tmp_path/'batch-source-bindings.json').write_text(json.dumps({
+        'schema':'natlang.teacher-batch-source-bindings/1','batches':[{'collection_source':remote}]}))
+    packet={'packet_sha256':collection['source_cases_sha256'],'selection':collection['protected_selection'],
+            'selected_ids':{'task'},'train_groups':{'train'},'held_groups':set(),'proofs':{}}
+    monkeypatch.setattr(converter,'packet_binding',lambda *args:packet)
+    monkeypatch.setattr(converter,'current_protection',lambda _: {})
+    result=converter.source_binding(SimpleNamespace(source=source,protection_manifest=tmp_path/'protection'))
+    assert set(result['collections'])=={remote}
+    assert len(result['collections'][remote]['continuation_proofs'])==5
+    assert result['teacher']==collection['teacher']

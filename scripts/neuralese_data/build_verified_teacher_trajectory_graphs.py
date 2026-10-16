@@ -195,6 +195,50 @@ def packet_binding(root, references):
             'proofs': {name: {'path': str(path), 'sha256': sha256_file(path)} for name, path in paths.items()}}
 
 
+def collection_provenance(collection, transferred, *, seen=()):
+    """Authenticate continuation inputs without changing their actor or schema."""
+    schema = collection.get('schema')
+    if schema not in {'natlang.sandbox-strong-teacher-collection/1',
+                       'natlang.sandbox-strong-teacher-continuation/1'}:
+        raise ValueError('collection receipt differs from supported collection/continuation schemas')
+    if schema.endswith('collection/1') and 'original_source' not in collection:
+        return {}
+    digest = canonical_json_sha256_hex(collection)
+    if digest in seen:
+        raise ValueError('teacher continuation parent cycle')
+    proofs = {}
+    for name in ('original_source', 'original_queue', 'drain_frontier', 'actor',
+                 'actual_teacher_execution_identity'):
+        reference = collection.get(name)
+        if (not isinstance(reference, dict) or not isinstance(reference.get('path'), str)
+                or not isinstance(reference.get('sha256'), str) or len(reference['sha256']) != 64
+                or type(reference.get('bytes')) is not int or reference['bytes'] < 1):
+            raise ValueError('teacher continuation lacks its exact ' + name + ' binding')
+        copies = transferred.get(reference['path'], [])
+        if not copies:
+            raise ValueError('teacher continuation provenance was not transferred: ' + name)
+        for item in copies:
+            local = Path(item['path'])
+            if (item.get('sha256') != reference['sha256'] or item.get('bytes') != reference['bytes']
+                    or local.stat().st_size != reference['bytes'] or sha256_file(local) != reference['sha256']):
+                raise ValueError('teacher continuation provenance differs from its exact ' + name)
+        proofs[name] = {'path': str(Path(copies[0]['path'])), 'sha256': reference['sha256'],
+                        'bytes': reference['bytes'], 'source': reference['path']}
+    execution = json.loads(Path(proofs['actual_teacher_execution_identity']['path']).read_text())
+    if not isinstance(execution, dict) or execution.get('actor') != collection['actor']:
+        raise ValueError('teacher continuation execution identity refers to a different actor')
+    parent = json.loads(Path(proofs['original_source']['path']).read_text())
+    if (parent.get('source_cases_sha256') != collection.get('source_cases_sha256')
+            or parent.get('protected_selection') != collection.get('protected_selection')
+            or collection.get('source_indices_seeds_preserved') is not True
+            or parent.get('seed_base') != collection.get('seed_base')
+            or type(collection.get('entries')) is not int or collection['entries'] < 1):
+        raise ValueError('teacher continuation changed its original selected source or seed contract')
+    for name, proof in collection_provenance(parent, transferred, seen=(*seen, digest)).items():
+        proofs['parent:' + name] = proof
+    return proofs
+
+
 def source_binding(args):
     root = args.source.parent
     batch_map = root / 'batch-source-bindings.json'
@@ -236,9 +280,14 @@ def source_binding(args):
     source_files = {item.get('row_id'): item for item in transfer.get('files', [])
                     if isinstance(item.get('row_id'), str)}
     collections = {}
+    transferred = {}
+    for item in transfer.get('files', []):
+        transferred.setdefault(item.get('source'), []).append(item)
     for item in transfer.get('files', []):
         if not str(item.get('source', '')).endswith('/teacher-source.json'):
             continue
+        if batch_map.exists() and item['source'] not in packets:
+            continue  # A referenced original receipt is evidence, not another response batch.
         local = Path(item['path'])
         if sha256_file(local) != item['sha256'] or local.stat().st_size != item['bytes']:
             raise ValueError('original collection receipt differs from its transfer binding')
@@ -254,14 +303,17 @@ def source_binding(args):
         if (not isinstance(teacher, dict) or teacher.get('teacher_role') !=
                 'independent stronger open teacher; not either student/onpolicy'):
             raise ValueError('collection does not identify an independent stronger teacher')
-        if (collection.get('schema') != 'natlang.sandbox-strong-teacher-collection/1'
-                or collection.get('source_cases_sha256') != packet['packet_sha256']
+        provenance = collection_provenance(collection, transferred)
+        if (collection.get('source_cases_sha256') != packet['packet_sha256']
                 or canonical_json_sha256_hex(collection.get('protected_selection')) != canonical_json_sha256_hex(packet['selection'])
                 or canonical_json_sha256_hex(collection.get('teacher')) != canonical_json_sha256_hex(teacher)):
             raise ValueError('collection receipt differs from selected tasks or actual stronger teacher')
         packets[item['source']] = packet
         collections[item['source']] = {'path': str(local), 'sha256': item['sha256'],
-                                      'packet_proofs': packet['proofs']}
+                                      'packet_proofs': packet['proofs'],
+                                      **({'continuation_proofs': provenance} if provenance else {})}
+        for name, proof in provenance.items():
+            proof_paths['collection:' + item['source'] + ':' + name] = Path(proof['path'])
     if not collections or set(packets) != set(collections):
         raise ValueError('teacher trajectories need complete immutable per-batch collection receipts')
     proof_sha = {name: sha256_file(path) for name, path in proof_paths.items()}
