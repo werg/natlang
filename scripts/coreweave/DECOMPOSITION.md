@@ -1,5 +1,27 @@
 # CoreWeave external-service mechanism
 
+## Continuous teacher batch closure (2026-10-16)
+
+`finishTeacherBatch(queue, journal, workerReturncodes, score)` returns a collection
+continuation receipt. Its declared policy is: keep the self-hosted stronger
+teacher supplied after accounted model failures; stop for missing collection
+results, broken transport or unbound errors. Preserve true outcomes and never
+turn collection completion into training admission.
+
+1. Match every distinct queue key to the collector's latest finish accounting.
+2. Accept the existing exact-result verifier's successful closure, regardless
+   of whether that model result passed its task.
+3. For model-request exhaustion, verify the actual typed error, saved error SHA,
+   job identity and source-bound manifest. Explicitly report legacy errors that
+   lack per-error source digests. They remain failures and are not admitted.
+4. Require score cardinality and recognized worker exits. Publish repair keys
+   for every unresolved case; advance only when every key is accounted for.
+
+The natural-language policy above is the operator's continuous-generation
+decision. `teacher_batch_completion.py` is its crisp verifier: SHA checks,
+identity joins and accounting arithmetic. It changes no model-facing wording,
+collector outcome, reward, training data or teacher allocation.
+
 Placement policy is the existing `applications/ops-placement/placeJob.nl`
 program, with its declared crisp alternative. Job declarations contain the
 policy's resource and storage decisions. This directory implements the external
