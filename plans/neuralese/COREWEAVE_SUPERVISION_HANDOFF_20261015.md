@@ -1,4 +1,57 @@
-# CoreWeave supervision — 2026-10-16 05:27 UTC
+# CoreWeave supervision — 2026-10-16 05:58 UTC
+
+## Current state; supersedes the earlier observations below
+
+- LF checkpoint5224 SHA4459907ba91fa45dda65b09d5370c5b6820dd649b3dfb57c932a35d3076d5976
+  is the current durable parent. Checkpointed CPU-input-offload recovery made six
+  updates, then hit the actual64GiB host cgroup limit; those uncommitted updates
+  must replay. No-offload recovery ACTUALLY reached5233 at05:52, GPU100%/~37.7GB.
+  Keep checkpoint_layers=true/inputoffload=false; no-checkpoint max graph OOMed.
+- M safely saved5385, SHA0d467f4c3249817e1b39795e24329fad3929f8b0c73b7136514ccd42052cea18,
+  48,041,003,941bytes,811971boundrows/16906completedvisits. Its attempted rollback
+  failed before SGD because continuation metadata still named V7 although the
+  checkpoint already includes V8. Cloud is binding the actual saved V8 source
+  as predecessor and restoring5385, not5000. cgroup oom_kill=0. Future safe stops
+  signal the recipe parent so it can forward and record interruption properly.
+- Shared optimizer fixcbcbb223b independently qualified67root tests+quick;
+  f1630b52d telemetry68root tests+quick. Native ordinary sparse rows/adapter now
+  AdamW, backbone MuonSR unchanged. Explicit native-ordinary-to-adamw-new-history-v1
+  migration preserves exact original Muon buffers/groups as provenance, weights,
+  RNG/exposure/unaffected state, and honestly starts new Adam moments/age atzero.
+  Both cloud compositions passed45focused+quick; next recovery deploys this fix.
+  Initial declared NN input/output rates.0003 forBOTH; LFreasoning.0003,
+  Mreasoning/backbone/adapter3e-6. These are adjustable operational choices, not
+  demonstrated optimal rates. Both future recipes noise1/native transporttrue.
+- M5001–5250 never had an ordinary-only streak longer thanone; that hypothesis
+  is ruled out for this interval. Actual FP32 updates occur, including inherited
+  Muon momentum on zero gradients. Routing correctness is not a task-lift claim.
+- Corrected native LF5000 task unit remains active. Five early completed cases
+  had semantic failures despite actual native writes (three also actual reads);
+  two returned a state reference as plain text. Native storage/import evidence
+  does not establish successful control read-out or downstream quality.
+- M24,556,281,665byte inference-only view fetch is advancing (~13GiB by05:57).
+  Shared resume verifier passed24root checks; private future-retry disk guard now
+  counts retained pending bytes. Do not restart the active useful fetch. Final
+  full SHA/base inventory/seal/queue admission still required; no M DGX run yet.
+- V13 ACTUALLY admitted1156train/model in d70605681; staging is separate from
+  exposure. Local D12 both-port conversion has ten complete pairs; source agent
+  is preparing a verified first complete cohort admission, not waiting D16/D18.
+- Search final-output forecast exceeds root capacity alongside the M ferry.
+  Data agent owns incremental SHA/size-verified relocation of the immutable128file
+  selection (11,587,363,760bytes) to external storage, retaining original paths
+  with per-file symlinks. Never remove source bytes before verifying their copy.
+- Standing fullf9c1b00d2e FAILED one real process-start identity race:2113Python
+  passes,15CUDA/2010TS/22conformance passes. Root reproduced25/100 transient
+  identity misses; exact retry repair passed11focused tests. Next standing full
+  must verify the integrated fix. Separate CPU fullcheck OOMed12GiB; focused16GB
+  CPU learning-file investigation progresses, not another broad rerun.
+- RootcoordACK05:53, nextdue06:43. Existing source workers, Qwen teacher queue,
+  private ferries/evaluators, storage and both learners require fresh checks.
+  Whole-foundation completion and useful cross-model readiness remain unclaimed.
+
+The following detail records earlier measurements and dependencies. Where a
+runtime, checkpoint, rate, queue count or check status conflicts, use the current
+state above and the live bound receipts, rather than these historical samples.
 
 DGX owns all execution; Pop closed. Exactly two student sandboxes and one
 self-hosted Qwen3.8-Flash-Next NVFP4 teacher. Comprehensive evolving production

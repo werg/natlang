@@ -372,7 +372,15 @@ def _launch_child(argv, kind, config, out, signature, rl_signature, *, semantic_
     except OSError:
         write_json_durable(path, {**launch, 'status': 'launch-failed'})
         raise
-    launch.update(status='running', identity=_owned_process_identity(child.pid, launch))
+    # Popen's exec handshake can finish while /proc still exposes a transient
+    # cmdline/environ view. Persisting that first miss loses the root identity
+    # needed to adopt a live child after controller restart. The durable launch
+    # token already exists, so interruption during this observation is safe.
+    identity = _owned_process_identity(child.pid, launch)
+    while identity is None and child.poll() is None:
+        time.sleep(.001)
+        identity = _owned_process_identity(child.pid, launch)
+    launch.update(status='running', identity=identity)
     write_json_durable(path, launch)
     return child, launch
 

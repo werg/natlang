@@ -92,6 +92,20 @@ per-row gradient/update norms and changed coordinates. Diagnose an unexpected
 zero update before attributing poor learning to the model. See
 `plans/neuralese/shared-state/REASONING_TOKEN_LEARNABILITY_20261015.md`.
 
+Native optimizer routing (engineering qualification, 2026-10-16): native
+ordinary parameters, including sparse vocabulary rows and the low-rank adapter,
+use AdamW; the backbone's declared MuonSR routing remains separate. Do not
+reclassify ordinary matrices into Muon by shape. Existing affected checkpoints
+require the explicit `native-ordinary-to-adamw-new-history-v1` migration:
+retain original numeric Muon buffers, groups and named bindings as transition
+provenance, preserve weights/RNG/exposure and unaffected optimizer history, and
+start the newly selected Adam algorithm with honestly new zero moments/age.
+Never fabricate historic Adam variance or silently reinterpret optimizer kinds.
+Monitor actual gold-boundary support, gradient/update directions and held task
+behavior; a routing bug alone does not establish the cause of every behavioral
+failure or an optimal learning rate. See
+`plans/neuralese/shared-state/NATIVE_OPTIMIZER_ROUTING_TRANSITION_20261016.md`.
+
 Owner correction, 2026-10-15: the lodestar is comprehensive training of BOTH
 models through the ENTIRE production recipe and all usable available data.
 Stages are steps to progress through, not endpoints. Half measures, short

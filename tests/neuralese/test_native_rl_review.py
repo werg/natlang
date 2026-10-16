@@ -86,6 +86,26 @@ def test_failed_child_retries_preserved_work_without_marking_success(tmp_path, m
     assert result['retry']['attempts'] == 1
 
 
+def test_child_launch_retries_transient_proc_identity_before_persisting(tmp_path, monkeypatch):
+    import sys
+    from natlang_neuralese.train import native_readiness as controller
+    actual = controller._owned_process_identity
+    reads = []
+    def transient(pid, launch, **kwargs):
+        reads.append(pid)
+        return None if len(reads) <= 2 else actual(pid, launch, **kwargs)
+    monkeypatch.setattr(controller, '_owned_process_identity', transient)
+    argv = [sys.executable, '-c', 'import time; time.sleep(300)']
+    child, launch = controller._launch_child(argv, 'native-semantic', {}, tmp_path, 'execution', None)
+    try:
+        assert len(reads) >= 3
+        assert launch['identity']['pid'] == child.pid
+        assert json.loads((tmp_path/'child-launch.json').read_text())['identity'] == launch['identity']
+        assert controller._recover_child(launch).pid == child.pid
+    finally:
+        child.terminate(); child.wait(timeout=5)
+
+
 def test_restart_adopts_exact_live_child_and_drains_without_duplicate_launch(tmp_path, monkeypatch):
     import sys
     from natlang_neuralese.train import native_readiness as controller, loop
