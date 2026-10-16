@@ -73,6 +73,8 @@ def main(argv=None,*,prepared=None):
     parser.add_argument('--export-receipt',required=True,type=Path)
     parser.add_argument('--base-tokenizer',required=True,type=Path)
     parser.add_argument('--protection',required=True,type=Path)
+    parser.add_argument('--source-closure-receipt',type=Path,
+        help='durable whole-source closure receipt; its bound inputs and current protections are rechecked')
     parser.add_argument('--decision-hold',required=True,action='append',type=Path)
     parser.add_argument('--output',required=True,type=Path)
     parser.add_argument('--chunk-pairs',type=int,default=100)
@@ -94,7 +96,11 @@ def convert(args,prepared):
     if export['outputs'][source.name]!=source_binding['sha256']:
         raise ValueError('offline normalized source changed from its export receipt')
     protection=current_protection(args.protection)
-    verify_global_source_closure(args.protection,protection)
+    closure_receipt = args.source_closure_receipt
+    if closure_receipt is None:
+        verify_global_source_closure(args.protection,protection)
+    else:
+        verify_global_source_closure(args.protection,protection,receipt_path=closure_receipt)
     projection=json.loads(args.protection.read_text())
     if not any(item['sha256']==sha256_file_hex(args.export_receipt)
                and item['source_sha256']==source_binding['sha256']
@@ -120,6 +126,8 @@ def convert(args,prepared):
         'prepared_tokenizer':prepared.binding,'runtime':_runtime(),
         'objective':{'kind':KIND,'beta':args.beta,'margin':args.margin},
         'chunk_pairs':args.chunk_pairs,'normalized_sessions':source_rows,'source_units':units}
+    if closure_receipt is not None:
+        binding['source_closure_receipt'] = _bound(closure_receipt)
     output=args.output;shard_root=output/'pair-shards'
     receipt_path=output/'receipt.json'
     if receipt_path.exists():
@@ -185,6 +193,9 @@ def convert(args,prepared):
             or load_decision_holds(holds)!=(decision_ids,decision_bindings)
             or sorted((ROOT/'training/decision-holds').glob('*.jsonl'))!=holds):
         raise ValueError('offline source/protection/holds changed during conversion')
+    if closure_receipt is not None:
+        verify_global_source_closure(args.protection,current_protection(args.protection),
+                                     receipt_path=closure_receipt)
     prepared.validate(args.base_tokenizer)
     all_rows={};outputs=[]
     for shard in shards:

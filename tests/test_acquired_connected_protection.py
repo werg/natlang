@@ -74,3 +74,27 @@ def test_publish_then_extend_without_original_normalized_text(tmp_path,monkeypat
     with pytest.raises(ValueError,match='immutable'):project(first,tmp_path/'extended',exports=[extra])
     component=second.parent/'inherited-components.jsonl';component.write_text('{}\n')
     with pytest.raises(ValueError,match='differs'):teacher.current_protection(second)
+
+
+def test_durable_source_closure_receipt_reuses_only_exact_current_inputs(tmp_path,monkeypatch):
+    original=base(tmp_path,monkeypatch)
+    first=project(original,tmp_path/'closed')
+    protected=teacher.current_protection(first)
+    receipt=tmp_path/'closure-receipt.json'
+    expected=verify_global_source_closure(first,protected,write_receipt_path=receipt)
+    assert verify_global_source_closure(first,protected,receipt_path=receipt)==expected
+    source=tmp_path/'sources'/'D16'/'one'/'full-trajectories.jsonl.zst'
+    with source.open('ab') as stream:stream.write(b'changed')
+    with pytest.raises(ValueError,match='immutable|input inventory'):
+        verify_global_source_closure(first,protected,receipt_path=receipt)
+
+
+def test_durable_source_closure_receipt_rejects_changed_current_hold_sets(tmp_path,monkeypatch):
+    original=base(tmp_path,monkeypatch)
+    first=project(original,tmp_path/'closed')
+    protected=teacher.current_protection(first)
+    receipt=tmp_path/'closure-receipt.json'
+    verify_global_source_closure(first,protected,write_receipt_path=receipt)
+    changed={**protected,'held':protected['held']|{'new-held'}}
+    with pytest.raises(ValueError,match='stale for current protection'):
+        verify_global_source_closure(first,changed,receipt_path=receipt)

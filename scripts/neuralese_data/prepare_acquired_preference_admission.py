@@ -32,7 +32,12 @@ def verify_conversion(directory,*,protection_path,base,prepared=None):
             or binding.get('runtime')!=_runtime()):
         raise ValueError('offline admission requires its exact qualified renderer and complete conversion receipt')
     protection=current_protection(protection_path)
-    verify_global_source_closure(protection_path,protection)
+    closure_binding=binding.get('source_closure_receipt')
+    closure_path=bound(closure_binding['path'],closure_binding) if closure_binding else None
+    if closure_path is None:
+        verify_global_source_closure(protection_path,protection)
+    else:
+        verify_global_source_closure(protection_path,protection,receipt_path=closure_path)
     if binding.get('protection')!=protection['proof']:
         raise ValueError('offline preference conversion uses different current source protection')
     holds=sorted((ROOT/'training/decision-holds').glob('*.jsonl'))

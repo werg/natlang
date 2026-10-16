@@ -95,16 +95,103 @@ def acquired_source_closure(path, protection):
     return accounting, closed, components
 
 
-def verify_global_source_closure(path, protection):
+SOURCE_CLOSURE_RECEIPT_SCHEMA = 'natlang.acquired-source-closure-receipt/1'
+
+
+def _source_closure_artifacts(path, manifest):
+    """Return the complete exact input closure, including per-directory inventories."""
+    path = Path(path).resolve(strict=True)
+    artifacts = {}
+
+    def add(candidate):
+        candidate = Path(candidate).resolve(strict=True)
+        artifacts[str(candidate)] = {'path': str(candidate), 'sha256': sha256_file_hex(candidate),
+                                     'bytes': candidate.stat().st_size}
+
+    for item in manifest.get('files', []):
+        add(bound(path.parent / item['path'], item))
+    inherited = manifest.get('inherited_source_components') or {}
+    for item in inherited.values():
+        add(bound(path.parent / item['path'], item))
+    bindings = manifest.get('normalized_export_bindings')
+    if not isinstance(bindings, list) or not bindings:
+        raise ValueError('acquired closure receipt needs the complete normalized export set')
+    directories = set()
+    for binding in bindings:
+        export_path = bound(binding['path'], binding)
+        export = json.loads(export_path.read_text())
+        source = bound(export_path.parent / 'full-trajectories.jsonl.zst',
+                       {'sha256': binding['source_sha256']})
+        if export.get('outputs', {}).get(source.name) != binding['source_sha256']:
+            raise ValueError('closure receipt source/export binding differs')
+        add(export_path); add(source)
+        directories.add(export_path.parent.parent.resolve(strict=True))
+    declared = set()
+    for directory in directories:
+        complete_path = directory / 'complete.json'
+        complete = json.loads(complete_path.read_text())
+        add(complete_path)
+        for item in complete.get('files', []):
+            if item.get('status') not in {'exported', 'reused'}:
+                continue
+            receipt = Path(item['receipt'])
+            if not receipt.is_absolute():
+                receipt = directory / receipt
+            declared.add(receipt.resolve(strict=True))
+    expected = {Path(item['path']).resolve(strict=True) for item in bindings}
+    if declared != expected:
+        raise ValueError('closure receipt does not cover each complete normalized export inventory')
+    return [artifacts[key] for key in sorted(artifacts)]
+
+
+def verify_global_source_closure(path, protection, *, receipt_path=None, write_receipt_path=None):
     """Reject direct-key protection that misses a transitive source sibling."""
+    manifest_path = Path(path).resolve(strict=True)
+    manifest = json.loads(manifest_path.read_text())
+    if receipt_path is not None and Path(receipt_path).exists():
+        receipt_path = Path(receipt_path).resolve(strict=True)
+        receipt = json.loads(receipt_path.read_text())
+        current_protection = {key: sorted(protection[key]) for key in ('held', 'quality', 'pending')}
+        if (receipt.get('schema') != SOURCE_CLOSURE_RECEIPT_SCHEMA
+                or receipt.get('manifest') != {'path': str(manifest_path),
+                    'sha256': sha256_file_hex(manifest_path), 'bytes': manifest_path.stat().st_size}
+                or receipt.get('protection') != current_protection
+                or receipt.get('protection_sha256') != canonical_json_sha256_hex(current_protection)
+                or receipt.get('verifier_sha256') != sha256_file_hex(__file__)):
+            raise ValueError('durable acquired-source closure receipt is stale for current protection or verifier')
+        artifacts = _source_closure_artifacts(manifest_path, manifest)
+        if artifacts != receipt.get('input_artifacts'):
+            raise ValueError('durable acquired-source closure input inventory changed')
+        accounting = receipt.get('accounting')
+        if (receipt.get('training_admission') is not False
+                or not isinstance(accounting, dict)
+                or accounting.get('normalized_export_bindings_sha256') != canonical_json_sha256_hex(manifest['normalized_export_bindings'])
+                or accounting.get('export_receipts') != len(manifest['normalized_export_bindings'])
+                or accounting.get('closed_group_counts') != {key: len(protection[key]) for key in ('held', 'quality', 'pending')}
+                or type(accounting.get('normalized_sessions')) is not int
+                or accounting['normalized_sessions'] < 1
+                or not isinstance(accounting.get('by_source'), dict)
+                or sum(accounting['by_source'].values()) != accounting['normalized_sessions']):
+            raise ValueError('durable acquired-source closure accounting is incomplete')
+        return accounting
     accounting, closed, components = acquired_source_closure(path, protection)
     if any(closed[key] != protection[key] for key in closed):
         raise ValueError('global acquired source protection lacks complete connected-group closure')
-    manifest = json.loads(Path(path).read_text())
     if manifest.get('source_group_components'):
         stored = [row['source_groups'] for row in sessions(Path(path).parent / manifest['source_group_components'])]
         if stored != components:
             raise ValueError('protected source component inventory differs from complete normalized sources')
+    if write_receipt_path is not None:
+        protection_binding = {key: sorted(protection[key]) for key in ('held', 'quality', 'pending')}
+        receipt = {'schema': SOURCE_CLOSURE_RECEIPT_SCHEMA,
+            'manifest': {'path': str(manifest_path), 'sha256': sha256_file_hex(manifest_path),
+                         'bytes': manifest_path.stat().st_size},
+            'protection': protection_binding,
+            'protection_sha256': canonical_json_sha256_hex(protection_binding),
+            'input_artifacts': _source_closure_artifacts(manifest_path, manifest),
+            'accounting': accounting, 'verifier_sha256': sha256_file_hex(__file__),
+            'training_admission': False}
+        write_json_durable(write_receipt_path, receipt)
     return accounting
 
 
