@@ -28,7 +28,7 @@ export type RecordedTurn = {
 };
 
 /** An adapter block bound for a call, with its scale (serve/grad.py, model/tiny_adapters.py). */
-export type AdapterBinding = { readonly id: string; readonly scale: number };
+export type AdapterBinding = { readonly id: string; readonly scale: number; readonly stop_gradient?:true };
 
 export interface TurnRecorder {
   record(turn: RecordedTurn): void;

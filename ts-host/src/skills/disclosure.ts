@@ -9,7 +9,7 @@
  *
  * The runtime decides where these strings go; this module only produces them.
  */
-import { neuraleseRef, neuraleseSentinel, type NeuraleseRef } from '../native/neuralese.js';
+import { neuraleseRef, neuraleseRefSentinel, type NeuraleseRef } from '../native/neuralese.js';
 import { formatType, parseType, TypeEnv, type Type } from '../native/types.js';
 import { coerce, Reject, type Value } from '../native/values.js';
 import { readSkillFile, type SkillSet } from './registry.js';
@@ -21,7 +21,7 @@ export const SKILL_READ_PREFIX = 'skills.';
 export function renderSkillListing(set: SkillSet, diagnostics: readonly SkillDiagnostic[] = []): string {
   if (!set.size && !diagnostics.length) return '';
   const semantic = (value: Skill['description']): string => typeof value === 'string'
-    ? value.replace(/\s+/g, ' ').trim() : neuraleseSentinel(value.$neuralese.id);
+    ? value.replace(/\s+/g, ' ').trim() : neuraleseRefSentinel(value);
   const lines = set.list().map(skill => `- ${skill.name}: ${semantic(skill.description)}` +
     (skill.summary !== undefined ? `\n  Summary: ${semantic(skill.summary)}` : '') +
     `\n  Read instructions: read_code("skills.${skill.name}")`);

@@ -13,8 +13,8 @@ import type {NativeStateDerivation} from '../native/native-derivative-contract.j
 export type NativeSourceCapture = { policy: { checkpoint_sha256: string; tokenizer_fingerprint: string;
   embedding_weight_sha256: string; architecture: string };
   segments: ({ kind: 'tokens'; token_ids: number[]; producing: boolean[] } |
-    { kind: 'native_state'; id: string; native_identity: Record<string, string>; adapter_state_consumption?: NativeAdapterStateConsumption;state_derivation?:NativeStateDerivation })[];
-  payload_start: number; payload_stop: number; imports?: { id: string; mode: string; observed_native_state_id?: string;
+    { kind: 'native_state'; id: string; native_identity: Record<string, string>; adapter_state_consumption?: NativeAdapterStateConsumption;state_derivation?:NativeStateDerivation;stop_gradient?:true })[];
+  payload_start: number; payload_stop: number; imports?: { id: string; mode: string; stop_gradient?:true; observed_native_state_id?: string;
     adapter_state_consumption?: NativeAdapterStateConsumption;state_derivation?:NativeStateDerivation;
     semantic_adaptation?: { adapter_sha256: string; source_native_identity: Record<string, string>; target_native_identity: Record<string, string> } }[] };
 export type NativeTextResult = { id: string; native_state: Record<string, unknown>; source_capture: NativeSourceCapture;

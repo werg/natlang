@@ -115,13 +115,13 @@ class GradSession:
         self.backbone, self.heads = engine.backbone, engine.heads
 
     # Sequences -----------------------------------------------------------------------------
-    def _items(self, segments, blocks: list[str], escape_nonce: str = "") -> list:
+    def _items(self, segments, blocks: list[str], escape_nonce: str = "",block_stop_gradients=None) -> list:
         items = []
         for segment in segments:
             if isinstance(segment, str):
                 items.extend(("tok", i) for i in self.engine._template_tokens(segment, escape_nonce))
             else:
-                items.append(("block", blocks[segment]))
+                items.append(("block_stop" if block_stop_gradients and block_stop_gradients[segment] else "block", blocks[segment]))
         return items
 
     def _target_items(self, messages, tools, target) -> tuple[list, list]:
@@ -137,8 +137,8 @@ class GradSession:
             return render_with_empty_thought(render, msgs) if thinking else render(msgs)
 
         full = engine.render_request(list(messages) + [target], tools, template=full_template)
-        before = self._items(prompt.segments, prompt.blocks, prompt.escape_nonce)
-        after = self._items(full.segments, full.blocks, full.escape_nonce)
+        before = self._items(prompt.segments, prompt.blocks, prompt.escape_nonce,prompt.block_stop_gradients)
+        after = self._items(full.segments, full.blocks, full.escape_nonce,full.block_stop_gradients)
         # The prompt is scored exactly as inference rendered it; the template may render earlier turns differently
         # once another assistant turn follows (it drops past reasoning), so the target is cut from the full rendering
         # after its own generation prefix rather than by matching the whole prompt.

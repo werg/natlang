@@ -79,9 +79,9 @@ export function scopeDeclarations(scope: EvalScopeDeclarations, iterationHelper?
   if (!named.has('decide')) lines.push('declare function decide<A extends unknown[], T>(fn: (...args: A) => Promise<T>, ...args: A): ' +
     'Promise<{ value: T; probabilities: { value: T; probability: number }[]; confidence: number; scored: boolean }>;');
   // The runtime writes a model-written Neuralese literal as this call; its contextual type types it.
-  lines.push(`declare function ${NEURALESE_LITERAL_INTRINSIC}<T>(id: string): T;`);
+  lines.push(`declare function ${NEURALESE_LITERAL_INTRINSIC}<T>(id: string, constant?: true): T;`);
   // ...and a model-written soft function body, the whole template of `nl.with({ … })`...``, as this one.
-  lines.push(`declare namespace ${NEURALESE_LITERAL_INTRINSIC} { function body(id: string): NeuraleseBody; }`);
+  lines.push(`declare namespace ${NEURALESE_LITERAL_INTRINSIC} { function body(id: string, constant?: true): NeuraleseBody; }`);
   return lines.join('\n') + '\n';
 }
 

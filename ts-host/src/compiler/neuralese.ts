@@ -18,7 +18,7 @@ export const NEURALESE_LITERAL_INTRINSIC = '__neuralese';
 export const DEFAULT_DIALECT = 'DefaultDialect';
 
 /** A model-written literal and the type its context gives it. */
-export type NeuraleseLiteral = SourceSpan & { id: string; type: string };
+export type NeuraleseLiteral = SourceSpan & { id: string; type: string; stopGradient?:true };
 /** A soft expression that JavaScript would otherwise coerce to text. */
 export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'array-string' | 'concat' | 'json' | 'error' | 'string-argument' | 'scalar-conversion' | 'string-replace' | 'array-map';
   argument?: number; conversion?: 'Number' | 'Boolean'; conditional?: true; callback?: { start: number; end: number } };
@@ -531,7 +531,8 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
   };
   const literal = (node: ts.CallExpression): void => {
     const argument = node.arguments[0];
-    if (node.arguments.length !== 1 || !argument || !ts.isStringLiteral(argument)) return;
+    if ((node.arguments.length!==1&&node.arguments.length!==2) || !argument || !ts.isStringLiteral(argument)||
+        node.arguments.length===2&&node.arguments[1]?.kind!==ts.SyntaxKind.TrueKeyword) return;
     // An async return position gives `T | PromiseLike<T>`: the one soft member is the literal's type.
     const contextual = checker.getContextualType(node);
     const members = !contextual ? [] : contextual.isUnion() ? contextual.types : [contextual];
@@ -544,7 +545,7 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     }
     const start = node.getStart(), position = file.getLineAndCharacterOfPosition(start);
     literals.push({ file: file.fileName, start, end: node.getEnd(), line: position.line + 1, column: position.character + 1,
-      id: argument.text, type: text });
+      id: argument.text, type: text,...(node.arguments.length===2?{stopGradient:true}:{}) });
   };
   planControlGuards(file);
   visit(file);

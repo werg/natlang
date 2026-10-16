@@ -356,3 +356,46 @@ for (const format of ['native_state', 'neuralese']) {
     assert.equal(invocation.lam.return.$neuralese.id, answer.id);
   });
 }
+
+test('per-use native constants survive parts, contextual coercion, eval and .nz soft bodies', async () => {
+  const { stopGradient } = await import('../dist/neuralese/learning.js');
+  const { neuraleseRefSentinel, soleSentinelUse } = await import('../dist/native/neuralese.js');
+  const { softFunction, softFunctionOf, save, nzExports, Context } = await import('../dist/runtime/contexts.js');
+  const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
+  const live = neuraleseRef('Neuralese<string>', artifact.id), constant = stopGradient(live);
+  assert.equal(live.$neuralese.stop_gradient, undefined);
+  assert.equal(constant.$neuralese.stop_gradient, true);
+  const marker = neuraleseRefSentinel(constant);
+  assert.deepEqual(soleSentinelUse(marker), {id:artifact.id,stop_gradient:true});
+  assert.deepEqual(textToParts(marker), [{type:'native_state',id:artifact.id,stop_gradient:true}]);
+  assert.equal(partsToText(textToParts(marker)), marker);
+  assert.equal(coerce(marker,parseType('Neuralese<string>'),envFor(runtimeFor(store))).$neuralese.stop_gradient,true);
+  assert.equal(sourceWithLiteralCalls(`return ${marker};`),`return __neuralese(${JSON.stringify(artifact.id)}, true);`);
+  assert.equal(sourceWithLiteralCalls('`'+marker+'`'),'`${__neuralese.body('+JSON.stringify(artifact.id)+', true)}`');
+  assert.notEqual(Context.empty().with({memo:live}).id,Context.empty().with({memo:constant}).id);
+  const fn = softFunction({type:'() => string',body:constant});
+  assert.equal(softFunctionOf(fn).bodyStopGradient,true);
+  const wire = await save({memo:constant,fn},{store,dialect:'native-state/fixture'});
+  const loaded = await loadNz(wire), exports = nzExports(loaded);
+  assert.equal(exports.memo.$neuralese.stop_gradient,true);
+  assert.equal(softFunctionOf(exports.fn).bodyStopGradient,true);
+  assert.equal(exports.memo.$neuralese.id,live.$neuralese.id);
+});
+
+test('agent request and graph preserve a native constant use without changing the artifact', async () => {
+  const { stopGradient } = await import('../dist/neuralese/learning.js');
+  const store = new MemoryNeuraleseStore(), artifact = await store.putNativeState(nativeStateFixture());
+  const constant=stopGradient(neuraleseRef('Neuralese<string>',artifact.id));
+  const neuralese=runtimeFor(store), parent=open({type:'(memo: Neuralese<string>) => string',instructions:'Use the memo.',
+    args:{memo:constant}},{neuralese}).session;
+  let uses=[];
+  const consume=Object.assign(async request=>{
+    uses=request.messages.flatMap(message=>Array.isArray(message.content)?message.content:[]).filter(part=>part.type==='native_state');
+    return {calls:[['return_result',{status:'success',value:'done'}]]};
+  },{neuralese:true});
+  await new NativeToolAgent(consume,{maxTurns:2,neuralese}).run(parent);
+  assert.equal(uses.length,1);assert.deepEqual(uses[0],{type:'native_state',id:artifact.id,stop_gradient:true});
+  const reads=parent.runtime.trace.events.filter(event=>event.kind==='block_read');
+  assert.equal(reads.length,1);assert.equal(reads[0].stop_gradient,true);
+  assert.equal((await store.getNativeState(artifact.id)).id,artifact.id);
+});

@@ -1,7 +1,7 @@
 import { checkHost, DEFAULT_DIALECT, fitsType, formatType, isAdapterType, parseType, TypeEnv } from './types.js';
 import type { Type } from './types.js';
 import { FileHandle, Folder, FolderHandle, type FolderTransaction } from './scoped-fs.js';
-import { isNeuraleseRef, neuraleseRef, soleSentinel, isContentParts, partsToText } from './neuralese.js';
+import { isNeuraleseRef, neuraleseRef, soleSentinelUse, isContentParts, partsToText } from './neuralese.js';
 import { isFusedRef } from './fusion-blocks.js';
 
 export const MISSING = Symbol('natlang-missing');
@@ -178,9 +178,9 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
   // A soft value is a reference to a stored block; its payload is never inspected here. A literal written into a tool
   // argument (return_result's value) arrives as one block marker and takes the slot's type.
   if (wanted.kind === 'neuralese') {
-    const sole = typeof raw === 'string' ? soleSentinel(raw) :
-      isContentParts(raw) && raw.some(part => part.type !== 'text') ? soleSentinel(partsToText(raw)) : undefined;
-    if (sole) { checkBlockDialect(sole, wanted, env, path); return neuraleseRef(formatType(wanted), sole) as unknown as Value; }
+    const sole = typeof raw === 'string' ? soleSentinelUse(raw) :
+      isContentParts(raw) && raw.some(part => part.type !== 'text') ? soleSentinelUse(partsToText(raw)) : undefined;
+    if (sole) { checkBlockDialect(sole.id, wanted, env, path); return neuraleseRef(formatType(wanted), sole.id,sole.stop_gradient) as unknown as Value; }
     if (!isNeuraleseRef(raw)) return reject(path, 'type-mismatch', formatType(wanted), preview(raw));
     let got: Type | undefined;
     try { got = parseType(raw.$neuralese.type); } catch { got = undefined; }
@@ -209,9 +209,9 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
     return reject(path, 'type-mismatch', formatType(type), preview(raw));
   }
   if (isContentParts(raw) && raw.some(part => part.type !== 'text')) {
-    const sole = soleSentinel(partsToText(raw));
+    const sole = soleSentinelUse(partsToText(raw));
     if (wanted.kind === 'prim' && wanted.name === 'unknown' && sole)
-      return neuraleseRef('Neuralese<unknown>', sole) as unknown as Value;
+      return neuraleseRef('Neuralese<unknown>', sole.id,sole.stop_gradient) as unknown as Value;
     return reject(path, 'type-mismatch', formatType(wanted), preview(raw));
   }
   if (wanted.kind === 'prim') {

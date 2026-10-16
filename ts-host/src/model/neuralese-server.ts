@@ -336,8 +336,10 @@ function materializeNativeStateSentinels(value: unknown, key?: string): unknown 
     return value.flatMap(part => part.type === 'text' ? runtimeTextToParts(part.text) : [part]);
   if (Array.isArray(value)) return value.map(item => materializeNativeStateSentinels(item));
   if (value && typeof value === 'object') {
-    const part = value as { type?: unknown; id?: unknown };
-    if (part.type === 'native_state' && isNativeStateId(part.id)) return [{ type: 'native_state', id: part.id }];
+    const part = value as { type?: unknown; id?: unknown;stop_gradient?:unknown };
+    if (part.type === 'native_state' && part.stop_gradient !== undefined && part.stop_gradient !== true) throw new TypeError('native state constant-use metadata must be true or absent');
+    if (part.type === 'native_state' && isNativeStateId(part.id)) return [{ type: 'native_state', id: part.id,
+      ...(part.stop_gradient===true?{stop_gradient:true}:{}) }];
     return Object.fromEntries(Object.entries(value).map(([name, item]) =>
       [name, materializeNativeStateSentinels(item, name)]));
   }

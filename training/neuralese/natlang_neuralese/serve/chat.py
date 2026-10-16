@@ -60,6 +60,7 @@ class Rendered:
     blocks: list[str]  # legacy or native state IDs in order of appearance
     escape_nonce: str = ""
     block_kinds: list[str] | None = None
+    block_stop_gradients: list[bool] | None = None
 
 
 def escape_specials(text: str, specials, nonce: str = "") -> str:
@@ -151,6 +152,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
     """
     blocks: list[str] = []
     block_kinds: list[str] = []
+    block_stop_gradients: list[bool] = []
     value_types, native_values = {}, set()
     # An input cannot manufacture our internal placeholders. Choose a nonce
     # absent from every supplied string; private-use characters remain ordinary text.
@@ -174,10 +176,13 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
                     raise RequestError("neuralese-native-state-unavailable", "this server is not serving native shared state")
                 if not isinstance(block_id, str) or not block_id.startswith(prefix):
                     raise RequestError("neuralese-bad-part", f"invalid {kind} part {part!r}")
+                if 'stop_gradient' in part and (kind!='native_state' or part['stop_gradient'] is not True):
+                    raise RequestError('neuralese-bad-part','stop_gradient must be true on an actual native-state reference use')
                 out.append(f"{input_prefix}{len(blocks)}{_PH_CLOSE}")
                 value_types[len(blocks)] = part.get("value_type") or (block_type(block_id) if block_type and kind == "neuralese" else None)
                 blocks.append(block_id)
                 block_kinds.append(kind)
+                block_stop_gradients.append(part.get('stop_gradient',False))
         return "".join(out)
 
     plain = []
@@ -236,7 +241,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
     seen = sorted(s for s in segments if isinstance(s, int))
     if seen != list(range(len(blocks))):
         raise RequestError("neuralese-render", "the chat template dropped or duplicated a block")
-    return Rendered(segments, blocks, nonce, block_kinds)
+    return Rendered(segments, blocks, nonce, block_kinds,block_stop_gradients)
 
 
 _VALUE = "natlangValue7f3a9c"  # printable, so no template escapes it; stands for a call argument's value while the template renders the call

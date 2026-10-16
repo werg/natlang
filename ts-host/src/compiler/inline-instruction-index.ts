@@ -1,3 +1,4 @@
+import { neuraleseSentinel } from '../native/neuralese.js';
 import { hexDigest } from '../native/hash.js';
 import { nativeDecisionTargetDigest, validNativeDecisionApproval } from '../native/decision-review.js';
 import { canonical, fingerprint } from '../adaptation/identity.js';
@@ -133,7 +134,7 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
       const holes = site.interpolations;
       const captures = Array.isArray(site.captures) ? site.captures : undefined;
       const loweredBodyHole = mappedSoftBody && Array.isArray(holes) && holes.length === 1 &&
-        asDict(holes[0])?.expression === `__neuralese.body(${JSON.stringify(bodyId)})`;
+        asDict(holes[0])?.expression === `__neuralese.body(${JSON.stringify(bodyId)}${site.soft_body_stop_gradient ? ", true" : ""})`;
       if (!Array.isArray(segments) || segments.length !== 1 || typeof segments[0] !== 'string' ||
           !Array.isArray(holes) || (holes.length !== 0 && !loweredBodyHole)) {
         hold(row, 'unsupported-interpolation'); continue;
@@ -229,7 +230,7 @@ export function buildInlineInstructionIndex(records: readonly unknown[]): Inline
         const markerBody = `<|neuralese|>${String(site.raw_body_source)}<|/neuralese|>`;
         const markers = [...code.matchAll(/<\|neuralese\|>([\s\S]*?)<\|\/neuralese\|>/g)];
         const normalized = markers.length === 1 && markers[0]![0] === markerBody ?
-          code.replace(markerBody, `${bodyId}`) : undefined;
+          code.replace(markerBody, neuraleseSentinel(bodyId, site.soft_body_stop_gradient === true)) : undefined;
         const actualArgs = asDict(asDict(call.outcome)?.arguments);
         if (normalized && hexDigest(normalized) === origin.writtenCodeSha256 && actualArgs &&
             stable(actualArgs) === stable({ ...args, code: normalized }) &&
@@ -382,12 +383,12 @@ function attestSnapshotBody(site: Dict, code: string, span: { start: number; end
   const bodyHash = bodyId ? stringAt(site, 'raw_body_source_sha256') : typeof bodySource === 'string' ? hexDigest(bodySource) : undefined;
   if (!bodySource || bodyHash !== hexDigest(bodySource) || /[\\`]|\$\{/.test(bodySource))
     return { valid: false, reason: 'soft-body-source-invalid-or-escaped' };
-  const bodyCodeSource = bodyId ? `${bodyId}` : bodySource;
+  const bodyCodeSource = bodyId ? neuraleseSentinel(bodyId, site.soft_body_stop_gradient === true) : bodySource;
   if (!validTemplateSource(code, span, bodyCodeSource)) return { valid: false, reason: 'template-span-or-cooked-text-mismatch' };
   const checkedCode = desugarNlCalls(sourceWithLiteralCalls(code));
   const checkedSpan = asDict(site.checked_template_span);
   const checkedStart = Number(checkedSpan?.start), checkedEnd = Number(checkedSpan?.end);
-  const expectedCheckedTemplate = bodyId ? `\`\${__neuralese.body(${JSON.stringify(bodyId)})}\`` : code.slice(span.start, span.end);
+  const expectedCheckedTemplate = bodyId ? `\`\${__neuralese.body(${JSON.stringify(bodyId)}${site.soft_body_stop_gradient ? ", true" : ""})}\`` : code.slice(span.start, span.end);
   if (hexDigest(checkedCode) !== stringAt(asDict(site.origin), 'checkedCodeSha256') ||
       !Number.isSafeInteger(checkedStart) || !Number.isSafeInteger(checkedEnd) ||
       checkedCode.slice(checkedStart, checkedEnd) !== expectedCheckedTemplate)

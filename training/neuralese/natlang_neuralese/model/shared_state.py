@@ -709,10 +709,12 @@ def validate_native_state_layout(port, block):
             raise ValueError('native state convolution channels disagree with the consumer')
 
 
-def splice_block(model, cache, block, *, checkpoint_sha256, tokenizer_fingerprint, embedding_weight_sha256):
+def splice_block(model, cache, block, *, checkpoint_sha256, tokenizer_fingerprint, embedding_weight_sha256, stop_gradient=False):
     """Append a verified native block with consumer-local positional encoding."""
     from .lfm2_port import PortCache, ConvState, append_kv
     block.validate()
+    if type(stop_gradient) is not bool:
+        raise ValueError('native state stop_gradient must be boolean')
     for field, expected in (('checkpoint_sha256', checkpoint_sha256),
                             ('tokenizer_fingerprint', tokenizer_fingerprint),
                             ('embedding_weight_sha256', embedding_weight_sha256)):
@@ -731,6 +733,8 @@ def splice_block(model, cache, block, *, checkpoint_sha256, tokenizer_fingerprin
     positions = torch.arange(start, start+count, device=port.embedding_weight.device)
     states = []
     for i, payload in enumerate(block.layers):
+        if stop_gradient:
+            payload = {name: value.detach() if isinstance(value, torch.Tensor) else value for name, value in payload.items()}
         previous = cache.states[i]
         if port.is_attention(i):
             if payload['kind'] != 'attention':

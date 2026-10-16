@@ -384,7 +384,7 @@ export async function withAdapters<T>(adapters: AdapterUse | readonly AdapterUse
   const bindings = (Array.isArray(adapters) ? adapters : [adapters]).map((item: AdapterUse): AdapterBinding => {
     const ref = isNeuraleseRef(item) ? item : item.adapter;
     if (!isNeuraleseRef(ref)) throw new LearningError('learning-adapter', 'withAdapters takes adapter values');
-    return { id: ref.$neuralese.id, scale: isNeuraleseRef(item) ? 1 : item.scale ?? 1 };
+    return { id: ref.$neuralese.id, scale: isNeuraleseRef(item) ? 1 : item.scale ?? 1, ...(ref.$neuralese.stop_gradient ? {stop_gradient:true} : {}) };
   });
   return adapterScope.run([...(adapterScope.getStore() ?? []), ...bindings], fn);
 }
@@ -412,7 +412,7 @@ const stopped = new WeakSet<object>();
 /** `v` as a constant: its Neuralese values receive no gradient. */
 export function stopGradient<T>(v: T): T {
   const copy = (value: unknown): unknown => {
-    if (isNeuraleseRef(value)) { const ref = neuraleseRef(value.$neuralese.type, value.$neuralese.id); stopped.add(ref); return ref; }
+    if (isNeuraleseRef(value)) { const ref = neuraleseRef(value.$neuralese.type, value.$neuralese.id,true); stopped.add(ref); return ref; }
     if (Array.isArray(value)) return value.map(copy);
     if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)
       return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, copy(item)]));
@@ -483,7 +483,7 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
     Promise<{ loss: Loss; grad: Gradient<A> }> {
   if (order !== undefined && order !== 1 && order !== 2)
     throw new LearningError('neuralese-grad-unavailable', 'gradients of order 1 or 2');
-  const leaves = softLeaves(a).filter(ref => !stopped.has(ref));
+  const leaves = softLeaves(a).filter(ref => !stopped.has(ref)&&!ref.$neuralese.stop_gradient);
   const arguments_ = [...new Set(leaves.map(ref => ref.$neuralese.id))];
   const rec = new Recorder();
   // An inner first-order gradient's own inner computations are constants to it: they are not recorded.
@@ -513,7 +513,7 @@ async function evaluate<A>(service: LearningService, f: (a: A) => Promise<Loss>,
   const gradients = (result.gradients ?? {}) as Record<string, string>;
   outer?.push({ kind: 'grad', arguments: arguments_, terms: loss.terms, ...(producers.length ? { producers } : {}), gradients,
     ...(nativeTurns.length?{native_turns:nativeTurns,native_graph_nodes:nativeGraphNodes}:{}) });
-  const grad = mapLeaves(a, (ref): GradientEntry => stopped.has(ref) || !gradients[ref.$neuralese.id] ? null :
+  const grad = mapLeaves(a, (ref): GradientEntry => stopped.has(ref) || ref.$neuralese.stop_gradient || !gradients[ref.$neuralese.id] ? null :
     { $gradientBlock: { id: gradients[ref.$neuralese.id]!, of: ref.$neuralese.id, type: ref.$neuralese.type } });
   return { loss, grad: { $gradient: grad } as Gradient<A> };
 }

@@ -24,7 +24,7 @@ import { UntrustedRegistry, containsUntrusted, hostUntrusted, scopedUntrusted } 
 import type { InlineLambdaPlan, NatlangDiagnostic } from '../compiler/inline.js';
 import { NEURALESE_TYPE_DOCUMENTATION } from '../compiler/intrinsics.js';
 import { desugarNlCalls } from '../compiler/nl-call.js';
-import { dialectBinding, isNeuraleseRef, neuraleseRef, NeuraleseUnsupportedError, sourceWithLiteralCalls,
+import { dialectBinding, isNeuraleseRef, neuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, sourceWithLiteralCalls,
   type NeuraleseRuntimeOptions } from './neuralese.js';
 import { blockInput, FILE_CONTEXT, graphNode, invocationNodeId, valueInputs } from './graph.js';
 import { canGenerateNl, currentFrame, racedCalls, runInFrame, type Frame } from '../runtime/context.js';
@@ -1922,11 +1922,11 @@ export class NativeSession {
     if (compiled.ok) {
       const turn = [...this.runtime.trace.events].reverse().find(event => event.kind === 'model_turn')?.node as string | undefined;
       for (const literal of compiled.literals ?? []) graphNode(this.runtime.trace, 'literal', { call_id: this.runtime.options.runId,
-        block: literal.id, type: literal.type, expression: `__neuralese(${JSON.stringify(literal.id)})` },
+        block: literal.id, type: literal.type, expression: `__neuralese(${JSON.stringify(literal.id)}${literal.stopGradient ? ", true" : ""})` },
         [blockInput(literal.id, 'block'), ...(turn ? [{ node: turn, port: 'turn' }] : [])]);
       for (const plan of compiled.plans ?? []) if (plan.softBody) graphNode(this.runtime.trace, 'literal', { call_id: this.runtime.options.runId,
         block: plan.softBody, type: `Neuralese<(${plan.parameters.map(item => `${item.name}: ${item.type.natlang ?? item.type.text}`).join(', ')}) => ${plan.returns.natlang ?? plan.returns.text}>`,
-        expression: `__neuralese.body(${JSON.stringify(plan.softBody)})`,
+        expression: `__neuralese.body(${JSON.stringify(plan.softBody)}${plan.softBodyStopGradient ? ", true" : ""})`,
         captures: plan.captures.filter(capture => !capture.shadowedByParameter).map(capture => capture.name),
         shadowed_capture_initializers: plan.captures.filter(capture => capture.shadowedByParameter)
           .map(({ name, mode }) => ({ name, mode: mode ?? 'snapshot' })) },
@@ -1948,7 +1948,7 @@ export class NativeSession {
       ...(() => {
         const bodyPlan = plans.find(plan => plan.softBody);
         if (!bodyPlan?.softBody) return {};
-        const literal = `\`\uE000${bodyPlan.softBody}\uE001\``;
+        const literal = `\`${neuraleseSentinel(bodyPlan.softBody, bodyPlan.softBodyStopGradient)}\``;
         const start = written.indexOf(literal);
         return start >= 0 && written.indexOf(literal, start + 1) < 0 ?
           { sourceTemplateSpan: { start, end: start + literal.length } } : {};

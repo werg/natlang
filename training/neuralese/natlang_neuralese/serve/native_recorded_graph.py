@@ -76,10 +76,12 @@ def authenticated_turns(turns, events):
         capture = native.get('sampling' if kind == 'generation' else 'decision')
         if not isinstance(capture, dict) or kind == 'decision' and capture.get('schema') != 'natlang.native-decision-capture/1':
             raise ValueError('native recorded turn lacks its actual capture kind')
+        from ..rl.episode_graph import validate_import_gradient_uses
         captured_reads = [segment.get('id') for segment in capture.get('prompt',[])
                           if segment.get('kind')=='native_state']
         if len(set(captured_reads)) != len(captured_reads) or set(captured_reads) != read_ids:
             raise ValueError('native recorded imports need exact occurrence-matched state; decoded/reencoded inputs require explicit differentiable lowering')
+        validate_import_gradient_uses(name, capture, nodes)
         captured_writes = [write.get('state_id') for write in capture.get('writes',[])]
         if len(set(captured_writes)) != len(captured_writes) or set(captured_writes) != set(writes):
             raise ValueError('native recorded writes differ from actual captured producer artifacts')

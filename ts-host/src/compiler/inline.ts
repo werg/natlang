@@ -66,6 +66,7 @@ export type InlineLambdaPlan = {
   explicitCaptures?: true;
   /** A soft function literal: the template is one model-written Neuralese block, this block ID. */
   softBody?: string;
+  softBodyStopGradient?:true;
   inheritedCodebaseRevision: string;
 };
 
@@ -99,7 +100,13 @@ export function softBodyOf(template: ts.TemplateLiteral): string | undefined {
   const callee = expression.expression;
   const [argument] = expression.arguments;
   return ts.isIdentifier(callee.expression) && callee.expression.text === '__neuralese' && callee.name.text === 'body' &&
-    expression.arguments.length === 1 && argument && ts.isStringLiteralLike(argument) ? argument.text : undefined;
+    (expression.arguments.length===1||expression.arguments.length===2&&expression.arguments[1]?.kind===ts.SyntaxKind.TrueKeyword) &&
+    argument && ts.isStringLiteralLike(argument) ? argument.text : undefined;
+}
+
+function softBodyIsConstant(template:ts.TemplateLiteral):boolean {
+  if(!softBodyOf(template)||!ts.isTemplateExpression(template))return false;
+  return (template.templateSpans[0]!.expression as ts.CallExpression).arguments.length===2;
 }
 
 /** The `nl.with(…)` call when a tagged template's tag is one. */
@@ -715,7 +722,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
         templateEnd: template.getEnd(), expressions: [], visibleBindings: [...listed].sort(), slotBindings: [] } : undefined;
       plans.push({ sourceSpan, templateSpan, interpolations, definitionId, ...(adaptation ? { adaptation } : {}), strings: softBody ? [''] : strings, instructions: softBody ? '' : strings.join('${…}'),
         parameters: parameterTargets, ...(signature.open ? { openParameters: true } : {}), returns, captures, explicitCaptures: true,
-        ...(softBody ? { softBody } : {}), inheritedCodebaseRevision: options.codebaseRevision ?? '' });
+        ...(softBody ? { softBody,...(softBodyIsConstant(template)?{softBodyStopGradient:true as const}:{}) } : {}), inheritedCodebaseRevision: options.codebaseRevision ?? '' });
       return;
     }
     const candidates = new Map<string, ts.Symbol>();

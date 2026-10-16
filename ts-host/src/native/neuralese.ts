@@ -19,10 +19,10 @@ export const NEURALESE_OPEN = '<|neuralese|>';
 export const NEURALESE_CLOSE = '<|/neuralese|>';
 
 /** Reference form of a soft value. */
-export type NeuraleseRef = { readonly $neuralese: { readonly type: string; readonly id: string } };
+export type NeuraleseRef = { readonly $neuralese: { readonly type: string; readonly id: string; readonly stop_gradient?: true } };
 export type NeuraleseTextPart = { type: 'text'; text: string };
 export type NeuraleseContentPart = { type: 'neuralese'; id: string };
-export type NativeStateContentPart = { type: 'native_state'; id: string };
+export type NativeStateContentPart = { type: 'native_state'; id: string; stop_gradient?: true };
 export type ContentPart = NeuraleseTextPart | NeuraleseContentPart | NativeStateContentPart;
 export type RuntimeContentPart = ContentPart;
 
@@ -35,15 +35,15 @@ const NATIVE_TENSOR_ID = /^nnt1_[a-z2-7]{52}$/;
 export function isNativeTensorArtifactId(value: unknown): value is string {
   return typeof value === 'string' && NATIVE_TENSOR_ID.test(value);
 }
-const NATIVE_SENTINEL = /(nzs1_[a-z2-7]{52})/g;
+const NATIVE_SENTINEL = /(nzs1_[a-z2-7]{52})(!)?/g;
 
 export function isNativeStateId(value: unknown): value is string {
   return typeof value === 'string' && NATIVE_STATE_ID.test(value);
 }
 
-export function nativeStateSentinel(id: string): string {
+export function nativeStateSentinel(id: string, stopGradient = false): string {
   if (!isNativeStateId(id)) throw new TypeError(`not a native-state block ID: ${JSON.stringify(id)}`);
-  return `${NATIVE_SENTINEL_OPEN}${id}${NATIVE_SENTINEL_CLOSE}`;
+  return `${NATIVE_SENTINEL_OPEN}${id}${stopGradient ? '!' : ''}${NATIVE_SENTINEL_CLOSE}`;
 }
 
 export function nativeStateSentinelIds(text: string): string[] {
@@ -52,16 +52,16 @@ export function nativeStateSentinelIds(text: string): string[] {
 
 export function runtimePartsToText(parts: readonly RuntimeContentPart[]): string {
   return parts.map(part => part.type === 'text' ? part.text :
-    part.type === 'neuralese' ? neuraleseSentinel(part.id) : nativeStateSentinel(part.id)).join('');
+    part.type === 'neuralese' ? neuraleseSentinel(part.id) : nativeStateSentinel(part.id,part.stop_gradient)).join('');
 }
 
 export function runtimeTextToParts(text: string): RuntimeContentPart[] {
   const parts: RuntimeContentPart[] = [];
-  const markers = [...text.matchAll(/(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})/g)];
+  const markers = [...text.matchAll(/(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})(!)?/g)];
   let last = 0;
   for (const match of markers) {
     if (match.index! > last) parts.push({ type: 'text', text: text.slice(last, match.index) });
-    parts.push(match[1] ? { type: 'neuralese', id: match[1] } : { type: 'native_state', id: match[2]! });
+    parts.push(match[1] ? { type: 'neuralese', id: match[1] } : { type: 'native_state', id: match[2]!,...(match[3]?{stop_gradient:true}:{}) });
     last = match.index! + match[0].length;
   }
   if (last < text.length || !parts.length) parts.push({ type: 'text', text: text.slice(last) });
@@ -73,7 +73,7 @@ export function nativeStateTextToParts(text: string): RuntimeContentPart[] {
   let last = 0;
   for (const match of text.matchAll(NATIVE_SENTINEL)) {
     if (match.index! > last) parts.push({ type: 'text', text: text.slice(last, match.index) });
-    parts.push({ type: 'native_state', id: match[1]! });
+    parts.push({ type: 'native_state', id: match[1]!,...(match[2]?{stop_gradient:true}:{}) });
     last = match.index! + match[0].length;
   }
   if (last < text.length || !parts.length) parts.push({ type: 'text', text: text.slice(last) });
@@ -82,9 +82,9 @@ export function nativeStateTextToParts(text: string): RuntimeContentPart[] {
 
 export function isNeuraleseId(value: unknown): value is string { return typeof value === 'string' && (ID.test(value) || NATIVE_STATE_ID.test(value) || NATIVE_TENSOR_ID.test(value)); }
 
-export function neuraleseRef(type: string, id: string): NeuraleseRef {
+export function neuraleseRef(type: string, id: string, stopGradient = false): NeuraleseRef {
   if (!isNeuraleseId(id)) throw new TypeError(`not a Neuralese block ID: ${JSON.stringify(id)}`);
-  return Object.freeze({ $neuralese: Object.freeze({ type, id }) });
+  return Object.freeze({ $neuralese: Object.freeze({ type, id,...(stopGradient?{stop_gradient:true as const}:{}) }) });
 }
 
 export function isNeuraleseRef(value: unknown): value is NeuraleseRef {
@@ -93,26 +93,37 @@ export function isNeuraleseRef(value: unknown): value is NeuraleseRef {
   if (keys.length !== 1 || keys[0] !== '$neuralese') return false;
   const body = (value as { $neuralese?: unknown }).$neuralese;
   return !!body && typeof body === 'object' && typeof (body as { type?: unknown }).type === 'string' &&
-    isNeuraleseId((body as { id?: unknown }).id) && Object.keys(body).every(key => key === 'type' || key === 'id');
+    isNeuraleseId((body as { id?: unknown }).id) &&
+    ((body as {stop_gradient?:unknown}).stop_gradient===undefined||(body as {stop_gradient?:unknown}).stop_gradient===true)&&
+    Object.keys(body).every(key => key === 'type' || key === 'id' || key === 'stop_gradient');
 }
 
 /** The conversation-text marker for a block. */
-export function neuraleseSentinel(id: string): string {
+export function neuraleseSentinel(id: string, stopGradient = false): string {
   if (isNativeTensorArtifactId(id)) throw new Error('neuralese-native-tensor-as-state: bind native adapters with withAdapters; named tensor artifacts cannot be consumed as communication state');
   if (!isNeuraleseId(id)) throw new TypeError(`not a Neuralese block ID: ${JSON.stringify(id)}`);
-  return isNativeStateId(id) ? nativeStateSentinel(id) : `${SENTINEL_OPEN}${id}${SENTINEL_CLOSE}`;
+  return isNativeStateId(id) ? nativeStateSentinel(id,stopGradient) : `${SENTINEL_OPEN}${id}${SENTINEL_CLOSE}`;
+}
+
+/** Per-use derivative metadata survives conversation plumbing, never model tokens. */
+export function neuraleseRefSentinel(ref:NeuraleseRef):string {
+  return neuraleseSentinel(ref.$neuralese.id,ref.$neuralese.stop_gradient);
 }
 
 /** The block a text consists of exactly, if it is one sentinel. */
 export function soleSentinel(text: string): string | undefined {
-  const match = /^(?:(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52}))$/.exec(text);
-  return match?.[1] ?? match?.[2];
+  return soleSentinelUse(text)?.id;
+}
+
+export function soleSentinelUse(text:string):{id:string;stop_gradient?:true}|undefined {
+  const match=/^(?:(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})(!)?)$/.exec(text);
+  return match?{id:match[1]??match[2]!,...(match[3]?{stop_gradient:true}:{})}:undefined;
 }
 
 export const hasNeuraleseSentinel = (text: string): boolean => text.includes(SENTINEL_OPEN) || text.includes(NATIVE_SENTINEL_OPEN);
 
 /** Block IDs a text refers to. */
-export function sentinelIds(text: string): string[] { return [...text.matchAll(/(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})/g)].map(match => match[1] ?? match[2]!); }
+export function sentinelIds(text: string): string[] { return [...text.matchAll(/(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})(!)?/g)].map(match => match[1] ?? match[2]!); }
 
 /** Conversation text to content parts: text runs and Neuralese blocks. */
 export function textToParts(text: string): ContentPart[] { return runtimeTextToParts(text); }
@@ -120,7 +131,7 @@ export function textToParts(text: string): ContentPart[] { return runtimeTextToP
 export const isContentParts = (value: unknown): value is ContentPart[] => Array.isArray(value) && value.length > 0 &&
   value.every(part => part && typeof part === 'object' && ((part.type === 'text' && typeof part.text === 'string') ||
     (part.type === 'neuralese' && isNeuraleseId(part.id)) ||
-    (part.type === 'native_state' && isNativeStateId(part.id))));
+    (part.type === 'native_state' && isNativeStateId(part.id) && (part.stop_gradient===undefined||part.stop_gradient===true))));
 
 /** Content parts to conversation text. */
 export function partsToText(parts: readonly ContentPart[]): string {
@@ -132,11 +143,11 @@ export function partsToText(parts: readonly ContentPart[]): string {
  * that is exactly one block is a soft function body, ``nl.with({ … })`${__neuralese.body("nz1_…")}` ``.
  */
 export function sourceWithLiteralCalls(code: string): string {
-  const pattern = /(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})/g;
+  const pattern = /(nz1_[a-z2-7]+)|(nzs1_[a-z2-7]{52})(!)?/g;
   const body = new RegExp('`(?:' + pattern.source + ')`', 'g');
-  return code.replace(body, (_, legacy: string, native: string) =>
-    `\`\${__neuralese.body(${JSON.stringify(legacy ?? native)})}\``)
-    .replace(pattern, (_, legacy: string, native: string) => `__neuralese(${JSON.stringify(legacy ?? native)})`);
+  return code.replace(body, (_, legacy: string, native: string,stop:string|undefined) =>
+    `\`\${__neuralese.body(${JSON.stringify(legacy ?? native)}${stop?', true':''})}\``)
+    .replace(pattern, (_, legacy: string, native: string,stop:string|undefined) => `__neuralese(${JSON.stringify(legacy ?? native)}${stop?', true':''})`);
 }
 
 /**

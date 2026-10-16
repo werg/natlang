@@ -87,12 +87,14 @@ def resolve_adapters(engine, entries, leaves=None):
     for entry in entries:
         if isinstance(entry, str):
             adapter_id, scale = entry, 1.
-        elif isinstance(entry, dict) and set(entry) <= {'id', 'scale'}:
+        elif isinstance(entry, dict) and set(entry) <= {'id', 'scale', 'stop_gradient'}:
             adapter_id, scale = entry.get('id'), entry.get('scale', 1.)
         else:
             raise ValueError('native adapters require an exact id and optional finite scale; projected codes are unsupported')
         if not isinstance(adapter_id, str) or type(scale) not in (int, float) or not math.isfinite(scale):
             raise ValueError('native adapter ID and scale are invalid')
+        if isinstance(entry, dict) and 'stop_gradient' in entry and entry['stop_gradient'] is not True:
+            raise ValueError('native adapter stop_gradient must be true or absent')
         record = engine.store.get_native_tensor_artifact(adapter_id)
         if record is None:
             raise ValueError(f'unknown native adapter {adapter_id}; restore its coefficients and basis first')
@@ -118,6 +120,8 @@ def resolve_adapters(engine, entries, leaves=None):
         if set(basis.tensors) != expected_basis:
             raise ValueError('native adapter basis inventory differs from its specification')
         values = leaves.get(adapter_id, adapter.tensors) if leaves else adapter.tensors
+        if isinstance(entry, dict) and entry.get('stop_gradient'):
+            values = {name: value.detach() for name, value in values.items()}
         if (any(value.dtype != torch.float32 for value in basis.tensors.values())
                 or any(value.dtype != torch.float32 for value in values.values())):
             raise ValueError('native adapter bases and coefficient masters must be FP32')

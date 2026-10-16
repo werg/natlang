@@ -43,7 +43,7 @@ class NativeInvocationActors:
             entries=bindings.get(name,default)
             resolved=resolve_adapters(engine,entries,leaves)
             identity=effective_identity(engine,resolved)
-            key=identity['checkpoint_sha256']
+            key=(identity['checkpoint_sha256'], tuple(isinstance(entry,dict) and entry.get('stop_gradient',False) for entry in entries or []))
             if key not in cache:
                 binding=[{'id':ident,'scale_hex':scale.hex()} for ident,scale,*_ in resolved]
                 replacement,dtypes=_effective_replacements(self.parameters,resolved,gradient_precision)
@@ -94,7 +94,7 @@ class NativeInvocationActors:
         owners=[]
         for node in plan.invocations:
             actor=self.actors[node.name]
-            key=actor[0][1]['checkpoint_sha256']
+            key=(actor[0][1]['checkpoint_sha256'], tuple(isinstance(entry,dict) and entry.get('stop_gradient',False) for entry in actor[0][3] or []))
             groups.setdefault(key,(node.name,[]))
             owners.append(key)
         for row,owner in enumerate(plan.node_ids):

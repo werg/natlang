@@ -116,7 +116,7 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
   const record = await value(JSON.stringify({ city: 'Lyon', day: 'Tuesday' }), 'Neuralese<{ city: string; day: string }>');
   const list = await value(JSON.stringify(['Lyon', 'Paris']), 'Neuralese<string[]>');
   const fnBody = await value(SAMPLE_FUNCTION, 'Neuralese<(text: string) => string>', '/v1/neuralese/embed');
-  const f = softFunction({ type: '(text: string) => string', body: fnBody.$neuralese.id });
+  const f = softFunction({ type: '(text: string) => string', body: fnBody });
   const samples: Record<CombinatorName, (lib: ReturnType<typeof createNeuraleseLibrary>) => Promise<unknown>> = {
     map: lib => lib.map(v, f), zip: lib => lib.zip(v, w), ap: lib => lib.ap(fnBody, SAMPLE_PARTNER),
     combine: lib => lib.combine(v, w), split: lib => lib.split(record), splitList: lib => lib.splitList(list),

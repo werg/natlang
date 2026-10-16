@@ -161,7 +161,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             raise ValueError('native RL needs its exact positive-temperature sampling law')
         if set(law) - {'temperature', 'seed', 'guidance', 'probabilities'}:
             raise ValueError('native RL sampling processor needs explicit replay support')
-        own, mask, reads = [], [], []
+        own, mask, reads, read_stops = [], [], [], {}
         for segment in capture.get('prompt') or []:
             if segment.get('kind') == 'tokens':
                 ids = _tokens(segment.get('token_ids'))
@@ -185,6 +185,9 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                         raise ValueError('native RL consumption receipt changed actual consumer position')
                 elif segment.get('native_identity') != actor_identity:
                     raise ValueError('foreign native RL state needs an explicit adaptation/reencoding capture')
+                if 'stop_gradient' in segment and segment['stop_gradient'] is not True:
+                    raise ValueError('native input stop_gradient must be explicitly true or absent')
+                read_stops[len(own)] = segment.get('stop_gradient', False)
                 reads.append((len(own), segment['id'], receipt))
             else:
                 raise ValueError('unknown native RL prompt segment')
@@ -282,7 +285,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             spans.append(span)
             occurrence = (turn.get('written_nodes') or {}).get(block_id)
             writers.setdefault(block_id, []).append((name, *span, occurrence))
-        prepared[name] = {'turn': turn, 'own': tuple(own), 'mask': mask, 'reads': reads,
+        prepared[name] = {'turn': turn, 'own': tuple(own), 'mask': mask, 'reads': reads, 'read_stops': read_stops,
                           'events': events, 'spans': spans, 'actor_identity':actor_identity,'adapter_binding':binding}
     if not prepared:
         raise ValueError('native RL graph has no captured turns')
@@ -325,7 +328,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                         if getattr(block, 'adapter_binding', None) != binding:
                             raise ValueError('native RL external state adapter binding differs from its actor')
                     start, stop = 0, len(block.token_ids)
-                imports.append(ImportSpan(at, source, start, stop))
+                imports.append(ImportSpan(at, source, start, stop, stop_gradient=item['read_stops'].get(at, False)))
             if any(dependency in pending for dependency in dependencies):
                 continue
             # All exact roles, including STOP and delimiter inputs, come from

@@ -121,8 +121,8 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
         return token, None if mode == 'recorded' else logp
     monkeypatch.setattr(engine, '_native_token', forced_sample if mode not in {'handoff', 'recorded'} else scripted_token)
     imports, original_consume = [], engine._native_consume
-    def record_consume(sequence, block_id):
-        original_consume(sequence, block_id)
+    def record_consume(sequence, block_id, **options):
+        original_consume(sequence, block_id, **options)
         imports.extend(sequence.native_imports[-1:])
     monkeypatch.setattr(engine, '_native_consume', record_consume)
     engine.start()

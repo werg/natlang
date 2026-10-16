@@ -19,8 +19,8 @@ const scopeValueChars = (session: NativeSession) => Math.max(SCOPE_VALUE_CHARS, 
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
-import { decodeTurnValue, encodeMessages, isContentParts, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
-  sentinelIds, nativeStateSentinelIds, type NeuraleseRuntimeOptions } from './neuralese.js';
+import { decodeTurnValue, encodeMessages, isContentParts, isNeuraleseRef, neuraleseSentinel, neuraleseRefSentinel, NeuraleseUnsupportedError, supportsNeuralese,
+  nativeStateSentinelIds, runtimeTextToParts, type NeuraleseRuntimeOptions } from './neuralese.js';
 import { resolveNeuralesePreviews } from './neuralese-preview.js';
 import { blockInput, graphNode, invocationNodeId } from './graph.js';
 import { failureFeedback, type RefinementChecker, type RefinementFailure, type RefinementJudge } from './refinement.js';
@@ -265,7 +265,7 @@ const capturedValue = (cell: { get(): unknown }) => { try { return cell.get(); }
 
 /** A short preview of a value that has no literal form; `holder` names where all of it is (see cutoff.ts). */
 function previewValue(value: Value, holder?: string, identity?: (value: object) => number): string {
-  if (isNeuraleseRef(value)) return neuraleseSentinel(value.$neuralese.id);
+  if (isNeuraleseRef(value)) return neuraleseRefSentinel(value);
   if (isLive(value)) return livePreview(value as object, identity);
   if (typeof value === 'string') {
     const text = value.trimEnd(), lines = text.split('\n');
@@ -373,7 +373,7 @@ function scopeExpression(value: unknown, root: Folder | undefined, holder?: stri
       scopeExpression(item, root, holder ? `${holder}[${index++}]` : undefined, left, state));
   }
   // A soft value is shown as its literal: the model reads the block itself (the transport sends it as a part).
-  if (isNeuraleseRef(value)) return neuraleseSentinel(value.$neuralese.id);
+  if (isNeuraleseRef(value)) return neuraleseRefSentinel(value);
   if (!isPlainRecord(value)) return undefined;
   const entries: [string, unknown][] = [];
   let fieldCount = 0;
@@ -604,32 +604,35 @@ export class NativeToolAgent {
     const turnId = `${callId}#turn${turn}`;
     const reads: { node: string; port: string; block: string }[] = [];
     const seen = new Set<string>();
-    const native = new Set<string>();
-    const findRefs = (value: unknown): void => {
+    type Use={block:string;native:boolean;stop?:true};
+    const findRefs = (value: unknown): Use[] => {
       if (typeof value === 'string') {
-        for (const block of sentinelIds(value)) seen.add(block);
-        for (const block of nativeStateSentinelIds(value)) { seen.add(block); native.add(block); }
-      } else if (Array.isArray(value)) value.forEach(findRefs);
+        return runtimeTextToParts(value).flatMap<Use>(part=>part.type==='text'?[]:
+          part.type==='native_state'?[{block:part.id,native:true,...(part.stop_gradient?{stop:true as const}:{})}]:
+          seen.has(part.id)?[]:(seen.add(part.id),[{block:part.id,native:false}]));
+      } else if (Array.isArray(value)) return value.flatMap(findRefs);
       else if (value && typeof value === 'object') {
-        const record = value as { type?: unknown; id?: unknown };
+        const record = value as { type?: unknown; id?: unknown;stop_gradient?:unknown };
         if (record.type === 'native_state' && typeof record.id === 'string') {
-          seen.add(record.id); native.add(record.id);
-        } else if (record.type === 'neuralese' && typeof record.id === 'string') seen.add(record.id);
-        else Object.values(record).forEach(findRefs);
+          return [{block:record.id,native:true,...(record.stop_gradient===true?{stop:true}:{})}];
+        } else if (record.type === 'neuralese' && typeof record.id === 'string') {
+          if(seen.has(record.id))return [];
+          seen.add(record.id);return [{block:record.id,native:false}];
+        }
+        return Object.values(record).flatMap(findRefs);
       }
+      return [];
     };
     for (const [index, message] of messages.entries()) {
       const record = message as { content?: unknown; tool_calls?: { function?: { arguments?: unknown } }[] };
       const texts = [record.content, ...(record.tool_calls ?? []).map(call => call.function?.arguments)];
       for (const [part, value] of texts.entries()) {
-        const before = new Set(seen);
-        findRefs(value);
-        for (const block of seen) {
-          if (before.has(block)) continue;
-          const isNative = native.has(block);
+        for (const use of findRefs(value)) {
+          const block=use.block,isNative=use.native;
           const artifact = isNative ? await this.options.neuralese?.store.getNativeState?.(block) : undefined;
           if (isNative && !artifact) throw new Error(`native-state consumer artifact ${block} is unavailable for provenance`);
           const node = graphNode(trace, 'block_read', { call_id: callId, turn: turnId, block,
+            ...(use.stop?{stop_gradient:true}:{}),
             ...(isNative ? { format: 'native-state', native_identity: {
               architecture: artifact!.metadata.architecture, checkpoint_sha256: artifact!.metadata.checkpoint_sha256,
               tokenizer_fingerprint: artifact!.metadata.tokenizer_fingerprint,

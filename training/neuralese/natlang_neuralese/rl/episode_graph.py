@@ -46,6 +46,23 @@ def validate_model_turn_coverage(captured_turn_names, execution_graph):
     return nodes
 
 
+def validate_import_gradient_uses(name, capture, nodes):
+    """Bind constant-use metadata to actual ordered read occurrences."""
+    reads = [event for event in nodes.values() if event.get('kind') == 'block_read' and event.get('turn') == name]
+    segments = [segment for segment in capture.get('prompt', []) if segment.get('kind') == 'native_state']
+    if len(reads) != len(segments):
+        raise ValueError('native input gradient uses differ from actual read occurrences')
+    if len({event.get('block') for event in reads}) == len(reads):
+        by_id = {event.get('block'): event for event in reads}
+        reads = [by_id.get(segment.get('id'), {}) for segment in segments]
+    for event, segment in zip(reads, segments):
+        if any('stop_gradient' in value and value['stop_gradient'] is not True for value in (event, segment)):
+            raise ValueError('native input stop_gradient must be explicitly true or absent')
+        if (event.get('block') != segment.get('id')
+                or event.get('stop_gradient', False) != segment.get('stop_gradient', False)):
+            raise ValueError('native input gradient use differs from its actual graph occurrence')
+
+
 def rollout_turn_names(turns):
     counters, result = {}, []
     for turn in turns:
@@ -83,6 +100,7 @@ def validate_rollout_graph(rollout):
             raise ValueError('whole-episode repeated state uses need exact occurrence-indexed capture')
         if set(captured_writes) != set(writes) or set(captured_reads) != set(reads) | set(outside):
             raise ValueError('whole-episode state capture differs from actual graph writes/reads; decoded or reencoded inputs require differentiable lowering')
+        validate_import_gradient_uses(name, capture, nodes)
     return names, nodes
 
 

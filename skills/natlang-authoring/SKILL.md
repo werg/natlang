@@ -500,3 +500,9 @@ their execution-graph write/read occurrences before re-admission. Correct plain
 execution remains rewardable; do not add Neuralese traffic to pass a gate or
 replace an omitted in-episode producer with detached archived state. Decoded
 imports need their actual differentiable lowering, not relabeled provenance.
+
+`stopGradient(value)` preserves native typed values and soft-function bodies as
+constants for that use, including after context snapshots and `.nz` save/load.
+An equal live value remains differentiable. Keep the typed value when passing
+it to another call or `withAdapters`; do not extract its artifact ID to preserve
+a constant boundary. No payload is decoded or rewritten by this operation.

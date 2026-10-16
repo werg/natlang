@@ -108,6 +108,7 @@
         "required": ["turn", "block", "positions"],
         "properties": {
           "turn": { "type": "string" },
+          "stop_gradient": { "const": true },
           "block": { "$ref": "#/$defs/blockId" },
           "positions": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 }
         }

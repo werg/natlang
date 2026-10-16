@@ -511,7 +511,9 @@ class Engine:
             else:
                 kind = (getattr(rendered, 'block_kinds', None) or
                         ["neuralese"] * len(rendered.blocks))[segment]
-                plan.append(("native_state" if kind == "native_state" else "block", rendered.blocks[segment]))
+                if kind=='native_state' and rendered.block_stop_gradients and rendered.block_stop_gradients[segment]:
+                    kind='native_state_constant'
+                plan.append((kind if kind in ('native_state','native_state_constant') else 'block', rendered.blocks[segment]))
         return plan
 
     def prompt_positions(self, messages, tools) -> int:
@@ -522,7 +524,7 @@ class Engine:
             for kind, value in self._prompt_plan(messages, tools):
                 if kind == 'tokens':
                     positions += len(value)
-                elif kind == 'native_state':
+                elif kind in ('native_state','native_state_constant'):
                     record = self.store.get_native_state(value)
                     if record is None:
                         raise RequestError('neuralese-unknown-native-state', f'{value} is not in this server store; restore it first')
@@ -631,10 +633,18 @@ class Engine:
         except ValueError:
             return False
 
-    def _native_consume(self, seq, block_id):
-        return self._native_run(lambda: self._native_consume_impl(seq, block_id), seq.request.adapters)
+    def _native_consume(self, seq, block_id, *, stop_gradient=False):
+        def consume():
+            begin,len_imports=len(seq.native_rl_prompt),len(seq.native_imports)
+            result=self._native_consume_impl(seq,block_id,stop_gradient=stop_gradient)
+            if stop_gradient:
+                for segment in seq.native_rl_prompt[begin:]:
+                    if segment['kind']=='native_state':segment['stop_gradient']=True
+                for receipt in seq.native_imports[len_imports:]:receipt['stop_gradient']=True
+            return result
+        return self._native_run(consume, seq.request.adapters)
 
-    def _native_consume_impl(self, seq, block_id):
+    def _native_consume_impl(self, seq, block_id, *, stop_gradient=False):
         from ..model.shared_state import splice_block
         record = self.store.get_native_state(block_id)
         if record is None:
@@ -670,7 +680,7 @@ class Engine:
             seq.cache = splice_block(self.shared_model, seq.cache, block,
                 checkpoint_sha256=source['checkpoint_sha256'],
                 tokenizer_fingerprint=source['tokenizer_fingerprint'],
-                embedding_weight_sha256=source['embedding_weight_sha256'])
+                embedding_weight_sha256=source['embedding_weight_sha256'], stop_gradient=stop_gradient)
             mode = 'same-base-adapter-state'
             observed_id = block_id
             if seq.request.rl_capture:
@@ -681,7 +691,7 @@ class Engine:
             seq.cache = splice_block(self.shared_model, seq.cache, block,
                                      checkpoint_sha256=self.execution_native_identity["checkpoint_sha256"],
                                      tokenizer_fingerprint=self.model_config["tokenizer_fingerprint"],
-                                     embedding_weight_sha256=self.embedding_weight_sha256)
+                                     embedding_weight_sha256=self.embedding_weight_sha256, stop_gradient=stop_gradient)
             mode = "exact-native-state"
             if seq.request.rl_capture:
                 seq.native_rl_prompt.append({"kind": "native_state", "id": block_id,
@@ -700,7 +710,7 @@ class Engine:
             seq.cache = splice_block(self.shared_model, seq.cache, adapted,
                                      checkpoint_sha256=self.execution_native_identity["checkpoint_sha256"],
                                      tokenizer_fingerprint=self.model_config['tokenizer_fingerprint'],
-                                     embedding_weight_sha256=self.embedding_weight_sha256)
+                                     embedding_weight_sha256=self.embedding_weight_sha256, stop_gradient=stop_gradient)
             mode = 'learned-semantic-state-deltas'
             if seq.request.rl_capture:
                 adapted_record = self.store.put_native_state(adapted)
@@ -761,7 +771,7 @@ class Engine:
 
     def _native_prefill_impl(self, seq):
         self._validate_native_state_modes(seq.request.native_state_modes,
-            {value for kind, value in seq.prompt_plan or () if kind == 'native_state'})
+            {value for kind, value in seq.prompt_plan or () if kind in ('native_state','native_state_constant')})
         if seq.request.rl_capture:
             from ..model.native_adapters import execution_binding, SCHEMA
             seq.native_rl_policy = dict(self.execution_native_identity)
@@ -813,8 +823,8 @@ class Engine:
                     output = self._native_forward(value, seq.cache)
                     seq.cache = output["cache"]
                     seq.logits = self._native_logits(output["h_final"])
-            elif kind == "native_state":
-                self._native_consume(seq, value)
+            elif kind in ("native_state","native_state_constant"):
+                self._native_consume(seq, value,stop_gradient=kind=='native_state_constant')
             else:
                 raise RequestError("neuralese-native-state-unavailable", "native serving accepts native_state parts, not projected blocks")
         if seq.cache is None or seq.logits is None:
@@ -1034,7 +1044,7 @@ class Engine:
                     if kinds[segment] != "native_state":
                         raise RequestError("neuralese-native-state-text", "legacy projected blocks cannot initialize native state")
                     temp = Sequence(GenerationRequest(messages=[], rl_capture=True, native_state_modes=native_state_modes), Future(), cache=cache)
-                    self._native_consume(temp, block_id)
+                    self._native_consume(temp, block_id,stop_gradient=bool(rendered.block_stop_gradients and rendered.block_stop_gradients[segment]))
                     cache = temp.cache
                     source_segments.extend(temp.native_rl_prompt)
                     source_imports.extend(temp.native_imports)
