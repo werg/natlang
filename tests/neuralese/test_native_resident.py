@@ -130,18 +130,25 @@ def test_same_forward_class_metrics_are_exact_weighted_graph_aggregates(monkeypa
     calls=[]
     def loss(model,example,**kwargs):
         calls.append(example.id)
-        return torch.tensor(example.loss),{'boundary_sums':{},'weight':example.weight,
+        return torch.tensor(example.loss),{'boundary_sums':{'7': {'count':1, 'weight':example.weight,
+            'nll_sum':example.loss*example.weight, 'correct_weight':example.accuracy*example.weight,
+            'probability_sum':.25*example.weight}},'weight':example.weight,
             'accuracy':example.accuracy,'supervised_tokens':3}
     monkeypatch.setattr(native_graph,'graph_loss',loss)
     examples=[SimpleNamespace(id='a',loss=2.,weight=2.,accuracy=.5,plan=SimpleNamespace(token_count=4)),
               SimpleNamespace(id='b',loss=4.,weight=1.,accuracy=1.,plan=SimpleNamespace(token_count=4))]
     model=torch.nn.Linear(1,1)
+    model.marker_ids=(7,)
     result=_evaluate(model,examples,checkpoint_layers=False,chunk_tokens=128,
         graph_classes={'a':'ordinary','b':'communication'})
     assert calls==['a','b'] and model.training
     assert result['classes']['ordinary']['loss']==2.
     assert result['classes']['communication']['weighted_accuracy']==1.
     assert result['loss']==pytest.approx(8/3)
+    assert result['classes']['ordinary']['boundaries']['7']['mean_nll']==2.
+    assert result['classes']['communication']['boundaries']['7']['mean_nll']==4.
+    assert result['classes']['ordinary']['boundaries']['7']['count']==1
+    assert result['boundaries']['7']['weight']==3.
 
 
 @pytest.mark.parametrize('crash_after_commit',[False,True])
