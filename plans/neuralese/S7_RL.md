@@ -71,7 +71,7 @@ Per task, `G = 4..8` rollouts at temperature 1. Advantage `(r − mean)/(std + �
 | --- | --- |
 | mixed successes and failures | **GRPO** (policy gradient) |
 | all fail | **rejection sampling / seeding**: draw more samples or teacher rollouts of the same row; successful trajectories go to SFT (RFT) |
-| all succeed | **retire** from the active set (keep for regression checks) |
+| all succeed | **revisit** through rotating breadth; move practice toward harder tasks |
 | all unscored | **infrastructure**: fix, never train |
 
 **Step 0 is rejection-sampling fine-tuning (RFT).** While the policy solves almost nothing, groups have no spread and
@@ -81,9 +81,13 @@ through the shared trainer (whole-trajectory supervision). GRPO starts on the ro
 
 **Task selection is a natlang policy.** Which rows and how many samples per row next round is a decision, so it is a
 pluggable policy (`ts-host/src/runtime/pluggable.ts` pattern): one interface `selectTasks(groupStats, budget) →
-{row, samples}[]`, crisp default (keep mixed groups; spend extra samples on all-fail rows with any historical success;
-retire all-success rows), and a natural-language implementation that reads the per-row outcome histograms and
-failure classes and states its choice. Shadow mode compares them before the NL one serves.
+{row, samples}[]`, crisp default plus `applications/curriculum-advisor/selectTrainingTasks.nl`.
+The shared controller retains scored task-choice history across policy updates,
+practices tractable levels before harder work, and reserves rotating breadth for
+**every** usable train task, including solved tasks and newly appended tasks.
+All-unscored infrastructure is not evidence of student ability. An optional
+`select_tasks_command` supplies the same typed interface; crisp validation retains
+coverage and exact task identities. See `RL_CURRICULUM_20261016.md`.
 
 ## 5. Algorithm and KL
 

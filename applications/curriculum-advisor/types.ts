@@ -37,3 +37,11 @@ export type BatchProposal = { batch: BatchLine[], note: string };
 export type CheckedEquivalenceJudgment = Is<EquivalenceJudgment, "a judgment whose verdict is equivalent, different or unsure, whose reason is one sentence, and whose evidence holds at least one non-empty quote unless the verdict is unsure">;
 /** The result of nextCollectionBatch: positive whole counts and one rationale sentence per line. */
 export type CheckedBatchProposal = Is<BatchProposal, "a proposal whose batch lines each have a positive whole count and a rationale, and whose note is a string">;
+
+/** RL task choice only: outcome telemetry is never behavior probabilities. */
+export type TrainingTask = { row: number; id: string; level: number; family: string };
+export type TrainingGroupOutcome = { task_id: string; scored: number; mean: number | null };
+export type TrainingSelectionBudget = { rows: number; group: number; offset: number };
+export type TrainingTaskSelection = { row: number; samples: number };
+
+export type TrainingCurriculumOptions = { schema: "natlang.rl-task-curriculum/1"; breadth_fraction: number; promotion_success_rate: number };

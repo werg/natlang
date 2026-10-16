@@ -5,6 +5,7 @@ Model/optimizer processes are launched by explicit commands through the existing
 host/cloud supervisor. The controller never silently changes provider resources.
 """
 from __future__ import annotations
+from .curriculum import DEFAULT as DEFAULT_TASK_CURRICULUM
 
 import argparse
 import fcntl
@@ -302,30 +303,35 @@ def collect_with_actor(config, values, **kwargs):
                 wait_forwarding_signals(process)
 
 
-def select_tasks(cases, stats, budget, *, command=None):
+def select_tasks(cases, stats, budget, *, command=None, curriculum=None):
     """S7 selectTasks(groupStats,budget)->{row,samples}[], crisp/NL boundary.
 
     A command may execute the existing natlang runtime and return the same typed
     JSON. This mechanism validates identities/counts; policy wording is in S7.
     """
+    from .curriculum import task_descriptors, select, validate_breadth, policy_options
+    tasks=task_descriptors(cases)
     if command:
         response = subprocess.run(command, input=json.dumps({'groupStats': stats,
-            'budget': budget, 'tasks': [{'row': i, 'id': row['id']} for i, row in enumerate(cases)]}),
+            'budget': budget, 'curriculum':policy_options(curriculum or {}), 'tasks': tasks}),
             text=True, capture_output=True, check=True)
         chosen = json.loads(response.stdout)
+    elif curriculum is not None:
+        chosen=select(cases,stats,budget,curriculum)
     else:
-        retired = {g['task_id'] for g in stats if g.get('scored', 0) and g.get('mean') == 1.}
         order = list(range(budget['offset'], len(cases))) + list(range(budget['offset']))
-        chosen = [{'row': i, 'samples': budget['group']} for i in order
-                  if cases[i]['id'] not in retired][:budget['rows']]
+        chosen = [{'row': i, 'samples': budget['group']} for i in order][:budget['rows']]
     if not isinstance(chosen, list) or any(not isinstance(item, dict) or
             type(item.get('row')) is not int or not 0 <= item['row'] < len(cases) or
             type(item.get('samples')) is not int or item['samples'] < 2 for item in chosen):
         raise ValueError('selectTasks must return distinct valid {row,samples>=2} entries')
+    if len(chosen)>budget['rows']:
+        raise ValueError('selectTasks exceeded the declared row allocation')
     if len({item['row'] for item in chosen}) != len(chosen):
         raise ValueError('selectTasks returned duplicate task rows')
     if len({item['samples'] for item in chosen}) > 1:
         raise ValueError('current collector fanout requires one shared group size per round')
+    if curriculum is not None:validate_breadth(cases,budget,curriculum,chosen)
     return chosen
 
 
@@ -420,9 +426,9 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 snapshot = json.loads(selection_file.read_text())
                 selection, selected = snapshot['selection'], snapshot['cases']
             else:
-                selection = select_tasks(cases, state.get('group_stats', []),
+                selection = select_tasks(cases, [*state.get('task_curriculum_history', {}).values(), *state.get('group_stats', [])],
                     {'rows': config.get('rows_per_round', 32), 'group': config.get('group', 4), 'offset': state['offset']},
-                    command=config.get('select_tasks_command'))
+                    command=config.get('select_tasks_command'),curriculum=config.get('task_curriculum'))
                 selected = [cases[item['row']] for item in selection]
                 if selection:
                     write_json_durable(selection_file, {'source_sha256': sha256_file_hex(Path(config['cases'])),
@@ -504,6 +510,13 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
             grouped = {g['task_id']: g for g in state.get('group_stats', [])}
             grouped.update({g['task_id']: g for g in report.get('groups', [])})
             state['group_stats'] = list(grouped.values())
+            history=state.setdefault('task_curriculum_history',{})
+            for group in report.get('groups',[]):
+                if group.get('scored',0)>0:
+                    history[group['task_id']]={**group,'observed_policy_id':policy,
+                        'observed_round':state['round'],'collection_attempt':attempt}
+            # This idempotent latest observation is scheduling telemetry only.
+            # Current-policy sampling probabilities remain in exact rollouts.
             write_json_durable(state_path, state)
             if report.get('scored', 0) == 0:
                 state.update(phase='infrastructure_repair', collection_attempt=attempt + 1,
@@ -704,6 +717,7 @@ def configure_native(args):
         'held_native_graphs': str(args.held_native_graphs.resolve()), 'base': str(args.base.resolve()),
         'cases': str(args.cases.resolve()), 'runtime': str(args.runtime.resolve()),
         'endpoints': [endpoint], 'rows_per_round': 32, 'group': 4, 'workers': 4,
+        'task_curriculum': DEFAULT_TASK_CURRICULUM.copy(),
         'neuralese_server': True, 'trainer_parameters': parameters,
         'production_recipe': str(args.production_recipe.resolve()), 'production_stage': args.production_stage,
         'actor_command': [python, repo + '/scripts/neuralese_data/serve_direct_checkpoint.py',

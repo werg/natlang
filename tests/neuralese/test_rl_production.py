@@ -87,12 +87,12 @@ def test_all_fail_groups_continue_seed_stage_without_claiming_rl_training_exposu
     assert state['production_complete'] is False
 
 
-def test_task_selection_retires_solved_rows_and_keeps_mixed_and_failed():
+def test_task_selection_keeps_solved_mixed_and_failed_rows():
     cases = [{'id': 'easy'}, {'id': 'mixed'}, {'id': 'hard'}]
     stats = [{'task_id': 'easy', 'scored': 4, 'mean': 1.},
              {'task_id': 'mixed', 'scored': 4, 'mean': .5}]
     assert production.select_tasks(cases, stats, {'rows': 3, 'group': 4, 'offset': 0}) == [
-        {'row': 1, 'samples': 4}, {'row': 2, 'samples': 4}]
+        {'row': 0, 'samples': 4}, {'row': 1, 'samples': 4}, {'row': 2, 'samples': 4}]
 
 
 def test_infrastructure_failure_never_runs_seeding_and_retries_fresh_attempt(tmp_path, monkeypatch):
@@ -247,7 +247,7 @@ def test_configure_retains_declared_task_quality_cadence(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize('legacy_empty_snapshot', [False, True])
-def test_solved_tasks_wait_then_admit_new_task_on_resume(tmp_path, monkeypatch, legacy_empty_snapshot):
+def test_solved_tasks_revisit_and_admit_new_task_on_resume(tmp_path, monkeypatch, legacy_empty_snapshot):
     source = tmp_path / 'cases.jsonl'
     source.write_text(json.dumps({'id': 'solved', 'split': 'train'}) + '\n')
     parent = tmp_path / 'checkpoint.pt'; parent.write_bytes(b'parent')
@@ -257,22 +257,26 @@ def test_solved_tasks_wait_then_admit_new_task_on_resume(tmp_path, monkeypatch, 
         'endpoints': ['unused'], 'after_update': ['publish']}))
     collected = []
     def collect(**kwargs):
-        task = json.loads(Path(kwargs['cases']).read_text())['id']
-        collected.append(task)
+        tasks = [json.loads(line)['id'] for line in Path(kwargs['cases']).read_text().splitlines()]
+        collected.extend(tasks)
+        task=tasks[-1]
         (kwargs['out'] / 'rollouts.jsonl').write_text('')
         return {'scored': 2, 'successes': 2, 'groups': [
             {'task_id': task, 'scored': 2, 'mean': 1.}]}
     monkeypatch.setattr(production, 'collect', collect)
     production.run(config, rounds=1)
-    assert production.run(config, rounds=1)['phase'] == 'await_new_train_tasks'
-    snapshot = out / 'round-000001-selection.json'
+    assert production.run(config, rounds=1)['phase'] == 'collect'
+    snapshot = out / 'round-000002-selection.json'
     assert not snapshot.exists()
     if legacy_empty_snapshot:
         snapshot.write_text(json.dumps({'selection': [], 'cases': []}))
     with source.open('a') as stream:
         stream.write(json.dumps({'id': 'new', 'split': 'train'}) + '\n')
-    production.run(config, rounds=1)
-    assert collected == ['solved', 'new']
+    result=production.run(config, rounds=1)
+    assert collected == ['solved', 'solved', 'solved', 'new']
+    assert set(result['task_curriculum_history'])=={'solved','new'}
+    assert result['task_curriculum_history']['solved']['observed_round']==1
+    assert result['task_curriculum_history']['new']['observed_round']==2
 
 
 def test_empty_source_waits_without_freezing_selection(tmp_path):
