@@ -1,0 +1,119 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-search-owl-native-graphs-20261016-v3-shard0048",
+  "owner": "dgx",
+  "path": "runs/search-owl-native-render-20261016-v3/shard0048-native-graphs",
+  "files": [
+    {
+      "path": "admission-proof.json",
+      "bytes": 2543,
+      "sha256": "d696fea904c4c0353bd48414ebf6e0b283a087ea36ead0f8aafd6906445d2186"
+    },
+    {
+      "path": "launch-binding.json",
+      "bytes": 31354,
+      "sha256": "9253ff70c945f9a07c765a70989a8159619e6c547f04a1e56c70586f50763295"
+    },
+    {
+      "path": "lfm25/receipt.json",
+      "bytes": 2229,
+      "sha256": "97f92d476e3e82ce9f3262fdd6c07677e9b5b6229d1a9b2bba68c1345e3f27a5"
+    },
+    {
+      "path": "lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 17904363,
+      "sha256": "0624c8cd763f5b2dbf733b12fe81a259a3c05fb0ee616d44527d10207a97d769"
+    },
+    {
+      "path": "mellum21/receipt.json",
+      "bytes": 2240,
+      "sha256": "b7111186c018c24e5bc2eb5db6273d9bdc38752b1a40509f16fa927fccc0327a"
+    },
+    {
+      "path": "mellum21/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 17465513,
+      "sha256": "475999218fa59ef91e637827a3278a0338495ce674b7219e6aca1273b1210f10"
+    },
+    {
+      "path": "program-header/lfm25/receipt.json",
+      "bytes": 1829,
+      "sha256": "b6c5b47f878703e0dfcb10cff7d7a7090d5e7646b996afa2b27287e396383e02"
+    },
+    {
+      "path": "program-header/lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "program-header/lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 17107239,
+      "sha256": "47a52e44d000cb6b29b9776209b7b240a979905e172a8d839c3efae88462684f"
+    },
+    {
+      "path": "program-header/mellum21/receipt.json",
+      "bytes": 1840,
+      "sha256": "9ca31be5ce872639b5bef5a79b9e0bb8022d18c3736eedeefc9fbb67084c4f05"
+    },
+    {
+      "path": "program-header/mellum21/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "program-header/mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 16194360,
+      "sha256": "b6e36c1384a7d6b3f6401a940fbdde18eff89a28d351710304fe2fe91644e4c2"
+    },
+    {
+      "path": "renderer-receipts/lfm25-0048.json",
+      "bytes": 83782,
+      "sha256": "8c7a8625bf5d112f6919d5993442cf347b4fa2172bc528e995350cd810d698af"
+    },
+    {
+      "path": "renderer-receipts/mellum21-0048.json",
+      "bytes": 83708,
+      "sha256": "881522851173af8430feacd142cf2d94199a551fc8dafb9ec4c57892ba59b780"
+    },
+    {
+      "path": "selected-shard-0048.jsonl.zst",
+      "bytes": 83739911,
+      "sha256": "7ae8e3b85e6107c5dad647e5c19eee33b3d7c92e8856ddd35223db56463e6f2a"
+    },
+    {
+      "path": "selection-state.json",
+      "bytes": 51182905,
+      "sha256": "61e7b5b6d410a607bc44cdbee18ca7612d4b4fe491f812efb3b24b2d727e2261"
+    },
+    {
+      "path": "source-text/program-header/lfm25/0048.jsonl.zst",
+      "bytes": 29456307,
+      "sha256": "4bb9846244d9f405aae4461bcf06f25f4a568904f42f40b3b35ed9d1edce3dfc"
+    },
+    {
+      "path": "source-text/program-header/mellum21/0048.jsonl.zst",
+      "bytes": 27936398,
+      "sha256": "05e76245a0d8bf0f8579beec3cf4dce8288dd4fdc0f260c5848dedccf2af7230"
+    },
+    {
+      "path": "source-text/whole-trajectory/lfm25/0048.jsonl.zst",
+      "bytes": 28739608,
+      "sha256": "af94e01839a0a863e4a9bd955bad8c0c7fb39cfe3fc91f9a14e51bf20c10d228"
+    },
+    {
+      "path": "source-text/whole-trajectory/mellum21/0048.jsonl.zst",
+      "bytes": 27424581,
+      "sha256": "8d4dfc5d44951433e5ae3fd9be5bd9b8c054c695dc2a2d1bae584246715057d2"
+    }
+  ],
+  "bytes": 317360762
+}
