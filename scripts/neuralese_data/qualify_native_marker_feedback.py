@@ -155,6 +155,8 @@ def captures(response):
 def project_response(response,variant):
     """The old supported nonstreaming wire envelope, not another repair policy."""
     failure=response.get('x_natlang_native_failure') if isinstance(response,dict) else None
+    if any(capture.get('protocol_failure') for capture in captures(response)) and not failure:
+        raise ValueError('feedback failed capture lacks its typed failure envelope')
     root=response
     if failure and response.get('source_turns'):
         root=response['source_turns'][-1]['response']
@@ -162,6 +164,9 @@ def project_response(response,variant):
         capture=root.get('x_natlang_rl_capture') or {}
         if failure!=capture.get('protocol_failure'):
             raise ValueError('feedback envelope differs from its actual failed capture')
+        choice=(root.get('choices') or [{}])[0]
+        if choice.get('finish_reason')!='error' or (choice.get('message') or {}).get('tool_calls'):
+            raise ValueError('feedback failed envelope exposes an executable successful choice')
         validate_failure(capture,sum(len(segment['token_ids']) for segment in capture['prompt'] if segment['kind']=='tokens'))
     if variant=='baseline' and failure:
         return 400,{'error':{'code':failure['code'],'message':failure['message']}}
@@ -324,9 +329,11 @@ def run(args):
         observations=[json.loads(path.read_text()) for path in sorted((directory/'observations').glob('[0-9]*.json'))]
         journal=directory/'journal.jsonl'
         finished=[json.loads(line) for line in journal.read_text().splitlines() if line.strip() and json.loads(line).get('event')=='finish'] if journal.exists() else []
+        finished_keys={entry['key'] for entry in finished}
         report={'schema':'natlang.native-marker-feedback-report/1','variant':args.variant,'returncode':result.returncode,
             'plan':binding(plan_path),'actor':identity,'runtime_inventory_sha256':digest(inventory),
-            'planned_windows':48,'finished_windows':len(finished),'actual_sampled_turns':sum(x['sampled_turns'] for x in observations),
+            'planned_windows':48,'finished_windows':len(finished_keys),'finish_events':len(finished),
+            'actual_sampled_turns':sum(x['sampled_turns'] for x in observations),
             'protocol_failures':sum(x['protocol_failures'] for x in observations),'observations':[binding(path) for path in sorted((directory/'observations').glob('[0-9]*.json'))],
             'observer_error':(directory/'observations/observer-error.json').exists(),
             'unfinished_workflows':'censored by declared diagnostic window; no model-negative rewards',

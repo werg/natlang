@@ -32,6 +32,10 @@ def test_legacy_projection_requires_exact_real_capture_boundary():
     with pytest.raises(ValueError,match='actual failed capture'):feedback.project_response(tampered,'baseline')
     tampered=copy.deepcopy(value);tampered['x_natlang_rl_capture']['generated_inputs']=[{'token_id':7,'sample_index':0}]
     with pytest.raises(ValueError,match='fed-input'):feedback.project_response(tampered,'candidate')
+    tampered=copy.deepcopy(value);tampered.pop('x_natlang_native_failure')
+    with pytest.raises(ValueError,match='lacks its typed'):feedback.project_response(tampered,'baseline')
+    tampered=copy.deepcopy(value);tampered['choices'][0]['finish_reason']='stop'
+    with pytest.raises(ValueError,match='executable'):feedback.project_response(tampered,'candidate')
     ordinary={'choices':[{'message':{'content':'literal neuralese-native-state-close'}}]}
     assert feedback.project_response(ordinary,'baseline')==(200,ordinary)
 
@@ -119,6 +123,7 @@ def test_runner_restart_reuses_sealed_proxy_and_executor_without_claiming_live_s
     def collect(command,**kwargs):
         calls.append(command)
         assert kwargs['env']['PATH'].split(':')[0]==str(node.parent)
+        (variant/'journal.jsonl').write_text(''.join(json.dumps({'event':'finish','key':'same-window'})+'\n' for _ in range(2)))
         return subprocess.CompletedProcess(command,0)
     monkeypatch.setattr(feedback.subprocess,'run',collect)
     identity={key:('lfm2' if key=='architecture' else sha) for key in feedback.IDENTITY_KEYS}
@@ -135,7 +140,8 @@ def test_runner_restart_reuses_sealed_proxy_and_executor_without_claiming_live_s
         first=feedback.run(args);second=feedback.run(args)
         assert calls[0]==calls[1]
         assert first==second and second['actual_sampled_turns']==0
-        assert second['feedback_quality_passed'] is None and second['finished_windows']==0
+        assert second['feedback_quality_passed'] is None and second['finished_windows']==1
+        assert second['finish_events']==2
         packet.write_text('changed packet\n')
         with pytest.raises(ValueError,match='input changed'):feedback.run(args)
         assert len(calls)==2
