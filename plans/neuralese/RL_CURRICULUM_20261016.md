@@ -134,10 +134,33 @@ Protected held content, IDs and answers were not used to author this packet.
 
 ## Validation and limits
 
+### Private writer public-return repair (2026-10-16)
+
+The first 48 self-hosted teacher scaffold executions finished with 44 accepted
+trajectories and four failures of `private-writer-return`. Its authored root
+declared a private `Neuralese<string>` result but returned it as the task's
+public `string`. This is an authored boundary mismatch; those failures do not
+measure teacher capability. The private writer now explicitly returns public
+`string`, while the writer-reader tasks retain their private state transfer.
+The existing host contract now executes this child call as well as the nine
+ordinary tasks: all ten pass, and an incorrect ordinary answer is rejected
+(Node 24, ledger unit `root-private-writer-public-contract-node24-20261016`).
+Task meaning and reward remain natural-language/existing exact
+oracles; the repair changes the authored typed reference, not runtime coercion.
+The original packet and its four assigned repair traces retain their original
+hashes. Rebuilding creates a new packet and contract hash, still pending live
+qualification; do not mutate the old packet or relabel its failures as successes.
+The repaired qualification packet is 12 rows, SHA
+`079b1279232f211294922265e88eca187066899a09360af84e43ace9e9b84dee`;
+the repaired pending 84-row union is SHA
+`8470aaf16ca346d9a408077dab42397a7e843bed226449d83301b98218eb6d3d`.
+Both remain outside the production task source until live qualification.
+
 Focused Python tests exercise growing difficulty, all-solved regression visits,
 new hard tasks, pending-source rejection, durable all-solved restart/appending,
 and existing controller update/publication recovery. The real natlang host
-contract accepts all nine ordinary scaffold oracles and rejects an incorrect
+contract accepts all nine ordinary scaffold oracles plus the repaired private
+writer's public return, and rejects an incorrect
 answer using a scripted provider. Static checks retain the three typed private
 roots and their exact contracts. These checks validate mechanisms and task
 oracles; they are not live model performance or completed RL training.

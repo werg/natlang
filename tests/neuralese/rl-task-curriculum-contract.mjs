@@ -18,7 +18,7 @@ test('independent complete static tasks retain exact oracles, private calls and 
   if(row.curriculum.trajectory_contract){
    assert.equal(row.curriculum.trajectory_contract.authored_root_sha256,createHash('sha256').update(reference).digest('hex'));
    assert.equal(row.curriculum.trajectory_contract.min_state_edges_from_children,0);
-   assert.match(reference,/Neuralese<string>/);
+   assert.match(reference,/Neuralese</);
   }else{
    const value=Function(reference)();assert.deepEqual(value,row.semantics.expected);
   }
@@ -33,7 +33,7 @@ import {mkdtemp,mkdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 const {nativeJobRunner,expectedProvenance,defaultToolSurfaceHash}=await import(pathToFileURL(resolve(runtime,'dist/teacher/collector.js')).href);
 
-test('real natlang host verifier accepts each ordinary static task and rejects wrong answer',async()=>{
+test('real natlang host verifier accepts ordinary tasks and private writer public return, and rejects wrong answer',async()=>{
  const dir=await mkdtemp(resolve(tmpdir(),'rl-curriculum-contract-'));let answer;
  const server=createServer((request,response)=>{
   request.resume();request.on('end',()=>{
@@ -45,7 +45,7 @@ test('real natlang host verifier accepts each ordinary static task and rejects w
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  try{
   const rows=await buildScaffolds(runtime);let accepted=0;
-  for(const [index,row] of rows.slice(0,9).entries()){
+  for(const [index,row] of rows.slice(0,10).entries()){
    answer=row.semantics.expected;const jobs=resolve(dir,'case-'+index);await mkdir(jobs,{recursive:true});
    const options={jobs,output:resolve(jobs,'out.jsonl'),workers:1,modelId:'local-contract-fixture',
     rootSeed:7,systemPrompt:'Execute this typed task.',contextTokens:8192,
@@ -54,7 +54,7 @@ test('real natlang host verifier accepts each ordinary static task and rejects w
    const item={index:0,record:row};const result=await nativeJobRunner(options)(item,expectedProvenance(row,options));
    assert.equal(result.outcome.accepted,true,JSON.stringify(result.outcome));accepted++;
   }
-  assert.equal(accepted,9);
+  assert.equal(accepted,10);
   const row=rows[0];answer=18;const jobs=resolve(dir,'wrong');await mkdir(jobs,{recursive:true});
   const options={jobs,output:resolve(jobs,'out.jsonl'),workers:1,modelId:'local-contract-fixture',
    rootSeed:7,systemPrompt:'Execute this typed task.',contextTokens:8192,
