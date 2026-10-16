@@ -23,3 +23,11 @@ qualify numerical training behavior.
 These decisions are stated here in natural language. Crisp Python performs AST
 comparison, exact hashing, cache-key verification and atomic writes using the
 existing row-index mechanism. It does not create an alternative validator.
+
+Regression-fixture correction, 2026-10-16: the positive continuation pair must
+use the actual frozen prefix compiler at
+`5706256bc7f733e9cd13199d4fcb58e05c50ce3a`, rather than whatever compiler happens
+to be on main. The later per-import adjoint semantics in `85d263ee8` correctly
+fail this narrow proof. Keep that rejection as an explicit regression; do not
+widen the historical production verifier merely to make its fixture pass.
+Focused continuation suite: 15 passed.

@@ -26,16 +26,25 @@ def packages(tmp_path):
             if root == roots[0]:
                 target.write_bytes(subprocess.check_output(['git', 'show', f'3042af96a386:training/neuralese/natlang_neuralese/{name}'], cwd=ROOT))
             else:
-                # Other policy files intentionally remain the frozen package's
-                # bytes: main has unrelated source-reader changes.
+                # This verifier supports exactly the historical prefix change.
+                # Later import-adjoint/compiler changes require new indexes,
+                # rather than silently widening the cache equivalence proof.
                 target.write_bytes((roots[0] / name).read_bytes() if name != 'model/native_graph_plan.py'
-                    else (ROOT / 'training/neuralese/natlang_neuralese' / name).read_bytes())
+                    else subprocess.check_output(['git', 'show',
+                        f'5706256bc7f733e9cd13199d4fcb58e05c50ce3a:training/neuralese/natlang_neuralese/{name}'],cwd=ROOT))
     return roots
 
 
 def test_exact_production_extension(packages):
     proof = subject.prove_extension(*packages)
     assert proof['old_policy_sha256'] != proof['new_policy_sha256']
+
+
+def test_later_import_adjoint_semantics_cannot_reuse_prefix_only_proof(packages):
+    target=packages[1]/'model/native_graph_plan.py'
+    target.write_bytes(subprocess.check_output(['git','show',
+        '85d263ee8:training/neuralese/natlang_neuralese/model/native_graph_plan.py'],cwd=ROOT))
+    with pytest.raises(ValueError):subject.prove_extension(*packages)
 
 
 @pytest.mark.parametrize('change', ['default', 'guard', 'arithmetic', 'helper', 'other', 'parser'])
