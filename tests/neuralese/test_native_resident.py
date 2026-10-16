@@ -115,6 +115,24 @@ def test_reused_resident_tree_rejects_changed_leaf_before_commit(tmp_path,monkey
     assert manager.train.ordered_ids()==['a','b']
 
 
+@pytest.mark.parametrize('prior_pending',[False,True])
+def test_prepare_without_publication_preserves_live_pending_and_sgd(tmp_path,monkeypatch,prior_pending):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    paths,directory,manager,recipe=setup(tmp_path)
+    pointer=directory/'pending.json'
+    if prior_pending:
+        pointer.write_text('{"untouched":"existing request"}\n')
+    before=pointer.read_bytes() if pointer.exists() else None
+    prepared=resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=(),publish=False)
+    assert (pointer.read_bytes() if pointer.exists() else None)==before
+    assert resident.bound(prepared).is_file()
+    assert resident.current(directory) is None and manager.train.ordered_ids()==['a','b']
+    # Repeating normal preparation explicitly publishes this same validated request.
+    published=resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=())
+    assert published==prepared and json.loads(pointer.read_text())==published
+    assert manager.poll(10)[0].ordered_ids()==['a','b','c']
+
+
 def test_rejection_does_not_commit_or_change_loaded_source_and_same_pending_is_not_retried(tmp_path,monkeypatch):
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
     paths,directory,manager,recipe=setup(tmp_path)

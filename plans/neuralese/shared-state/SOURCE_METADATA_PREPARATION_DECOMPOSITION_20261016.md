@@ -24,6 +24,12 @@ or new training admission decision.
    geometry, runtime and atomic commit checks still run before changing SGD.
    Object reuse is not a claim that full production adoption fits host memory;
    measure that separately on the target VM.
+6. Preparation can explicitly withhold publication (`publish=False`, CLI
+   `--no-publish`). It writes the same fully checked immutable request while
+   leaving the learner's pending pointer untouched, including a preexisting
+   request. This permits a memory measurement without accidentally triggering
+   adoption in a runtime awaiting upgrade. Default preparation still publishes;
+   reprepare against the current generation/runtime before actual adoption.
 
 The immediate consumer is the SHA-bound external CoreWeave CPU preparer. It may
 use the unchanged frozen leaf parser/index policy and explicitly staged metadata

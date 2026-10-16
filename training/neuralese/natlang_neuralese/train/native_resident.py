@@ -333,8 +333,10 @@ def retire(directory, checkpoint, terminal):
 
 
 def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids,
-            runtime_package=None, geometry_evidence=None):
+            runtime_package=None, geometry_evidence=None, publish=True):
     """CPU preparation; callers decide admission and provide an immutable recipe."""
+    if type(publish) is not bool:
+        raise ValueError('resident preparation publish must be an explicit boolean')
     from .recipe import load_recipe, resolve_stage_inputs, _binding_files, native_recipe_binding
     from .native_state_sft import append_only_rows
     directory = Path(directory).resolve()
@@ -429,7 +431,8 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
         path = requests / (request_id + '.json')
         if not path.exists():
             write_json(path, {'schema': SCHEMA, 'payload': payload, 'generation': request_id})
-        write_json(directory / 'pending.json', binding(path))
+        if publish:
+            write_json(directory / 'pending.json', binding(path))
         return binding(path)
 
 
@@ -582,6 +585,8 @@ def main(argv=None):
     parser.add_argument('--stage-id')
     parser.add_argument('--tokenizer-fingerprint')
     parser.add_argument('--role-ids', nargs=4, type=int)
+    parser.add_argument('--no-publish', action='store_true',
+                        help='validate and write an immutable request without publishing it to the learner')
     args = parser.parse_args(argv)
     if args.retire_checkpoint:
         if not args.trainer_exit:
@@ -591,7 +596,8 @@ def main(argv=None):
     if not all((args.recipe, args.stage_id, args.tokenizer_fingerprint, args.role_ids)):
         parser.error('preparation requires recipe, stage, tokenizer fingerprint and four role IDs')
     print(json.dumps(prepare(args.directory, args.recipe, args.stage_id,
-                            tokenizer_fingerprint=args.tokenizer_fingerprint, role_ids=args.role_ids)))
+                            tokenizer_fingerprint=args.tokenizer_fingerprint, role_ids=args.role_ids,
+                            publish=not args.no_publish)))
 
 
 if __name__ == '__main__':
