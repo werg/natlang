@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -76,6 +77,14 @@ def launch(state: dict, sha: str) -> None:
     git('worktree', 'add', '-q', '--detach', str(wt), sha)
     log = BASE / f'{sha[:10]}.log'
     unit = f'natlang-full-check-{sha[:10]}'
+    temporary = Path(os.environ.get('NATLANG_FULL_CHECK_TMPDIR', str(BASE / 'tmp'))) / sha[:10]
+    temporary.mkdir(parents=True, exist_ok=True)
+    marker = temporary / '.full-check-owner'
+    if temporary.is_symlink() or (marker.exists() and marker.read_text() != sha):
+        raise ValueError('full-check temporary directory belongs to another owner')
+    if not marker.exists() and any(temporary.iterdir()):
+        raise ValueError('full-check temporary directory has unowned contents')
+    marker.write_text(sha)
     # The Neuralese TS tests' Python reference server runs on the GPU: on the CPU, beside training, it held 10-16 GB and
     # neuralese-learning.test.mjs never finished in its 900 s (a timeout in every verdict); its orphaned server then sat
     # beside neuralese-server.test.mjs's own, which was the 18.3 GB peak and the OOM kill at 18 GB (9361c4f989). On the
@@ -93,11 +102,23 @@ def launch(state: dict, sha: str) -> None:
                     '-p', f'StandardOutput=append:{ledger_log}', '-p', f'StandardError=append:{ledger_log}',
                     'python3', str(REPO / 'scripts/memory_ledger.py'), 'run', '--unit', unit, '--budget-gb', '13', '--reserve-gb', '2',
                     '--priority', 'low', '--resumable', '--wait', '86400', '--workdir', str(wt), '--',
-                    'sh', '-c', command], check=True, capture_output=True)
+                    'env', f'TMPDIR={temporary}', 'sh', '-c', command], check=True, capture_output=True)
     state['running'] = {'sha': sha, 'unit': unit, 'worktree': str(wt), 'log': str(log), 'started': time.time(),
+                        'temporary_directory': str(temporary),
                         'command': f'python3 scripts/memory_ledger.py run --unit {unit} --budget-gb 13 --reserve-gb 2 --priority '
                                    f'low --resumable --workdir {wt} -- sh -c "{command}"'}
     save(state)
+
+
+def clean_temporary(run: dict) -> None:
+    if not run.get('temporary_directory'):
+        return
+    path = Path(run['temporary_directory'])
+    marker = path / '.full-check-owner'
+    if (path.name != run['sha'][:10] or path.is_symlink()
+            or not marker.is_file() or marker.read_text() != run['sha']):
+        raise ValueError('refusing to remove unowned full-check temporary directory')
+    shutil.rmtree(path)
 
 
 def failures(text: str) -> dict:
@@ -146,6 +167,7 @@ def finish(state: dict) -> None:
         # answer nothing, retry current main, and alert every three interruptions.
         attempts = run.get('attempts', 1)
         git('worktree', 'remove', '--force', run['worktree'], check=False)
+        clean_temporary(run)
         state.setdefault('history', []).append({**run, 'exit': result['exit'], 'incomplete': True, 'finished': time.time()})
         state['history'] = state['history'][-50:]
         state.pop('running')
@@ -181,6 +203,7 @@ def finish(state: dict) -> None:
         shutil.copy(log, kept)
         run['log'] = str(kept)
     git('worktree', 'remove', '--force', run['worktree'], check=False)
+    clean_temporary(run)
     state.setdefault('history', []).append({**run, **{k: result[k] for k in ('exit', 'failed_steps', 'failed_tests')},
                                             'answered': answered, 'finished': time.time()})
     state['history'] = state['history'][-50:]

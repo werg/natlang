@@ -30,6 +30,26 @@ def test_admission_waiter_has_its_own_managed_service(monkeypatch, tmp_path):
     assert '--wait' in args and '86400' in args
     assert kwargs['check'] is True
     assert state['running']['unit'] == 'natlang-full-check-aaaaaaaaaa'
+    temporary=Path(state['running']['temporary_directory'])
+    assert f'TMPDIR={temporary}' in args
+    assert (temporary/'.full-check-owner').read_text()=='a'*40
+
+
+def test_temporary_storage_is_explicit_and_only_owned_terminal_fixtures_are_removed(monkeypatch,tmp_path):
+    module=service(monkeypatch,tmp_path)
+    monkeypatch.setenv('NATLANG_FULL_CHECK_TMPDIR',str(tmp_path/'external'))
+    monkeypatch.setattr(module.subprocess,'run',lambda args,**kwargs:subprocess.CompletedProcess(args,0))
+    state={};module.launch(state,'b'*40)
+    run=state['running'];temporary=Path(run['temporary_directory'])
+    assert temporary.parent==tmp_path/'external'
+    (temporary/'fixture').write_text('generated test fixture')
+    (temporary/'.full-check-owner').write_text('different owner')
+    with pytest.raises(ValueError,match='unowned'):
+        module.clean_temporary(run)
+    assert (temporary/'fixture').exists()
+    (temporary/'.full-check-owner').write_text('b'*40)
+    module.clean_temporary(run)
+    assert not temporary.exists()
 
 
 def test_waiting_admission_service_counts_as_live(monkeypatch, tmp_path):
