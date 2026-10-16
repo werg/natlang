@@ -43,6 +43,26 @@ def alive(identity):
     current = process(identity['pid']) if identity else None
     return bool(current and all(current[key] == identity[key] for key in ('start_ticks', 'boot_id')))
 
+def verify_teacher_identity(path, *, server, model_id):
+    """Verify the existing serving producer's immutable bytes and actual owners."""
+    path=Path(path);descriptor=json.loads(path.read_text())
+    if descriptor.get('schema')!='natlang.self-hosted-teacher-execution-identity/1':
+        raise ValueError('teacher execution identity schema differs')
+    if descriptor.get('server')!=server or descriptor.get('model_id')!=model_id:
+        raise ValueError('teacher endpoint/model differs from serving identity')
+    actor=descriptor['actor'];actual=binding(actor['path'])
+    if actual['sha256']!=actor['sha256']:
+        raise ValueError('teacher serving identity producer bytes changed')
+    owners=descriptor.get('processes') or []
+    if not owners:raise ValueError('teacher serving identity needs actual engine owners')
+    for expected in owners:
+        current=process(expected['pid'])
+        if (not alive(expected) or current is None
+                or hashlib.sha256(b'\0'.join(current['argv'])).hexdigest()!=expected['argv_sha256']):
+            raise ValueError('actual teacher engine process identity changed')
+    return {'identity':binding(path),'actor':actual,'processes':owners,
+        'server':server,'model_id':model_id,'claim':'actual independent retry actor, not the original source-batch actor'}
+
 def recover_token(token, *, script_prefix='feed-evidence-'):
     found = []
     for root in Path('/proc').iterdir():
@@ -146,7 +166,8 @@ def launch_feeder(folder, state, config, batch):
         if current and any(Path(arg.decode(errors='replace')).name.startswith('feed-evidence-') for arg in current['argv'][:5]):
             raise ValueError('another live feeder already owns generation')
     env = {**os.environ, TOKEN: launch['token'], 'NATLANG_TEACHER_START_BATCH': str(batch),
-           'NATLANG_TEACHER_SINGLE_BATCH': '1', 'NATLANG_TEACHER_TASK_RUNTIME': config['task_runtime']}
+           'NATLANG_TEACHER_SINGLE_BATCH': '1', 'NATLANG_TEACHER_TASK_RUNTIME': config['task_runtime'],
+           'NATLANG_TEACHER_IDENTITY':config['teacher_identity']['path']}
     log = (folder/'feeder.log').open('ab')
     child = subprocess.Popen(['nice', '-n', '10', 'python', '-u', config['feeder']],
         env=env, stdout=log, stderr=log, start_new_session=True)
@@ -189,6 +210,10 @@ def launch_repair(folder, state, config):
                 attempt.update(state='drained', journal_binding=binding(journal),
                     terminal_keys=sorted(finishes))
                 receipt['attempts'].append(attempt); receipt['current'] = None; attempt = None
+            if attempt is not None and not journal.exists() and any(attempt.get(key)!=config.get(field) for key,field in
+                    [('runtime','task_runtime'),('server','server'),('model_id','model_id'),('teacher_identity','teacher_identity')]):
+                attempt['state']='superseded_unstarted_configuration_revision';receipt['attempts'].append(attempt)
+                receipt['current']=None;attempt=None
             # No journal and no live token means the intent never reached an
             # observable request. Recover this SAME intent rather than losing it.
         originals = [json.loads(line) for line in source_queue.read_text().splitlines() if line]
@@ -211,7 +236,8 @@ def launch_repair(folder, state, config):
             attempt = {'number':number,'state':'prepared','token':uuid.uuid4().hex,
                 'queue':str(queue),'queue_binding':binding(queue),'journal':str(leaf/'journal.jsonl'),
                 'runtime':config['task_runtime'],'server':config['server'],'model_id':config['model_id'],
-                'node_bin':config['node_bin'],'queue_worker':config['queue_worker']}
+                'node_bin':config['node_bin'],'queue_worker':config['queue_worker'],
+                'teacher_identity':config.get('teacher_identity')}
             receipt['current'] = attempt; write(receipt_path, receipt)
         queue = Path(attempt['queue'])
         if binding(queue) != attempt['queue_binding']: raise ValueError('prepared repair queue changed')
@@ -221,6 +247,12 @@ def launch_repair(folder, state, config):
             str(queue),attempt['journal'],'--runtime',attempt['runtime'],'--server',attempt['server'],
             '--chat-completions-url',attempt['server']+'/v1/chat/completions','--model-id',attempt['model_id'],
             '--model-concurrency','1','--max-batch-cases','1','--case-seconds','7200','--identical-turn-limit','8']
+        if attempt.get('teacher_identity'):
+            identity_binding=attempt['teacher_identity']
+            if binding(identity_binding['path'])['sha256']!=identity_binding['sha256']:
+                raise ValueError('configured teacher execution identity changed')
+            attempt['actual_teacher_identity']=verify_teacher_identity(identity_binding['path'],server=attempt['server'],model_id=attempt['model_id'])
+            command += ['--teacher-identity',identity_binding['path']]
         attempt['argv']=command;write(receipt_path,receipt)
         log=(queue.parent/'worker.log').open('ab');child=subprocess.Popen(command,env=env,stdout=log,stderr=log,start_new_session=True)
         identity=process(child.pid)
@@ -245,7 +277,7 @@ def config_revision(folder, state, path):
     raw=Path(path).read_bytes();config=json.loads(raw);current=binding(path)
     if state.get('config')==current: return config
     previous=state.get('config_value')
-    allowed={'task_runtime','server','model_id','feeder','queue_worker','node_bin','drain_file'}
+    allowed={'task_runtime','server','model_id','feeder','queue_worker','node_bin','drain_file','teacher_identity'}
     changes={key for key in set(previous or {})|set(config) if (previous or {}).get(key)!=config.get(key)}
     if previous is not None and changes-allowed: raise ValueError('guardian root/ownership configuration changed; preserve and explicitly migrate this state')
     snapshot=folder/'config-history'/(current['sha256']+'.json');snapshot.parent.mkdir(parents=True,exist_ok=True)
@@ -264,6 +296,7 @@ def config_revision(folder, state, path):
 def run(config_path):
     config_path = Path(config_path); config = json.loads(config_path.read_text()); folder = Path(config['control']); folder.mkdir(parents=True, exist_ok=True)
     lock = (folder/'guardian.lock').open('a'); fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    if not config.get('teacher_identity'):raise ValueError('production guardian needs explicit actual teacher execution identity')
     root = Path(config['root']); target = folder/'state.json'
     if target.exists(): state = json.loads(target.read_text())
     else:

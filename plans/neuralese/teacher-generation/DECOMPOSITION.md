@@ -9,3 +9,7 @@ Policy: continue useful broad generation after a drained batch while retaining e
 5. On operator drain, launch neither a feeder nor a repair collector. Let already active calls finish. Resume from the durable state when the drain file is removed.
 
 The numbered policy above is the natural-language program. `scripts/coreweave/teacher_generation_guardian.py` is its exact outside-world/durability interpreter; completion and inference remain the existing shared mechanisms.
+
+Routine qualified runtime/server/model revisions use the same control and append immutable configuration snapshots; they preserve the live old owner, source debt and next batch. A retry binds its own existing serving-identity producer bytes and exact engine process identities. The queue verifies that descriptor immediately before each case, so a later engine change cannot silently inherit the old batch's actor attribution. Unstarted prepared intents are revised explicitly; already live attempts retain their actual actor.
+
+`run_bonsai_queue.py --drain-file` is a case-boundary service: finish the active collector, fsync the completed/unstarted key frontier, and return75 before launching another collector. Completed keys are skipped on resume. If the teacher actor changes, the caller must preserve the old completed actor scope and publish a separately actor-bound continuation for remaining keys.

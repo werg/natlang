@@ -76,7 +76,7 @@ def test_existing_unowned_batch_is_rejected_before_launch(tmp_path,monkeypatch):
 def test_operator_drain_prevents_new_feeder_or_repair(tmp_path,monkeypatch):
     root=tmp_path/'root';root.mkdir();control=tmp_path/'control';control.mkdir();drain=tmp_path/'DRAIN';drain.touch()
     config={'root':str(root),'control':str(control),'predecessor_pid':999999,'predecessor_script':'feed-evidence-v6.py',
-        'predecessor_batch':13,'drain_file':str(drain)};p=tmp_path/'config.json';p.write_text(json.dumps(config))
+        'predecessor_batch':13,'drain_file':str(drain),'teacher_identity':{'path':'/immutable/actor.json','sha256':'a'*64}};p=tmp_path/'config.json';p.write_text(json.dumps(config))
     guardian.write(control/'state.json',{'config':guardian.binding(p),'owner':None,'active_batch':None,'next_batch':14})
     monkeypatch.setattr(guardian,'launch_feeder',lambda *a:pytest.fail('feeder during drain'))
     monkeypatch.setattr(guardian,'launch_repair',lambda *a:pytest.fail('repair during drain'))
@@ -171,3 +171,32 @@ def test_unrelated_pid_reuse_is_not_an_active_batch_worker(tmp_path,monkeypatch)
     monkeypatch.setattr(guardian,'process',lambda pid:{'pid':int(pid),'start_ticks':'new','boot_id':'boot',
         'argv':[b'python',b'/unrelated/worker.py']} if str(pid)=='1' else None)
     assert guardian.live_batch_workers(source)==[]
+
+
+def test_actual_teacher_identity_uses_existing_producer_and_exact_live_engine(tmp_path,monkeypatch):
+    actor=tmp_path/'existing-serving-producer.json';actor.write_text(json.dumps({'repo':'own-hosted-teacher','revision':'pinned','quant':'nvfp4'}))
+    engine={'pid':41,'start_ticks':'engine-1','boot_id':'boot','argv':[b'python',b'serve',b'--pinned-model']}
+    monkeypatch.setattr(guardian,'process',lambda pid:engine)
+    expected={**guardian.public_identity(engine),'argv_sha256':guardian.hashlib.sha256(b'\0'.join(engine['argv'])).hexdigest()}
+    p=tmp_path/'execution-identity.json';guardian.write(p,{'schema':'natlang.self-hosted-teacher-execution-identity/1',
+        'actor':guardian.binding(actor),'processes':[expected],'server':'http://teacher','model_id':'own'})
+    proof=guardian.verify_teacher_identity(p,server='http://teacher',model_id='own')
+    assert proof['actor']==guardian.binding(actor) and proof['processes']==[expected]
+    with pytest.raises(ValueError,match='endpoint'):guardian.verify_teacher_identity(p,server='http://different',model_id='own')
+    engine['start_ticks']='reused-pid'
+    with pytest.raises(ValueError,match='engine process'):guardian.verify_teacher_identity(p,server='http://teacher',model_id='own')
+    engine['start_ticks']='engine-1';actor.write_text('{}')
+    with pytest.raises(ValueError,match='producer bytes'):guardian.verify_teacher_identity(p,server='http://teacher',model_id='own')
+
+
+def test_prepared_never_started_repair_revises_actor_without_claiming_old_actor_called(tmp_path,monkeypatch):
+    config,receipt=repair_fixture(tmp_path);state={}
+    monkeypatch.setattr(guardian,'recover_token',lambda *a,**k:None)
+    monkeypatch.setattr(guardian.subprocess,'Popen',lambda *a,**k:(_ for _ in ()).throw(RuntimeError('crash before spawn')))
+    with pytest.raises(RuntimeError):guardian.launch_repair(tmp_path,state,config)
+    before=json.loads(receipt.read_text())
+    with pytest.raises(RuntimeError):guardian.launch_repair(tmp_path,state,{**config,'model_id':'new-quant-teacher','server':'http://new-engine'})
+    after=json.loads(receipt.read_text())
+    assert after['attempts'][0]['state']=='superseded_unstarted_configuration_revision'
+    assert after['current']['model_id']=='new-quant-teacher' and after['current']['server']=='http://new-engine'
+    assert after['current']['token']!=before['current']['token']
