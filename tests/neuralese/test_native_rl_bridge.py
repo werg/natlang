@@ -129,3 +129,57 @@ def test_cloud_queue_uses_only_files_and_drains_stopped_result(tmp_path, monkeyp
     assert observed[0]['request']['sha256'] == bridge.binding(request)['sha256']
     assert bridge.queued_requests(queue) == []
     assert json.loads(stop_file.read_text())['request']['sha256'] == bridge.binding(request)['sha256']
+
+
+@pytest.mark.parametrize('phase',['published','pending','partial'])
+def test_raw_worker_round_preserves_exact_parent_and_returns_actual_full_continuation(tmp_path,monkeypatch,phase):
+    """File protocol fixture; the real shared trainer's restore has separate coverage."""
+    import torch
+    from natlang_neuralese.model.native_model import CHECKPOINT_SCHEMA
+    from natlang_neuralese.train.native_continuation import TRAINING_SCHEMA
+    from natlang_neuralese.train.loop import capture_training_rng_state
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'original-exact-parent')
+    out=tmp_path/'raw';config=tmp_path/'raw-config.json'
+    write_json_durable(config,{'native_state':True,'checkpoint':str(parent),'out':str(out)})
+    request=bridge.write_request(tmp_path/'requests',kind='round',out=out,config=config)
+    value=bridge.read_request(request)
+    assert value['native_actor_mode']=='raw-state'
+    assert 'semantic_adapter' not in value and 'native_participant' not in value
+    checkpoint=out/'learner/checkpoint.pt'
+    def run(path,**kwargs):
+        checkpoint.parent.mkdir()
+        torch.save({'schema':CHECKPOINT_SCHEMA,'training':{'schema':TRAINING_SCHEMA,
+            'optimizer':{'actual-fixture-moment':torch.ones(1)},'rng':capture_training_rng_state('cpu'),
+            'options':{'continuation':{'checkpoint_sha256':value['parent_checkpoint']['sha256']}}}},checkpoint)
+        state={'checkpoint':str(checkpoint if phase=='published' else parent),
+               'phase':'collect' if phase=='published' else 'awaiting_semantic_refresh' if phase=='pending' else 'requested_stop'}
+        if phase=='pending':state['pending_native_checkpoint']=str(checkpoint)
+        if phase=='partial':state['partial_checkpoint']=str(checkpoint)
+        if phase=='published':state['partial_checkpoint']=str(out/'obsolete-partial-not-current.pt')
+        write_json_durable(out/'state.json',state)
+        return state
+    monkeypatch.setattr(production,'run',run)
+    result_path=tmp_path/'result.json'
+    result=bridge.execute(request,result_path)
+    assert result['status']=='completed'
+    assert bridge.verify_result(request,result_path)['checkpoint']['sha256']==bridge.binding(checkpoint)['sha256']
+    original=torch.load(checkpoint,weights_only=True)
+    for tamper in ('parent','rng','optimizer','pruned'):
+        from copy import deepcopy
+        bad=deepcopy(original)
+        if tamper=='parent':bad['training']['options']['continuation']['checkpoint_sha256']='f'*64
+        elif tamper=='pruned':bad['optimizer_pruned']=True
+        else:bad['training'].pop(tamper)
+        torch.save(bad,checkpoint)
+        rebound={**result,'checkpoint':bridge.binding(checkpoint),'artifacts':bridge.inventory(out)}
+        write_json_durable(result_path,rebound)
+        with pytest.raises(ValueError,match='exact parent/full optimizer/RNG'):
+            bridge.verify_result(request,result_path)
+
+
+def test_raw_bridge_cannot_inherit_a_semantic_participant(tmp_path):
+    parent=tmp_path/'parent.pt';parent.write_bytes(b'parent')
+    config=tmp_path/'config.json'
+    write_json_durable(config,{'native_state':True,'native_participant':'lfm','checkpoint':str(parent)})
+    with pytest.raises(ValueError,match='raw bridge round'):
+        bridge.write_request(tmp_path/'requests',kind='round',out=tmp_path/'out',config=config)

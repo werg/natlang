@@ -39,9 +39,14 @@ def write_request(directory, *, kind, out, config=None, state=None, adapter=None
         request['config'] = binding(config_copy)
         request['provider'] = config_value.get('provider')
         current = json.loads(Path(state).read_text()) if state and Path(state).exists() else {}
-        adapter = current.get('semantic_adapter', config_value['semantic_adapter'])
+        adapter = current.get('semantic_adapter', config_value.get('semantic_adapter'))
         request['parent_checkpoint'] = binding(current.get('checkpoint', config_value['checkpoint']))
-        request['native_participant'] = config_value['native_participant']
+        if config_value.get('semantic_adapter'):
+            request['native_participant'] = config_value['native_participant']
+        else:
+            if adapter is not None or config_value.get('native_participant') is not None:
+                raise ValueError('raw bridge round cannot inherit a semantic actor/participant')
+            request['native_actor_mode']='raw-state'
         if current:
             snapshot = directory/('state-' + canonical_json_sha256_hex(current) + '.json')
             write_json_durable(snapshot, current)
@@ -52,7 +57,8 @@ def write_request(directory, *, kind, out, config=None, state=None, adapter=None
         request['provider'] = provider
     else:
         raise ValueError('native bridge supports only round and refresh requests')
-    request['semantic_adapter'] = binding(adapter)
+    if adapter is not None:request['semantic_adapter'] = binding(adapter)
+    elif kind=='refresh':raise ValueError('semantic refresh requires its actual parent adapter')
     request['request_id'] = canonical_json_sha256_hex(request)
     destination = directory/(request['request_id'] + '.request.json')
     write_json_durable(destination, request)
@@ -66,7 +72,23 @@ def read_request(path):
             or canonical_json_sha256_hex(value) != identity):
         raise ValueError('native bridge request identity/schema changed')
     value['request_id'] = identity
+    if value.get('native_actor_mode')=='raw-state' and (value['kind']!='round'
+            or value.get('semantic_adapter') is not None or value.get('native_participant') is not None):
+        raise ValueError('raw bridge request cannot substitute semantic ownership')
     return value
+
+
+def verify_raw_checkpoint(reference,parent):
+    """The shared trainer's full continuation proves the published raw parent."""
+    from ..model.native_model import CHECKPOINT_SCHEMA
+    from ..train.native_continuation import TRAINING_SCHEMA
+    from ..train.checkpoint_policy import CheckpointPolicy
+    state=CheckpointPolicy.load(_bound(reference))
+    training=state.get('training') or {}
+    if (state.get('schema')!=CHECKPOINT_SCHEMA or state.get('optimizer_pruned')
+            or training.get('schema')!=TRAINING_SCHEMA or not training.get('optimizer') or not training.get('rng')
+            or (training.get('options') or {}).get('continuation',{}).get('checkpoint_sha256')!=parent['sha256']):
+        raise ValueError('raw bridge learner lacks its exact parent/full optimizer/RNG continuation')
 
 
 def verify_result(request_path, result_path):
@@ -99,12 +121,24 @@ def verify_result(request_path, result_path):
             _bound(result[key])
     if request['kind'] == 'round' and result.get('state'):
         state = json.loads(_bound(result['state']).read_text())
-        if sha256_file_hex_cached(state['checkpoint']) != request['parent_checkpoint']['sha256']:
-            raise ValueError('native bridge round state substituted its parent policy')
+        advanced=sha256_file_hex_cached(state['checkpoint']) != request['parent_checkpoint']['sha256']
+        raw=request.get('native_actor_mode')=='raw-state'
+        if advanced:
+            if (not raw or not result.get('checkpoint')
+                    or sha256_file_hex_cached(state['checkpoint'])!=result['checkpoint']['sha256']):
+                raise ValueError('native bridge round state substituted its parent policy')
+            verify_raw_checkpoint(result['checkpoint'],request['parent_checkpoint'])
         if state.get('pending_native_checkpoint'):
             if (not result.get('checkpoint') or sha256_file_hex_cached(state['pending_native_checkpoint'])
                     != result['checkpoint']['sha256']):
                 raise ValueError('native bridge round lost its actual pending learner checkpoint')
+        if raw and result.get('checkpoint'):
+            selected=(state.get('pending_native_checkpoint') or
+                (state.get('partial_checkpoint') if state.get('phase') in {'learner_pending','requested_stop'} else None)
+                or state['checkpoint'])
+            if sha256_file_hex_cached(selected)!=result['checkpoint']['sha256']:
+                raise ValueError('raw bridge result lost its actual current/pending learner checkpoint')
+            if not advanced:verify_raw_checkpoint(result['checkpoint'],request['parent_checkpoint'])
     if request['kind'] == 'refresh' and result.get('deployment'):
         deployment = json.loads(_bound(result['deployment']).read_text())
         if (deployment.get('schema') != 'natlang.native-rl-deployment/1'
@@ -129,13 +163,14 @@ def execute(request_path, result_path, *, stop=None):
     result = {'schema': RESULT_SCHEMA, 'kind': request['kind'], 'request_id': request['request_id'],
               'request_sha256': sha256_file_hex_cached(request_path)}
     try:
-        adapter_path = _bound(request['semantic_adapter'])
+        adapter_path = _bound(request['semantic_adapter']) if request.get('semantic_adapter') else None
         if request['kind'] == 'round':
             from .production import run
             config_path = _bound(request['config'])
             config = json.loads(config_path.read_text())
             if (not config.get('native_state') or Path(config['out']).absolute() != out.absolute()
-                    or config['native_participant'] != request['native_participant']):
+                    or config.get('native_participant') != request.get('native_participant')
+                    or bool(config.get('semantic_adapter'))!=bool(adapter_path)):
                 raise ValueError('native bridge round config changes participant/output ownership')
             state_path = out/'state.json'
             if request.get('state'):
@@ -149,13 +184,18 @@ def execute(request_path, result_path, *, stop=None):
             _bound(request['parent_checkpoint'])
             prior = json.loads(state_path.read_text()) if state_path.exists() else config
             if (sha256_file_hex_cached(prior['checkpoint']) != request['parent_checkpoint']['sha256']
-                    or sha256_file_hex_cached(prior.get('semantic_adapter', config['semantic_adapter']))
-                        != request['semantic_adapter']['sha256']):
+                    or (adapter_path is not None and sha256_file_hex_cached(prior.get('semantic_adapter', config['semantic_adapter']))
+                        != request['semantic_adapter']['sha256'])):
                 raise ValueError('native bridge round changed its exact actor checkpoint/adapter')
             state = run(config_path, rounds=1, defer_native_refresh=True, stop=stop)
             result['state'] = binding(state_path)
             if state.get('pending_native_checkpoint'):
                 result['checkpoint'] = binding(state['pending_native_checkpoint'])
+            elif request.get('native_actor_mode')=='raw-state':
+                current=((state.get('partial_checkpoint') if state.get('phase') in {'learner_pending','requested_stop'} else None)
+                         or state['checkpoint'])
+                if sha256_file_hex_cached(current)!=request['parent_checkpoint']['sha256']:
+                    result['checkpoint']=binding(current)
             result['phase'] = state['phase']
         else:
             from .native_refresh import refresh

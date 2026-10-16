@@ -47,3 +47,11 @@ a reached continuation boundary with positive optimizer updates, and the exact
 saved checkpoint hash. The report remains `completed:false` with its full recipe
 deficits intact. The same predicate prevents replaying an already committed
 quantum after a publication failure; it does not accept partial RL/RFT updates.
+
+The existing provider bridge now represents raw rounds explicitly without a
+semantic adapter/participant. It returns the actual current, pending supervised,
+or stopped partial checkpoint. A published raw update must match the returned
+state and carry the exact request parent plus full native training schema,
+optimizer and RNG. A stale partial pointer cannot replace an already published
+current policy. Semantic refresh requests retain their adapter requirement and
+the existing shared participant ownership contract.
