@@ -82,12 +82,12 @@ def recover(directory):
         return state
 
 
-def _source_witness(source):
+def _source_witness(source, package=None):
     """Bind the existing validation-cache entries; no second graph parser."""
     from ..common import row_index
     if source.kind == 'manifest':
-        return [w for child in source.children for w in _source_witness(child)]
-    package = Path(__file__).resolve().parents[1]
+        return [w for child in source.children for w in _source_witness(child, package)]
+    package = Path(package or Path(__file__).resolve().parents[1])
     names = ('data/native_sources.py', 'data/native_graph_schema.py', 'model/native_graph_plan.py',
              'data/native_pair_schema.py', 'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')
     key = {'source_sha256': source.file_sha256, 'tokenizer': source.tokenizer_fingerprint,
@@ -167,6 +167,73 @@ def new_geometry(source, first):
     return maximum
 
 
+
+def geometry_from_evidence(source, first, evidence, *, package):
+    """Reuse a bound completed CPU parse, conservatively covering a new suffix.
+
+    Legacy tiered prewarm receipts parsed TRAIN only. Their held indexes are
+    admission evidence, never held geometry. A prepared resident request covers
+    both splits, but its union maximum is deliberately retained for each split.
+    """
+    from ..data.native_sources import NativeGraphSource
+    report = json.loads(bound(evidence).read_text())
+    split = source.required_split
+    if report.get('schema') == SCHEMA:
+        payload = report['payload']
+        if digest(payload) != report.get('generation'):
+            raise ValueError('geometry evidence resident request is corrupt')
+        field, prior = ('train', 'prior_train') if split == 'train' else ('held', 'prior_held')
+        source_binding, prior_binding = payload[field], payload[prior]
+        witnesses, maximum = payload['indexes'], payload['geometry']
+        expected_rows = payload['rows' if split == 'train' else 'held_rows']
+        expected_entries = payload['entries_sha256' if split == 'train' else 'held_entries_sha256']
+        start = None
+    else:
+        if report.get('passed') is not True or split != 'train':
+            raise ValueError('legacy geometry evidence covers completed training geometry only')
+        source_binding, prior_binding = report['source'], report['prior_train']
+        witnesses = report['indexes']
+        start = report['old_train_rows']
+        expected_rows = start + report['new_train_rows']
+        expected_entries = None
+        maximum = {key: report['maxima'][key][key] for key in ('forward_tokens', 'kv_slots')}
+    covered = NativeGraphSource(bound(source_binding), source.tokenizer_fingerprint,
+        required_split=split, role_ids=source.role_ids)
+    prior_source = NativeGraphSource(bound(prior_binding), source.tokenizer_fingerprint,
+        required_split=split, role_ids=source.role_ids)
+    if start is None:
+        start = len(prior_source)
+    if (type(start) is not int or start != len(prior_source) or len(covered) != expected_rows
+            or covered.entries[:start] != prior_source.entries
+            or expected_entries is not None and digest(covered.entries) != expected_entries):
+        raise ValueError('geometry evidence source prefix/count/metadata differs')
+    _check_indexes(witnesses)
+    recorded = {digest(w) for w in witnesses}
+    if any(digest(w) not in recorded for w in _source_witness(covered, package)):
+        raise ValueError('geometry evidence lacks exact source/tokenizer/split/policy indexes')
+    measured = {entry['id']: entry for entry in covered.entries[start:]}
+    requested = source.entries[first:]
+    if any(measured.get(entry['id']) != entry for entry in requested):
+        raise ValueError('geometry evidence does not cover every exact appended row')
+    if set(maximum) != {'forward_tokens', 'kv_slots'} or any(type(v) is not int or v < 1 for v in maximum.values()):
+        raise ValueError('geometry evidence needs positive physical and total-slot maxima')
+    if maximum['forward_tokens'] < max((e['forward_tokens'] for e in covered.entries[start:]), default=0):
+        raise ValueError('geometry evidence understates indexed physical geometry')
+    if report.get('schema') != SCHEMA:
+        descriptors = report['maxima']
+        indices = sorted({v['index'] for v in descriptors.values()})
+        if any(type(index) is not int or not 0 <= index < len(covered) for index in indices):
+            raise ValueError('geometry maximum must name an exact covered-source row')
+        actual = {}
+        for index, example in zip(indices, covered.iter_indices(indices)):
+            entry = covered.entries[index]
+            actual[index] = {'index': index, 'id': example.id, 'binding': entry['binding'],
+                'forward_tokens': example.plan.token_count, 'kv_slots': len(example.plan.slot_sources)}
+        if any(actual.get(value['index']) != value for value in descriptors.values()):
+            raise ValueError('geometry evidence maximum row identity/physical/total slots differ')
+    return maximum
+
+
 def process_owner():
     return {'pid': os.getpid(), 'boot_id': Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
             'start_ticks': Path('/proc/self/stat').read_text().split(') ', 1)[1].split()[19]}
@@ -217,7 +284,8 @@ def retire(directory, checkpoint, terminal):
         finally: os.close(descriptor)
 
 
-def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids):
+def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids,
+            runtime_package=None, geometry_evidence=None):
     """CPU preparation; callers decide admission and provide an immutable recipe."""
     from .recipe import load_recipe, resolve_stage_inputs, _binding_files, native_recipe_binding
     from ..data.native_sources import NativeGraphSource
@@ -235,7 +303,7 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
                              {'records': None, 'pieces': None, 'text_data': None}))
         for stage in proposed['recipe']['stages']}
     _contract(plan, proposed, stage_id)
-    package = Path(__file__).resolve().parents[1]
+    package = Path(runtime_package or Path(__file__).resolve().parents[1])
     if code_inventory(package) != plan['code']:
         raise ValueError('resident preparation runtime differs from the running recipe')
     inputs = {}
@@ -269,8 +337,17 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
     if not capacity_binding:
         raise ValueError('resident append needs an explicit current geometry qualification')
     limits = geometry_capacity(capacity_binding, identity=initial['geometry_identity'], code=plan['code'])
-    train_geometry = new_geometry(train, len(old))
-    held_geometry = new_geometry(held, len(old_held))
+    geometry_evidence = geometry_evidence or {}
+    if set(geometry_evidence) - {'train', 'test'}:
+        raise ValueError('geometry evidence must declare train/test scope explicitly')
+    def measured(source, first):
+        if len(source) == first:
+            return {'forward_tokens': 0, 'kv_slots': 0}
+        evidence = geometry_evidence.get(source.required_split)
+        return (geometry_from_evidence(source, first, evidence, package=package) if evidence
+                else new_geometry(source, first))
+    train_geometry = measured(train, len(old))
+    held_geometry = measured(held, len(old_held))
     geometry = {key: max(train_geometry[key], held_geometry[key]) for key in train_geometry}
     if any(geometry[key] > limits[key] for key in limits):
         raise ValueError('resident append exceeds qualified whole-graph geometry; retain pending until memory handling is qualified')
@@ -281,10 +358,12 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
         'prior_recipe': (previous['payload']['prior_recipe'] if previous else
             json.loads((directory/'initial.json').read_text())['recipe']),
         'tokenizer_fingerprint': tokenizer_fingerprint, 'role_ids': list(role_ids),
-        'indexes': _source_witness(train) + _source_witness(held), 'rows': len(train),
+        'indexes': _source_witness(train, package) + _source_witness(held, package), 'rows': len(train),
         'held_rows': len(held), 'held_entries_sha256': digest(held.entries),
         'entries_sha256': digest(train.entries), 'geometry_qualification': capacity_binding,
         'geometry': geometry, 'geometry_identity': initial['geometry_identity']}
+    if geometry_evidence:
+        payload['geometry_evidence'] = geometry_evidence
     proposed.setdefault('resident_adoptions', []).append({'predecessor': predecessor,
         'recipe': payload['recipe'], 'train': payload['train'], 'held': payload['held'], 'stage_id': stage_id})
     request_id = digest(payload)
