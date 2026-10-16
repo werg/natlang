@@ -34,7 +34,10 @@ Mellum checkpointing/inputoffload=true.
   Resident polling scope remains unchanged because it cannot load declarations.
   Root independent27tests PASS8.69s and quick PASS08:31. Cloud compositions
   Ma765bd1be/LF2af640d3e differ from previous approved packages only recipe.py.
-  Revised exact M inventory capacity approval in progress. Do not stop a learner
+  Root independently approved exact M inventory capacity continuation review
+  878a8870618b6b6f94c4a96383e88b49ae9c574307ee177cb6556b2e9839499e;
+  local recursive capacity verification passed112008physical/173589KV. Cloud must
+  verify actual staged inventory and regenerate with remote artifact paths. Do not stop a learner
   until its actual dry-run and memory continuation succeed; resume latest exact
   drained checkpoint without rolling weights, optimizer, RNG or exposure back.
 - LF must promptly acquire all2331 long-row obligations; M handoff carries488.
@@ -71,7 +74,8 @@ claim until actual drained-boundary throughput/verified-quality comparison.
 - D15 existing converter continues,59 missing source/model completion receipts
   at08:30. Root d15-complete-admission-watch-root-20261016.service is live:
   waits complete BOTH models then current-protection full first audit/source
-  rerender/register. No duplicate converter. Old conversion protection requires
+  rerender/register. Follow-on d15-capacity-admission-watch-root-20261016 is live
+  and uses shared partition/declaration/admission helpers immediately afterwards. No duplicate converter. Old conversion protection requires
   exact old/current eligibility proof, not invented historic admission.
 - D12 failed-source factual feature-status derivative under development. Entire
   source transcript is tool context; sole assistant target is structured evaluator
@@ -104,7 +108,10 @@ durable trajectories/receipts stay external. Actual old aggregate-only shards0â€
 require full rerender, never false attribution to newer stream renderer.12done
 receipts at08:24. Current Search v3 exact full-graph parity12samples passed.
 Earlier evidence-terminal V1 audit was misidentified as Search: retracted.
-It does not prove active evidence-terminal V2 defective; V2 parity remains to check.
+Actual active evidence-terminal V2 current-converter full graph equality now
+passes12 samples (first3train+first3held, BOTH models), proof8a571485beb35b049c2fffd014a3759b4d1e6f01f2962a4874e7728f16d919f1.
+This is representative parity, not an all-row recertification; no active V2
+weighting defect is evidenced.
 Root disk16GiB free08:30/ext52GiB. Agent watches physical SQLite peak including
 open deleted sort files. Redundant retired M5000 eval weight view deleted with
 explicit receipt, reclaiming24,556,281,665B; full training parent preserved.
