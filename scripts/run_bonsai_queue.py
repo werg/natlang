@@ -503,7 +503,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
               provider=None, model_concurrency=None, execution_plans=False, reasoning_effort='low', min_free_mib=0,
               no_observation_seconds=0, max_batch_cases=5, provider_request_config=None,
               server=None, chat_completions_url=None, api_key_env=None, chat_request_config=None,
-              identical_turn_limit=0, neuralese_server=False):
+              identical_turn_limit=0, neuralese_server=False, drain_file=None):
     if provider and (server or chat_completions_url or api_key_env):
         raise ValueError('Pi provider and external HTTP controls are mutually exclusive')
     if (chat_completions_url or api_key_env) and not server:
@@ -568,14 +568,22 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                                        row.get('resource_limit_reason') == 'model_request_budget') else failure_streak + 1
                 next_allowed_at = row.get('next_allowed_at', 0)
     journal.parent.mkdir(parents=True, exist_ok=True)
-    def record(value):
+    def record(value, *, durable=False):
         with journal.open('a') as output:
             output.write(json.dumps(value) + '\n')
             output.flush()
+            if durable: os.fsync(output.fileno())
         print(json.dumps(value), flush=True)
     for entry in entries:
         if entry['key'] in attempted:
             continue
+        if drain_file is not None and Path(drain_file).exists():
+            record({'event':'operator_drain','time':time.time(),'next_key':entry['key'],
+                'queue':str(queue),'queue_sha256':hashlib.sha256(queue.read_bytes()).hexdigest(),
+                'completed_keys':sorted(attempted),
+                'unstarted_keys':[row['key'] for row in entries if row['key'] not in attempted],
+                'disposition':'active case finished; no next request; remove drain file to resume exact remaining keys'}, durable=True)
+            return 75
         resolve_entry_jobs(entry, runtime)
         if min_free_mib:
             free_mib = shutil.disk_usage(journal.parent).free // (1024 * 1024)
@@ -798,6 +806,7 @@ def run_queue(queue, journal, runtime, seconds=600, model_id='Ternary-Bonsai-2-2
                 'failure_streak': failure_streak, 'next_allowed_at': next_allowed_at,
                 'elapsed_seconds': round(time.monotonic() - start, 1), 'time': time.time(),
                 'output_accounting': accounting, **partial_metrics(entry)})
+        attempted.add(entry['key'])
         # Preserve original attempt keys when roots share one collector batch.
         # A terminal batch event covers both attempts, even when only one produced a result.
         for member in entry.get('members', []):
@@ -839,6 +848,7 @@ if __name__ == '__main__':
     parser.add_argument('--identical-turn-limit', type=int, default=0,
                         help='stop a single case after this many exact repeats of action and observation in one invocation; zero disables')
     parser.add_argument('--max-batch-cases', type=int, default=5, help='explicit local queue batch ceiling; request concurrency remains separate')
+    parser.add_argument('--drain-file', type=Path, help='finish the active case, then stop before another case with a durable unstarted frontier')
     parser.add_argument('--execution-plans', action='store_true')
     parser.add_argument('--reasoning-effort', default='low')
     args = parser.parse_args()
@@ -861,4 +871,4 @@ if __name__ == '__main__':
               args.model_concurrency, args.execution_plans, args.reasoning_effort, args.min_free_mib,
               args.no_observation_seconds, args.max_batch_cases, args.provider_request_config,
               args.server, args.chat_completions_url, args.api_key_env, args.chat_request_config,
-              args.identical_turn_limit, args.neuralese_server))
+              args.identical_turn_limit, args.neuralese_server, args.drain_file))

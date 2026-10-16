@@ -583,3 +583,36 @@ def test_same_id_index_changed_source_cannot_reuse_old_native_terminal_error(tmp
     accounting=queue_module.output_accounting(entry,TS_HOST)
     assert accounting['manifest_valid'] and accounting['job_states'][0]['state']=='unverified_terminal_error'
     assert classify_case(None,{'status':'incomplete','output_accounting':accounting})=='unresolved'
+
+
+def test_cooperative_drain_before_case_does_not_start_or_relabel_unstarted(tmp_path,monkeypatch):
+    queue,journal,drain=tmp_path/'queue.jsonl',tmp_path/'journal.jsonl',tmp_path/'DRAIN'
+    entry=queue_entry(tmp_path);queue.write_text(json.dumps(entry)+'\n');drain.touch()
+    monkeypatch.setattr(queue_module.subprocess,'Popen',lambda *a,**k:pytest.fail('request after drain'))
+    assert run_queue(queue,journal,TS_HOST,drain_file=drain)==75
+    rows=[json.loads(x) for x in journal.read_text().splitlines()]
+    assert len(rows)==1 and rows[0]['event']=='operator_drain'
+    assert rows[0]['unstarted_keys']==['case'] and rows[0]['completed_keys']==[]
+    assert rows[0]['queue_sha256']==hashlib.sha256(queue.read_bytes()).hexdigest()
+
+
+def test_cooperative_drain_finishes_active_case_then_resumes_only_remaining(tmp_path,monkeypatch):
+    queue,journal,drain=tmp_path/'queue.jsonl',tmp_path/'journal.jsonl',tmp_path/'DRAIN'
+    source=tmp_path/'source.ir.jsonl';source_rows(source,2)
+    entries=[queue_entry(tmp_path,key=f'case-{i}',index=i,source=source,output=tmp_path/f'out-{i}.jsonl') for i in range(2)]
+    queue.write_text(''.join(json.dumps(row)+'\n' for row in entries));calls=[]
+    class Child:
+        def __init__(self,command,**kwargs):self.command=command;calls.append(command)
+        def wait(self,timeout=None):
+            write_exact_export(self.command)
+            if len(calls)==1:drain.touch()
+            return 0
+        def terminate(self):pytest.fail('drain terminated an active case')
+        def kill(self):pytest.fail('drain killed an active case')
+    install_child(monkeypatch,Child)
+    assert run_queue(queue,journal,TS_HOST,drain_file=drain)==75
+    rows=[json.loads(x) for x in journal.read_text().splitlines()]
+    assert [r['key'] for r in rows if r['event']=='finish']==['case-0']
+    event=rows[-1];assert event['event']=='operator_drain' and event['completed_keys']==['case-0'] and event['unstarted_keys']==['case-1']
+    drain.unlink();assert run_queue(queue,journal,TS_HOST,drain_file=drain)==0
+    assert len(calls)==2 and [c[c.index('--start')+1] for c in calls]==['0','1']

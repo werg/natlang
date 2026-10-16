@@ -1,0 +1,304 @@
+"""Durable boundary supervision for the existing self-hosted teacher feeder."""
+from __future__ import annotations
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import time
+import uuid
+try:
+    from .teacher_batch_completion import batch_completion
+except ImportError:
+    from teacher_batch_completion import batch_completion
+
+TOKEN = 'NATLANG_TEACHER_GENERATION_TOKEN'
+
+def write(path, value):
+    path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
+    pending = path.with_name(path.name + '.pending')
+    with pending.open('w') as stream:
+        json.dump(value, stream, indent=2); stream.write('\n'); stream.flush(); os.fsync(stream.fileno())
+    os.replace(pending, path)
+    fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+
+def binding(path):
+    path = Path(path)
+    return {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'bytes': path.stat().st_size}
+
+def process(pid):
+    try:
+        root = Path('/proc', str(pid)); stat = (root/'stat').read_text().rsplit(')', 1)[1].split()
+        if stat[0] == 'Z': return None
+        return {'pid': int(pid), 'start_ticks': stat[19],
+                'boot_id': Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                'argv': (root/'cmdline').read_bytes().split(b'\0')[:-1]}
+    except (FileNotFoundError, ProcessLookupError): return None
+
+def alive(identity):
+    current = process(identity['pid']) if identity else None
+    return bool(current and all(current[key] == identity[key] for key in ('start_ticks', 'boot_id')))
+
+def recover_token(token, *, script_prefix='feed-evidence-'):
+    found = []
+    for root in Path('/proc').iterdir():
+        if not root.name.isdigit(): continue
+        try:
+            if (TOKEN+'='+token).encode() not in (root/'environ').read_bytes().split(b'\0'): continue
+            current = process(root.name)
+            if current: found.append(current)
+        except (FileNotFoundError, PermissionError, ProcessLookupError): pass
+    # Only the feeder root is an owner; descendants inherit the token.
+    roots = [row for row in found if any(Path(arg.decode(errors='replace')).name.startswith(script_prefix) for arg in row['argv'][:5])]
+    if len(roots) > 1: raise ValueError('multiple feeders own the same prepared process token')
+    return roots[0] if roots else None
+
+def public_identity(identity):
+    return {key: value for key, value in identity.items() if key != 'argv'}
+
+def assess(entries, journal, codes, score):
+    completion = batch_completion(entries, journal, codes, score)
+    finishes = {row['key']: row for row in journal if row.get('event') == 'finish'}
+    return {'schema': 'natlang.teacher-generation-boundary/1', 'completion': completion,
+            'batch_complete': bool(completion['can_advance']),
+            'repair_required': completion['repair_required'],
+            'individual_outcomes': [{'key': entry['key'], 'source': entry['source'],
+                'index': entry['index'], 'seed': entry['seed'],
+                'finish': finishes.get(entry['key'])} for entry in entries]}
+
+def boundary(root, folder, expected_batch=None):
+    phase = json.loads((root/'feed-evidence-phase.json').read_text())
+    if phase['phase'] != 'batch_complete': raise ValueError('no drained batch boundary; preserve state for targeted repair')
+    batch = phase['batch']
+    if expected_batch is not None and batch != expected_batch: raise ValueError('feeder exited at a different batch boundary')
+    source = root/'evidence-collections-v2'/f'batch-{batch:04d}'
+    if live_batch_workers(source): raise ValueError('batch collectors have not drained')
+    entries = [json.loads(line) for line in (source/'queue.jsonl').read_text().splitlines() if line]
+    journal = [json.loads(line) for line in (source/'journal.jsonl').read_text().splitlines() if line]
+    decision = assess(entries, journal, phase['returncodes'], json.loads((source/'score.json').read_text()))
+    decision.update(at=time.time(), batch=batch, bindings={name: binding(source/name)
+        for name in ('queue.jsonl', 'journal.jsonl', 'score.json', 'teacher-source.json')})
+    receipt = folder/'boundaries'/f'batch-{batch:04d}.json'
+    if receipt.exists():
+        previous = json.loads(receipt.read_text())
+        if {k:v for k,v in previous.items() if k != 'at'} != {k:v for k,v in decision.items() if k != 'at'}:
+            raise ValueError('previously recorded immutable batch boundary changed')
+        decision = previous
+    else: write(receipt, decision)
+    return decision, entries
+
+def prepare_retry(folder, decision, entries):
+    """One distinct reviewed retry per unresolved key; original outputs are untouched."""
+    wanted = {row['key'] for row in decision['repair_required']}
+    rows = []
+    for entry in entries:
+        if entry['key'] not in wanted: continue
+        leaf = folder/'repairs'/f"batch-{decision['batch']:04d}"/entry['key']
+        if Path(entry['key']).name != entry['key'] or entry['key'] in ('.', '..'):
+            raise ValueError('repair key is not a plain queue key')
+        revised = {**entry, 'key': f"batch-{decision['batch']:04d}:"+entry['key'],
+            'jobs': str(leaf/'jobs'), 'output': str(leaf/'results.jsonl'), 'log': str(leaf/'collector.log')}
+        prepared = {'original': entry, 'retry': revised,
+            'boundary': binding(folder/'boundaries'/f"batch-{decision['batch']:04d}.json"),
+            'claim': 'independent retry; original batch stays incomplete unless separately reconciled'}
+        if (leaf/'prepared.json').exists():
+            if json.loads((leaf/'prepared.json').read_text()) != prepared:
+                raise ValueError('repair source/seed/boundary changed')
+        else: write(leaf/'prepared.json', prepared)
+        rows.append(revised)
+    if rows:
+        path = folder/'repairs'/f"batch-{decision['batch']:04d}"/'queue.jsonl'
+        # One atomic queue publication; no changes to a queue already consumed.
+        text = ''.join(json.dumps(row)+'\n' for row in rows)
+        if path.exists():
+            if path.read_text() != text: raise ValueError('published repair queue changed')
+            return rows
+        pending = path.with_suffix('.pending'); pending.write_text(text)
+        with pending.open('rb') as stream: os.fsync(stream.fileno())
+        os.replace(pending, path)
+    return rows
+
+def launch_feeder(folder, state, config, batch):
+    target = folder/'state.json'
+    launch = state.get('prepared_launch')
+    if launch and launch['batch'] != batch: raise ValueError('prepared launch batch mismatch')
+    if launch:
+        recovered = recover_token(launch['token'])
+        if recovered:
+            state['owner'] = public_identity(recovered); state['active_batch'] = batch
+            state.pop('prepared_launch', None); write(target, state); return
+        # A prepared token with no live owner may have run and exited before the
+        # supervisor recovered. A materialized batch must be reconciled first.
+        if (Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}').exists():
+            state.update(owner=None, active_batch=batch); state.pop('prepared_launch', None)
+            write(target, state); return
+    else:
+        if (Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}').exists():
+            raise ValueError('next batch already exists without this prepared launch')
+        launch = {'batch': batch, 'token': uuid.uuid4().hex}; state['prepared_launch'] = launch; write(target, state)
+    for root in Path('/proc').iterdir():
+        if not root.name.isdigit(): continue
+        current = process(root.name)
+        if current and any(Path(arg.decode(errors='replace')).name.startswith('feed-evidence-') for arg in current['argv'][:5]):
+            raise ValueError('another live feeder already owns generation')
+    env = {**os.environ, TOKEN: launch['token'], 'NATLANG_TEACHER_START_BATCH': str(batch),
+           'NATLANG_TEACHER_SINGLE_BATCH': '1', 'NATLANG_TEACHER_TASK_RUNTIME': config['task_runtime']}
+    log = (folder/'feeder.log').open('ab')
+    child = subprocess.Popen(['nice', '-n', '10', 'python', '-u', config['feeder']],
+        env=env, stdout=log, stderr=log, start_new_session=True)
+    identity = process(child.pid)
+    if identity is None: raise ValueError('new feeder exited before process identity publication')
+    state.update(owner=public_identity(identity), active_batch=batch, feeder=binding(config['feeder']),
+        task_runtime=config['task_runtime']); state.pop('prepared_launch', None); write(target, state)
+
+def repair_outcomes(queue, journal):
+    entries = [json.loads(line) for line in queue.read_text().splitlines() if line]
+    keys = {entry['key'] for entry in entries}
+    rows = [json.loads(line) for line in journal.read_text().splitlines() if line] if journal.exists() else []
+    if any(row.get('key') not in keys for row in rows): raise ValueError('repair journal has an unknown queue key')
+    finishes = {row['key']: row for row in rows if row.get('event') == 'finish'}
+    return entries, finishes
+
+
+def launch_repair(folder, state, config):
+    """Recover one shared process-token protocol, then retry only unfinished keys."""
+    active = state.get('repair_owner')
+    if active and alive(active): return
+    for source_queue in sorted((folder/'repairs').glob('batch-*/queue.jsonl')):
+        receipt_path = source_queue.parent/'launch.json'
+        receipt = json.loads(receipt_path.read_text()) if receipt_path.exists() else {
+            'schema': 'natlang.teacher-repair-attempts/1', 'source_queue': binding(source_queue),
+            'terminal_keys': {}, 'attempts': [], 'current': None}
+        if receipt['source_queue'] != binding(source_queue): raise ValueError('repair source queue changed')
+        attempt = receipt.get('current')
+        if attempt:
+            recovered = recover_token(attempt['token'], script_prefix='run_bonsai_queue.py')
+            if recovered:
+                attempt['owner'] = public_identity(recovered); attempt['state'] = 'launched'
+                state['repair_owner'] = attempt['owner']; write(receipt_path, receipt); write(folder/'state.json', state); return
+            if alive(attempt.get('owner')):
+                state['repair_owner'] = attempt['owner']; write(folder/'state.json', state); return
+            queue, journal = Path(attempt['queue']), Path(attempt['journal'])
+            _, finishes = repair_outcomes(queue, journal)
+            receipt['terminal_keys'].update(finishes)
+            if journal.exists():
+                attempt.update(state='drained', journal_binding=binding(journal),
+                    terminal_keys=sorted(finishes))
+                receipt['attempts'].append(attempt); receipt['current'] = None; attempt = None
+            # No journal and no live token means the intent never reached an
+            # observable request. Recover this SAME intent rather than losing it.
+        originals = [json.loads(line) for line in source_queue.read_text().splitlines() if line]
+        remaining = [row for row in originals if row['key'] not in receipt['terminal_keys']]
+        if not remaining:
+            receipt['state'] = 'attempt_exhausted'; receipt['current'] = None
+            receipt['claim'] = 'actual terminal retry outcomes retained; original batch is not relabelled complete'
+            write(receipt_path, receipt); continue
+        if attempt is None:
+            number = len(receipt['attempts'])+1; leaf = source_queue.parent/f'attempt-{number:04d}'
+            leaf.mkdir(exist_ok=True)
+            rows = [{**row, 'jobs': str(leaf/row['key']/'jobs'),
+                'output': str(leaf/row['key']/'results.jsonl'), 'log': str(leaf/row['key']/'collector.log')} for row in remaining]
+            queue = leaf/'queue.jsonl'; text = ''.join(json.dumps(row)+'\n' for row in rows)
+            if queue.exists() and queue.read_text() != text: raise ValueError('repair attempt queue changed')
+            if not queue.exists():
+                pending=queue.with_suffix('.pending');pending.write_text(text)
+                with pending.open('rb') as stream: os.fsync(stream.fileno())
+                os.replace(pending,queue)
+            attempt = {'number':number,'state':'prepared','token':uuid.uuid4().hex,
+                'queue':str(queue),'queue_binding':binding(queue),'journal':str(leaf/'journal.jsonl'),
+                'runtime':config['task_runtime'],'server':config['server'],'model_id':config['model_id'],
+                'node_bin':config['node_bin'],'queue_worker':config['queue_worker']}
+            receipt['current'] = attempt; write(receipt_path, receipt)
+        queue = Path(attempt['queue'])
+        if binding(queue) != attempt['queue_binding']: raise ValueError('prepared repair queue changed')
+        env = {**os.environ, TOKEN:attempt['token'], 'PATH':attempt['node_bin']+':'+os.environ.get('PATH',''),
+               'CUDA_VISIBLE_DEVICES':'','OMP_NUM_THREADS':'1'}
+        command=['flock','-n',str(folder/'repair-collector.lock'),'nice','-n','19','python','-u',attempt['queue_worker'],
+            str(queue),attempt['journal'],'--runtime',attempt['runtime'],'--server',attempt['server'],
+            '--chat-completions-url',attempt['server']+'/v1/chat/completions','--model-id',attempt['model_id'],
+            '--model-concurrency','1','--max-batch-cases','1','--case-seconds','7200','--identical-turn-limit','8']
+        attempt['argv']=command;write(receipt_path,receipt)
+        log=(queue.parent/'worker.log').open('ab');child=subprocess.Popen(command,env=env,stdout=log,stderr=log,start_new_session=True)
+        identity=process(child.pid)
+        if identity:
+            attempt.update(state='launched',owner=public_identity(identity));state['repair_owner']=attempt['owner']
+        write(receipt_path,receipt);write(folder/'state.json',state);return
+
+
+def live_batch_workers(source):
+    result=[]
+    for path in Path('/proc').iterdir():
+        if not path.name.isdigit(): continue
+        row=process(path.name)
+        if not row or not row['argv'] or not Path(row['argv'][0].decode(errors='replace')).name.startswith('python'): continue
+        if (any(Path(arg.decode(errors='replace')).name=='run_bonsai_queue.py' for arg in row['argv'][:5])
+                and any(arg.decode(errors='replace').startswith(str(source)+'/') for arg in row['argv'])):
+            result.append(public_identity(row))
+    return result
+
+
+def config_revision(folder, state, path):
+    raw=Path(path).read_bytes();config=json.loads(raw);current=binding(path)
+    if state.get('config')==current: return config
+    previous=state.get('config_value')
+    allowed={'task_runtime','server','model_id','feeder','queue_worker','node_bin','drain_file'}
+    changes={key for key in set(previous or {})|set(config) if (previous or {}).get(key)!=config.get(key)}
+    if previous is not None and changes-allowed: raise ValueError('guardian root/ownership configuration changed; preserve and explicitly migrate this state')
+    snapshot=folder/'config-history'/(current['sha256']+'.json');snapshot.parent.mkdir(parents=True,exist_ok=True)
+    if snapshot.exists():
+        if snapshot.read_bytes()!=raw:raise ValueError('config revision bytes changed')
+    else:
+        pending=snapshot.with_suffix('.pending')
+        with pending.open('wb') as stream:stream.write(raw);stream.flush();os.fsync(stream.fileno())
+        os.replace(pending,snapshot)
+    history=state.setdefault('config_history',[])
+    history.append({'at':time.time(),'previous':state.get('config_snapshot'),'current':binding(snapshot),
+        'changed_fields':sorted(changes),'policy':'active owner retains its actual old actor/runtime until natural boundary'})
+    state.update(config=current,config_snapshot=binding(snapshot),config_value=config)
+    write(folder/'state.json',state);return config
+
+def run(config_path):
+    config_path = Path(config_path); config = json.loads(config_path.read_text()); folder = Path(config['control']); folder.mkdir(parents=True, exist_ok=True)
+    lock = (folder/'guardian.lock').open('a'); fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    root = Path(config['root']); target = folder/'state.json'
+    if target.exists(): state = json.loads(target.read_text())
+    else:
+        predecessor = process(config['predecessor_pid'])
+        if predecessor and config['predecessor_script'].encode() not in predecessor['argv']: raise ValueError('predecessor exact argv mismatch')
+        state = {'schema': 'natlang.teacher-generation-guardian/1', 'config': binding(config_path),
+                 'owner': public_identity(predecessor) if predecessor else None, 'active_batch': config['predecessor_batch']}
+        write(target, state)
+    # Preserve older state receipts while introducing explicit same-control revisions.
+    if 'config_value' not in state and state.get('config')==binding(config_path):
+        state.pop('config',None)
+    config=config_revision(folder,state,config_path)
+    while True:
+        config=config_revision(folder,state,config_path)
+        if alive(state.get('owner')):
+            if not Path(config['drain_file']).exists(): launch_repair(folder,state,config)
+            write(folder/'phase.json', {'at': time.time(), 'phase': 'waiting_natural_feeder_exit', 'owner': state['owner'], 'drain_requested': Path(config['drain_file']).exists()})
+            time.sleep(5); continue
+        if state.get('active_batch') is not None:
+            decision, entries = boundary(root, folder, state['active_batch']); prepare_retry(folder, decision, entries)
+            state.update(next_batch=decision['batch']+1, active_batch=None, owner=None,
+                last_boundary=binding(folder/'boundaries'/f"batch-{decision['batch']:04d}.json"))
+            write(target, state)
+        if Path(config['drain_file']).exists():
+            write(folder/'phase.json', {'at': time.time(), 'phase': 'operator_drained', 'repair_running': alive(state.get('repair_owner')), 'next_batch': state['next_batch']})
+            time.sleep(5); continue
+        launch_repair(folder, state, config)
+        launch_feeder(folder, state, config, state['next_batch'])
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__); parser.add_argument('--config', required=True)
+    args = parser.parse_args()
+    try: run(args.config)
+    except BaseException as error:
+        try:
+            config = json.loads(Path(args.config).read_text()); write(Path(config['control'])/'error.json',
+                {'at': time.time(), 'error': str(error), 'type': type(error).__name__})
+        finally: raise
