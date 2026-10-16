@@ -610,6 +610,7 @@ def configure_native(args):
     parameters = effective_stage_parameters(stages[0], [], recipe)
     parameters = {key: value for key, value in parameters.items()
                   if key in HANDLERS['native_state_sft']['parameters'] and value is not None}
+    parameters.pop('memory_qualification',None)  # one-time source-capacity probe already bound to the SFT parent
     parameters.update(base=str(args.base.resolve()))
     parameters.setdefault('epochs', 1)
     if not parameters.get('task_eval') or not parameters.get('task_eval_every'):
