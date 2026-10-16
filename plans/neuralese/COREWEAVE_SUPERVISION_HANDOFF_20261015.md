@@ -1,4 +1,4 @@
-# CoreWeave supervision — 2026-10-16 01:41 UTC
+# CoreWeave supervision — 2026-10-16 01:55 UTC
 
 DGX owns operations; Pop closed. Exactly two student sandboxes and one stronger
 self-hosted Qwen teacher. Comprehensive adaptive entire-recipe training remains
@@ -7,7 +7,8 @@ shared dialect, production adaptedRL or measured task-lift claim.
 
 ## Actual training and next useful continuation
 
-Fresh01:31: LF4275/PID457011,loss.54565,5781supTPS/64154forwardtokens;
+Fresh01:51: LF4366/100%GPU; M4250 in normal held/save phase. Earlier01:31
+LF4275/PID457011,loss.54565,5781supTPS/64154forwardtokens;
 M4036/PID279683,loss.55412,5099supTPS/26086tokens. Both update after seed5044
 safe continuations. Current792493LF/792494M train,15827held,57144comm. LF
 learnedFP32rows.003/backbone3e-6; M inherited3e-6. PrefixOFF both.
@@ -29,7 +30,16 @@ prewarm465584,M288082/prewarm287744 wait exactprefix/foundation/held/planPASS
 before any stop. CandidateLF01cd5fcdca0b/Mdafd3b605770 include c432boundaryobserver,
 v2accounting+82e/370exactterminalsource binding andfullnamedoptimizer/RL closure;
 693compiledfiles+locks verified,100LF/103M Python+34Node+quickPASS. Numerics and
-7admission files match69c/f234. No next-runtime adoption claim yet.
+7admission files match69c/f234. No next-runtime adoption claim yet. Both guards
+held safely before stop while adding reviewed shared held-class coverage
+df25747f9 (47focused+9compatibility tests and quick PASS). Existing held sampling
+had checked only ordinary rows: first communication row3155; LFcursor298/M240.
+New class visits/cursors preserve prior exact visits and check both ordinary and
+communication within the normal budget. Full final coverage remains mandatory.
+Old prewarm PASS365/355s; held-fix runtime stages underway, reusing verified
+indexes. Learners remain running. M exporter exited01:45 on transient SDK stream
+reset verifying step4000;3750 remains latest verified private fullGET. Cloud
+agent repairs retry loop in shared supervisor; no newer durability claim yet.
 
 Firstread-onlyLFparentprofile failed helper missing checkpoint_layers before
 measurement (0SGD), baseline1024/checkpointing resumed. Fixed23a75728b+indexed
@@ -45,15 +55,15 @@ next completev2closure travels with V7, not old4820 incompatibleoptimizer.
 
 ## Data, generation and local checks
 
-Teacher01:31 GPU96%/90583MiB,8collectors,batch12 2678/3826finished,
-2384exactsuccess/54semantic/234invalid/6budget,8active. Keep fed; no additional
-sandbox/student/APIteacher. Dolci353/644 alive; Big2cloud4400chains/101569edges/
-99630ordinary/model. DGXdisjoint5k builderactive6workers12GBclaim.
+Teacher01:51 GPU96%,8collectors,batch12 2765/3826finished,
+2459exactsuccesses,8active. Keep fed; no additional sandbox/student/APIteacher.
+Dolci358/644 alive; Big2cloud4600chains/106188edges/104179ordinary/model.
+DGXdisjoint5k builderactive6workers12GBclaim.
 
 Search/OWL v3 live unit searchowl-native-render-20261016-v3.service/PID1125375,
 outputruns/search-owl-native-render-20261016-v3. New durable per-source compressed
-selection frames withinput/protectionbinding+hashes+tailtruncate; latest11/164,
-40901selected/1189committedframes. RSS~.48GB vsold18GBanonymous, cgroup~3GBincl
+selection frames withinput/protectionbinding+hashes+tailtruncate; latest48/164.
+RSS~.48GB vsold18GBanonymous, cgroup~3GBincl
 filecache.81ed06e25; root98integrity/checkpoint/renderer/convertertests+quickPASS.
 Rootfixes3oldAPItestfixtures without changinglivecode. No Searchgraphs admittedyet.
 
@@ -71,8 +81,18 @@ checkednull. Rootsource-curatedSFTreview explicitlyauthorizesoriginalteacher
 continuationimitation WITHOUTclaimingoracle/nativeverification. ExactsourceSHA
 andall7027row+targetbindings underprivate searchowl-overcap-source-curation-review-20261016,
 reviewSHA7099178a657fdc13b0367913fecd002b224477ba241d40cea2b2c1ec4c6559a6.
-Notcorpusadmission: adapterWIP stillneedsfullmessage/toolcall/native-target
-rendering+assistantproducerrole/protection/twins/actualconsumergradientchecks.
+Adapterdc0e28ec1 uses assistant producer spans, complete structured consumer
+messages/toolcalls and native assistant target continuation;9focused+quickPASS.
+Decision-hold audit all7027 found0source-ID/reviewed-decision/raw-SHA intersections
+against4596 held IDs; current files bound in conversion receipts. Root independent
+actualCUDA full-length consumer-only gradient gate terminalPASS: LF45279tokens/
+405targets, produceradaptergradnorm.000288899, cachedgradmaxgap1.81899e-10;
+M49433tokens/442targets,gradnorm.00843261,maxgap5.23869e-10. Exactly one flat graph
+forward; outputs/loss/gradient match explicit cached invocation reference under
+unchanged3e-6/2e-5 tolerances. Proof private searchowl-port-record-gradient-root-20261016.json.
+Scope is full real token IDs/pinned tokenizers with tiny FP32 native architectures,
+not production task performance. No corpus admission/exposure claim yet: complete
+bounded full build/admission and commit strict reader dependency before deployment.
 Do not treat broadnativeprogramadmission asoriginaltargetexecutionproof.
 
 RootactualLF4000 local16updates/32train+16disjointheld ratecheck DONEbotharms:
@@ -82,7 +102,8 @@ probes. Botharms'boundaryconfidence shifts showaggregateCE insufficient; add
 actualnormalheldboundaryobserverbothports nextV7. ComparisonJSONprivate under
 native-backbone-rate-direction-20261016. No diagnosticcheckpoint saved.
 
-LF4000 task eval stillactive onDGX; two completedlogiccasesvalidformat/wrong
+LF4000 task eval stillactive onDGX; latest4completed/1error, growingpartials.
+Two completedlogiccasesvalidformat/wrong
 exactanswer, repeatednamespace-shadowingdespitesuppliedcorrectfeedback; no task
 liftclaim. Do not trainonprotectedheldexamples. Currentevaldrains/coalescesexports.
 
@@ -95,13 +116,22 @@ updates integrated, rootactualCUDA15PASS+quick, defaultstrictexternalchangedacto
 rejectsbeforeforward. Originalsampledlogps/reward/bundles/optimizerhistoryretained.
 
 Newexplicit same-base adapter-state mechanism38f4ab9f1 remains ISOLATED, NOT
-canonical/adopted untilactualMper-tokenEnginegradientoraclePASS. Forwardhidden/
-logits/logps/lossBITWISEequal, butdcoefmax3.99034e-5/relL2.000605; final-layerdQexact,
-dK/dV differbeforeearlierlayers. FP64basiscontractionexplainsgap; agentfixingactual
-BF16KVcotangentfanin viaopt-inFP32carriers, no tolerancewaiver/fallback. Earlier
+canonical/adopted until full qualification. ActualMper-tokenEngine gradient now
+passed strict gate after opt-in FP32 KV cotangent repair: forward hidden/logits/
+logps/loss BITWISE equal; coefficientmaxgap3.72529e-9/relativeL2 4.60715e-8 versus
+previousmax3.99034e-5/relL2.000605. Actual threaded HTTP activation-checkpoint
+recompute also lost actor context on another Python thread; shared callback
+capture repair restores exact actor frames. Wider shape/compiler coverage still
+underway: initial16-case run13PASS/3FAIL; reusable private FX graph metadata
+workaround failed and was removed. Agent testing explicit Dynamo boundary wrapper
+over same sparse Flex HOP/lowering, no default/global change or tolerance waiver.
+Actual contextual-init/decide HTTP2ports PASS. Earlier
 DeltaLookupmaskdefecthypothesisretracted; no default-maskbugdemonstrated. Full
 heterogeneouspercall/export/higherorder paths remainopen, not completionclaims.
 
-Single standingfullsuite7705015aa active; previousafb97GREEN,bcfonlystalequeue
-fixturefailure fixed770. No duplicatebroadtests. InboxACK01:36,nextby02:26UTC.
+Full770 terminal4FAIL/1927PASS/266SKIP plus15GPU tests and allTS PASS. Four stale
+semantic serving fixtures fixed4fb6a8862 (actor identity/lock/request adapter
+list); focused7PASS+quick. Superseded065 full check stopped as incomplete to avoid
+known-red rerun; single standing4fb6 full check active. No full-green claim beyond
+afb97. InboxACK01:53,nextby02:43UTC.
 Owneruntracked expansionplan neverstaged. Keepallongoingprocessesmonitored.
