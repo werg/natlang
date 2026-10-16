@@ -74,12 +74,15 @@ LEGACY_SELECTOR_SEMANTICS_SHA256 = '69f7da7f1dc08c01ca9deb554f0275072c82e2666615
 # historic bindings used canonical-checkout path labels even when the new
 # renderer is run from a frozen checkout elsewhere.
 LEGACY_SEARCH_RENDERER_SHA256 = 'b054133ae53e7d86a9202ad84e60cabed1f79a26d18aa588e3890c2c21249917'
+from natlang_neuralese.common.paths import DEFAULTS as MACHINE_PATH_DEFAULTS  # noqa: E402
+
+_LEGACY_REPO = Path(MACHINE_PATH_DEFAULTS['repo'])
 LEGACY_SEARCH_CODE_BINDING = {
-    '/home/werg/natlang/scripts/neuralese_data/render_native_turn_corpus.py':
+    str(_LEGACY_REPO / 'scripts/neuralese_data/render_native_turn_corpus.py'):
         LEGACY_SEARCH_RENDERER_SHA256,
-    '/home/werg/natlang/training/neuralese/natlang_neuralese/data/text_corpus.py':
+    str(_LEGACY_REPO / 'training/neuralese/natlang_neuralese/data/text_corpus.py'):
         '004659afb57d4c23dd64262ed49ca4b3964938b60e701789a61b63091464773a',
-    '/home/werg/natlang/scripts/neuralese_data/strip_generic_system_prompt.py':
+    str(_LEGACY_REPO / 'scripts/neuralese_data/strip_generic_system_prompt.py'):
         'ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838',
 }
 # Upstream held-out split names rendered as test (recorded as selection counts split_mapped:<name>->test and as each
@@ -833,10 +836,32 @@ def _init(tokenizers, pieces=None):
     _G['strip_row'] = strip_row
     _G['pieces'] = pieces or {}  # exact source pieces, keyed by their registered names
     _G['tok'] = {}
+    _G['tokenizer_paths'] = {}
     for name, path in tokenizers.items():
         tok = load_pinned_tokenizer(Path(path))
         bind_history_reasoning(tok, require_declared=True)
         _G['tok'][name] = tok
+        _G['tokenizer_paths'][name] = Path(path).resolve()
+
+
+def _render_input_binding(tokenizers, pieces):
+    from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
+    tokenizer_inputs = {name: _tokenizer_input_binding(name, path, tokenizer_fingerprint)
+                        for name, path in sorted(tokenizers.items())}
+    return {'tokenizers': tokenizer_inputs,
+            'pieces_sha256': sha(canonical(pieces or {}).encode()) if pieces else None}
+
+
+def _tokenizer_input_binding(name, path, fingerprint=None):
+    if fingerprint is None:
+        from natlang_neuralese.data.text_corpus import tokenizer_fingerprint as fingerprint
+    root = Path(path).resolve()
+    relevant_files = ('tokenizer.json', 'tokenizer_config.json', 'chat_template.jinja',
+                      'special_tokens_map.json', 'added_tokens.json', 'vocab.json',
+                      'merges.txt', 'tokenizer.model')
+    return {'fingerprint': fingerprint(_G['tok'][name]),
+            'files': {filename: file_sha(root / filename) for filename in relevant_files
+                      if (root / filename).is_file()}}
 
 
 def _message_digest(message) -> str:
@@ -1251,7 +1276,7 @@ def _trajectory_key(record):
 
 def _render_job_binding(source_sha, tok_name, blocked, corpus, held_groups, decision_exclude,
                         target_exclude, header_as_full, full_programs, renderings,
-                        compress_text, code_binding):
+                        compress_text, code_binding, input_binding=None):
     return sha(canonical({
         'source_sha256': source_sha, 'tokenizer': tok_name, 'corpus': corpus,
         'blocked': blocked, 'held_groups': sorted(held_groups),
@@ -1259,6 +1284,7 @@ def _render_job_binding(source_sha, tok_name, blocked, corpus, held_groups, deci
         'header_as_full': header_as_full,
         'full_programs': None if full_programs is None else sorted(full_programs),
         'renderings': list(renderings), 'compress_text': compress_text, 'code': code_binding,
+        'render_inputs': input_binding,
     }).encode())
 
 
@@ -1304,6 +1330,18 @@ def _legacy_render_job_binding(job, source_sha, renderer_sha):
 def _verify_trajectory_receipts(job, done_result, allowed_renderer_shas):
     shard_path, out_dir, tok_name = Path(job[0]), Path(job[1]), job[2]
     stem = shard_path.name.removesuffix('.zst').removesuffix('.jsonl')
+    source_digest = file_sha(shard_path)
+    current_code_binding = _render_code_binding()
+    current_renderer_sha = current_code_binding[str(Path(__file__).resolve())]
+    expected_job_binding = _render_job_binding(
+        source_digest, tok_name, job[3], job[4], job[5], job[6],
+        job[11] if len(job) > 11 else set(), job[7], job[8], job[9],
+        bool(job[10]) if len(job) > 10 else False, current_code_binding,
+        job[13] if len(job) > 13 else None)
+    if done_result.get('render_job_binding') != expected_job_binding:
+        raise ValueError(f'done marker does not match current render job policy: {stem}/{tok_name}')
+    if done_result.get('renderer_code_sha256') != current_renderer_sha:
+        raise ValueError(f'done marker renderer identity differs from current renderer: {stem}/{tok_name}')
     expected_aggregate = {}
     for mode in job[9]:
         suffix = '.jsonl.zst' if bool(job[10]) else '.jsonl'
@@ -1350,18 +1388,51 @@ def _verify_trajectory_receipts(job, done_result, allowed_renderer_shas):
             raise ValueError(f'trajectory renderer identity mismatch: {path}')
         actual_renderer_shas.add(recorded_renderer)
         group_dir = path.parent.parent / 'groups' / path.stem
-        outputs = receipt.get('outputs')
-        if not isinstance(outputs, dict) or not outputs:
-            raise ValueError(f'trajectory receipt has no output checksums: {path}')
-        for relative, digest in outputs.items():
-            output_path = group_dir / relative
-            if not output_path.is_file():
-                raise ValueError(f'trajectory output missing: {output_path}')
-            if file_sha(output_path) != digest:
-                raise ValueError(f'trajectory output checksum mismatch: {output_path}')
+        _verify_group_receipt(
+            receipt, path.stem, group_dir, tok_name, job[9], bool(job[10]),
+            expected_binding=trajectory_bindings[path.stem],
+            expected_renderer_sha=expected_renderer_sha)
     declared = done_result.get('group_renderer_code_sha256s')
     if declared is not None and sorted(actual_renderer_shas) != sorted(declared):
         raise ValueError(f'done marker renderer summary differs from trajectory receipts: {stem}/{tok_name}')
+
+
+def _verify_group_receipt(receipt, group_id, group_dir, tok_name, renderings, compress_text,
+                          expected_binding=None, expected_renderer_sha=None):
+    """Require every durable output of a trajectory group, with safe paths and exact hashes."""
+    if not isinstance(receipt, dict) or receipt.get('schema') != 'natlang.native-turn-trajectory-render/1':
+        raise ValueError(f'trajectory receipt schema mismatch: {group_id}')
+    if receipt.get('trajectory_sha256') != group_id:
+        raise ValueError(f'trajectory receipt identity mismatch: {group_id}')
+    if expected_binding is not None and receipt.get('binding') != expected_binding:
+        raise ValueError(f'trajectory receipt binding mismatch: {group_id}')
+    if expected_renderer_sha is not None:
+        got_renderer_sha = receipt.get('renderer_code_sha256', expected_renderer_sha)
+        if got_renderer_sha != expected_renderer_sha:
+            raise ValueError(f'trajectory receipt renderer identity mismatch: {group_id}')
+    source_ids = receipt.get('source_record_ids')
+    result = receipt.get('result')
+    if not isinstance(source_ids, list) or not source_ids or not isinstance(result, dict):
+        raise ValueError(f'trajectory receipt lacks source rows or render result: {group_id}')
+    if any(not isinstance(result.get(mode), int) or result[mode] < 0 for mode in renderings):
+        raise ValueError(f'trajectory receipt lacks a valid count for every rendering: {group_id}')
+    suffix = '.jsonl.zst' if compress_text else '.jsonl'
+    expected = {f'{mode}/{tok_name}/{group_id}{suffix}' for mode in renderings}
+    expected.add(f'omissions/{tok_name}/{group_id}.jsonl')
+    outputs = receipt.get('outputs')
+    if not isinstance(outputs, dict) or set(outputs) != expected:
+        raise ValueError(f'trajectory receipt output inventory mismatch: {group_id}')
+    for relative, digest in outputs.items():
+        relative_path = Path(relative)
+        if relative_path.is_absolute() or '..' in relative_path.parts:
+            raise ValueError(f'trajectory receipt contains unsafe output path: {relative}')
+        if not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest):
+            raise ValueError(f'trajectory receipt has invalid output SHA-256: {relative}')
+        output_path = group_dir / relative_path
+        if not output_path.is_file():
+            raise ValueError(f'trajectory output missing: {output_path}')
+        if file_sha(output_path) != digest:
+            raise ValueError(f'trajectory output checksum mismatch: {output_path}')
 
 
 def _verify_legacy_done_binding(job, done_result, renderer_sha, source_digest):
@@ -1399,6 +1470,7 @@ def render_shard(job):
      renderings, *storage_options) = job
     compress_text = bool(storage_options and storage_options[0])
     target_exclude = storage_options[1] if len(storage_options) > 1 else set()
+    input_binding = storage_options[3] if len(storage_options) > 3 else None
     shard_path, out_dir = Path(shard_path), Path(out_dir)
     stem = shard_path.name.removesuffix('.zst').removesuffix('.jsonl')
     outer = out_dir / 'trajectory-stream' / tok_name / stem
@@ -1406,11 +1478,24 @@ def render_shard(job):
     groups_root.mkdir(parents=True, exist_ok=True)
     receipts_root.mkdir(parents=True, exist_ok=True)
     source_file_sha = file_sha(shard_path)
+    if input_binding is not None:
+        from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
+        actual_input_binding = {
+            'tokenizers': {tok_name: _tokenizer_input_binding(
+                tok_name, _G['tokenizer_paths'][tok_name], tokenizer_fingerprint)},
+            'pieces_sha256': sha(canonical(_G.get('pieces') or {}).encode())
+            if _G.get('pieces') else None,
+        }
+        expected_model_binding = input_binding.get('tokenizers', {}).get(tok_name)
+        if (not isinstance(expected_model_binding, dict)
+                or expected_model_binding != actual_input_binding['tokenizers'][tok_name]
+                or input_binding.get('pieces_sha256') != actual_input_binding['pieces_sha256']):
+            raise ValueError(f'loaded tokenizer or piece inventory changed for {tok_name}')
     code_binding = _render_code_binding()
     renderer_code_sha = code_binding[str(Path(__file__).resolve())]
     job_binding = _render_job_binding(source_file_sha, tok_name, blocked, corpus, held_groups, decision_exclude,
                                       target_exclude, header_as_full, full_programs, renderings,
-                                      compress_text, code_binding)
+                                      compress_text, code_binding, input_binding)
     legacy_renderer_sha = storage_options[2] if len(storage_options) > 2 else None
     legacy_job_binding = None
     if legacy_renderer_sha:
@@ -1481,7 +1566,8 @@ def render_shard(job):
         trajectory_count = db.execute('SELECT COUNT(*) FROM (SELECT trajectory FROM rows GROUP BY trajectory)').fetchone()[0]
         aggregate = {'shard': stem, 'tokenizer': tok_name, 'records': total,
                      'trajectory_groups': trajectory_count, 'streaming': True,
-                     'source_sha256': source_file_sha, 'renderer_code_sha256': renderer_code_sha}
+                     'source_sha256': source_file_sha, 'renderer_code_sha256': renderer_code_sha,
+                     'render_job_binding': job_binding}
         group_renderer_shas = set()
         trajectory_bindings, trajectory_renderers = {}, {}
 
@@ -1535,14 +1621,11 @@ def render_shard(job):
                         raise ValueError(f'legacy trajectory receipt renderer identity changed: {trajectory}')
                 else:
                     raise ValueError(f'committed trajectory binding changed: {trajectory}')
-                valid = True
-                for relative, digest in expected_receipt.get('outputs', {}).items():
-                    path = group_dir / relative
-                    if not path.is_file() or file_sha(path) != digest:
-                        valid = False
-                        break
-                if not valid:
-                    raise ValueError(f'committed trajectory output checksum mismatch: {trajectory}')
+                _verify_group_receipt(
+                    expected_receipt, group_id, group_dir, tok_name, renderings, compress_text,
+                    expected_binding=receipt_binding, expected_renderer_sha=receipt_renderer_sha)
+                if expected_receipt.get('source_record_ids') != source_ids:
+                    raise ValueError(f'committed trajectory source row inventory changed: {trajectory}')
             if expected_receipt is not None:
                 accumulate(expected_receipt['result'])
                 group_renderer_shas.add(receipt_renderer_sha)
@@ -1588,7 +1671,8 @@ def render_shard(job):
             temp_source.unlink(missing_ok=True)
             outputs = {}
             for path in sorted(group_dir.rglob('*')):
-                if path.is_file() and path != receipt_path and not path.name.endswith('.tmp'):
+                if (path.is_file() and path != receipt_path and not path.name.endswith('.tmp')
+                        and path.relative_to(group_dir).parts[0] != 'done'):
                     outputs[str(path.relative_to(group_dir))] = file_sha(path)
             group_receipt = {'schema': 'natlang.native-turn-trajectory-render/1',
                              'binding': binding, 'trajectory_sha256': sha(trajectory.encode()),
@@ -1956,9 +2040,11 @@ def main(argv=None):
         for path in a.target_exclude_ids:
             target_exclude.update(json.loads(line)['id'] for line in jsonl_lines(path) if line.strip())
         full_set = None if full_programs is None else set(full_programs)
+        _init(tokenizers, pieces)
+        input_binding = _render_input_binding(tokenizers, pieces)
         all_jobs = [(str(shard_paths[s]), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
                      a.program_header_as_full, full_set, tuple(a.renderings), a.compress_text, target_exclude,
-                     a.legacy_renderer_sha256)
+                     a.legacy_renderer_sha256, input_binding)
                 for s in shards for name in tokenizers]
         if a.render_shards is not None:
             if len(a.render_shards) != len(set(a.render_shards)):
@@ -2026,7 +2112,6 @@ def main(argv=None):
             p.error('subset rendering requires --render-only')
         if len(results) != len(all_jobs):
             raise ValueError(f'finalization requires all {len(all_jobs)} shard/tokenizer receipts; found {len(results)}')
-        _init(tokenizers, pieces)
         renders = {}
         for mode in a.renderings:
             for name in tokenizers:
