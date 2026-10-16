@@ -64,7 +64,9 @@ _G: dict = {}
 
 
 from natlang_neuralese.common.hashing import sha256_file_hex as file_sha, sha256_hex as sha  # noqa: E402
-from natlang_neuralese.common.jsonio import canonical_json_str as canonical, open_jsonl_text, write_jsonl_text  # noqa: E402
+from natlang_neuralese.common.jsonio import (canonical_json_str as canonical, open_jsonl_text,
+                                              write_json_durable, write_jsonl_text)  # noqa: E402
+from natlang_neuralese.common.resumable_jsonl_frames import ResumableJsonlFrames  # noqa: E402
 
 
 def jsonl_lines(path: Path):
@@ -511,7 +513,60 @@ def validate_candidate_selection_row(row, approved):
             raise ValueError(f'candidate-selection source row has an explicit training rejection: {rid}')
 
 
-def select(args, shard_dir: Path):
+def selection_input_binding(args):
+    """Bind the deterministic selector and all inputs that can change its result."""
+    def file_bindings(paths):
+        return [{'path': str(Path(path).resolve()), 'bytes': Path(path).stat().st_size,
+                 'sha256': file_sha(path)} for path in paths]
+    files = {
+        'sources': file_bindings(args.source),
+        'include_ids': file_bindings(args.include_ids or []),
+        'exclude_programs': file_bindings(args.exclude_programs or []),
+        'decision_exclude_ids': file_bindings(args.decision_exclude_ids or []),
+        'target_exclude_ids': file_bindings(args.target_exclude_ids or []),
+        'held_text': file_bindings(args.held_text or []),
+        'reserved': file_bindings([args.reserved] if args.reserved else []),
+        'protected': file_bindings([args.protected] if args.protected else []),
+    }
+    options = {
+        'corpus_id': args.corpus_id,
+        'include_admits': bool(args.include_admits),
+        'train_only': bool(args.train_only),
+        'registry_admits_reason': args.registry_admits_reason,
+        'limit': args.limit,
+        'shards': args.shards,
+        'full_sample': args.full_sample,
+        'candidate_selection_admission_sha256': (
+            sha(canonical(args.candidate_selection_admission).encode('utf-8'))
+            if args.candidate_selection_admission is not None else None),
+        'selector_code_sha256': file_sha(Path(__file__).resolve()),
+        'selector_policy': 'native-turn-source-order-selection/1',
+    }
+    binding = {'schema': 'natlang.native-turn-selection-inputs/1', 'files': files, 'options': options}
+    binding['sha256'] = sha(canonical(binding).encode('utf-8'))
+    return binding
+
+
+def _selection_state(binding, next_source, omissions, counts, strata, blocked, protected_cache,
+                     seen_ids, test_groups, reserved_groups, reserved_cache, frame_writer):
+    return {
+        'schema': 'natlang.native-turn-selection-checkpoint/1',
+        'binding': binding,
+        'next_source': next_source,
+        'omissions': omissions,
+        'counts': dict(counts),
+        'strata': {key: sorted(values) for key, values in strata.items()},
+        'blocked': blocked,
+        'protected': protected_cache,
+        'seen_ids': sorted(seen_ids),
+        'test_groups': sorted(test_groups),
+        'reserved_groups': sorted(reserved_groups),
+        'reserved_cache': reserved_cache,
+        'frames': frame_writer.frames,
+    }
+
+
+def select(args, shard_dir: Path, state_path: Path, binding: dict):
     """Stream the sources; write selected raw lines to trajectory shards; return omissions and blocked chains."""
     exclude = {}
     include = None
@@ -531,25 +586,45 @@ def select(args, shard_dir: Path):
     needles = index_needles(reserved_needles(args.reserved)) if args.reserved else None
     reserved_cache, reserved_groups = {}, set()
     protected = json.loads(args.protected.read_text()) if args.protected else None
-    with ExitStack() as stack:
-        compressed = getattr(args, 'compress_text', False)
-        suffix = '.jsonl.zst' if compressed else '.jsonl'
-        shard_files = [stack.enter_context(write_jsonl_text(shard_dir / f'{i:04d}{suffix}'))
-                       for i in range(args.shards)]
+    compressed = getattr(args, 'compress_text', False)
+    existing = json.loads(state_path.read_text()) if state_path.exists() else None
+    if existing is not None:
+        if existing.get('schema') != 'natlang.native-turn-selection-checkpoint/1':
+            raise ValueError('selection state is complete legacy data, not an incremental checkpoint')
+        if existing.get('binding') != binding:
+            raise ValueError('selection checkpoint inputs or selector semantics changed')
+        omissions, counts = existing['omissions'], Counter(existing['counts'])
+        strata = defaultdict(set, {key: set(values) for key, values in existing['strata'].items()})
+        blocked, protected_cache = existing['blocked'], existing['protected']
+        seen_ids, test_groups = set(existing['seen_ids']), set(existing['test_groups'])
+        reserved_groups = set(existing['reserved_groups'])
+        reserved_cache = existing['reserved_cache']
+        start_source = existing['next_source']
+        if not isinstance(start_source, int) or not 0 <= start_source <= len(args.source):
+            raise ValueError('selection checkpoint source frontier is invalid')
+        frame_writer = ResumableJsonlFrames(shard_dir, args.shards, compressed=compressed,
+                                            frames=existing['frames'])
+        n = counts['source_rows']
+    else:
         omissions, counts = [], Counter()
         strata = defaultdict(set)  # family -> selected programs (for the full-rendering warm-up sample)
         blocked = {}  # chain -> fewest messages of an unselected decision in it
         protected_cache = {}
-        seen_ids = set()
-        test_groups = set()
-        n = 0
-        for source in args.source:
+        seen_ids, test_groups, reserved_groups = set(), set(), set()
+        start_source, n = 0, 0
+        frame_writer = ResumableJsonlFrames(shard_dir, args.shards, compressed=compressed)
+    full_sample_programs = None
+    limit_reached = False
+    try:
+        for source_index in range(start_source, len(args.source)):
+            source = args.source[source_index]
             with open_jsonl_text(source) as f:
                 for text_line in f:
                     line = text_line.encode('utf-8')
                     if not line.strip():
                         continue
                     if args.limit and n >= args.limit:
+                        limit_reached = True
                         break
                     n += 1
                     row = json.loads(line)
@@ -654,10 +729,23 @@ def select(args, shard_dir: Path):
                     counts['selected:' + str(row.get('split'))] += 1
                     strata[str(row.get('family') or row.get('task_family') or '')].add(program_key(row))
                     shard = int(sha(str(row.get('teacher_trajectory_id') or chain_key(row)).encode())[:8], 16) % args.shards
-                    shard_files[shard].write(line.rstrip(b'\n').decode('utf-8') + '\n')
+                    frame_writer.write(shard, line.rstrip(b'\n').decode('utf-8') + '\n')
+            frame_writer.finish_source(source_index)
+            next_source = len(args.source) if limit_reached else source_index + 1
+            write_json_durable(state_path, _selection_state(
+                binding, next_source, omissions, counts, strata, blocked, protected_cache,
+                seen_ids, test_groups, reserved_groups, reserved_cache, frame_writer))
+            if limit_reached:
+                break
+    except BaseException:
+        frame_writer.abort()
+        raise
+    else:
+        frame_writer.close()
+    full_sample_programs = full_sample(strata, args.full_sample)
     counts['reserved_programs_hit'] = sum(bool(v) for v in reserved_cache.values())
     counts['reserved_groups'] = len(reserved_groups)
-    return omissions, counts, blocked, protected_cache, test_groups, reserved_groups, full_sample(strata, args.full_sample)
+    return omissions, counts, blocked, protected_cache, test_groups, reserved_groups, full_sample_programs
 
 
 def full_sample(strata: dict, fraction: float) -> list[str] | None:
@@ -1299,8 +1387,13 @@ def main(argv=None):
     t0 = time.time()
     shard_dir = out / 'work' / 'selected'
     state_path = out / 'work' / 'selection-state.json'
-    if state_path.exists():  # resume: selection is deterministic and already done
-        state = json.loads(state_path.read_text())
+    selection_binding = selection_input_binding(a)
+    state = json.loads(state_path.read_text()) if state_path.exists() else None
+    if state is not None and state.get('schema') == 'natlang.native-turn-selection-checkpoint/1':
+        omissions, counts, blocked, protected_cache, test_groups, reserved_groups, full_programs = select(
+            a, shard_dir, state_path, selection_binding)
+        print(json.dumps({'resumed_selection': True, 'next_source': len(a.source)}), flush=True)
+    elif state is not None:  # compatibility: older complete selection state
         omissions, counts, blocked = state['omissions'], Counter(state['counts']), state['blocked']
         protected_cache, test_groups, reserved_groups = state['protected'], set(state['test_groups']), set(state['reserved_groups'])
         # A selection made before --full-sample existed rendered (and keeps rendering) full for every program.
@@ -1311,13 +1404,8 @@ def main(argv=None):
     else:
         shutil.rmtree(out / 'work', ignore_errors=True)
         shard_dir.mkdir(parents=True, exist_ok=True)
-        omissions, counts, blocked, protected_cache, test_groups, reserved_groups, full_programs = select(a, shard_dir)
-        tmp = state_path.with_suffix('.tmp')
-        tmp.write_text(json.dumps({'omissions': omissions, 'counts': counts, 'blocked': blocked,
-                                   'protected': protected_cache, 'test_groups': sorted(test_groups),
-                                   'reserved_groups': sorted(reserved_groups),
-                                   'full_sample_programs': full_programs}))
-        os.replace(tmp, state_path)
+        omissions, counts, blocked, protected_cache, test_groups, reserved_groups, full_programs = select(
+            a, shard_dir, state_path, selection_binding)
     held_external = held_groups_from(a.held_text)
     # Train decisions sharing a source group with a reserved-test hit go with it (whole source groups, every split's
     # program of that group): they are decontaminated exactly like held groups.
