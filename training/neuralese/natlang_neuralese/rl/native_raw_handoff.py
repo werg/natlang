@@ -191,6 +191,11 @@ def complete_drain(intent, terminal, checkpoint, out, *, original_slot, resident
         record['resident']={'directory':str(directory.resolve()),'generation':state['generation'] if state else None,
             'current':snapshot('current.json') if state else None,
             'initial':snapshot('initial.json'),'pending_uncredited':snapshot('pending.json')}
+        if state is None:
+            source=directory.parent/'recipe-plan.json'
+            if source.exists():
+                target=snapshots/'recipe-plan.json';write_bytes_durable(target,source.read_bytes())
+                record['resident']['plan']=binding(target)
     write_json_durable(out,record)
     verify_handoff(binding(out))
     return binding(out)
@@ -270,7 +275,8 @@ def verify_handoff(reference, *, requirement=None):
     return record,saved
 
 
-RECIPE_HANDOFF='natlang.native-raw-drained-recipe-handoff/1'
+RECIPE_HANDOFF='natlang.native-raw-drained-recipe-handoff/2'
+LEGACY_RECIPE_HANDOFF='natlang.native-raw-drained-recipe-handoff/1'
 
 
 def _recipe_plan(recipe_path, device):
@@ -296,14 +302,38 @@ def _stable_handoff_plan(plan):
     return value
 
 
+def _drained_plan_authority(record, saved):
+    """Select actual adopted or initial-only authority, without manufacturing either."""
+    from ..train.native_resident import digest
+    evidence=record.get('resident') or {}
+    if evidence.get('current'):
+        state=json.loads(_bound(evidence['current']).read_text())
+        return state,state['payload']['plan'],state['payload']['stage_id']
+    if not evidence.get('initial') or not evidence.get('plan'):
+        raise ValueError('drained recipe handoff requires its original resident or initial plan')
+    initial=json.loads(_bound(evidence['initial']).read_text())
+    plan=json.loads(_bound(evidence['plan']).read_text())
+    training=saved['training'];options=training.get('options') or {}
+    recipe=options.get('recipe_binding')
+    if isinstance(recipe,str):recipe=json.loads(recipe)
+    stage=initial.get('stage_id');inputs=plan.get('stage_inputs',{}).get(stage,{})
+    receipts=training.get('source_receipts') or []
+    if (digest(plan)!=initial.get('plan_sha256') or recipe!=initial.get('recipe')
+            or not recipe or recipe.get('sha256')!=plan.get('recipe_sha256')
+            or options.get('stage_id')!=stage or len(receipts)<2
+            or any(receipts[i].get('sha256')!=inputs.get(key,{}).get('sha256')
+                   for i,key in enumerate(('native_graphs','held_native_graphs')))):
+        raise ValueError('drained initial plan differs from the actual saved recipe/stage/sources')
+    return None,plan,stage
+
+
 def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None):
     """Persist an existing verified lineage handoff, never a resident rewrite."""
     from ..train import native_resident as resident
     from ..train.recipe import lineage_handoff
-    record,saved=verify_handoff(handoff);del saved
-    state_ref=(record.get('resident') or {}).get('current')
-    if state_ref is None:raise ValueError('drained recipe handoff requires its original resident generation')
-    state=json.loads(_bound(state_ref).read_text());directory=Path(record['resident']['directory'])
+    record,saved=verify_handoff(handoff)
+    state,old_plan,stage_id=_drained_plan_authority(record,saved);del saved
+    directory=Path(record['resident']['directory'])
     package=Path(package or Path(__file__).resolve().parents[1]).resolve()
     out=Path(out);out.parent.mkdir(parents=True,exist_ok=True)
     if out.exists():
@@ -318,16 +348,20 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None):
         initial=json.loads((directory/'initial.json').read_text())
         if resident.owner_alive(initial.get('owner') or {}):
             raise ValueError('drained recipe handoff has a live optimizer owner')
-        retired=directory/'retired'/(state['generation']+'.json')
-        retirement=json.loads(retired.read_text())
-        if ({k:v for k,v in retirement.items() if k not in ('checkpoint','terminal')}!=state
-                or retirement.get('checkpoint')!=record['checkpoint']
-                or retirement.get('terminal',{}).get('sha256')!=record['terminal']['sha256']):
-            raise ValueError('drained recipe handoff retirement differs from original owner/checkpoint')
+        retired=None
+        if state is not None:
+            retired=directory/'retired'/(state['generation']+'.json')
+            retirement=json.loads(retired.read_text())
+            if ({k:v for k,v in retirement.items() if k not in ('checkpoint','terminal')}!=state
+                    or retirement.get('checkpoint')!=record['checkpoint']
+                    or retirement.get('terminal',{}).get('sha256')!=record['terminal']['sha256']):
+                raise ValueError('drained recipe handoff retirement differs from original owner/checkpoint')
+        elif initial!=json.loads(_bound(record['resident']['initial']).read_text()):
+            raise ValueError('drained recipe handoff initial owner changed before transition')
         from ..train.recipe import stage_started
-        if not stage_started(directory.parent,state['payload']['stage_id']):
+        if not stage_started(directory.parent,stage_id):
             raise ValueError('drained recipe handoff lost the actual started-stage boundary')
-        old_plan=state['payload']['plan'];plan_path=directory.parent/'recipe-plan.json'
+        plan_path=directory.parent/'recipe-plan.json'
         proposed=_recipe_plan(_bound(binding(recipe)),old_plan['device'])
         frozen=directory.parent/'runtime/natlang_neuralese'
         # Validate first; the existing implementation owns runtime archival and
@@ -351,9 +385,11 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None):
             updated=installed
         new_copy=out.with_name(out.stem+'-new-plan.json');write_json_durable(new_copy,updated)
         previous=updated['handoffs'][-1].get('superseded_runtime')
-        old_package=(directory.parent/previous/'natlang_neuralese') if previous else frozen
+        old_package=(directory.parent/previous/'natlang_neuralese') if previous else package
+        if resident.code_inventory(old_package)!=old_plan['code']:
+            raise ValueError('drained recipe handoff lost immutable original runtime code')
         value={'schema':RECIPE_HANDOFF,'handoff':handoff,'checkpoint':record['checkpoint'],
-            'retirement':binding(retired),'old_plan':binding(old_copy),'recipe':binding(recipe),
+            'retirement':binding(retired) if retired else None,'old_plan':binding(old_copy),'recipe':binding(recipe),
             'new_plan':binding(new_copy),'old_package':str(old_package.resolve()),
             'new_package':str(package),'old_code':resident.code_inventory(old_package),
             'new_code':resident.code_inventory(package)}
@@ -367,19 +403,22 @@ def verify_drained_recipe_handoff(reference, *, handoff):
     from ..train import native_resident as resident
     from ..train.recipe import lineage_handoff
     value=json.loads(_bound(reference).read_text())
-    if value.get('schema')!=RECIPE_HANDOFF or value.get('handoff')!=handoff:
+    if value.get('schema') not in (RECIPE_HANDOFF,LEGACY_RECIPE_HANDOFF) or value.get('handoff')!=handoff:
         raise ValueError('drained recipe handoff belongs to another original owner')
-    record,saved=verify_handoff(handoff);del saved
+    record,saved=verify_handoff(handoff)
+    state,original_plan,_=_drained_plan_authority(record,saved);del saved
     if value.get('checkpoint')!=record['checkpoint']:
         raise ValueError('drained recipe handoff changed its exact parent')
-    state=json.loads(_bound(record['resident']['current']).read_text())
-    retirement=json.loads(_bound(value['retirement']).read_text())
-    if ({k:v for k,v in retirement.items() if k not in ('checkpoint','terminal')}!=state
-            or retirement.get('checkpoint')!=record['checkpoint']
-            or retirement.get('terminal',{}).get('sha256')!=record['terminal']['sha256']):
-        raise ValueError('drained recipe handoff retirement changed')
+    if state is not None:
+        retirement=json.loads(_bound(value['retirement']).read_text())
+        if ({k:v for k,v in retirement.items() if k not in ('checkpoint','terminal')}!=state
+                or retirement.get('checkpoint')!=record['checkpoint']
+                or retirement.get('terminal',{}).get('sha256')!=record['terminal']['sha256']):
+            raise ValueError('drained recipe handoff retirement changed')
+    elif value.get('schema')!=RECIPE_HANDOFF or value.get('retirement') is not None:
+        raise ValueError('initial-only recipe transition requires explicit version2 proof')
     prior=json.loads(_bound(value['old_plan']).read_text())
-    if prior!=state['payload']['plan']:
+    if prior!=original_plan:
         raise ValueError('drained recipe handoff lost its final original plan')
     old_package,new_package=Path(value['old_package']),Path(value['new_package'])
     if (resident.code_inventory(old_package)!=value['old_code'] or value['old_code']!=prior['code']

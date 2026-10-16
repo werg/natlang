@@ -18,3 +18,15 @@ a historical resident commit to make it claim the new policy.
 
 These are exact durability and authentication helpers. The decision to drain or
 change the declared recipe remains the supervisor's natural-language policy.
+
+## Initial-only owners after a completed handoff
+
+A restarted trainer has a real initial owner and installed recipe plan before
+any new resident append exists. A subsequent certificate-only recipe change
+must use this actual authority, without inventing a resident generation or
+retirement. At safe drain snapshot the installed plan; verify its digest against
+the actual initial receipt, exact saved recipe binding, stage, and train/held
+source receipts. Reuse the existing lineage verifier/atomic plan commit and
+independently recompute it on reload. Version2 recipe proofs distinguish this
+case from generation retirement; historical version1 proofs retain their scope.
+Completed model/optimizer/RNG/exposure and process-tree checks remain mandatory.

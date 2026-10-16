@@ -96,3 +96,64 @@ def test_drained_resident_selects_new_priority_plan_and_preserves_exact_parent(a
             forged[field]=resident.binding(bad)
         path=tmp_path/('forged-'+field+'.json');write(path,forged)
         with pytest.raises(ValueError):handoff.verify_drained_recipe_handoff(resident.binding(path),handoff=original)
+
+
+@pytest.mark.parametrize('interrupt',[False,True])
+def test_initial_only_owner_carries_certificate_successor_into_raw_recipe(actual_drain,tmp_path,monkeypatch,interrupt):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    root=tmp_path/'initial-source';root.mkdir()
+    paths,directory,manager,_=setup(root)
+    assert resident.current(directory) is None
+    (directory.parent/'sft').mkdir()
+    package=Path(resident.__file__).parents[1]
+    frozen=directory.parent/'runtime/natlang_neuralese'
+    shutil.copytree(package,frozen,ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
+    process,intent,terminal,slot,pin=actual_drain
+    tree=json.loads(Path(intent['path']).read_text())
+    initial=json.loads((directory/'initial.json').read_text())
+    initial['owner']=tree['children'][0];write(directory/'initial.json',initial)
+    saved=torch.load(slot,weights_only=False)
+    saved['training'].update(global_step=8,source_receipts=[resident.binding(paths['old']),resident.binding(paths['held'])],
+        options={'recipe_binding':json.dumps(initial['recipe']),'stage_id':'sft'})
+    torch.save(saved,slot);shutil.copyfile(slot,pin)
+    process.communicate();write(terminal,{'at':time.time(),'returncode':0})
+    original=handoff.complete_drain(intent,resident.binding(terminal),resident.binding(pin),tmp_path/'initial-drained.json',
+        original_slot=resident.binding(slot),resident_directory=directory)
+    record,_=handoff.verify_handoff(original)
+    assert record['resident']['current'] is None and record['resident']['generation'] is None
+    assert record['resident']['plan']
+    before=pin.read_bytes()
+    certificate=root/'actual-capacity.json';write(certificate,{'passed':True,'scope':'control fixture only'})
+    prior=json.loads((directory.parent/'recipe-plan.json').read_text())
+    recipe=copy.deepcopy(prior['recipe'])
+    recipe['stages'][0]['parameters']['resident_geometry_qualification']=str(certificate)
+    successor=root/'certificate-successor.json';write(successor,recipe)
+    proof_path=tmp_path/'initial-transition.json'
+    if interrupt:
+        original_write=handoff.write_json_durable
+        def fail(path,value):
+            if path==proof_path:raise OSError('interrupted initial transition publication')
+            original_write(path,value)
+        with monkeypatch.context() as patch:
+            patch.setattr(handoff,'write_json_durable',fail)
+            with pytest.raises(OSError,match='interrupted initial'):
+                handoff.prepare_drained_recipe_handoff(original,successor,proof_path,package=package)
+    proof=handoff.prepare_drained_recipe_handoff(original,successor,proof_path,package=package)
+    checked=handoff.verify_drained_recipe_handoff(proof,handoff=original)
+    assert checked['retirement'] is None and pin.read_bytes()==before
+    assert resident.current(directory) is None and not (directory/'retired').exists()
+    plan=json.loads(Path(checked['new_plan']['path']).read_text())
+    assert plan['recipe']['stages'][0]['parameters']['resident_geometry_qualification']==str(certificate)
+    declaration={'drained_recipe_handoff':proof,'handoff_requirement':{'recipe_sha256':initial['recipe']['sha256']}}
+    assert raw._release_requirement(declaration,{})['recipe_sha256']==checked['recipe']['sha256']
+    assert handoff.prepare_drained_recipe_handoff(original,successor,proof_path,package=package)==proof
+    # Later runtime replacement cannot invalidate an exact historical proof.
+    (frozen/'future-runtime-change.py').write_text('# later runtime replacement\n')
+    assert handoff.verify_drained_recipe_handoff(proof,handoff=original)==checked
+    for key in ('plan_sha256','recipe','stage_id'):
+        forged=copy.deepcopy(initial);forged[key]='forged'
+        bad=tmp_path/('bad-initial-'+key+'.json');write(bad,forged)
+        altered=copy.deepcopy(record);altered['resident']['initial']=resident.binding(bad)
+        path=tmp_path/('bad-handoff-'+key+'.json');write(path,altered)
+        with pytest.raises((ValueError,TypeError)):
+            handoff.prepare_drained_recipe_handoff(resident.binding(path),successor,tmp_path/('bad-proof-'+key+'.json'),package=package)
