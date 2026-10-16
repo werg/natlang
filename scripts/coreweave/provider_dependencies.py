@@ -49,6 +49,12 @@ def dependency_closure(request, *, namespace='/work/native-production'):
         for name, frame in progress.items():
             if obligations[name]['complete']:
                 continue  # Completed historical source files are not read by mandatory SFT.
+            identity = frame.get('identity') or {}
+            if identity.get('objective_kind') == 'native-offline-pairwise':
+                objective = identity.get('objective')
+                if not isinstance(objective, dict) or not all(objective.get(key) for key in ('path', 'sha256')):
+                    raise ValueError('incomplete offline preference frame needs its exact objective binding')
+                bound(objective)
             for declaration in (frame.get('pending_source_declarations') or {}).values():
                 from natlang_neuralese.train.native_pending_sources import pending_source_dependencies
                 path = bound(declaration['binding'])

@@ -205,3 +205,27 @@ def test_pending_source_declarations_and_complete_cohort_are_carried_dependencie
     Path(long_rows['path']).write_text('changed')
     with pytest.raises(ValueError,match='content hash mismatch'):
         deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+
+
+@pytest.mark.parametrize('condition',['valid','changed','missing','complete'])
+def test_carried_offline_preference_objective_is_exact_consumed_dependency(tmp_path,condition):
+    import torch
+    source=write(tmp_path/'paired-graphs.jsonl','complete chosen and rejected histories')
+    objective=write(tmp_path/'preference.json',{'rows':{'chosen':{'mask':[0,1]},'rejected':{'mask':[0,1]}}})
+    frame={'required_visits':{'chosen':1,'rejected':1},'exposure_counts':{},'source_receipts':[source],
+        'identity':{'objective_kind':'native-offline-pairwise',
+            'objective':{**objective,'kind':'native-offline-pairwise','beta':.1,'margin':0.}}}
+    if condition=='complete':frame['exposure_counts']={'chosen':1,'rejected':1}
+    checkpoint=tmp_path/'state.pt';torch.save({'sft_progress':{'preference':frame}},checkpoint)
+    binding={'path':str(checkpoint),'sha256':deps.sha256_file_hex_cached(checkpoint)}
+    if condition=='changed':Path(objective['path']).write_text('changed mask')
+    if condition in ('missing','complete'):Path(objective['path']).unlink()
+    if condition=='changed':
+        with pytest.raises(ValueError,match='dependency hash changed'):
+            deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+    elif condition=='missing':
+        with pytest.raises(FileNotFoundError):
+            deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+    else:
+        result={row['path'] for row in deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))['files']}
+        assert result==({str(checkpoint)} if condition=='complete' else {str(checkpoint),source['path'],objective['path']})
