@@ -962,3 +962,11 @@ public semantics were introduced by these static tasks.
 The optional `selectTrainingTasks.nl` policy is also prepared but has no live NL
 execution qualification; the shared crisp default serves until that policy is
 measured through its existing pluggable interface.
+
+Native constant-use transport now retains existing `stopGradient` semantics
+through typed references, contexts, compiled bodies and archives. The per-use
+flag is transport metadata; model token renderings and numeric artifact IDs
+remain unchanged. Recovery details for a malformed constant flag or mismatched
+capture remain internal verifier debt if exposed to an executing model; include
+them in the next live recovery window. Static roundtrips and gradient checks do
+not establish task improvement or qualify public higher-order learning.
