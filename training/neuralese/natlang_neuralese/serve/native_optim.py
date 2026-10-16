@@ -68,6 +68,11 @@ def _native_optimizer_step_impl(engine, body, owner):
         if record is None:
             raise ValueError('optimizer request needs an available named native gradient artifact')
         gradient = record.artifact
+        if gradient.kind=='state-gradient':
+            from ..model.native_state_derivation import optimize_state
+            result,_,_=optimize_state(engine,record,body.get('optimizer'),body.get('optimizer_state_id'),owner,
+                program_id=(gradient.provenance or {}).get('derivative_program_id'))
+            return {**result,'native_identity':identity,'native_state':engine.store.get_native_state(result['native_state_id']).meta()}
         if gradient.kind == 'adapter-gradient':
             from ..model.native_adapters import optimize_adapter
             with engine.native_execution_lock:
@@ -75,6 +80,14 @@ def _native_optimizer_step_impl(engine, body, owner):
         if gradient.kind != 'parameter-gradient' or gradient.native_identity != identity:
             raise ValueError('gradient kind or model identity differs from the live checkpoint')
         names = set(gradient.tensors)
+        value_id=(gradient.provenance or {}).get('parameter_value_id')
+        if value_id is not None:
+            parent=engine.store.get_native_tensor_artifact(value_id)
+            live=dict(engine.shared_model.named_parameters())
+            if (parent is None or parent.artifact.kind!='parameter-set' or parent.artifact.native_identity!=identity
+                    or not names<=parent.artifact.tensors.keys() or any(name not in live
+                    or not torch.equal(live[name].detach().cpu(),parent.artifact.tensors[name]) for name in names)):
+                raise ValueError('gradient belongs to another exact functional parameter value; apply it through its bound derivative program')
         updated_model = _copy_parameter_targets(engine.shared_model, names)
         parameters = dict(updated_model.named_parameters())
         options = body.get('optimizer')

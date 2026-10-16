@@ -88,4 +88,5 @@ class SemanticStateMessage(NativeStateBlock):
             raise ValueError('semantic message schema or tensor inventory differs')
         return cls(**{name: metadata[name] for name in ('text', 'architecture', 'tokenizer_fingerprint',
             'checkpoint_sha256', 'embedding_weight_sha256', 'source_model', 'adapter_sha256', 'offsets', 'offset_policy')},
-            **tensors, layers=()).validate()
+            **tensors, layers=(),adapter_binding=metadata.get("adapter_binding"),
+            derivation=metadata.get("derivation")).validate()

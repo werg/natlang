@@ -309,7 +309,16 @@ def optimize_adapter(engine, gradient, options, state_id, owner=None):
         for actor in invocation_actors['invocations'].values():
             resolve_adapters(engine,[{'id':entry['id'],'scale':float.fromhex(entry['scale_hex'])}
                 for entry in (actor['adapter_binding'] or {}).get('adapters',[])])
-    actor_binding = (gradient.provenance or {}).get('adapter_binding')
+    from .native_derivative_contract import validate_derivative_target
+    derivative_target=validate_derivative_target(gradient)
+    if derivative_target is not None:
+        from .native_derivative_contract import verify_derivative_gradient_origin
+        verify_derivative_gradient_origin(engine.store,gradient)
+    if derivative_target is not None:
+        # A meta-gradient differentiates an earlier coefficient value. Its
+        # evaluated actors belong to the objective, not to the updated root.
+        invocation_actors=None
+    actor_binding = None if derivative_target is not None else (gradient.provenance or {}).get('adapter_binding')
     if actor_binding is not None:
         from types import SimpleNamespace
         validate_state_binding(actor_binding, SimpleNamespace(**gradient.provenance['effective_native_identity']))
@@ -403,7 +412,10 @@ def optimize_adapter(engine, gradient, options, state_id, owner=None):
     parent = engine.store.get_native_tensor_artifact(adapter_id).artifact
     updated = engine.store.put_native_tensor_artifact(NativeTensorArtifact('adapter-coefficients', engine.native_identity,
         next_coefficients, parent.source_artifact_id, {'adapter_spec': spec,
-            'coefficient_lineage':(parent.provenance or {}).get('coefficient_lineage',adapter_id)}), owner)
+            'coefficient_lineage':(parent.provenance or {}).get('coefficient_lineage',adapter_id),
+            **({'derivative_program_id':gradient.provenance['derivative_program_id'],
+                'gradient_id':engine.store.put_native_tensor_artifact(gradient,owner).id,'optimizer_state_parent_id':state_id,
+                'arithmetic':gradient.provenance['arithmetic']} if derivative_target is not None else {})}), owner)
     next_entries = ([{'id': updated.id if entry['id'] == adapter_id else entry['id'],
                       'scale': float.fromhex(entry['scale_hex'])} for entry in actor_binding['adapters']]
                     if actor_binding else [updated.id])

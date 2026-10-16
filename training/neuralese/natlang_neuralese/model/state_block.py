@@ -29,8 +29,11 @@ class NativeStateBlock:
     layers: tuple[dict[str, Any], ...]
     architecture: str
     adapter_binding: dict | None = field(default=None, kw_only=True)
+    derivation: dict | None = field(default=None,kw_only=True)
 
     def _validate_token_fields(self):
+        from .native_derivative_contract import validate_derivation
+        validate_derivation(self.derivation)
         if not isinstance(self.text, str) or not isinstance(self.architecture, str) or not self.architecture:
             raise ValueError('native state needs text and an architecture identity')
         for name in ('tokenizer_fingerprint', 'checkpoint_sha256', 'embedding_weight_sha256'):
@@ -104,7 +107,8 @@ class NativeStateBlock:
                 'checkpoint_sha256': self.checkpoint_sha256,
                 'embedding_weight_sha256': self.embedding_weight_sha256,
                 'layer_kinds': [layer['kind'] for layer in self.layers],
-                **({'adapter_binding': self.adapter_binding} if self.adapter_binding is not None else {})}
+                **({'adapter_binding': self.adapter_binding} if self.adapter_binding is not None else {}),
+                **({'derivation':self.derivation} if self.derivation is not None else {})}
 
     def tensors(self) -> dict[str, torch.Tensor]:
         return {'token_ids': self.token_ids, 'positions': self.positions, 'embeddings': self.embeddings,
@@ -135,6 +139,6 @@ class NativeStateBlock:
         block = cls(**{name: metadata[name] for name in ('text', 'architecture', 'tokenizer_fingerprint',
                         'checkpoint_sha256', 'embedding_weight_sha256')},
                     **{name: tensors[name] for name in ('token_ids', 'positions', 'embeddings')},
-                    layers=tuple(layers), adapter_binding=metadata.get("adapter_binding"))
+                    layers=tuple(layers), adapter_binding=metadata.get("adapter_binding"),derivation=metadata.get("derivation"))
         block.validate()
         return block

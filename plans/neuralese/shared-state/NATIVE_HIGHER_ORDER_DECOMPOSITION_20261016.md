@@ -107,3 +107,75 @@ including relative-L2/cosine checks and actual file pack/unpack counters. The
 stride-preserving storage implementation 72957ded9. This qualifies the native
 higher-order interaction; it does not qualify production whole-graph capacity
 or expose the unfinished public derivative-program API.
+
+### Finite program and durable optimized-state contract (implementation underway)
+
+The service-facing unit is a finite typed derivation program: named native
+parameter, adapter or imported-state inputs; ordered gradient and immutable
+optimizer nodes; and an outer objective differentiated with respect to named
+original inputs. Natural-language callers choose the objective, updates and
+stopping structure. Crisp code verifies acyclic references, exact artifact and
+model identities, executes each objective through the existing masked native
+graph executor, and applies the shared named service optimizer. A communication
+graph still has one masked forward; optimizer nodes intentionally create new
+forward evaluations at changed values. This is not recursive communication replay.
+
+1. Bind an immutable program declaration before execution, preserving its exact
+   JSON bytes and arithmetic contract. Root input and static artifact dependencies
+   are explicit. Output IDs occur only in the later execution receipt, avoiding
+   cycles in content hashes.
+2. Materialize every actual changed adapter or native state under its real ID
+   before using it. Retain live tensors separately for automatic differentiation;
+   durable artifacts contain the exact evaluated values, never placeholder actors.
+3. A native state update preserves the original producer as origin and records
+   the parent state, actual gradient, numeric update, optimizer history/step,
+   algorithm settings and optional derivative-program ID. Original text, token
+   IDs, embeddings, positions and layout remain unchanged. The consumer verifies
+   archived parents and exact selected numeric payloads; it must not describe the
+   result as a fresh producer capture.
+4. Preserve per-name optimizer moments and counters across successive nodes.
+   Missing or incompatible histories fail; an explicit new history starts at
+   step one. No optimizer, model, global RNG or original artifact is mutated.
+5. Python and TypeScript stores, portable archives, inference receipts and the
+   public learning API must preserve this same derivation graph. A graph-only
+   endpoint is an internal component, not completion of public GradSession support.
+
+This next protocol is not advertised until all paths and both-port service
+qualification are complete. The mathematical reference component and offload
+interaction above are qualified independently of that unfinished integration.
+
+Optimized values also cross semantic adaptation: a semantic encoding records its
+exact optimized raw parent and adapter SHA; a decoded target state records the
+source artifact, source/target model identities and trained adapter SHA. These
+are explicitly semantic transformations, never producer captures. The decoder
+runs the existing SemanticChannel mechanism; no alternative projection or
+text-only replacement is introduced. Portable validation checks immutable
+provenance and unchanged source fields, not a claim of offline numerical VAE
+re-execution. Actual constructor/consumer equivalence remains a separate test.
+
+Internal finite-program component qualification (2026-10-16): both ports pass
+two actual SGD/Adam updates with root meta-gradients, explicit same-arithmetic
+manual autograd oracles, named backbone and KV/hybrid roots, heterogeneous
+actors, unused-input zero derivatives, and exact original-versus-evaluated
+actor separation. A gradient records a complete functional actor descriptor:
+base identity, actual parameter-set overlays, uniform or per-invocation
+coefficients and reference arithmetic. It never reuses a coefficient-only
+checkpoint hash for changed backbone values. Immutable declaration/execution
+bindings are verified before accepting program-bound gradients.
+
+The focused final CPU run passed 35 cases (14.11 s); actual CUDA passed all
+28 program/state cases (27.78 s, 2.7 GB peak). These include actual typed HTTP
+two-step imported-state optimization, restart/restore, Python-to-TypeScript
+File/Memory/OPFS archives and `.nz` round trips, forged actor/dependency
+rejection, and optimized-state semantic encode/decode provenance. The existing
+14 native-store/tensor/OPFS tests also passed. This does not claim full-size
+cloud capacity, task lift, or public automatic higher-order support.
+
+Remaining public integration is explicit: recorded native turns must preserve
+actual native sampling/producer receipts; the existing `GradSession` objectives
+must lower to native masked graphs and the finite DAG; registered-policy
+objective files need portable dependency closure. Public order-2 HTTP support
+and capability metadata remain guarded. Persisted parameter-set roots currently
+must match the actual live checkpoint; within-program changed parameter sets
+are supported and individually identified. Exporting a new serving checkpoint
+from an arbitrary changed parameter-set root is a separate operation.

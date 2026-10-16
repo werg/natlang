@@ -1,3 +1,5 @@
+import {verifyNativeDerivativeGradientOrigin} from '../native/native-derivative-origin.js';
+import { verifyNativeStateDerivation } from '../native/native-state-derivation.js';
 /**
  * Node: a persistent Neuralese block archive in a directory (the Node twin of the browser's `OpfsNeuraleseStore`,
  * browser/neuralese-opfs-store.ts). Blocks are content-addressed: one file per block, named by its ID, holding the block
@@ -207,6 +209,7 @@ export class FileNeuraleseStore implements NeuraleseStore {
   }
 
   async putNativeState(input: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
+    if(input.metadata.derivation)await verifyNativeStateDerivation(this,input);
     const wire = encodeNativeState(input);
     const artifact = decodeNativeState(wire);
     return this.serialized(artifact.id, async () => {
@@ -245,6 +248,7 @@ export class FileNeuraleseStore implements NeuraleseStore {
   }
 
   async putNativeTensorArtifact(input: Omit<NativeTensorArtifact, 'id'>): Promise<NativeTensorArtifact> {
+    await verifyNativeDerivativeGradientOrigin(this,input);
     const wire = encodeNativeTensorArtifact(input), artifact = decodeNativeTensorArtifact(wire);
     return this.serialized(artifact.id, async () => {
       if (await this.has(artifact.id)) {

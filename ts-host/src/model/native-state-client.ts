@@ -1,19 +1,21 @@
 /** Exact native state service plumbing shared by typed writes, body init and views. */
 import { fetchModel } from '../model/chat-completion.js';
 import { HttpNeuraleseStore, requestNativeStateIds, restoreBlocks, restoreNativeStates } from '../model/neuralese-server.js';
-import { archiveNativeTensorFrom, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlockMeta,
+import { archiveNativeTensorFrom, archiveNativeArtifactFrom, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlockMeta,
   type NeuralesePort, type NeuraleseStore, type NativeAdapterStateConsumption, validateNativeAdapterStateConsumption, nativeCanonicalJson } from '../native/neuralese-store.js';
 import { hexDigest } from '../native/hash.js';
 import { neuraleseServerInfo, serves, type NeuraleseServerInfo } from '../model/neuralese-info.js';
 
 export type { NativeAdapterStateConsumption } from '../native/neuralese-store.js';
 
+import type {NativeStateDerivation} from '../native/native-derivative-contract.js';
+
 export type NativeSourceCapture = { policy: { checkpoint_sha256: string; tokenizer_fingerprint: string;
   embedding_weight_sha256: string; architecture: string };
   segments: ({ kind: 'tokens'; token_ids: number[]; producing: boolean[] } |
-    { kind: 'native_state'; id: string; native_identity: Record<string, string>; adapter_state_consumption?: NativeAdapterStateConsumption })[];
+    { kind: 'native_state'; id: string; native_identity: Record<string, string>; adapter_state_consumption?: NativeAdapterStateConsumption;state_derivation?:NativeStateDerivation })[];
   payload_start: number; payload_stop: number; imports?: { id: string; mode: string; observed_native_state_id?: string;
-    adapter_state_consumption?: NativeAdapterStateConsumption;
+    adapter_state_consumption?: NativeAdapterStateConsumption;state_derivation?:NativeStateDerivation;
     semantic_adaptation?: { adapter_sha256: string; source_native_identity: Record<string, string>; target_native_identity: Record<string, string> } }[] };
 export type NativeTextResult = { id: string; native_state: Record<string, unknown>; source_capture: NativeSourceCapture;
   source_text_sha256: string; init?: Record<string, unknown>; gate?: null };
@@ -23,18 +25,8 @@ export type NativeClientOptions = { endpoint: string; headers?: Record<string, s
 const failure = (code: string, detail: string): never => { throw Object.assign(new Error(`${code}: ${detail}`), { code }); };
 
 export async function archiveNativeState(options: NativeClientOptions, id: string): Promise<NativeStateArtifact> {
-  if (!options.store.putNativeState || !options.store.getNativeState)
-    return failure('neuralese-native-archive-unavailable', 'configure a store that preserves native multi-tensor state');
-  const found = await options.store.getNativeState(id);
-  const remote = new HttpNeuraleseStore(options.endpoint, options.headers);
-  const artifact = found ?? await remote.getNativeState(id);
-  if (!artifact) return failure('neuralese-unknown-native-state', `native source ${id} is unavailable; restore its exact artifact`);
-  for (const binding of artifact.metadata.adapter_binding?.adapters ?? []) await archiveNativeTensorFrom(remote, options.store, binding.id);
-  if (found) return found;
-  const { id: _, ...input } = artifact;
-  const saved = await options.store.putNativeState(input);
-  if (saved.id !== id) return failure('neuralese-block-integrity', `native source ${id} changed during archival`);
-  return saved;
+  if(!id.startsWith('nzs1_')) return failure('neuralese-native-source-integrity','native state archival requires an exact state ID');
+  return await archiveNativeArtifactFrom(new HttpNeuraleseStore(options.endpoint,options.headers),options.store,id) as NativeStateArtifact;
 }
 
 /** Restore every native part before a contextual write, including nested tool arguments. */

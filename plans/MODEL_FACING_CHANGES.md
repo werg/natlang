@@ -847,3 +847,18 @@ This is API capability metadata, not a new generation prompt. If exposed in a
 model-facing service discovery tool, include that discovery surface in the next
 live executor measurement window; do not infer downstream task lift from API
 qualification.
+
+
+## 2026-10-16: exact native state optimizer service (measurement debt)
+
+The typed host client gains `nativeStateOptimizerStep`; the existing native
+optimizer endpoint can update imported KV/hybrid coordinates and reports exact
+origin/update/history provenance. The existing `neuralese-native-optim-invalid`
+error code now also rejects missing or mismatched state ancestry/history. No
+prompt is added, raw source states retain their existing IDs, and higher-order
+public GradSession support is not advertised by this component. Numeric,
+Python/TypeScript archive and actual typed HTTP restart qualification are
+separate from model behavior. If this operation or its new error detail is
+exposed to an executing model, run the standing roughly48-sample live executor
+window before adopting that model-facing surface. This entry is unmeasured;
+there is no downstream task-lift claim.

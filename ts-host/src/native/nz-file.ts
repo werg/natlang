@@ -1,3 +1,4 @@
+import {verifyNativeStateDerivationRecords} from './native-state-derivation.js';
 /**
  * `.nz` files (spec/NEURALESE_FILES.md): a safetensors container whose metadata key `natlang` holds a JSON header of
  * typed named exports, and whose tensors are the soft blocks those exports use, each named by its content ID.
@@ -5,7 +6,7 @@
  * This module is the codec and the export loader. It knows nothing of callables: soft-function exports are returned
  * as `NzSoftFunctionSpec` values, which the runtime turns into callables (runtime/contexts.ts).
  */
-import { decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta, nativeTensorArtifactDependencies, type NativeTensorArtifact, decodeNativeState, encodeNativeState, nativeStateBlockMeta, type NativeStateArtifact, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseDtype,
+import { decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta, nativeTensorArtifactDependencies, nativeStateArtifactDependencies, importNativeArtifactBundle, type NativeTensorArtifact, decodeNativeState, encodeNativeState, nativeStateBlockMeta, type NativeStateArtifact, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseDtype,
   type NeuraleseStore } from './neuralese-store.js';
 import { isNeuraleseRef, neuraleseRef, type NeuraleseRef } from './neuralese.js';
 import { readTypeAliases } from './type-aliases.js';
@@ -156,10 +157,26 @@ export function decodeNz(bytes: Uint8Array): { header: NzHeader; blocks: Map<str
     if (artifact.id !== id) throw new NzFileError('neuralese-block-integrity', `native tensor ${id} changed`);
     nativeTensors.set(id, artifact);
   }
-  for (const artifact of nativeTensors.values()) for (const dependency of nativeTensorArtifactDependencies(artifact))
-    if (!nativeTensors.has(dependency)) throw new NzFileError('neuralese-unknown-block', `native artifact lacks dependency ${dependency}`);
-  for (const state of nativeStates.values()) for (const entry of state.metadata.adapter_binding?.adapters ?? [])
-    if (!nativeTensors.has(entry.id)) throw new NzFileError('neuralese-unknown-block', `adapted native state lacks coefficients ${entry.id}`);
+  for (const artifact of [...nativeTensors.values(),...nativeStates.values()]) for(const dependency of
+      artifact.id.startsWith('nnt1_')?nativeTensorArtifactDependencies(artifact as NativeTensorArtifact):nativeStateArtifactDependencies(artifact as NativeStateArtifact))
+    if(!nativeTensors.has(dependency)&&!nativeStates.has(dependency))throw new NzFileError('neuralese-unknown-block',`native artifact lacks dependency ${dependency}`);
+  const verified=new Set<string>(),active=new Set<string>();
+  const verify=(id:string):void=>{
+    if(verified.has(id))return;
+    if(active.has(id))throw new NzFileError('neuralese-file-format','native derivations must form a DAG');
+    active.add(id);
+    const state=nativeStates.get(id),value=state?.metadata.derivation;
+    if(state&&value){
+      verify(value.parent_state_id);
+      const parent=nativeStates.get(value.parent_state_id);
+      if(!parent)throw new NzFileError('neuralese-unknown-block','native derivation lacks original state');
+      if(value.kind==='optimizer')verifyNativeStateDerivationRecords(state,parent,nativeTensors.get(value.gradient_id),nativeTensors.get(value.update_artifact_id),
+        value.optimizer_state_parent_id?nativeTensors.get(value.optimizer_state_parent_id):undefined,value.program_id?nativeTensors.get(value.program_id):undefined);
+      else verifyNativeStateDerivationRecords(state,parent,undefined,undefined);
+    }
+    active.delete(id);verified.add(id);
+  };
+  for(const id of nativeStates.keys())verify(id);
   return { header, blocks, nativeStates, nativeTensors };
 }
 
@@ -202,12 +219,7 @@ export async function loadNz(bytes: Uint8Array, options: { store?: NeuraleseStor
   const loaded = loadNzSync(bytes, options.resolve);
   if (options.store) {
     for (const block of loaded.blocks.values()) await options.store.put({ ...block.meta, data: block.data });
-    if (loaded.nativeStates.size && !options.store.putNativeState)
-      throw new NzFileError('neuralese-file-format', 'the configured store cannot preserve native-state artifacts');
-    for (const { id: _, ...artifact } of loaded.nativeStates.values()) await options.store.putNativeState!(artifact);
-    if (loaded.nativeTensors.size && !options.store.putNativeTensorArtifact)
-      throw new NzFileError('neuralese-file-format', 'the configured store cannot preserve named native tensors');
-    for (const { id: _, ...artifact } of loaded.nativeTensors.values()) await options.store.putNativeTensorArtifact!(artifact);
+    await importNativeArtifactBundle(options.store,loaded.nativeStates,loaded.nativeTensors);
   }
   return loaded;
 }
@@ -238,24 +250,8 @@ export async function adoptImportedBlocks(store: Pick<NeuraleseStore, 'has' | 'p
     }
     done.add(id);
   }
-  for (const [id, artifact] of IMPORTED_NATIVE_STATES) {
-    if (done.has(id)) continue;
-    if (!(await store.has(id))) {
-      if (!store.putNativeState) throw new NzFileError('neuralese-file-format', 'compiled native state needs a native-capable store');
-      const { id: _, ...input } = artifact;
-      await store.putNativeState(input);
-    }
-    done.add(id);
-  }
-  for (const [id, artifact] of IMPORTED_NATIVE_TENSORS) {
-    if (done.has(id)) continue;
-    if (!(await store.has(id))) {
-      if (!store.putNativeTensorArtifact) throw new NzFileError('neuralese-file-format', 'compiled native tensor needs a named tensor store');
-      const { id: _, ...input } = artifact;
-      await store.putNativeTensorArtifact(input);
-    }
-    done.add(id);
-  }
+  await importNativeArtifactBundle(store,IMPORTED_NATIVE_STATES,IMPORTED_NATIVE_TENSORS);
+  for(const id of [...IMPORTED_NATIVE_STATES.keys(),...IMPORTED_NATIVE_TENSORS.keys()])done.add(id);
 }
 const ADOPTED = new WeakMap<object, Set<string>>();
 
@@ -402,7 +398,7 @@ export async function saveNz(exports: Record<string, NzSaveExport>, options: { s
       const wire = encodeNativeState(artifact);
       nativeHeaders[id] = { bytes: wire.length };
       blocks.set(id, wire);
-      for (const entry of artifact.metadata.adapter_binding?.adapters ?? []) await use(entry.id, 'native adapted state');
+      for(const dependency of nativeStateArtifactDependencies(artifact))await use(dependency,'native state derivation dependency');
       return;
     }
     const block = await options.store.get(id);

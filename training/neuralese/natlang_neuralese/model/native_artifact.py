@@ -19,7 +19,7 @@ DOMAIN = 'natlang.neuralese-native-tensor-artifact/1'
 _DTYPES = {torch.float16: ('F16', 2), torch.bfloat16: ('BF16', 2),
            torch.float32: ('F32', 4), torch.float64: ('F64', 8)}
 _FROM_SAFE = {name: (dtype, size) for dtype, (name, size) in _DTYPES.items()}
-_KINDS = {'parameter-set', 'parameter-gradient', 'parameter-update', 'state-gradient', 'optimizer-state', 'adapter-basis', 'adapter-coefficients', 'adapter-gradient'}
+_KINDS = {'parameter-set', 'parameter-gradient', 'parameter-update', 'state-gradient', 'optimizer-state', 'adapter-basis', 'adapter-coefficients', 'adapter-gradient', 'derivative-program'}
 
 
 def _raw(tensor):
@@ -53,8 +53,12 @@ class NativeTensorArtifact:
             raise ValueError('native artifact architecture is required')
         if self.source_artifact_id is not None and not re.fullmatch(r'nzs1_[a-z2-7]+|nnt1_[a-z2-7]+', self.source_artifact_id):
             raise ValueError('native artifact source must identify a native state or tensor artifact')
-        if not isinstance(self.tensors, dict) or not self.tensors:
+        if not isinstance(self.tensors, dict) or (not self.tensors and self.kind!='derivative-program'):
             raise ValueError('native tensor artifact needs named tensors')
+        if self.kind=='derivative-program':
+            from .native_derivative_contract import validate_program_artifact
+            validate_program_artifact(self.provenance)
+            if self.tensors:raise ValueError('native derivative program stores exact metadata, never fake parameter tensors')
         for name, tensor in self.tensors.items():
             if not isinstance(name, str) or not name or not isinstance(tensor, torch.Tensor):
                 raise ValueError('native tensors require nonempty names and tensor values')
@@ -71,13 +75,17 @@ class NativeTensorArtifact:
             validate_state_binding(binding, SimpleNamespace(**self.provenance.get('effective_native_identity', {})))
             if binding['base_native_identity'] != self.native_identity:
                 raise ValueError('adapter gradient actor binding changed its exact base identity')
+        from .native_derivative_contract import validate_derivative_target
+        derivative_target=validate_derivative_target(self)
+        from .native_derivative_contract import validate_functional_actor
+        validate_functional_actor(self)
         from .native_actor_graph import validate_invocation_behavior_provenance
         validate_invocation_behavior_provenance(self.provenance,self.native_identity)
         actors=(self.provenance or {}).get('invocation_actors')
         if actors is not None:
             from .native_actor_graph import validate_invocation_actor_provenance
             validate_invocation_actor_provenance(self.provenance,self.native_identity)
-            if self.kind=='adapter-gradient' and self.source_artifact_id not in {
+            if self.kind=='adapter-gradient' and derivative_target is None and self.source_artifact_id not in {
                     entry['id'] for actor in actors['invocations'].values()
                     for entry in (actor['adapter_binding'] or {}).get('adapters',[])}:
                 raise ValueError('native invocation gradient target is not one of its exact actors')
@@ -171,7 +179,8 @@ def decode_native_tensor_artifact(body):
                       if dtype == torch.bfloat16 else torch.frombuffer(bytearray(raw), dtype=dtype))
             tensors[name] = tensor.reshape(shape).clone()
         spans.sort()
-        if not spans or spans[0][0] != 0 or spans[-1][1] != len(payload) or any(a[1] != b[0] for a, b in zip(spans, spans[1:])):
+        if (not spans and (metadata.get('kind')!='derivative-program' or len(payload)!=0)
+                or spans and (spans[0][0] != 0 or spans[-1][1] != len(payload) or any(a[1] != b[0] for a, b in zip(spans, spans[1:])))):
             raise ValueError('native tensor payload has gaps or overlaps')
         expected = {row['name']: (row['dtype'], row['shape']) for row in metadata.get('tensors', [])}
         actual = {name: (_DTYPES[value.dtype][0], list(value.shape)) for name, value in tensors.items()}
@@ -193,10 +202,41 @@ def decode_native_tensor_artifact(body):
 def native_tensor_dependencies(artifact):
     """Required immutable inputs for interpreting/updating a named artifact."""
     dependencies = []
+    if artifact.kind=='derivative-program':
+        from .native_derivative_contract import validate_program_artifact
+        validate_program_artifact(artifact.provenance)
+        dependencies.extend(artifact.provenance['dependencies'])
+    execution=(artifact.provenance or {}).get('derivative_execution_id')
+    if execution is not None:
+        from .native_derivative_contract import native_id
+        if not native_id(execution,'nnt1_'):raise ValueError('native derivative gradient needs its exact execution artifact')
+        dependencies.append(execution)
+    program=(artifact.provenance or {}).get('derivative_program_id')
+    if program is not None:
+        from .native_derivative_contract import native_id
+        if not native_id(program,'nnt1_'):raise ValueError('native derivative gradient needs its exact program artifact')
+        dependencies.append(program)
+    if artifact.kind=='state-gradient' and artifact.source_artifact_id:
+        dependencies.append(artifact.source_artifact_id)
+    derivation=(artifact.provenance or {})
+    if derivation.get('scope') in ('natlang.native-state-derivation/1','natlang.native-derivative-program/1') or derivation.get('schema')=='natlang.native-state-derivation/1':
+        for key in ('gradient_id','parent_state_id','optimizer_state_parent_id','parent_value_id'):
+            if derivation.get(key):dependencies.append(derivation[key])
+        if artifact.source_artifact_id:dependencies.append(artifact.source_artifact_id)
     if (artifact.kind in ('adapter-coefficients', 'adapter-gradient') or
             artifact.kind == 'optimizer-state' and
             (artifact.provenance or {}).get('scope') == 'natlang.native-adapter/1'):
-        dependencies = [artifact.source_artifact_id] if artifact.source_artifact_id else []
+        if artifact.source_artifact_id:dependencies.append(artifact.source_artifact_id)
+    actor=(artifact.provenance or {}).get('functional_actor')
+    if actor is not None:
+        dependencies.extend(entry['id'] for entry in actor['parameter_values'])
+        for entries in [actor['uniform_adapters'],*(actor['invocation_adapters'] or {}).values()]:dependencies.extend(entry['id'] for entry in entries)
+    for value in ((artifact.provenance or {}).get('evaluation_inputs') or {}).values():
+        dependencies.append(value['value_id'])
+    if program is not None:
+        for key in ('parent_value_id','parameter_value_id','gradient_id','optimizer_state_parent_id'):
+            if (artifact.provenance or {}).get(key):dependencies.append(artifact.provenance[key])
+        if artifact.source_artifact_id:dependencies.append(artifact.source_artifact_id)
     binding = (artifact.provenance or {}).get('adapter_binding') if artifact.kind == 'adapter-gradient' else None
     if binding:
         dependencies.extend(entry['id'] for entry in binding['adapters'])

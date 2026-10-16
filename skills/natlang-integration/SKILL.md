@@ -448,3 +448,14 @@ invalid native adapter request, correct those names or restore the matching
 checkpoint closure. Native `grad_order: 1` remains first order; advertised
 adapters and same-base state exchange do not imply higher-order gradients,
 legacy projection decoders or cross-base raw KV compatibility.
+
+
+A native imported-state gradient can be applied with the typed host operation
+`nativeStateOptimizerStep`. Its result is new KV/hybrid state, with the original
+producer preserved as origin and exact gradient, update and optimizer-history
+artifacts retained. Keep its full `.nz` dependency closure when saving or moving
+it. For `neuralese-native-optim-invalid`, restore the exact parent state and
+matching named optimizer history; explicitly omit history only for an intended
+new optimizer. Do not relabel an optimized state as a fresh producer capture or
+replace missing state with decoded text. Public automatic `grad(...,{order:2})`
+remains unavailable until its native recorded-turn/DAG path is qualified.

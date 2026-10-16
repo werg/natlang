@@ -1,3 +1,5 @@
+import {verifyNativeDerivativeGradientOrigin} from './native-derivative-origin.js';
+import { verifyNativeStateDerivation } from './native-state-derivation.js';
 /**
  * Neuralese tensor store (S0 §3.4, S4 §2.4).
  *
@@ -5,6 +7,7 @@
  * references (`{ $neuralese: { type, id } }`); bytes move between this store, `.nz` files and model servers.
  */
 import { digest, hexDigest } from './hash.js';
+import { validateNativeStateDerivation, nativeStateDerivationDependencies, validateNativeDerivativeArtifact, validateNativeDerivativeTarget, validateNativeFunctionalActor, type NativeStateDerivation } from './native-derivative-contract.js';
 
 export type NeuraleseDtype = 'f32' | 'f16' | 'bf16';
 
@@ -46,7 +49,7 @@ export type NativeInvocationActorReceipt = { schema: 'natlang.native-invocation-
 
 export type NativeStateMetadata = { text: string; architecture: string;
   tokenizer_fingerprint: string; checkpoint_sha256: string; embedding_weight_sha256: string; layer_kinds: string[];
-  adapter_binding?: NativeAdapterBinding } &
+  adapter_binding?: NativeAdapterBinding; derivation?: NativeStateDerivation } &
   ({ schema: 'neuralese.native-state/1' } | { schema: 'neuralese.semantic-state/1';
     source_model: string; adapter_sha256: string; offsets: number[][]; posterior: 'mean';
     offset_policy: 'exact-tokenizer-offsets' | 'actual-token-decoder-alignment' | 'actual-token-decoder-text-alignment' });
@@ -64,7 +67,7 @@ export function nativeModelIdentityEqual(left: NativeModelIdentity, right: Nativ
 }
 
 export type NativeTensorArtifactMetadata = { schema: 'natlang.neuralese-native-tensor-artifact/1';
-  kind: 'parameter-set' | 'parameter-gradient' | 'parameter-update' | 'state-gradient' | 'optimizer-state' | 'adapter-basis' | 'adapter-coefficients' | 'adapter-gradient';
+  kind: 'parameter-set' | 'parameter-gradient' | 'parameter-update' | 'state-gradient' | 'optimizer-state' | 'adapter-basis' | 'adapter-coefficients' | 'adapter-gradient' | 'derivative-program';
   native_identity: NativeModelIdentity; source_artifact_id: string | null; provenance: Record<string, unknown>;
   tensors: { name: string; dtype: NativeTensorDtype; shape: number[] }[] };
 export type NativeTensorArtifact = { id: string; metadata: NativeTensorArtifactMetadata;
@@ -97,6 +100,34 @@ export function nativeTensorArtifactDependencies(artifact: Pick<NativeTensorArti
   const dependencies = (meta.kind === 'adapter-coefficients' || meta.kind === 'adapter-gradient' ||
       meta.kind === 'optimizer-state' && meta.provenance.scope === 'natlang.native-adapter/1') &&
       meta.source_artifact_id ? [meta.source_artifact_id] : [];
+  if (meta.kind === 'derivative-program') {
+    validateNativeDerivativeArtifact(meta.provenance);
+    dependencies.push(...meta.provenance.dependencies as string[]);
+  }
+  for (const key of ['derivative_program_id','derivative_execution_id'] as const) if (meta.provenance[key] !== undefined && meta.provenance[key] !== null) {
+    const id=meta.provenance[key];
+    if (typeof id !== 'string' || !/^nnt1_[a-z2-7]{52}$/.test(id)) throw new RangeError('native derivative artifact dependency needs its exact ID');
+    dependencies.push(id);
+  }
+  if (meta.kind === 'state-gradient' && meta.source_artifact_id) dependencies.push(meta.source_artifact_id);
+  if (meta.provenance.scope === 'natlang.native-state-derivation/1' || meta.provenance.schema === 'natlang.native-state-derivation/1' || meta.provenance.scope === 'natlang.native-derivative-program/1') {
+    for (const key of ['gradient_id','parent_state_id','optimizer_state_parent_id','parent_value_id','parameter_value_id'] as const) {
+      const id=meta.provenance[key];if(typeof id === 'string') dependencies.push(id);
+    }
+    if(meta.source_artifact_id) dependencies.push(meta.source_artifact_id);
+  }
+  if (meta.provenance.derivative_program_id) {
+    for(const key of ['parent_value_id','parameter_value_id','gradient_id','optimizer_state_parent_id']) {
+      const id=meta.provenance[key];if(typeof id==='string')dependencies.push(id);
+    }
+    if(meta.source_artifact_id)dependencies.push(meta.source_artifact_id);
+  }
+  const functional=meta.provenance.functional_actor as {parameter_values:{id:string}[];uniform_adapters:{id:string}[];invocation_adapters:Record<string,{id:string}[]>|null}|undefined;
+  if(functional){
+    dependencies.push(...functional.parameter_values.map(entry=>entry.id),...functional.uniform_adapters.map(entry=>entry.id));
+    for(const entries of Object.values(functional.invocation_adapters??{}))dependencies.push(...entries.map(entry=>entry.id));
+  }
+  for(const value of Object.values((meta.provenance.evaluation_inputs??{}) as Record<string,{value_id:string}>))dependencies.push(value.value_id);
   const binding = meta.kind === 'adapter-gradient' ? meta.provenance.adapter_binding as NativeAdapterBinding | undefined : undefined;
   if (binding) {
     validateNativeAdapterBinding(binding, meta.provenance.effective_native_identity as NativeModelIdentity);
@@ -126,20 +157,62 @@ export function nativeTensorArtifactDependencies(artifact: Pick<NativeTensorArti
   return [...new Set(dependencies)];
 }
 
-/** Archive one immutable named native artifact and its executable dependencies. */
-export async function archiveNativeTensorFrom(remote: NeuraleseStore, archive: NeuraleseStore,
-    id: string): Promise<NativeTensorArtifact> {
-  if (!archive.getNativeTensorArtifact || !archive.putNativeTensorArtifact)
+/** Exact native state dependencies, including original producers and update DAGs. */
+export function nativeStateArtifactDependencies(artifact: Pick<NativeStateArtifact,'metadata'>): string[] {
+  return [...new Set([...(artifact.metadata.adapter_binding?.adapters.map(entry=>entry.id)??[]),
+    ...nativeStateDerivationDependencies(artifact.metadata.derivation)])];
+}
+
+/** Archive either typed native family through one exact dependency mechanism. */
+export async function archiveNativeArtifactFrom(remote: NeuraleseStore, archive: NeuraleseStore,
+    id: string, active = new Set<string>()): Promise<NativeStateArtifact | NativeTensorArtifact> {
+  if (active.has(id)) throw new Error('neuralese-native-artifact-cycle: exact native dependencies must form a DAG');
+  const nested=new Set(active);nested.add(id);
+  if(id.startsWith('nzs1_')) {
+    if(!archive.getNativeState||!archive.putNativeState) throw new Error('neuralese-native-archive-unavailable: configure a native state archive');
+    const found=await archive.getNativeState(id), artifact=found??await remote.getNativeState?.(id);
+    if(!artifact) throw new Error(`neuralese-unknown-native-state: restore native state ${id}`);
+    for(const dependency of nativeStateArtifactDependencies(artifact)) await archiveNativeArtifactFrom(remote,archive,dependency,nested);
+    if(found)return found;
+    const {id:_,...input}=artifact,saved=await archive.putNativeState(input);
+    if(saved.id!==id)throw new Error('neuralese-block-integrity: native state changed during archival');
+    return saved;
+  }
+  if(!id.startsWith('nnt1_')||!archive.getNativeTensorArtifact||!archive.putNativeTensorArtifact)
     throw new Error('neuralese-native-archive-unavailable: configure a named tensor archive');
-  const found = await archive.getNativeTensorArtifact(id);
-  const artifact = found ?? await remote.getNativeTensorArtifact?.(id);
-  if (!artifact) throw new Error(`neuralese-unknown-native-artifact: restore native tensor ${id}`);
-  for (const dependency of nativeTensorArtifactDependencies(artifact)) await archiveNativeTensorFrom(remote, archive, dependency);
-  if (found) return found;
-  const { id: _, ...input } = artifact;
-  const saved = await archive.putNativeTensorArtifact(input);
-  if (saved.id !== id) throw new Error('neuralese-block-integrity: native artifact changed during archival');
+  const found=await archive.getNativeTensorArtifact(id),artifact=found??await remote.getNativeTensorArtifact?.(id);
+  if(!artifact)throw new Error(`neuralese-unknown-native-artifact: restore native tensor ${id}`);
+  for(const dependency of nativeTensorArtifactDependencies(artifact))await archiveNativeArtifactFrom(remote,archive,dependency,nested);
+  if(found)return found;
+  const {id:_,...input}=artifact,saved=await archive.putNativeTensorArtifact(input);
+  if(saved.id!==id)throw new Error('neuralese-block-integrity: native artifact changed during archival');
   return saved;
+}
+export async function archiveNativeTensorFrom(remote: NeuraleseStore, archive: NeuraleseStore,id:string):Promise<NativeTensorArtifact> {
+  if(!id.startsWith('nnt1_'))throw new RangeError('native tensor archive requires a named tensor ID');
+  return await archiveNativeArtifactFrom(remote,archive,id) as NativeTensorArtifact;
+}
+
+/** Restore a mixed native bundle in dependency order, sharing every archive writer. */
+export async function importNativeArtifactBundle(store: Pick<NeuraleseStore,'has'|'putNativeState'|'putNativeTensorArtifact'>,
+    states:Map<string,NativeStateArtifact>,tensors:Map<string,NativeTensorArtifact>):Promise<void> {
+  const done=new Set<string>(),active=new Set<string>();
+  const restore=async(id:string):Promise<void>=>{
+    if(done.has(id))return;
+    if(active.has(id))throw new RangeError('native artifact dependencies must form a finite DAG');
+    active.add(id);
+    const state=states.get(id),tensor=tensors.get(id);
+    if(!state&&!tensor){if(await store.has(id)){active.delete(id);done.add(id);return;}throw new RangeError(`native bundle lacks dependency ${id}`);}
+    for(const dependency of state?nativeStateArtifactDependencies(state):nativeTensorArtifactDependencies(tensor!))await restore(dependency);
+    if(!(await store.has(id))){
+      if(state){if(!store.putNativeState)throw new RangeError('native bundle needs a state-capable archive');
+        const {id:_,...input}=state;if((await store.putNativeState(input)).id!==id)throw new RangeError('native bundle state identity changed');}
+      else {if(!store.putNativeTensorArtifact)throw new RangeError('native bundle needs a named tensor archive');
+        const {id:_,...input}=tensor!;if((await store.putNativeTensorArtifact(input)).id!==id)throw new RangeError('native bundle tensor identity changed');}
+    }
+    active.delete(id);done.add(id);
+  };
+  for(const id of [...states.keys(),...tensors.keys()])await restore(id);
 }
 
 /** Exact executable dependency closure for retention and portable values. */
@@ -151,7 +224,7 @@ export async function nativeArtifactDependencyClosure(store: Pick<NeuraleseStore
     const artifact = id.startsWith('nnt1_') ? await store.getNativeTensorArtifact?.(id) : undefined;
     const state = id.startsWith('nzs1_') ? await store.getNativeState?.(id) : undefined;
     const dependencies = artifact ? nativeTensorArtifactDependencies(artifact) :
-      state?.metadata.adapter_binding?.adapters.map(entry => entry.id) ?? [];
+      state ? nativeStateArtifactDependencies(state) : [];
     for (const dependency of dependencies) if (!keep.has(dependency)) { keep.add(dependency); pending.push(dependency); }
   }
   return keep;
@@ -342,6 +415,7 @@ function validateNativeState(metadata: NativeStateMetadata, tensors: Record<stri
       (metadata.schema === 'neuralese.native-state/1' && !metadata.layer_kinds.length))
     throw new RangeError('invalid native-state metadata');
   if (metadata.adapter_binding !== undefined) validateNativeAdapterBinding(metadata.adapter_binding, metadata);
+  validateNativeStateDerivation(metadata.derivation);
   const expected = new Set(['token_ids', 'positions', 'embeddings']);
   const count = (name: string, rank: number): number[] => {
     const tensor = tensors[name];
@@ -425,22 +499,28 @@ export function nativeCanonicalJson(value: unknown): string {
 function validateNativeTensorArtifact(metadata: NativeTensorArtifactMetadata,
     tensors: Record<string, NativeTensorValue>): void {
   if (!metadata || metadata.schema !== 'natlang.neuralese-native-tensor-artifact/1' ||
-      !['parameter-set', 'parameter-gradient', 'parameter-update', 'state-gradient', 'optimizer-state', 'adapter-basis', 'adapter-coefficients', 'adapter-gradient'].includes(metadata.kind) ||
+      !['parameter-set', 'parameter-gradient', 'parameter-update', 'state-gradient', 'optimizer-state', 'adapter-basis', 'adapter-coefficients', 'adapter-gradient', 'derivative-program'].includes(metadata.kind) ||
       !metadata.native_identity || !SHA256.test(metadata.native_identity.checkpoint_sha256) ||
       !SHA256.test(metadata.native_identity.tokenizer_fingerprint) ||
       !SHA256.test(metadata.native_identity.embedding_weight_sha256) ||
       typeof metadata.native_identity.architecture !== 'string' || !metadata.native_identity.architecture ||
       (metadata.source_artifact_id !== null && !/^(?:nzs1_|nnt1_)[a-z2-7]{52}$/.test(metadata.source_artifact_id)) ||
       !metadata.provenance || typeof metadata.provenance !== 'object' || Array.isArray(metadata.provenance) ||
-      !tensors || typeof tensors !== 'object' || !Object.keys(tensors).length)
+      !tensors || typeof tensors !== 'object' || (!Object.keys(tensors).length && metadata.kind !== 'derivative-program'))
     throw new RangeError('invalid native tensor artifact metadata');
+  if (metadata.kind === 'derivative-program') {
+    validateNativeDerivativeArtifact(metadata.provenance);
+    if (Object.keys(tensors).length) throw new RangeError('native derivative program stores metadata, never fake tensor payloads');
+  }
+  const derivativeTarget=validateNativeDerivativeTarget(metadata,tensors);
+  validateNativeFunctionalActor(metadata,nativeCanonicalJson);
   validateNativeInvocationBehaviorProvenance(metadata);
   const actors = metadata.provenance.invocation_actors as NativeInvocationActorReceipt | undefined;
   if (actors) {
     validateNativeInvocationActorReceipt(actors,metadata.native_identity);
     validateNativeInvocationSourceNames(metadata,actors);
     if (metadata.provenance.actor_graph_sha256 !== hexDigest(nativeCanonicalJson(actors))) throw new RangeError('native invocation actor graph digest differs from its receipt');
-    if (metadata.kind === 'adapter-gradient' && !Object.values(actors.invocations).some(actor =>
+    if (metadata.kind === 'adapter-gradient' && !derivativeTarget && !Object.values(actors.invocations).some(actor =>
         actor.adapter_binding?.adapters.some(entry => entry.id === metadata.source_artifact_id)))
       throw new RangeError('native invocation gradient target is not one of its exact actors');
   }
@@ -533,7 +613,8 @@ export function decodeNativeTensorArtifact(bytes: Uint8Array): NativeTensorArtif
     spans.push([start, end]); tensors[name] = { dtype: entry.dtype, shape: [...entry.shape], data: payload.slice(start, end) };
   }
   spans.sort((a, b) => a[0] - b[0]);
-  if (!spans.length || spans[0]![0] !== 0 || spans.at(-1)![1] !== payload.length ||
+  if (!spans.length ? metadata.kind !== 'derivative-program' || payload.length !== 0 :
+      spans[0]![0] !== 0 || spans.at(-1)![1] !== payload.length ||
       spans.some((span, index) => index > 0 && spans[index - 1]![1] !== span[0]))
     throw new RangeError('native tensor artifact payload has gaps or overlaps');
   const prefix = `{"id":${JSON.stringify(id)},`;
@@ -662,6 +743,7 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
   }
   async has(id: string): Promise<boolean> { return this.blocks.has(id) || this.nativeStates.has(id) || this.nativeTensorArtifacts.has(id); }
   async putNativeState(artifact: Omit<NativeStateArtifact, 'id'>): Promise<NativeStateArtifact> {
+    if(artifact.metadata.derivation)await verifyNativeStateDerivation(this,artifact);
     const id = nativeStateContentId(artifact.metadata, artifact.tensors);
     const stored = { id, metadata: structuredClone(artifact.metadata), tensors: Object.fromEntries(
       Object.entries(artifact.tensors).map(([name, tensor]) => [name, { ...tensor, shape: [...tensor.shape], data: tensor.data.slice() }])) };
@@ -677,6 +759,7 @@ export class MemoryNeuraleseStore implements NeuraleseStore {
   }
   async hasNativeState(id: string): Promise<boolean> { return this.nativeStates.has(id); }
   async putNativeTensorArtifact(artifact: Omit<NativeTensorArtifact, 'id'>): Promise<NativeTensorArtifact> {
+    await verifyNativeDerivativeGradientOrigin(this,artifact);
     const wire = encodeNativeTensorArtifact(artifact), stored = decodeNativeTensorArtifact(wire);
     const found = this.nativeTensorArtifacts.get(stored.id);
     if (found) return structuredClone(found);

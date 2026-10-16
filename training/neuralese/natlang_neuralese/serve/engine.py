@@ -639,6 +639,9 @@ class Engine:
         if record is None:
             raise RequestError("neuralese-unknown-native-state", f"{block_id} is not in this server's store; PUT it first")
         block = record.block
+        if block.derivation is not None:
+            from ..model.native_state_derivation import verify_state_derivation
+            verify_state_derivation(self.store,block)
         exact = self._native_exact(block)
         adaptation = None
         state_receipt = None
@@ -671,7 +674,8 @@ class Engine:
             observed_id = block_id
             if seq.request.rl_capture:
                 seq.native_rl_prompt.append({'kind': 'native_state', 'id': block_id,
-                    'native_identity': source, 'adapter_state_consumption': state_receipt})
+                    'native_identity': source, 'adapter_state_consumption': state_receipt,
+                    **({'state_derivation':block.derivation} if block.derivation is not None else {})})
         elif exact:
             seq.cache = splice_block(self.shared_model, seq.cache, block,
                                      checkpoint_sha256=self.execution_native_identity["checkpoint_sha256"],
@@ -680,14 +684,15 @@ class Engine:
             mode = "exact-native-state"
             if seq.request.rl_capture:
                 seq.native_rl_prompt.append({"kind": "native_state", "id": block_id,
-                    "native_identity": self._native_block_identity(block)})
+                    "native_identity": self._native_block_identity(block),
+                    **({'state_derivation':block.derivation} if block.derivation is not None else {})})
         elif (getattr(self, 'semantic_channel', None) is not None and
               self.execution_native_identity in self.semantic_channel.bindings.values() and
               self._native_block_identity(block) in self.semantic_channel.bindings.values()):
             try:
                 adapted, adaptation = self.semantic_channel.adapt(block, target_name=self.semantic_participant,
                     target_model=self.shared_model, target_tokenizer=self.tokenizer, target_identity=self.execution_native_identity,
-                    allow_nearest=True)
+                    allow_nearest=True,source_state_id=block_id)
             except ValueError as error:
                 raise RequestError('neuralese-semantic-adapter-mismatch',
                     f'{error}; restore the matching model/adapter export or write the text with the target native writer') from error
@@ -723,6 +728,7 @@ class Engine:
         seq.native_own_position += 1
         seq.logits = self._native_logits(close_out["h_final"])
         seq.native_imports.append({"id": block_id, "mode": mode,
+                                   **({'state_derivation':block.derivation} if block.derivation is not None else {}),
                                    **({'observed_native_state_id': observed_id} if observed_id is not None else {}),
                                    **({'semantic_adaptation': adaptation} if adaptation is not None else {}),
                                    **({'adapter_state_consumption': state_receipt} if state_receipt is not None else {})})

@@ -82,7 +82,7 @@ class SemanticChannel:
         return mean, {'source_model': name, 'adapter_sha256': self.adapter_sha256,
                       'posterior': 'mean', 'source_native_identity': self.bindings[name]}
 
-    def message(self, block):
+    def message(self, block, *, source_state_id=None):
         from .semantic_message import SemanticStateMessage, retained_source_offsets
         source_name = self.model_name(block)
         source_tokenizer = self.tokenizers[source_name]
@@ -92,18 +92,23 @@ class SemanticChannel:
         local = NativeStateBlock.from_tensors(block.metadata(), {name: value.to(device)
                                                   for name, value in block.tensors().items()})
         code, _ = self.encode(local)
+        derivation=None
+        if block.derivation is not None:
+            from .native_state_derivation import semantic_derivation
+            if source_state_id is None:raise ValueError('optimized semantic encoding needs its exact source state ID')
+            derivation=semantic_derivation(block,source_state_id,self.adapter_sha256,self.bindings[source_name],self.bindings[source_name],'semantic-encode')
         return SemanticStateMessage(text=block.text, token_ids=local.token_ids,
             positions=local.positions, embeddings=local.embeddings, layers=(),
             **{key: getattr(block, key) for key in ('architecture', 'tokenizer_fingerprint',
                 'checkpoint_sha256', 'embedding_weight_sha256')},
-            code=code, offsets=offsets, offset_policy=policy,
+            code=code, offsets=offsets, offset_policy=policy,derivation=derivation,
             source_model=source_name, adapter_sha256=self.adapter_sha256).validate()
 
     def adapt(self, block, *, target_name, target_model, target_tokenizer, target_identity,
-              allow_nearest=False):
+              allow_nearest=False,source_state_id=None):
         from .semantic_message import SemanticStateMessage, retained_source_offsets
         self.require_target(target_name, target_identity)
-        message = block if isinstance(block, SemanticStateMessage) else self.message(block)
+        message = block if isinstance(block, SemanticStateMessage) else self.message(block,source_state_id=source_state_id)
         message.validate()
         source_name = self.model_name(message)
         if message.embeddings.shape[1] != self.vae.layouts[source_name].embedding_width:
@@ -133,5 +138,11 @@ class SemanticChannel:
         if baseline.embeddings.device != device:
             raise ValueError('semantic adapter and target model must use the declared serving device')
         decoded = self.vae.decode(target_name, code, baseline, alignment=alignment)
+        if block.derivation is not None:
+            from dataclasses import replace
+            from .native_state_derivation import semantic_derivation
+            if source_state_id is None:raise ValueError('optimized semantic decoding needs its exact source state ID')
+            decoded=replace(decoded,derivation=semantic_derivation(block,source_state_id,self.adapter_sha256,
+                self.bindings[source_name],target_identity,'semantic-adapt'))
         return decoded, {**receipt, 'target_model': target_name, 'alignment': matching,
                          'mode': 'learned-semantic-state-deltas', 'target_native_identity': target_identity}

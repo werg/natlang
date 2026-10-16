@@ -3,10 +3,10 @@
  * Native learning operates on captured invocation graphs and named tensor
  * artifacts; it cannot consume the old flattened `nz1` GradSession payload.
  */
-import { nativeCanonicalJson, validateNativeInvocationActorReceipt, type NativeInvocationActorReceipt, validateNativeAdapterBinding, type NativeAdapterBinding, nativeModelIdentityEqual, type NativeModelIdentity, type NativeTensorArtifact, type NeuraleseStore } from '../native/neuralese-store.js';
+import { nativeCanonicalJson, validateNativeInvocationActorReceipt, type NativeInvocationActorReceipt, validateNativeAdapterBinding, type NativeAdapterBinding, nativeModelIdentityEqual, type NativeModelIdentity, type NativeTensorArtifact, type NativeStateArtifact, type NeuraleseStore } from '../native/neuralese-store.js';
 import { providerErrorBody } from '../model/chat-completion.js';
 import { hexDigest } from '../native/hash.js';
-import { HttpNeuraleseStore, restoreNativeStates } from '../model/neuralese-server.js';
+import { HttpNeuraleseStore, restoreNativeStates, restoreBlocks } from '../model/neuralese-server.js';
 import { archiveNativeState } from '../model/native-state-client.js';
 import { archiveNativeTensorArtifact, restoreNativeTensorArtifacts } from './native-tensor-client.js';
 
@@ -198,4 +198,33 @@ export async function nativeAdapterOptimizerStep(endpoint: string, store: Neural
         entry.scale_hex !== currentBinding.adapters[index]?.scale_hex))
     throw new Error('neuralese-native-update-binding: adapter update changed the actor order or scales');
   return { ...reply, adapter };
+}
+
+
+/** Optimize exact KV/hybrid coordinates, preserving their producer and full update ancestry. */
+export async function nativeStateOptimizerStep(endpoint:string,store:NeuraleseStore,request:{
+  gradient:NativeTensorArtifact;nativeIdentity:NativeModelIdentity;optimizer:NativeOptimizerSpec;
+  optimizerStateId?:string;headers?:Record<string,string>;
+}):Promise<{native_state_id:string;native_state:NativeStateArtifact;optimizer_state_id:string;update_artifact_id:string;step:number;native_identity:NativeModelIdentity}>{
+  if(request.gradient.metadata.kind!=='state-gradient'||!nativeModelIdentityEqual(request.gradient.metadata.native_identity,request.nativeIdentity))
+    throw new RangeError('native state update requires an exact-base named state gradient');
+  if(!store.putNativeTensorArtifact)throw new Error('neuralese-native-archive-unavailable: configure a named tensor archive');
+  const {id:_,...input}=request.gradient;
+  if((await store.putNativeTensorArtifact(input)).id!==request.gradient.id)throw new Error('neuralese-native-gradient-binding: state gradient changed before upload');
+  const remote=new HttpNeuraleseStore(endpoint,request.headers);
+  const missing=await restoreBlocks(remote,store,[request.gradient.id,...(request.optimizerStateId?[request.optimizerStateId]:[])]);
+  if(missing.length)throw new Error(`neuralese-unknown-native-artifact: restore exact state update dependencies ${missing.join(', ')}`);
+  const reply=await post<{native_state_id:string;optimizer_state_id:string;update_artifact_id:string;step:number;native_identity:NativeModelIdentity}>(
+    endpoint,'/v1/neuralese/optim',{schema:'natlang.native-optimizer-request/1',native_identity:request.nativeIdentity,
+      gradient_id:request.gradient.id,optimizer_state_id:request.optimizerStateId,optimizer:request.optimizer},request.headers);
+  if(!nativeModelIdentityEqual(reply.native_identity,request.nativeIdentity))throw new Error('neuralese-native-update-binding: state update changed its exact native base');
+  const artifact=await archiveNativeState({endpoint,store,headers:request.headers},reply.native_state_id);
+  const derivation=artifact.metadata.derivation;
+  if(!derivation||derivation.kind!=='optimizer'||derivation.parent_state_id!==request.gradient.metadata.source_artifact_id||derivation.gradient_id!==request.gradient.id||
+    derivation.step!==reply.step||derivation.update_artifact_id!==reply.update_artifact_id||derivation.optimizer_state_parent_id!==(request.optimizerStateId??null))
+    throw new Error('neuralese-native-update-binding: state update differs from its exact gradient, parent or optimizer history');
+  const history=await archiveNativeTensorArtifact(endpoint,store,reply.optimizer_state_id,request.headers);
+  if(history.metadata.kind!=='optimizer-state'||history.metadata.source_artifact_id!==artifact.id||history.metadata.provenance.step!==reply.step)
+    throw new Error('neuralese-native-update-binding: state optimizer history differs from the actual updated artifact');
+  return {...reply,native_state:artifact};
 }

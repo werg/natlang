@@ -32,7 +32,7 @@ import {validateCoefficientRuntime,requireCoefficientAttestation,coefficientBind
 import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
   isNativeStateId, partsToText, runtimePartsToText, runtimeTextToParts, type ContentPart, type RuntimeContentPart } from '../native/neuralese.js';
 import { constantBlock, decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
-  decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId, nativeTensorArtifactDependencies, archiveNativeTensorFrom,
+  decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId, nativeTensorArtifactDependencies, nativeStateArtifactDependencies, archiveNativeTensorFrom,
   nativeTensorArtifactBlockMeta, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
   type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseDtype, type NeuraleseStore } from '../native/neuralese-store.js';
 
@@ -89,6 +89,18 @@ export async function restoreBlocks(remote: NeuraleseStore, archive: NeuraleseSt
   const restore = async (id: string): Promise<void> => {
     if (visited.has(id)) return;
     visited.add(id);
+    if (id.startsWith('nzs1_')) {
+      const artifact=await archive?.getNativeState?.(id)??await remote.getNativeState?.(id);
+      if(!artifact||!remote.putNativeState){missing.push(id);return;}
+      const before=missing.length;
+      for(const dependency of nativeStateArtifactDependencies(artifact))await restore(dependency);
+      if(missing.length!==before)return;
+      if(!(await remote.has(id))){
+        const {id:_,...input}=artifact;
+        if((await remote.putNativeState(input)).id!==id)throw new Error(`native state changed while restoring ${id}`);
+      }
+      return;
+    }
     if (id.startsWith('nnt1_')) {
       const artifact = await archive?.getNativeTensorArtifact?.(id) ?? await remote.getNativeTensorArtifact?.(id);
       if (!artifact || !remote.putNativeTensorArtifact) { missing.push(id); return; }
@@ -338,8 +350,8 @@ export async function restoreNativeStates(remote: HttpNeuraleseStore, archive: N
   const missing: string[] = [];
   for (const id of ids) {
     const local = await archive?.getNativeState?.(id);
-    if (local?.metadata.adapter_binding) {
-      const absent = await restoreBlocks(remote, archive, local.metadata.adapter_binding.adapters.map(entry => entry.id));
+    if (local) {
+      const absent = await restoreBlocks(remote, archive, nativeStateArtifactDependencies(local));
       if (absent.length) throw new Error(`neuralese-unknown-native-artifact: restore source adapter coefficients and bases ${absent.join(', ')}`);
     }
     if (known?.has(id)) continue;

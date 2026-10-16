@@ -432,6 +432,9 @@ class TensorStore:
         """Store raw native state or semantic codes with the same durable lifecycle."""
         from ..model.state_block import NativeStateBlock
         block.validate()
+        if block.derivation is not None:
+            from ..model.native_state_derivation import verify_state_derivation
+            verify_state_derivation(self,block)
         cpu_tensors = {name: tensor.detach().to("cpu").contiguous().clone() for name, tensor in block.tensors().items()}
         stored_block = NativeStateBlock.from_tensors(block.metadata(), cpu_tensors)
         record = NativeStateRecord(native_state_id(stored_block), stored_block)
@@ -466,6 +469,8 @@ class TensorStore:
         if not isinstance(artifact, NativeTensorArtifact):
             raise TypeError('expected NativeTensorArtifact')
         artifact.validate()
+        from ..model.native_derivative_contract import verify_derivative_gradient_origin
+        verify_derivative_gradient_origin(self,artifact)
         cpu_tensors = {name: tensor.detach().to('cpu').contiguous().clone()
                        for name, tensor in artifact.tensors.items()}
         stored_artifact = NativeTensorArtifact(artifact.kind, dict(artifact.native_identity), cpu_tensors,
@@ -532,6 +537,8 @@ class TensorStore:
             elif isinstance(record, NativeStateRecord):
                 binding = getattr(record.block, 'adapter_binding', None)
                 dependencies = [entry['id'] for entry in binding['adapters']] if binding else []
+                from ..model.native_derivative_contract import derivation_dependencies
+                dependencies += derivation_dependencies(record.block.derivation)
             for dependency in dependencies:
                 if dependency not in keep:
                     keep.add(dependency)
