@@ -13,7 +13,7 @@
  * parts, and eval compilation turns them into `__neuralese("id")`, which the checker types from context.
  */
 import { constantBlock, type NeuraleseBlockMeta, type NeuralesePort, type NeuraleseStore } from './neuralese-store.js';
-import type { DialectBinding } from './types.js';
+import type { DialectBinding, Type, TypeEnv } from './types.js';
 
 export const NEURALESE_OPEN = '<|neuralese|>';
 export const NEURALESE_CLOSE = '<|/neuralese|>';
@@ -145,25 +145,28 @@ export function sourceWithLiteralCalls(code: string): string {
  * the text inside the markers is what the stand-in port embeds. An unclosed literal is written as truncated.
  */
 export async function writeLiterals(text: string, port: NeuralesePort | undefined,
-  producer: Record<string, unknown> = {}): Promise<{ text: string; blocks: NeuraleseBlockMeta[] }> {
-  if (!text.includes(NEURALESE_OPEN)) return { text, blocks: [] };
+  producer: Record<string, unknown> = {}): Promise<{ text: string; parts: ContentPart[]; blocks: NeuraleseBlockMeta[] }> {
+  if (!text.includes(NEURALESE_OPEN)) return { text, parts: [{ type: 'text', text }], blocks: [] };
   if (!port) throw new NeuraleseUnsupportedError('the model wrote a Neuralese literal, but this runtime has no Neuralese port');
   let out = '', rest = text;
   const blocks: NeuraleseBlockMeta[] = [];
+  const parts: ContentPart[] = [];
   while (true) {
     const open = rest.indexOf(NEURALESE_OPEN);
-    if (open < 0) { out += rest; break; }
-    out += rest.slice(0, open);
+    if (open < 0) { out += rest; if (rest) parts.push({ type: 'text', text: rest }); break; }
+    const prefix = rest.slice(0, open);
+    out += prefix; if (prefix) parts.push({ type: 'text', text: prefix });
     const body = rest.slice(open + NEURALESE_OPEN.length);
     const close = body.indexOf(NEURALESE_CLOSE);
     const inner = close < 0 ? body : body.slice(0, close);
     const block = await port.write(inner, { producer, truncated: close < 0 });
     blocks.push(block);
     out += neuraleseSentinel(block.id);
+    parts.push({ type: isNativeStateId(block.id) ? 'native_state' : 'neuralese', id: block.id });
     if (close < 0) break;
     rest = body.slice(close + NEURALESE_CLOSE.length);
   }
-  return { text: out, blocks };
+  return { text: out, parts, blocks };
 }
 
 /** A backend or runtime without Neuralese support was asked to carry a soft value. No text fallback exists. */
@@ -292,18 +295,58 @@ export function encodeMessages(messages: readonly unknown[]): { messages: unknow
  * A model turn with its Neuralese content in conversation-text form: part arrays (from a Neuralese backend) and
  * marker text (from the stand-in path) in the reply text and in every string of the call arguments become sentinels.
  */
+type TurnValueExpectation = { type: Type; env: TypeEnv };
+
+function expectedValueTypes(expected: TurnValueExpectation | undefined): Type[] {
+  if (!expected) return [];
+  const type = expected.env.resolve(expected.type);
+  if (type.kind === 'refined' || type.kind === 'untrusted') return expectedValueTypes({ ...expected, type: type.base });
+  if (type.kind === 'union') return type.members.flatMap(member => expectedValueTypes({ ...expected, type: member }));
+  return [type];
+}
+
+function expectedChild(expected: TurnValueExpectation | undefined, key: string, container: unknown): TurnValueExpectation | undefined {
+  const candidates = expectedValueTypes(expected).filter(type => {
+    if (type.kind !== 'record' || !container || typeof container !== 'object') return true;
+    return type.fields.every(field => {
+      if (!Object.hasOwn(container, field.name)) return true;
+      const discriminants = expectedValueTypes({ env: expected!.env, type: field.type });
+      return !discriminants.length || !discriminants.every(member => member.kind === 'lit') ||
+        discriminants.some(member => member.kind === 'lit' &&
+          member.value === (container as Record<string, unknown>)[field.name]);
+    });
+  });
+  const members = candidates.flatMap(type => type.kind === 'record' ?
+    type.fields.filter(field => field.name === key).map(field => field.type) :
+    type.kind === 'list' || type.kind === 'dict' ? [type.element] : []);
+  return members.length && expected ? { env: expected.env,
+    type: members.length === 1 ? members[0]! : { kind: 'union', members } } : undefined;
+}
+
 export async function decodeTurnValue(value: unknown, port: NeuralesePort | undefined,
-  producer: Record<string, unknown>, written?: NeuraleseBlockMeta[]): Promise<unknown> {
+  producer: Record<string, unknown>, written?: NeuraleseBlockMeta[], expected?: TurnValueExpectation): Promise<unknown> {
+  const valueBoundary = producer.marker_context === 'return-result' || producer.marker_context === 'other-tool-argument';
   if (typeof value === 'string') {
-    if (!value.includes(NEURALESE_OPEN)) return value;
-    const { text, blocks } = await writeLiterals(value, port, producer);
+    const types = expectedValueTypes(expected);
+    const explicitlyNeuralese = types.some(type => type.kind === 'neuralese') &&
+      !types.some(type => type.kind === 'prim' && ['string', 'Blob', 'unknown'].includes(type.name) ||
+        type.kind === 'lit' && typeof type.value === 'string');
+    if (!value.includes(NEURALESE_OPEN) || valueBoundary && !explicitlyNeuralese) return value;
+    const { text, parts, blocks } = await writeLiterals(value, port, producer);
     written?.push(...blocks);
-    return text;
+    return valueBoundary ? parts : text;
   }
-  if (isContentParts(value)) return decodeTurnValue(partsToText(value), port, producer, written);
-  if (Array.isArray(value)) return Promise.all(value.map(item => decodeTurnValue(item, port, producer, written)));
+  if (isContentParts(value)) {
+    if (!valueBoundary) return decodeTurnValue(partsToText(value), port, producer, written);
+    // Text runs remain literal; only actual block parts confer transport identity.
+    return value.some(part => part.type !== 'text') ? value.map(part => ({ ...part })) :
+      value.map(part => (part as NeuraleseTextPart).text).join('');
+  }
+  if (Array.isArray(value)) return Promise.all(value.map((item, index) =>
+    decodeTurnValue(item, port, producer, written, expectedChild(expected, String(index), value))));
   if (value && typeof value === 'object') {
-    const entries = await Promise.all(Object.entries(value).map(async ([key, item]) => [key, await decodeTurnValue(item, port, producer, written)]));
+    const entries = await Promise.all(Object.entries(value).map(async ([key, item]) =>
+      [key, await decodeTurnValue(item, port, producer, written, expectedChild(expected, key, value))]));
     return Object.fromEntries(entries);
   }
   return value;

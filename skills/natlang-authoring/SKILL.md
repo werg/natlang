@@ -421,3 +421,8 @@ to the same current actor. `neuralese-native-coefficient-policy` means restore
 the exact declared policy and coefficient archive; retry with that binding.
 Stable adapter handles are mapped by the declared policy, so retain those handles
 in the program rather than substituting an old coefficient artifact yourself.
+
+A produced Neuralese value remains an opaque typed reference. For a string-slot
+`type-mismatch`, return actual answer text, or pass the reference to a declared
+`Neuralese<T>` reader that returns the requested type. Do not return an artifact
+ID or internal marker as answer text. Literal string contents remain literal.

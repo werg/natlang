@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MemoryNeuraleseStore, encodeNativeState } from '../dist/native/neuralese-store.js';
+import { MemoryNeuraleseStore, encodeNativeState, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
 import { neuraleseRef, neuraleseSentinel, isNeuraleseRef, soleSentinel, sourceWithLiteralCalls,
   textToParts, partsToText, sentinelIds, decodeTurnValue, dialectBinding, nativeStateConsumerFromInfo } from '../dist/native/neuralese.js';
 import { TypeEnv, parseType } from '../dist/native/types.js';
@@ -177,4 +177,88 @@ test('shared semantic standard libraries retain their dialect and archived zero 
   const library = await loadStandardLibrary(bytes, store);
   assert.equal(library.dialect, dialect);
   assert.equal(createNeuraleseLibrary(library).empty().$neuralese.id, empty.id);
+});
+
+
+for (const format of ['native_state', 'neuralese']) {
+  test(`${format} transport retains its identity at nested value boundaries and rejects ordinary strings`, async () => {
+    const store = new MemoryNeuraleseStore();
+    const port = format === 'neuralese' ? new StandInNeuralesePort(store, hashingEmbedder(8), 8) : undefined;
+    const artifact = port ? await port.write('opaque legacy payload') : await store.putNativeState(nativeStateFixture());
+    const options = port ? { store, port, dialect: port.dialect } : runtimeFor(store);
+    const parts = [{ type: format, id: artifact.id }], env = envFor(options);
+    const decoded = await decodeTurnValue({ rows: [{ memo: parts }] }, port, { marker_context: 'return-result' });
+    assert.deepEqual(decoded.rows[0].memo, parts);
+    const result = coerce(decoded, parseType('{ rows: { memo: Neuralese<string> }[] }'), env);
+    assert.equal(result.rows[0].memo.$neuralese.id, artifact.id);
+    for (const type of ['string', 'Blob', '{ type: string, id: string }[]'])
+      assert.throws(() => coerce(parts, parseType(type), env), /type-mismatch/);
+    const unknown = coerce(parts, parseType('unknown'), env);
+    assert.ok(isNeuraleseRef(unknown)); assert.equal(unknown.$neuralese.id, artifact.id);
+    const union = coerce(parts, parseType('string | Neuralese<string>'), env);
+    assert.equal(union.$neuralese.id, artifact.id);
+    const mixed = [{ type: 'text', text: 'prefix ' }, ...parts];
+    for (const type of ['string', 'Neuralese<string>', 'unknown'])
+      assert.throws(() => coerce(mixed, parseType(type), env), /type-mismatch/);
+    const literal = neuraleseSentinel(artifact.id);
+    assert.equal(coerce(literal, parseType('string'), env), literal);
+    assert.equal(await decodeTurnValue([{ type: 'text', text: literal }], port,
+      { marker_context: 'other-tool-argument' }), literal);
+    assert.equal(await decodeTurnValue(parts, port, { marker_context: 'assistant-text' }), literal);
+    assert.equal(await decodeTurnValue(parts, port, { marker_context: 'eval-code' }), literal);
+  });
+
+  test(`${format} genuine producer output cannot escape as an opaque-ID string result`, async () => {
+    const store = new MemoryNeuraleseStore();
+    const port = format === 'neuralese' ? new StandInNeuralesePort(store, hashingEmbedder(8), 8) : undefined;
+    const artifact = port ? await port.write('opaque payload') : await store.putNativeState(nativeStateFixture());
+    const neuralese = port ? { store, port, dialect: port.dialect } : runtimeFor(store);
+    const invocation = open({ type: '() => string', instructions: 'Return the answer text.' }, { neuralese }).session;
+    let turns = 0, feedback = '';
+    const driver = Object.assign(async request => {
+      turns++; if (turns === 2) feedback = JSON.stringify(request.messages);
+      return { calls: [['return_result', { status: 'success', value: turns === 1 ?
+        [{ type: format, id: artifact.id }] : 'actual answer' }]] };
+    }, { neuralese: true });
+    await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(invocation);
+    assert.equal(turns, 2); assert.equal(invocation.lam.return, 'actual answer');
+    assert.match(feedback, /type-mismatch/);
+  });
+}
+
+test('nested declared literal strings remain exact while typed legacy literals retain transport provenance', async () => {
+  const store = new MemoryNeuraleseStore(), port = new StandInNeuralesePort(store, hashingEmbedder(8), 8);
+  const neuralese = { store, port, dialect: port.dialect }, env = envFor(neuralese);
+  const literal = '<|neuralese|>literal user text<|/neuralese|>';
+  const type = parseType('{ literal: string, items: { memo: Neuralese<string> }[], tags: { [key: string]: string } }');
+  const decoded = await decodeTurnValue({ literal, items: [{ memo: '<|neuralese|>memo<|/neuralese|>' }],
+    tags: { source: literal } }, port, { marker_context: 'return-result' }, [], { type, env });
+  assert.equal(decoded.literal, literal); assert.equal(decoded.tags.source, literal);
+  assert.equal(decoded.items[0].memo[0].type, 'neuralese');
+  const value = coerce(decoded, type, env);
+  assert.equal(value.literal, literal); assert.ok(isNeuraleseRef(value.items[0].memo));
+});
+
+
+test('declared union discriminants preserve the selected nested literal/Neuralese contract', async () => {
+  const store = new MemoryNeuraleseStore(), port = new StandInNeuralesePort(store, hashingEmbedder(8), 8);
+  const env = envFor({ store, port, dialect: port.dialect });
+  const type = parseType('{ mode: "state", memo: Neuralese<string> } | { mode: "text", memo: string }');
+  const literal = '<|neuralese|>literal<|/neuralese|>';
+  const text = await decodeTurnValue({ mode: 'text', memo: literal }, port,
+    { marker_context: 'return-result' }, [], { type, env });
+  assert.equal(coerce(text, type, env).memo, literal);
+  const state = await decodeTurnValue({ mode: 'state', memo: literal }, port,
+    { marker_context: 'return-result' }, [], { type, env });
+  assert.ok(isNeuraleseRef(coerce(state, type, env).memo));
+  const refined = { kind: 'refined', base: parseType('string'), predicate: 'an exact literal' };
+  assert.equal(await decodeTurnValue(literal, port, { marker_context: 'return-result' }, [],
+    { type: refined, env }), literal);
+  const untrusted = { kind: 'untrusted', base: parseType('string') };
+  assert.equal(await decodeTurnValue(literal, port, { marker_context: 'return-result' }, [],
+    { type: untrusted, env }), literal);
+  const id = state.memo[0].id;
+  const argument = await decodeTurnValue({ nested: [[{ type: 'neuralese', id }]] }, port,
+    { marker_context: 'other-tool-argument' });
+  assert.equal(coerce(argument, parseType('{ nested: Neuralese<string>[] }'), env).nested[0].$neuralese.id, id);
 });

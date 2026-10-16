@@ -807,3 +807,10 @@ No new prompt policy and no production controller adoption are introduced.
   verify the mechanism; live48-sample feedback remains debt for the next own
   self-hosted teacher window. Public capabilities/default recipes unchanged;
   no cloud or task-lift claim.
+
+- 2026-10-16: Genuine native/legacy transport parts retain provenance at typed
+  value boundaries. An ordinary string slot now sees the existing type-mismatch
+  feedback instead of accepting an internal opaque-ID sentinel as an answer.
+  Literal raw strings stay exact; no payload decoding or prompt is added.
+  Live48-sample feedback qualification on admitted TRAIN tasks is pending before
+  production adoption; protected evaluation cases are not training inputs.

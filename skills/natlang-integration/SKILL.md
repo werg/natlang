@@ -435,3 +435,8 @@ named optimizer state and RNG/exposure. A backbone change creates explicitly
 new bound artifacts and requires fresh rollout collection; old KV and behavior
 must not be relabeled. Explicit stale-row cancellation retains completed credits
 and records untrained visits as uncredited, then recollects on the new base.
+
+A produced Neuralese value remains an opaque typed reference. For a string-slot
+`type-mismatch`, return actual answer text, or pass the reference to a declared
+`Neuralese<T>` reader that returns the requested type. Do not return an artifact
+ID or internal marker as answer text. Literal string contents remain literal.
