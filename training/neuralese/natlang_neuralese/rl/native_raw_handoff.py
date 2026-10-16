@@ -319,7 +319,7 @@ def _drained_plan_authority(record, saved):
     stage=initial.get('stage_id');inputs=plan.get('stage_inputs',{}).get(stage,{})
     receipts=training.get('source_receipts') or []
     if (digest(plan)!=initial.get('plan_sha256') or recipe!=initial.get('recipe')
-            or not recipe or recipe.get('sha256')!=plan.get('recipe_sha256')
+            or not recipe or recipe.get('lineage_sha256',recipe.get('sha256'))!=plan.get('recipe_sha256')
             or options.get('stage_id')!=stage or len(receipts)<2
             or any(receipts[i].get('sha256')!=inputs.get(key,{}).get('sha256')
                    for i,key in enumerate(('native_graphs','held_native_graphs')))):

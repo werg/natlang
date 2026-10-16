@@ -99,7 +99,8 @@ def test_drained_resident_selects_new_priority_plan_and_preserves_exact_parent(a
 
 
 @pytest.mark.parametrize('interrupt',[False,True])
-def test_initial_only_owner_carries_certificate_successor_into_raw_recipe(actual_drain,tmp_path,monkeypatch,interrupt):
+@pytest.mark.parametrize('preserved_lineage',[False,True])
+def test_initial_only_owner_carries_certificate_successor_into_raw_recipe(actual_drain,tmp_path,monkeypatch,interrupt,preserved_lineage):
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
     root=tmp_path/'initial-source';root.mkdir()
     paths,directory,manager,_=setup(root)
@@ -111,6 +112,14 @@ def test_initial_only_owner_carries_certificate_successor_into_raw_recipe(actual
     process,intent,terminal,slot,pin=actual_drain
     tree=json.loads(Path(intent['path']).read_text())
     initial=json.loads((directory/'initial.json').read_text())
+    if preserved_lineage:
+        from natlang_neuralese.train.recipe import native_recipe_binding
+        installed=json.loads((directory.parent/'recipe-plan.json').read_text())
+        installed['recipe_sha256']='f'*64
+        initial['recipe']=native_recipe_binding(Path(initial['recipe']['path']),installed['recipe_sha256'])
+        assert initial['recipe']['sha256']!=initial['recipe']['lineage_sha256']
+        initial['plan_sha256']=resident.digest(installed)
+        write(directory.parent/'recipe-plan.json',installed)
     initial['owner']=tree['children'][0];write(directory/'initial.json',initial)
     saved=torch.load(slot,weights_only=False)
     saved['training'].update(global_step=8,source_receipts=[resident.binding(paths['old']),resident.binding(paths['held'])],
@@ -144,6 +153,7 @@ def test_initial_only_owner_carries_certificate_successor_into_raw_recipe(actual
     assert resident.current(directory) is None and not (directory/'retired').exists()
     plan=json.loads(Path(checked['new_plan']['path']).read_text())
     assert plan['recipe']['stages'][0]['parameters']['resident_geometry_qualification']==str(certificate)
+    assert plan['recipe_sha256']==initial['recipe']['lineage_sha256']
     declaration={'drained_recipe_handoff':proof,'handoff_requirement':{'recipe_sha256':initial['recipe']['sha256']}}
     assert raw._release_requirement(declaration,{})['recipe_sha256']==checked['recipe']['sha256']
     assert handoff.prepare_drained_recipe_handoff(original,successor,proof_path,package=package)==proof
