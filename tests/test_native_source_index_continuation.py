@@ -127,7 +127,7 @@ def test_new_loader_hits_continued_index_without_parsing(packages, tmp_path, mon
         'tokenizer_fingerprint': 'tok', 'nodes': [{'name': 'text',
             'token_ids': [1, 2, 3], 'target_weights': [0., 1., 1.]}]}) + '\n')
     old = modules[0].NativeGraphSource(source, 'tok', required_split='train')
-    receipt = subject.continue_indexes(subject.prove_extension(*packages), [subject.sha(source)])
+    receipt = subject.continue_indexes(subject.prove_extension(*packages), [subject.sha256_file_hex(source)])
     assert len(receipt['indexes']) == 1
     def forbidden(*args, **kwargs):
         raise AssertionError('continued source index must not reparse source rows')

@@ -39,13 +39,9 @@ def tree(value):
     return ast.dump(value, include_attributes=False)
 
 
-def sha(path):
-    return sha256_file_hex(path)
-
-
 def prove_extension(old_package, new_package):
     roots = [Path(old_package), Path(new_package)]
-    inventories = [{name: sha(root / name) for name in POLICY_FILES} for root in roots]
+    inventories = [{name: sha256_file_hex(root / name) for name in POLICY_FILES} for root in roots]
     for name in POLICY_FILES:
         if name != 'model/native_graph_plan.py' and inventories[0][name] != inventories[1][name]:
             raise ValueError(f'validation policy changed: {name}')
@@ -136,8 +132,8 @@ def continue_indexes(proof, source_hashes):
             raise ValueError('index continuation write failed')
         results.append({'source_sha256': key['source_sha256'], 'split': key['split'],
             'kind': key['kind'], 'rows': len(entries), 'metadata_sha256': value['metadata_sha256'],
-            'old_index': str(path), 'old_index_sha256': sha(path),
-            'new_index': str(target), 'new_index_sha256': sha(target)})
+            'old_index': str(path), 'old_index_sha256': sha256_file_hex(path),
+            'new_index': str(target), 'new_index_sha256': sha256_file_hex(target)})
     return {'schema': 'natlang.native-source-index-continuation/1', **proof,
             'indexes': results, 'missing_source_sha256': sorted(wanted - {item['source_sha256'] for item in results})}
 
