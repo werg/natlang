@@ -56,7 +56,7 @@ _TOKENIZER_INVENTORY_WITNESS={
         'tokenizer_inventory':'7d1f7639865c403de69295eae79c7ff84c6363e0607a4192a4f685f6327fec8c',
     },
     'imports':'7c5568b938f4cc9d2cb8264ee8e05304adb23cb4298c2c04277529ed204d1321',
-    'bindings':['Path','sha256_file_hex_cached','_input_inventory'],
+    'bindings':['Path','sha256_file_hex_cached','_input_inventory','tokenizer_inventory'],
 }
 
 
@@ -64,8 +64,9 @@ def _tokenizer_inventory_ast_witness(path):
     source=Path(path).read_text()
     tree=ast.parse(source)
     wanted=set(_TOKENIZER_INVENTORY_WITNESS['functions'])
-    functions={node.name:node for node in tree.body if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef))}
-    if not wanted.issubset(functions):
+    definitions=[node for node in tree.body if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef))]
+    functions={node.name:node for node in definitions}
+    if not wanted.issubset(functions) or any(sum(node.name==name for node in definitions)!=1 for name in wanted):
         raise ValueError('tokenizer inventory function witness is incomplete')
     actual_functions={name:hashlib.sha256(ast.dump(functions[name],include_attributes=False).encode()).hexdigest()
                       for name in sorted(wanted)}
@@ -97,7 +98,7 @@ def _tokenizer_inventory_ast_witness(path):
             allowed=((isinstance(node,ast.ImportFrom) and node.module=='pathlib' and overlap=={'Path'})
                      or (isinstance(node,ast.ImportFrom) and node.module and node.module.endswith('common.hashing')
                          and overlap=={'sha256_file_hex_cached'})
-                     or (isinstance(node,ast.FunctionDef) and node.name=='_input_inventory'))
+                     or (isinstance(node,ast.FunctionDef) and node.name in wanted))
             if not allowed:
                 raise ValueError('tokenizer inventory dependency global is rebound: '+','.join(sorted(overlap)))
     for function in (node for node in tree.body if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef))):
@@ -126,7 +127,8 @@ def _conversion_runtime_transition(conversion_runtime,verification_runtime=None)
     inventory_key='tokenizer_inventory'
     inventory_old='99eee6d5b2bbe87b8957b3df486951fdf37e8a102d73eaf0cbd91f7274924e9d'
     inventory_proof=None
-    inventory_transition=(old_files.get(inventory_key) or {}).get('sha256')==inventory_old
+    inventory_transition=(inventory_key in differences
+                          and (old_files.get(inventory_key) or {}).get('sha256')==inventory_old)
     if inventory_transition:
         inventory_proof=_tokenizer_inventory_ast_witness(
             CODE_ROOT/_TOKENIZER_INVENTORY_WITNESS['module'])

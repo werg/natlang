@@ -267,6 +267,12 @@ def test_conversion_runtime_drift_requires_the_exact_named_full_rerender_transit
         old['files'][key]['sha256']=before
     old['files']['tokenizer_inventory']['sha256']='99eee6d5b2bbe87b8957b3df486951fdf37e8a102d73eaf0cbd91f7274924e9d'
     old['fingerprint']=transition['from_fingerprint']
+    original_current=deepcopy(current)
+    original_current['files']['tokenizer_inventory']['sha256']='99eee6d5b2bbe87b8957b3df486951fdf37e8a102d73eaf0cbd91f7274924e9d'
+    original_current['fingerprint']=admission.canonical_json_sha256_hex(original_current['files'])
+    original=admission._conversion_runtime_transition(old,original_current)
+    assert original['kind']=='exact-all-pair-rerender-continuation'
+    assert 'function_scoped_tokenizer_inventory_transition' not in original
     proof=admission._conversion_runtime_transition(old,current)
     assert proof['kind']=='exact-all-pair-rerender-continuation'
     assert set(proof['changed_files'])==set(transition['changed_files'])
@@ -304,6 +310,12 @@ def test_tokenizer_inventory_transition_rejects_function_ast_drift(tmp_path,monk
     unchanged=inspect.getsource(native_model)+'\n\ndef untrusted_rebind():\n    global Path\n    Path = object\n'
     module.write_text(unchanged)
     with pytest.raises(ValueError,match='global is rebound'):
+        admission._tokenizer_inventory_ast_witness(module)
+    module.write_text(inspect.getsource(native_model)+'\n\ntokenizer_inventory = lambda base: {}\n')
+    with pytest.raises(ValueError,match='global is rebound'):
+        admission._tokenizer_inventory_ast_witness(module)
+    module.write_text(inspect.getsource(native_model)+'\n\ndef tokenizer_inventory(base):\n    return {}\n')
+    with pytest.raises(ValueError,match='function witness is incomplete'):
         admission._tokenizer_inventory_ast_witness(module)
 
 
