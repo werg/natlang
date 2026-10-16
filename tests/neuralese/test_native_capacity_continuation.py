@@ -67,6 +67,27 @@ def test_mechanical_continuation_retains_measured_parent_and_bounds_extra_memory
     assert invoke(tmp_path, old, new, review) == result
 
 
+@pytest.mark.parametrize('mutation', [None, 'old-source', 'new-source', 'unbound-policy'])
+def test_saved_recipe_metadata_policy_accepts_only_exact_reviewed_trainer(mutation):
+    old, new = mechanism.LINEAGE_METADATA_COMPOSITION
+    name = mechanism.LINEAGE_METADATA_FILE
+    review = {'optimizer_policy': mechanism.LINEAGE_METADATA_POLICY,
+              'old_code': {name: old}, 'new_code': {name: new},
+              'optimizer_state_unchanged': True, 'metadata_extra_bytes': 64 << 20,
+              'ordinary_parameters': [{'name': 'learned rows', 'shape': [4, 2304], 'dtype': 'torch.float32'}]}
+    if mutation == 'old-source': review['old_code'][name] = 'a' * 64
+    if mutation == 'new-source': review['new_code'][name] = 'b' * 64
+    if mutation == 'unbound-policy': review['optimizer_state_unchanged'] = False
+    if mutation:
+        with pytest.raises(ValueError):
+            mechanism._lineage_metadata_contract(review)
+            mechanism._memory_allowance(review)
+    else:
+        mechanism._lineage_metadata_contract(review)
+        assert mechanism._memory_allowance(review) == 64 << 20
+        assert mechanism.allowed_changes(mechanism.LINEAGE_METADATA_POLICY) == {name}
+
+
 @pytest.mark.parametrize('mutation', ['unapproved', 'offload', 'unreviewed', 'forward',
     'device', 'host', 'reserve', 'layout', 'parameters', 'source-parent', 'source-mutated', 'numerics', 'nonzero-update'])
 def test_changed_execution_unbound_proof_or_memory_shortfall_cannot_inherit_capacity(tmp_path, mutation):

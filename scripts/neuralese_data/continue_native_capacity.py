@@ -35,6 +35,12 @@ LOADER_IO_POLICY = 'native-resident-mmap-advice-v1'
 LOADER_IO_CHANGES = METADATA_CHANGES | {
     'train/checkpoint_policy.py', 'train/checkpoint_readahead.py',
 }
+LINEAGE_METADATA_POLICY = 'native-saved-recipe-lineage-metadata-v1'
+LINEAGE_METADATA_FILE = 'train/native_state_sft.py'
+LINEAGE_METADATA_COMPOSITION = (
+    'ca5acf17bbcdfd0eaeff2712e9af07a990960d8235c6ab5bb89ae2625d04321e',
+    '14e903b5baf160a35f7d33b75eafa83bc5a79a466aef4737a956c8d244abf9e8',
+)
 ATTENTION_INDEX_POLICY = 'native-graph-attention-index-reuse-v1'
 ATTENTION_INDEX_REVIEW_SHA256 = 'e100c0814676e340b6c2bf3341dee101d02958a249757304ca3fb2df16a0b7a2'
 ATTENTION_INDEX_COMPOSITIONS = {
@@ -52,7 +58,17 @@ ATTENTION_INDEX_COMPOSITIONS = {
 def allowed_changes(policy):
     return {POLICY: ALLOWED_CHANGES, METADATA_POLICY: METADATA_CHANGES,
             LOADER_IO_POLICY: LOADER_IO_CHANGES,
+            LINEAGE_METADATA_POLICY: {LINEAGE_METADATA_FILE},
             ATTENTION_INDEX_POLICY: {'model/shared_state.py'}}.get(policy, set())
+
+
+def _lineage_metadata_contract(review):
+    if review['optimizer_policy'] != LINEAGE_METADATA_POLICY:
+        return
+    actual = (review['old_code'].get(LINEAGE_METADATA_FILE),
+              review['new_code'].get(LINEAGE_METADATA_FILE))
+    if actual != LINEAGE_METADATA_COMPOSITION:
+        raise ValueError('saved recipe metadata continuation requires the exact independently reviewed trainer repair')
 
 
 def _attention_index_contract(review, limits):
@@ -132,7 +148,7 @@ def _memory_allowance(review):
         if (parameter.get('dtype') != 'torch.float32' or not parameter.get('shape')
                 or any(type(n) is not int or n < 1 for n in parameter['shape'])):
             raise ValueError('capacity continuation requires the unchanged FP32 ordinary layout')
-    if review['optimizer_policy'] in {METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY}:
+    if review['optimizer_policy'] in {METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY}:
         extra = review.get('metadata_extra_bytes')
         if (review.get('optimizer_state_unchanged') is not True
                 or type(extra) is not int or extra < (64 << 20)):
@@ -184,6 +200,7 @@ def _proof_cases(reference, *, identity, code_sha, parent, seen=()):
         if {key: max(case[key] for case in cases) for key in ('forward_tokens', 'kv_slots')} != value['limits']:
             raise ValueError('inherited capacity limits differ from actual source cases')
         _attention_index_contract(review, value['limits'])
+        _lineage_metadata_contract(review)
         extra = value.get('extra_bytes_per_memory_domain')
         if type(extra) is not int or extra != _memory_allowance(review):
             raise ValueError('inherited capacity lost its additional memory allowance')
@@ -217,7 +234,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     if (review.get('schema') != 'natlang.native-capacity-continuation-review/1'
             or review.get('approved') is not True
             or review.get('parameter_layout_unchanged') is not True
-            or review.get('optimizer_policy') not in {POLICY, METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY}):
+            or review.get('optimizer_policy') not in {POLICY, METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY}):
         raise ValueError('capacity continuation requires an approved exact optimizer review')
     old, new = code_inventory(old_package), code_inventory(new_package)
     if old != review.get('old_code') or new != review.get('new_code'):
@@ -240,6 +257,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     if (source.get('limits') != limits or any(type(v) is not int or v < 1 for v in limits.values())):
         raise ValueError('capacity limits differ from actual source cases')
     _attention_index_contract(review, limits)
+    _lineage_metadata_contract(review)
     # Adam first/second moments, retained old buffers, telemetry snapshots and
     # per-parameter update intermediates. No backbone-sized copy is authorized.
     extra = _memory_allowance(review)
@@ -288,6 +306,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
         'scope': 'inherited actual capacity through explicitly reviewed ' +
             ('optimizer/telemetry-only' if policy == POLICY else
              'exact frozen attention-index-only' if policy == ATTENTION_INDEX_POLICY else
+             'exact frozen saved-recipe-metadata-only' if policy == LINEAGE_METADATA_POLICY else
              'CPU scheduling/pending-obligation-only') +
             ' continuation; new parent not measured'})
     return certificate
