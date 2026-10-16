@@ -56,6 +56,20 @@ if (recorder) {
   }
   assert.throws(() => recorder.linkNativeTurn(produced.id, consumed.graph.graph_turn), /two model-turn occurrences/);
   await writeFile(archive + '/native-recorded-turns.json', JSON.stringify(turns));
+  const conflicting = new ModelTurnRecorder();
+  conflicting.record(turns[0]);
+  conflicting.linkNativeTurn(produced.id, consumed.graph.graph_turn);
+  assert.throws(() => recorder.absorb(conflicting), /two model-turn occurrences/);
+  const duplicateWrite = new ModelTurnRecorder();
+  duplicateWrite.record(turns[0]);
+  duplicateWrite.absorb(recorder);
+  duplicateWrite.recordGraphNode({ ...recorder.graphNodes.get(write.node), node: write.node + ':duplicate' });
+  assert.throws(() => duplicateWrite.nativeTurns(), /repeated native writes/);
+  const duplicateRead = new ModelTurnRecorder();
+  duplicateRead.record(turns[1]);
+  duplicateRead.absorb(recorder);
+  duplicateRead.recordGraphNode({ ...recorder.graphNodes.get(read.node), node: read.node + ':duplicate' });
+  assert.throws(() => duplicateRead.nativeTurns(), /repeated native reads/);
   const original = recorder.graphNodes.get(write.node);
   recorder.recordGraphNode({ ...original, length: Number(original.length) + 1 });
   assert.throws(() => recorder.nativeTurns(), /conflicting source node identities/);

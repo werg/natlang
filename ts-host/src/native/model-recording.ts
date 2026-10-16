@@ -73,6 +73,9 @@ export class ModelTurnRecorder implements TurnRecorder {
   }
   linkNativeTurn(id:string,graphTurn:string):void{
     if(!this.turns.some(turn=>turn.native?.id===id))throw Object.assign(new Error('neuralese-native-grad-invalid: native graph link has no exact recorded model turn'),{code:'neuralese-native-grad-invalid'});
+    this.bindNativeTurn(id,graphTurn);
+  }
+  private bindNativeTurn(id:string,graphTurn:string):void {
     const previous=this.nativeLinks.get(id);
     if(previous&&previous!==graphTurn)throw Object.assign(new Error('neuralese-native-grad-invalid: native receipt was linked to two model-turn occurrences'),{code:'neuralese-native-grad-invalid'});
     this.nativeLinks.set(id,graphTurn);
@@ -80,7 +83,7 @@ export class ModelTurnRecorder implements TurnRecorder {
   absorb(other:ModelTurnRecorder):void{
     for(const node of other.graphNodes.values())this.recordGraphNode(node);
     for(const id of other.graphConflicts)this.graphConflicts.add(id);
-    for(const [id,turn] of other.nativeLinks)this.nativeLinks.set(id,turn);
+    for(const [id,turn] of other.nativeLinks)this.bindNativeTurn(id,turn);
   }
   nativeTurns():RecordedTurn[]{
     if([...this.turns,...this.nested].some(turn=>turn.native)&&this.graphConflicts.size)
@@ -91,11 +94,16 @@ export class ModelTurnRecorder implements TurnRecorder {
       const modelNode=this.graphNodes.get(graphTurn);
       if(modelNode?.kind!=='model_turn'||turn.native!.invocation_id&&modelNode.call_id!==turn.native!.invocation_id)
         throw Object.assign(new Error('neuralese-native-grad-invalid: native receipt does not match its actual model-turn occurrence'),{code:'neuralese-native-grad-invalid'});
-      const writes:Record<string,string>={},reads:Record<string,string>={};
+      const writes:Record<string,string>={},reads:Record<string,string>={},readNodes=new Set<string>();
       for(const event of this.graphNodes.values()){
         if(event.turn!==graphTurn||typeof event.block!=='string'||typeof event.node!=='string')continue;
-        if(event.kind==='block_write')writes[event.block]=event.node;
+        if(event.kind==='block_write'){
+          if(writes[event.block]&&writes[event.block]!==event.node)throw Object.assign(new Error('neuralese-native-grad-invalid: repeated native writes need distinct occurrence bindings'),{code:'neuralese-native-grad-invalid'});
+          writes[event.block]=event.node;
+        }
         if(event.kind==='block_read'){
+          if(readNodes.has(event.block))throw Object.assign(new Error('neuralese-native-grad-invalid: repeated native reads need distinct occurrence bindings'),{code:'neuralese-native-grad-invalid'});
+          readNodes.add(event.block);
           const inputs=(event.inputs??[]) as {node:string;block?:string}[];
           const sources=inputs.filter(input=>input.block===event.block&&input.node!=='external');
           if(sources.length>1)throw Object.assign(new Error('neuralese-native-grad-invalid: native read has ambiguous actual execution-graph producers'),{code:'neuralese-native-grad-invalid'});
