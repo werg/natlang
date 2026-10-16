@@ -97,8 +97,9 @@ def validate_config(config):
     declarations=[config,config.get('options') or {},*config.get('models',{}).values(),
                   *[phase.get('options') or {} for phase in phases]]
     for declaration in declarations:
-        if 'learned_row_learning_rate' in declaration:
-            validate_learned_row_rate(declaration['learned_row_learning_rate'])
+        for name in ('learned_row_learning_rate','interface_row_learning_rate'):
+            if name in declaration:
+                validate_learned_row_rate(declaration[name],name=name)
     for key in ('backbone_lr', 'vae_lr'):
         value = config.get(key)
         if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
@@ -136,10 +137,10 @@ def first_work(phases, entries, participants, exposure, cursors=None):
     return None
 
 
-def _adjust_lr(optimizer, lr, learned_row_lr=None):
+def _adjust_lr(optimizer, lr, learned_row_lr=None, interface_row_lr=None):
     if hasattr(optimizer,'_native_named_parameters'):
         from .native_learning_rates import apply_native_learning_rates
-        return apply_native_learning_rates(optimizer,backbone_lr=lr,learned_row_lr=learned_row_lr)
+        return apply_native_learning_rates(optimizer,backbone_lr=lr,learned_row_lr=learned_row_lr,interface_row_lr=interface_row_lr)
     for group in optimizer.param_groups:
         group['lr'] = lr
         if 'qat_latent_lr' in group:
@@ -170,7 +171,8 @@ def load_participant(name, binding, config, device):
         optimizer.load_state_dict(inherited['optimizer'])
     if backend is not None and inherited.get('fp8') is not None:
         backend.restore_extra_state(inherited['fp8'])
-    _adjust_lr(optimizer, config['backbone_lr'], declaration.get('learned_row_learning_rate',config.get('learned_row_learning_rate')))
+    _adjust_lr(optimizer, config['backbone_lr'], declaration.get('learned_row_learning_rate',config.get('learned_row_learning_rate')),
+        declaration.get('interface_row_learning_rate',config.get('interface_row_learning_rate')))
     model.port.checkpoint_layers = True
     model.train()
     result = SemanticParticipant(model, tokenizer, model_config, identity, optimizer, backend)
@@ -591,7 +593,9 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             participant.optimizer.zero_grad(set_to_none=True)
             _adjust_lr(participant.optimizer, options.get('backbone_lr', config['backbone_lr']),
                        options.get('learned_row_learning_rate',config.get('models',{}).get(name,{}).get(
-                           'learned_row_learning_rate',config.get('learned_row_learning_rate'))))
+                           'learned_row_learning_rate',config.get('learned_row_learning_rate'))),
+                       options.get('interface_row_learning_rate',config.get('models',{}).get(name,{}).get(
+                           'interface_row_learning_rate',config.get('interface_row_learning_rate'))))
             for key, value in participant.model.named_parameters():
                 value.requires_grad_(phase['kind'] != 'vae' and name in active and key in trainable[name])
         optimizer.zero_grad(set_to_none=True)
