@@ -48,18 +48,40 @@ through the projected-value implementation.
 
 ## Current status
 
-Raw native-state production training is deployed on BOTH sandboxes. These are
-the shared `native_state_sft` jobs under `/work/native-production`, currently
-on LFM runtime `69c888c682bc` and Mellum target-qualified `f2348dee2`;
-they are not continuing the old projected trainer. On October 16 at 00:54 UTC,
-LFM was approaching its safe update4150 continuation and Mellum was saving
-full state at3750. Their initial genuine communication foundation remains
-26,312 pairs; neither model has completed it. The active source has57,144
-genuine communication pairs. Another5,044 ordinary rows per model are staged
-for exact-state continuations, with held15,827 unchanged.
-Only checkpointed row exposure, full optimizer/RNG and real readiness receipts
-count toward completion. Native SFT, typed durable child handoffs, contextual
-writes, empty values and hierarchical views are integrated.
+Raw native-state production training is deployed on BOTH sandboxes through
+shared `native_state_sft` jobs under `/work/native-production`. Direct SDK
+inspection on October 16 at 09:23 UTC found LFM at6269 (runtime2af640d3e5a3,
+100% sampled GPU utilization) and Mellum at7010 (runtimea765bd1bea00,
+83% sampled utilization). Both are performing real optimizer updates after
+exact6181/6813 restores, retaining weights, optimizer/RNG and earned exposure.
+Native interface rows use FP32 AdamW masters at.0003; LFM reasoning rows use
+.0003, while Mellum reasoning/backbone/adapter rates remain3e-6. These are
+current settings, not evidence of optimal rates or downstream task lift.
+
+The immutable6181 LFM parent records25,755 graph visits/916,597 active rows,
+including10,985/26,312 original foundation graphs. Mellum6813 records21,070
+visits/949,801 rows, including8,237/26,312 foundation graphs. Live updates after
+those parents are not included in these counts. Neither foundation is complete;
+no model is ready for shared-dialect training. Additional admitted sources are
+obligations, not earned exposure.
+
+Current-capacity D12/D16/D18 v2 admissions retain exact full rows and protected
+splits while making1,739 additional LFM training graphs fit the actual measured
+92,606-physical/157,075-KV envelope. D15's complete source and fit/pending
+partition are admitted; Qwen V17 adds8,309 train graphs per model and is staged
+on both sandboxes. Sandbox adoption and actual visits remain separate checks.
+The original pending cohorts and visit quotas must survive activation.
+
+Resident transactions now support pending-only and combined active/pending
+adoption through the existing atomic commit point. Independent review found
+and fixed a withdrawal-history gap before commit. Integrated resident, offline
+pairwise, continuation and memory tests passed109 cases. The new reference-free
+offline preference objective binds both complete alternatives with zero ordinary
+CE weights and scores their assistant suffixes through the shared optimizer.
+Production source admission/capacity qualification and mandatory post-joint
+interleave are still being finished; this is not a deployed preference-stage
+completion claim. Native SFT, typed durable child handoffs, contextual writes,
+empty values and hierarchical views remain integrated.
 
 Full-model raw-state references and fixed-delta tests established the deployed
 channel. Subsequent prefix-sharing investigation found and repaired a separate
@@ -73,8 +95,10 @@ qualification passed with392 executedFP8projections/67,200routed rows,
 BF16 input adjoints, zero forward/consumer-loss gap and adapter gradient
 maximum4.66e-10 under unchanged gates; subsequent productionSGD reached3750.
 This qualifies that target path, not prefix reuse or task-quality lift.
-Standing fullcheckafb97fe793 is green; bcf9fb1d1d failed one stale queue
-fixture, repaired in7705015aa with focused tests; current main awaits fullsuite.
+Standing fullcheckbfdc7e75 completed green, including CUDA and TypeScript.
+The next standing fullcheck323680aa8 is running; current resident/preference
+integration additionally passed109 focused tests,29 capacity-continuation
+tests,17 provider-closure tests and the quick main check.
 
 The shared semantic stage now implements VAE, joint producer/write-out/consumer
 adaptation, behavioral distillation, deferred full-model optimizers, complete

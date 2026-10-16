@@ -135,8 +135,14 @@ def metadata_chain(tmp_path):
     return second,adam,new,continued,certificate
 
 
-def test_metadata_continuation_keeps_actual_origin_and_cumulative_memory(tmp_path):
+@pytest.mark.parametrize('resident_change',[False,True])
+def test_metadata_continuation_keeps_actual_origin_and_cumulative_memory(tmp_path,resident_change):
     phase,old,new,review,original=metadata_chain(tmp_path)
+    if resident_change:
+        (new/'train/native_resident.py').write_text('reviewed resident pending source obligations\n')
+        review['new_code']=code_inventory(new)
+        review['changes']['train/native_resident.py']={
+            'old':None,'new':review['new_code']['train/native_resident.py']}
     output=invoke(phase,old,new,review)
     certificate=json.loads(output.read_text())
     result=json.loads(Path(certificate['evidence']['path']).read_text())

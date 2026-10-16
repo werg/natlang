@@ -27,7 +27,8 @@ METADATA_POLICY = 'native-scheduling-pending-obligations-v1'
 METADATA_CHANGES = {
     'train/native_state_sft.py', 'train/recipe.py', 'train/native_source_streams.py',
     'train/native_pending_sources.py', 'train/native_continuation.py',
-    'train/native_readiness.py', 'rl/native_supervised.py', 'rl/production.py',
+    'train/native_readiness.py', 'train/native_resident.py',
+    'rl/native_supervised.py', 'rl/production.py',
 }
 
 
