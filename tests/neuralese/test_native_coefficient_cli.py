@@ -35,6 +35,8 @@ def test_actual_coefficient_stage_cli_sigterm_resume_and_real_held_collector(tmp
     episodes=[{'task_id':'coefficient-cli-train','split':'train','group':'one',
         'sample':index,'reward':{'quality':quality},'policy':{'checkpoint_sha256':engine.native_identity['checkpoint_sha256']},
         'turns':copy.deepcopy(rows)} for index,quality in enumerate((1,0))]
+    from test_rl_episode_graph import attach_execution_graph
+    attach_execution_graph(episodes)
     def fetch(ident):
         return encode_native_tensor_artifact(engine.store.get_native_tensor_artifact(ident).artifact) if ident.startswith('nnt1_') else encode_native_state(engine.store.get_native_state(ident).block)
     save_bundle(episodes,tmp_path/'rollout-bundle',policy_id=engine.native_identity['checkpoint_sha256'],fetch=fetch)
@@ -131,6 +133,9 @@ def test_actual_coefficient_stage_cli_sigterm_resume_and_real_held_collector(tmp
             actual_rows=[{'messages':[],'target':{},'invocation_id':turn['graph_turn'],'sampling':turn['sampling'],
                           'replay':{'raw_calls_retained':True}} for turn in actual_turns]
             actual_episodes=[{**episode,'turns':copy.deepcopy(actual_rows)} for episode in episodes]
+            # Updated actors produce different immutable block IDs. Their
+            # whole-episode occurrence inventory belongs to these fresh captures.
+            attach_execution_graph(actual_episodes)
             save_bundle(actual_episodes,destination/'blocks',policy_id=base_sha,fetch=fetch)
             (destination/'rollouts.jsonl').write_text(''.join(json.dumps(row)+'\n' for row in actual_episodes))
             receipt={'scored':2,'successes':1,'groups_with_spread':1,'block_bundle':str(destination/'blocks/manifest.json'),

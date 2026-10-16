@@ -205,6 +205,7 @@ def test_native_policy_gradient_scores_imported_kv_and_finite_convolution(tmp_pa
     spec.write_text(json.dumps({'schema': 'natlang.native-policy-objective/1', 'kind': 'native-policy',
         'mode': 'rft', 'policy': identity, 'block_bundle': str(bundle),
         'rows': {example.id: {'graph_sha256': canonical_json_sha256_hex(graph_identity(example)),
+            'episode_turns': ['consumer'],
             'actions': [{'query': 0, 'token_id': 7, 'behavior_logp': -2.0,
                          'temperature': 1.0, 'allowed_token_ids': None}], 'advantage': 1.0}}}))
     engine = _service_engine(shared_model=model, store=store, checkpoint_sha256=identity['checkpoint_sha256'],
