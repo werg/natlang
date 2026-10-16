@@ -45,7 +45,8 @@ def test_command_arguments_preserve_literal_json(monkeypatch):
 
 
 @pytest.mark.parametrize('publish_fails_once', [False, True])
-def test_all_fail_groups_continue_seed_stage_without_claiming_rl_training_exposure(tmp_path, monkeypatch, publish_fails_once):
+@pytest.mark.parametrize('native_boundary',[False,True])
+def test_all_fail_groups_continue_seed_stage_without_claiming_rl_training_exposure(tmp_path, monkeypatch, publish_fails_once,native_boundary):
     source = tmp_path / 'cases.jsonl'
     source.write_text(''.join(json.dumps({'id': f't{i}', 'split': 'train'}) + '\n' for i in range(4)))
     checkpoint = tmp_path / 'parent.pt'
@@ -54,7 +55,11 @@ def test_all_fail_groups_continue_seed_stage_without_claiming_rl_training_exposu
     config = tmp_path / 'config.json'
     config.write_text(json.dumps({'out': str(out), 'checkpoint': str(checkpoint), 'cases': str(source),
         'endpoints': ['http://unused'], 'rows_per_round': 2, 'seed_command': ['seed'],
-        'learner_command': ['learn'], 'after_update': ['publish']}))
+        'learner_command': ['learn'], 'after_update': ['publish'],
+        'native_state':native_boundary,'base':'unused'}))
+    if native_boundary:
+        from natlang_neuralese.rl import native_raw_policy
+        monkeypatch.setattr(native_raw_policy,'prepare_raw_policy',lambda *a,**kw:{'tokenizer':'bound-parent'})
     def collect(**kwargs):
         dest = kwargs['out']
         dest.mkdir(parents=True, exist_ok=True)
@@ -71,7 +76,12 @@ def test_all_fail_groups_continue_seed_stage_without_claiming_rl_training_exposu
             stage = Path(values['learner_out'])
             stage.mkdir(parents=True)
             (stage / 'checkpoint.pt').write_bytes(b'updated full state')
-            (stage / 'report.json').write_text(json.dumps({'completed': True,
+            from natlang_neuralese.common.hashing import sha256_file_hex
+            (stage / 'report.json').write_text(json.dumps({'completed': not native_boundary,
+                'schema':'natlang.neuralese-native-sft-report/1','numerics_ok':True,
+                'mandatory_sft':{'complete':False,'remaining_graph_visits':999},
+                'continuation_boundary':{'kind':'semantic-refresh','reached':True,'new_optimizer_updates':250,
+                    'checkpoint_sha256':sha256_file_hex(stage/'checkpoint.pt')},
                 'this_run': {'supervised_tokens': 120, 'target_tokens': 80}}))
     monkeypatch.setattr(production, 'run_command', command)
     if publish_fails_once:
@@ -85,6 +95,29 @@ def test_all_fail_groups_continue_seed_stage_without_claiming_rl_training_exposu
     assert state['trained_task_ids'] == []  # general SFT seed did not train these RL tasks
     assert state['trained_target_tokens'] == 80
     assert state['production_complete'] is False
+    if native_boundary:
+        assert state['last_learner_progress']['completed'] is False
+        assert state['last_learner_progress']['mandatory_sft']['remaining_graph_visits']==999
+
+
+@pytest.mark.parametrize('tamper',['schema','numerics','kind','reached','updates','checkpoint','mode'])
+def test_seed_checkpoint_boundary_rejects_unqualified_or_wrong_checkpoint(tmp_path,tamper):
+    from copy import deepcopy
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    checkpoint=tmp_path/'checkpoint.pt';checkpoint.write_bytes(b'exact-quantum')
+    report={'schema':'natlang.neuralese-native-sft-report/1','completed':False,'numerics_ok':True,
+        'continuation_boundary':{'kind':'semantic-refresh','reached':True,'new_optimizer_updates':250,
+                                'checkpoint_sha256':sha256_file_hex(checkpoint)}}
+    assert production.qualified_seed_boundary({'native_state':True},'seed',report,checkpoint)
+    bad=deepcopy(report);mode='seed'
+    if tamper=='schema':bad['schema']='other'
+    elif tamper=='numerics':bad['numerics_ok']=False
+    elif tamper=='kind':bad['continuation_boundary']['kind']='other'
+    elif tamper=='reached':bad['continuation_boundary']['reached']=False
+    elif tamper=='updates':bad['continuation_boundary']['new_optimizer_updates']=0
+    elif tamper=='checkpoint':checkpoint.write_bytes(b'different-checkpoint')
+    else:mode='rft'
+    assert not production.qualified_seed_boundary({'native_state':True},mode,bad,checkpoint)
 
 
 def test_task_selection_keeps_solved_mixed_and_failed_rows():

@@ -379,6 +379,19 @@ def initial_controller_state(config):
         'trained_target_tokens':0,'production_complete':False}
 
 
+def qualified_seed_boundary(config,mode,progress,checkpoint):
+    """Accept actual SFT work at its checkpoint, without declaring the stage complete."""
+    if not config.get('native_state') or mode!='seed':return False
+    boundary=progress.get('continuation_boundary') or {}
+    if (progress.get('schema')!='natlang.neuralese-native-sft-report/1'
+            or progress.get('numerics_ok') is not True or boundary.get('kind')!='semantic-refresh'
+            or boundary.get('reached') is not True
+            or type(boundary.get('new_optimizer_updates')) is not int
+            or boundary['new_optimizer_updates']<=0 or not Path(checkpoint).is_file()):return False
+    from ..common.hashing import sha256_file_hex_cached
+    return boundary.get('checkpoint_sha256')==sha256_file_hex_cached(checkpoint)
+
+
 def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
     """Hot-reload configuration at round boundaries; preserve actual state/exposure."""
     from ..common.hashing import sha256_file_hex
@@ -610,8 +623,9 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 values.update(learner_out=str(stage_out), rft_document_kind=kind)
                 learner_report = stage_out / 'report.json'
                 saved_progress=json.loads(learner_report.read_text()) if learner_report.is_file() else {}
-                already_complete=bool(saved_progress.get('completed') and
+                already_complete=bool((saved_progress.get('completed') and
                     (not (config.get('coefficient_policy') and mode!='seed') or saved_progress.get('qualification_complete') is True))
+                    or qualified_seed_boundary(config,mode,saved_progress,stage_out/'checkpoint.pt'))
                 if config.get('before_update') and not already_complete:
                     run_command(config['before_update'], values)
                 if not already_complete:
@@ -638,7 +652,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     state['trained_' + key] = state.get('trained_' + key, 0) + counts[key] - previous_counts.get(key, 0)
                 per_stage[str(stage_out)] = counts
                 write_json_durable(state_path, state)
-                if not progress.get('completed'):
+                if not progress.get('completed') and not qualified_seed_boundary(config,mode,progress,checkpoint):
                     state.update(phase='learner_pending', partial_checkpoint=str(checkpoint), last_learner_progress=progress)
                     write_json_durable(state_path, state)
                     pending = True

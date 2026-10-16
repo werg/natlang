@@ -38,3 +38,12 @@ unchanged. Deployment now provisions the adjustable semantic `policy_schedule`
 from step 5 without inventing collected sources. Step 4's actual per-student
 bootstrap/resource handoff and the complete production rollout/update/SFT cycle
 remain outstanding. These changes alone do not mean raw RL is running in cloud.
+
+Successful native batches with no reward spread use positive whole-episode RFT,
+including ordinary tasks with no communication. A native all-failure batch uses
+the declared verified SFT source. Its controller may publish a finite supervised
+checkpoint quantum only when the actual native SFT report records good numerics,
+a reached continuation boundary with positive optimizer updates, and the exact
+saved checkpoint hash. The report remains `completed:false` with its full recipe
+deficits intact. The same predicate prevents replaying an already committed
+quantum after a publication failure; it does not accept partial RL/RFT updates.
