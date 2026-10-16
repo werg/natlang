@@ -64,6 +64,86 @@ def prove_reviewed_runtime_extension(old_package, new_package):
             'new_policy_sha256': digest(inventories[1])}
 
 
+METADATA_STATE_HELPER = 'def _checked_file_state(self, previous, state, *, context, strict=False):\n        """A metadata change is safe only after stable, fresh whole-file hashing."""\n        fields = (\'st_dev\', \'st_ino\', \'st_size\', \'st_mtime_ns\', \'st_ctime_ns\')\n        def signature(value):\n            return tuple(getattr(value, name) for name in fields)\n        def binding(value):\n            return (value.st_size, value.st_mtime_ns, value.st_ino)\n        expected = (getattr(self, \'_file_stat_signature\', None) if type(previous) is tuple\n                    else signature(previous))\n        same = signature(state) == expected and (type(previous) is not tuple or binding(state) == previous)\n        if not same:\n            if strict:\n                raise ValueError(f\'{self.path}: \' + context)\n            before = state\n            actual = sha256_file_hex(self.path)\n            state = self.path.stat()\n            if signature(before) != signature(state) or actual != self.file_sha256:\n                raise ValueError(f\'{self.path}: \' + context)\n        self._file_stat_signature = signature(state)\n        self.file_binding = binding(state)\n        return state\n'
+
+def prove_metadata_revalidation_extension(old_package, new_package, reference_package):
+    """An exact reviewed parser followed only by the declared file-state guard repair."""
+    old,new,reference=map(Path,(old_package,new_package,reference_package))
+    inventories=[{name:sha256_file_hex(root/name) for name in POLICY_FILES} for root in (old,new,reference)]
+    if (inventories[2]!=_NEW_COMPLETE or
+            {name:sha256_file_hex(reference/name) for name in _COMPLETE_HELPERS}!=_COMPLETE_HELPERS):
+        raise ValueError('metadata continuation requires the exact reviewed canonical reference')
+    if inventories[0]==_NEW_COMPLETE:
+        parent='canonical64ec'
+    else:
+        parent=prove_reviewed_runtime_extension(old,reference)['parent']
+    if any(inventories[1][name]!=inventories[2][name] for name in POLICY_FILES if name!='data/native_sources.py'):
+        raise ValueError('metadata continuation changed parser dependencies')
+    checks={
+        "after = self._checked_file_state(before, after, context='source changed while loading graph index')":
+            "if (before.st_size, before.st_mtime_ns, before.st_ino) != (after.st_size, after.st_mtime_ns, after.st_ino):\n    raise ValueError(f'{self.path}: source changed while loading graph index')",
+        "after = self._checked_file_state(before, after, context='source changed during streaming graph validation', strict=True)":
+            "if (before.st_size, before.st_mtime_ns, before.st_ino) != (after.st_size, after.st_mtime_ns, after.st_ino):\n    raise ValueError(f'{self.path}: source changed during streaming graph validation')",
+        "state = self._checked_file_state(self.file_binding, state, context='source changed after index validation')":
+            "if (state.st_size, state.st_mtime_ns, state.st_ino) != self.file_binding:\n    raise ValueError(f'{self.path}: source changed after index validation')",
+        "after = self._checked_file_state(self.file_binding, after, context='source changed while streaming examples')":
+            "if (after.st_size, after.st_mtime_ns, after.st_ino) != self.file_binding:\n    raise ValueError(f'{self.path}: source changed while streaming examples')"}
+    checks={tree(ast.parse(key).body[0]):ast.parse(value).body[0] for key,value in checks.items()}
+    post=tree(ast.parse("self._checked_file_state(self.file_binding, self.path.stat(), context='source changed while streaming examples')").body[0])
+    expected_helper=tree(ast.parse(METADATA_STATE_HELPER).body[0])
+    counts={'helper':0,'checks':0,'post':0,'import':0}
+    class Normalize(ast.NodeTransformer):
+        def visit_FunctionDef(self,node):
+            if node.name=='_checked_file_state':
+                if tree(node)!=expected_helper:raise ValueError('metadata continuation changed the exact file verifier')
+                counts['helper']+=1;return None
+            return self.generic_visit(node)
+        def visit_ImportFrom(self,node):
+            expected=ast.parse('from ..common.hashing import sha256_file_hex_cached, sha256_file_hex').body[0]
+            if tree(node)==tree(expected):
+                counts['import']+=1;node.names=node.names[:1]
+            return node
+        def visit_Assign(self,node):
+            key=tree(node)
+            if key in checks:counts['checks']+=1;return checks[key]
+            return self.generic_visit(node)
+        def visit_If(self,node):
+            if tree(node.test)==tree(ast.parse("self.kind == 'manifest'",mode='eval').body):
+                if len(node.body)<2 or not isinstance(node.body[-1],ast.Return) or tree(node.body[-2])!=post:
+                    raise ValueError('metadata continuation lost the post-stream manifest guard')
+                counts['post']+=1;node.body.pop(-2)
+            return self.generic_visit(node)
+    normalized=Normalize().visit(ast.parse((new/'data/native_sources.py').read_text()))
+    if (counts!={'helper':1,'checks':4,'post':1,'import':1}
+            or tree(normalized)!=tree(ast.parse((reference/'data/native_sources.py').read_text()))):
+        raise ValueError('metadata continuation changed source admission or streaming semantics')
+    helper=ast.parse((new/'data/native_source_tree.py').read_text())
+    old_helper=ast.parse((reference/'data/native_source_tree.py').read_text())
+    code="state = source._checked_file_state(before, state, context='native graph manifest changed during validation', strict=True)"
+    guard=ast.parse("if (before.st_size, before.st_mtime_ns, before.st_ino) != (state.st_size, state.st_mtime_ns, state.st_ino):\n    raise ValueError('native graph manifest changed during validation')").body[0]
+    key=tree(ast.parse(code).body[0]);hits=0
+    function=next(node for node in helper.body if isinstance(node,ast.FunctionDef) and node.name=='initialize_manifest')
+    for index,node in enumerate(function.body):
+        if tree(node)==key:function.body[index]=guard;hits+=1
+    assignment=ast.parse('source.file_sha256 = sha256_file_hex_cached(source.path)').body[0]
+    matches=[node for node in function.body if tree(node)==tree(assignment)]
+    # Hash-before-read closes the old read/hash replacement race. Apart from
+    # that ordering and the exact guard call, the manifest parser is unchanged.
+    if len(matches)!=1 or tree(function.body[1])!=tree(assignment):
+        raise ValueError('metadata manifest must bind its hash before parsing bytes')
+    function.body.remove(matches[0])
+    kind=tree(ast.parse("source.kind = 'manifest'").body[0])
+    positions=[index for index,node in enumerate(function.body) if tree(node)==kind]
+    if len(positions)!=1:raise ValueError('metadata manifest kind changed')
+    function.body.insert(positions[0]+1,matches[0])
+    if hits!=1 or tree(helper)!=tree(old_helper):
+        raise ValueError('metadata continuation changed manifest admission')
+    return {'qualification':'source-metadata-revalidation-20261016','parent':parent,
+        'policy_files':inventories[:2],'reference_policy_files':inventories[2],
+        'new_helpers':{name:sha256_file_hex(new/name) for name in _COMPLETE_HELPERS},
+        'old_policy_sha256':digest(inventories[0]),'new_policy_sha256':digest(inventories[1])}
+
+
 GUARDS = (
     """if type(node.cache_prefix) is not bool or (node.cache_prefix and
             (node.producing or node.logical_producing or len(node.imports) > 1)):
@@ -191,13 +271,18 @@ def main():
     parser.add_argument('--old-package', type=Path, required=True)
     parser.add_argument('--new-package', type=Path, required=True)
     parser.add_argument('--source-sha256', action='append', required=True)
-    parser.add_argument('--qualification', choices=('prefix-extension', 'complete-native-runtime'),
+    parser.add_argument('--qualification', choices=('prefix-extension', 'complete-native-runtime', 'source-metadata-revalidation'),
                         default='prefix-extension')
+    parser.add_argument('--reference-package', type=Path, help='exact canonical64ec package required for metadata-only continuation')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     prove = (prove_extension if args.qualification == 'prefix-extension'
              else prove_reviewed_runtime_extension)
-    receipt = continue_indexes(prove(args.old_package, args.new_package), args.source_sha256)
+    if args.qualification == 'source-metadata-revalidation':
+        if args.reference_package is None:parser.error('metadata continuation requires --reference-package')
+        proof=prove_metadata_revalidation_extension(args.old_package,args.new_package,args.reference_package)
+    else:proof=prove(args.old_package,args.new_package)
+    receipt = continue_indexes(proof, args.source_sha256)
     write_json_durable(args.output, receipt)
     print(json.dumps({'indexes': len(receipt['indexes']), 'missing_sources': len(receipt['missing_source_sha256']),
                       'receipt': str(args.output)}))

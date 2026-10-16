@@ -45,8 +45,13 @@ class NativeSourcePreparation:
         while pending:
             value = pending.pop()
             state = value.path.stat()
-            if ((state.st_size, state.st_mtime_ns, state.st_ino) != value.file_binding
+            checker = getattr(value, '_checked_file_state', None)
+            if checker is not None:
+                checker(value.file_binding, state, context='reused preparation source changed after validation')
+            elif ((state.st_size, state.st_mtime_ns, state.st_ino) != value.file_binding
                     or sha256_file_hex_cached(value.path) != value.file_sha256):
+                # A deliberately retained old frozen source keeps its original
+                # strict contract; no unqualified verifier is monkeypatched in.
                 raise ValueError('reused preparation source changed after validation: ' + str(value.path))
             pending.extend(getattr(value, 'children', ()))
 

@@ -153,3 +153,51 @@ def test_new_import_stop_syntax_needs_fresh_validation(frozen_packages, tmp_path
         old.NativeGraphSource(path, '1'*64, required_split='train')
     fresh = new.NativeGraphSource(path, '1'*64, required_split='train')
     assert any(next(iter(fresh)).plan.slot_stops)
+
+
+@pytest.mark.parametrize('parent',(*PARENTS,'64ec316e5'))
+def test_metadata_revalidation_keeps_actual_old_cache_and_fresh_stream_validation(frozen_packages,tmp_path,monkeypatch,parent):
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'indexes'))
+    monkeypatch.setenv('NATLANG_HASH_CACHE',str(tmp_path/'digests.jsonl'))
+    reference=frozen_packages/'64ec316e5'
+    new=ROOT/'training/neuralese/natlang_neuralese'
+    old=load_source(frozen_packages/parent,monkeypatch)
+    current=load_source(new,monkeypatch)
+    path=tmp_path/'graphs.jsonl';path.write_text(json.dumps(graph('actual'))+'\n')
+    before=old.NativeGraphSource(path,'1'*64,required_split='train')
+    proof=subject.prove_metadata_revalidation_extension(frozen_packages/parent,new,reference)
+    result=subject.continue_indexes(proof,[sha256_file_hex(path)])
+    assert len(result['indexes'])==1 and not result['missing_source_sha256']
+    parse=current.NativeGraphSource._parse
+    monkeypatch.setattr(current.NativeGraphSource,'_parse',lambda *args:pytest.fail('continued cache missed'))
+    after=current.NativeGraphSource(path,'1'*64,required_split='train')
+    assert after.entries==before.entries and after.bindings==before.bindings
+    monkeypatch.setattr(current.NativeGraphSource,'_parse',parse)
+    expected=[positional_plan(row) for row in before]
+    temporary=tmp_path/'replacement';temporary.write_bytes(path.read_bytes());temporary.replace(path)
+    assert [positional_plan(row) for row in after]==expected
+
+
+@pytest.mark.parametrize('tamper',['helper','parser','manifest','dependency','post-location'])
+def test_metadata_continuation_rejects_any_non_guard_policy_change(frozen_packages,tmp_path,tamper):
+    reference=frozen_packages/'64ec316e5';new=tmp_path/'new'
+    package=ROOT/'training/neuralese/natlang_neuralese'
+    for name in (*subject.POLICY_FILES,'data/native_source_tree.py'):
+        target=new/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(package/name,target)
+    if tamper=='manifest':path=new/'data/native_source_tree.py';needle="kind not in {'native-graphs', 'semantic-pairs'}";change='False'
+    elif tamper=='dependency':path=new/'data/native_pair_schema.py';needle='';change='\n# changed parser dependency\n'
+    else:
+        path=new/'data/native_sources.py'
+        needle,change={
+            'helper':('actual != self.file_sha256','False'),
+            'parser':("example.split != required_split","False"),
+            'post-location':("            self._checked_file_state(self.file_binding, self.path.stat(), context='source changed while streaming examples')\n",'')
+        }[tamper]
+    text=path.read_text();assert not needle or needle in text
+    text=text.replace(needle,change,1) if needle else text+change
+    if tamper=='post-location':
+        moved="        self._checked_file_state(self.file_binding, self.path.stat(), context='source changed while streaming examples')\n"
+        text=text.replace('        with open_jsonl_text(self.path) as handle:',moved+'        with open_jsonl_text(self.path) as handle:')
+    path.write_text(text)
+    with pytest.raises(ValueError):subject.prove_metadata_revalidation_extension(frozen_packages/PARENTS[0],new,reference)

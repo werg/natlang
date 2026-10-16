@@ -7,11 +7,11 @@ from ..common.hashing import sha256_file_hex_cached
 def initialize_manifest(source, parents, *, load_child):
     # Manifest assembly is always verified; only leaf row indexes are cached.
     before = source.path.stat()
+    source.file_sha256 = sha256_file_hex_cached(source.path)
     manifest = json.loads(source.path.read_text())
     if manifest.get('schema') != 'natlang.native-graph-sources/1' or not manifest.get('sources'):
         raise ValueError('native graph source manifest requires its schema and bound sources')
     source.kind = 'manifest'
-    source.file_sha256 = sha256_file_hex_cached(source.path)
     source.children, source.entries, source.bindings, source.groups = [], [], {}, set()
     for binding in manifest['sources']:
         priority = binding.get('training_priority', 0)
@@ -44,6 +44,5 @@ def initialize_manifest(source, parents, *, load_child):
         source.bindings.update(child.bindings)
         source.groups.update(child.groups)
     state = source.path.stat()
-    if (before.st_size, before.st_mtime_ns, before.st_ino) != (state.st_size, state.st_mtime_ns, state.st_ino):
-        raise ValueError('native graph manifest changed during validation')
+    state = source._checked_file_state(before, state, context='native graph manifest changed during validation', strict=True)
     source.file_binding = (state.st_size, state.st_mtime_ns, state.st_ino)

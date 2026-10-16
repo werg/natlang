@@ -5,7 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from ..common.hashing import sha256_file_hex_cached
+from ..common.hashing import sha256_file_hex_cached, sha256_file_hex
 from ..common.jsonio import open_jsonl_text
 
 
@@ -68,8 +68,7 @@ class NativeGraphSource:
             self.bindings = {entry['id']: entry['binding'] for entry in self.entries}
             self.groups = {group for entry in self.entries for group in entry['groups']}
             after = self.path.stat()
-            if (before.st_size, before.st_mtime_ns, before.st_ino) != (after.st_size, after.st_mtime_ns, after.st_ino):
-                raise ValueError(f'{self.path}: source changed while loading graph index')
+            after = self._checked_file_state(before, after, context='source changed while loading graph index')
             self.file_binding = (after.st_size, after.st_mtime_ns, after.st_ino)
             print(json.dumps({'kind': 'native_graph_index_cache', 'hit': True,
                               'path': str(self.path), 'rows': len(self.entries)}), flush=True)
@@ -95,11 +94,32 @@ class NativeGraphSource:
         if not self.entries:
             raise ValueError(f'{self.path}: no {required_split} native graph rows')
         after = self.path.stat()
-        if (before.st_size, before.st_mtime_ns, before.st_ino) != (after.st_size, after.st_mtime_ns, after.st_ino):
-            raise ValueError(f'{self.path}: source changed during streaming graph validation')
+        after = self._checked_file_state(before, after, context='source changed during streaming graph validation', strict=True)
         self.file_binding = (after.st_size, after.st_mtime_ns, after.st_ino)
         row_index.save(index_path, {'key': key, 'entries': self.entries,
             'metadata_sha256': canonical_json_sha256_hex(self.entries)})
+
+    def _checked_file_state(self, previous, state, *, context, strict=False):
+        """A metadata change is safe only after stable, fresh whole-file hashing."""
+        fields = ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns')
+        def signature(value):
+            return tuple(getattr(value, name) for name in fields)
+        def binding(value):
+            return (value.st_size, value.st_mtime_ns, value.st_ino)
+        expected = (getattr(self, '_file_stat_signature', None) if type(previous) is tuple
+                    else signature(previous))
+        same = signature(state) == expected and (type(previous) is not tuple or binding(state) == previous)
+        if not same:
+            if strict:
+                raise ValueError(f'{self.path}: ' + context)
+            before = state
+            actual = sha256_file_hex(self.path)
+            state = self.path.stat()
+            if signature(before) != signature(state) or actual != self.file_sha256:
+                raise ValueError(f'{self.path}: ' + context)
+        self._file_stat_signature = signature(state)
+        self.file_binding = binding(state)
+        return state
 
     def _init_manifest(self, parents):
         from .native_source_tree import initialize_manifest
@@ -173,8 +193,7 @@ class NativeGraphSource:
         if not 0 <= start <= len(self.entries):
             raise ValueError(f'{self.path}: row cursor outside indexed source')
         state = self.path.stat()
-        if (state.st_size, state.st_mtime_ns, state.st_ino) != self.file_binding:
-            raise ValueError(f'{self.path}: source changed after index validation')
+        state = self._checked_file_state(self.file_binding, state, context='source changed after index validation')
         if self.kind == 'manifest':
             offset = 0
             for child in self.children:
@@ -183,6 +202,7 @@ class NativeGraphSource:
                 if stop > start and (selected_child is None or selected_child):
                     yield from child.iter_from(max(0, start-offset), selected=selected_child)
                 offset = stop
+            self._checked_file_state(self.file_binding, self.path.stat(), context='source changed while streaming examples')
             return
         with open_jsonl_text(self.path) as handle:
             index = 0
@@ -203,8 +223,7 @@ class NativeGraphSource:
             if index != len(self.entries):
                 raise ValueError(f'{self.path}: row count changed after index validation')
         after = self.path.stat()
-        if (after.st_size, after.st_mtime_ns, after.st_ino) != self.file_binding:
-            raise ValueError(f'{self.path}: source changed while streaming examples')
+        after = self._checked_file_state(self.file_binding, after, context='source changed while streaming examples')
 
     def receipt(self):
         counts = {}
