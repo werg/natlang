@@ -39,7 +39,7 @@ def test_validation_rows_become_test_with_source_split(tmp_path):
     shards.mkdir()
     args = Args(source=[source], limit=None, train_only=False, registry_admits_reason=None, exclude_programs=[],
                      reserved=None, protected=None, shards=1, full_sample=1.0)
-    omissions, counts, _blocked, _cache, test_groups, _reserved, _sample = render.select(args, shards)
+    omissions, counts, _blocked, _cache, test_groups, _reserved, _sample = render.select(args, shards, tmp_path/'selection-state.json', render.selection_input_binding(args))
     written = [json.loads(line) for line in (shards / '0000.jsonl').read_text().splitlines()]
     by_id = {r['id']: r for r in written}
     assert by_id['b']['split'] == 'test' and by_id['b']['source_split'] == 'validation'
@@ -60,6 +60,6 @@ def test_compressed_native_sources_preserve_selection_ids_and_source_bytes(tmp_p
     with write_jsonl_text(source) as stream:stream.write(encoded)
     args=Args(source=[source],exclude_programs=[],pieces=[],protected=None,reserved=None,shards=1,limit=None,full_sample=1.0)
     shards=tmp_path/'selected';shards.mkdir()
-    result=render.select(args,shards)
+    result=render.select(args,shards,tmp_path/'selection-state.json',render.selection_input_binding(args))
     assert result[1]['selected']==1
     assert next(shards.glob('*.jsonl')).read_bytes()==encoded.encode('utf-8')

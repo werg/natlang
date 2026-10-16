@@ -1,6 +1,5 @@
 """Selected scratch stays compressed without changing admitted record bytes."""
 import json
-from contextlib import contextmanager
 
 import pytest
 
@@ -22,7 +21,7 @@ def test_compressed_selection_matches_plain_bytes_and_all_selection_metadata(tmp
         args = Args(source=[source], limit=None, train_only=False, registry_admits_reason=None,
                     exclude_programs=[], reserved=None, protected=None, shards=3, full_sample=1.0,
                     compress_text=compressed)
-        metadata = render.select(args, directory)
+        metadata = render.select(args, directory, tmp_path/f'selection-{compressed}.json', render.selection_input_binding(args))
         decoded = {}
         for path in directory.iterdir():
             with render.open_jsonl_text(path) as stream:
@@ -40,11 +39,11 @@ def test_selection_does_not_succeed_when_streaming_compressor_close_fails(tmp_pa
     source = tmp_path/'empty.jsonl';source.write_text('')
     args = Args(source=[source], include_ids=[], limit=None, train_only=False, registry_admits_reason=None,
                 exclude_programs=[], reserved=None, protected=None, shards=1, full_sample=1.0, compress_text=True)
-    @contextmanager
-    def failed_writer(path):
-        with path.open('w') as stream:
-            yield stream
-        raise RuntimeError('compression failed')
-    monkeypatch.setattr(render, 'write_jsonl_text', failed_writer)
+    import zstandard
+    class FailedCompressor:
+        def __init__(self, **kwargs):pass
+        def compress(self, value):
+            raise RuntimeError('compression failed')
+    monkeypatch.setattr(zstandard, 'ZstdCompressor', FailedCompressor)
     with pytest.raises(RuntimeError, match='compression failed'):
-        render.select(args, tmp_path)
+        render.select(args, tmp_path/'selected', tmp_path/'selection-state.json', render.selection_input_binding(args))

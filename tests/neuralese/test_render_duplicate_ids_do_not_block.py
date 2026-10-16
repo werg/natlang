@@ -22,7 +22,7 @@ def run(tmp_path, sources):
     shards.mkdir()
     args = Args(source=paths, limit=None, train_only=False, registry_admits_reason=None, exclude_programs=[],
                 reserved=None, protected=None, shards=1, full_sample=1.0)
-    omissions, counts, blocked, *_ = render.select(args, shards)
+    omissions, counts, blocked, *_ = render.select(args, shards, tmp_path/'selection-state.json', render.selection_input_binding(args))
     written = [json.loads(line) for line in (shards / '0000.jsonl').read_text().splitlines()]
     return omissions, blocked, written
 
