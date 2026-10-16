@@ -395,3 +395,77 @@ def test_original_provider_capture_identity_cannot_join_missing_or_malformed_fie
         'raw_response_sha256': 'a' * 64}
     bound = {**decision, 'invocation_id': 'child-a', 'raw_response_sha256': 'a' * 64}
     assert converter.admitted_teacher_turn(row, 0, valid, {(row['id'], 0): bound}) == (True, bound)
+
+
+def authored_packet(tmp_path, monkeypatch):
+    monkeypatch.setattr(converter.source_review, 'pending_unpinned_source_groups', lambda: set())
+    def put(name,value):
+        path=tmp_path/name;path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text(json.dumps(value)+'\n');return path
+    held=put('protection/held-union/full/groups.jsonl',{'source_groups':['held-world']})
+    quality=put('protection/quality-groups.jsonl',{'source_groups':['quality-world']})
+    protection=put('protection/manifest.json',{'schema':'natlang.training-protection-projection/1',
+        'held_groups':1,'quality_groups':1,'source_review_sha256':'a'*64,
+        'files':[{'path':str(path.relative_to(tmp_path/'protection')),
+            'sha256':converter.sha256_file(path),'bytes':path.stat().st_size} for path in (held,quality)]})
+    programs=[{'version':'natlang.program/2','id':'fresh-world-a','split':'train',
+        'source_groups':['fresh-source-a'],'inputs':{'query':'fresh task'}}]
+    cases=put('cases.jsonl',programs[0]);digest=converter.sha256_file(cases)
+    selection=put('selection-proof.json',{'schema':'natlang.fresh-authored-teacher-packet/1',
+        'cases':1,'cases_sha256':digest,'worlds':1,'held_and_pending_intersections':0,
+        'training_admission':False,'canonical_programs_sha256':converter.canonical_json_sha256_hex(programs),
+        'protection':{'path':'/original/machine/manifest.json','sha256':converter.sha256_file(protection),
+            'held_groups':1,'quality_groups':1,'source_review_sha256':'a'*64}})
+    summary_value={'cases':1,'admitted':1,'decisions':4,'approved':3,
+        'held':{'seed failed proposal is not positive':1},'omitted':{},'omissions':[]}
+    summary=put('reference-isolated.summary.json',summary_value)
+    qualification=put('reference-qualification.json',{'schema':'natlang.authored-reference-qualification/1',
+        'passed':True,'training_admission':False,'reference_traces_are_teacher_generations':False,
+        'cases':1,'cases_sha256':digest,'counts':summary_value,
+        'runtime_inventory':{'runtime.js':'a'*64}, 'scripts_inventory':{'replay.mjs':'b'*64},
+        'runtime_sha256':converter.canonical_json_sha256_hex({'runtime.js':'a'*64}),
+        'scripts_sha256':converter.canonical_json_sha256_hex({'replay.mjs':'b'*64}),
+        'selection_proof_sha256':converter.sha256_file(selection),
+        'reference_summary_sha256':converter.sha256_file(summary)})
+    join=put('global-protection-join.json',{'schema':'natlang.native-teacher-global-protection-join/1',
+        'status':'passed','selected_packet_sha256':digest,'held_group_intersections':[],
+        'quality_group_intersections':[]})
+    return dict(selection=selection,selected_cases=cases,global_protection_join=join,
+        reference_qualification=qualification,reference_summary=summary,selection_protection=protection)
+
+
+def test_fresh_authored_packet_preserves_schema_and_full_exact_witness_closure(tmp_path,monkeypatch):
+    paths=authored_packet(tmp_path,monkeypatch)
+    refs={name:{'path':str(path),'sha256':converter.sha256_file(path)} for name,path in paths.items()}
+    result=converter.packet_binding(tmp_path,refs)
+    assert result['selection']['schema']=='natlang.fresh-authored-teacher-packet/1'
+    assert result['selected_ids']=={'fresh-world-a'} and result['train_groups']=={'fresh-source-a'}
+    assert set(result['proofs'])==set(paths)
+    # Reference qualification has no authority to turn reference traces into teacher data.
+    assert result['selection']['training_admission'] is False
+
+
+@pytest.mark.parametrize('tamper', ['missing-proof','failed-reference','wrong-selection','wrong-summary',
+    'partial-reference','changed-programs','protected-group','nested-protection','held-overlap'])
+def test_fresh_authored_packet_rejects_incomplete_or_forged_witnesses(tmp_path,monkeypatch,tamper):
+    paths=authored_packet(tmp_path,monkeypatch)
+    def alter(role,change):
+        value=json.loads(paths[role].read_text());change(value);paths[role].write_text(json.dumps(value))
+    if tamper=='missing-proof':paths.pop('reference_qualification')
+    elif tamper=='failed-reference':alter('reference_qualification',lambda value:value.update(passed=False))
+    elif tamper=='wrong-selection':alter('reference_qualification',lambda value:value.update(selection_proof_sha256='0'*64))
+    elif tamper=='wrong-summary':alter('reference_summary',lambda value:value.update(approved=0))
+    elif tamper=='partial-reference':alter('reference_qualification',lambda value:value.update(cases=0))
+    elif tamper=='changed-programs':alter('selection',lambda value:value.update(canonical_programs_sha256='0'*64))
+    elif tamper=='protected-group':alter('selection_protection',lambda value:value.update(source_review_sha256='b'*64))
+    elif tamper=='nested-protection':alter('selection',lambda value:value['protection'].update(sha256='0'*64))
+    elif tamper=='held-overlap':
+        child=paths['selection_protection'].parent/'held-union/full/groups.jsonl'
+        child.write_text(json.dumps({'source_groups':['fresh-source-a']}))
+        alter('selection_protection',lambda value:value['files'][0].update(
+            sha256=converter.sha256_file(child),bytes=child.stat().st_size))
+        alter('selection',lambda value:value['protection'].update(sha256=converter.sha256_file(paths['selection_protection'])))
+        alter('reference_qualification',lambda value:value.update(selection_proof_sha256=converter.sha256_file(paths['selection'])))
+    refs={name:{'path':str(path),'sha256':converter.sha256_file(path)} for name,path in paths.items()}
+    with pytest.raises(ValueError,match='fresh authored'):
+        converter.packet_binding(tmp_path,refs)

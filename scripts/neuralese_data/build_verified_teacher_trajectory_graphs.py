@@ -60,7 +60,7 @@ class GraphWriter(CompressedRows):
         return {**super().finish(), 'tokens': self.tokens, 'max_row_tokens': self.max_tokens}
 
 
-def current_protection(path):
+def current_protection(path, *, verify_current=True):
     manifest = json.loads(path.read_text())
     if manifest.get('schema') != 'natlang.training-protection-projection/1':
         raise ValueError('current protection needs its exact projection manifest')
@@ -78,13 +78,52 @@ def current_protection(path):
     if len(held) != manifest['held_groups'] or len(quality) != manifest['quality_groups']:
         raise ValueError('current protection group projection is incomplete')
     live_review = source_review.REGISTRY / 'holds.jsonl'
-    if sha256_file(live_review) != manifest['source_review_sha256']:
+    if verify_current and sha256_file(live_review) != manifest['source_review_sha256']:
         raise ValueError('protection projection differs from current source reviews')
     pending = source_review.pending_unpinned_source_groups()
     return {'held': held, 'quality': quality, 'pending': pending,
             'proof': {'path': str(path), 'sha256': sha256_file(path),
                 'held_groups': len(held), 'quality_groups': len(quality),
                 'source_review_sha256': manifest['source_review_sha256']}}
+
+
+
+def validate_authored_packet(paths, selection, packet_sha, programs, groups):
+    """Verify task/reference witnesses; actual teacher decisions qualify separately."""
+    required = {'reference_qualification', 'reference_summary', 'selection_protection'}
+    if not required <= paths.keys():
+        raise ValueError('fresh authored packet needs exact reference and protection witnesses')
+    qualification = json.loads(paths['reference_qualification'].read_text())
+    summary = json.loads(paths['reference_summary'].read_text())
+    if (not programs or type(selection.get('cases')) is not int
+            or type(selection.get('worlds')) is not int
+            or qualification.get('schema') != 'natlang.authored-reference-qualification/1'
+            or qualification.get('passed') is not True
+            or qualification.get('training_admission') is not False
+            or qualification.get('reference_traces_are_teacher_generations') is not False
+            or qualification.get('cases_sha256') != packet_sha
+            or qualification.get('selection_proof_sha256') != sha256_file(paths['selection'])
+            or qualification.get('reference_summary_sha256') != sha256_file(paths['reference_summary'])
+            or type(qualification.get('cases')) is not int or qualification['cases'] != len(programs)
+            or qualification.get('counts') != summary or summary.get('cases') != len(programs)
+            or any(type(summary.get(key)) is not int for key in ('cases', 'admitted', 'decisions', 'approved'))
+            or summary.get('admitted') != len(programs)
+            or summary.get('omitted') != {} or summary.get('omissions') != []
+            or any(not isinstance(qualification.get(key+'_inventory'), dict)
+                   or not qualification[key+'_inventory']
+                   or canonical_json_sha256_hex(qualification[key+'_inventory']) != qualification.get(key+'_sha256')
+                   for key in ('runtime', 'scripts'))
+            or canonical_json_sha256_hex(programs) != selection.get('canonical_programs_sha256')
+            or len(groups) != selection.get('worlds')):
+        raise ValueError('fresh authored reference qualification differs from its complete original task packet')
+    reference = selection.get('protection') or {}
+    projection_path = paths['selection_protection']
+    projection = current_protection(projection_path, verify_current=False)
+    if (sha256_file(projection_path) != reference.get('sha256')
+            or any(projection['proof'].get(key) != reference.get(key)
+                   for key in ('source_review_sha256', 'held_groups', 'quality_groups'))
+            or groups & (projection['held'] | projection['quality'])):
+        raise ValueError('fresh authored packet historical protection binding or source groups differ')
 
 
 def packet_binding(root, references):
@@ -99,12 +138,14 @@ def packet_binding(root, references):
         paths[name] = path
     selection = json.loads(paths['selection'].read_text())
     protection = json.loads(paths['global_protection_join'].read_text())
+    fresh_selection = selection.get('schema') == 'natlang.fresh-authored-teacher-packet/1'
     code_selection = selection.get('schema') == 'natlang.strong-teacher-code-source-selection/1'
-    packet_sha = selection.get('cases_sha256') if code_selection else selection.get('output_sha256')
+    structured_selection = code_selection or fresh_selection
+    packet_sha = selection.get('cases_sha256') if structured_selection else selection.get('output_sha256')
     if (sha256_file(paths['selected_cases']) != packet_sha or
-            (code_selection and (selection.get('held_and_pending_intersections') != 0
+            (structured_selection and (selection.get('held_and_pending_intersections') != 0
                                  or selection.get('training_admission') is not False)) or
-            (not code_selection and (selection.get('schema') != 'natlang.native-teacher-task-selection/1'
+            (not structured_selection and (selection.get('schema') != 'natlang.native-teacher-task-selection/1'
                                     or selection.get('status') != 'passed'))):
         raise ValueError('selected task packet differs from its passed immutable selection proof')
     if (protection.get('schema') != 'natlang.native-teacher-global-protection-join/1'
@@ -112,22 +153,23 @@ def packet_binding(root, references):
             or protection.get('selected_packet_sha256') != packet_sha
             or protection.get('held_group_intersections') or protection.get('quality_group_intersections')):
         raise ValueError('teacher selection intersects protected evaluation or quality-held groups')
-    programs, packet_groups = {}, set()
+    programs, packet_groups, ordered_programs = {}, set(), []
     for _, row in file_rows(paths['selected_cases']):
         program = row.get('program_ir', row)
         if not isinstance(program.get('id'), str) or program['id'] in programs:
             raise ValueError('selected task packet needs distinct program identities')
-        if code_selection and (program.get('version') != 'natlang.program/2' or program.get('split') != 'train'
+        if structured_selection and (program.get('version') != 'natlang.program/2' or program.get('split') != 'train'
                 or not isinstance(program.get('source_groups'), list) or not program['source_groups']
                 or any(not isinstance(group, str) or not group for group in program['source_groups'])):
             raise ValueError('selected code packet needs actual train program source groups')
         packet_groups.update(program.get('source_groups', []))
         programs[program['id']] = canonical_json_sha256_hex(program)
-    if code_selection and selection.get('cases') != len(programs):
+        ordered_programs.append(program)
+    if structured_selection and selection.get('cases') != len(programs):
         raise ValueError('selected code packet count differs from selection proof')
-    if not code_selection and set(programs) != set(selection.get('selected_ids', [])):
+    if not structured_selection and set(programs) != set(selection.get('selected_ids', [])):
         raise ValueError('selected packet program IDs differ from selection proof')
-    train_groups = packet_groups if code_selection else set(selection.get('train_groups', []))
+    train_groups = packet_groups if structured_selection else set(selection.get('train_groups', []))
     held_groups = set(selection.get('held_groups', []))
     if code_selection and 'selected_source_groups' in selection:
         declared_groups = selection['selected_source_groups']
@@ -135,6 +177,8 @@ def packet_binding(root, references):
                  (isinstance(declared_groups, list) and set(declared_groups) == train_groups))
         if not valid:
             raise ValueError('selected code packet groups differ from selection proof')
+    if fresh_selection:
+        validate_authored_packet(paths, selection, packet_sha, ordered_programs, packet_groups)
     if train_groups & held_groups:
         raise ValueError('selection proof train/held source groups overlap')
     return {'selection': selection, 'packet_sha256': packet_sha, 'protection': protection, 'selected_ids': set(programs),
@@ -171,7 +215,8 @@ def source_binding(args):
             if source in packets:
                 raise ValueError('teacher snapshot repeats a batch source binding')
             packets[source] = packet_binding(root, {key: batch[key] for key in (
-                'selection', 'selected_cases', 'global_protection_join')})
+                'selection', 'selected_cases', 'global_protection_join',
+                'reference_qualification', 'reference_summary', 'selection_protection') if key in batch})
         fallback = None
     else:
         fallback_refs = {name: {'path': str(root / filename), 'sha256': sha256_file(root / filename)}
