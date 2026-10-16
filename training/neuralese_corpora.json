@@ -119970,6 +119970,93 @@
       ]
     },
     {
+      "id": "qwen-verified-positive-native-graphs-20261015-v19-mellum-prefix",
+      "owner": "dgx",
+      "path": "runs/qwen-verified-positive-native-graphs-20261015-v19",
+      "include": [
+        "mellum21/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "validation-proof.json",
+        "decision-hold-closure-proof.json"
+      ],
+      "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
+      "split": "Mellum-only train continuation: 6,845 unique graphs; empty test file; no held evaluation rows claimed. LFM is admitted by the companion v19-lfm-prefix entry.",
+      "admission": "The same 235 verified Qwen3.8-Flash-Next trajectories yielded 6,920 eligible assistant turns. This Mellum tokenizer view contributes 6,845 graphs after 75 exact token/weight duplicates were removed against prior admitted views; 401 failed or unexecuted actions remain explicit omissions.",
+      "training_admission": true,
+      "training_admission_reason": "Independent full validation checked the actual Mellum view and matching source decision-admission receipt, source-group closure, exact current decision holds, model graph identity, and byte hashes. This entry covers only Mellum; companion LFM registration is separate.",
+      "derived_from": [
+        "qwen-positive-clean-actions-20261015-v1",
+        "qwen-verified-positive-native-graphs-20261015-v1-v2",
+        "qwen-verified-positive-native-graphs-20261015-v10",
+        "qwen-verified-positive-native-graphs-20261015-v11",
+        "qwen-verified-positive-native-graphs-20261015-v12",
+        "qwen-verified-positive-native-graphs-20261015-v13",
+        "qwen-verified-positive-native-graphs-20261015-v14",
+        "qwen-verified-positive-native-graphs-20261015-v15",
+        "qwen-verified-positive-native-graphs-20261015-v16",
+        "qwen-verified-positive-native-graphs-20261015-v17",
+        "qwen-verified-positive-native-graphs-20261015-v18",
+        "qwen-verified-positive-native-graphs-20261015-v3",
+        "qwen-verified-positive-native-graphs-20261015-v4",
+        "qwen-verified-positive-native-graphs-20261015-v5",
+        "qwen-verified-positive-native-graphs-20261015-v6",
+        "qwen-verified-positive-native-graphs-20261015-v7",
+        "qwen-verified-positive-native-graphs-20261015-v8",
+        "qwen-verified-positive-native-graphs-20261015-v9"
+      ],
+      "license_provenance": "Project-collected trajectories from the pinned RadixArk/Qwen3.8-Flash-Next-NVFP4 teacher revision. License provenance remains a source fact; no license exclusion.",
+      "note": "Complementary Mellum-only entry for the same immutable V19 source. Do not add the LFM leaf from the combined conversion through this manifest; it is already admitted via the LFM-prefix entry.",
+      "source_binding": {
+        "raw_source": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v19/native-trajectories.jsonl",
+          "sha256": "3e89fe78d0200fd41525b2f7e4023c00175fad66df1c6afe5b82cddfc761ec45",
+          "bytes": 445839415,
+          "rows": 235
+        },
+        "transfer_receipt": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v19/transfer-receipt.json",
+          "sha256": "03f45fd9cb479e8ca170f413afdfc9870196c0d71941a2b4d0a96c4fcc1cddd4"
+        },
+        "batch_source_bindings": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v19/batch-source-bindings.json",
+          "sha256": "1160f867640299061d9ea30c6ea39890f17a1b196457d191a22ba02830b5cff8"
+        },
+        "actual_source_binding_verification_sha256": "486d4984610937a1770c1d016a20ea63144a348856c70e997791813feb4babdd",
+        "decision_admission_cache_sha256": "48f7ad5d0a17943c0e42e11bdc2988bc3ed471971a674306dfffc9d3f16e81c5",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "current_source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+        "validation_proof_sha256": "7a9037dee447b2add0e1fc7fde7b6201042f09f15636fd184575abcffe5e54d1",
+        "eligible_turns": 6920,
+        "duplicate_omissions_per_model": 75,
+        "action_omissions_per_model": 401,
+        "deduplication": "This Mellum view was compared against V1–V18 verified-positive/clean-action views; exact per-model token/weight omissions are bound in the build receipt.",
+        "decision_hold_closure": {
+          "path": "runs/qwen-verified-positive-native-graphs-20261015-v19/decision-hold-closure-proof.json",
+          "sha256": "c619bd775f2544cdbd88e9c75a2527c750b21e6d3972fc0187ee5436057927dc",
+          "scope": "Both complete tokenizer views were independently audited; Mellum's 6,845 positive target decision IDs had 0 intersections with the exact sorted current decision-hold files."
+        },
+        "model_views_complete": false,
+        "pending_model_views": [
+          "lfm25 (covered by companion V19 LFM-prefix entry)"
+        ],
+        "models": {
+          "mellum21": {
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "build_receipt_sha256": "bed699a83302cab9055022d3c3a40bb9bac50f159111ee941eb3951036823157",
+            "train_sha256": "43e200b55ae306ebd0bcc8dc6c6639e5ba301aec98eb9a7f0c37d51c2e33f292",
+            "test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+            "rows": 6845,
+            "tokens": 46662754,
+            "expanded_tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f"
+          }
+        }
+      },
+      "model_scope": [
+        "mellum21"
+      ]
+    },
+    {
       "id": "external-expansion-search-owl-native-graphs-20261016-v3-shard0018",
       "owner": "dgx",
       "path": "runs/search-owl-native-render-20261016-v3/shard0018-native-graphs",
