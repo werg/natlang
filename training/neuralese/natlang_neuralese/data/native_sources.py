@@ -102,45 +102,8 @@ class NativeGraphSource:
             'metadata_sha256': canonical_json_sha256_hex(self.entries)})
 
     def _init_manifest(self, parents):
-        before = self.path.stat()
-        manifest = json.loads(self.path.read_text())
-        if manifest.get('schema') != 'natlang.native-graph-sources/1' or not manifest.get('sources'):
-            raise ValueError('native graph source manifest requires its schema and bound sources')
-        self.kind = 'manifest'
-        self.file_sha256 = sha256_file_hex_cached(self.path)
-        self.children, self.entries, self.bindings, self.groups = [], [], {}, set()
-        for binding in manifest['sources']:
-            priority = binding.get('training_priority', 0)
-            if type(priority) is not int or priority < 0:
-                raise ValueError('native source training_priority must be a nonnegative integer')
-            kind = binding.get('kind')
-            if kind not in {'native-graphs', 'semantic-pairs'}:
-                raise ValueError('native graph manifest source kind must be explicit')
-            if kind == 'semantic-pairs' and not isinstance(binding.get('model'), str):
-                raise ValueError('semantic graph source must select its exact model view')
-            path = Path(binding['path'])
-            if not path.is_absolute():
-                path = self.path.parent / path
-            if sha256_file_hex_cached(path) != binding.get('sha256'):
-                raise ValueError('native graph manifest source SHA-256 mismatch: ' + str(path))
-            child = NativeGraphSource(path, self.tokenizer_fingerprint, required_split=self.required_split,
-                pair_model=binding.get('model') if kind == 'semantic-pairs' else None,
-                role_ids=self.role_ids, _parents=(*parents, self.path.resolve()))
-            if child.file_sha256 != binding['sha256']:
-                raise ValueError('native graph manifest dependency changed during validation')
-            if self.bindings.keys() & child.bindings.keys():
-                raise ValueError('native graph manifest repeats a graph identity across sources')
-            self.children.append(child)
-            # Scheduling policy never changes physical source order or row
-            # binding. An omitted priority inherits a nested declaration.
-            self.entries.extend({**entry, 'training_priority': priority if 'training_priority' in binding
-                                 else entry.get('training_priority', 0)} for entry in child.entries)
-            self.bindings.update(child.bindings)
-            self.groups.update(child.groups)
-        state = self.path.stat()
-        if (before.st_size, before.st_mtime_ns, before.st_ino) != (state.st_size, state.st_mtime_ns, state.st_ino):
-            raise ValueError('native graph manifest changed during validation')
-        self.file_binding = (state.st_size, state.st_mtime_ns, state.st_ino)
+        from .native_source_tree import initialize_manifest
+        initialize_manifest(self, parents, load_child=NativeGraphSource)
 
     def _parse(self, row):
         from .native_graph_schema import parse_graph
