@@ -94,9 +94,13 @@ def validate_config(config):
     if any(kind not in kinds for kind in ('vae', 'joint', 'distill')):
         raise ValueError('complete semantic curriculum requires VAE, joint and behavioral distillation phases')
     from .native_learning_rates import validate_learned_row_rate
+    from .native_optimizer_migration import validate_native_optimizer_migration
+    if any(phase.get('options',{}).get('native_optimizer_migration') is not None for phase in phases):
+        raise ValueError('native optimizer migration must be declared globally or per model before phase training')
     declarations=[config,config.get('options') or {},*config.get('models',{}).values(),
                   *[phase.get('options') or {} for phase in phases]]
     for declaration in declarations:
+        validate_native_optimizer_migration(declaration.get('native_optimizer_migration'))
         if 'checkpoint_input_offload' in declaration and type(declaration['checkpoint_input_offload']) is not bool:
             raise ValueError('semantic checkpoint_input_offload must be a boolean')
         for name in ('learned_row_learning_rate','interface_row_learning_rate'):
@@ -150,8 +154,10 @@ def _adjust_lr(optimizer, lr, learned_row_lr=None, interface_row_lr=None):
 
 
 def load_participant(name, binding, config, device):
-    path = _bound(binding['checkpoint'])
+    from .native_optimizer_migration import native_optimizer_migration_option
     declaration = config.get('models', {}).get(name, {})
+    migration=native_optimizer_migration_option(config,name)
+    path = _bound(binding['checkpoint'])
     model, tokenizer, _, model_config, state = load_native_checkpoint(path, device=device,
         base=declaration.get('base'), participant=binding['checkpoint'].get('participant'))
     identity = native_identity(model, model_config, checkpoint_sha256=binding['checkpoint']['sha256'])
@@ -170,7 +176,7 @@ def load_participant(name, binding, config, device):
         weight_decay=config.get('weight_decay', .1), latent_ns=config.get('latent_ns', 'quintic'), in_backward=False)
     inherited = state.get('training') or state.get('shared_training') or {}
     if inherited.get('optimizer') and config.get('inherit_optimizer', True):
-        optimizer.load_state_dict(inherited['optimizer'])
+        optimizer.load_state_dict(inherited['optimizer'],native_optimizer_migration=migration)
     if backend is not None and inherited.get('fp8') is not None:
         backend.restore_extra_state(inherited['fp8'])
     _adjust_lr(optimizer, config['backbone_lr'], declaration.get('learned_row_learning_rate',config.get('learned_row_learning_rate')),
@@ -486,7 +492,9 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             else:
                 with _native_modules({name: participant}):
                     restore_model_state(participant.model, saved['model_state'])
-                participant.optimizer.load_state_dict(saved['optimizer'])
+                from .native_optimizer_migration import native_optimizer_migration_option
+                migration=native_optimizer_migration_option(config,name)
+                participant.optimizer.load_state_dict(saved['optimizer'],native_optimizer_migration=migration)
                 participant.sft_progress = saved.get('sft_progress', participant.sft_progress)
                 participant.global_step = saved.get('global_step', participant.global_step)
                 if participant.backend is not None:

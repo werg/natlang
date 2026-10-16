@@ -157,7 +157,7 @@ def make_native_optimizer(model, *, lr, weight_decay=.1, latent_ns='quintic', in
                     _raise_nonfinite(name)
             parameter.register_post_accumulate_grad_hook(finite_before_muon)
     optimizer = PortMuonAdamW(ordinary, lr=lr, vocab_size=int(model.port.embedding_weight.shape[0]),
-        embedding_ids={id(model.port.embedding_weight)},
+        embedding_ids={id(model.port.embedding_weight)}, force_adamw_ids={id(parameter) for _,parameter in ordinary},
         latent=latent_entries(latent, 'muonsr', lr), latent_optimizer='muonsr',
         latent_options=latent_options('muonsr', weight_decay=weight_decay, ns=latent_ns))
     optimizer._native_named_parameters = named
@@ -570,6 +570,9 @@ def build_parser():
     from ..model.native_precision import PRODUCTION_NATIVE_LINEAR_PRECISIONS
     parser.add_argument('--native-linear-precision', choices=PRODUCTION_NATIVE_LINEAR_PRECISIONS, default=None,
         help='explicit native GEMM arithmetic transition; preserves source dtype, optimizer, RNG and row exposure')
+    from .native_optimizer_migration import POLICY as NATIVE_OPTIMIZER_MIGRATION
+    parser.add_argument('--native-optimizer-migration',choices=(NATIVE_OPTIMIZER_MIGRATION,),default=None,
+        help='explicit new AdamW history for formerly misrouted ordinary parameters; preserves original Muon buffers and all unaffected state')
     parser.add_argument('--learning-rate', type=float, default=3e-6)
     parser.add_argument('--learned-row-learning-rate',type=float,default=None)
     parser.add_argument('--interface-row-learning-rate',type=float,default=None,
@@ -757,7 +760,7 @@ def main(argv=None):
     training_identity = {'schema': TRAINING_SCHEMA, 'config': config, 'train_source_hash': source_hash,
                 'schedule': 'row-visit-deficit/2',
                 'held_sha256': source_receipts[1]['sha256'], 'optimizer': 'shared-muon-sr-in-backward-v1',
-                'optimizer_options': {'lr': args.learning_rate, 'learned_row_lr':args.learned_row_learning_rate, 'interface_row_lr':args.interface_row_learning_rate, 'weight_decay': args.weight_decay,
+                'optimizer_options': {'native_optimizer_migration':args.native_optimizer_migration,'lr': args.learning_rate, 'learned_row_lr':args.learned_row_learning_rate, 'interface_row_lr':args.interface_row_learning_rate, 'weight_decay': args.weight_decay,
                                       'latent_ns': args.latent_ns},
                 'batch_graphs': args.batch_graphs, 'batch_tokens': args.batch_tokens, 'seed': args.seed, 'rank': config['rank'],
                 'fp8': {'kind': args.fp8_training, 'recipe': args.fp8_recipe,
@@ -856,6 +859,7 @@ def main(argv=None):
                               'cursor': resume.get('cursor'), 'policy': 'immutable source-order prefix then appended rows'}),
                   flush=True)
         training_identity['optimizer_options'] = {'lr': args.learning_rate,
+            'native_optimizer_migration':args.native_optimizer_migration,
             'learned_row_lr':args.learned_row_learning_rate, 'interface_row_lr':args.interface_row_learning_rate,
             'weight_decay': args.weight_decay, 'latent_ns': args.latent_ns,
             'continued_from': previous.get('optimizer_options')}
@@ -915,9 +919,10 @@ def main(argv=None):
         if token_upgrade and (token_upgrade['added'] or token_upgrade.get('promoted_parameters')):
             optimizer.load_state_dict(resume['optimizer'], allow_added_names=(
                 'interface.extra_input_rows', 'interface.extra_output_rows'),
-                allow_promoted_names=tuple('interface.'+name for name in token_upgrade.get('promoted_parameters', {})))
+                allow_promoted_names=tuple('interface.'+name for name in token_upgrade.get('promoted_parameters', {})),
+                native_optimizer_migration=args.native_optimizer_migration)
         else:
-            optimizer.load_state_dict(resume['optimizer'])
+            optimizer.load_state_dict(resume['optimizer'],native_optimizer_migration=args.native_optimizer_migration)
         # Adaptive production may tune the step size without discarding moments.
         # The new value is recorded in optimizer_options while moments/RNG stay exact.
         from .native_learning_rates import apply_native_learning_rates
@@ -1013,7 +1018,10 @@ def main(argv=None):
         if resident.state:
             checkpoint_options['resident_adoption'] = {'generation': resident.generation,
                 'history': resident.state['history']}
-    metadata_dirty = False
+    # A no-update continuation still needs its own durable checkpoint, and an
+    # explicitly changed optimizer algorithm must be saved even at a completed
+    # exposure boundary. Neither operation earns another graph visit.
+    metadata_dirty = last_saved_step < 0 or args.native_optimizer_migration is not None
     eval_at = max(1, args.eval_every)
     started = time.time()
     def foundation_exposure():

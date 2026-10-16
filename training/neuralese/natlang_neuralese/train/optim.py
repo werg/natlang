@@ -38,7 +38,8 @@ def muon_eligible(name: str, parameter: torch.Tensor, vocab_size: int, embedding
 
 class PortMuonAdamW(torch.optim.Optimizer):
     def __init__(self, named_parameters, *, lr: float, vocab_size: int, embedding_ids=(), momentum: float = 0.95,
-                 ns_steps: int = 5, latent=(), latent_optimizer: str = "lionsr", latent_options=None):
+                 ns_steps: int = 5, latent=(), latent_optimizer: str = "lionsr", latent_options=None,
+                 force_adamw_ids=()):
         """``latent``: (name, parameter, lr, row_scale) of BF16 latents stepped in backward with one BF16 momentum and
         stochastic-rounding writes, for the latent backbone policy. ``latent_optimizer``: ``lionsr`` (per-row step
         ``lr x row_scale``, the memory-lean path of Mellum's conversion v3; ``lr`` in units of each row's ternary
@@ -50,6 +51,9 @@ class PortMuonAdamW(torch.optim.Optimizer):
         if not hasattr(torch.optim, "Muon"):
             raise RuntimeError("the muon policy needs a PyTorch build with torch.optim.Muon")
         embedding_ids = set(embedding_ids)
+        force_adamw_ids = set(force_adamw_ids)
+        self._force_adamw_names = set()
+        self._native_optimizer_transitions = []
         self.schema, muon, auxiliary, seen = [], [], [], set()
         self._parameter_names = {}
         for name, parameter in named_parameters:
@@ -57,10 +61,13 @@ class PortMuonAdamW(torch.optim.Optimizer):
                 raise ValueError(f"duplicate trainable parameter {name}")
             seen.add(id(parameter))
             self._parameter_names[id(parameter)] = name
-            use_muon = muon_eligible(name, parameter, vocab_size, embedding_ids)
+            use_muon = id(parameter) not in force_adamw_ids and muon_eligible(name, parameter, vocab_size, embedding_ids)
+            if id(parameter) in force_adamw_ids:self._force_adamw_names.add(name)
             (muon if use_muon else auxiliary).append(parameter)
             self.schema.append({"name": name, "shape": list(parameter.shape), "dtype": str(parameter.dtype),
                                 "optimizer": "muon" if use_muon else "adamw"})
+        if force_adamw_ids - seen:
+            raise ValueError('forced AdamW routing must name actual ordinary parameters')
         latent = list(latent)
         for name, parameter, _, _ in latent:
             if id(parameter) in seen:
@@ -147,13 +154,18 @@ class PortMuonAdamW(torch.optim.Optimizer):
             for group in child.param_groups for parameter in group['params']]
             for kind,child in (('muon',self.muon),('adamw',self.auxiliary),(self.latent_key,self.latent))
             if child is not None}
+        if self._native_optimizer_transitions:
+            state['native_optimizer_transitions'] = self._native_optimizer_transitions
         return state
 
-    def load_state_dict(self, state_dict, *, allow_added_names=(), allow_promoted_names=()):
+    def load_state_dict(self, state_dict, *, allow_added_names=(), allow_promoted_names=(), native_optimizer_migration=None):
         if all(isinstance(item.get('name'),str) for item in self.schema):
             from .optim_restore import load_named_port_state
             return load_named_port_state(self,state_dict,allow_added_names=allow_added_names,
-                                         allow_promoted_names=allow_promoted_names)
+                                         allow_promoted_names=allow_promoted_names,
+                                         native_optimizer_migration=native_optimizer_migration)
+        if native_optimizer_migration is not None:
+            raise ValueError('native optimizer migration requires complete named parameter contracts')
         return self._load_unnamed_state_dict(state_dict,allow_added_names=allow_added_names,
                                              allow_promoted_names=allow_promoted_names)
 
