@@ -108993,6 +108993,79 @@
         "train_rows_per_model": 743,
         "test_rows_per_model": 0
       }
+    },
+    {
+      "id": "qwen-verified-positive-native-graphs-20261015-v7",
+      "owner": "dgx",
+      "path": "runs/qwen-verified-positive-native-graphs-20261015-v7-v6-dedup-20261016",
+      "include": [
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "mellum21/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "validation-proof.json"
+      ],
+      "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
+      "split": "Train-only. 11,687 unique graphs per model; empty test files; no held evaluation rows are claimed.",
+      "admission": "675 verified Qwen3.8-Flash-Next trajectories yielded 11,708 eligible assistant turns. Twenty-one exact token/weight duplicates per model were omitted after comparison with V1–V6 and clean-action V1–V4, leaving 11,687 train graphs per model. 1,415 turns per model remain explicit action omissions for failed/unexecuted proposals, one failed child and one missing authenticated typed-result target. Full captured prompts and trajectories remain bound; text emulation is ordinary one-node SFT, not an authentic Neuralese edge capture.",
+      "training_admission": true,
+      "training_admission_reason": "Independent terminal validation recomputed source/admission bindings, parsed all graphs under both expanded tokenizer fingerprints, verified identical model graph IDs, exact train-only split and source group closure, and found zero intersections with current held, quality, pending-review or decision-hold groups.",
+      "derived_from": [
+        "qwen-verified-positive-native-graphs-20261015-v1-v2",
+        "qwen-verified-positive-native-graphs-20261015-v3",
+        "qwen-verified-positive-native-graphs-20261015-v4",
+        "qwen-verified-positive-native-graphs-20261015-v5",
+        "qwen-verified-positive-native-graphs-20261015-v6",
+        "qwen-positive-clean-actions-20261015-v1"
+      ],
+      "license_provenance": "Project-collected trajectories from the pinned RadixArk/Qwen3.8-Flash-Next-NVFP4 teacher revision. License provenance remains a source fact; no license exclusion.",
+      "note": "Incremental train-only continuation data for both students. Registration makes it available; actual exposure must be recorded by each training continuation. V7 deduplication preserves exact prior positive content coverage.",
+      "source_binding": {
+        "raw_source": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v7/native-trajectories.jsonl",
+          "sha256": "689d61bb39efc8656cf44bd575a2017c47b3f50450c86218e0a478bf620b1887",
+          "bytes": 1276079513,
+          "rows": 675
+        },
+        "transfer_receipt": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v7/transfer-receipt.json",
+          "sha256": "943f739b19ad51d773048597fb45a2d18c63c1f06da7ed3fd0a3e86ea1483e7b"
+        },
+        "batch_source_bindings": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v7/batch-source-bindings.json",
+          "sha256": "dc80c994d6500b0cee3449ea70a3485f08e3c695e22538a174d2813ddc9341fc"
+        },
+        "decision_admission_cache_sha256": "e825edff2a87c77ed1814af9a749d9e3182fcb80469ed9ca5822256da00854da",
+        "deduplication": "v1–v6 verified-positive and clean-action V1–V4 exact token/weight comparison; 21 exact duplicates per model omitted.",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "current_source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+        "validation_proof_sha256": "a1a4c6f85c856bf929bb9b5d43801f24edcc7e2ae16f8ef259ac43169d5f2bcc",
+        "eligible_turns": 11708,
+        "duplicate_omissions_per_model": 21,
+        "action_omissions_per_model": 1415,
+        "models": {
+          "lfm25": {
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "build_receipt_sha256": "3b6b577ffa38a36c2e1c514a52cad4ce5b0d1ee4e9db83ae16630cf2c9304f3a",
+            "train_sha256": "92b79d808be1682a2e2c6870ef5e0a88f32650aa9d1d1e12701b3c8264db53fa",
+            "test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+            "rows": 11687,
+            "tokens": 122091478,
+            "expanded_tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105"
+          },
+          "mellum21": {
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "build_receipt_sha256": "eb676bab4918c74cbb217ad25d3583e39aa3435b22afa3f75623afa5014b78a5",
+            "train_sha256": "13a558b7ba11e176ca4b10cc5fd440d1f768382d25433459d8fb053fc9b5199a",
+            "test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+            "rows": 11687,
+            "tokens": 123254843,
+            "expanded_tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f"
+          }
+        }
+      }
     }
   ],
   "coverage_backlog": [
