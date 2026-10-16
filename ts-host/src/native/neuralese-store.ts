@@ -4,7 +4,7 @@
  * Every soft value is an immutable, content-addressed block of vectors. The runtime's value model holds only
  * references (`{ $neuralese: { type, id } }`); bytes move between this store, `.nz` files and model servers.
  */
-import { digest } from './hash.js';
+import { digest, hexDigest } from './hash.js';
 
 export type NeuraleseDtype = 'f32' | 'f16' | 'bf16';
 
@@ -40,6 +40,9 @@ export type NativeAdapterStateConsumption = { schema: 'natlang.native-adapter-st
   target_native_identity: Record<string, string>; base_native_identity: Record<string, string>;
   source_adapter_binding: NativeAdapterBinding | null; target_adapter_binding: NativeAdapterBinding | null; target_position_start: number; tokens: number };
 
+
+export type NativeInvocationActorReceipt = { schema: 'natlang.native-invocation-actors/1'; base_native_identity: NativeModelIdentity;
+  invocations: Record<string, { native_identity: NativeModelIdentity; adapter_binding: NativeAdapterBinding | null }> };
 
 export type NativeStateMetadata = { text: string; architecture: string;
   tokenizer_fingerprint: string; checkpoint_sha256: string; embedding_weight_sha256: string; layer_kinds: string[];
@@ -98,6 +101,13 @@ export function nativeTensorArtifactDependencies(artifact: Pick<NativeTensorArti
   if (binding) {
     validateNativeAdapterBinding(binding, meta.provenance.effective_native_identity as NativeModelIdentity);
     dependencies.push(...binding.adapters.map(entry => entry.id));
+  }
+  const actors = meta.provenance.invocation_actors as NativeInvocationActorReceipt | undefined;
+  if (actors) {
+    validateNativeInvocationActorReceipt(actors,meta.native_identity);
+    if (meta.provenance.actor_graph_sha256 !== hexDigest(nativeCanonicalJson(actors))) throw new RangeError('native invocation actor graph digest differs from its receipt');
+    for (const actor of Object.values(actors.invocations))
+      dependencies.push(...(actor.adapter_binding?.adapters ?? []).map(entry => entry.id));
   }
   const contracts = meta.provenance.external_adapter_state_contracts as Record<string, {
     source_adapter_binding?: NativeAdapterBinding; target_adapter_binding?: NativeAdapterBinding;
@@ -264,6 +274,25 @@ export function validateNativeAdapterStateConsumption(receipt: NativeAdapterStat
     throw new RangeError('adapter-state consumption requires the exact same immutable base');
 }
 
+export function validateNativeInvocationActorReceipt(receipt: NativeInvocationActorReceipt, base: NativeModelIdentity): void {
+  if (!receipt || Object.keys(receipt).sort().join(',') !== 'base_native_identity,invocations,schema' ||
+      receipt.schema !== 'natlang.native-invocation-actors/1' || !nativeModelIdentityEqual(receipt.base_native_identity,base) ||
+      !receipt.invocations || Array.isArray(receipt.invocations) || !Object.keys(receipt.invocations).length)
+    throw new RangeError('native invocation actor receipt needs its exact base and complete inventory');
+  for (const [name, actor] of Object.entries(receipt.invocations)) {
+    if (!name || !actor || Object.keys(actor).sort().join(',') !== 'adapter_binding,native_identity' ||
+        !actor.native_identity || Object.keys(actor.native_identity).sort().join(',') !== 'architecture,checkpoint_sha256,embedding_weight_sha256,tokenizer_fingerprint')
+      throw new RangeError('native invocation actor identity is malformed');
+    if (actor.adapter_binding === null) {
+      if (!nativeModelIdentityEqual(actor.native_identity,base)) throw new RangeError('unadapted invocation differs from its base');
+    } else {
+      validateNativeAdapterBinding(actor.adapter_binding,actor.native_identity);
+      if (!nativeModelIdentityEqual(actor.adapter_binding.base_native_identity,base))
+        throw new RangeError('native invocation actor changed its immutable base');
+    }
+  }
+}
+
 function validateNativeState(metadata: NativeStateMetadata, tensors: Record<string, NativeStateTensor>): void {
   if (!metadata || !['neuralese.native-state/1', 'neuralese.semantic-state/1'].includes(metadata.schema) || typeof metadata.text !== 'string' ||
       typeof metadata.architecture !== 'string' || !metadata.architecture ||
@@ -364,6 +393,14 @@ function validateNativeTensorArtifact(metadata: NativeTensorArtifactMetadata,
       !metadata.provenance || typeof metadata.provenance !== 'object' || Array.isArray(metadata.provenance) ||
       !tensors || typeof tensors !== 'object' || !Object.keys(tensors).length)
     throw new RangeError('invalid native tensor artifact metadata');
+  const actors = metadata.provenance.invocation_actors as NativeInvocationActorReceipt | undefined;
+  if (actors) {
+    validateNativeInvocationActorReceipt(actors,metadata.native_identity);
+    if (metadata.provenance.actor_graph_sha256 !== hexDigest(nativeCanonicalJson(actors))) throw new RangeError('native invocation actor graph digest differs from its receipt');
+    if (metadata.kind === 'adapter-gradient' && !Object.values(actors.invocations).some(actor =>
+        actor.adapter_binding?.adapters.some(entry => entry.id === metadata.source_artifact_id)))
+      throw new RangeError('native invocation gradient target is not one of its exact actors');
+  }
   if (metadata.kind === 'adapter-gradient' && metadata.provenance.adapter_binding !== undefined) {
     const binding = metadata.provenance.adapter_binding as NativeAdapterBinding;
     validateNativeAdapterBinding(binding, metadata.provenance.effective_native_identity as NativeModelIdentity);

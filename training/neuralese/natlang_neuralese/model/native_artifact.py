@@ -71,6 +71,14 @@ class NativeTensorArtifact:
             validate_state_binding(binding, SimpleNamespace(**self.provenance.get('effective_native_identity', {})))
             if binding['base_native_identity'] != self.native_identity:
                 raise ValueError('adapter gradient actor binding changed its exact base identity')
+        actors=(self.provenance or {}).get('invocation_actors')
+        if actors is not None:
+            from .native_actor_graph import validate_invocation_actor_provenance
+            validate_invocation_actor_provenance(self.provenance,self.native_identity)
+            if self.kind=='adapter-gradient' and self.source_artifact_id not in {
+                    entry['id'] for actor in actors['invocations'].values()
+                    for entry in (actor['adapter_binding'] or {}).get('adapters',[])}:
+                raise ValueError('native invocation gradient target is not one of its exact actors')
         return self
 
     def metadata(self):
@@ -190,6 +198,12 @@ def native_tensor_dependencies(artifact):
     binding = (artifact.provenance or {}).get('adapter_binding') if artifact.kind == 'adapter-gradient' else None
     if binding:
         dependencies.extend(entry['id'] for entry in binding['adapters'])
+    actors=(artifact.provenance or {}).get('invocation_actors')
+    if actors is not None:
+        from .native_actor_graph import validate_invocation_actor_provenance
+        validate_invocation_actor_provenance(artifact.provenance,artifact.native_identity)
+        for actor in actors['invocations'].values():
+            dependencies.extend(entry['id'] for entry in (actor['adapter_binding'] or {}).get('adapters',[]))
     for contract in ((artifact.provenance or {}).get('external_adapter_state_contracts') or {}).values():
         for key in ('source_adapter_binding', 'target_adapter_binding'):
             binding = contract.get(key)

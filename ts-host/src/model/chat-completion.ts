@@ -10,6 +10,13 @@ import { runtimePartsToText, type RuntimeContentPart } from '../native/neuralese
 
 type Json = Record<string, unknown>;
 /** Streamed chunks (`chat.completion.chunk`), or a single complete `chat.completion` body. */
+/** Unwrap exact provider error records shared by completion and native services. */
+export function providerErrorBody(body: unknown): Record<string, unknown> | undefined {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return undefined;
+  const root=body as Record<string, unknown>, nested=root.error;
+  return nested && typeof nested === 'object' && !Array.isArray(nested) ? nested as Record<string, unknown> : root;
+}
+
 export type ChatTransport = (body: Json, signal?: AbortSignal, meta?: ChatRequestMeta) => Promise<AsyncIterable<Json> | Json>;
 /**
  * What a scheduling transport (model/scheduler.ts) may know about a request without reading its body: the call it
@@ -473,7 +480,7 @@ export function httpChatTransport(options: HttpChatOptions): ChatTransport {
       const text = await response.text();
       let body: any;
       try { body = JSON.parse(text); } catch { body = undefined; }
-      const errorBody = body?.error && typeof body.error === 'object' ? body.error : body;
+      const errorBody = providerErrorBody(body) ?? {};
       throw Object.assign(new Error(`model HTTP ${response.status}: ${text.slice(0, 2000)}`), {
         status: response.status, headers: response.headers,
         ...(typeof errorBody?.code === 'string' ? { providerCode: errorBody.code } : {}),

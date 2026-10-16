@@ -57,10 +57,40 @@ def native_graph_gradient(engine, body, owner):
         raise RequestError('neuralese-native-grad-order', 'native graph learning currently accepts first-order objectives only; remove derived computations or use a service advertising grad.order2')
     from ..model.native_adapters import resolve_adapters, run_native
     try:
-        resolved = resolve_adapters(engine, body.get('adapters'))
-        leaves = {ident: {name: value.detach().clone().requires_grad_(True)
-                         for name, value in coefficients.items()}
-                  for ident, _, _, coefficients, _ in resolved}
+        declarations=body.get('invocation_adapters')
+        if 'invocation_adapters' in body and not isinstance(declarations,dict):
+            raise ValueError('invocation_adapters must declare an actual invocation-to-adapter map')
+        if declarations is not None:
+            if body.get('objective','graph-ce') not in ('graph-ce',None):
+                raise ValueError('heterogeneous policy objectives require an admitted per-invocation behavior binding')
+            example=parse_graph(body.get('graph'),tokenizer_fingerprint=engine.model_config['tokenizer_fingerprint'])
+            names=[node.name for node in example.plan.invocations]
+            if (not isinstance(declarations,dict) or any(name not in names for name in declarations)
+                    or any(not isinstance(entries,list) for entries in declarations.values())):
+                raise ValueError('invocation_adapters must map actual invocation names to explicit adapter lists')
+            entries=[body.get('adapters'),*declarations.values()]
+        else:
+            entries=[body.get('adapters')]
+        leaves={}
+        for bindings in entries:
+            for ident,_,_,coefficients,_ in resolve_adapters(engine,bindings):
+                if ident not in leaves:
+                    leaves[ident]={name:value.detach().clone().requires_grad_(True) for name,value in coefficients.items()}
+        if declarations is not None:
+            from ..model.native_actor_graph import run_invocation_actors
+            selected=(_parameter_targets(engine.shared_model,body['target'].get('names'))
+                      if (body.get('target') or {}).get('kind')=='model-parameters' else {})
+            # Base-weight adjoints must exist while actor weights are derived,
+            # before entering any functional substitution.
+            restore={parameter:parameter.requires_grad for parameter in selected.values()}
+            try:
+                for parameter in restore:parameter.requires_grad_(True)
+                return run_invocation_actors(engine,names,declarations,
+                    lambda bank:_native_graph_gradient_impl(engine,body,owner,leaves,actor_bank=bank),
+                    default=body.get('adapters'),leaves=leaves,
+                    gradient_precision=body.get('adapter_gradient_precision','storage'))
+            finally:
+                for parameter,enabled in restore.items():parameter.requires_grad_(enabled)
         return run_native(engine, lambda: _native_graph_gradient_impl(engine, body, owner, leaves),
                           body.get('adapters'), leaves=leaves,
                           gradient_precision=body.get('adapter_gradient_precision', 'storage'))
@@ -70,7 +100,7 @@ def native_graph_gradient(engine, body, owner):
         raise RequestError('neuralese-native-grad-invalid', str(error)) from error
 
 
-def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
+def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_bank=None):
     """Evaluate one actual native graph and return a durable named gradient.
 
     `target` selects either named native model parameters or one exact imported
@@ -125,7 +155,18 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
             block = record.block
             if len(block.token_ids) != binding['token_count']:
                 raise ValueError(f'external state token count changed for {name}')
-            if (modes or {}).get(binding['id']) is not None:
+            if actor_bank is not None:
+                source_identity={key:getattr(block,key) for key in expected}
+                consumers=[node.name for node in example.plan.invocations if any(span.source==name for span in node.imports)]
+                for consumer in consumers:
+                    if (modes or {}).get(binding['id']) is not None:
+                        from ..model.native_adapters import adapter_state_input_receipt
+                        receipt=actor_bank.execute(consumer,lambda:adapter_state_input_receipt(engine,block,binding['id'],target_position_start=0))
+                        consumption_receipts[canonical_json_sha256_hex([consumer,name])]={'invocation':consumer,'input_name':name,**receipt}
+                    else:
+                        block.require_native(**actor_bank.actors[consumer][0][1])
+                input_identities[name]=source_identity
+            elif (modes or {}).get(binding['id']) is not None:
                 from ..model.native_adapters import adapter_state_input_receipt
                 consumption_receipts[name] = adapter_state_input_receipt(engine, block, binding['id'], target_position_start=0)
                 input_identities[name] = consumption_receipts[name]['source_native_identity']
@@ -203,19 +244,24 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
              'external_source_identities': input_identities,
              'external_adapter_state_contracts': {name: {key: value for key, value in receipt.items()
                  if key not in {'target_position_start', 'tokens'}} for name, receipt in consumption_receipts.items()},
-             'target_names': sorted(tensors), 'effective_native_identity': effective,
+             'target_names': sorted(tensors),
+             **({'invocation_actors':actor_bank.receipt(),'actor_graph_sha256':canonical_json_sha256_hex(actor_bank.receipt())}
+                if actor_bank is not None else {'effective_native_identity':effective}),
              'adapter_gradient_precision': body.get('adapter_gradient_precision', 'storage'),
-             'adapters': body.get('adapters') or [],
+             **({'invocation_adapter_declarations':body['invocation_adapters'],'default_adapters':body.get('adapters') or []}
+                if actor_bank is not None else {'adapters':body.get('adapters') or []}),
              **({'adapter_binding': {'schema': 'natlang.native-adapter/1', 'base_native_identity': expected,
                  'adapters': execution_binding(engine)}}
-                if body.get('adapters') else {}),
+                if body.get('adapters') and actor_bank is None else {}),
              'loss': float(loss.detach()), 'stats': stats,
              **({'objective_spec_sha256': objective_request['sha256'],
                  'behavior_native_identity': objective.identity,
                  'behavior_adapter_binding': objective.adapter_binding} if objective is not None else {})}).validate()
         stored = engine.store.put_native_tensor_artifact(artifact, owner)
         return {'loss': float(loss.detach()), 'stats': stats, 'gradient': stored.meta(),
-                'native_identity': expected, 'effective_native_identity': effective, 'objective': artifact.provenance['objective']}
+                'native_identity': expected, 'objective': artifact.provenance['objective'],
+                **({'invocation_actors':actor_bank.receipt(),'actor_graph_sha256':canonical_json_sha256_hex(actor_bank.receipt())}
+                   if actor_bank is not None else {'effective_native_identity':effective})}
     except RequestError:
         raise
     except (ValueError, KeyError, TypeError, OSError, RuntimeError) as error:

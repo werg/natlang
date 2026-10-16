@@ -765,3 +765,15 @@ No new prompt policy and no production controller adoption are introduced.
   incremental/flat adjoints now pass. Contextual import-integrity errors require
   exact declared actor receipts and recursive source coefficient restoration. Live
   executor feedback measurement remains debt for the next own-teacher window.
+
+- 2026-10-16: Native graph coefficient services accept explicit invocation-name
+  adapter declarations and return exact per-invocation actor continuation rather
+  than a single effective model. New validation recovery text uses the existing
+  `neuralese-native-grad-invalid` code. Live48-sample executor feedback remains
+  debt for the next own-teacher window; no capability or production enablement
+  is claimed. Heterogeneous policy replay remains explicitly unavailable.
+
+- The same native-service change repairs nested provider errors that previously
+  rendered as `[object Object]`, preserving their actual code and recovery text.
+  Real HTTP adversarial fixtures verify the structured error contract; live
+  teacher-feedback measurement remains part of the entry above.

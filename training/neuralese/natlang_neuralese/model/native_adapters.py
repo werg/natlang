@@ -272,6 +272,13 @@ def optimize_adapter(engine, gradient, options, state_id, owner=None):
     if gradient.native_identity != engine.native_identity or gradient.kind != 'adapter-gradient':
         raise ValueError('adapter update requires a gradient bound to this exact live native base')
     adapter_id = gradient.source_artifact_id
+    invocation_actors=(gradient.provenance or {}).get('invocation_actors')
+    if invocation_actors is not None:
+        from .native_actor_graph import validate_invocation_actor_receipt
+        validate_invocation_actor_receipt(invocation_actors,engine.native_identity)
+        for actor in invocation_actors['invocations'].values():
+            resolve_adapters(engine,[{'id':entry['id'],'scale':float.fromhex(entry['scale_hex'])}
+                for entry in (actor['adapter_binding'] or {}).get('adapters',[])])
     actor_binding = (gradient.provenance or {}).get('adapter_binding')
     if actor_binding is not None:
         from types import SimpleNamespace
@@ -376,6 +383,19 @@ def optimize_adapter(engine, gradient, options, state_id, owner=None):
     next_resolved = resolve_adapters(engine, next_entries)
     next_binding = {'schema': SCHEMA, 'base_native_identity': dict(engine.native_identity),
                     'adapters': [{'id': ident, 'scale_hex': scale.hex()} for ident, scale, *_ in next_resolved]}
+    if invocation_actors is not None:
+        import copy
+        continued=copy.deepcopy(invocation_actors)
+        for actor in continued['invocations'].values():
+            binding=actor['adapter_binding']
+            if binding is None:continue
+            for entry in binding['adapters']:
+                if entry['id']==adapter_id:entry['id']=updated.id
+            resolved_actor=resolve_adapters(engine,[{'id':entry['id'],'scale':float.fromhex(entry['scale_hex'])} for entry in binding['adapters']])
+            actor['native_identity']=effective_identity(engine,resolved_actor)
+        validate_invocation_actor_receipt(continued,engine.native_identity)
+        return {'adapter':updated.meta(),'optimizer_state_id':state.id,'step':step,'native_identity':engine.native_identity,
+                'invocation_actors':continued,'actor_graph_sha256':canonical_json_sha256_hex(continued)}
     return {'adapter': updated.meta(), 'optimizer_state_id': state.id, 'step': step,
             'native_identity': engine.native_identity, 'adapter_binding': next_binding,
             'effective_native_identity': effective_identity(engine, next_resolved)}

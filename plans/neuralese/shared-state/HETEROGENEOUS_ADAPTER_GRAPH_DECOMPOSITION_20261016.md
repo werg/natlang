@@ -84,3 +84,53 @@ verify exact restoration. `native-invocation-actor-request-bindings-20261016`
 passed the focused request-binding reuse regression and quick: canonical actor
 matrices may be reused while each invocation retains its own request spelling,
 including explicit empty versus inherited base bindings.
+
+Exact receipt/service continuation is implemented: each result and captured
+producer binds the actual invocation actor; incorrect caller-supplied capture
+identity is rejected. Versioned `natlang.native-invocation-actors/1` receipts
+bind every invocation and the exact common base. Graph gradients and immutable
+coefficient updates retain this receipt plus its SHA, with no invented single
+effective model identity. Updating one coefficient rewrites every affected
+invocation binding while retaining other actors, scale/order, moments and all
+unselected coefficients. Python and TypeScript native tensor dependency walkers
+archive every actor's coefficients and frozen bases; .nz and wire roundtrips
+retain the complete closure.
+
+The typed graph-CE service accepts `invocationAdapters`; source, split and
+artifact declarations are checked before execution. Real consumer-only CE reaches
+the producer value-projection coefficients. The final-layer producer query
+projection is structurally absent from exported same-layer KV in the tiny LFM
+fixture, so its zero gradient is not used as an update test. The value-projection
+test requires actual nonzero gradients and changed coefficients on every update.
+Unknown invocations and held rows fail closed. An existing nested provider-error
+parser bug initially dropped recovery text as `[object Object]`; the native
+client now shares the completion protocol unwrapper and preserves real codes.
+
+Terminal evidence: `native-invocation-actor-receipts-20261016` 6 passed38.60s,
+including real CUDA ports, exact actor capture and cross-language wire/.nz
+closure. `native-invocation-actor-errors-typed-final-20261016` built the typed
+client, passed both real HTTP cases17.06s (two Adam updates, archive reopen,
+remote eviction/restoration, untouched actor/base isolation, source-name and
+held rejection), and quick. Existing service regression coverage passed25 cases
+in the preceding integration; its two newly added error-text tests exposed and
+then verified the parser repair. `native-invocation-actors-executed-fp8-20261016`
+passed2 cases17.69s: current/current-bf16-dx each execute actual grouped FP8
+projections in graph, cached reference and actual Engine oracle, checkpointed,
+all selected coefficient adjoints held to the existing strict gates. These are
+local Torch2.11/cu130/SM121 tests, not full-size or cloud qualification.
+
+Remaining explicit work: heterogeneous native-policy behavior admission,
+immutable per-turn actor bundles and current/behavior replay bindings. That
+objective path rejects requests instead of silently using one actor. Public
+capability flags remain unadvertised. Full-size memory/throughput is unqualified:
+current matrices are materialized once per distinct actor; repeated actors share
+matrices, but many distinct actors targeting complete expert banks increase
+memory. Any bounded/tiled materialization must derive from immutable base values
+and preserve exact rounded forward/adjoints under the same references.
+
+The receipt digest is mandatory and verified by both artifact codecs and their
+dependency walkers; a valid actor receipt cannot retain a stale graph digest.
+Final `native-invocation-actor-receipt-hash-final-20261016` rebuilt TypeScript,
+passed the actor-wire/digest forgery test and both real typed service/restart
+cases, then quick. Existing corpus/checkpoint/recipe identity formats are
+unchanged; this is a new explicit invocation-actor receipt binding.

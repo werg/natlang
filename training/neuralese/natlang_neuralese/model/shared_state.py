@@ -131,13 +131,14 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
     key_positions = plan.tensor(plan.slot_positions, device)
     query_positions = plan.tensor(plan.own_positions, device)
     external = _external_layers(port, plan, external_blocks, external_identity)
-    if plan.token_count == 0:
-        state = tuple(tuple(torch.cat([item[i][j] for item in external], dim=2 if port.is_attention(i) else 1)
-                            for j in range(2 if port.is_attention(i) else 1)) for i in range(port.num_layers))
-        return {'h_final': h, 'states': state if retain_states else (), 'plan': plan}
     from .native_actor_graph import invocation_actor_bank
     actor_bank=invocation_actor_bank(port)
     actor_groups=actor_bank.row_groups(plan,device) if actor_bank is not None else ()
+    if plan.token_count == 0:
+        state = tuple(tuple(torch.cat([item[i][j] for item in external], dim=2 if port.is_attention(i) else 1)
+                            for j in range(2 if port.is_attention(i) else 1)) for i in range(port.num_layers))
+        return {'h_final': h, 'states': state if retain_states else (), 'plan': plan,
+                **({'invocation_actors':actor_bank.receipt()} if actor_bank is not None else {})}
     state = []
     masks = {}
     checkpointed = bool(getattr(port, 'checkpoint_layers', False)) and torch.is_grad_enabled()
@@ -185,7 +186,8 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
         h = updated[0]
         if retain_states:
             state.append(updated[1:])
-    return {'h_final': h, 'states': tuple(state), 'plan': plan}
+    return {'h_final': h, 'states': tuple(state), 'plan': plan,
+            **({'invocation_actors':actor_bank.receipt()} if actor_bank is not None else {})}
 
 
 def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, external_blocks=None, external_identity=None):
@@ -261,7 +263,8 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
     if external:
         states = tuple(tuple(torch.cat([field, *[item[i][j] for item in external]], dim=2 if len(values) == 2 else 1)
                              for j, field in enumerate(values)) for i, values in enumerate(states))
-    return {'h_final': torch.cat(outputs, dim=1), 'states': states, 'plan': plan}
+    return {'h_final': torch.cat(outputs, dim=1), 'states': states, 'plan': plan,
+            **({'invocation_actors':actor_bank.receipt()} if actor_bank is not None else {})}
 
 
 PRODUCE_OPEN = '<|neuralese_produce|>'
@@ -489,6 +492,13 @@ def _capture_logical(result, index, start, stop):
 
 def capture_block(result, invocation, start, stop, **metadata):
     from .state_block import NativeStateBlock
+    actors=result.get('invocation_actors')
+    if actors is not None:
+        actor=actors['invocations'][invocation]
+        for key,value in {**actor['native_identity'],'adapter_binding':actor['adapter_binding']}.items():
+            if key in metadata and metadata[key]!=value:
+                raise ValueError('captured native state metadata differs from its actual invocation actor')
+            metadata[key]=value
     block = NativeStateBlock(**metadata, **capture_invocation_span(result, invocation, start, stop))
     block.validate()
     return block

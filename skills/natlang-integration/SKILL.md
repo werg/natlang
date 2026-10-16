@@ -408,3 +408,12 @@ and target actor receipts. Preserve `native_state_modes` when recording or
 replaying the call. For `neuralese-unknown-native-artifact` during restoration,
 restore the source actor's exact coefficient artifacts and frozen bases alongside
 its raw state; restoring only the state cannot authenticate the producing actor.
+
+Native graph coefficient learning may declare `invocationAdapters` by exact
+invocation name. Continue from the returned `invocation_actors` receipt when
+updating several call actors; a heterogeneous graph has no single effective
+model identity. `neuralese-native-grad-invalid` for an invocation declaration
+requires actual graph node names and exact-base coefficient/basis artifacts.
+Keep protected test rows out of gradient requests. Heterogeneous policy-objective
+admission/replay remains unavailable until its per-turn behavior contract is
+implemented and qualified; graph CE support does not imply that RL support.

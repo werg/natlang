@@ -49,6 +49,16 @@ class NativeInvocationActors:
             frame=(*frame[:3],entries,*frame[4:])
             self.actors[name]=(frame,replacement,selected)
 
+    def receipt(self):
+        import copy
+        from .native_adapters import SCHEMA
+        result={'schema':'natlang.native-invocation-actors/1','base_native_identity':dict(self.engine.native_identity),
+                'invocations':{name:{'native_identity':dict(actor[0][1]),
+                    'adapter_binding':({'schema':SCHEMA,'base_native_identity':dict(self.engine.native_identity),
+                                        'adapters':copy.deepcopy(actor[0][2])} if actor[0][2] else None)}
+                               for name,actor in self.actors.items()}}
+        return validate_invocation_actor_receipt(result,self.engine.native_identity)
+
     def execute(self, name, callback):
         if not self.lifecycle['active']:
             raise NativeAdapterError('native invocation actor scope expired; complete backward within the graph operation')
@@ -95,3 +105,38 @@ def run_invocation_actors(engine,names,bindings,callback,*,default=None,leaves=N
         finally:
             bank.lifecycle['active']=False
             _BANKS.reset(token);_ACTIVE.reset(active)
+
+
+def validate_invocation_actor_receipt(receipt,base):
+    """Validate every actual invocation actor against one exact immutable base."""
+    from types import SimpleNamespace
+    from .native_adapters import validate_state_binding
+    if (not isinstance(receipt,dict) or set(receipt)!={'schema','base_native_identity','invocations'}
+            or receipt.get('schema')!='natlang.native-invocation-actors/1'
+            or receipt.get('base_native_identity')!=base or not isinstance(receipt.get('invocations'),dict)
+            or not receipt['invocations']):
+        raise NativeAdapterError('native invocation actor receipt needs its exact base and complete invocation inventory')
+    for name,actor in receipt['invocations'].items():
+        if (not isinstance(name,str) or not name or not isinstance(actor,dict)
+                or set(actor)!={'native_identity','adapter_binding'}
+                or not isinstance(actor['native_identity'],dict) or set(actor['native_identity'])!=set(base)):
+            raise NativeAdapterError('native invocation actor identity is malformed')
+        binding=actor['adapter_binding']
+        if binding is None:
+            if actor['native_identity']!=base:
+                raise NativeAdapterError('unadapted invocation actor differs from its immutable base')
+        else:
+            validate_state_binding(binding,SimpleNamespace(**actor['native_identity']))
+            if binding['base_native_identity']!=base:
+                raise NativeAdapterError('native invocation actor changed its immutable base')
+    return receipt
+
+
+def validate_invocation_actor_provenance(provenance,base):
+    receipt=(provenance or {}).get('invocation_actors')
+    if receipt is None:return None
+    from ..common.hashing import canonical_json_sha256_hex
+    validate_invocation_actor_receipt(receipt,base)
+    if provenance.get('actor_graph_sha256')!=canonical_json_sha256_hex(receipt):
+        raise NativeAdapterError('native invocation actor graph digest differs from its exact receipt')
+    return receipt
