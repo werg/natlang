@@ -388,7 +388,9 @@ function normalizeReply(body: Json): Json {
     const fn = call.function;
     if (!fn) continue;
     const parsed = typeof fn.arguments === 'string' ? JSON.parse(fn.arguments) : fn.arguments;
-    fn.arguments = JSON.stringify(partsAsText(parsed));
+    // Tool argument leaves retain their actual wire parts until the typed
+    // runtime boundary. Eval source and assistant text normalize separately.
+    fn.arguments = JSON.stringify(parsed);
   }
   return body;
 }

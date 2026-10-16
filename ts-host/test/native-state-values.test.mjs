@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:http';
+import { neuraleseServerModelTurn, encodeBlockBody } from '../dist/model/neuralese-server.js';
 import { join } from 'node:path';
 import { MemoryNeuraleseStore, encodeNativeState, StandInNeuralesePort, hashingEmbedder } from '../dist/native/neuralese-store.js';
 import { neuraleseRef, neuraleseSentinel, isNeuraleseRef, soleSentinel, sourceWithLiteralCalls,
@@ -262,3 +264,51 @@ test('declared union discriminants preserve the selected nested literal/Neurales
     { marker_context: 'other-tool-argument' });
   assert.equal(coerce(argument, parseType('{ nested: Neuralese<string>[] }'), env).nested[0].$neuralese.id, id);
 });
+
+
+for (const format of ['native_state', 'neuralese']) {
+  test(`${format} real HTTP normalization preserves producer provenance through agent rejection`, async () => {
+    const store = new MemoryNeuraleseStore();
+    const port = format === 'neuralese' ? new StandInNeuralesePort(store, hashingEmbedder(8), 8) : undefined;
+    const artifact = port ? await port.write('opaque transport payload') : await store.putNativeState(nativeStateFixture());
+    const neuralese = port ? { store, port, dialect: port.dialect } : runtimeFor(store);
+    const requests = [];
+    const server = createServer(async (request, response) => {
+      if (request.url === '/v1/neuralese/info') {
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ dialects: [neuralese.dialect], stream: false })); return;
+      }
+      if (request.url?.endsWith('/meta')) {
+        response.setHeader('content-type', 'application/json'); response.end('{}'); return;
+      }
+      if (request.url === '/v1/neuralese/blocks/' + artifact.id) {
+        response.end(encodeBlockBody(artifact, (await store.get(artifact.id)).data)); return;
+      }
+      if (request.url === '/v1/neuralese/native-states/' + artifact.id) {
+        response.end(encodeNativeState(artifact)); return;
+      }
+      let body = ''; for await (const chunk of request) body += chunk;
+      requests.push(JSON.parse(body));
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '', tool_calls: [{
+        id: 'reply-' + requests.length, type: 'function', function: { name: 'return_result',
+          arguments: JSON.stringify({ status: 'success', value: requests.length === 1 ?
+            [{ type: format, id: artifact.id }] : 'actual HTTP answer' }) },
+      }] } }], ...(requests.length !== 1 ? {} : format === 'native_state' ?
+        { native_state: { blocks: [{ ...artifact.metadata, id: artifact.id }] } } : { neuralese: { blocks: [artifact] } }) }));
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const endpoint = `http://127.0.0.1:${server.address().port}`;
+      const driver = neuraleseServerModelTurn({ endpoint, model: 'exact-protocol-fixture', store });
+      const invocation = open({ type: '() => string', instructions: 'Return actual answer text.' }, { neuralese }).session;
+      await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(invocation);
+      assert.equal(invocation.lam.return, 'actual HTTP answer'); assert.equal(requests.length, 2);
+      assert.match(JSON.stringify(requests[1].messages), /type-mismatch/);
+      const child = open({ type: '() => Neuralese<string>', instructions: 'Return the produced value.' }, { neuralese }).session;
+      requests.length = 0;
+      await new NativeToolAgent(driver, { maxTurns: 1, neuralese }).run(child);
+      assert.equal(child.lam.return.$neuralese.id, artifact.id);
+    } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+  });
+}
