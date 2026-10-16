@@ -253,8 +253,11 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
             or request.get('identity')!=identity or request.get('runtime_code_sha256')!=code_sha):
         raise ValueError('memory qualification request differs from actual restored model/runtime/packing')
     _check_indexes(request['indexes'])
+    source_split=request.get('split','train')
+    if source_split not in ('train','test'):
+        raise ValueError('capacity source split must be train or test')
     source=NativeGraphSource(bound(request['source']),config['tokenizer_fingerprint'],
-        required_split='train',pair_model=request.get('pair_model'),role_ids=roles.ids)
+        required_split=source_split,pair_model=request.get('pair_model'),role_ids=roles.ids)
     selected=request['cases']
     if not selected or len({row['index'] for row in selected})!=len(selected):
         raise ValueError('memory qualification needs distinct complete graph cases')
