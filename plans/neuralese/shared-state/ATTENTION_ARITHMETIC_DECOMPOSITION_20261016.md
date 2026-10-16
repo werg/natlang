@@ -78,3 +78,13 @@ Independent implementation review, actual trained-parent H100 normal/long
 qualification and production adoption remain OPEN. Crisp code is justified for
 exact arithmetic dispatch, identity, checkpoint durability and numerical
 verifiers; the preceding policy governs prioritization and adoption.
+
+Independent closure review found and repairs two nondefault-only omissions:
+raw-policy metadata proxies must bind the saved attention mode on both model and
+port, and immutable composite update manifests must retain that field. The
+existing parent/config verifier rejects a mismatched declaration; it does not
+reinterpret an updated actor. Async evaluation also checks the saved attention
+mode explicitly. These exact identity/durability paths share the original model
+loader, optimizer and artifact mechanisms. Default IEEE serialized forms remain
+unchanged. Source review confirms shared semantic checkpoints retain complete
+model configs and ordinary RL/preference execution uses the shared trainer.

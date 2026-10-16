@@ -698,9 +698,10 @@ def restore_engine(request: dict, *, dtype=None):
             prompt_rendering=request['prompt_rendering'])
         saved=provenance['model_config']
         for key in ('architecture','rank','marker_ids','tokenizer_fingerprint','base_inventory_sha256',
-                    'dtype','sparse_row_dtype','token_override_ids','token_override_dtype','native_linear_precision','precision'):
-            expected_value=saved.get(key,'ieee' if key=='native_linear_precision' else None)
-            if engine.model_config.get(key)!=expected_value:
+                    'dtype','sparse_row_dtype','token_override_ids','token_override_dtype','native_linear_precision','native_attention_precision','precision'):
+            default='ieee' if key in ('native_linear_precision','native_attention_precision') else None
+            expected_value=saved.get(key,default)
+            if engine.model_config.get(key,default)!=expected_value:
                 raise ValueError('native async eval model contract changed: '+key)
         if engine.native_identity['checkpoint_sha256']!=expected['sha256']:
             raise ValueError('native async eval restored another checkpoint identity')

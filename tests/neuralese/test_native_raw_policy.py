@@ -15,7 +15,8 @@ def parent_training():
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
-def test_raw_policy_identity_and_tokenizer_match_actual_loaded_model_without_construction(tmp_path,monkeypatch,family):
+@pytest.mark.parametrize('attention',['ieee','tf32x3'])
+def test_raw_policy_identity_and_tokenizer_match_actual_loaded_model_without_construction(tmp_path,monkeypatch,family,attention):
     import natlang_neuralese.model.native_model as native
     from transformers import AutoTokenizer
     from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
@@ -23,6 +24,9 @@ def test_raw_policy_identity_and_tokenizer_match_actual_loaded_model_without_con
     engine=engine_fixture(tmp_path,family)
     model,tokenizer,roles,config=engine.shared_model,engine.tokenizer,engine.role_tokens,engine.model_config
     base=Path(config['base'])
+    if attention!='ieee':
+        from natlang_neuralese.model.native_precision import set_native_attention_precision
+        set_native_attention_precision(model,attention);config['native_attention_precision']=attention
     with torch.no_grad():
         model.input_rows.add_(.013)
         model.adapter.up.weight.add_(.012)

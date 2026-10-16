@@ -174,6 +174,8 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
         'output_embedding_weight_sha256': output_embed_sha,
         'optimizer': optimizer or {}, 'update_provenance': update_provenance or {}}
     manifest['model_config']['native_linear_precision'] = model_config.get('native_linear_precision','ieee')
+    if 'native_attention_precision' in model_config:
+        manifest['model_config']['native_attention_precision'] = model_config['native_attention_precision']
     if 'sparse_row_dtype' in model_config:
         manifest['model_config']['sparse_row_dtype'] = model_config['sparse_row_dtype']
     if model.token_override_ids:

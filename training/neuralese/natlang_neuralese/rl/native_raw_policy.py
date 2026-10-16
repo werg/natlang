@@ -37,7 +37,10 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
              'torch.float16': torch.float16}[config['dtype']]
     # These are views of saved tensors, not modules or randomly initialized
     # weights. Reuse serving's exact identity law, including activation casts.
-    proxy = SimpleNamespace(port=SimpleNamespace(embedding_weight=state['backbone_state'][embedding_keys[0]].to(dtype)),
+    attention_mode=interface.get('native_attention_precision','ieee')
+    proxy = SimpleNamespace(port=SimpleNamespace(embedding_weight=state['backbone_state'][embedding_keys[0]].to(dtype),
+        native_attention_precision=attention_mode),
+        native_attention_precision=attention_mode,
         input_rows=interface['input_rows'], adapter=SimpleNamespace(state_dict=lambda: interface['adapter']),
         native_linear_precision=interface.get('native_linear_precision', 'ieee'),
         token_override_ids=tuple(interface.get('token_override_ids', ())),
