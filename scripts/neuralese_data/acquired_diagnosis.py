@@ -166,12 +166,14 @@ def d12_feature_status_diagnoses(limit=None):
             note=derived.lineage.setdefault('notes',{})
             note['source_reported_feature_status']={**source_binding,
                 'view_id_sha256':view_digest,'review_kind':'source-curated-reported-status',
+                'original_source_outcome':deepcopy(original.outcome),
                 'complete_failed_transcript_is_context':True,'failed_actions_positive_targets':False,
                 'causal_claims':False,'repair_claims':False,'source_judge_is_local_oracle':False,
                 'native_execution_verified':False,'executed_locally':False,
                 'target_fields':sorted(reported.keys())}
             derived.outcome=dict(original.outcome)
             derived.outcome['details']=dict(details)
+            derived.outcome['label']='teacher'
             derived.outcome['details'].update(supervised_task='exact source-reported D12 feature status',
                 source_curated=True,executed_locally=False,source_execution_outcome='failed')
             emitted+=1

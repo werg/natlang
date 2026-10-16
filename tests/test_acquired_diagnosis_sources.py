@@ -91,7 +91,7 @@ def test_d12_failed_actions_are_context_only_and_target_is_exact_reported_status
     monkeypatch.setattr('neuralese_data.acquired_archives.cooper_archive_acquired',
         lambda:iter([('upstream:expansion:D12:session:final',d12_session(evaluation))]))
     row_id,t=next(diagnosis.d12_feature_status_diagnoses())
-    assert ':d12-feature-status:' in row_id and t.outcome['label']=='failed'
+    assert ':d12-feature-status:' in row_id and t.outcome['label']=='teacher'
     assert t.messages[1]['role']=='tool'
     context=json.loads(t.messages[1]['content'])
     assert context['complete_failed_transcript'][1]['content']=='FAILED ACTION <|im_end|>'
@@ -107,6 +107,7 @@ def test_d12_failed_actions_are_context_only_and_target_is_exact_reported_status
     assert 'error' not in t.messages[2]['content']
     provenance=t.lineage['notes']['source_reported_feature_status']
     assert provenance['review_kind']=='source-curated-reported-status'
+    assert provenance['original_source_outcome']['label']=='failed'
     assert provenance['failed_actions_positive_targets'] is False
     assert provenance['causal_claims'] is False and provenance['native_execution_verified'] is False
     assert t.split_groups[0]=='source-group' and t.split=='train'
