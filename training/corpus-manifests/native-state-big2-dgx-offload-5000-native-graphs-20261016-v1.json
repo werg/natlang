@@ -1,0 +1,76 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "native-state-big2-dgx-offload-5000-native-graphs-20261016-v1",
+  "owner": "dgx",
+  "path": "runs/native-big2-dgx-offload-5000-20261016-v1",
+  "files": [
+    {
+      "path": "graphs/lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 6701599,
+      "sha256": "fec426213cead02af160737868545ff1d21711a7199d998ba065bd9c8bef0ad0"
+    },
+    {
+      "path": "graphs/lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 40229724,
+      "sha256": "cb1722f0f3362d58a14c1bced56e59b3dbda55577913910bf86eff37e94c7e1b"
+    },
+    {
+      "path": "graphs/mellum21/test/native-graphs.jsonl.zst",
+      "bytes": 6433981,
+      "sha256": "03afa0ee3e608c64ab48da399dcf0444493b28f0333a61099a616e3154220f6b"
+    },
+    {
+      "path": "graphs/mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 38436339,
+      "sha256": "491676b20610783c4b0a8a8582c936a11dd30783964812453be71000e6b1d74d"
+    },
+    {
+      "path": "pair-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "pairs/test/semantic-pairs.jsonl.zst",
+      "bytes": 30252174,
+      "sha256": "d59ca214245abb0dd3d8faf9975cdf4a4e50f453f0f61aca5a33559c3ea5c62a"
+    },
+    {
+      "path": "pairs/train/semantic-pairs.jsonl.zst",
+      "bytes": 202776599,
+      "sha256": "fbc69df0b7b8133ccbe1b4f7be587e76e97abbfaa020fdf0fed8fc5db43ef356"
+    },
+    {
+      "path": "protection-hold-identity-proof.json",
+      "bytes": 2250,
+      "sha256": "5d616b73c6d3cb50e311f1a865900e31c2bc34f20e1412597269aa87f471e140"
+    },
+    {
+      "path": "provenance/transfer-proof.json",
+      "bytes": 1280,
+      "sha256": "09b608b2b0c75df08418f809af15d2ef545b0db2e030168ed7c0998686ead74d"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 4580,
+      "sha256": "dea4619b4622ce5ad79340b596702d0eb8bb2169d3f8e03587f677e6236d9965"
+    },
+    {
+      "path": "render-omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "resume-manifest.json",
+      "bytes": 8602124,
+      "sha256": "1ab324cb927e88d0078b22bd52ea4c7db9da956ca7b499a85607def8f9639a84"
+    },
+    {
+      "path": "validation-proof.json",
+      "bytes": 6361,
+      "sha256": "fd046ed119ebab418c6e3dd6446de7b03daa48590b11bb0b2ec5100b8771806b"
+    }
+  ],
+  "bytes": 333447011
+}

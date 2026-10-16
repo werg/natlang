@@ -109284,6 +109284,208 @@
         }
       },
       "note": "All full graphs are retained intact; no arbitrary token or row cap was applied. Independent geometry reports max total physical forward graph length of 87,996 LFM tokens / 96,447 Mellum tokens and max logical import spans of 70,667 / 78,534. This dataset requires whole-graph handling at those sizes. Original 7,002 over-cap omission entries (7,001 unique IDs) matched 7,027 selected source rows (7,001 unique IDs); all exact row occurrences are preserved and qualified by source row hash."
+    },
+    {
+      "id": "native-state-big2-dgx-offload-5000-native-graphs-20261016-v1",
+      "owner": "dgx",
+      "path": "runs/native-big2-dgx-offload-5000-20261016-v1",
+      "include": [
+        "graphs/lfm25/train/native-graphs.jsonl.zst",
+        "graphs/lfm25/test/native-graphs.jsonl.zst",
+        "graphs/mellum21/train/native-graphs.jsonl.zst",
+        "graphs/mellum21/test/native-graphs.jsonl.zst",
+        "pairs/train/semantic-pairs.jsonl.zst",
+        "pairs/test/semantic-pairs.jsonl.zst",
+        "pair-omissions.jsonl",
+        "render-omissions.jsonl",
+        "receipt.json",
+        "resume-manifest.json",
+        "protection-hold-identity-proof.json",
+        "validation-proof.json",
+        "provenance/transfer-proof.json"
+      ],
+      "source_class": "verified-disjoint-Big2-incremental-whole-trajectory-and-native-communication-graph-tranche",
+      "split": "Reserved source interval [61000,66000): 4,542 train chains and 458 test/held chains. Each model has 46,978 train and 4,786 held ordinary graphs; the paired communication corpus has 50,622 train and 5,186 held rows.",
+      "admission": "This is a verified, disjoint 5,000-chain tranche from Big2, not a claim that the entire Big2 source is converted. All 51,764 selected records and all 55,808 source edges were covered; every selected edge has exactly one paired row. The two model-specific ordinary graph views and both model views in every pair were parsed with exact tokenizer fingerprints. Train/test groups are disjoint, current held/quality/pending and decision-hold intersections are zero, and the prior Big2 first100/1k pair IDs do not overlap.",
+      "training_admission": true,
+      "training_admission_reason": "Ledgered independent validation passed exact archive/extract/selection/reservation/active-assignment/source bindings, all chain/record/edge membership, both tokenizer-specific graph splits and semantic-pair views, complete paired-edge coverage, exact group/split closure, current global protection and explicit decision-hold checks, and disjointness from previously admitted Big2 pairs. Test rows remain held. Registration records eligibility only; it does not claim student exposure or whole-source completion.",
+      "derived_from": [
+        "neuralese-e2e-cloud-big2-protected-20261015-v1",
+        "native-state-big2-first100-native-graphs-20261015-v1",
+        "native-state-big2-dgx-offload-1000-native-graphs-20261016-v1"
+      ],
+      "license_provenance": "Inherited from the admitted Big2 source cohort; owner accepts all licenses.",
+      "note": "Incremental source-order interval [61000,66000), extracted as 5,000 complete chains. The remaining Big2 source continues in the cloud converter with the 6,000 reserved/offloaded identities excluded. This tranche is independent of and appended after prior admitted Big2 portions.",
+      "source_bindings": {
+        "source_corpus_id": "neuralese-e2e-cloud-big2-protected-20261015-v1",
+        "archive": {
+          "path": "/home/werg/data/dgxops/big2-dgx-offload-transfer-5000-20261016/big2-dgx-offload-5000-20261016-v1.tar.zst",
+          "bytes": 54545919,
+          "sha256": "b53cf4b95decf7650848fdf15410e8e0d928bbbb25a438c2e096adcc10deafc9",
+          "private_independently_verified": true
+        },
+        "extract_receipt": {
+          "bytes": 37913862,
+          "path": "/mnt/external/natlang-development-data/big2-dgx-offload-5000-20261016-v1/source/extract-receipt.json",
+          "sha256": "9130567a650e97b338cfdb6d3b63c12c674549bf7b280c86f50d52d7879d173b"
+        },
+        "source_files": {
+          "chains.jsonl": {
+            "bytes": 3683922,
+            "path": "/mnt/external/natlang-development-data/big2-dgx-offload-5000-20261016-v1/source/chains.jsonl",
+            "sha256": "7db99e74253d5c2d2b434c9275a771b19db13b806bd8b71aca073d994b450770"
+          },
+          "edges.jsonl": {
+            "bytes": 26747540,
+            "path": "/mnt/external/natlang-development-data/big2-dgx-offload-5000-20261016-v1/source/edges.jsonl",
+            "sha256": "95baa835a2ef9eacdb783e9fccb964f437a06fea66872ad3d4b9af0fd7c0cd0d"
+          },
+          "omissions.jsonl": {
+            "bytes": 0,
+            "path": "/mnt/external/natlang-development-data/big2-dgx-offload-5000-20261016-v1/source/omissions.jsonl",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "pieces.jsonl": {
+            "bytes": 21862,
+            "path": "/mnt/external/natlang-development-data/big2-dgx-offload-5000-20261016-v1/source/pieces.jsonl",
+            "sha256": "3be9a082efdd7f59e1060658c6bf324c80ac2d7671c3c00f6fc2ed0ba67c50d7"
+          },
+          "records.jsonl": {
+            "bytes": 7352197878,
+            "path": "/mnt/external/natlang-development-data/big2-dgx-offload-5000-20261016-v1/source/records.jsonl",
+            "sha256": "9c35b955639eb060ac0b287478e9385e6fb379bb4ecf56c88b2dc6ea4eced0ce"
+          }
+        },
+        "selection": {
+          "bytes": 575066,
+          "path": "/mnt/external/natlang-development-data/big2-dgx-offload-5000-20261016-v1/assignment/selection.json",
+          "sha256": "b5e5093ac9e47d64f994ba387404b292a1c2364f86d1561dde6955ba7c2d2d35"
+        },
+        "active_assignment": {
+          "bytes": 277548,
+          "path": "/mnt/external/natlang-development-data/big2-dgx-offload-5000-20261016-v1/assignment/assignment-active-proof.json",
+          "sha256": "1c670406b52b096faba967fc32c227fed68c814126e5bdf482dd0e65c8a22db4"
+        },
+        "reservation_proof": {
+          "bytes": 2226,
+          "path": "/mnt/external/natlang-development-data/big2-dgx-offload-5000-20261016-v1/assignment/reservation-proof.json",
+          "sha256": "7f219921816ecf231d7821ee57ab60fe908f8b80a9d2604b16466ee56265608f"
+        },
+        "parent_receipt": {
+          "bytes": 41228,
+          "path": "/mnt/external/natlang-development-data/big2-dgx-offload-5000-20261016-v1/parent/cohort-receipt.json",
+          "sha256": "c54815e06e9ce74fe090cfbbf0a9769fe7145501d0b521eb8165194268bdecc7"
+        },
+        "current_protection": {
+          "held_groups": 16133,
+          "path": "/home/werg/data/e2e-current-protection-bundle-20261015-v2/protection-manifest.json",
+          "quality_groups": 65161,
+          "sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+          "source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593"
+        },
+        "current_protected_counts": {
+          "held_groups": 16133,
+          "pending_groups": 398,
+          "quality_groups": 65161
+        },
+        "decision_hold_identity_proof": {
+          "path": "/home/werg/natlang/runs/native-big2-dgx-offload-5000-20261016-v1/protection-hold-identity-proof.json",
+          "bytes": 2250,
+          "sha256": "5d616b73c6d3cb50e311f1a865900e31c2bc34f20e1412597269aa87f471e140"
+        },
+        "conversion_receipt_sha256": "dea4619b4622ce5ad79340b596702d0eb8bb2169d3f8e03587f677e6236d9965",
+        "resume_manifest_sha256": "1ab324cb927e88d0078b22bd52ea4c7db9da956ca7b499a85607def8f9639a84",
+        "validation_proof_sha256": "fd046ed119ebab418c6e3dd6446de7b03daa48590b11bb0b2ec5100b8771806b",
+        "transfer_proof_sha256": "09b608b2b0c75df08418f809af15d2ef545b0db2e030168ed7c0998686ead74d",
+        "assignment": {
+          "active_cloud_intersection": 0,
+          "chains": 5000,
+          "edges": 55808,
+          "records": 51764,
+          "source_order_interval": [
+            61000,
+            66000
+          ],
+          "test_chains": 458,
+          "train_chains": 4542
+        },
+        "counts": {
+          "chains": 5000,
+          "train_chains": 4542,
+          "test_chains": 458,
+          "records": 51764,
+          "edges": 55808,
+          "paired_train": 50622,
+          "paired_test": 5186,
+          "ordinary_graphs_per_model": {
+            "train": 46978,
+            "test": 4786
+          }
+        },
+        "models": {
+          "lfm25": {
+            "graph_files": {
+              "test": {
+                "bytes": 6701599,
+                "path": "/home/werg/natlang/runs/native-big2-dgx-offload-5000-20261016-v1/graphs/lfm25/test/native-graphs.jsonl.zst",
+                "rows": 4786,
+                "sha256": "fec426213cead02af160737868545ff1d21711a7199d998ba065bd9c8bef0ad0"
+              },
+              "train": {
+                "bytes": 40229724,
+                "path": "/home/werg/natlang/runs/native-big2-dgx-offload-5000-20261016-v1/graphs/lfm25/train/native-graphs.jsonl.zst",
+                "rows": 46978,
+                "sha256": "cb1722f0f3362d58a14c1bced56e59b3dbda55577913910bf86eff37e94c7e1b"
+              }
+            },
+            "graphs": {
+              "test": 4786,
+              "train": 46978
+            },
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105"
+          },
+          "mellum21": {
+            "graph_files": {
+              "test": {
+                "bytes": 6433981,
+                "path": "/home/werg/natlang/runs/native-big2-dgx-offload-5000-20261016-v1/graphs/mellum21/test/native-graphs.jsonl.zst",
+                "rows": 4786,
+                "sha256": "03afa0ee3e608c64ab48da399dcf0444493b28f0333a61099a616e3154220f6b"
+              },
+              "train": {
+                "bytes": 38436339,
+                "path": "/home/werg/natlang/runs/native-big2-dgx-offload-5000-20261016-v1/graphs/mellum21/train/native-graphs.jsonl.zst",
+                "rows": 46978,
+                "sha256": "491676b20610783c4b0a8a8582c936a11dd30783964812453be71000e6b1d74d"
+              }
+            },
+            "graphs": {
+              "test": 4786,
+              "train": 46978
+            },
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f"
+          }
+        },
+        "pair_files": {
+          "test": {
+            "bytes": 30252174,
+            "path": "/home/werg/natlang/runs/native-big2-dgx-offload-5000-20261016-v1/pairs/test/semantic-pairs.jsonl.zst",
+            "rows": 5186,
+            "sha256": "d59ca214245abb0dd3d8faf9975cdf4a4e50f453f0f61aca5a33559c3ea5c62a"
+          },
+          "train": {
+            "bytes": 202776599,
+            "path": "/home/werg/natlang/runs/native-big2-dgx-offload-5000-20261016-v1/pairs/train/semantic-pairs.jsonl.zst",
+            "rows": 50622,
+            "sha256": "fbc69df0b7b8133ccbe1b4f7be587e76e97abbfaa020fdf0fed8fc5db43ef356"
+          }
+        },
+        "pair_omissions": 0,
+        "render_omissions": 0,
+        "overlap_with_prior_big2_pairs": 0
+      }
     }
   ],
   "coverage_backlog": [
