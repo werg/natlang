@@ -1,6 +1,6 @@
 # DGX current state
 
-Generated 2026-10-16 12:08 UTC by `python3 scripts/current_state.py --machine dgx`. Do not edit by hand: regenerate.
+Generated 2026-10-16 13:49 UTC by `python3 scripts/current_state.py --machine dgx`. Do not edit by hand: regenerate.
 This page holds the present only. History is in git (`git log -p -- plans/neuralese/HANDOVER.md`), in the
 decision records and in the coordination log. Live processes and the status pages are the authority.
 
@@ -19,21 +19,23 @@ decision records and in the coordination log. Live processes and the status page
 
 ## DGX status page (this machine)
 
-Updated 2026-10-16T12:08:53.702543Z by dgx-codex-01a13659.
+Updated 2026-10-16T13:49:17.809430Z by dgx-codex-01a13659.
 
-DGX 2026-10-16 12:08 UTC. Continuous supervision active. Entire evolving production recipe on both models; exactly two training and one stronger self-hosted teacher sandbox.
+DGX 2026-10-16 13:49 UTC. Supervision active; full evolving recipe on BOTH students. Exactly two training sandboxes plus one stronger self-hosted teacher. No full-recipe, capability-lift or shared-dialect completion claim.
 
-Training: LFM drained at 6711 (parent e764d30ace98888f25b5b8175bb158a92b4ddb1167f8f1db03088c06e74e69c3), continuation plan 992297 train / 25955 held / all2449 pending. Restore failed before SGD because optional memory_qualification=None was serialized as null. Shared8c50461a1 omits absent setting; frozen57d5818dd283 differs from3042 in EXACT two recipe lines. Root independently verified251 modules/10recursive evidence hashes and continue_capacity PASS, approved review06422d60eec41cf55f5854f41444509c07724345953ea2f19331bde08ff2ade0. Cloud remote verifier PASS; corrected native-recipe supervisor2552 restoring exact6711. No new model measurement or lost new SGD. Keep CPU preparation off LF restore and use actual VM MemAvailable, not misleading cgroup limits. Mellum last observed8146 GPU98%, runtime4bda74b8c99a. Original26312 communication-foundation exposure incomplete BOTH; no VAE readiness claim.
+LFM prefix optimization ACTUALLY training again: step7058 at13:45, GPU100% at7050; exact parent7049/5e0c7cbb…b397 retained with optimizer/RNG/exposure. Original communication foundation12493/26312 complete, not all ordinary communication visits. All three actual source-bound MAX cases PASS; TRUE-mode certificate ff47a021e693c023c500730e5fa69f0462289d5f07a8fad6ad4b5bd6387e5daa, limits94236physical/157075KV. Earlier exact6620 paired proof output/loss bitwise, gradientrelL2~4.14e-6; physical13431->8188. Per-row updates present. Current plan992297train/25955held/all2449pending. Narrow reuse metadata continuation being composed; old poll cannot safely rebuild million-row source trees with9.5GiB actualVM. No numerical retrial needed.
 
-Data: D24 first twin source acquired-d24-sft-member-00372b569325-20261016-v1 registered8c48a8974. Independent strict parse6187train sessions/model,65.25M LF /70.90M M tokens, sameID/groups, zeroheld/quality/pending overlap; allfit current limits. Mellum guarded stage passed31files/114144897bytes; bounded resident append next, not yet exposure. Shared07bb897a6 source pool reuses exact validated subtrees with file hash checks,44focused+114regression+quickPASS; cloud independently reviewed. FullD24 remaining147985SFT/12413preference pairs progressing remotely v3e, real grandchild496285 healthy. D20 metadata-only Parquet accounting52e991264 ready; guarded retry queued after D24 host capacity. Six reference exports require source-owning VM split; retries remain tracked. Search shard0015 registered321b08f1a. V18 transfer853verified-success trajectories (304batch13+549batch14 excludingV1-17), cbf796b6ca22097fb346b3620ed1e99dc465b79b73d122e39e3d0008339edd1e,1.629GB; active DGX8GiB low-priority materializer. No download/staging counted as training exposure. HFaccess next12:45UTC throughOct19.
+Mellum safely drained latest9174 (not older6813 basis), independent bytecopy of48181409625B latestcheckpoint in progress13:43. Current handoff newb50e8823a only two boundedCPUhelpers/native_resident and exacttwo foundation counters; numerical/update math unchanged. Root approved3ffac014…fc6 after253gitmodules/32recursive proofs; actualunpublished v5CPUpreparerPASS134s/peak3068219392B/endVM17.25GB. Preserve latestdrain rebinding and independently copied parent before restore. D24 append via reuse after restore; do not start CPU source jobs during checkpoint window. FullM7750 inferenceexport PUT/GETverified d879…2d/24761429633B; local fetch/ingester still tracked, no Mtaskscores yet.
 
-Teacher: existing qualified RadixArk Qwen rollback actor restored after pinned NVIDIA CSF trial2 loaded74.48GB but ViTFA2 unsupported PTX. io_uring issue fixed by shipped InstantTensor MMAP, same quant. Root inspected actual pinned source; both --language-model-only and --skip-mm-profiling explicitly bypass observed unused multimodal profile path. Third same-image/CSF/MMAP text-only attempt supervisor714768 armed, drains actual case frontier; ready48TRAIN quality/throughput watcher and automatic qualified rollback. No fourth sandbox. Preserve batch14 oldactor564 completions separately from460continuation cases/new actor.
+Teacher qualifiedrollback generating actual360 remainder,126terminal/GPU100%13:42. NVIDIA diagnostic48 terminal41accepted/5semanticfalse/2typedrequestbudget, no qualitylift claim. Template400 late-system blocker fixed by pinned derived Jinja helper f9b3c91f1; sourceb9ce18a…/derived2ec0ba69…4742;17static testsPASS. Actual pinned-launcher preflightPASS13:42:53 includes template+text-only flags. New same48 recovery-path live qualification armed; actor/provenance/frontier preserved and rollback retained. No fourthsandbox. NVIDIA CSF/MMAP/text-only flags had previously reached READY/280–427generatedTPS; no final engine adoption claim until corrected live trial.
 
-Evaluation: corrected dispatcher and Mellum ingester active after old inactive services repaired. LFM6620 exact parent8aed972119025f4bbc8d218fb15399b7733c290d8eb245ee42d690e0be2fc352 finished16tasks:1pass,6invalid_action,1budget_exhaustion,8semantic_mismatch; eligible, no matched previous baseline. QAD matched base evaluation expressly not requested by prior owner correction. LFM6711 evaluation now active. Root found remaining assistant-only result provenance bug: four actual producer blocks flattened into opaque-ID string returns despite earlier tool-return fix. Repair underway: preserve original wire parts and reuse existing typed return_result path, no payload decode; literal strings unchanged. Next live48TRAIN qualification required before production runtime adoption. Wrongfield and other answer errors remain genuine diagnostic work. Mellum7750 inference view FULLPUT+independentGET verified11:59:30, SHA d8792efed669717c85821edb38523d9f7184bd3e2945ad5328b88deefa64ab2d /24761429633bytes; full origin47a80bbfdb19c7fc014b2e621efbf643ed66c5905ed0ee76d486b2e47f64d8d5. Corrected ingester ferrying to external disk for actual evaluation.
+Data: V18 c6442394c stagedBOTH8files:853verified successes->25103train nativegraphs/model; staging not exposure. D24 first6187/model stagedBOTH31files, second10817/model prepared15files; remainingSFT mustresume after handoff.12413DPOpairs+30omissions tracked, concreteconverter pendingexecution. D17 registered26648a364,92/92manifestPASS SHA56fa37d9…e06; ferry77files788459826B verified. TrainfitLF16252/M14542, long447/377 mandatorypending. All31618source rows currentprotection intersections zero, auditedoldclosure preserved/currentclosure bound; guardedLFstage2644 starts after SGDrestore,Mstagewaits. Fullnative buildersLF72/M1224 completedprefix shards shouldadmit promptly. HF D09still40312:45,next15:45UTCthroughOct19. D20metadata/sixcorrectVMretries tracked bydataagent.
 
-Native learning: e4/6b/0957 independently reviewed and integrated f861e2e61,b802238f2,75a44423d, published c4efd7950. Immutable finite derivative programs; exact state update and prior named moments recomputed through shared CPU optimizer with explicit runtime binding (no crossCPU/CUDA bitwise fiction); full mixed dependency closure across HTTP/storage/.nz/RL admission/objective/restore. Root actual CUDA31PASS+2skip, remaining5 TSbridge PASS after required build, quickGREEN. Public captured-turn objective lowering remains active agent work; public order2 guarded and no full-size RL lift claim.
+RL ownerclarification enforced8647bd716: rewardcorrectexecution regardlessNeuralese; no mandatoryedge/minnodes. Actualgraphrequires entire captured episode, allproducers/consumers/exactstateoccurrences; originaloutsideinputs remainoutsideevenequalIDlocalwriter.89CPU+14actualCUDA+quickPASS andindependentreviewCLEAR. Repeated per-ID uses/semanticdecodedimports honestlyrejectpending real occurrence-indexed/differentiablecodec lowering; nativeagent ownsclosure. RLagent preparing executable LFMcurriculum/adaptiveselector using existing sharedproduction, no newtrainer, no externalgeneration. Solvedtaskpermanentretirement beingreplaced withpractice/breadth. No fullsizeproductionRLcompletion claim. Internalrecordedobjective/per-importstop commits06700ac37/85d263ee8 currentlylocalreview/testing, notcloudadopted; 11actualCUDA+4Node/build+quickPASS, integratedCPUretryafter avoidableconcurrentdistbuildrace.
 
-Efficiency/checks/storage: LF actual H1006620 prefix proof PASS13431->8188physical rows(-39%), bitwise outputs/loss and gradient relL2 4.14e-6, still OFF pending adoption. Source-index continuation399/182 passed16checks and exactfrozen policy verification. File-backed checkpoint candidate248cd0924 has34focused and actual nativeCUDA43 derivative checks PASS; actual longgraph cloud capacity/throughput still pending. Full99da4b04ac GREENall11steps; standing fullc4efd79502 now running. Removed20.50GB dead pytest fixtures and23.42GB discarded legacy projected export with indexes/symlink; active parents/source/held retained. Root29GiB and external71GiB free before current M24GB download. No whole-recipe completion, learned shared dialect or optimal utilization claim.
+Task evidence: LFM6620/6711 each1/16; latest6750 0/16 (9invalidaction,2modelincomplete,4semanticmismatch,1budget,0infra).7049correctedheldevaluation active. These are weak taskresults, no demonstratedbroadlift. No owner-forbidden new QADbaseeval. Assistant-onlynative-return fixpublished but livebranchqualificationstilldebt:53baseline/48candidate6711turns ordinarytools only,0nativeuse. Do notclaimtaskliftoradmitinterruptedcases. CurrentperiodicevalF01runtimeunchanged.
+
+Checks/storage: full5b0475b056 active externalisolatedTMP, latest~29%nativePython nofailureseen; prior6c9PythonPASS/TSactualENOSPC notgreen. LastfullGREEN99da4b04ac. New5b0475b05 ownedterminalTMPcleanup10focused+quickPASS. Root~13GBfree/ext46GB at13:46; monitor Mfetch+fullcheck peaks. ReclaimedV18/V11 exactduplicate2.458GB plus previous20.50GBdeadpytest/23.42GBdiscardedlegacyexport/1.389GBruntimecopies. Activeparents/reusablesources/heldpreserved. Fullgoal remainsactive.
 
 ## POP status page
 
@@ -45,16 +47,16 @@ Pop generation closeout complete (2026-10-15 12:20 UTC): Luna seed52118 terminal
 
 | Unit | Priority | Budget / used GB | Recipe |
 | --- | --- | --- | --- |
-| `corrected-mellum-eval-ingest-root-20261016` | medium | 3.0 / 0.4 |  |
-| `corrected-native-task-dispatch-root-20261016` | medium | 3.0 / 0.6 |  |
+| `corrected-native-task-dispatch-root-20261016` | medium | 3.0 / 0.8 |  |
+| `cw-lf-prefix-reuse-quick-2650` | medium | 2.0 / 0.3 |  |
 | `cw-lfm-foundation-ferry-2264` | low | 1.0 / 0.1 |  |
-| `cw-mellum-d24-sourcepool-prepare-2554` | high | 1.0 / 0.1 |  |
-| `d24-v3e-progress-20261016-04` | low | 1.0 / 0.0 |  |
-| `natlang-full-check-c4efd79502` | low | 13.5 / 0.9 |  |
+| `native-objective-stop-integrated2-root-20261016` | medium | 3.0 / 2.8 |  |
+| `natlang-full-check-5b0475b056` | low | 13.5 / 4.2 |  |
 | `natlang-memory-guard` |  |  |  |
 | `search-completed-selection-dedup2-20261016` | low | 2.0 / 0.0 |  |
 | `search-completed-shards-admission-current-root-20261016` | low | 8.0 / 0.7 |  |
-| `searchowl-native-render-optimized-resume-20261016-r7` | low | 16.0 / 4.5 |  |
+| `searchowl-native-render-optimized-resume-20261016-r7` | low | 16.0 / 4.0 |  |
+| `taskeval-ea484213-0007049` | medium | 66.7 / 12.1 |  |
 
 ## Declared lineages (training/neuralese/line-parity.json: next launch per line)
 
@@ -71,7 +73,7 @@ Recipes on disk (77): `diag-e2e-lfm-u10006-r4-ph-heads-3e-6`, `diag-e2e-lfm-u100
 
 ## Corpus registry
 
-1765 live entries in `training/neuralese_corpora.json` (319 dgx, 1446 pop); 408 carry training admission.
+1770 live entries in `training/neuralese_corpora.json` (324 dgx, 1446 pop); 413 carry training admission.
 
 ## Open coordination requests to dgx
 
