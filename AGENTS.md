@@ -121,6 +121,23 @@ problem requires a redo or continued training, preserving exact state and
 recording the evidence. Comprehensive training is the objective, not a ban on
 interruptions or sensible course corrections.
 
+## Whole-graph RL and LFM curriculum (owner, 2026-10-16)
+
+Reward correct task execution whether or not the policy uses Neuralese. Do not
+require a communication edge or a minimum number of nodes for RL eligibility.
+When an execution has a Neuralese graph, policy updates cover the entire actual
+graph: preserve sampled and forced producer turns, consumer imports, exact
+occurrence bindings and downstream outcomes, with gradients through the real
+producer/consumer dependencies. Never turn an in-episode producer into a detached
+external input or train a selected consumer/turn in place of the whole graph.
+Missing or unsupported graph capture is repaired before that episode is used.
+
+Prepare an executable LFM RL task curriculum, starting with tractable verified
+natlang execution and growing into tool use, multi-step work and communication.
+Use actual task outcomes to adapt difficulty; keep protected evaluation separate.
+Share curriculum mechanisms and useful findings with Mellum. This does not relax
+comprehensive training on the entire evolving production recipe.
+
 ## Adaptive production training (standing owner instructions, 2026-10-15)
 
 - **Best possible models as soon as possible is the objective. We are not

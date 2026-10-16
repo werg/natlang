@@ -85,6 +85,8 @@ def test_actual_shared_optimizer_updates_native_policy_graph_for_both_ports(tmp_
     if mode == 'grpo':
         negative = copy.deepcopy(episodes[0]); negative.update(sample=1, reward={'quality': 0})
         episodes.append(negative)
+    from test_rl_episode_graph import attach_execution_graph
+    attach_execution_graph(episodes)
     graphs, spec = prepare_objective(episodes, identity=identity, roles=roles,
                                     fetch_block=lambda key: block, mode=mode)
     path = tmp_path/'objective.json'; path.write_text(json.dumps(spec))
@@ -132,7 +134,8 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path):
         'sampling_law': {'temperature': 1., 'seed': 3, 'guidance': False, 'probabilities': 'post-processing-normalized'}}
     rollout = {'task_id': 'fixture-only', 'sample': 0, 'group': 0, 'split': 'train',
         'policy': {'checkpoint_sha256': identity['checkpoint_sha256']}, 'reward': {'quality': 1},
-        'turns': [{'messages': [], 'target': {}, 'sampling': capture, 'replay': {'raw_calls_retained': True}}]}
+        'turns': [{'messages': [], 'target': {}, 'invocation_id':'ordinary-policy',
+                   'sampling': capture, 'replay': {'raw_calls_retained': True}}]}
     source = tmp_path/'rollouts.jsonl'; source.write_text(json.dumps(rollout)+'\n')
     held = tmp_path/'held.jsonl'
     held.write_text(json.dumps({'schema': SCHEMA, 'id': 'held-fixture', 'split': 'test',

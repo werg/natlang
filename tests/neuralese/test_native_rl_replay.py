@@ -106,6 +106,8 @@ def test_native_policy_objective_prepares_whole_episode_and_uses_supplied_forwar
     episodes = [{'task_id': 'train-task', 'sample': sample, 'split': 'train', 'group': 'g',
                  'reward': {'quality': reward}, 'policy': {'checkpoint_sha256': identity['checkpoint_sha256']},
                  'turns': copy.deepcopy(raw_turns)} for sample, reward in enumerate((1, 0))]
+    from test_rl_episode_graph import attach_execution_graph
+    attach_execution_graph(episodes)
     graphs, spec = prepare_objective(episodes, identity=identity, roles=roles, fetch_block=lambda key: block)
     assert len(graphs) == 2 and all(len(graph['nodes']) == 2 for graph in graphs)
     spec_path = tmp_path / 'objective.json'

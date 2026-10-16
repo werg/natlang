@@ -68,6 +68,8 @@ def test_distinct_policy_two_actual_http_updates_and_restart(tmp_path,monkeypatc
     episodes=[{'task_id':'heterogeneous-actor-train','split':'train','sample':sample,'group':'same-task',
         'reward':{'quality':reward},'policy':{'checkpoint_sha256':engine.native_identity['checkpoint_sha256']},
         'turns':copy.deepcopy(rows)} for sample,reward in enumerate((1,0))]
+    from test_rl_episode_graph import attach_execution_graph
+    attach_execution_graph(episodes)
     fetch_block=lambda ident:engine.store.get_native_state(ident).block
     policy=invocation_behavior_policy(episodes,identity=engine.native_identity,roles=engine.role_tokens,fetch_block=fetch_block)
     owner=canonical_json_sha256_hex(policy)

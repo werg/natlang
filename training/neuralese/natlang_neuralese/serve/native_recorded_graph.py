@@ -85,6 +85,8 @@ def authenticated_turns(turns, events):
             raise ValueError('native recorded writes differ from actual captured producer artifacts')
         prepared.append({**copy.deepcopy(binding), 'sampling': copy.deepcopy(capture),
                          'receipt_id': native['id'], 'kind': kind})
+    from ..rl.episode_graph import validate_model_turn_coverage
+    validate_model_turn_coverage(linked, events)
     captured_writers={node for turn in prepared for node in turn['written_nodes'].values()}
     for turn in prepared:
         outside={block:node for block,node in turn['read_bindings'].items() if node not in captured_writers}

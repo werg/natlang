@@ -66,6 +66,8 @@ def test_whole_policy_stop_restart_preserves_all_moments_rng_and_exposure(tmp_pa
         'sample':sample,'reward':{'quality':quality},'policy':{'checkpoint_sha256':engine.native_identity['checkpoint_sha256']},
         'turns':copy.deepcopy(rows)} for sample,quality in enumerate((1,0))]
     fetch_block=lambda ident:engine.store.get_native_state(ident).block
+    from test_rl_episode_graph import attach_execution_graph
+    attach_execution_graph(episodes)
     behavior=invocation_behavior_policy(episodes,identity=engine.native_identity,roles=engine.role_tokens,fetch_block=fetch_block)
     def fetch(ident):
         return encode_native_tensor_artifact(engine.store.get_native_tensor_artifact(ident).artifact) if ident.startswith('nnt1_') else encode_native_state(fetch_block(ident))

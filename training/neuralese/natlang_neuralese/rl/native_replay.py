@@ -298,10 +298,10 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                 occurrence_binding = (item['turn'].get('read_bindings') or {}).get(block_id)
                 outside = (item['turn'].get('external_read_bindings') or {}).get(block_id)
                 if outside is not None:
-                    if (not structural or not isinstance(outside,str) or not outside
+                    if (not isinstance(outside,str) or not outside
                             or occurrence_binding is not None
                             or any(choice[3]==outside for choice in choices)):
-                        raise ValueError('native structural external origin must remain outside actual captured writer occurrences')
+                        raise ValueError('native external origin must remain outside actual captured writer occurrences')
                     choices = []
                 elif occurrence_binding is not None:
                     choices = [choice for choice in choices if choice[3] == occurrence_binding]
@@ -457,6 +457,12 @@ class NativePolicyObjective:
         self.rows = self.spec['rows']
         if not self.rows:
             raise ValueError('native policy objective has no admitted episodes')
+        for row in self.rows.values():
+            names = row.get('episode_turns')
+            if (not isinstance(names, list) or not names
+                    or any(not isinstance(name, str) or not name for name in names)
+                    or len(names) != len(set(names))):
+                raise ValueError('native policy objective needs its complete admitted episode-turn inventory')
         self.behavior_policy=self.spec.get('behavior_policy') if self.spec['schema']=='natlang.native-policy-objective/2' else None
         if self.spec['schema']=='natlang.native-policy-objective/2':
             self.identity=self.spec['base_native_identity']
@@ -648,6 +654,8 @@ class NativePolicyObjective:
         losses, count = [], 0
         for example in context['examples']:
             row = self.rows[example.id]
+            if set(row['episode_turns']) != {node.name for node in example.plan.invocations}:
+                raise ValueError('native policy graph omits or adds an admitted episode turn')
             # Bind objective coordinates to the exact source graph and masks,
             # rather than accepting same-shaped replacement training rows.
             from ..common.hashing import canonical_json_sha256_hex
@@ -689,16 +697,18 @@ def _require_scored_training_episode(rollout, identity):
     if not rollout.get('task_id') or not rollout.get('turns') or any(
             not (turn.get('replay') or {}).get('raw_calls_retained') for turn in rollout['turns']):
         raise ValueError('native RL episode lacks task identity or exact raw-call replay')
+    from .episode_graph import validate_rollout_graph
+    validate_rollout_graph(rollout)
 
 
 def invocation_behavior_policy(rollouts,*,identity,roles,fetch_block):
     """Bind actual scored train calls; a collector base header is not behavior."""
-    from .graph_replay import producer_turns
+    from .episode_graph import whole_episode_turns
     from ..common.hashing import canonical_json_sha256_hex
     episodes={}
     for rollout in rollouts:
         _require_scored_training_episode(rollout,identity)
-        turns=producer_turns(rollout)
+        turns=whole_episode_turns(rollout)
         actors=capture_invocation_actors(turns,identity)
         compile_replay(turns,identity=identity,roles=roles,fetch_block=fetch_block,invocation_actors=actors)
         key=canonical_json_sha256_hex(rollout)
@@ -713,7 +723,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
     from ..model.native_graph_plan import invocation_dict
     from ..data.native_graph import SCHEMA, parse_graph
     from ..common.hashing import canonical_json_sha256_hex
-    from .graph_replay import producer_turns
+    from .episode_graph import whole_episode_turns
     from .grpo import group_advantages
     from ..serve.store import native_state_id
     if behavior_policy is not None:
@@ -746,8 +756,12 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             actors=behavior_policy['episodes'].get(episode_key) if behavior_policy is not None else None
             if behavior_policy is not None and actors is None:
                 raise ValueError('native invocation behavior descriptor omits an admitted source episode')
-            replay = compile_replay(producer_turns(rollout), identity=identity, roles=roles, fetch_block=fetch_block,
+            replay = compile_replay(whole_episode_turns(rollout), identity=identity, roles=roles, fetch_block=fetch_block,
                                     invocation_actors=actors)
+            from .episode_graph import rollout_turn_names
+            episode_turns = rollout_turn_names(rollout['turns'])
+            if set(episode_turns) != {node.name for node in replay.plan.invocations}:
+                raise ValueError('native replay lost an actual whole-episode model turn')
             if binding_seen and adapter_binding != replay.adapter_binding:
                 raise ValueError('native RL objective cannot mix different adapter-bound actors')
             adapter_binding, binding_seen = replay.adapter_binding, True
@@ -773,6 +787,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
                 'external_states': external}
             example = parse_graph(graph, tokenizer_fingerprint=identity['tokenizer_fingerprint'])
             objective_rows[identifier] = {'graph_sha256': canonical_json_sha256_hex(graph_identity(example)),
+                'episode_turns': episode_turns,
                 'actions': list(replay.actions), 'advantage': float(advantage or 0.),
                 'external_consumption_receipts': replay.external_receipts or {},
                 **({'external_invocations':replay.external_invocations or {}} if replay.invocation_actors is not None else {}),

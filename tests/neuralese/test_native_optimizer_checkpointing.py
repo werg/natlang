@@ -107,6 +107,8 @@ def test_native_policy_in_backward_matches_deferred_exactly(tmp_path,family,mode
         for positive in episodes[:]:
             negative=copy.deepcopy(positive);negative.update(sample=1,reward={'quality':0})
             episodes.append(negative)
+    from test_rl_episode_graph import attach_execution_graph
+    attach_execution_graph(episodes)
     graphs,spec=prepare_objective(episodes,identity=identity,roles=roles,fetch_block=lambda _:block,mode=mode)
     spec['chunk_tokens']=chunk_tokens
     path=tmp_path/'objective.json';path.write_text(json.dumps(spec))

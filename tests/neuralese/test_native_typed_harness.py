@@ -163,7 +163,13 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
                 assert len(compiled.decision_actions)==2
                 assert not compiled.replay.external_blocks, 'both decisions consume the actual captured producer'
                 only_decisions=[turn for turn in recorded if turn['native']['kind']=='decision']
-                external=compile_recorded_graph(only_decisions,events,identity=identity,
+                with pytest.raises(ValueError,match='whole-episode graph model-turn inventory'):
+                    compile_recorded_graph(only_decisions,events,identity=identity,
+                        roles=engine.role_tokens,fetch_block=fetch)
+                decision_names={turn['native']['graph']['graph_turn'] for turn in only_decisions}
+                decision_events=[event for event in events if event['node'] in decision_names
+                    or event.get('turn') in decision_names]
+                external=compile_recorded_graph(only_decisions,decision_events,identity=identity,
                     roles=engine.role_tokens,fetch_block=fetch)
                 assert len(external.replay.external_blocks)==1
                 assert len(external.replay.plan.invocations)==4

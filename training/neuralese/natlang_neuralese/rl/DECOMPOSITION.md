@@ -31,6 +31,20 @@ LFM and Mellum; only backbone loading, chat templates and resource sizes differ.
 
 ## Crisp mechanisms and reuse
 
+Owner clarification (2026-10-16): Neuralese use is optional for reward and policy
+updates. A one-node ordinary execution can be a complete episode. Where the
+execution contains a communication graph, retain its entire captured model-turn
+inventory, sampled/forced writes and exact consumer occurrences. Reject a
+missing internal producer rather than loading its archived state as a detached
+constant. Explicit inputs originating outside this episode remain inputs.
+This is exact graph-coverage verification, separate from task selection policy.
+`episode_graph` authenticates the complete model-turn and captured state-event
+inventories. Explicit outside origins stay outside even when an equal content
+ID also has a local writer. Missing native graph events or unsupported decoded
+state lowering are rejected before policy admission; archive bytes cannot
+substitute for an omitted producer. Admitted objective rows retain the full
+turn-name inventory and verify it against the learner graph.
+
 - Native replacement: `native_replay` verifies actual sampled and forced input
   coordinates, resolves exact writer occurrences, and compiles the complete
   episode into one flattened invocation graph. State is the deterministic

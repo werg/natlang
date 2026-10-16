@@ -57,6 +57,8 @@ def test_actual_rl_external_optimized_state_archive_restore_and_objective(tmp_pa
                 'reward':{'quality':1-sample},'policy':{'checkpoint_sha256':engine.checkpoint_sha256},
                 'turns':[{'messages':messages,'target':reply['choices'][0]['message'],'invocation_id':'reader',
                     'sampling':capture,'replay':{'raw_calls_retained':True}}]})
+        from test_rl_episode_graph import attach_execution_graph
+        attach_execution_graph(episodes)
         from natlang_neuralese.rl.native_stage import prepare
         engine.tokenizer.save_pretrained(tmp_path/'rl-tokenizer')
         rows,spec=prepare(episodes,checkpoint=engine.native_checkpoint,tokenizer=tmp_path/'rl-tokenizer',bundle=bundle)

@@ -931,3 +931,13 @@ interactions including actual recovery/system-message paths before adopting the
 derived template. Existing 41/48 NVIDIA diagnostics include the strict-template
 failure and do not qualify this change. Continue qualified broad generation
 while preparing the fix; do not infer task lift from static rendering tests.
+
+## 2026-10-16: whole-episode policy capture validation
+
+Native RL admission and internal recorded-graph compilation now reject missing
+model turns, changed occurrence bindings and unsupported decoded-state gradient
+lowering. These are internal verifier errors; no prompt, task reward or public
+capability changes. Recovery restores the complete original episode and exact
+state occurrences, or implements the missing differentiable lowering. If these
+details reach the executing model, measure recovery in the next live window;
+mechanism tests alone do not qualify new model-facing error wording.

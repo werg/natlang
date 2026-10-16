@@ -155,6 +155,8 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
     episodes=[{'task_id':'train-adapter-task','split':'train','sample':sample,'group':'group',
         'reward':{'quality':reward},'policy':{'checkpoint_sha256':identity['checkpoint_sha256']},
         'turns':copy.deepcopy(rows)} for sample,reward in enumerate((1,0))]
+    from test_rl_episode_graph import attach_execution_graph
+    attach_execution_graph(episodes)
     def fetch(ident):
         if ident.startswith('nnt1_'):
             return encode_native_tensor_artifact(engine.store.get_native_tensor_artifact(ident).artifact)

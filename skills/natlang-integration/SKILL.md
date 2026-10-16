@@ -509,3 +509,9 @@ ordered system/recovery messages and use a qualified compatible server template.
 Do not move recovery instructions into the initial prompt or change their roles.
 The pinned Qwen compatibility renderer preserves originally valid renderings;
 its changed recovery path needs live executor qualification before adoption.
+
+For a whole-episode native gradient error, restore all original model turns and
+their execution-graph write/read occurrences before re-admission. Correct plain
+execution remains rewardable; do not add Neuralese traffic to pass a gate or
+replace an omitted in-episode producer with detached archived state. Decoded
+imports need their actual differentiable lowering, not relabeled provenance.
