@@ -201,9 +201,18 @@ def test_bootstrap_binds_actual_export_and_train_files_then_preserves_hot_config
     proof = {'adapter': adapter, 'curriculum': curriculum}
     completion = tmp_path/'shared-stage-completion.json'; completion.write_text(json.dumps(proof))
     monkeypatch.setattr(native_readiness, 'validate_completion', lambda *args: (proof, 'verified-fixture'))
-    monkeypatch.setattr(recipe, 'resolve_recipe_data', lambda path: {'stages': [
-        {'id': 'native_full_sft', 'kind': 'native_state_sft', 'parameters': {
-            'epochs': 1, 'task_eval': {'packet': 'held'}, 'task_eval_every': 5000}}]})
+    def production_recipe(path):
+        model=Path(path).name.removesuffix('-recipe.json')
+        # Pending-obligation inheritance resolves the complete parent stage;
+        # retain its real required source inputs in this bootstrap fixture.
+        sources={'native_graphs': tmp_path/(model+'-train.jsonl'),
+                 'held_native_graphs': tmp_path/(model+'-held.jsonl')}
+        return {'input_bindings': {role: {'path': str(source), 'sha256': sha256_file_hex(source)}
+                                  for role,source in sources.items()},
+            'stages': [{'id': 'native_full_sft', 'kind': 'native_state_sft',
+            'inputs': {role: role for role in sources},
+            'parameters': {'epochs': 1, 'task_eval': {'packet': 'held'}, 'task_eval_every': 5000}}]}
+    monkeypatch.setattr(recipe, 'resolve_recipe_data', production_recipe)
     runtime = tmp_path/'runtime/dist/teacher'; runtime.mkdir(parents=True)
     (runtime/'cli.js').write_text('// fixture build')
     models = []
