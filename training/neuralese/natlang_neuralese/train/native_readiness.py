@@ -376,8 +376,15 @@ def _launch_child(argv, kind, config, out, signature, rl_signature, *, semantic_
     # cmdline/environ view. Persisting that first miss loses the root identity
     # needed to adopt a live child after controller restart. The durable launch
     # token already exists, so interruption during this observation is safe.
+    # This is a bounded observation, not a prerequisite for running the child:
+    # wrappers may legitimately expose different argv, and a vanished process
+    # must never leave the controller stuck before supervision starts. Recovery
+    # can still find and drain token-owned descendants without a root identity.
     identity = _owned_process_identity(child.pid, launch)
-    while identity is None and child.poll() is None:
+    for _ in range(100):
+        if (identity is not None or child.poll() is not None
+                or not (Path('/proc') / str(child.pid)).exists()):
+            break
         time.sleep(.001)
         identity = _owned_process_identity(child.pid, launch)
     launch.update(status='running', identity=identity)

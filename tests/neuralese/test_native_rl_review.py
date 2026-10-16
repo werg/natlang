@@ -106,6 +106,36 @@ def test_child_launch_retries_transient_proc_identity_before_persisting(tmp_path
         child.terminate(); child.wait(timeout=5)
 
 
+def test_child_launch_identity_miss_does_not_block_supervision(tmp_path, monkeypatch):
+    from natlang_neuralese.train import native_readiness as controller
+    class Child:
+        pid = 2147483647
+        def poll(self): return None
+    child = Child()
+    monkeypatch.setattr(controller.subprocess, 'Popen', lambda *args, **kwargs: child)
+    monkeypatch.setattr(controller, '_owned_process_identity', lambda *args, **kwargs: None)
+    monkeypatch.setattr(controller.time, 'sleep', lambda _: pytest.fail('absent process must not be retried'))
+    observed, launch = controller._launch_child(['missing-fixture'], 'native-semantic', {}, tmp_path, 'execution', None)
+    assert observed is child and launch['identity'] is None
+    assert launch['status'] == 'running' and launch['token']
+
+
+def test_wrapper_argv_identity_miss_is_bounded_and_owned_tree_recoverable(tmp_path):
+    import sys
+    from natlang_neuralese.train import native_readiness as controller
+    script = tmp_path/'worker'
+    script.write_text('#!' + sys.executable + '\nimport time\ntime.sleep(300)\n')
+    script.chmod(0o700)
+    child, launch = controller._launch_child([str(script)], 'native-semantic', {}, tmp_path, 'execution', None)
+    try:
+        assert child.poll() is None and launch['identity'] is None
+        recovered = controller._recover_child(launch)
+        assert recovered is not None
+        assert any(entry['pid'] == child.pid for entry in controller._owned_tree(launch))
+    finally:
+        child.terminate(); child.wait(timeout=5)
+
+
 def test_restart_adopts_exact_live_child_and_drains_without_duplicate_launch(tmp_path, monkeypatch):
     import sys
     from natlang_neuralese.train import native_readiness as controller, loop
