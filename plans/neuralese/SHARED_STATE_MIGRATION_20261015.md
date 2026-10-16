@@ -131,11 +131,14 @@ are integrated (11fa82aff/e31371cdb). Optional FP32 coefficient cotangent
 carriers preserve stored BF16 forward values and fix cached/flat adjoint gaps;
 independent root actualCUDA integration passed26cases plus the repaired
 CPU-reference diagnostic oracle. Forward values remain bitwise identical;
-this does not enable production adaptedRL or claim task lift. Multi-update GRPO behavior/current actor
-separation, heterogeneous per-call bindings, full-backbone adapted export and
-higher-order derived graphs remain explicit unfinished paths in
+this does not enable production adaptedRL or claim task lift. Native adapter
+application, immutable restart and heterogeneous actor sampling/replay passed
+40 integrated actual CUDA/typed-HTTP tests in the independent root review on
+October16; supported adapter modes are now advertised. Remaining full-size
+cloud deployment, actual trained-weight multi-update adapted-RL qualification
+and higher-order derived graphs stay explicit in
 `shared-state/NATIVE_LEARNING_SERVICE_DECOMPOSITION_20261015.md`. Capability
-denial is not completion. The independent review and actual trained-weight
+denial is not completion. Independent review and actual trained-weight
 training/inference/transport qualification remain required.
 
 Pop is closed; DGX supervises all remaining work. The dedicated generation

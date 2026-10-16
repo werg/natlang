@@ -26,9 +26,14 @@ Native cached `/decide` and `/score` now use the shared renderer and the native
 Engine cache/step path. Named native tensor artifacts use a distinct content
 identity and the existing durable owner/pin/collection store. A composite
 checkpoint binds an immutable full native parent, named native parameter
-patch, and optimizer tensor state without rewriting the parent. Adapter application/creation and second-order execution
-remain open until their actual client paths and both-backbone validation land;
-capability denial is not counted as implementation.
+patch, and optimizer tensor state without rewriting the parent. Native `xs` and
+`tiny` adapter application/creation and exact actor replay are integrated.
+Independent root qualification on October16 passed40 actual CUDA/typed-HTTP,
+optimizer-restart, heterogeneous-actor and counted-FP8 tests. The service now
+advertises these adapter modes and same-base adapter-state consumption. This
+evidence covers the implemented small-backbone paths, not full-size cloud
+performance or task lift. Second-order execution remains open; capability
+denial is not counted as implementation.
 
 Native `/grad` accepts `natlang.native-gradient-request/1` with a native graph
 row, explicit `model-parameters` or `native-state` target, and either shared
@@ -60,10 +65,12 @@ The TS host exports explicit native graph-gradient and optimizer clients; they
 archive named gradients, parameter updates and optimizer state, and restore the
 state artifact before continuation. Identity equality compares exact fields
 independently of JSON property order. This does not reinterpret legacy flat
-value gradients as native graph requests. Adapters/direct-gradient/higher-order
-still need native implementations. Guided generation is implemented below. Capability denial remains explicit;
-requesting unsupported order/derived computations or adapter application is
-rejected before any native graph computation rather than silently ignored.
+value gradients as native graph requests. Supported native adapter application,
+coefficient gradients and immutable optimizer continuation use the shared
+mechanisms. Guided generation is implemented below. Higher-order derived
+computations still require implementation and both-backbone validation;
+unsupported requests are rejected before native computation. The advertised
+first-order boundary is a real remaining gap, not completion.
 Actual LFM and Mellum tests cover gradients, immutable full-backbone/interface
 updates, reload and alternating-target SGD/Adam continuation. Focused evidence
 is not cutover or task-quality qualification.

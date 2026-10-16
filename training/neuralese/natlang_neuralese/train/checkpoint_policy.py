@@ -1,10 +1,11 @@
 """Shared checkpoint policy (plans/STORAGE_POLICY.md, training/storage-policy.json "checkpoint_cadence").
 
-Evaluations and full-state writes happen ONLY at declared step points (owner 2026-10-10): a stage declares
-``eval_every`` (about 10-20 evenly spaced points per stage, the last at the stage end, where the stage gate runs) and
-``checkpoint_every`` (a multiple of it, sized from the measured step time to about every 3 h). Step points are
-reproducible and comparable across runs, resumes and machines; nothing runs on a wall clock. The rolling resumable slot
-is written at the checkpoint points, at the stage end, and when the process is asked to stop (SIGTERM: the full state,
+Evaluation and full-state writes follow the declared step cadence, optional
+wall-clock checkpoint cadence, stage completion and explicit stop requests.
+The supervisor may drain at an update boundary to adopt useful data or fixes;
+continuation retains the actual optimizer/RNG and exposure history.
+The rolling resumable slot
+is written at checkpoint points, at the stage end, and when the process is asked to stop (SIGTERM: the full state,
 within the stop grace the memory ledger gives every unit; no evaluation). "Best" is the best AMONG THOSE WRITES: when the
 evaluation of a write's point is the best so far, the written file is also published as ``best-checkpoint.pt`` by a hard
 link (no second write, never an extra write or evaluation for best).
@@ -166,8 +167,12 @@ class CheckpointPolicy:
         """Load a full training state while allowlisting TE's version metadata only."""
         from torch.torch_version import TorchVersion
 
+        from .checkpoint_readahead import enabled, advise_checkpoint
+        sequential = enabled()
         with torch.serialization.safe_globals([TorchVersion]):
             state = torch.load(path, map_location=map_location, mmap=True, weights_only=True)
+        if sequential:
+            advise_checkpoint(path)
         if expand_shared:
             from ..model.native_shared_checkpoint import SHARDED_SCHEMA, expand_shared as expand
             if state.get('schema') == SHARDED_SCHEMA:
