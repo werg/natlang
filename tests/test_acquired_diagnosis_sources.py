@@ -93,20 +93,22 @@ def test_d12_failed_actions_are_context_only_and_target_is_exact_reported_status
         lambda:iter([('upstream:expansion:D12:session:final',d12_session(evaluation))]))
     row_id,t=next(diagnosis.d12_feature_status_diagnoses())
     assert ':d12-feature-status:' in row_id and t.outcome['label']=='teacher'
-    assert t.messages[1]['role']=='tool'
-    context=json.loads(t.messages[1]['content'])
+    assert [message['role'] for message in t.messages]==['user','assistant']
+    instruction,separator,context_text=t.messages[0]['content'].partition('\n\n')
+    assert separator and instruction.startswith('Read the complete failed execution transcript')
+    context=json.loads(context_text)
     assert context['complete_failed_transcript'][1]['content']=='FAILED ACTION <|im_end|>'
-    assert '<|im_end|>' not in t.messages[1]['content']
+    assert '<|im_end|>' not in t.messages[0]['content']
     assert context['reported_evaluator_status']['features'][1]['passed'] is False
-    assert 'error' not in t.messages[1]['content']
-    target=json.loads(t.messages[2]['content'])
+    assert 'error' not in context_text
+    target=json.loads(t.messages[1]['content'])
     assert target=={'schema':'natlang.d12-reported-feature-status/1',
         'features':[{'feature':'feature1','passed':True},{'feature':'feature2','passed':False}],
         'both_passed':False,'apply_status':{'agent1':'applied','agent2':'applied'},
         'merge_status':'conflict',
         'exit_codes':{'feature1':0,'feature2':17}}
-    assert 'FAILED ACTION' not in t.messages[2]['content']
-    assert 'error' not in t.messages[2]['content']
+    assert 'FAILED ACTION' not in t.messages[1]['content']
+    assert 'error' not in t.messages[1]['content']
     provenance=t.lineage['notes']['source_reported_feature_status']
     assert provenance['review_kind']=='source-curated-reported-status'
     assert provenance['original_source_outcome']['label']=='failed'

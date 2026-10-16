@@ -8,8 +8,10 @@ is the exact structured status already reported by the source evaluator.
 1. Read the original D12 cooperation trajectory and its bound `eval.json`.
 2. Require a failed source outcome and a well-formed two-feature evaluation
    whose boolean `passed` fields agree with `both_passed == false`.
-3. Keep the complete observed transcript in a tool/context message. Do not
-   promote any assistant message from that failed transcript.
+3. Put the exact instruction, a blank line, and the complete serialized
+   transcript/evaluator context in one user message. This avoids an orphan tool
+   response in serving APIs. Do not promote any assistant message from the
+   failed transcript.
 4. Emit only the exact feature identifiers and pass booleans, plus structured
    `apply_status`, merge status and integer feature exit codes when present.
    Do not copy error prose or claim a cause, fix, local execution or oracle
@@ -21,3 +23,8 @@ is the exact structured status already reported by the source evaluator.
 The source annotation and safe derivation are natural-language policy. Exact
 source joining, schema checks, transcript serialization, target construction,
 hashes and split/protection verification are crisp shared adapter plumbing.
+
+
+The live-sample request uses the same single-user-message rendering as the
+derived training view. Its full transcript is input context at the existing
+context weight; the assistant target remains the exact structured status.

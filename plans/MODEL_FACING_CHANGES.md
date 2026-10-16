@@ -819,6 +819,7 @@ No new prompt policy and no production controller adoption are introduced.
   failed-session transcript and copy only the exact source-reported feature
   statuses and recorded status fields. The desired behavior is faithful
   extraction without causal diagnosis or repair claims; the full transcript is
-  tool context and failed actions are never positive targets. This new instruction
+  included after the instruction in the same user message, and failed actions
+  are never positive targets. This new instruction
   has not yet had the required live 48-sample self-hosted teacher measurement;
   record fidelity and any misleading wording as debt before production adoption.

@@ -84,7 +84,8 @@ def mascope_diagnosis_acquired(limit=None):
 def d12_feature_status_diagnoses(limit=None):
     """Derive only explicit D12 evaluator statuses from failed sessions.
 
-    Failed assistant turns remain serialized as tool context, never targets.
+    Failed assistant turns remain in the complete user-provided context, never
+    targets. The user message is a normal chat message, not an orphan tool reply.
     This is source-curated status supervision, not a cause/fix diagnosis.
     """
     from copy import copy, deepcopy
@@ -151,9 +152,12 @@ def d12_feature_status_diagnoses(limit=None):
                 raise Reject('D12 status view lacks exact archive/evaluation member receipts')
             context=json.dumps({'complete_failed_transcript':original.messages,
                 'reported_evaluator_status':reported},ensure_ascii=False,separators=(',',':'))
-            # Keep literal model control spellings as data inside the tool body.
+            # Keep literal model control spellings as data inside the context.
             context=context.replace('<','\\u003c')
             target=json.dumps(reported,ensure_ascii=False,separators=(',',':'))
+            instruction=('Read the complete failed execution transcript and its source-reported '
+                'evaluator status record. Copy only the exact structured feature statuses and '
+                'recorded status fields from that record; do not infer a cause or repair.')
             derived=copy(original)
             derived.lineage=deepcopy(original.lineage)
             view_digest=hashlib.sha256((source_id+'\0'+source_binding['evaluation_sha256']).encode()).hexdigest()
@@ -161,8 +165,7 @@ def d12_feature_status_diagnoses(limit=None):
             derived.family='source_reported_feature_status'
             derived.noun='source-reported feature status'
             derived.messages=[
-                {'role':'user','content':'Read the complete failed execution transcript and its source-reported evaluator status record. Copy only the exact structured feature statuses and recorded status fields from that record; do not infer a cause or repair.'},
-                {'role':'tool','content':context},
+                {'role':'user','content':instruction+'\n\n'+context},
                 {'role':'assistant','content':target}]
             derived.split_groups=list(dict.fromkeys([*derived.split_groups,
                 group_key('d12-feature-status-view',view_digest)]))
