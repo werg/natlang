@@ -111,7 +111,8 @@ class RMSNorm(nn.Module):
             # One Triton kernel each way (maple/norm_kernels.py), same rule; NATLANG_MAPLE_FUSED_NORM=0: eager/compiled.
             from .norm_kernels import fused_rms_norm
             return fused_rms_norm(x, weight, self.eps)
-        if (x.is_cuda and not _eager_depth and not _compiled_eager_depth.get()
+        if (x.is_cuda and not getattr(self, 'native_stable_norm', False)
+                and not _eager_depth and not _compiled_eager_depth.get()
                 and os.environ.get("NATLANG_MAPLE_COMPILE", "1") != "0"):
             global _rms_norm_compiled
             if _rms_norm_compiled is None:

@@ -452,6 +452,12 @@ class SharedStateModel(nn.Module):
         if min(marker_ids) < 0 or max(marker_ids) >= port.embedding_weight.shape[0]:
             raise ValueError('role markers must have actual input and output vocabulary rows')
         self.port = port
+        # One native arithmetic rule for graph, reference and real cached
+        # execution. Checkpoint-only compile bypass changes FP32 rounding.
+        from ..maple.model import RMSNorm
+        for module in port.modules():
+            if isinstance(module, RMSNorm):
+                module.native_stable_norm = True
         for name in ('control_rows', 'control_head_rows'):
             if hasattr(port, name):
                 getattr(port, name).requires_grad_(False)

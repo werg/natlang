@@ -29,3 +29,13 @@ actual CUDA (7.88 s, 2.2 GiB). The BF16 test asserts real fused-kernel calls on
 both forward and recompute. Ordinary uncheckpointed dispatch is unchanged;
 FP32 checkpoint execution uses the same eager rule already used by cached-port
 checkpointing, consistently rather than depending on mutable compiler caches.
+
+The full suite then exposed a second consequence: checkpoint-only eager FP32
+norms differ from compiled cached norms, and diagnostic TF32 projections amplify
+the rounding difference. Native model construction now selects the existing
+eager FP32 rule on its own Maple norm modules for every path, including cached
+serving, reference execution, final readout and uncheckpointed graph execution.
+This is per-model mechanism state derived from the native wrapper; ordinary
+non-native Maple models retain compiled dispatch. BF16/FP16 custom fused norms
+remain unchanged. Tests cover real cached action execution as well as the graph
+oracle, with unchanged forward/gradient tolerances and compiler independence.
