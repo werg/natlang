@@ -12,7 +12,7 @@ from scripts.neuralese_data.build_acquired_full_session_graphs import sessions
 from scripts.neuralese_data.prepare_acquired_session_admission import bound
 
 
-def propose(full_proposal, partition_receipt, declarations, *, cohort_root, identifier, output):
+def propose(full_proposal, partition_receipt, declarations, *, cohort_root, identifier, output, protection_continuation=None):
     root=Path(cohort_root).resolve(strict=True)
     original=json.loads(Path(full_proposal).read_text())
     receipt_path=Path(partition_receipt).resolve(strict=True);directory=receipt_path.parent
@@ -61,6 +61,20 @@ def propose(full_proposal, partition_receipt, declarations, *, cohort_root, iden
     proposal['build']['capacity_partition']={'path':str(receipt_path.relative_to(root)),
         'sha256':sha256_file_hex(receipt_path),'source_corpus_id':original['id'],
         'full_cohort_is_additional_training_source':False,'execution_qualified':False}
+    if protection_continuation is not None:
+        from scripts.neuralese_data.continue_acquired_protection import verify_certificate
+        certificate_path = Path(protection_continuation).resolve(strict=True)
+        certificate = verify_certificate(certificate_path, audit_sha256=original['build']['audit_sha256'])
+        for ref in certificate['dependencies']:
+            include.add(str((certificate_path.parent / ref['path']).resolve(strict=True).relative_to(root)))
+        include.add(str(certificate_path.relative_to(root)))
+        proposal['include'] = sorted(include)
+        proposal['build']['protection_continuation'] = {
+            'path': str(certificate_path.relative_to(root)), 'sha256': sha256_file_hex(certificate_path),
+            'new_protection': {**certificate['new_protection'], 'path': str(
+                (certificate_path.parent / certificate['new_protection']['path']).resolve(strict=True).relative_to(root))},
+            'eligibility_only': True, 'numeric_partition_unchanged': True}
+        proposal['training_admission_reason'] += ' Eligibility continued explicitly under the bound stricter connected-source protection; original numeric audit and partition remain unchanged.'
     write_json_durable(output,proposal)
     return proposal
 
@@ -69,9 +83,10 @@ def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     for name in ('full-proposal','partition-receipt','cohort-root','output'):parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--id',required=True);parser.add_argument('--declarations',required=True,help='JSON model-to-path map')
+    parser.add_argument('--protection-continuation',type=Path)
     args=parser.parse_args(argv)
     propose(args.full_proposal,args.partition_receipt,json.loads(args.declarations),cohort_root=args.cohort_root,
-        identifier=args.id,output=args.output)
+        identifier=args.id,output=args.output,protection_continuation=args.protection_continuation)
     return 0
 
 
