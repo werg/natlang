@@ -31,6 +31,7 @@ class CodecDependency:
     source_stop: int = 0
     source_logical: bool = False
     external_source: str | None = None
+    source_occurrence: str | None = None
 
     def validate(self):
         import re
@@ -41,6 +42,7 @@ class CodecDependency:
                 or self.source_node is not None and (not isinstance(self.source_node,str) or not self.source_node)
                 or self.external_source is not None and (not isinstance(self.external_source,str) or not self.external_source)
                 or type(self.source_logical) is not bool
+                or self.source_occurrence is not None and (not isinstance(self.source_occurrence,str) or not self.source_occurrence)
                 or any(type(value) is not int or value<0 for value in (self.source_start,self.source_stop))
                 or self.source_stop<self.source_start
                 or any(type(token) is not int or token<0 for token in (*self.source_token_ids,*self.target_token_ids))):
@@ -53,7 +55,8 @@ def _identity(block):
                                               'embedding_weight_sha256','architecture')}
 
 
-def execute_codec_graph(participants, plans, dependencies, *, channel, external_blocks=None):
+def execute_codec_graph(participants, plans, dependencies, *, channel, external_blocks=None,
+                        training_execution=None,behavior_channel=None):
     """Run every actual invocation once, preserving all cross-segment adjoints.
 
     Participants expose model/tokenizer/identity. The caller owns backend scopes,
@@ -63,6 +66,20 @@ def execute_codec_graph(participants, plans, dependencies, *, channel, external_
     if not isinstance(plans,dict) or not plans or not set(plans)<=set(participants):
         raise ValueError('semantic policy graph requires its actual loaded participant plans')
     dependencies=[dependency.validate() for dependency in dependencies]
+    if training_execution is not None:
+        import re
+        required={'schema','parent_checkpoint_sha256','parent_adapter_sha256','parent_step','step','behavior_adapter_sha256'}
+        if (not isinstance(training_execution,dict) or set(training_execution)!=required
+                or training_execution['schema']!='natlang.native-semantic-policy-execution/1'
+                or any(not isinstance(training_execution[key],str) or not re.fullmatch('[0-9a-f]{64}',training_execution[key])
+                       for key in ('parent_checkpoint_sha256','parent_adapter_sha256','behavior_adapter_sha256'))
+                or any(type(training_execution[key]) is not int or training_execution[key]<0 for key in ('parent_step','step'))
+                or training_execution['step']<training_execution['parent_step']
+                or training_execution['parent_adapter_sha256']!=channel.adapter_sha256
+                or behavior_channel is None or behavior_channel.adapter_sha256!=training_execution['behavior_adapter_sha256']):
+            raise ValueError('semantic policy update requires exact current parent/step and immutable behavior codec bindings')
+    elif behavior_channel is not None:
+        raise ValueError('a behavior codec is only valid in explicit semantic policy training execution')
     if len({dependency.input_name for dependency in dependencies})!=len(dependencies):
         raise ValueError('semantic policy dependency input names must be unique')
     codecs={dependency.input_name:dependency for dependency in dependencies}
@@ -83,7 +100,7 @@ def execute_codec_graph(participants, plans, dependencies, *, channel, external_
                        or edge.stop!=len(dependency.target_token_ids) or edge.logical
                        for name,edge in uses[dependency.input_name])
                 or dependency.source_node is not None and dependency.source_node not in nodes
-                or dependency.adapter_sha256!=channel.adapter_sha256):
+                or dependency.adapter_sha256!=(training_execution['behavior_adapter_sha256'] if training_execution is not None else channel.adapter_sha256)):
             raise ValueError('semantic dependency differs from its actual consumers/source/adapter')
     # Semantic edges require a later segment; raw edges in a segment remain one
     # masked graph. Stable declared node order controls equal-level scheduling.
@@ -126,8 +143,9 @@ def execute_codec_graph(participants, plans, dependencies, *, channel, external_
                 source=(exports[(dependency.source_node,dependency.source_start,dependency.source_stop,
                                  dependency.source_logical,dependency.text)] if dependency.source_node is not None
                         else external_blocks[dependency.external_source])
+                source_channel=behavior_channel if dependency.external_source is not None and training_execution is not None else channel
                 if (source.token_ids.tolist()!=list(dependency.source_token_ids) or source.text!=dependency.text
-                        or channel.model_name(source)!=dependency.source_model):
+                        or source_channel.model_name(source)!=dependency.source_model):
                     raise ValueError('semantic policy source differs from its exact retained producer span')
                 targets=[actor(reader) for reader,_ in uses[edge.source]]
                 if any(target!=targets[0] for target in targets):
@@ -138,7 +156,9 @@ def execute_codec_graph(participants, plans, dependencies, *, channel, external_
                         return channel.adapt(source,target_name=dependency.target_model,target_model=model,
                             target_tokenizer=participant.tokenizer,target_identity=target['native_identity'],
                             target_adapter_binding=target['adapter_binding'],allow_nearest=True,
-                            source_state_id=dependency.source_state_id)
+                            source_state_id=dependency.source_state_id,
+                            source_channel=source_channel if source_channel is not channel else None,
+                            training_execution=training_execution)
                 block,receipt=bank.execute(name,adapt) if bank is not None else adapt()
                 if (block.token_ids.tolist()!=list(dependency.target_token_ids)
                         or receipt['mode']!='learned-semantic-state-deltas'):
@@ -146,7 +166,8 @@ def execute_codec_graph(participants, plans, dependencies, *, channel, external_
                 decoded[edge.source]=block
                 execution.append({'kind':'semantic-codec','input':edge.source,'source_model':dependency.source_model,
                     'target_model':dependency.target_model,'adapter_sha256':dependency.adapter_sha256,
-                    'posterior':'mean','source_state_id':dependency.source_state_id})
+                    'posterior':'mean','source_state_id':dependency.source_state_id,
+                    **({'training_execution':dict(training_execution)} if training_execution is not None else {})})
                 execution.append({'kind':'semantic-target-baseline','participant':owner,
                                   'tokens':len(block.token_ids)+2})
         selected=[];blocks={};sizes={}

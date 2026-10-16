@@ -118,6 +118,8 @@ def validate_boundary(proof,adapter,curriculum):
     if proof.get('completed') is not True and proof.get('refresh_ready') is not True:
         raise ValueError('shared boundary is neither complete nor a qualified all-phase refresh')
     if proof.get('step')!=adapter.get('step'):raise ValueError('shared boundary step differs from exported checkpoint progress')
+    from .native_semantic_policy import validate_policy_boundary
+    validate_policy_boundary(proof,adapter,curriculum)
     source=PairedSource(proof['source_bindings']['train'],split='train')
     if proof['phases']!=curriculum['phases'] or proof['source_bindings']['train']!=curriculum['pairs']:
         raise ValueError('shared boundary changed its required curriculum/source')

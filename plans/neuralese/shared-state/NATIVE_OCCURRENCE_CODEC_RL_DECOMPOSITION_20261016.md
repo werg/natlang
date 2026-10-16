@@ -105,3 +105,72 @@ allocation OOM; the supervisor measured only6GiB MemFree after cache release and
 requested no blind retry while live evaluations/forensic decoding occupy memory.
 Thus this revision has no CUDA codec qualification yet; earlier raw occurrence
 CUDA evidence does not substitute for it. No serving capability was enabled.
+
+Joint policy-stage design (next delta, not yet enabled): the existing shared
+semantic loop owns participant optimizers, VAE optimizer, RNG, rolling checkpoint,
+qualification and export. `policy_training` declares its phase ID, immutable
+rollout/bundle/behavior-adapter sources, GRPO or RFT, epochs, semantic-update
+cadence and finite refresh quantum. Actual episodes are parsed by the existing
+capture compiler per participant, then their already authenticated foreign writer
+occurrences are reconnected before execution. Every call/action is included;
+ordinary one-call episodes remain eligible. The existing phase exposure map also
+holds committed policy episode visits, with required visits and explicit
+objective revisions; no ordinary-positive credit is awarded for rejected actions.
+
+Behavior adapter/identities authenticate original wire and densities. Current
+execution is a separately declared derivation from an exact shared-parent
+checkpoint/adapter and step. In-episode producers encode current state. An actual
+external compact code stays constant with its original identity while an explicit
+training-only decoder interpretation may learn; default serving compatibility
+stays exact and unchanged. No artifact is relabeled as a current-codec message.
+Only the existing shared durable checkpoint and new adapter export publish the
+updated weights/code for inference. Source admission and new actual policy-pair
+geometry remain capacity obligations, distinct from prior raw-graph proof.
+
+The joint policy-stage implementation now reuses the existing semantic loop,
+participant optimizers, codec optimizer, backend scopes, deferred joint backward,
+qualification and atomic export. Whole-source policy visits use the existing
+phase exposure ledger. Parameter changes retain earned visits and require a
+fresh visit only where none remains under the new objective; unvisited quotas do
+not inflate on each tweak. Changed modes cannot erase unfinished episodes;
+explicit supervised cancellations retain the original uncredited deficit.
+Policy refresh work is a finite declared quantum while full epoch deficits remain
+mandatory and checkpointed. A changed policy boundary also schedules the actual
+full final held evaluation after all declared visits, rather than inheriting an
+old pre-policy held result.
+
+Routing retains an entire collected batch whenever it contains a learned codec
+input. This preserves original relative-reward groups across ordinary and
+semantic episodes; no turn or captured producer is sent to a separate learner.
+Per-source GRPO/RFT and collecting-participant scope remain bound. Collection
+state owns one pending source until the shared coordinator durably enrolls it.
+Enrollment is distinct from earned visits: only checkpointed nonzero episode
+visits enter trained-task accounting. Reapplying an old deployment cannot clear
+a new pending batch, and restart does not recollect or launch a raw-only learner.
+The shared curriculum's `policy_schedule` supplies operational settings; actual
+sources are inserted only after collection, not represented by placeholder data.
+
+Actual CUDA component28 passed51.56s (3.1GiB peak). The actual shared-stage test
+uses serialized LFM+Mellum parents and the production Mellum FP8 loader/backend,
+all VAE/joint/distill plus two policy updates, exact both-model/VAE optimizer and
+weights, CPU/CUDA RNG and exposure across interruption/resume; it passed20.13s.
+That test exposed a real frozen-codec cache-miss bug: module construction consumed
+CPU RNG before saved weights replaced its random initialization. The shared
+loader now forks/restores only that construction's RNG; training startup does not
+restore a global serving RNG. Follow-up counters attest executed expert
+projections per phase. Source/progress/routing CPU7 passed0.88s; actual external
+historical-code/current-decoder law CPU4 passed2.10s, proving archived code and
+source identities stay unchanged and external encoders receive no fake gradient.
+These are mechanism/continuation results, not task lift or full-size H100 policy
+capacity qualification. Provider dependency transfer and independent integrated
+review remain required before sandbox adoption. Early bare-native RL bootstrap
+is being generalized separately: full communication foundation gates joint
+VAE/shared dialect, not ordinary/raw whole-episode RL.
+
+Final focused stage evidence: CUDA5 passed12.01s, including executed FP8
+projection counters; the separate actual-CUDA extension case passed10.29s after
+increasing policy epochs and changing clipping on a completed semantic parent.
+It performs exactly the additional owed policy update, preserves earlier semantic
+exposure and repeats the full final held evaluation for the new boundary. The
+combined CPU suite passed60 cases18.48s. Final quick checks cover the staged
+source. These checks do not qualify full-size cloud policy geometry or transfer.

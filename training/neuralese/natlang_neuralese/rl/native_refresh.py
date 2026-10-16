@@ -103,6 +103,8 @@ def refresh(*, adapter, updates, config, out, device='cuda', stop=None):
             'sha256':sha256_file_hex_cached(out/'shared-stage-completion.json')},
         'updated_participants': {name: {'path': str(Path(path).resolve()),
              'sha256': sha256_file_hex_cached(path)} for name, path in updates.items()}}
+    if value.get('policy_training_progress'):
+        deployment['policy_training_progress']=value['policy_training_progress']
     write_json_durable(out/'deployment.json', deployment)
     return deployment
 

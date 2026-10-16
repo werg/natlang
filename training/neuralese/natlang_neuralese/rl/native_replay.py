@@ -27,6 +27,7 @@ class NativeReplay:
     invocation_actors: dict | None = None
     external_invocations: dict | None = None
     semantic_dependencies: tuple = ()
+    written_sources: tuple = ()
 
 
 def _tokens(ids):
@@ -383,7 +384,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     key=f'semantic-input:{name}:{read_index}'
                     dependency=CodecDependency(key,'policy',**semantic,source_node=source_node,
                         source_start=start if choices else 0,source_stop=stop if choices else 0,
-                        external_source=external_source)
+                        external_source=external_source,source_occurrence=outside or occurrence_binding or (choices[0][3] if choices else None))
                     resolved_codecs.append(dependency.validate())
                     # Pending turns are revisited; append once only after all
                     # source dependencies have become executable.
@@ -415,7 +416,9 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
     plan = compile_graph(nodes, external_sizes={name:len(block.token_ids) for name,block in externals.items() if name in used})
     actions = tuple({**event, 'query': offset + event['local_query']}
         for offset, item in zip(plan.offsets, ordered) for event in item['events'])
-    return NativeReplay(plan, actions, externals, dict(identity), adapter_binding if invocation_actors is None else None, external_receipts, invocation_actors, external_invocations,tuple(semantic_dependencies))
+    written_sources=tuple({'state_id':ident,'invocation':name,'start':start,'stop':stop,'node':occurrence}
+        for ident,values in writers.items() for name,start,stop,occurrence in values)
+    return NativeReplay(plan, actions, externals, dict(identity), adapter_binding if invocation_actors is None else None, external_receipts, invocation_actors, external_invocations,tuple(semantic_dependencies),written_sources)
 
 
 def replay_logps(model, replay, *, checkpoint_layers=True, chunk_tokens=128,semantic_channel=None):

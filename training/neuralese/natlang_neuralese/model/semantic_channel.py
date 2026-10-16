@@ -39,9 +39,15 @@ class SemanticChannel:
         spec = state['vae_specification']
         if canonical_json_sha256_hex(spec) != receipt['specification_sha256']:
             raise ValueError('semantic adapter layout differs from its exact trained checkpoint')
-        vae = SemanticStateVAE.from_specification(spec).to(device)
-        vae.load_state_dict(state['vae_state'], strict=True)
-        vae.eval().requires_grad_(False)
+        # Initial module values are immediately replaced by immutable saved
+        # weights. A serving/archive cache miss must not consume training RNG,
+        # especially when the same behavior codec is reopened after resume.
+        target_device=torch.device(device)
+        devices=[target_device.index if target_device.index is not None else torch.cuda.current_device()] if target_device.type=='cuda' else []
+        with torch.random.fork_rng(devices=devices):
+            vae = SemanticStateVAE.from_specification(spec).to(device)
+            vae.load_state_dict(state['vae_state'], strict=True)
+            vae.eval().requires_grad_(False)
         tokenizers, bindings = {}, {}
         for name, model in receipt['models'].items():
             identity = model['native_identity']
@@ -105,21 +111,27 @@ class SemanticChannel:
             source_model=source_name, adapter_sha256=self.adapter_sha256).validate()
 
     def adapt(self, block, *, target_name, target_model, target_tokenizer, target_identity,
-              allow_nearest=False,source_state_id=None,target_adapter_binding=None):
+              allow_nearest=False,source_state_id=None,target_adapter_binding=None,
+              source_channel=None,training_execution=None):
         from .semantic_message import SemanticStateMessage, retained_source_offsets
         self.require_target(target_name, target_identity)
         if target_adapter_binding is not None:
             from .native_adapters import validate_state_binding
             from types import SimpleNamespace
             validate_state_binding(target_adapter_binding,SimpleNamespace(**target_identity))
+        if source_channel is not None and (training_execution is None or not isinstance(block,SemanticStateMessage)
+                or training_execution.get('behavior_adapter_sha256')!=source_channel.adapter_sha256
+                or training_execution.get('parent_adapter_sha256')!=self.adapter_sha256):
+            raise ValueError('historical semantic code requires explicit current training execution and exact behavior codec')
+        source_channel=source_channel or self
         message = block if isinstance(block, SemanticStateMessage) else self.message(block,source_state_id=source_state_id)
         message.validate()
-        source_name = self.model_name(message)
+        source_name = source_channel.model_name(message)
         if message.embeddings.shape[1] != self.vae.layouts[source_name].embedding_width:
             raise ValueError('semantic message source embedding width differs from its trained model')
-        if message.adapter_sha256 != self.adapter_sha256 or message.source_model != source_name:
+        if message.adapter_sha256 != source_channel.adapter_sha256 or message.source_model != source_name:
             raise ValueError('semantic message requires the exact trained adapter and source model')
-        offsets, policy = retained_source_offsets(self.tokenizers[source_name], message.text,
+        offsets, policy = retained_source_offsets(source_channel.tokenizers[source_name], message.text,
                                                  message.token_ids.detach().cpu().tolist())
         if offsets != message.offsets or policy != message.offset_policy:
             raise ValueError('semantic message source token IDs/offsets differ from its bound tokenizer')
@@ -134,8 +146,9 @@ class SemanticChannel:
         device = next(self.vae.parameters()).device
         code = message.code.to(device=device, dtype=next(self.vae.parameters()).dtype)
         receipt = {'source_model': source_name, 'adapter_sha256': self.adapter_sha256,
-                   'posterior': 'mean', 'source_native_identity': self.bindings[source_name],
-                   'source_offset_policy': message.offset_policy}
+                   'posterior': 'mean', 'source_native_identity': source_channel.bindings[source_name],
+                   'source_offset_policy': message.offset_policy,
+                   **({'training_execution':dict(training_execution)} if training_execution is not None else {})}
         alignment, matching = alignment_weights(message.offsets, target_tokens['offset_mapping'],
             device=device, allow_nearest=allow_nearest)
         matching['best_effort'] = matching['best_effort'] or message.offset_policy != 'exact-tokenizer-offsets'

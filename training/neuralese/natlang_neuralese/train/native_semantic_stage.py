@@ -124,6 +124,8 @@ def validate_config(config):
             if type(value) is not int or value<=0:raise ValueError('adaptive refresh needs positive updates for every phase')
     if config.get('held_eval_rows') is not None and (type(config['held_eval_rows']) is not int or config['held_eval_rows']<=0):
         raise ValueError('held_eval_rows must be a positive whole-graph count')
+    from .native_semantic_policy import validate_policy_training
+    validate_policy_training(config.get('policy_training'),[phase['id'] for phase in phases])
     return config
 
 
@@ -344,6 +346,9 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
     export['tokenizers'] = tokenizers
     export['semantic_obligations']=training.get('semantic_obligations')
     export['refresh_progress']=training.get('refresh_cycle')
+    if training.get('policy_training_phase'):
+        from .native_semantic_policy import checkpoint_progress
+        export['policy_training_progress']=checkpoint_progress(training)
     history=training.get('config_history') or []
     if history:
         qualified=history[-1]['config']
@@ -533,6 +538,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     last_config = None
     stream, cached_row = None, None
     stream_phase,stream_index=None,None
+    policy_source=None
     cursors = {}
     previous_manifest = manifest['signature']
     metrics = {}
@@ -549,6 +555,13 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                 train, held = _sources(updated, {'train': train.bindings, 'held': held.bindings})
                 stream = None
             config = updated
+            from .native_semantic_policy import PolicySource
+            if config.get('policy_training'):
+                policy_source=PolicySource(config['policy_training'],previous_sources=training.get('policy_source_history',[]))
+                training['policy_obligations']=policy_source.synchronize(training)
+            elif training.get('policy_obligations') and not training['policy_obligations']['complete']:
+                raise ValueError('semantic continuation cannot drop unfinished policy episode obligations')
+            else:policy_source=None
             resolver = ExternalArtifacts(config)
             cursors = {}
             training['config_history'].append({'step': training['step'], 'sha256': config_sha, 'config': config})
@@ -582,35 +595,66 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                 refresh_cycle,training.setdefault('refresh_source_cursors',{}))
         else:
             work=first_work(config['phases'],train.entries,participants,training['exposure'],cursors)
-        if work is None:
+        from .native_semantic_policy import policy_cycle_complete
+        policy_cycle=(policy_source.cycle(training,refresh_cycle['signature']) if policy_source is not None and refresh_cycle is not None else None)
+        policy_next=policy_source.next(training) if policy_source is not None else None
+        policy_due=bool(policy_next is not None and (policy_cycle is None or not policy_cycle_complete(policy_cycle))
+            and (work is None or training.get('semantic_updates',0)-training.get('last_policy_semantic_update',0)
+                 >=policy_source.declaration['every_semantic_updates']))
+        if policy_due:
+            policy_index,policy_entry=policy_next
+            policy_loaded=policy_source.load(policy_entry,device=device)
+            rollout,behavior,_=policy_loaded
+            active=set()
+            for turn in rollout['turns']:
+                matches=[name for name,identity in behavior.bindings.items() if identity==(turn.get('sampling') or {}).get('policy')]
+                if len(matches)!=1:raise ValueError('semantic policy source lost its exact participant identity')
+                active.add(matches[0])
+            if active-set(participants):raise ValueError('semantic policy source names an absent ready participant')
+            origin=training.get('policy_execution_origin')
+            if origin is None:
+                # The exact shared parent, including current codec, is durable
+                # before the first policy update. No frozen foreign model copy.
+                parent_export=save_shared(policy,participants,vae,optimizer,training=training,device=device)
+                origin={'checkpoint_sha256':parent_export['checkpoint']['sha256'],
+                    'adapter_sha256':sha256_file_hex_cached(out/'semantic-adapter.json'),
+                    'step':training['step'],'models':{name:{'native_identity':entry['native_identity']}
+                        for name,entry in parent_export['models'].items()}}
+                training['policy_execution_origin']=origin
+            phase={'id':policy_source.declaration['id'],'kind':'policy','epochs':policy_source.declaration['epochs'],
+                   'options':policy_source.declaration.get('options',{})}
+            row_id=policy_entry['id'];refresh_row_index=None
+        elif work is None:
             break
-        phase,row_id,pairs=work[:3]
-        refresh_row_index=work[3] if refresh_cycle is not None else None
-        if (stream_phase!=phase['id'] or (refresh_row_index is not None and stream_index is not None
+        else:
+            phase,row_id,pairs=work[:3]
+            refresh_row_index=work[3] if refresh_cycle is not None else None
+        if not policy_due and (stream_phase!=phase['id'] or (refresh_row_index is not None and stream_index is not None
                 and refresh_row_index<stream_index)):
             stream,cached_row=None,None
-        stream_phase,stream_index=phase['id'],refresh_row_index
-        if stream is None:
+        if not policy_due:stream_phase,stream_index=phase['id'],refresh_row_index
+        if not policy_due and stream is None:
             # Keep compressed JSONL sequential between neighboring updates.
             # A new epoch/new phase intentionally restarts the stream once.
             stream = train.rows()
-        row = cached_row if cached_row and cached_row['id'] == row_id else None
-        if row is None:
+        row = cached_row if not policy_due and cached_row and cached_row['id'] == row_id else None
+        if not policy_due and row is None:
             for candidate in stream:
                 if candidate['id'] == row_id:
                     row = candidate
                     break
-        if row is None:
+        if not policy_due and row is None:
             row = train.get(row_id)
             stream = None
-        cached_row = row
-        if canonical_json_sha256_hex(row) != train.bindings[row_id]:
+        if not policy_due:cached_row = row
+        if not policy_due and canonical_json_sha256_hex(row) != train.bindings[row_id]:
             raise ValueError('semantic training row changed under its exposure cursor')
-        active = {name for pair in pairs for name in pair}
+        if not policy_due:active = {name for pair in pairs for name in pair}
         selected = {name: participant for name, participant in participants.items() if name in active}
         options = {**config.get('options', {}), **phase.get('options', {})}
         for name, participant in participants.items():
             participant.optimizer.zero_grad(set_to_none=True)
+            if name in active:participant.model.port.checkpoint_layers=True
             _adjust_lr(participant.optimizer, options.get('backbone_lr', config['backbone_lr']),
                        options.get('learned_row_learning_rate',config.get('models',{}).get(name,{}).get(
                            'learned_row_learning_rate',config.get('learned_row_learning_rate'))),
@@ -624,12 +668,20 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         optimizer.zero_grad(set_to_none=True)
         vae.requires_grad_(phase['kind'] != 'distill')
         _adjust_lr(optimizer, options.get('vae_lr', config['vae_lr']))
+        for participant in selected.values():
+            if participant.backend is not None:participant.backend.reset_row_counts()
         with contextlib.ExitStack() as stack:
             for participant in selected.values():
                 if participant.backend is not None:
                     stack.enter_context(participant.backend.autocast())
-            loss, details = joint_loss(vae, selected, row, phase=phase['kind'], options=options,
-                                       fetch_external=resolver)
+            if policy_due:
+                from .native_semantic_policy import policy_loss
+                loss,details,actual_active=policy_loss(policy_source,policy_entry,participants,vae,training,origin,
+                    device=device,loaded=policy_loaded)
+                if actual_active!=active:raise ValueError('semantic policy forward changed its actual participant inventory')
+            else:
+                loss, details = joint_loss(vae, selected, row, phase=phase['kind'], options=options,
+                                           fetch_external=resolver)
             loss.backward()
         parameters = [parameter for participant in selected.values() for parameter in participant.model.parameters()
                       if parameter.requires_grad and parameter.grad is not None]
@@ -648,14 +700,25 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         if phase['kind'] != 'distill':
             optimizer.step()
         training['step'] += 1
+        backend_execution={name:participant.backend.collect_row_counts() for name,participant in selected.items()
+                           if participant.backend is not None}
+        for name,execution in backend_execution.items():
+            total=training.setdefault('phase_backend_execution',{}).setdefault(phase['id'],{}).setdefault(name,{})
+            total['updates']=total.get('updates',0)+1
+            for key,value in execution.items():total[key]=total.get(key,0)+value
         counts = training['exposure'].setdefault(phase['id'], {}).setdefault(row_id, {})
         # joint_loss includes every unordered pair of selected participants.
         consumed_obligations=0
-        for a, b in itertools.combinations(sorted(selected), 2):
+        for a, b in (() if policy_due else itertools.combinations(sorted(selected), 2)):
             key = pair_key(a, b)
             consumed_obligations+=int(counts.get(key,0)<phase['epochs'])
             counts[key] = counts.get(key, 0) + 1
-        if refresh_cycle is not None:
+        if policy_due:
+            policy_source.committed(training,policy_index,policy_entry)
+            training['last_policy_semantic_update']=training.get('semantic_updates',0)
+            if policy_cycle is not None:policy_cycle['completed_updates']+=1
+        else:training['semantic_updates']=training.get('semantic_updates',0)+1
+        if refresh_cycle is not None and not policy_due:
             refresh_schedule.committed(training,refresh_cycle,phase,refresh_row_index,len(train.entries))
         obligations=training['semantic_obligations']
         obligations['remaining_pair_visits']-=consumed_obligations
@@ -664,13 +727,14 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         metrics = {'step': training['step'], 'phase': phase['id'], 'source_row': row_id,
                    'loss': float(loss.detach()), 'gradient_norm': float(norm), 'details': details,
                    'seconds': time.time() - started,
+                   'backend_execution':backend_execution,
                    'learning_rates':{name:participant.optimizer.native_learning_rates
                                      for name,participant in participants.items()}}
         training['source_bindings'] = {'train': train.bindings, 'held': held.bindings}
         training['participants_signature'] = manifest['signature']
         if training['step'] % config['eval_every'] == 0:
             held_metrics,coverage=refresh_schedule.held_evaluation(participants,vae,held,
-                phase=phase['kind'],options=options,resolver=resolver,coverage=training.get('held_coverage'),
+                phase='joint' if policy_due else phase['kind'],options=options,resolver=resolver,coverage=training.get('held_coverage'),
                 rows=config.get('held_eval_rows'))
             training['held_coverage']=coverage
             metrics['held']=held_metrics;metrics['held_loss']=held_metrics['loss'];metrics['held_rows']=held_metrics['rows']
@@ -694,11 +758,16 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
     from . import native_semantic_refresh as refresh_schedule
     training['semantic_obligations']=refresh_schedule.exposure_summary(config['phases'],train,participants,training['exposure'])
     refresh_cycle=refresh_schedule.initialize(training,config,manifest)
-    refresh_reached=refresh_schedule.complete(refresh_cycle)
+    from .native_semantic_policy import policy_cycle_complete,checkpoint_progress
+    policy_complete=not training.get('policy_obligations') or training['policy_obligations']['complete']
+    refresh_reached=refresh_schedule.complete(refresh_cycle) and policy_cycle_complete(training.get('policy_refresh_cycle'))
     exposure_complete, missing = _exposure_complete(config['phases'], train, participants, training['exposure'])
-    final_coverage_key=canonical_json_sha256_hex({'train':train.binding,'held':held.binding,'phases':config['phases']})
+    final_coverage_key=canonical_json_sha256_hex({'train':train.binding,'held':held.binding,'phases':config['phases'],
+        **({'policy_training':config['policy_training'],'policy_progress':checkpoint_progress(training),
+             'policy_exposure':training['exposure'].get(config['policy_training']['id'],{})}
+           if config.get('policy_training') else {})})
     publication_boundary=refresh_cycle is None or refresh_reached
-    final_due=exposure_complete and publication_boundary and training.get('full_held_curriculum')!=final_coverage_key
+    final_due=exposure_complete and policy_complete and publication_boundary and training.get('full_held_curriculum')!=final_coverage_key
     if final_due:
         metrics['held'],training['held_coverage']=refresh_schedule.held_evaluation(participants,vae,held,
             phase='joint',options=config.get('options',{}),resolver=resolver,coverage=training.get('held_coverage'),final=True)
@@ -708,7 +777,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             phase='joint',options=config.get('options',{}),resolver=resolver,coverage=training.get('held_coverage'),rows=config.get('held_eval_rows'))
     export = save_shared(policy, participants, vae, optimizer, training=training, device=device)
     complete, missing = _exposure_complete(config['phases'], train, participants, training['exposure'])
-    complete=bool(complete and publication_boundary)
+    complete=bool(complete and publication_boundary and policy_complete)
     certificates = {}
     tasks = {}
     semantic_certificate=None
@@ -754,7 +823,7 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
             write_json_durable(path,transport)
             semantic_certificate={'path':str(path.resolve()),'sha256':sha256_file_hex_cached(path),'passed':transport['passed']}
         numerics_ready=all(value['passed'] for value in certificates.values())
-        complete = bool(exposure_complete and numerics_ready and (metrics.get('held') or {}).get('scope')=='full')
+        complete = bool(exposure_complete and policy_complete and numerics_ready and (metrics.get('held') or {}).get('scope')=='full')
     configuration = out/'completed-curriculum.json'
     write_json_durable(configuration, config)
     current_checks=bool(certificates and all(value['passed'] for value in certificates.values())
@@ -776,6 +845,8 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
         'task_execution_receipts': tasks,
         'production_ready':bool((complete or refresh_reached) and current_checks),
         'task_lift': 'not-claimed', 'metrics': metrics}
+    if training.get('policy_training_phase'):
+        report['policy_training_progress']=checkpoint_progress(training)
     write_json_durable(out/'shared-stage-completion.json', report)
     return report
 

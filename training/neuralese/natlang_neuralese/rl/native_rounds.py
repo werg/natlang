@@ -200,6 +200,8 @@ def apply_deployment(config, deployment):
         from .production import initial_controller_state
         state = json.loads(path.read_text()) if path.exists() else initial_controller_state(config)
         name = config['native_participant']
+        from .native_semantic_route import accept_policy_deployment
+        accept_policy_deployment(config,state,deployment)
         pending = state.get('pending_native_checkpoint')
         if pending:
             accepted = deployment.get('updated_participants', {}).get(name)
@@ -264,7 +266,8 @@ def _run_rounds(config_paths, out, *, rounds=None, device='cuda', stop):
                 if not all(config.get('production_recipe') for config in configs):
                     raise ValueError('all native learners must declare their mandatory production recipe')
                 pending_rl=any((Path(config['out'])/'state.json').exists() and
-                    json.loads((Path(config['out'])/'state.json').read_text()).get('pending_native_checkpoint')
+                    (lambda state:state.get('pending_native_checkpoint') or state.get('pending_semantic_source'))(
+                        json.loads((Path(config['out'])/'state.json').read_text()))
                     for config in configs)
                 if not pending_rl:
                     from .native_supervised import interleave
@@ -297,7 +300,9 @@ def _run_rounds(config_paths, out, *, rounds=None, device='cuda', stop):
                 if config.get('coefficient_policy') and state.get('phase')=='collect'
                 and (state.get('last_learner_progress') or {}).get('schema')=='natlang.native-coefficient-training-report/1'
                 and state['last_learner_progress'].get('qualification_complete') is True}
+            policy_sources=[state['pending_semantic_source'] for state in states if state.get('pending_semantic_source')]
             semantic_pending=(json.loads(Path(adapter).read_text()).get('semantic_obligations') or {}).get('complete') is False
+            semantic_pending=semantic_pending or bool(policy_sources)
             if not updates and not semantic_pending and coefficient_updates:
                 write_json_durable(coefficient_latest,{'schema':'natlang.native-coefficient-rounds/1',
                     'next_round':cycle+1,'policies':coefficient_updates,
@@ -315,7 +320,11 @@ def _run_rounds(config_paths, out, *, rounds=None, device='cuda', stop):
             if not updates and not semantic_pending:
                 return {'phase': 'await_useful_rollouts_or_data', 'states': states, 'production_complete': False}
             directory = out/f'round-{cycle:06d}'
-            deployment = refresh_job(configs, adapter, updates, next(iter(semantic_configs)), directory, device, stop)
+            semantic_config=next(iter(semantic_configs))
+            if policy_sources:
+                from .native_semantic_route import policy_curriculum
+                semantic_config=policy_curriculum(semantic_config,policy_sources,directory/'policy-curriculum.json')
+            deployment = refresh_job(configs, adapter, updates, semantic_config, directory, device, stop)
             # All external actors receive the whole joint publication, not
             # only the model which happened to finish its learner first.
             for config in configs:

@@ -406,6 +406,13 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 write_json_durable(state_path, state)
                 return state
             config = resolve_recipe_data(config_path)
+            if state.get('pending_semantic_source'):
+                if defer_native_refresh:return state
+                from .native_semantic_route import publish_pending
+                publish_pending(config,state,stop=stop)
+                write_json_durable(state_path,state)
+                completed+=1
+                continue
             if not config.get('after_update') and not config.get('actor_command'):
                 raise ValueError('configure after_update before learning: every endpoint needs new weights')
             cases = list(read_jsonl(config['cases']))
@@ -529,7 +536,9 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                              reason='all rollout outcomes unscored; no learning signal')
                 write_json_durable(state_path, state)
                 raise RuntimeError('RL collector infrastructure failed; repair and retry retained round with fresh attempt')
-            if report.get('scored') == report.get('successes'):
+            from .native_semantic_route import has_semantic_inputs
+            semantic_batch=bool(config.get('native_state') and has_semantic_inputs(rows))
+            if report.get('scored') == report.get('successes') and not semantic_batch:
                 state.update(round=state['round'] + 1, offset=(selection[-1]['row'] + 1) % len(cases),
                              phase='collect', collection_attempt=0)
                 write_json_durable(state_path, state)
@@ -574,6 +583,21 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 values['rollouts'] = state['update_rollouts']
                 rft_stages = state.get('update_stages', ['all'])
             values['mode'] = mode
+            if semantic_batch and mode in {'grpo','rft'}:
+                from .native_semantic_route import bind_policy_source,publish_pending
+                source=bind_policy_source(config,values,rows,mode)
+                previous=state.get('pending_semantic_source')
+                if previous is not None and previous!=source:
+                    raise ValueError('pending semantic batch changed before joint admission')
+                state.update(phase='awaiting_semantic_refresh',pending_semantic_source=source,
+                    pending_semantic_round_dir=str(round_dir),
+                    pending_semantic_next_offset=(selection[-1]['row']+1)%len(cases))
+                write_json_durable(state_path,state)
+                if defer_native_refresh or (control is not None and control.stop.requested):return state
+                publish_pending(config,state,stop=stop)
+                write_json_durable(state_path,state)
+                completed+=1
+                continue
             if config.get('coefficient_policy') and state.get('active_update_round')!=str(round_dir):
                 state['update_coefficient_policy']={'path':values['coefficient_policy'],'sha256':values['coefficient_policy_sha256']}
             state.update(phase='updating', update_mode=mode, active_update_round=str(round_dir),

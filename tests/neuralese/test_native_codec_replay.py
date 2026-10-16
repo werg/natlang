@@ -9,24 +9,27 @@ from natlang_neuralese.serve.store import native_state_id
 from natlang_neuralese.rl.native_replay import compile_replay,replay_logps
 
 
-def captured(tmp_path,family):
-    participants,channel,_,_=case(tmp_path,family,family)
+def captured(tmp_path,family,target=None,return_participants=False,loaded=None):
+    target=target or family
+    if loaded is None:participants,channel,_,_=case(tmp_path,family,target)
+    else:participants,channel=loaded
     participant=participants[family];model=participant.model;identity=participant.identity
+    target_participant=participants[target];target_model=target_participant.model
     roles=RoleTokens(*model.marker_ids);device=model.input_rows.device
-    def step(ids,cache=None,producing=False):
-        return native_step(model,torch.tensor([ids],device=device),cache,producing=producing)
-    def capture(prompt):
-        return {'schema':'natlang.native-rl-sampling/1','policy':identity,'prompt':prompt,
+    def step(ids,cache=None,producing=False,active=model):
+        return native_step(active,torch.tensor([ids],device=device),cache,producing=producing)
+    def capture(prompt,active_identity=identity):
+        return {'schema':'natlang.native-rl-sampling/1','policy':active_identity,'prompt':prompt,
             'samples':[],'writes':[],'sample_range_convention':'half-open','finish_reason':'stop',
             'sampling_law':{'temperature':.8,'seed':3,'guidance':False,'probabilities':'post-processing-normalized'}}
-    def sample(out,record,tokens):
+    def sample(out,record,tokens,active=model):
         chunks=[]
         for index,(token,producing) in enumerate(tokens):
-            logp=model.logits(out['h_final'][:,-1]).float().div(.8).log_softmax(-1)[0,token]
+            logp=active.logits(out['h_final'][:,-1]).float().div(.8).log_softmax(-1)[0,token]
             record['samples'].append({'index':index,'token_id':token,'logp':float(logp),
                 'input_role':'produce' if producing else 'ordinary','terminal':token==2})
             if token!=2:
-                out=step([token],out['cache'],producing)
+                out=step([token],out['cache'],producing,active)
                 if producing:chunks.append(out)
         return out,chunks
     with torch.no_grad():
@@ -37,21 +40,22 @@ def captured(tmp_path,family):
         raw_id=native_state_id(raw);message=channel.message(raw);wire_id=native_state_id(message)
         writer['writes']=[{'state_id':wire_id,'raw_state_id':raw_id,'begin_sample':0,'end_sample':4,
             'payload_begin':1,'payload_end':3,'native_identity':identity}]
-        decoded,receipt=channel.adapt(message,target_name=family,target_model=model,
-            target_tokenizer=participant.tokenizer,target_identity=identity,allow_nearest=True,source_state_id=wire_id)
+        decoded,receipt=channel.adapt(message,target_name=target,target_model=target_model,
+            target_tokenizer=target_participant.tokenizer,target_identity=target_participant.identity,allow_nearest=True,source_state_id=wire_id)
         observed_id=native_state_id(decoded)
-        reader=capture([{'kind':'tokens','token_ids':[7,roles.consume_open],'producing':[False,False]},
-            {'kind':'native_state','id':observed_id,'source_state_id':wire_id,'native_identity':identity,
+        target_roles=RoleTokens(*target_model.marker_ids)
+        reader=capture([{'kind':'tokens','token_ids':[7,target_roles.consume_open],'producing':[False,False]},
+            {'kind':'native_state','id':observed_id,'source_state_id':wire_id,'native_identity':target_participant.identity,
              'semantic_adaptation':receipt,'source_occurrence':'actual-write'},
-            {'kind':'tokens','token_ids':[roles.consume_close],'producing':[False]}])
-        prefix=step([7,roles.consume_open]);cache=splice_block(model,prefix['cache'],decoded,
-            **{key:value for key,value in identity.items() if key!='architecture'})
-        sample(step([roles.consume_close],cache),reader,[(9,False),(2,False)])
+            {'kind':'tokens','token_ids':[target_roles.consume_close],'producing':[False]}],target_participant.identity)
+        prefix=step([7,target_roles.consume_open],active=target_model);cache=splice_block(target_model,prefix['cache'],decoded,
+            **{key:value for key,value in target_participant.identity.items() if key!='architecture'})
+        sample(step([target_roles.consume_close],cache,active=target_model),reader,[(9,False),(2,False)],target_model)
     turns=[{'graph_turn':'writer','sampling':writer,'written_nodes':{wire_id:'actual-write'}},
         {'graph_turn':'reader','sampling':reader,'read_bindings':{wire_id:'actual-write'},'read_occurrences':[
             {'index':0,'id':observed_id,'source_state_id':wire_id,'node':'actual-read','source':'actual-write'}]}]
     blocks={raw_id:raw,wire_id:message,observed_id:decoded}
-    return participant,channel,roles,blocks,turns
+    return participants if return_participants else participant,channel,roles,blocks,turns
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
