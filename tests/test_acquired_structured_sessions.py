@@ -133,3 +133,26 @@ def test_malformed_context_is_explicit_and_other_original_contexts_survive(monke
     rows(monkeypatch,'D19',row,'traces/condition/rep.json.gz')
     result=list(acquired.agent_collusion_raw_acquired())
     assert isinstance(result[0][1],Reject) and result[1][1].messages[-1]['content']=='reflection'
+
+
+def test_legacy_function_calls_and_named_feedback_preserve_source_bytes():
+    raw=[{'role':'assistant','content':None,'function_call':{'name':'inspect','arguments':'{"file":"a"}'}},
+         {'role':'function','name':'inspect','content':'{"name":"observed","arguments":"this is feedback"}'}]
+    for normalized in (agents._openai_messages(raw),agents.expansion_messages(raw)):
+        assert len(normalized)==2
+        assert normalized[0]['tool_calls'][0]['function']==raw[0]['function_call']
+        assert normalized[1]['role']=='tool' and normalized[1]['name']=='inspect'
+        assert normalized[1]['content']==raw[1]['content']
+    with pytest.raises(Reject,match='conflicting'):
+        agents._openai_messages([{**raw[0],'tool_calls':[{'function':{'name':'other'}}]}])
+
+
+def test_correct_negative_verdict_is_not_itself_an_actor_failure(monkeypatch):
+    row=collusion();actor=row['results'][0]['agents']['alice']
+    actor.update(true_expected_verdict='fail',verdict_correct=True,reward=10)
+    rows(monkeypatch,'D19',row,'traces/condition/rep.json.gz')
+    _,t=next(acquired.agent_collusion_raw_acquired())
+    assert t.outcome['label']=='teacher' and t.outcome['details']['reported_true_expected_verdict']=='fail'
+    actor['extraction_eval']={'quality_verdict':'fail'}
+    rows(monkeypatch,'D19',row,'traces/condition/rep.json.gz')
+    assert next(acquired.agent_collusion_raw_acquired())[1].outcome['label']=='failed'

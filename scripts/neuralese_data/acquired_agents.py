@@ -418,7 +418,7 @@ def agent_collusion_raw_acquired(limit=None):
                             'llm_usage':[usage for usage in episode.get('llm_usage') or [] if usage.get('actor')==actor],
                             'reasoning_alignment':alignment}
                         checks=[agent.get(key) for key in ('extraction_eval','data_search_eval','code_eval','code_assessment')]
-                        failed=agent.get('verdict_correct') is False or agent.get('true_expected_verdict')=='fail'
+                        failed=agent.get('verdict_correct') is False
                         failed=failed or any(isinstance(check,dict) and (check.get('quality_verdict')=='fail'
                             or check.get('passed') is False or check.get('correct') is False) for check in checks)
                         if agent.get('reward') is not None and float(agent['reward'])<=0:failed=True

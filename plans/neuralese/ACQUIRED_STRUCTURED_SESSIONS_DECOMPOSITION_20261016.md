@@ -76,3 +76,12 @@ Local qualification, 2026-10-16:
 - Tracked-file quick check passed. Admission, complete source conversion,
   protected split closure and actual training exposure remain separate steps;
   this format proof does not claim task success or locally verified source quality.
+
+Independent review correction: named legacy `function` feedback and assistant
+`function_call` use the shared OpenAI normalizer, preserving exact call arguments
+and observed response text. Named feedback cannot become a dispatch merely
+because its JSON result contains `name` and `arguments`. For D19, an expected
+negative verdict alone is not actor failure: a correct negative evaluation can
+be useful teacher behavior. Failure classification uses reported incorrect
+verdict, nonpositive reward or actual failed task-check results; expectation is
+retained as a separate source fact, never a local oracle.

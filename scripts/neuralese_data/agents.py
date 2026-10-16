@@ -45,6 +45,8 @@ def _openai_messages(raw: list, *, reasoning_key="reasoning_content", parse_call
         role = m.get("role")
         if role == "developer":
             role = "system"
+        elif role == "function":
+            role = "tool"  # legacy OpenAI named function observation
         if role not in ("system", "user", "assistant", "tool"):
             continue
         content = m.get("content")
@@ -59,6 +61,11 @@ def _openai_messages(raw: list, *, reasoning_key="reasoning_content", parse_call
         if reasoning is not None and not isinstance(reasoning,str):
             reasoning=json.dumps(reasoning,ensure_ascii=False)
         calls = m.get("tool_calls")
+        legacy=m.get("function_call")
+        if legacy is not None:
+            if role!="assistant" or calls or not isinstance(legacy,dict) or not isinstance(legacy.get("name"),str):
+                raise Reject("unsupported or conflicting original legacy function call")
+            calls=[{"id":legacy.get("id"),"function":legacy}]
         if isinstance(calls, str) and parse_calls:
             calls = parse_calls(calls)
         norm_calls = []
@@ -495,6 +502,8 @@ def expansion_messages(raw):
                                   {'id': call.get('id'), 'type': 'function',
                                    'function': {'name': call['name'], 'arguments': call.get('arguments', '{}')}}
                                   for call in item['tool_calls']]
+        if item.get('role') == 'function' and (item.get('name') or item.get('tool_call_id')):
+            item['role']='tool'  # named feedback is never a dispatch inferred from its JSON body
         if item.get('role') == 'function':
             # Evidence-subagent Qwen transcripts use this role for dispatches,
             # while legacy OpenAI transcripts use it for observations.
