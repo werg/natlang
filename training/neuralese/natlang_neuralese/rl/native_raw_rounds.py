@@ -336,64 +336,67 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
             counts={row['model']:0 for row in plan['models']}
             eligible=set();rendezvous=False;active={}
             with ThreadPoolExecutor(max_workers=len(plan['models'])) as pool:
-                while True:
-                    updated=json.loads(plan_path.read_text())
-                    if (updated.get('schema')!=plan['schema'] or
-                            {row['model']:row['handoff_requirement']['model_id'] for row in updated['models']}!=
-                            {row['model']:row['handoff_requirement']['model_id'] for row in plan['models']}
-                            or {row['model']:{key:row['handoff_requirement'].get(key) for key in
-                                ('foundation_sources','foundation_epochs','readiness_boundary')} for row in updated['models']}!=
-                               {row['model']:{key:row['handoff_requirement'].get(key) for key in
-                                ('foundation_sources','foundation_epochs','readiness_boundary')} for row in plan['models']}):
-                        raise ValueError('live raw plan cannot silently replace a student optimizer owner')
-                    plan=updated
-                    state['plan_sha256']=sha256_file_hex_cached(plan_path)
-                    models={row['model']:row for row in plan['models']}
-                    if not stop.requested and not rendezvous:
-                        for name,model in models.items():
-                            if name in active or (cycles is not None and counts[name]>=cycles):continue
-                            witness=model.get('handoff_receipt')
-                            if witness is None:
-                                candidate=out/'handoffs'/(name+'.json')
-                                if candidate.is_file():witness=binding(candidate)
-                            if witness is not None:
-                                # Published eligibility is informational while this
-                                # student's optimizer is owned by another cycle.
-                                active[name]=(pool.submit(student_cycle,plan_path,model,witness,out/name,stop=stop),witness)
-                    write_json_durable(state_path,state)
-                    if not active:
-                        if rendezvous and eligible!=set(models):
-                            rendezvous=False
-                        if rendezvous:
-                            state['released']=True;write_json_durable(state_path,state)
-                            if validate_release(state_path,plan_path,allow_live=True) is not None:return state
-                            state['released']=False;rendezvous=False;eligible.clear()
-                        if stop.requested or (cycles is not None and all(counts[name]>=cycles for name in models)):
-                            write_json_durable(state_path,state);return state
-                        time.sleep(poll_seconds);continue
-                    finished,_=wait([value[0] for value in active.values()],timeout=poll_seconds,return_when=FIRST_COMPLETED)
-                    for name,(future,witness) in list(active.items()):
-                        if future not in finished:continue
-                        try:cursor=future.result()
-                        except BaseException:
-                            # Drain sibling-owned workers rather than waiting
-                            # indefinitely while their coordinator has failed.
-                            stop.requested=True
-                            write_json_durable(state_path,state)
-                            raise
-                        del active[name];counts[name]+=1
-                        config=json.loads((out/name/'config.json').read_text())
-                        state['models'][name]={'handoff':witness,'checkpoint':_current_checkpoint(config),
-                            'config':binding(out/name/'config.json'),
-                            'production_state':binding(Path(config['out'])/'state.json'),
-                            **({'resident_current':cursor['resident_current']} if cursor.get('resident_current') else {}),
-                            **({'readiness':cursor['readiness']} if cursor.get('readiness') else {})}
-                        if cursor.get('readiness'):eligible.add(name)
-                        else:eligible.discard(name)
-                    # Do not idle the first eligible student. Only after every
-                    # student has reached an actual eligible boundary do we stop
-                    # resubmitting and drain their currently owned operations.
-                    if eligible==set(models):rendezvous=True
+                try:
+                    while True:
+                        updated=json.loads(plan_path.read_text())
+                        if (updated.get('schema')!=plan['schema'] or
+                                {row['model']:row['handoff_requirement']['model_id'] for row in updated['models']}!=
+                                {row['model']:row['handoff_requirement']['model_id'] for row in plan['models']}
+                                or {row['model']:{key:row['handoff_requirement'].get(key) for key in
+                                    ('foundation_sources','foundation_epochs','readiness_boundary')} for row in updated['models']}!=
+                                   {row['model']:{key:row['handoff_requirement'].get(key) for key in
+                                    ('foundation_sources','foundation_epochs','readiness_boundary')} for row in plan['models']}):
+                            raise ValueError('live raw plan cannot silently replace a student optimizer owner')
+                        plan=updated
+                        state['plan_sha256']=sha256_file_hex_cached(plan_path)
+                        models={row['model']:row for row in plan['models']}
+                        if not stop.requested and not rendezvous:
+                            for name,model in models.items():
+                                if name in active or (cycles is not None and counts[name]>=cycles):continue
+                                witness=model.get('handoff_receipt')
+                                if witness is None:
+                                    candidate=out/'handoffs'/(name+'.json')
+                                    if candidate.is_file():witness=binding(candidate)
+                                if witness is not None:
+                                    # Published eligibility is informational while this
+                                    # student's optimizer is owned by another cycle.
+                                    active[name]=(pool.submit(student_cycle,plan_path,model,witness,out/name,stop=stop),witness)
+                        write_json_durable(state_path,state)
+                        if not active:
+                            if rendezvous and eligible!=set(models):
+                                rendezvous=False
+                            if rendezvous:
+                                state['released']=True;write_json_durable(state_path,state)
+                                if validate_release(state_path,plan_path,allow_live=True) is not None:return state
+                                state['released']=False;rendezvous=False;eligible.clear()
+                            if stop.requested or (cycles is not None and all(counts[name]>=cycles for name in models)):
+                                write_json_durable(state_path,state);return state
+                            time.sleep(poll_seconds);continue
+                        finished,_=wait([value[0] for value in active.values()],timeout=poll_seconds,return_when=FIRST_COMPLETED)
+                        for name,(future,witness) in list(active.items()):
+                            if future not in finished:continue
+                            cursor=future.result()
+                            del active[name];counts[name]+=1
+                            config=json.loads((out/name/'config.json').read_text())
+                            state['models'][name]={'handoff':witness,'checkpoint':_current_checkpoint(config),
+                                'config':binding(out/name/'config.json'),
+                                'production_state':binding(Path(config['out'])/'state.json'),
+                                **({'resident_current':cursor['resident_current']} if cursor.get('resident_current') else {}),
+                                **({'readiness':cursor['readiness']} if cursor.get('readiness') else {})}
+                            if cursor.get('readiness'):eligible.add(name)
+                            else:eligible.discard(name)
+                        # Do not idle the first eligible student. Only after every
+                        # student has reached an actual eligible boundary do we stop
+                        # resubmitting and drain their currently owned operations.
+                        if eligible==set(models):rendezvous=True
+                except BaseException:
+                    # The executor drains only after every owned worker has
+                    # observed this shared stop, including config/IO failures.
+                    stop.requested=True
+                    state['released']=False
+                    try:write_json_durable(state_path,state)
+                    except Exception:pass  # Preserve the original failure, including storage errors.
+                    raise
             return state
     finally:
         if owned:stop.restore()

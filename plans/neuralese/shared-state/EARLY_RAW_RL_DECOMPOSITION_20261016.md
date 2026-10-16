@@ -106,3 +106,8 @@ Original launch and terminal records are also copied byte-for-byte into immutabl
 handoff evidence. Their original path/SHA bindings remain explicit for requirement
 matching, while later legitimate writes to the operational control slots cannot
 invalidate that historical drain proof. A source/snapshot digest mismatch rejects.
+
+Every coordinator failure inside its executor forwards the shared safe stop
+before waiting for owned workers to drain, including malformed hot-plan or
+storage failures. The original exception is preserved; failure-state writes
+cannot replace it with a secondary storage exception.

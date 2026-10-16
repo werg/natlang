@@ -406,3 +406,31 @@ def test_immutable_recipe_copy_never_overwrites_changed_original(tmp_path):
     source.write_text('changed-authority')
     with pytest.raises(ValueError):raw._restore_recipe_alias(reference,raw.binding(copy))
     assert source.read_text()=='changed-authority'
+
+
+def test_hot_plan_failure_stops_owned_sibling_before_executor_drains(tmp_path,monkeypatch):
+    import time
+    from threading import Event
+    started=Event();drained=Event();stop=SimpleNamespace(requested=False)
+    plan=tmp_path/'plan.json';out=tmp_path/'out'
+    write_json_durable(plan,{'schema':'natlang.native-raw-rl-bootstrap/1','models':[
+        {'model':name,'handoff_receipt':{'path':'protocol'},'handoff_requirement':{'model_id':name}}
+        for name in ('slow','hot-plan')]})
+    monkeypatch.setattr(raw,'validate_release',lambda *a,**k:None)
+    def student(path,declaration,witness,directory,*,stop):
+        if declaration['model']=='slow':
+            started.set();deadline=time.monotonic()+3
+            while not stop.requested and time.monotonic()<deadline:drained.wait(.005)
+            assert stop.requested,'coordinator failed without forwarding stop to its owned worker'
+            drained.set();return {}
+        assert started.wait(3)
+        write_json_durable(plan,{'schema':'changed-invalid-plan','models':[]})
+        directory.mkdir(parents=True,exist_ok=True);parent=directory/'parent';parent.write_bytes(b'protocol')
+        state=directory/'production/state.json';state.parent.mkdir()
+        write_json_durable(state,{'checkpoint':str(parent)})
+        write_json_durable(directory/'config.json',{'out':str(state.parent)})
+        return {}
+    monkeypatch.setattr(raw,'student_cycle',student)
+    with pytest.raises(ValueError,match='live raw plan'):
+        raw.run(plan,out,stop=stop,poll_seconds=.01)
+    assert drained.is_set() and stop.requested
