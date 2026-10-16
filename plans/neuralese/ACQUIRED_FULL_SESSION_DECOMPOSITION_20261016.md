@@ -30,3 +30,25 @@ The pinned source-ref to complete-session adapter lookup is shared in
 through the existing `agents.CORPORA` registry. The lookup is crisp plumbing
 because a ref must select exactly one already-authored adapter. Session
 normalization and source-quality interpretation remain in the shared adapters.
+
+## Observed numeric settings and shared compressed input
+
+D12 source qualification isolated a thread-sensitive FP32 reduction in the
+existing segmented role weights. Tokens, masks, provenance and all non-weight
+fields were exact; replaying the captured calculation at20 threads reproduced
+the original entire vector exactly. The historical worker environment was not
+recorded and remains unknown. No data was rewritten and no tolerance changed.
+
+Future static-text and complete-session receipts record the actual Torch/Python
+versions, Torch thread counts, default dtype and OMP/MKL environment. Each
+complete-session shard records its own observed settings, including after a
+resume. These observations do not constrain continuation or reset row credits.
+Source sample qualification uses the selected shard's recorded Torch threads,
+restores the caller's setting even after failure, and distinguishes an explicit
+legacy reference override from known historical metadata.
+
+The static text converter also reuses common.jsonio's existing compressed
+reader, including symlink resolution and long-window handling. A file symlink
+previously skipped by the direct zstd wrapper must never produce empty success.
+Focused source-reader, numeric-reference, full-session and preference tests
+passed27 cases; the integrated offline-source/optimizer suite passed34 cases.

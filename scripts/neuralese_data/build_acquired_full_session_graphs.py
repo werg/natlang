@@ -19,7 +19,7 @@ from natlang_neuralese.data.text_corpus import (native_gold_document, native_gol
     native_gold_rendered_text, tokenizer_fingerprint)
 from natlang_neuralese.model.native_model import tokenizer_inventory
 from natlang_neuralese.serve.chat import bind_history_reasoning
-from scripts.neuralese_data.build_native_graph_text_corpus import GraphWriter
+from scripts.neuralese_data.build_native_graph_text_corpus import GraphWriter, numerical_runtime
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import provision
 from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
 from scripts.neuralese_data.decision_holds import load_decision_holds
@@ -81,7 +81,7 @@ def runtime_bindings(root=None):
     files = {name: {'sha256': sha256_file_hex(path)} for name, path in paths.items()}
     observed_paths = {name: str(path.resolve()) for name, path in paths.items()}
     return {'files': files, 'fingerprint': canonical_json_sha256_hex(files),
-            'observed_paths': observed_paths}
+            'observed_paths': observed_paths, 'numerical_runtime': numerical_runtime()}
 
 
 def _record_uncommitted_cleanup(shard_root, directory):
@@ -488,7 +488,8 @@ def _convert(args, prepared):
             'source_record_start': shard_start, 'source_record_stop': shard_stop,
             'source_record_count': shard_stop - shard_start, 'counts': dict(shard_counts),
             'outputs': [{**output, 'path': str(Path(output['path']).relative_to(shard_dir))} for output in outputs],
-            'omissions_sha256': sha256_file_hex(omissions_path), 'runtime': runtime,
+            'omissions_sha256': sha256_file_hex(omissions_path),
+            'runtime': {**runtime, 'numerical_runtime': numerical_runtime()},
             'source_sha256': digest, 'protection': protection['proof'], 'decision_holds': decision_bindings,
             'source_tokenizer_fingerprint': source_fp, 'expanded_tokenizer_fingerprint': expanded_fp}
         receipt_path = shard_dir / 'receipt.json'

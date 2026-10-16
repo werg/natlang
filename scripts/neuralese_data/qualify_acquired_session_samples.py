@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import json
 from pathlib import Path
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
 from natlang_neuralese.common.jsonio import write_json_durable
-from scripts.neuralese_data.build_acquired_full_session_graphs import sessions, session_graphs, prepare_tokenizer
+from scripts.neuralese_data.build_acquired_full_session_graphs import sessions, session_graphs, prepare_tokenizer, numerical_runtime
 from scripts.neuralese_data.prepare_acquired_session_admission import bound
 
 
@@ -43,7 +44,30 @@ def proposal_with_samples(audit_path, sample_path):
     return target
 
 
-def qualify(audit_path, models, out):
+@contextmanager
+def conversion_threads(recorded, override=None):
+    """Use recorded per-shard threads; legacy settings remain explicitly unknown."""
+    import torch
+    previous=torch.get_num_threads()
+    target=override if override is not None else (recorded or {}).get('torch_threads')
+    if target is not None and (type(target) is not int or target<1):
+        raise ValueError('source reference torch threads must be a positive integer')
+    try:
+        if target is not None and target!=previous:torch.set_num_threads(target)
+        yield numerical_runtime()
+    finally:
+        if torch.get_num_threads()!=previous:torch.set_num_threads(previous)
+
+
+def recorded_runtime(receipt, ordinal):
+    for shard in receipt.get('shards') or []:
+        if shard['start']<=ordinal<shard['stop']:
+            path=bound(shard['path'],shard)
+            return (json.loads(path.read_text()).get('runtime') or {}).get('numerical_runtime')
+    return (receipt.get('runtime') or {}).get('numerical_runtime')
+
+
+def qualify(audit_path, models, out, *, torch_threads=None):
     audit_path = Path(audit_path); before = sha256_file_hex(audit_path)
     audit = json.loads(audit_path.read_text())
     if (audit.get('schema') != 'natlang.acquired-session-admission-audit/1'
@@ -61,7 +85,7 @@ def qualify(audit_path, models, out):
         prepared = prepare_tokenizer(base)
         picks = {proof['normalized_session_sha256']: proof for proof in selected[model].values()}
         picked_original_files = {proof['original_source']['sha256'] for proof in picks.values()}
-        observed = {key: [] for key in picks}; original = {}; receipts = []
+        observed = {key: [] for key in picks}; original = {}; receipts = []; numerical = {}
         for conversion in audit['conversions']:
             if conversion['model'] != model: continue
             receipt_path = bound(conversion['receipt']['path'], conversion['receipt'])
@@ -72,11 +96,12 @@ def qualify(audit_path, models, out):
             if json.loads(export_path.read_text())['contract']['source']['sha256'] not in picked_original_files:
                 continue
             source_path = bound(receipt['source']['path'], receipt['source'])
-            for value in sessions(source_path):
+            for ordinal,value in enumerate(sessions(source_path)):
                 digest = canonical_json_sha256_hex(value)
                 if digest in picks:
                     if digest in original: raise ValueError('sample source occurrence is duplicated')
                     original[digest] = value
+                    numerical[digest] = recorded_runtime(receipt,ordinal)
                     receipts.append({'normalized_session_sha256': digest, 'source': receipt['source'],
                         'conversion_receipt': conversion['receipt']})
             for output in conversion['outputs']:
@@ -87,16 +112,20 @@ def qualify(audit_path, models, out):
         if set(original) != set(picks): raise ValueError('sample lost its exact original normalized source')
         for digest, proof in picks.items():
             value = original[digest]
-            expected = list(session_graphs(value, prepared.tokenizer,
-                source_fingerprint=prepared.source_fingerprint,
-                expanded_fingerprint=prepared.expanded_fingerprint, split=proof['split']))
+            with conversion_threads(numerical[digest],torch_threads) as reference_runtime:
+                expected = list(session_graphs(value, prepared.tokenizer,
+                    source_fingerprint=prepared.source_fingerprint,
+                    expanded_fingerprint=prepared.expanded_fingerprint, split=proof['split']))
             views = compare_views(expected, observed[digest])
             reports.append({'model': model, 'selection': [kind for kind, selected_proof in selected[model].items()
                 if selected_proof['normalized_session_sha256'] == digest],
                 'normalized_session_sha256': digest, 'original_source': value['source_file'],
                 'original_source_row': value['source_row'], 'source_outcome': value['trajectory']['outcome'],
                 'tokenizer': prepared.binding, 'bindings': [r for r in receipts if r['normalized_session_sha256'] == digest],
-                'exact_entire_graph_equal': True, 'views': views})
+                'exact_entire_graph_equal': True, 'views': views,
+                'recorded_conversion_numerical_runtime': numerical[digest],
+                'reference_numerical_runtime': reference_runtime,
+                'explicit_reference_thread_override': torch_threads})
         prepared.validate(base)
     if sha256_file_hex(audit_path) != before: raise ValueError('cohort audit changed during source-backed samples')
     result = {'schema': 'natlang.acquired-session-source-render-samples/1', 'passed': True,
@@ -116,11 +145,13 @@ def main(argv=None):
     parser.add_argument('--audit', type=Path, required=True)
     parser.add_argument('--model', action='append', required=True, help='NAME=actual pinned tokenizer base')
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--torch-threads', type=int,
+        help='explicit current reference for legacy conversions whose original setting was not recorded')
     args = parser.parse_args(argv)
     items = [item.split('=', 1) for item in args.model]
     if any(len(item) != 2 for item in items) or len(dict(items)) != len(items):
         raise ValueError('models require distinct NAME=actual pinned tokenizer base bindings')
-    qualify(args.audit, dict(items), args.out)
+    qualify(args.audit, dict(items), args.out, torch_threads=args.torch_threads)
 
 
 if __name__ == '__main__':

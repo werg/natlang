@@ -15,6 +15,7 @@ import tempfile
 
 from transformers import AutoTokenizer
 from natlang_neuralese.common.hashing import sha256_file_hex as sha256
+from natlang_neuralese.common.jsonio import iter_jsonl_rows
 
 from natlang_neuralese.data.native_graph_conversion import text_row_graph, whole_trajectory_text_row_graph
 from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
@@ -22,20 +23,18 @@ from natlang_neuralese.model.shared_state import ROLE_MARKERS
 
 
 def read_jsonl_zstd(path):
-    proc = subprocess.Popen(['zstd', '-dcq', str(path)], stdout=subprocess.PIPE)
-    try:
-        for number, raw in enumerate(proc.stdout, 1):
-            try:
-                yield json.loads(raw)
-            except json.JSONDecodeError as exc:
-                raise ValueError(f'{path}:{number}: invalid JSON') from exc
-        code = proc.wait()
-        if code:
-            raise RuntimeError(f'zstd decompression failed with status {code}: {path}')
-    finally:
-        if proc.poll() is None:
-            proc.terminate()
-            proc.wait()
+    for _, row in iter_jsonl_rows(path):
+        yield row
+
+
+def numerical_runtime():
+    """Observed conversion settings, kept outside source/resume fingerprints."""
+    import sys
+    import torch
+    return {'torch_version': str(torch.__version__), 'python_version': sys.version.split()[0],
+            'torch_threads': torch.get_num_threads(), 'torch_interop_threads': torch.get_num_interop_threads(),
+            'torch_default_dtype': str(torch.get_default_dtype()),
+            'thread_environment': {key: os.environ.get(key) for key in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS')}}
 
 
 class GraphWriter:
@@ -159,7 +158,8 @@ def main():
         'conversion': ('static one-node graphs; whole-trajectory rows preserve all roles, weight assistant targets, '
                        'downweight prompt/runtime-opening/tool context, and exclude failed assistant actions; '
                        'no inferred native edges'),
-        'whole_trajectory_supervision': whole_policy if any(row['rows'] for row in whole_policy.values()) else None}
+        'whole_trajectory_supervision': whole_policy if any(row['rows'] for row in whole_policy.values()) else None,
+        'numerical_runtime': numerical_runtime()}
     args.output.mkdir(parents=True, exist_ok=True)
     temp_receipt = args.output / '.receipt.json.tmp'
     temp_receipt.write_text(json.dumps(receipt, indent=2) + '\n')
