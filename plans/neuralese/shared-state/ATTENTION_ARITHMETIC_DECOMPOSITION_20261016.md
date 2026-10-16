@@ -88,3 +88,17 @@ mode explicitly. These exact identity/durability paths share the original model
 loader, optimizer and artifact mechanisms. Default IEEE serialized forms remain
 unchanged. Source review confirms shared semantic checkpoints retain complete
 model configs and ordinary RL/preference execution uses the shared trainer.
+
+The full-parent numerical observer is
+`scripts/neuralese_data/qualify_native_attention_arithmetic.py`. It is an exact
+verifier, not an adoption policy. It uses the existing capacity executor and
+its unarmed optimizer/RNG/backend/parameter guards, compares the actual loss,
+hidden outputs and every observed named parameter adjoint under explicitly
+declared tolerances, and records all unobserved trainables. Reference adjoints
+spill one at a time to temporary storage; timing runs omit serialization and
+comparison. Both numerical passes warm their kernels before one whole-graph
+timing per mode. That timing is preliminary, not a stable throughput estimate.
+The CLI binds the actual imported package, saved parent, source row and original
+capacity identity. This does not grant a new capacity certificate or task
+qualification. Run it on actual normal and long source geometry before cloud
+arithmetic adoption; graph/cached qualification remains separately required.
