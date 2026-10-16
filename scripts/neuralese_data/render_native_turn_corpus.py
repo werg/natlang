@@ -1438,10 +1438,30 @@ def _verify_group_receipt(receipt, group_id, group_dir, tok_name, renderings, co
 def _verify_legacy_done_binding(job, done_result, renderer_sha, source_digest):
     if renderer_sha != LEGACY_SEARCH_RENDERER_SHA256:
         raise ValueError('legacy renderer SHA is not an approved historical migration witness')
-    if done_result.get('trajectories_committed') is None:
-        raise ValueError('legacy done marker lacks its committed trajectory count')
     if done_result.get('source_sha256') not in (None, source_digest):
         raise ValueError('legacy done marker source SHA differs from selected shard')
+    if done_result.get('trajectories_committed') is None:
+        # The original Search renderer wrote aggregate-only markers. They have
+        # no per-trajectory receipts and are never trusted as reusable output:
+        # this migration queues the selected shard for a complete source-based
+        # rerender, which writes the current receipt only after every group is
+        # independently committed. Accept only that exact old marker shape.
+        legacy_only = {'renderer_code_sha256', 'render_job_binding',
+                       'aggregate_outputs', 'trajectory_bindings',
+                       'trajectory_renderers'}
+        if any(key in done_result for key in legacy_only):
+            raise ValueError('legacy done marker has an incomplete current receipt')
+        if not isinstance(done_result.get('records'), int) or done_result['records'] < 0:
+            raise ValueError('legacy done marker lacks its selected-record count')
+        if done_result.get('shard') != Path(job[0]).name.removesuffix('.zst').removesuffix('.jsonl'):
+            raise ValueError('legacy done marker shard identity differs from selected input')
+        if done_result.get('tokenizer') != job[2]:
+            raise ValueError('legacy done marker tokenizer differs from selected job')
+        for mode in job[9]:
+            if not isinstance(done_result.get(mode), int) or done_result[mode] < 0:
+                raise ValueError(f'legacy done marker lacks a valid {mode} count')
+    elif not isinstance(done_result.get('trajectories_committed'), int):
+        raise ValueError('legacy done marker has an invalid committed trajectory count')
 
 
 def _filter_render_jobs(jobs, selected_shards):

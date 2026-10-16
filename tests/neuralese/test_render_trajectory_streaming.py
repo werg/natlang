@@ -366,10 +366,24 @@ def test_legacy_done_marker_requires_exact_source_and_old_renderer_witness(tmp_p
     result = renderer.render_shard(job)
     old_sha = renderer.LEGACY_SEARCH_RENDERER_SHA256
     old_done = {key: value for key, value in result.items()
-                if key not in {'source_sha256', 'renderer_code_sha256', 'group_renderer_code_sha256s'}}
+                if key not in {'source_sha256', 'renderer_code_sha256', 'group_renderer_code_sha256s',
+                               'trajectories_committed', 'aggregate_outputs',
+                               'trajectory_bindings', 'trajectory_renderers',
+                               'render_job_binding'}}
     renderer._verify_legacy_done_binding(job, old_done, old_sha, renderer.file_sha(selected))
     with __import__('pytest').raises(ValueError, match='approved historical migration witness'):
         renderer._verify_legacy_done_binding(job, old_done, 'c' * 64, renderer.file_sha(selected))
+    # The prior Search renderer emitted aggregate-only markers. Those are
+    # accepted solely as rerender triggers; current/incomplete receipts cannot
+    # omit the trajectory count and bypass group validation.
+    incomplete_current = dict(old_done, render_job_binding='0' * 64)
+    with __import__('pytest').raises(ValueError, match='incomplete current receipt'):
+        renderer._verify_legacy_done_binding(job, incomplete_current, old_sha,
+                                              renderer.file_sha(selected))
+    with __import__('pytest').raises(ValueError, match='selected-record count'):
+        renderer._verify_legacy_done_binding(job, {key: value for key, value in old_done.items()
+                                                    if key != 'records'}, old_sha,
+                                              renderer.file_sha(selected))
 
 
 def test_render_subset_selects_only_named_shards():
