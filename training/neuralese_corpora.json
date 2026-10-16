@@ -110629,6 +110629,71 @@
           "requires_actual_capacity_certificate": true
         }
       }
+    },
+    {
+      "build": {
+        "audit": "admission-acquired-d16-full-session-native-20261016-v2/audit.json",
+        "audit_sha256": "bc23f690f4a90e791f3bab10f099ae1ccc105d0d316eaddbf6790d8984fd2634",
+        "source_render_samples": {
+          "path": "admission-acquired-d16-full-session-native-20261016-v2/source-render-samples.json",
+          "sha256": "7bfa717a47de5a7980b21a81a7abcdde975b85b8b55c7e7ddfbc92aa10d71186"
+        }
+      },
+      "documents": {
+        "lfm25": {
+          "graphs:test": 164,
+          "graphs:train": 1497,
+          "max_row_tokens": 551668,
+          "positive_sessions": 1661,
+          "tokens:test": 13745675,
+          "tokens:train": 36932109
+        },
+        "mellum21": {
+          "graphs:test": 164,
+          "graphs:train": 1497,
+          "max_row_tokens": 596354,
+          "positive_sessions": 1661,
+          "tokens:test": 14350425,
+          "tokens:train": 38435959
+        }
+      },
+      "id": "acquired-d16-full-session-native-20261016-v2",
+      "include": [
+        "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/lfm25/omissions.jsonl",
+        "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/lfm25/receipt.json",
+        "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/lfm25/resume-state.json",
+        "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/lfm25/test/native-graphs.jsonl.zst",
+        "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/lfm25/train/native-graphs.jsonl.zst",
+        "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/mellum21/omissions.jsonl",
+        "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/mellum21/receipt.json",
+        "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/mellum21/resume-state.json",
+        "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/mellum21/test/native-graphs.jsonl.zst",
+        "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/mellum21/train/native-graphs.jsonl.zst",
+        "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/lfm25/omissions.jsonl",
+        "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/lfm25/receipt.json",
+        "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/lfm25/resume-state.json",
+        "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/lfm25/test/native-graphs.jsonl.zst",
+        "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/lfm25/train/native-graphs.jsonl.zst",
+        "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/mellum21/omissions.jsonl",
+        "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/mellum21/receipt.json",
+        "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/mellum21/resume-state.json",
+        "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/mellum21/test/native-graphs.jsonl.zst",
+        "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/mellum21/train/native-graphs.jsonl.zst",
+        "admission-acquired-d16-full-session-native-20261016-v2/audit.json",
+        "admission-acquired-d16-full-session-native-20261016-v2/lfm25-test-sources.json",
+        "admission-acquired-d16-full-session-native-20261016-v2/lfm25-train-sources.json",
+        "admission-acquired-d16-full-session-native-20261016-v2/mellum21-test-sources.json",
+        "admission-acquired-d16-full-session-native-20261016-v2/mellum21-train-sources.json",
+        "admission-acquired-d16-full-session-native-20261016-v2/row-proof.jsonl",
+        "admission-acquired-d16-full-session-native-20261016-v2/source-render-samples.json"
+      ],
+      "license": "exact source license facts retained in each graph acquired_session provenance",
+      "owner": "dgx",
+      "path": "runs/acquired-connected-native-graphs-20261016-v2/D16",
+      "source_class": "source-curated-complete-acquired-agent-native-session-graphs",
+      "split": "original source split and complete cross-source global held-group closure; no truncation",
+      "training_admission": true,
+      "training_admission_reason": "Source-curated third-party SFT, not oracle or native-execution verified. Exact complete source sessions, full reasoning views and both pinned tokenizer variants preserve current global held/quality/pending and exact decision holds. Eligibility is not training exposure."
     }
   ],
   "coverage_backlog": [

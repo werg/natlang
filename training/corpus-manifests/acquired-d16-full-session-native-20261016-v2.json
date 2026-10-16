@@ -1,0 +1,149 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "acquired-d16-full-session-native-20261016-v2",
+  "owner": "dgx",
+  "path": "runs/acquired-connected-native-graphs-20261016-v2/D16",
+  "files": [
+    {
+      "path": "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/lfm25/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/lfm25/receipt.json",
+      "bytes": 7819,
+      "sha256": "3f83319fc01d7927493f41de9b099a685a5a317598f1d5aad52e042aec7ccce8"
+    },
+    {
+      "path": "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/lfm25/resume-state.json",
+      "bytes": 16377,
+      "sha256": "5f7e2794f4bacbd1a1f019df43a148c4a61618e42fff9e09a36c218208033e0b"
+    },
+    {
+      "path": "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 6771,
+      "sha256": "41cf090122dce55c615da077ece4274e0ed538791f33042f1c9f9ada0456fb49"
+    },
+    {
+      "path": "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 234166,
+      "sha256": "8fc08cef6d1e5cebcfddc65874c1a828dbc1f41c039b8a7465c513ce346bf42d"
+    },
+    {
+      "path": "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/mellum21/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/mellum21/receipt.json",
+      "bytes": 7947,
+      "sha256": "151810a755fc5225d484d4eaa122f13fc66071539607d3e24db4e95bf1df0ca5"
+    },
+    {
+      "path": "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/mellum21/resume-state.json",
+      "bytes": 16499,
+      "sha256": "73b2d38511391d9d7d69c06917dd8d1ab6483ddc4704b43c4a3f28da419b778a"
+    },
+    {
+      "path": "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/mellum21/test/native-graphs.jsonl.zst",
+      "bytes": 6435,
+      "sha256": "958a0ce161c0ac1f396b48151dc0c3024973a7054357e9a9fdfa6bd8bbc41302"
+    },
+    {
+      "path": "19792d3a08d175940a2451c93ad01bdf3f8fe8b69069bda855d00beff3dd2f03/mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 226173,
+      "sha256": "f24e0c3134c685fca7724d781b02f63ed1ee9d380c120c90ac7e6696ddded24b"
+    },
+    {
+      "path": "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/lfm25/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/lfm25/receipt.json",
+      "bytes": 15222,
+      "sha256": "c583b68a408e1e8592aa4da25035ae46397b275c062d7899a57dfdd5a32598d9"
+    },
+    {
+      "path": "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/lfm25/resume-state.json",
+      "bytes": 23762,
+      "sha256": "d00f8f8c8831e06e61322c173d009362fa8b376a997ad62a44f5a87e3da403b4"
+    },
+    {
+      "path": "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 2662996,
+      "sha256": "5be542387ef734dd1ec17e9ebd10ca0ba07c23f8a4eae47d06199fbcbbb2b5d7"
+    },
+    {
+      "path": "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 8999702,
+      "sha256": "2b06374d30c2fc0a0e6f533fd5592091d8a3b1747a1292ea972a98e4cc04ed7b"
+    },
+    {
+      "path": "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/mellum21/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/mellum21/receipt.json",
+      "bytes": 15398,
+      "sha256": "f91a5be5ce5e924c8c9d03c7d1219e14500f9479790544c590191d3adaae4c39"
+    },
+    {
+      "path": "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/mellum21/resume-state.json",
+      "bytes": 23932,
+      "sha256": "f8f0a148febced545db6e57219c0b78540ad97cb80b7f74f70d76bd2dba4f342"
+    },
+    {
+      "path": "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/mellum21/test/native-graphs.jsonl.zst",
+      "bytes": 2522309,
+      "sha256": "8bcf6c2949fa16186241ba816081011431f17cc4748634f31f903cb0cdcc8d08"
+    },
+    {
+      "path": "33655f8864b270a14a64169d9ee4d84a5dae63c6111d443f98a4e27414c7d9bd/mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 8596086,
+      "sha256": "8be94983e6bce044c6385c43e4ed05d05349686a2bca741fbffef3fcbe78ddea"
+    },
+    {
+      "path": "admission-acquired-d16-full-session-native-20261016-v2/audit.json",
+      "bytes": 9300,
+      "sha256": "bc23f690f4a90e791f3bab10f099ae1ccc105d0d316eaddbf6790d8984fd2634"
+    },
+    {
+      "path": "admission-acquired-d16-full-session-native-20261016-v2/lfm25-test-sources.json",
+      "bytes": 641,
+      "sha256": "12bdf98b431eeee0171d72a1e1dbdd6054b2ef780fcc0ee3afcefbcdaa3b2cb4"
+    },
+    {
+      "path": "admission-acquired-d16-full-session-native-20261016-v2/lfm25-train-sources.json",
+      "bytes": 643,
+      "sha256": "c01710917507a40414bbb2d08218d1e2cf0c010697b78f9b6c3885b2c930e6db"
+    },
+    {
+      "path": "admission-acquired-d16-full-session-native-20261016-v2/mellum21-test-sources.json",
+      "bytes": 647,
+      "sha256": "f2235238fb5750bd60f10e556457da5c7dd1a906117df44def043b77490bb52a"
+    },
+    {
+      "path": "admission-acquired-d16-full-session-native-20261016-v2/mellum21-train-sources.json",
+      "bytes": 649,
+      "sha256": "1287bcf74ad9aa464a296a95bba8090fc6181ef02aade897fbb5582d65307b4a"
+    },
+    {
+      "path": "admission-acquired-d16-full-session-native-20261016-v2/row-proof.jsonl",
+      "bytes": 3686471,
+      "sha256": "b2d7e7ef211f65edfa8492f442768783874ad78d71d3d540d78503d5293184be",
+      "lines": 3322
+    },
+    {
+      "path": "admission-acquired-d16-full-session-native-20261016-v2/source-render-samples.json",
+      "bytes": 14479,
+      "sha256": "7bfa717a47de5a7980b21a81a7abcdde975b85b8b55c7e7ddfbc92aa10d71186"
+    }
+  ],
+  "bytes": 27094424
+}
