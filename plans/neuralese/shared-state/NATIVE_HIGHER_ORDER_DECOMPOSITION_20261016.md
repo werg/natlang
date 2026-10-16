@@ -373,3 +373,14 @@ gradients and optimized-state history without a derivative-program target keep
 their prior contract. No production deployment of the earlier unadvertised
 program API was claimed. Focused adversarial/portable tests22PASS8.18s; broader
 derivative/state integration36PASS2skip16.05s.
+
+Actual decision capture is now implemented through both direct and batched
+scoring. Native prompts, exact option token continuations and original/decoded
+state dependencies are retained before returning to the objective. The agent
+uses its existing block-read/model-query graph mechanism with explicit
+deterministic readout metadata. Coalesced callers retain separate actual
+recorders. Both-port real HTTP tests2PASS4.43s; relevant legacy score/readout
+Node tests11PASS and native typed HTTP regression8PASS17.77s. An initially
+mis-scoped legacy full-server test exceeded its own3GiB unit cap and was not
+claimed green; the focused rerun excludes that unrelated full-model fixture.
+Public term→query rendering and nested GradSession lowering remain guarded/open.

@@ -503,3 +503,8 @@ program, graph and bound values. Older internal program gradients without an
 exact graph receipt need a genuine reexecution; do not synthesize or relabel
 provenance. This stronger program check does not invalidate ordinary prior
 first-order state/gradient history.
+
+Recorded native decisions need the exact rendered option receipt and native
+input archive. For a missing decision receipt or archive error, use the matching
+native scoring service and restore its original/decoded state dependencies;
+never substitute a sampled text reply or infer producer links from equal IDs.

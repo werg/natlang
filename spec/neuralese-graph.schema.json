@@ -68,8 +68,13 @@
           "turn": { "type": "integer", "minimum": 1 },
           "temperature": { "type": ["number", "null"], "minimum": 0 },
           "seed": { "type": ["integer", "null"] },
-          "calls": { "type": "array" }
-        }
+          "calls": { "type": "array" },
+          "readout": { "enum": ["decision"] }
+        },
+        "allOf": [{
+          "if": { "required": ["readout"], "properties": { "readout": { "const": "decision" } } },
+          "then": { "properties": { "temperature": { "const": null }, "seed": { "const": null }, "calls": { "maxItems": 0 } } }
+        }]
       }
     },
     {

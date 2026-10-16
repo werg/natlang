@@ -598,7 +598,7 @@ export class NativeToolAgent {
    * [message, part] in the request; a server that reports payload positions gives token positions), and the
    * `model_turn` with its sampling settings and the tool calls it chose.
    */
-  private async modelTurnNode(session: NativeSession, messages: readonly unknown[], response: ModelTurn, turn: number): Promise<string | undefined> {
+  private async modelTurnNode(session: NativeSession, messages: readonly unknown[], response: ModelTurn, turn: number, readout?: 'decision'): Promise<string | undefined> {
     const trace = session.runtime.trace;
     const callId = session.runtime.options.runId;
     const turnId = `${callId}#turn${turn}`;
@@ -639,8 +639,8 @@ export class NativeToolAgent {
         }
       }
     }
-    return graphNode(trace, 'model_turn', { call_id: callId, turn, temperature: this.options.temperature ?? null,
-      seed: session.runtime.seedPolicy.mode === 'backend' ? null : deriveSeed(session.runtime.seedPolicy.root!,
+    return graphNode(trace, 'model_turn', { call_id: callId, turn, ...(readout?{readout}:{}), temperature: readout?null:this.options.temperature ?? null,
+      seed: readout || session.runtime.seedPolicy.mode === 'backend' ? null : deriveSeed(session.runtime.seedPolicy.root!,
         runSeedKey(session.runtime.options), session.lam.attempts, 'model-turn', turn - 1),
       completion_tokens: response.completion_tokens ?? null, text_chars: (response.text ?? '').length,
       calls: (response.calls ?? []).map(call => Array.isArray(call) ? call[0] : (call as { name?: string }).name ?? null) },
@@ -994,6 +994,10 @@ export class NativeToolAgent {
     }
     if (scores.log_probs.length !== replies.length || scores.log_probs.some(value => !Number.isFinite(value)))
       throw new Error('decision readout returned no finite score for every option');
+    if(scores.x_natlang_native_recorded_turn){
+      const turnNode=await this.modelTurnNode(session,messages,{},1,'decision');
+      if(turnNode)activeRecorder()?.linkNativeTurn?.(scores.x_natlang_native_recorded_turn,turnNode);
+    }
     const probabilities = softmax(scores.log_probs);
     const chosen = probabilities.indexOf(Math.max(...probabilities));
     session.runtime.trace.emit('decision_readout', { call_id: callId, phase: 'scored', options: replies,

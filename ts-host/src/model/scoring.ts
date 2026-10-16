@@ -76,17 +76,20 @@ export async function postExplicitBatch(options: ExplicitBatchOptions, items: De
     const response = await fetchModel(options.url, { method: 'POST', signal,
       headers: { 'content-type': 'application/json', ...options.headers },
       body: JSON.stringify({ ...options.extra, items: items.map(item => ({ messages: item.messages, continuations: item.options,
-        ...(item.adapters?.length ? { adapters: item.adapters } : {}) })) }) });
+        ...(item.adapters?.length ? { adapters: item.adapters } : {}),
+        ...(item.native_state_modes ? {native_state_modes:item.native_state_modes}:{}),
+        ...(item.native_recording ? {native_recording:true}:{}) })) }) });
     if ([404, 405, 501].includes(response.status)) throw new ScoreEndpointMissing(`no scoring endpoint at ${options.url}`);
     if (!response.ok) throw new Error(`batched scoring HTTP ${response.status}: ${(await response.text()).slice(0, 2000)}`);
-    const body = await response.json() as { results?: ({ log_probs?: number[]; tokens?: number[]; error?: string } | null)[] };
+    const body = await response.json() as { results?: ({ log_probs?: number[]; tokens?: number[]; error?: string; native_decision_capture?: Record<string,unknown> } | null)[] };
     if (!Array.isArray(body.results) || body.results.length !== items.length)
       throw new Error('batched scoring returned a different number of results than items');
     return body.results.map((result, index): Settled => {
       if (!result || typeof result.error === 'string' || !Array.isArray(result.log_probs) ||
           result.log_probs.length !== items[index]!.options.length)
         return { status: 'rejected', reason: new Error(result?.error ?? 'batched scoring returned no scores for an item') };
-      return { status: 'fulfilled', value: { log_probs: result.log_probs, ...(result.tokens ? { tokens: result.tokens } : {}) } };
+      return { status: 'fulfilled', value: { log_probs: result.log_probs, ...(result.tokens ? { tokens: result.tokens } : {}),
+        ...(result.native_decision_capture?{native_decision_capture:result.native_decision_capture}:{}) } };
     });
   } finally { release(); }
 }

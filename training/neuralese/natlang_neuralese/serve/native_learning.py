@@ -74,19 +74,27 @@ def _score_item(engine, item, adapters=None):
 
 def _score_rendered(engine, item, plan, continuations, bindings):
     request = GenerationRequest(messages=item.get("messages") or [], tools=item.get("tools"), max_tokens=0,
-                                adapters=bindings, native_state_modes=item.get('native_state_modes'))
+                                adapters=bindings, native_state_modes=item.get('native_state_modes'),
+                                rl_capture=bool(item.get('native_recording')),native_recording=bool(item.get('native_recording')))
     sequence = Sequence(request, None, prompt_plan=plan)
     engine._native_prefill(sequence)
     base_cache, base_logits = sequence.cache, sequence.logits
     results = [_score_from_cache(engine, base_cache, base_logits, own) for own in continuations]
-    return {"log_probs": [score for score, _ in results], "tokens": [count for _, count in results],
-            "native_state_imports": sequence.native_imports}
+    response={"log_probs": [score for score, _ in results], "tokens": [count for _, count in results],
+              "native_state_imports": sequence.native_imports}
+    if item.get('native_recording'):
+        response['native_decision_capture']={'schema':'natlang.native-decision-capture/1',
+            'policy':dict(sequence.native_rl_policy),'adapter_binding':sequence.native_rl_adapter_binding,
+            'prompt':sequence.native_rl_prompt,'continuations':continuations,
+            'native_state_imports':sequence.native_imports}
+    return response
 
 
 def decide_native(engine, body: dict) -> dict:
     """Score candidate replies from a single exact native prompt cache."""
     return _score_item(engine, {"messages": body.get("messages") or [], "tools": body.get("tools"),
-                                "options": body.get("options") or [], "native_state_modes": body.get("native_state_modes")}, body.get('adapters'))
+                                "options": body.get("options") or [], "native_state_modes": body.get("native_state_modes"),
+                                "native_recording":body.get("native_recording",False)}, body.get('adapters'))
 
 
 def decide_many_native(engine, body: dict) -> dict:
@@ -97,7 +105,7 @@ def decide_many_native(engine, body: dict) -> dict:
     results = []
     for item in items:
         try:
-            results.append(_score_item(engine, {"native_state_modes": body.get("native_state_modes"), **item}, body.get("adapters")))
+            results.append(_score_item(engine, {"native_state_modes": body.get("native_state_modes"), "native_recording":body.get("native_recording",False), **item}, body.get("adapters")))
         except Exception as error:  # item failures are part of the shared score contract
             code = error.code if isinstance(error, RequestError) else "internal"
             results.append({"error": f"{code}: {error}"[:500]})

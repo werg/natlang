@@ -80,3 +80,9 @@ evidence for a different choice. Changed choices need fresh rollouts.
 Records are training data. They follow the lineage, licence and split rules of the
 training pipeline ([NEURALESE_DATA.md](NEURALESE_DATA.md)), and records built under
 different runtime versions are not mixed.
+
+A finite native decision may be a `model_turn` with `readout: "decision"`. It
+records an actual deterministic conditional readout, with null temperature/seed
+and no sampled tool calls. Its native receipt contains the rendered prompt and
+each option's token continuation, and its block-read edges retain actual source
+occurrences. A decision receipt is not a sampled-policy density.

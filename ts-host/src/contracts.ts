@@ -76,8 +76,13 @@ export type ModelTurnOptions = { onDelta?: (delta: ModelTurnDelta) => void };
  * as the whole reply, end of message included, over the tokens where the options differ; `tokens[i]` counts them.
  * A server that cannot score replies fails with an error whose message starts with `decision-unsupported`.
  */
-export type DecisionRequest = { messages: unknown[]; options: string[]; adapters?: { id: string; scale: number }[] };
+export type DecisionRequest = { messages: unknown[]; options: string[]; adapters?: { id: string; scale: number }[];
+  /** Exact native input contracts/capture; transport metadata, never model instructions. */
+  native_state_modes?: Record<string,'same-base-adapter-state'>; native_recording?: boolean };
 export type DecisionScores = { log_probs: number[]; tokens?: number[];
+  native_decision_capture?: Record<string,unknown>;
+  /** Host-only association to the active learning recorder. */
+  x_natlang_native_recorded_turn?: string;
   /** Set by a coalescing scorer: the batch this readout was scored in. */
   batch?: { batch_id: string; batch_size: number } };
 export type DecisionScorer = ((request: DecisionRequest, signal?: AbortSignal) => Promise<DecisionScores>) & {

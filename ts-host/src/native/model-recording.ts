@@ -7,8 +7,9 @@
  * so this module stays platform-neutral.
  */
 export type NativeTurnGraphBinding={graph_turn:string;written_nodes:Record<string,string>;read_bindings:Record<string,string>};
-export type NativeRecordedTurn={schema:'natlang.native-recorded-turn/1';id:string;sampling:Record<string,unknown>;
-  invocation_id?:string;retry:number;graph?:NativeTurnGraphBinding};
+export type NativeRecordedTurn={schema:'natlang.native-recorded-turn/1';id:string;
+  invocation_id?:string;retry:number;graph?:NativeTurnGraphBinding} & (
+    {kind:'generation';sampling:Record<string,unknown>} | {kind:'decision';decision:Record<string,unknown>});
 export type RecordedTurn = {
   readonly messages: unknown[];
   readonly tools?: unknown[];
@@ -92,7 +93,9 @@ export class ModelTurnRecorder implements TurnRecorder {
       const graphTurn=this.nativeLinks.get(turn.native!.id);
       if(!graphTurn)return structuredClone(turn);
       const modelNode=this.graphNodes.get(graphTurn);
-      if(modelNode?.kind!=='model_turn'||turn.native!.invocation_id&&modelNode.call_id!==turn.native!.invocation_id)
+      if(modelNode?.kind!=='model_turn'||turn.native!.invocation_id&&modelNode.call_id!==turn.native!.invocation_id||
+          turn.native!.kind==='decision'&&modelNode.readout!=='decision'||
+          turn.native!.kind==='generation'&&modelNode.readout!==undefined)
         throw Object.assign(new Error('neuralese-native-grad-invalid: native receipt does not match its actual model-turn occurrence'),{code:'neuralese-native-grad-invalid'});
       const writes:Record<string,string>={},reads:Record<string,string>={},readNodes=new Set<string>();
       for(const event of this.graphNodes.values()){

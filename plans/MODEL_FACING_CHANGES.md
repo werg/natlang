@@ -911,3 +911,10 @@ error family for changed declared graph/query roots or a missing exact program
 graph receipt. Recovery restores the matching program or genuinely reexecutes
 older internal program calculations. These detail changes remain in the same
 unmeasured internal-learning debt; no prompt or public capability is added.
+
+Native recorded decisions now use the same existing gradient/archive error
+families if an exact rendered-option receipt or input archive is absent. The
+transport preserves each coalesced caller's recorder and adapter scope. No
+decision prompt, option text, ordinary sampling behavior or public order-2
+capability changes. Error recovery details remain unmeasured until the next
+live window; runtime receipt tests do not claim task improvement.

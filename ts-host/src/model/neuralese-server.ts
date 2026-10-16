@@ -510,7 +510,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         throw Object.assign(new Error('neuralese-native-grad-invalid: native learning needs the actual server sampling receipt'),{code:'neuralese-native-grad-invalid'});
       if(nativeRecording&&archiveIds.size&&!store)
         throw Object.assign(new Error('neuralese-native-archive-unavailable: configure a durable native store before recording state communication'),{code:'neuralese-native-archive-unavailable'});
-      const native=nativeRecording?{schema:'natlang.native-recorded-turn/1' as const,id:`native-turn:${globalThis.crypto.randomUUID()}`,
+      const native=nativeRecording?{schema:'natlang.native-recorded-turn/1' as const,kind:'generation' as const,id:`native-turn:${globalThis.crypto.randomUUID()}`,
         sampling:structuredClone(capture!),retry:meta?.retry??0,...(meta?.invocation_id?{invocation_id:meta.invocation_id}:{})}:undefined;
       if(native)reply.x_natlang_native_recorded_turn=native.id;
       if(message)recorder.record({messages:structuredClone((nativeRecording?preparedMessages:body.messages) as unknown[]),
@@ -536,52 +536,68 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
   const here = (): Scope => ({ recorder: activeRecorder(), adapters: activeAdapters() });
   const scopeOf = (item: object): Scope => scopes.get(item) ?? here();
   const prepare = async (messages: unknown[], replies: readonly string[], bound: readonly { id: string; scale: number }[] | undefined,
-      scope: Scope = here()) => {
+      scope: Scope = here()):Promise<Item> => {
     const adapters = await adapterParts(bound ?? [], scope.adapters);
-    scope.recorder?.record({ messages: structuredClone(messages), reply: { role: 'assistant', content: null }, blocks: [],
-      decision: { options: [...replies] }, ...(adapters.length ? { adapters: [...adapters] } : {}),
-        ...(coefficientStateModes(coefficientPolicy,requestNativeStateIds(messages),nativeStateModes) ? { native_state_modes: coefficientStateModes(coefficientPolicy,requestNativeStateIds(messages),nativeStateModes) } : {}) });
-    return adapters;
+    const native=(await serverInfo())?.native_state as {enabled?:boolean}|undefined;
+    const preparedMessages=native?.enabled?materializeNativeStateSentinels(messages) as unknown[]:messages;
+    const modes=coefficientStateModes(coefficientPolicy,requestNativeStateIds(preparedMessages),nativeStateModes);
+    if(!native?.enabled)scope.recorder?.record({messages:structuredClone(messages),reply:{role:'assistant',content:null},blocks:[],
+      decision:{options:[...replies]},...(adapters.length?{adapters:[...adapters]}:{}),...(modes?{native_state_modes:modes}:{})});
+    return {messages:preparedMessages,options:[...replies],...(adapters.length?{adapters:[...adapters]}:{}),
+      ...(modes?{native_state_modes:modes}:{}),...(native?.enabled&&scope.recorder?{native_recording:true}:{})};
   };
-  const decideRequest = async (messages: unknown[], replies: readonly string[], adapters: readonly { id: string; scale: number }[],
-      signal?: AbortSignal) =>
-    await withRestoredBlocks(remote, store, blockIds(messages, adapters), async () => {
-      return await withRestoredNativeStates(remote, store, requestNativeStateIds(messages), async () => {
-      const response = await fetchModel(http.endpoint.replace(/\/$/, '') + '/v1/neuralese/decide', { method: 'POST', signal,
-        headers: { 'content-type': 'application/json', ...http.headers },
-        body: JSON.stringify({ messages, options: replies, ...(adapters.length ? { adapters } : {}),
-          ...(coefficientStateModes(coefficientPolicy,requestNativeStateIds(messages),nativeStateModes) ? { native_state_modes: coefficientStateModes(coefficientPolicy,requestNativeStateIds(messages),nativeStateModes) } : {}) }) });
-      if (response.status === 404 || response.status === 501) throw new Error('decision-unsupported: the server does not serve /v1/neuralese/decide');
-      if (!response.ok) throw new Error(`neuralese decide HTTP ${response.status}: ${(await response.text()).slice(0, 2000)}`);
-      return await response.json() as DecisionScores;
-      }, nativeUploaded);
-    }, uploaded);
-  const decide: DecisionScorer = async ({ messages, options: replies, adapters: bound }, signal) =>
-    decideRequest(messages, replies, await prepare(messages, replies, bound), signal);
-
-  // Batched decision readouts: decisions that arrive together are scored by one POST /v1/natlang/score when the server
-  // serves `score` (the reference server and the fork both do); items sharing a prompt are sent adjacently. A server
-  // without it (not in its capabilities, or 404, 405, 501) is asked per item through `/v1/neuralese/decide`, and not
-  // asked again. An item whose blocks cannot be restored fails alone, and so does an item the server rejects.
-  const perItem = (items: Item[], signal?: AbortSignal) =>
-    Promise.allSettled(items.map(item => decideRequest(item.messages, item.options, (item.adapters ?? []) as { id: string; scale: number }[], signal)));
-  const batched = explicitBatchScoreMany({ url: http.endpoint.replace(/\/$/, '') + '/v1/natlang/score', headers: http.headers }, perItem);
-  const scoreMany = async (items: Item[], signal?: AbortSignal): Promise<Settled[]> => {
-    if (!serves((await serverInfo()) ?? {}, 'score'))
-      return Promise.allSettled(items.map(async item => decideRequest(item.messages, item.options,
-        await prepare(item.messages, item.options, item.adapters, scopeOf(item)), signal)));
-    const prepared: ({ index: number; item: Item; key: string } | undefined)[] = [];
-    const results: Settled[] = new Array(items.length);
-    await Promise.all(items.map(async (item, index) => {
-      try {
-        const adapters = await prepare(item.messages, item.options, item.adapters, scopeOf(item));
-        await withRestoredBlocks(remote, store, blockIds(item.messages, adapters), async () => undefined, uploaded);
-        prepared[index] = { index, item: { ...item, ...(adapters.length ? { adapters } : {}) }, key: JSON.stringify([item.messages, adapters]) };
-      } catch (error) { results[index] = { status: 'rejected', reason: error }; }
+  const finish = async (item:Item,scope:Scope,scores:DecisionScores):Promise<DecisionScores> => {
+    if(!item.native_recording)return scores;
+    const capture=scores.native_decision_capture;
+    if(!scope.recorder||capture?.schema!=='natlang.native-decision-capture/1'||!Array.isArray(capture.prompt)||
+        !Array.isArray(capture.continuations)||capture.continuations.length!==item.options.length)
+      throw Object.assign(new Error('neuralese-native-grad-invalid: native decision learning needs its actual rendered continuation receipt'),{code:'neuralese-native-grad-invalid'});
+    const ids=new Set<string>(requestNativeStateIds(item.messages));
+    for(const segment of capture.prompt as {kind?:string;id?:string}[])if(segment.kind==='native_state'&&segment.id)ids.add(segment.id);
+    for(const receipt of (capture.native_state_imports??[]) as {id?:string;observed_native_state_id?:string}[])
+      for(const id of [receipt.id,receipt.observed_native_state_id])if(id)ids.add(id);
+    if(ids.size&&!store)throw Object.assign(new Error('neuralese-native-archive-unavailable: configure a durable native store before recording decision inputs'),{code:'neuralese-native-archive-unavailable'});
+    for(const id of ids){await archiveNativeArtifactFrom(remote,store!,id);nativeUploaded.add(id);}
+    const native={schema:'natlang.native-recorded-turn/1' as const,kind:'decision' as const,
+      id:`native-turn:${globalThis.crypto.randomUUID()}`,decision:structuredClone(capture),retry:0};
+    scope.recorder.record({messages:structuredClone(item.messages),reply:{role:'assistant',content:null},blocks:[],
+      decision:{options:[...item.options]},...(item.adapters?.length?{adapters:[...item.adapters]}:{}),
+      ...(item.native_state_modes?{native_state_modes:{...item.native_state_modes}}:{}),native});
+    return {...scores,x_natlang_native_recorded_turn:native.id};
+  };
+  const restore = async (item:Item,run:()=>Promise<DecisionScores>):Promise<DecisionScores> =>
+    withRestoredBlocks(remote,store,blockIds(item.messages,item.adapters??[]),()=>
+      withRestoredNativeStates(remote,store,requestNativeStateIds(item.messages),run,nativeUploaded),uploaded);
+  const issue = async (item:Item,signal?:AbortSignal):Promise<DecisionScores> => restore(item,async()=>{
+    const response=await fetchModel(http.endpoint.replace(/\/$/,'')+'/v1/neuralese/decide',{method:'POST',signal,
+      headers:{'content-type':'application/json',...http.headers},body:JSON.stringify(item)});
+    if(response.status===404||response.status===501)throw new Error('decision-unsupported: the server does not serve /v1/neuralese/decide');
+    if(!response.ok)throw new Error(`neuralese decide HTTP ${response.status}: ${(await response.text()).slice(0,2000)}`);
+    return await response.json() as DecisionScores;
+  });
+  const decide:DecisionScorer=async(request,signal)=>{
+    const scope=scopeOf(request),item=await prepare(request.messages,request.options,request.adapters,scope);
+    return finish(item,scope,await issue(item,signal));
+  };
+  const perItem=(items:Item[],signal?:AbortSignal)=>Promise.allSettled(items.map(item=>issue(item,signal)));
+  const batched=explicitBatchScoreMany({url:http.endpoint.replace(/\/$/,'')+'/v1/natlang/score',headers:http.headers},perItem);
+  const scoreMany=async(items:Item[],signal?:AbortSignal):Promise<Settled[]>=>{
+    const prepared:({index:number;item:Item;scope:Scope;key:string}|undefined)[]=[],results:Settled[]=new Array(items.length);
+    await Promise.all(items.map(async(original,index)=>{
+      try{
+        const scope=scopeOf(original),item=await prepare(original.messages,original.options,original.adapters,scope);
+        await restore(item,async()=>({log_probs:[]}));
+        prepared[index]={index,item,scope,key:JSON.stringify([item.messages,item.adapters])};
+      }catch(error){results[index]={status:'rejected',reason:error};}
     }));
-    const order = prepared.filter(entry => entry !== undefined).sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : a.index - b.index);
-    const scored = await batched(order.map(entry => entry.item), signal);
-    order.forEach((entry, position) => { results[entry.index] = scored[position]!; });
+    const order=prepared.filter(entry=>entry!==undefined).sort((a,b)=>a.key<b.key?-1:a.key>b.key?1:a.index-b.index);
+    const scored=await (serves((await serverInfo())??{},'score')?batched:perItem)(order.map(entry=>entry.item),signal);
+    await Promise.all(order.map(async(entry,position)=>{
+      const result=scored[position]!;
+      if(result.status==='rejected'){results[entry.index]=result;return;}
+      try{results[entry.index]={status:'fulfilled',value:await finish(entry.item,entry.scope,result.value)};}
+      catch(error){results[entry.index]={status:'rejected',reason:error};}
+    }));
     return results;
   };
   const coalesced = coalescingScorer(Object.assign((...args: Parameters<DecisionScorer>) => decide(...args), { scoreMany }));

@@ -45,7 +45,12 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
     for marker, token in zip(ROLE_MARKERS, model.marker_ids):
         del vocabulary[f't{token}']
         vocabulary[marker] = token
+    if mode=='recorded':
+        for spelling,index in [('<|im_start|>',4),('<|im_end|>',10)]:
+            del vocabulary[f't{index}'];vocabulary[spelling]=index
     raw_tokenizer = Tokenizer(WordLevel(vocabulary, unk_token='t0'))
+    if mode=='recorded':
+        raw_tokenizer.pre_tokenizer=WhitespaceSplit()
     if mode not in {'handoff', 'recorded'}:
         # A real BPE merge crosses an ordinary-text body boundary, while actual
         # producer role tokens delimit independent prefix/body/suffix runs.
@@ -57,7 +62,7 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
         assert raw_tokenizer.encode('t5t6').ids == [15]
         assert raw_tokenizer.encode('t5').ids + raw_tokenizer.encode('t6').ids == [5, 6]
     tokenizer = PreTrainedTokenizerFast(tokenizer_object=raw_tokenizer,
-        unk_token='t0', bos_token='t1', eos_token='t2', pad_token='t3', additional_special_tokens=list(ROLE_MARKERS))
+        unk_token='t0', bos_token='t1', eos_token='t2', pad_token='t3', additional_special_tokens=list(ROLE_MARKERS)+(['<|im_start|>','<|im_end|>'] if mode=='recorded' else []))
     last_only = ' and loop.last' if family == 'lfm' else ''
     tokenizer.chat_template = ("{% for message in messages %}"
         "{% if message['role'] == 'assistant' and message.get('reasoning_content')" + last_only + " %}"
@@ -69,6 +74,11 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
             "{% for tool in message.get('tool_calls', []) %}"
             "{{ tool['function']['name'] }}({{ tool['function']['arguments'] | tojson }})"
             "{% endfor %}{% endfor %}{% if add_generation_prompt %}assistant:{% endif %}")
+    if mode=='recorded':
+        tokenizer.chat_template=("{% for message in messages %}<|im_start|>{{ message['role'] }} "
+            "{% if message['role'] == 'assistant' and message.get('reasoning_content')"+last_only+" %}"
+            "{{ message['reasoning_content'] }} {% endif %}{{ message['content'] }}<|im_end|>{% endfor %}"
+            "{% if add_generation_prompt %}<|im_start|>assistant {% endif %}")
     config = {'architecture': port.config.model_type, 'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer)}
     weights = tmp_path / 'weights.pt'
     torch.save(model_state(model), weights)
@@ -77,6 +87,8 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
         shared_model=model, role_tokens=RoleTokens(*model.marker_ids), model_config=config,
         checkpoint_sha256=identity['checkpoint_sha256'], embedding_weight_sha256=identity['embedding_weight_sha256'])
     engine.native_identity = identity
+    if mode=='recorded':
+        engine.context=8192
     if mode not in {'handoff', 'recorded'}:
         engine.context = 2048
         engine.max_block = 8
@@ -131,7 +143,7 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
                 assert receipt['recorded'] is True
                 from natlang_neuralese.rl.native_replay import compile_replay
                 recorded = json.loads((tmp_path / 'archive/native-recorded-turns.json').read_text())
-                turns = [{**turn['native']['graph'], 'sampling': turn['native']['sampling']} for turn in recorded]
+                turns = [{**turn['native']['graph'], 'sampling': turn['native']['sampling']} for turn in recorded if turn['native']['kind']=='generation']
                 def fetch(block_id):
                     return engine.store.get_native_state(block_id).block
                 with pytest.raises(ValueError, match='unsupported sampling schema'):
