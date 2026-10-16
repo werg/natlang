@@ -61,6 +61,7 @@ class Rendered:
     escape_nonce: str = ""
     block_kinds: list[str] | None = None
     block_stop_gradients: list[bool] | None = None
+    block_source_occurrences: list[str | None] | None = None
 
 
 def escape_specials(text: str, specials, nonce: str = "") -> str:
@@ -153,6 +154,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
     blocks: list[str] = []
     block_kinds: list[str] = []
     block_stop_gradients: list[bool] = []
+    block_source_occurrences = []
     value_types, native_values = {}, set()
     # An input cannot manufacture our internal placeholders. Choose a nonce
     # absent from every supplied string; private-use characters remain ordinary text.
@@ -183,6 +185,10 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
                 blocks.append(block_id)
                 block_kinds.append(kind)
                 block_stop_gradients.append(part.get('stop_gradient',False))
+                source=part.get('source_occurrence')
+                if 'source_occurrence' in part and (kind!='native_state' or not isinstance(source,str) or not source):
+                    raise RequestError('neuralese-bad-part','native source occurrence must be its nonempty actual producer reference')
+                block_source_occurrences.append(source)
         return "".join(out)
 
     plain = []
@@ -241,7 +247,7 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
     seen = sorted(s for s in segments if isinstance(s, int))
     if seen != list(range(len(blocks))):
         raise RequestError("neuralese-render", "the chat template dropped or duplicated a block")
-    return Rendered(segments, blocks, nonce, block_kinds,block_stop_gradients)
+    return Rendered(segments, blocks, nonce, block_kinds,block_stop_gradients,block_source_occurrences)
 
 
 _VALUE = "natlangValue7f3a9c"  # printable, so no template escapes it; stands for a call argument's value while the template renders the call

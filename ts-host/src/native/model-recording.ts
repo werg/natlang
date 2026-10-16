@@ -6,7 +6,10 @@
  * the blocks it wrote). The learning module installs the source of the active recorder (Node: `AsyncLocalStorage`),
  * so this module stays platform-neutral.
  */
-export type NativeTurnGraphBinding={graph_turn:string;written_nodes:Record<string,string>;read_bindings:Record<string,string>};
+export type NativeWriteOccurrence={index:number;id:string;node:string};
+export type NativeReadOccurrence={index:number;id:string;source_state_id:string;node:string;source:string;stop_gradient?:true};
+export type NativeTurnGraphBinding={graph_turn:string;written_nodes:Record<string,string>;read_bindings:Record<string,string>;
+  written_occurrences?:NativeWriteOccurrence[];read_occurrences?:NativeReadOccurrence[]};
 export type NativeRecordedTurn={schema:'natlang.native-recorded-turn/1';id:string;
   invocation_id?:string;retry:number;graph?:NativeTurnGraphBinding} & (
     {kind:'generation';sampling:Record<string,unknown>} | {kind:'decision';decision:Record<string,unknown>});
@@ -97,26 +100,47 @@ export class ModelTurnRecorder implements TurnRecorder {
           turn.native!.kind==='decision'&&modelNode.readout!=='decision'||
           turn.native!.kind==='generation'&&modelNode.readout!==undefined)
         throw Object.assign(new Error('neuralese-native-grad-invalid: native receipt does not match its actual model-turn occurrence'),{code:'neuralese-native-grad-invalid'});
-      const writes:Record<string,string>={},reads:Record<string,string>={},readNodes=new Set<string>();
-      for(const event of this.graphNodes.values()){
-        if(event.turn!==graphTurn||typeof event.block!=='string'||typeof event.node!=='string')continue;
-        if(event.kind==='block_write'){
-          if(writes[event.block]&&writes[event.block]!==event.node)throw Object.assign(new Error('neuralese-native-grad-invalid: repeated native writes need distinct occurrence bindings'),{code:'neuralese-native-grad-invalid'});
-          writes[event.block]=event.node;
-        }
-        if(event.kind==='block_read'){
-          if(readNodes.has(event.block))throw Object.assign(new Error('neuralese-native-grad-invalid: repeated native reads need distinct occurrence bindings'),{code:'neuralese-native-grad-invalid'});
-          readNodes.add(event.block);
-          const inputs=(event.inputs??[]) as {node:string;block?:string}[];
-          const sources=inputs.filter(input=>input.block===event.block&&input.node!=='external');
-          if(sources.length>1)throw Object.assign(new Error('neuralese-native-grad-invalid: native read has ambiguous actual execution-graph producers'),{code:'neuralese-native-grad-invalid'});
-          if(sources[0])reads[event.block]=sources[0].node;
-        }
-      }
-      const binding:NativeTurnGraphBinding={graph_turn:graphTurn,written_nodes:writes,read_bindings:reads};
+      const capture=turn.native!.kind==='generation'?turn.native!.sampling:turn.native!.decision;
+      const binding=nativeCaptureGraphBinding(graphTurn,capture,this.graphNodes);
       return {...structuredClone(turn),native:{...structuredClone(turn.native!),graph:binding}};
     });
   }
   /** Turns recorded since the previous claim. */
   claim(): RecordedTurn[] { const out = this.turns.slice(this.claimed); this.claimed = this.turns.length; return out; }
+}
+
+/** Exact capture/event matching; equal IDs do not select a latest writer. */
+export function nativeCaptureGraphBinding(name:string,capture:Record<string,unknown>,nodes:ReadonlyMap<string,Record<string,unknown>>):NativeTurnGraphBinding {
+  const writes=[...nodes.values()].filter(event=>event.kind==='block_write'&&event.turn===name);
+  const reads=[...nodes.values()].filter(event=>event.kind==='block_read'&&event.turn===name);
+  const capturedWrites=(capture.writes??[]) as {state_id:string}[];
+  const capturedReads=((capture.prompt??[]) as Record<string,unknown>[]).filter(segment=>segment.kind==='native_state');
+  const fail=(message:string):never=>{throw Object.assign(new Error(`neuralese-native-grad-invalid: ${message}`),{code:'neuralese-native-grad-invalid'});};
+  const source=(event:Record<string,unknown>):string=>{
+    const edges=Array.isArray(event.inputs)?event.inputs as Record<string,unknown>[]:[];
+    const sources=edges.filter(edge=>edge.block===event.block).map(edge=>edge.node);
+    return sources.length===1&&typeof sources[0]==='string'&&sources[0]?sources[0]:fail('native read needs one exact writer or external input');
+  };
+  if(writes.length!==capturedWrites.length||reads.length!==capturedReads.length)fail('native capture differs from actual state occurrence inventory');
+  const boundWrites:NativeWriteOccurrence[]=capturedWrites.map((write,index)=>{
+    const at=writes.findIndex(event=>event.block===write.state_id);
+    if(at<0)fail('native write changed its actual artifact');
+    const event=writes.splice(at,1)[0]!;
+    return {index,id:String(event.block),node:String(event.node)};
+  });
+  const boundReads:NativeReadOccurrence[]=capturedReads.map((segment,index)=>{
+    if(segment.source_state_id!==undefined&&segment.source_state_id!==segment.id)fail('semantic input requires differentiable codec lowering');
+    const candidates=reads.filter(event=>event.block===segment.id&&event.stop_gradient===segment.stop_gradient&&
+      (segment.source_occurrence===undefined||source(event)===segment.source_occurrence));
+    if(!candidates.length||new Set(candidates.map(source)).size!==1)fail('native input has ambiguous or changed source occurrence');
+    const event=candidates[0]!;reads.splice(reads.indexOf(event),1);
+    return {index,id:String(segment.id),source_state_id:String(segment.id),node:String(event.node),source:source(event),
+      ...(segment.stop_gradient===true?{stop_gradient:true}:{})};
+  });
+  const count=(items:string[])=>{const counts=new Map<string,number>();for(const id of items)counts.set(id,(counts.get(id)??0)+1);return counts;};
+  const wc=count(boundWrites.map(item=>item.id)),rc=count(boundReads.map(item=>item.source_state_id));
+  return {graph_turn:name,written_nodes:Object.fromEntries(boundWrites.filter(item=>wc.get(item.id)===1).map(item=>[item.id,item.node])),
+    read_bindings:Object.fromEntries(boundReads.filter(item=>rc.get(item.source_state_id)===1&&item.source!=='external').map(item=>[item.source_state_id,item.source])),
+    ...([...wc.values()].some(value=>value>1)?{written_occurrences:boundWrites}:{}),
+    ...([...rc.values()].some(value=>value>1)?{read_occurrences:boundReads}:{})};
 }

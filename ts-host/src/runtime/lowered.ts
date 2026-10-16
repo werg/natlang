@@ -231,7 +231,7 @@ function instructionSite(plan: InlineLambdaPlan, renderedValues: readonly string
     interpolations: plan.interpolations.map((item, index) => ({ ...item, rendered: renderedValues[index] })),
     parameters: plan.parameters, returns: plan.returns, captures: plan.captures,
     ...(plan.sourceBackedHelper ? { source_backed_helper: plan.sourceBackedHelper } : {}),
-    ...(plan.softBody ? { soft_body_id: plan.softBody, ...(plan.softBodyStopGradient ? {soft_body_stop_gradient:true} : {}) } : {}),
+    ...(plan.softBody ? { soft_body_id: plan.softBody, ...(plan.softBodyStopGradient ? {soft_body_stop_gradient:true} : {}),...(plan.softBodySourceOccurrence?{soft_body_source_occurrence:plan.softBodySourceOccurrence}:{}) } : {}),
     ...(plan.explicitCaptures ? { explicit_captures: true } : {}), origin: origin ?? null };
 }
 
@@ -388,7 +388,7 @@ function explicitInline(plan: InlineLambdaPlan, values: readonly unknown[], acce
   const runtimeCaptureSnapshots = captureSnapshotAttestation(plan, origin, snapshots);
   if (plan.softBody) {
     const params = plan.parameters.map(parameter => `${parameter.name}: ${targetType(parameter.type)}`).join(', ');
-    return softFunction({ type: `(${params}) => ${targetType(plan.returns)}`, body: neuraleseRef(`Neuralese<(${params}) => ${targetType(plan.returns)}>`, plan.softBody, plan.softBodyStopGradient), captures: listed,
+    return softFunction({ type: `(${params}) => ${targetType(plan.returns)}`, body: neuraleseRef(`Neuralese<(${params}) => ${targetType(plan.returns)}>`, plan.softBody, plan.softBodyStopGradient,plan.softBodySourceOccurrence), captures: listed,
       types: planTypes(plan), codebase: context ?? {}, name: `soft@${plan.sourceSpan.file.split('/').at(-1)}:${plan.sourceSpan.line}`,
       manifest: { inline_instruction_site: { ...instructionSite(plan, [], origin),
         ...(runtimeCaptureSnapshots ? { runtime_capture_snapshots: runtimeCaptureSnapshots } : {}) } } });

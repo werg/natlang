@@ -47,20 +47,9 @@ def validate_model_turn_coverage(captured_turn_names, execution_graph):
 
 
 def validate_import_gradient_uses(name, capture, nodes):
-    """Bind constant-use metadata to actual ordered read occurrences."""
-    reads = [event for event in nodes.values() if event.get('kind') == 'block_read' and event.get('turn') == name]
-    segments = [segment for segment in capture.get('prompt', []) if segment.get('kind') == 'native_state']
-    if len(reads) != len(segments):
-        raise ValueError('native input gradient uses differ from actual read occurrences')
-    if len({event.get('block') for event in reads}) == len(reads):
-        by_id = {event.get('block'): event for event in reads}
-        reads = [by_id.get(segment.get('id'), {}) for segment in segments]
-    for event, segment in zip(reads, segments):
-        if any('stop_gradient' in value and value['stop_gradient'] is not True for value in (event, segment)):
-            raise ValueError('native input stop_gradient must be explicitly true or absent')
-        if (event.get('block') != segment.get('id')
-                or event.get('stop_gradient', False) != segment.get('stop_gradient', False)):
-            raise ValueError('native input gradient use differs from its actual graph occurrence')
+    """Compatibility entry point for the shared exact occurrence verifier."""
+    from .native_occurrences import capture_occurrences
+    capture_occurrences(name,capture,nodes)
 
 
 def rollout_turn_names(turns):
@@ -88,40 +77,10 @@ def validate_rollout_graph(rollout):
     for name, turn in zip(names, turns):
         if nodes and nodes[name].get('call_id') != turn['invocation_id']:
             raise ValueError('whole-episode model-turn event changed its actual invocation owner')
-        writes, reads, outside = turn_bindings(name, nodes)
-        capture = turn.get('sampling') or {}
-        captured_writes = [item.get('state_id') for item in capture.get('writes', [])]
-        captured_reads = [item.get('id') for item in capture.get('prompt', [])
-                          if item.get('kind') == 'native_state']
-        if any(not isinstance(value, str) or not value for value in captured_writes + captured_reads):
-            raise ValueError('whole-episode state capture needs exact artifact identities')
-        if (len(set(captured_writes)) != len(captured_writes)
-                or len(set(captured_reads)) != len(captured_reads)):
-            raise ValueError('whole-episode repeated state uses need exact occurrence-indexed capture')
-        if set(captured_writes) != set(writes) or set(captured_reads) != set(reads) | set(outside):
-            raise ValueError('whole-episode state capture differs from actual graph writes/reads; decoded or reencoded inputs require differentiable lowering')
-        validate_import_gradient_uses(name, capture, nodes)
+        capture=turn.get('sampling') or {}
+        from .native_occurrences import graph_binding
+        graph_binding(name,capture,nodes)
     return names, nodes
-
-
-def turn_bindings(name, nodes):
-    writes, reads, outside = {}, {}, {}
-    for event in nodes.values():
-        if event.get('turn') != name or event.get('kind') not in {'block_write', 'block_read'}:
-            continue
-        block = event.get('block')
-        if not isinstance(block, str) or not block:
-            raise ValueError('whole-episode state occurrence needs its exact artifact identity')
-        if event['kind'] == 'block_write':
-            if block in writes:
-                raise ValueError('whole-episode repeated writes need exact occurrence-indexed capture')
-            writes[block] = event['node']
-        else:
-            if block in reads or block in outside:
-                raise ValueError('whole-episode repeated reads need exact occurrence-indexed capture')
-            source = next(item['node'] for item in event['inputs'] if item.get('block') == block)
-            (reads if source in nodes else outside)[block] = source
-    return writes, reads, outside
 
 
 def whole_episode_turns(rollout):
@@ -130,8 +89,11 @@ def whole_episode_turns(rollout):
     names, nodes = validate_rollout_graph(rollout)
     result = []
     for name, turn in zip(names, rollout['turns']):
-        writes, reads, outside = turn_bindings(name, nodes)
+        from .native_occurrences import graph_binding
+        binding=graph_binding(name,turn.get('sampling') or {},nodes)
+        captured_writers={event['node'] for event in nodes.values() if event.get('kind')=='block_write'}
+        outside={block:node for block,node in binding['read_bindings'].items() if node not in captured_writers}
+        binding['read_bindings']={block:node for block,node in binding['read_bindings'].items() if block not in outside}
         result.append({'messages': turn['messages'], 'tools': turn.get('tools'), 'reply': turn['target'],
-            'graph_turn': name, 'written_nodes': writes, 'read_bindings': reads,
-            'external_read_bindings': outside, 'sampling': copy.deepcopy(turn.get('sampling') or {})})
+            **binding,'external_read_bindings':outside,'sampling':copy.deepcopy(turn.get('sampling') or {})})
     return result

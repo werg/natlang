@@ -180,7 +180,7 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
   if (wanted.kind === 'neuralese') {
     const sole = typeof raw === 'string' ? soleSentinelUse(raw) :
       isContentParts(raw) && raw.some(part => part.type !== 'text') ? soleSentinelUse(partsToText(raw)) : undefined;
-    if (sole) { checkBlockDialect(sole.id, wanted, env, path); return neuraleseRef(formatType(wanted), sole.id,sole.stop_gradient) as unknown as Value; }
+    if (sole) { checkBlockDialect(sole.id, wanted, env, path); return neuraleseRef(formatType(wanted), sole.id,sole.stop_gradient,sole.source_occurrence) as unknown as Value; }
     if (!isNeuraleseRef(raw)) return reject(path, 'type-mismatch', formatType(wanted), preview(raw));
     let got: Type | undefined;
     try { got = parseType(raw.$neuralese.type); } catch { got = undefined; }
@@ -211,7 +211,7 @@ export function coerce(raw: unknown, type: Type, env: TypeEnv, path = 'value', o
   if (isContentParts(raw) && raw.some(part => part.type !== 'text')) {
     const sole = soleSentinelUse(partsToText(raw));
     if (wanted.kind === 'prim' && wanted.name === 'unknown' && sole)
-      return neuraleseRef('Neuralese<unknown>', sole.id,sole.stop_gradient) as unknown as Value;
+      return neuraleseRef('Neuralese<unknown>', sole.id,sole.stop_gradient,sole.source_occurrence) as unknown as Value;
     return reject(path, 'type-mismatch', formatType(wanted), preview(raw));
   }
   if (wanted.kind === 'prim') {

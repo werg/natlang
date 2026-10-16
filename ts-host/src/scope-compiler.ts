@@ -1071,7 +1071,7 @@ export function compileScopeSnippet(source: string, options: ScopeCompileOptions
       // A typed literal becomes its reference value; an untyped one was reported by the analysis.
       const at = rel(node), literal = literals.find(item => item.start === at.start && item.end === at.end);
       if (literal) {
-        primitive.push({ ...at, text: `({ $neuralese: { type: ${JSON.stringify(literal.type)}, id: ${JSON.stringify(literal.id)}${literal.stopGradient?', stop_gradient: true':''} } })` });
+        primitive.push({ ...at, text: `({ $neuralese: { type: ${JSON.stringify(literal.type)}, id: ${JSON.stringify(literal.id)}${literal.stopGradient?', stop_gradient: true':''}${literal.sourceOccurrence?', source_occurrence: '+JSON.stringify(literal.sourceOccurrence):''} } })` });
         return;
       }
     }

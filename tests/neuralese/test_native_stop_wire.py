@@ -31,7 +31,7 @@ def test_stopped_capture_replay_retains_forward_and_blocks_only_source_gradient(
 
 
 def test_stop_capture_must_agree_with_actual_event_and_be_true_or_absent():
-    event={'kind':'block_read','turn':'reader','block':'state','stop_gradient':True}
+    event={'node':'read','kind':'block_read','turn':'reader','block':'state','stop_gradient':True,'inputs':[{'node':'external','block':'state'}]}
     capture={'prompt':[{'kind':'native_state','id':'state','stop_gradient':True}]}
     validate_import_gradient_uses('reader',capture,{'read':event})
     bad=copy.deepcopy(capture);bad['prompt'][0].pop('stop_gradient')

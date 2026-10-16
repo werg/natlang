@@ -22,7 +22,7 @@ def _native_plan(engine, items):
         if kind == "tok":
             run.append(int(value))
             continue
-        if kind not in ("block","block_stop") or not isinstance(value, str) or not value.startswith("nzs1_"):
+        if kind not in ("block","block_stop") or not isinstance(value.get("id") if isinstance(value,dict) else value, str) or not (value["id"] if isinstance(value,dict) else value).startswith("nzs1_"):
             raise RequestError("neuralese-native-state-unavailable",
                                "native decisions require exact native-state imports")
         if run:

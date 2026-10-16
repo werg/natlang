@@ -970,3 +970,15 @@ remain unchanged. Recovery details for a malformed constant flag or mismatched
 capture remain internal verifier debt if exposed to an executing model; include
 them in the next live recovery window. Static roundtrips and gradient checks do
 not establish task improvement or qualify public higher-order learning.
+## 2026-10-16: exact native producer/use occurrences
+
+Native typed references and private transport now retain the actual producer
+occurrence; repeated equal-ID reads/writes use complete occurrence inventories.
+This changes hidden metadata and exact gradient verification, not prompt text or
+an exposed operation. References without native origin remain explicit external
+inputs rather than choosing the latest equal-ID writer. Existing internal
+`neuralese-native-grad-invalid` recovery advice is extended in both authoring and
+integration skills. If the executing model receives an ambiguous-origin or
+capture-inventory rejection, measure that recovery in the next approximately48
+live executor samples; mechanism tests do not qualify new error-wording effects.
+Semantic-codec RL remains guarded until genuine differentiable lowering passes.

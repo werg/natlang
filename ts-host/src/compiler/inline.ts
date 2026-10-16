@@ -2,7 +2,7 @@ import ts from 'typescript';
 import { hexDigest } from '../native/hash.js';
 import { solveHoles } from './holes.js';
 import { awaitedType, describeTarget, isPromiseLike, TargetError, type TargetDescriptor } from './targets.js';
-import { checkGenericResults, checkNeuralese, neuraleseParts, type GenericInstantiation, type NeuraleseLiteral,
+import { checkGenericResults, checkNeuralese, neuraleseParts, nativeLiteralUse, type GenericInstantiation, type NeuraleseLiteral,
   type NeuraleseReadout } from './neuralese.js';
 
 export type SourceSpan = { file: string; start: number; end: number; line: number; column: number };
@@ -66,7 +66,7 @@ export type InlineLambdaPlan = {
   explicitCaptures?: true;
   /** A soft function literal: the template is one model-written Neuralese block, this block ID. */
   softBody?: string;
-  softBodyStopGradient?:true;
+  softBodyStopGradient?:true; softBodySourceOccurrence?:string;
   inheritedCodebaseRevision: string;
 };
 
@@ -98,15 +98,13 @@ export function softBodyOf(template: ts.TemplateLiteral): string | undefined {
   const expression = template.templateSpans[0]!.expression;
   if (!ts.isCallExpression(expression) || !ts.isPropertyAccessExpression(expression.expression)) return;
   const callee = expression.expression;
-  const [argument] = expression.arguments;
-  return ts.isIdentifier(callee.expression) && callee.expression.text === '__neuralese' && callee.name.text === 'body' &&
-    (expression.arguments.length===1||expression.arguments.length===2&&expression.arguments[1]?.kind===ts.SyntaxKind.TrueKeyword) &&
-    argument && ts.isStringLiteralLike(argument) ? argument.text : undefined;
+  return ts.isIdentifier(callee.expression) && callee.expression.text === '__neuralese' && callee.name.text === 'body' ?
+    nativeLiteralUse(expression.arguments)?.id : undefined;
 }
 
-function softBodyIsConstant(template:ts.TemplateLiteral):boolean {
-  if(!softBodyOf(template)||!ts.isTemplateExpression(template))return false;
-  return (template.templateSpans[0]!.expression as ts.CallExpression).arguments.length===2;
+function softBodyUse(template:ts.TemplateLiteral) {
+  if(!softBodyOf(template)||!ts.isTemplateExpression(template))return;
+  return nativeLiteralUse((template.templateSpans[0]!.expression as ts.CallExpression).arguments);
 }
 
 /** The `nl.with(…)` call when a tagged template's tag is one. */
@@ -722,7 +720,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
         templateEnd: template.getEnd(), expressions: [], visibleBindings: [...listed].sort(), slotBindings: [] } : undefined;
       plans.push({ sourceSpan, templateSpan, interpolations, definitionId, ...(adaptation ? { adaptation } : {}), strings: softBody ? [''] : strings, instructions: softBody ? '' : strings.join('${…}'),
         parameters: parameterTargets, ...(signature.open ? { openParameters: true } : {}), returns, captures, explicitCaptures: true,
-        ...(softBody ? { softBody,...(softBodyIsConstant(template)?{softBodyStopGradient:true as const}:{}) } : {}), inheritedCodebaseRevision: options.codebaseRevision ?? '' });
+        ...(softBody ? { softBody,...(softBodyUse(template)?.stopGradient?{softBodyStopGradient:true as const}:{}),...(softBodyUse(template)?.sourceOccurrence?{softBodySourceOccurrence:softBodyUse(template)!.sourceOccurrence}:{}) } : {}), inheritedCodebaseRevision: options.codebaseRevision ?? '' });
       return;
     }
     const candidates = new Map<string, ts.Symbol>();

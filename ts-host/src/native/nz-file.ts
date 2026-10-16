@@ -38,7 +38,7 @@ export type NzHeader = {
 };
 
 /** A soft function as stored: its type, body block and snapshot captures (already resolved to values). */
-export type NzSoftFunctionSpec = { readonly kind: 'soft-function'; readonly type: string; readonly body: string; readonly body_stop_gradient?: true;
+export type NzSoftFunctionSpec = { readonly kind: 'soft-function'; readonly type: string; readonly body: string; readonly body_stop_gradient?: true; readonly body_source_occurrence?:string;
   readonly captures: Readonly<Record<string, unknown>> };
 export const isSoftFunctionSpec = (value: unknown): value is NzSoftFunctionSpec =>
   !!value && typeof value === 'object' && (value as { kind?: unknown }).kind === 'soft-function';
@@ -300,8 +300,9 @@ export function loadNzSync(bytes: Uint8Array, resolve?: NzResolver): LoadedNz {
       return other.exports[name];
     }
     if ('$neuralese' in record && Object.keys(record).length === 1) {
-      const body = record.$neuralese as { type?: unknown; id?: unknown; stop_gradient?: unknown; distribution?: unknown; logScale?: unknown };
+      const body = record.$neuralese as { type?: unknown; id?: unknown; stop_gradient?: unknown; source_occurrence?:unknown; distribution?: unknown; logScale?: unknown };
       if (body.stop_gradient !== undefined && body.stop_gradient !== true) throw new NzFileError('neuralese-file-format', `${where}: invalid constant-use metadata`);
+      if (body.source_occurrence !== undefined && (typeof body.source_occurrence !== 'string'||!body.source_occurrence)) throw new NzFileError('neuralese-file-format', `${where}: invalid source occurrence`);
       const id = String(body?.id);
       block(id, where);
       if (body.distribution !== undefined) {
@@ -314,15 +315,16 @@ export function loadNzSync(bytes: Uint8Array, resolve?: NzResolver): LoadedNz {
           throw new NzFileError('neuralese-file-format', `${where}: log-scale and mean shapes differ`);
         declareDistribution(id, body.logScale);
       }
-      return neuraleseRef(String(body.type), id, body.stop_gradient === true);
+      return neuraleseRef(String(body.type), id, body.stop_gradient === true,body.source_occurrence as string|undefined);
     }
     if ('$neuralese-fn' in record && Object.keys(record).length === 1) {
-      const body = record['$neuralese-fn'] as { type?: unknown; body?: unknown; body_stop_gradient?: unknown; captures?: unknown };
+      const body = record['$neuralese-fn'] as { type?: unknown; body?: unknown; body_stop_gradient?: unknown; body_source_occurrence?:unknown; captures?: unknown };
       if (body.body_stop_gradient !== undefined && body.body_stop_gradient !== true) throw new NzFileError('neuralese-file-format', `${where}: invalid body constant-use metadata`);
+      if (body.body_source_occurrence!==undefined&&(typeof body.body_source_occurrence!=='string'||!body.body_source_occurrence)) throw new NzFileError('neuralese-file-format', `${where}: invalid body source occurrence`);
       block(String(body.body), where);
       const captures = Object.fromEntries(Object.entries((body.captures ?? {}) as Record<string, unknown>)
         .map(([name, value]) => [name, decodeValue(value, `${where} capture ${name}`)]));
-      return Object.freeze({ kind: 'soft-function', type: String(body.type), body: String(body.body), ...(body.body_stop_gradient ? {body_stop_gradient:true as const} : {}), captures: Object.freeze(captures) });
+      return Object.freeze({ kind: 'soft-function', type: String(body.type), body: String(body.body), ...(body.body_stop_gradient ? {body_stop_gradient:true as const} : {}), ...(body.body_source_occurrence?{body_source_occurrence:body.body_source_occurrence as string}:{}), captures: Object.freeze(captures) });
     }
     return Object.fromEntries(Object.entries(record).map(([key, item]) => [key, decodeValue(item, `${where}.${key}`)]));
   };
@@ -358,7 +360,7 @@ function checkExport(name: string, type: Type, value: unknown, env: TypeEnv, hea
   softValues(type, value, `export ${name}`);
   // Soft functions are checked structurally above; everything else goes through the ordinary value check.
   const plain = (type: Type, value: unknown): unknown => isSoftFunctionSpec(value) ?
-    neuraleseRef(value.type, value.body, value.body_stop_gradient) : value && typeof value === 'object' && !isNeuraleseRef(value) ?
+    neuraleseRef(value.type, value.body, value.body_stop_gradient,value.body_source_occurrence) : value && typeof value === 'object' && !isNeuraleseRef(value) ?
       (Array.isArray(value) ? value.map(item => plain(type, item)) :
         Object.fromEntries(Object.entries(value).map(([key, item]) => [key, plain(type, item)]))) : value;
   try { coerce(plain(type, value), type, env, `export ${name}`); }
@@ -420,7 +422,7 @@ export async function saveNz(exports: Record<string, NzSaveExport>, options: { s
       await use(value.body, where);
       const captures: Record<string, unknown> = {};
       for (const [name, item] of Object.entries(value.captures)) captures[name] = await encodeValue(item, `${where} capture ${name}`);
-      return { '$neuralese-fn': { type: value.type, body: value.body, ...(value.body_stop_gradient ? {body_stop_gradient:true} : {}), captures } };
+      return { '$neuralese-fn': { type: value.type, body: value.body, ...(value.body_stop_gradient ? {body_stop_gradient:true} : {}),...(value.body_source_occurrence?{body_source_occurrence:value.body_source_occurrence}:{}), captures } };
     }
     if (typeof value === 'function') throw new NzFileError('neuralese-file-type', `${where} holds a function that is not a soft function`);
     if (Array.isArray(value)) return Promise.all(value.map((item, index) => encodeValue(item, `${where}[${index}]`)));

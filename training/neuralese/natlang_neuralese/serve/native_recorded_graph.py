@@ -34,7 +34,7 @@ def authenticated_turns(turns, events):
             raise ValueError('native recorded turn needs its unique exact receipt identity')
         ids.add(native['id'])
         binding = native.get('graph')
-        if not isinstance(binding, dict) or set(binding) != {'graph_turn','written_nodes','read_bindings'}:
+        if not isinstance(binding, dict) or set(binding) - {'graph_turn','written_nodes','read_bindings','written_occurrences','read_occurrences'} or not {'graph_turn','written_nodes','read_bindings'} <= set(binding):
             raise ValueError('native recorded turn lacks its exact graph occurrence binding')
         name = binding['graph_turn']
         node = nodes.get(name)
@@ -45,51 +45,18 @@ def authenticated_turns(turns, events):
                 or native.get('invocation_id') is not None and native['invocation_id'] != node.get('call_id')):
             raise ValueError('native recorded receipt changed its actual model-turn occurrence')
         linked.add(name)
-        writes, reads, read_ids = {}, {}, set()
-        for event in nodes.values():
-            if event.get('turn') != name or event.get('kind') not in {'block_write','block_read'}:
-                continue
-            block = event.get('block')
-            if not isinstance(block, str):
-                raise ValueError('native block event needs its exact artifact identity')
-            if event['kind'] == 'block_write':
-                if block in writes:
-                    raise ValueError('native repeated writes need distinct occurrence bindings')
-                writes[block] = event['node']
-            else:
-                if block in read_ids:
-                    raise ValueError('native repeated reads need distinct occurrence bindings')
-                read_ids.add(block)
-                inputs = event.get('inputs')
-                if not isinstance(inputs, list) or any(not isinstance(item, dict) for item in inputs):
-                    raise ValueError('native read needs exact execution-graph input edges')
-                sources = [item['node'] for item in inputs if item.get('block') == block and item.get('node') != 'external']
-                if len(sources) > 1:
-                    raise ValueError('native read has ambiguous producer occurrence edges')
-                if sources:
-                    source = nodes.get(sources[0])
-                    if source is not None and (source.get('kind') != 'block_write' or source.get('block') != block):
-                        raise ValueError('native read edge does not reference its actual block writer')
-                    reads[block] = sources[0]
-        if binding['written_nodes'] != writes or binding['read_bindings'] != reads:
-            raise ValueError('native recorded occurrence maps differ from actual execution graph events')
         capture = native.get('sampling' if kind == 'generation' else 'decision')
         if not isinstance(capture, dict) or kind == 'decision' and capture.get('schema') != 'natlang.native-decision-capture/1':
             raise ValueError('native recorded turn lacks its actual capture kind')
-        from ..rl.episode_graph import validate_import_gradient_uses
-        captured_reads = [segment.get('id') for segment in capture.get('prompt',[])
-                          if segment.get('kind')=='native_state']
-        if len(set(captured_reads)) != len(captured_reads) or set(captured_reads) != read_ids:
-            raise ValueError('native recorded imports need exact occurrence-matched state; decoded/reencoded inputs require explicit differentiable lowering')
-        validate_import_gradient_uses(name, capture, nodes)
-        captured_writes = [write.get('state_id') for write in capture.get('writes',[])]
-        if len(set(captured_writes)) != len(captured_writes) or set(captured_writes) != set(writes):
-            raise ValueError('native recorded writes differ from actual captured producer artifacts')
+        from ..rl.native_occurrences import graph_binding
+        expected = graph_binding(name,capture,nodes)
+        if binding != expected:
+            raise ValueError('native recorded occurrence maps differ from actual execution graph events')
         prepared.append({**copy.deepcopy(binding), 'sampling': copy.deepcopy(capture),
                          'receipt_id': native['id'], 'kind': kind})
     from ..rl.episode_graph import validate_model_turn_coverage
     validate_model_turn_coverage(linked, events)
-    captured_writers={node for turn in prepared for node in turn['written_nodes'].values()}
+    captured_writers={node for turn in prepared for node in [*turn['written_nodes'].values(),*(item['node'] for item in turn.get('written_occurrences',[]))]}
     for turn in prepared:
         outside={block:node for block,node in turn['read_bindings'].items() if node not in captured_writers}
         turn['external_read_bindings']=outside
@@ -165,6 +132,6 @@ def compile_recorded_graph(turns, events, *, identity, roles, fetch_block):
         for source,entries in external_invocations.items()
         if any(item['receipt'] is not None for item in entries)}
     origins={turn['receipt_id']:{key:copy.deepcopy(turn[key]) for key in
-        ('graph_turn','written_nodes','read_bindings','external_read_bindings')} for turn in prepared}
+        ('graph_turn','written_nodes','read_bindings','external_read_bindings','written_occurrences','read_occurrences') if key in turn} for turn in prepared}
     return RecordedGraph(replace(replay,plan=plan,invocation_actors=receipts,
         external_invocations=external_invocations,external_receipts=external_receipts),invocations,decisions,origins)

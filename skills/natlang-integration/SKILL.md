@@ -521,3 +521,10 @@ constants for that use, including after context snapshots and `.nz` save/load.
 An equal live value remains differentiable. Keep the typed value when passing
 it to another call or `withAdapters`; do not extract its artifact ID to preserve
 a constant boundary. No payload is decoded or rewritten by this operation.
+
+Native Neuralese values retain their source-call occurrence through returns,
+context snapshots and `.nz`; equal artifact IDs may come from different calls.
+Pass the original typed value rather than rebuilding a reference from its ID.
+If native graph verification rejects ambiguous origins, restore the complete
+recorded episode and its typed source references; do not substitute a detached
+external state for an in-episode producer.

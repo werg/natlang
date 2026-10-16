@@ -18,12 +18,23 @@ export const NEURALESE_LITERAL_INTRINSIC = '__neuralese';
 export const DEFAULT_DIALECT = 'DefaultDialect';
 
 /** A model-written literal and the type its context gives it. */
-export type NeuraleseLiteral = SourceSpan & { id: string; type: string; stopGradient?:true };
+export type NeuraleseLiteral = SourceSpan & { id: string; type: string; stopGradient?:true;sourceOccurrence?:string };
 /** A soft expression that JavaScript would otherwise coerce to text. */
 export type NeuraleseReadout = SourceSpan & { kind?: 'join' | 'array-string' | 'concat' | 'json' | 'error' | 'string-argument' | 'scalar-conversion' | 'string-replace' | 'array-map';
   argument?: number; conversion?: 'Number' | 'Boolean'; conditional?: true; callback?: { start: number; end: number } };
 
 type Report = (node: ts.Node, code: NatlangDiagnostic['code'], message: string) => void;
+
+/** Exact private-literal transport metadata; this never adds a model operation. */
+export function nativeLiteralUse(args:ts.NodeArray<ts.Expression>):{id:string;stopGradient?:true;sourceOccurrence?:string}|undefined {
+  const [id,constant,source]=args;
+  if(!id||!ts.isStringLiteralLike(id)||args.length<1||args.length>3)return;
+  if(constant&&constant.kind!==ts.SyntaxKind.TrueKeyword&&!(ts.isIdentifier(constant)&&constant.text==='undefined'))return;
+  if(args.length===2&&constant?.kind!==ts.SyntaxKind.TrueKeyword)return;
+  if(args.length===3&&(!source||!ts.isStringLiteralLike(source)||!source.text))return;
+  return {id:id.text,...(constant?.kind===ts.SyntaxKind.TrueKeyword?{stopGradient:true as const}:{}),
+    ...(source&&ts.isStringLiteralLike(source)?{sourceOccurrence:source.text}:{})};
+}
 
 /** The element type and dialect of a soft value type, or undefined when the type is not one. */
 export function neuraleseParts(checker: ts.TypeChecker, type: ts.Type): { element: ts.Type; dialect: string } | undefined {
@@ -530,9 +541,8 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     ts.forEachChild(node, visit);
   };
   const literal = (node: ts.CallExpression): void => {
-    const argument = node.arguments[0];
-    if ((node.arguments.length!==1&&node.arguments.length!==2) || !argument || !ts.isStringLiteral(argument)||
-        node.arguments.length===2&&node.arguments[1]?.kind!==ts.SyntaxKind.TrueKeyword) return;
+    const use = nativeLiteralUse(node.arguments);
+    if (!use) return;
     // An async return position gives `T | PromiseLike<T>`: the one soft member is the literal's type.
     const contextual = checker.getContextualType(node);
     const members = !contextual ? [] : contextual.isUnion() ? contextual.types : [contextual];
@@ -545,7 +555,7 @@ export function checkNeuralese(checker: ts.TypeChecker, file: ts.SourceFile, rep
     }
     const start = node.getStart(), position = file.getLineAndCharacterOfPosition(start);
     literals.push({ file: file.fileName, start, end: node.getEnd(), line: position.line + 1, column: position.character + 1,
-      id: argument.text, type: text,...(node.arguments.length===2?{stopGradient:true}:{}) });
+      ...use, type: text });
   };
   planControlGuards(file);
   visit(file);

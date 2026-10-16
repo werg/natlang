@@ -534,6 +534,48 @@ export class NativeToolAgent {
       ...(returnType ? { result_type: returnType } : {}) };
     const port = this.options.neuralese?.port;
     const expectedReturn = session.lam.type.kind === 'lambda' ? session.env.resolve(session.lam.type.returns) : undefined;
+    const nativeOrigins=new Map<string,string[]>();
+    for (const block of nativeBlocks.filter(block => typeof block.id === 'string')) {
+      const id = block.id as string;
+      const artifact = await this.options.neuralese?.store.getNativeState?.(id);
+      if (!artifact) throw new Error(`native-state producer artifact ${id} was not archived before the agent turn`);
+      const tokenIds = artifact?.tensors.token_ids;
+      const embeddings = artifact?.tensors.embeddings;
+      if (!tokenIds || !embeddings) throw new Error(`native-state producer artifact ${id} lacks token/embedding tensors`);
+      const node=graphNode(session.runtime.trace, 'block_write', { call_id: producer.call_id,
+        turn: turnNode ?? '', block: id, format: 'native-state', source_kind: 'native-state-producer',
+        length: tokenIds.shape[0], width: embeddings.shape[1], truncated: false, stops: [],
+        native_identity: { architecture: artifact.metadata.architecture,
+          checkpoint_sha256: artifact.metadata.checkpoint_sha256,
+          tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
+          embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
+        tensor_inventory: Object.fromEntries(Object.entries(artifact.tensors)
+          .map(([name, tensor]) => [name, { dtype: tensor.dtype, shape: tensor.shape }])),
+        metadata: block },
+        turnNode ? [{ node: turnNode, port: 'turn' }] : []);
+      if(node)nativeOrigins.set(id,[...(nativeOrigins.get(id)??[]),node]);
+    }
+    const originUses=new Map<string,number>();
+    const withNativeOrigins=(value:unknown):unknown=>{
+      if(Array.isArray(value))return value.map(withNativeOrigins);
+      if(value&&typeof value==='object'){
+        const part=value as {type?:unknown;id?:unknown};
+        if(part.type==='native_state'&&typeof part.id==='string'){
+          const nodes=nativeOrigins.get(part.id),index=originUses.get(part.id)??0;
+          if(nodes?.length){
+            originUses.set(part.id,index+1);
+            // A repeated reference to one produced state retains that origin.
+            // Distinct equal writes are matched in actual output occurrence order.
+            const node=nodes.length===1?nodes[0]:nodes[index];
+            if(!node)throw new Error('neuralese-native-grad-invalid: native output has no unique producer occurrence');
+            return {...value,source_occurrence:node};
+          }
+          return value;
+        }
+        return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,withNativeOrigins(item)]));
+      }
+      return value;
+    };
     const written: NeuraleseBlockMeta[] = [...serverBlocks];
     const decodeCall = async ([name, args]: [string, Record<string, unknown>]): Promise<[string, Record<string, unknown>]> => {
       const decodedArgs: Record<string, unknown> = {};
@@ -542,7 +584,7 @@ export class NativeToolAgent {
           name === 'return_result' && key === 'value' ? 'return-result' : 'other-tool-argument';
         const resultValue = name === 'return_result' && key === 'value' &&
           (args.status === undefined || args.status === 'success');
-        decodedArgs[key] = await decodeTurnValue(value, port, { ...producer, marker_context: context }, written,
+        decodedArgs[key] = await decodeTurnValue(withNativeOrigins(value), port, { ...producer, marker_context: context }, written,
           resultValue && expectedReturn ? { type: expectedReturn, env: session.env } : undefined);
       }
       return [name, decodedArgs];
@@ -570,26 +612,6 @@ export class NativeToolAgent {
           .filter(key => reported[key] !== undefined)
           .map(key => [key, reported[key]])) }, turnNode ? [{ node: turnNode, port: 'turn' }] : []);
     }
-    for (const block of new Map(nativeBlocks.filter(block => typeof block.id === 'string')
-      .map(block => [block.id as string, block])).values()) {
-      const id = block.id as string;
-      const artifact = await this.options.neuralese?.store.getNativeState?.(id);
-      if (!artifact) throw new Error(`native-state producer artifact ${id} was not archived before the agent turn`);
-      const tokenIds = artifact?.tensors.token_ids;
-      const embeddings = artifact?.tensors.embeddings;
-      if (!tokenIds || !embeddings) throw new Error(`native-state producer artifact ${id} lacks token/embedding tensors`);
-      graphNode(session.runtime.trace, 'block_write', { call_id: producer.call_id,
-        turn: turnNode ?? '', block: id, format: 'native-state', source_kind: 'native-state-producer',
-        length: tokenIds.shape[0], width: embeddings.shape[1], truncated: false, stops: [],
-        native_identity: { architecture: artifact.metadata.architecture,
-          checkpoint_sha256: artifact.metadata.checkpoint_sha256,
-          tokenizer_fingerprint: artifact.metadata.tokenizer_fingerprint,
-          embedding_weight_sha256: artifact.metadata.embedding_weight_sha256 },
-        tensor_inventory: Object.fromEntries(Object.entries(artifact.tensors)
-          .map(([name, tensor]) => [name, { dtype: tensor.dtype, shape: tensor.shape }])),
-        metadata: block },
-        turnNode ? [{ node: turnNode, port: 'turn' }] : []);
-    }
     return decoded;
   }
 
@@ -604,17 +626,17 @@ export class NativeToolAgent {
     const turnId = `${callId}#turn${turn}`;
     const reads: { node: string; port: string; block: string }[] = [];
     const seen = new Set<string>();
-    type Use={block:string;native:boolean;stop?:true};
+    type Use={block:string;native:boolean;stop?:true;source?:string};
     const findRefs = (value: unknown): Use[] => {
       if (typeof value === 'string') {
         return runtimeTextToParts(value).flatMap<Use>(part=>part.type==='text'?[]:
-          part.type==='native_state'?[{block:part.id,native:true,...(part.stop_gradient?{stop:true as const}:{})}]:
+          part.type==='native_state'?[{block:part.id,native:true,...(part.stop_gradient?{stop:true as const}:{}),...(part.source_occurrence?{source:part.source_occurrence}:{})}]:
           seen.has(part.id)?[]:(seen.add(part.id),[{block:part.id,native:false}]));
       } else if (Array.isArray(value)) return value.flatMap(findRefs);
       else if (value && typeof value === 'object') {
-        const record = value as { type?: unknown; id?: unknown;stop_gradient?:unknown };
+        const record = value as { type?: unknown; id?: unknown;stop_gradient?:unknown;source_occurrence?:unknown };
         if (record.type === 'native_state' && typeof record.id === 'string') {
-          return [{block:record.id,native:true,...(record.stop_gradient===true?{stop:true}:{})}];
+          return [{block:record.id,native:true,...(record.stop_gradient===true?{stop:true}:{}),...(typeof record.source_occurrence==='string'?{source:record.source_occurrence}:{})}];
         } else if (record.type === 'neuralese' && typeof record.id === 'string') {
           if(seen.has(record.id))return [];
           seen.add(record.id);return [{block:record.id,native:false}];
@@ -637,7 +659,7 @@ export class NativeToolAgent {
               architecture: artifact!.metadata.architecture, checkpoint_sha256: artifact!.metadata.checkpoint_sha256,
               tokenizer_fingerprint: artifact!.metadata.tokenizer_fingerprint,
               embedding_weight_sha256: artifact!.metadata.embedding_weight_sha256 } } : {}),
-            positions: [index, part] }, [blockInput(block, 'block')]);
+            positions: [index, part] }, [blockInput(block, 'block',use.source)]);
           if (node) reads.push({ node, port: 'read', block });
         }
       }

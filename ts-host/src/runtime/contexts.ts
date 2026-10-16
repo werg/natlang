@@ -62,7 +62,7 @@ export function live(get: unknown, set?: (value: unknown) => void): unknown {
 }
 export const isLiveCapture = (value: unknown): value is LiveCapture => !!value && typeof value === 'object' && LIVE in value;
 
-type SoftMeta = { type: string; body: string; bodyStopGradient?: true; captures: Record<string, unknown>; live: boolean };
+type SoftMeta = { type: string; body: string; bodyStopGradient?: true; bodySourceOccurrence?:string; captures: Record<string, unknown>; live: boolean };
 const SOFT = new WeakMap<object, SoftMeta>();
 /** The stored form of a soft function, when `value` is one. */
 export function softFunctionOf(value: unknown): SoftMeta | undefined { return typeof value === 'function' ? SOFT.get(value) : undefined; }
@@ -85,7 +85,8 @@ export function softFunction(spec: { type: string; body: string | NeuraleseRef; 
   readout?: 'template' }): NatlangCallable {
   const body = typeof spec.body === 'string' ? spec.body : spec.body.$neuralese.id;
   const bodyStopGradient = typeof spec.body !== 'string' && spec.body.$neuralese.stop_gradient;
-  const bodyKey = body + (bodyStopGradient ? ':constant' : '');
+  const bodySourceOccurrence=typeof spec.body !== 'string' ? spec.body.$neuralese.source_occurrence : undefined;
+  const bodyKey = body + (bodyStopGradient ? ':constant' : '') + (bodySourceOccurrence ? '@'+bodySourceOccurrence : '');
   const type = parseType(spec.type);
   const lambda = type.kind === 'neuralese' ? type.element : type;
   if (lambda.kind !== 'lambda') throw new TypeError(`a soft function needs a function type, got ${spec.type}`);
@@ -104,7 +105,7 @@ export function softFunction(spec: { type: string; body: string | NeuraleseRef; 
   Object.assign(captures, dataCells(context, new Set(Object.keys(captures))));
   const skillFiles = skillFilesOf(context.data);
   const definition: CallableDefinition = { id: `nz-fn:${bodyKey}`, name: spec.name ?? `soft@${body.slice(4, 16)}`,
-    body: neuraleseSentinel(body, bodyStopGradient) + '\n',
+    body: neuraleseSentinel(body, bodyStopGradient,bodySourceOccurrence) + '\n',
     params: lambda.params.fields.map(field => ({ name: field.name, type: formatType(field.type), ...(field.optional ? { optional: true } : {}) })),
     returns: formatType(lambda.returns), types: spec.types ?? {}, codebase: spec.codebase ?? context.items as Record<string, unknown>,
     subtype: 'function', ...(spec.codebase ? {} : { contextId: context.id }), revision: bodyKey,
@@ -113,7 +114,7 @@ export function softFunction(spec: { type: string; body: string | NeuraleseRef; 
     { captures, manifest: { inline: true, soft: true, ...(spec.manifest ?? {}), ...(spec.adHoc === false ? { adHoc: false } : {}) },
       ...(skillFiles ? { skillFiles } : {}), ...(at ? { at } : {}) }) });
   attachChildren(fn, (spec.codebase ?? context.items) as Record<string, ItemRecord>);
-  SOFT.set(fn, { type: softType, body, ...(bodyStopGradient ? {bodyStopGradient: true} : {}), captures: Object.fromEntries(Object.entries(spec.captures ?? {})
+  SOFT.set(fn, { type: softType, body, ...(bodyStopGradient ? {bodyStopGradient: true} : {}), ...(bodySourceOccurrence?{bodySourceOccurrence}:{}), captures: Object.fromEntries(Object.entries(spec.captures ?? {})
     .map(([name, value]) => [name, isLiveCapture(value) ? value : value])), live: hasLive });
   return fn;
 }
@@ -144,9 +145,9 @@ function recordDigest(record: ItemRecord): unknown {
 
 function dataDigest(value: unknown): unknown {
   if (value instanceof Context) return { context: value.id };
-  if (isNeuraleseRef(value)) return { neuralese: value.$neuralese.id, type: value.$neuralese.type, ...(value.$neuralese.stop_gradient ? {stop_gradient:true} : {}) };
+  if (isNeuraleseRef(value)) return { neuralese: value.$neuralese.id, type: value.$neuralese.type, ...(value.$neuralese.stop_gradient ? {stop_gradient:true} : {}),...(value.$neuralese.source_occurrence?{source_occurrence:value.$neuralese.source_occurrence}:{}) };
   const soft = softFunctionOf(value);
-  if (soft) return { softFunction: soft.body, type: soft.type, ...(soft.bodyStopGradient ? {body_stop_gradient:true} : {}), captures: Object.fromEntries(Object.entries(soft.captures)
+  if (soft) return { softFunction: soft.body, type: soft.type, ...(soft.bodyStopGradient ? {body_stop_gradient:true} : {}),...(soft.bodySourceOccurrence?{body_source_occurrence:soft.bodySourceOccurrence}:{}), captures: Object.fromEntries(Object.entries(soft.captures)
     .map(([name, item]) => [name, isLiveCapture(item) ? { live: true } : dataDigest(item)])) };
   if (typeof value === 'function') {
     const meta = callableMeta(value);
@@ -163,7 +164,7 @@ function dataDigest(value: unknown): unknown {
 function snapshotContextValue(value: unknown, active = new WeakSet<object>()): unknown {
   if (!value || typeof value !== 'object') return value;
   if (value instanceof Context || isLiveCapture(value)) return value;
-  if (isNeuraleseRef(value)) return neuraleseRef(value.$neuralese.type, value.$neuralese.id,value.$neuralese.stop_gradient);
+  if (isNeuraleseRef(value)) return neuraleseRef(value.$neuralese.type, value.$neuralese.id,value.$neuralese.stop_gradient,value.$neuralese.source_occurrence);
   if (value instanceof ArrayBuffer) return value.slice(0);
   if (ArrayBuffer.isView(value)) {
     const buffer = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
@@ -490,7 +491,7 @@ setRebinder((fn, context) => rebind(fn, context as Context));
 
 /** A callable for a soft-function export. */
 export function softFunctionFromSpec(spec: NzSoftFunctionSpec, context?: Context): NatlangCallable {
-  return softFunction({ type: spec.type, body: neuraleseRef(spec.type,spec.body,spec.body_stop_gradient), captures: { ...spec.captures }, context });
+  return softFunction({ type: spec.type, body: neuraleseRef(spec.type,spec.body,spec.body_stop_gradient,spec.body_source_occurrence), captures: { ...spec.captures }, context });
 }
 
 /** The exports of a loaded `.nz` file as runtime values (soft functions become callables). */
@@ -509,7 +510,7 @@ export async function save(exports: Record<string, unknown>, options: { store: N
     const soft = softFunctionOf(value);
     if (soft) {
       if (soft.live) throw new NzFileError('neuralese-live-capture-save', `${where} has live captures; only snapshot captures can be saved`);
-      return { kind: 'soft-function', type: soft.type, body: soft.body, ...(soft.bodyStopGradient ? {body_stop_gradient:true} : {}),
+      return { kind: 'soft-function', type: soft.type, body: soft.body, ...(soft.bodyStopGradient ? {body_stop_gradient:true} : {}),...(soft.bodySourceOccurrence?{body_source_occurrence:soft.bodySourceOccurrence}:{}),
         captures: Object.fromEntries(Object.entries(soft.captures).map(([name, item]) => [name, toSpec(item, `${where} capture ${name}`)])) };
     }
     if (isLiveCapture(value)) throw new NzFileError('neuralese-live-capture-save', `${where} is a live capture`);

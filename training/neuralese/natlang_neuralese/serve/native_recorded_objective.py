@@ -25,14 +25,14 @@ def _prompt_items(engine,turn):
     for kind,value in engine._prompt_plan(turn['messages'],turn.get('tools')):
         if kind=='tokens':expected.extend(('token',token,False) for token in value)
         elif kind in ('native_state','native_state_constant'):
-            expected.extend([('token',engine.role_tokens.consume_open,False),('state',value,kind=='native_state_constant'),
+            expected.extend([('token',engine.role_tokens.consume_open,False),('state',value['id'] if isinstance(value,dict) else value,kind=='native_state_constant',value.get('source_occurrence') if isinstance(value,dict) else None),
                              ('token',engine.role_tokens.consume_close,False)])
         else:raise ValueError('native recorded request cannot use legacy projected imports')
     actual=[]
     for segment in _capture(turn)['prompt']:
         if segment['kind']=='tokens':
             actual.extend(('token',token,producing) for token,producing in zip(segment['token_ids'],segment['producing']))
-        else:actual.append(('state',segment['id'],segment.get('stop_gradient',False)))
+        else:actual.append(('state',segment['id'],segment.get('stop_gradient',False),segment.get('source_occurrence')))
     if expected!=actual:
         raise ValueError('native recorded prompt differs from its exact rendered messages/tools/import roles')
 
@@ -90,7 +90,7 @@ def lower_recorded_objective(engine,turns,events,terms,*,owner=None):
         for kind,value in rest:
             if kind=='tok':tokens.append(int(value));flags.append(False)
             elif kind in ('block','block_stop'):
-                block=fetch(value)
+                block=fetch(value['id'] if isinstance(value,dict) else value)
                 same=block.tokenizer_fingerprint==identity['tokenizer_fingerprint']
                 ids=block.token_ids.tolist() if same else engine.tokenizer(block.text,
                     add_special_tokens=False,split_special_tokens=True)['input_ids']

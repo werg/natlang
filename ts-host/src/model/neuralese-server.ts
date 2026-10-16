@@ -336,10 +336,11 @@ function materializeNativeStateSentinels(value: unknown, key?: string): unknown 
     return value.flatMap(part => part.type === 'text' ? runtimeTextToParts(part.text) : [part]);
   if (Array.isArray(value)) return value.map(item => materializeNativeStateSentinels(item));
   if (value && typeof value === 'object') {
-    const part = value as { type?: unknown; id?: unknown;stop_gradient?:unknown };
+    const part = value as { type?: unknown; id?: unknown;stop_gradient?:unknown;source_occurrence?:unknown };
+    if (part.type === 'native_state' && part.source_occurrence !== undefined && (typeof part.source_occurrence!=='string'||!part.source_occurrence)) throw new TypeError('native source occurrence must be a nonempty actual writer reference');
     if (part.type === 'native_state' && part.stop_gradient !== undefined && part.stop_gradient !== true) throw new TypeError('native state constant-use metadata must be true or absent');
     if (part.type === 'native_state' && isNativeStateId(part.id)) return [{ type: 'native_state', id: part.id,
-      ...(part.stop_gradient===true?{stop_gradient:true}:{}) }];
+      ...(part.stop_gradient===true?{stop_gradient:true}:{}),...(typeof part.source_occurrence==='string'?{source_occurrence:part.source_occurrence}:{}) }];
     return Object.fromEntries(Object.entries(value).map(([name, item]) =>
       [name, materializeNativeStateSentinels(item, name)]));
   }
@@ -488,11 +489,11 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     // Sampling receipts also own raw producer captures and decoded native
     // observations. Archive them before releasing the serving lease; compact
     // outputs alone cannot reproduce the actor's actual policy inputs.
-    const sampling = reply.x_natlang_rl_capture as { prompt?: Array<{ kind?: string; id?: string }>;
+    const sampling = reply.x_natlang_rl_capture as { prompt?: Array<{ kind?: string; id?: string;source_state_id?:string }>;
       writes?: Array<{ state_id?: string; raw_state_id?: string }> } | undefined;
     const archiveIds = new Set(nativeBlocks.map(meta => meta.id));
     for (const observation of sampling?.prompt ?? [])
-      if (observation.kind === 'native_state' && observation.id) archiveIds.add(observation.id);
+      if (observation.kind === 'native_state') for(const id of [observation.id,observation.source_state_id])if(id)archiveIds.add(id);
     for (const write of sampling?.writes ?? [])
       for (const id of [write.state_id, write.raw_state_id]) if (id) archiveIds.add(id);
     for (const id of archiveIds) {
@@ -555,7 +556,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         !Array.isArray(capture.continuations)||capture.continuations.length!==item.options.length)
       throw Object.assign(new Error('neuralese-native-grad-invalid: native decision learning needs its actual rendered continuation receipt'),{code:'neuralese-native-grad-invalid'});
     const ids=new Set<string>(requestNativeStateIds(item.messages));
-    for(const segment of capture.prompt as {kind?:string;id?:string}[])if(segment.kind==='native_state'&&segment.id)ids.add(segment.id);
+    for(const segment of capture.prompt as {kind?:string;id?:string;source_state_id?:string}[])if(segment.kind==='native_state')for(const id of [segment.id,segment.source_state_id])if(id)ids.add(id);
     for(const receipt of (capture.native_state_imports??[]) as {id?:string;observed_native_state_id?:string}[])
       for(const id of [receipt.id,receipt.observed_native_state_id])if(id)ids.add(id);
     if(ids.size&&!store)throw Object.assign(new Error('neuralese-native-archive-unavailable: configure a durable native store before recording decision inputs'),{code:'neuralese-native-archive-unavailable'});

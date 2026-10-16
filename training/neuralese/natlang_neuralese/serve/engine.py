@@ -513,7 +513,10 @@ class Engine:
                         ["neuralese"] * len(rendered.blocks))[segment]
                 if kind=='native_state' and rendered.block_stop_gradients and rendered.block_stop_gradients[segment]:
                     kind='native_state_constant'
-                plan.append((kind if kind in ('native_state','native_state_constant') else 'block', rendered.blocks[segment]))
+                value = rendered.blocks[segment]
+                if kind in ('native_state','native_state_constant') and rendered.block_source_occurrences and rendered.block_source_occurrences[segment]:
+                    value = {'id': value, 'source_occurrence': rendered.block_source_occurrences[segment]}
+                plan.append((kind if kind in ('native_state','native_state_constant') else 'block', value))
         return plan
 
     def prompt_positions(self, messages, tools) -> int:
@@ -525,7 +528,7 @@ class Engine:
                 if kind == 'tokens':
                     positions += len(value)
                 elif kind in ('native_state','native_state_constant'):
-                    record = self.store.get_native_state(value)
+                    record = self.store.get_native_state(value['id'] if isinstance(value,dict) else value)
                     if record is None:
                         raise RequestError('neuralese-unknown-native-state', f'{value} is not in this server store; restore it first')
                     positions += 2 + (len(record.block.token_ids) if self._native_exact(record.block)
@@ -633,14 +636,14 @@ class Engine:
         except ValueError:
             return False
 
-    def _native_consume(self, seq, block_id, *, stop_gradient=False):
+    def _native_consume(self, seq, block_id, *, stop_gradient=False, source_occurrence=None):
         def consume():
             begin,len_imports=len(seq.native_rl_prompt),len(seq.native_imports)
             result=self._native_consume_impl(seq,block_id,stop_gradient=stop_gradient)
-            if stop_gradient:
-                for segment in seq.native_rl_prompt[begin:]:
-                    if segment['kind']=='native_state':segment['stop_gradient']=True
-                for receipt in seq.native_imports[len_imports:]:receipt['stop_gradient']=True
+            use = {**({'stop_gradient': True} if stop_gradient else {}), **({'source_occurrence': source_occurrence} if source_occurrence else {})}
+            for segment in seq.native_rl_prompt[begin:]:
+                if segment['kind']=='native_state':segment.update(use)
+            for receipt in seq.native_imports[len_imports:]:receipt.update(use)
             return result
         return self._native_run(consume, seq.request.adapters)
 
@@ -716,6 +719,7 @@ class Engine:
                 adapted_record = self.store.put_native_state(adapted)
                 observed_id = adapted_record.id
                 seq.native_rl_prompt.append({'kind': 'native_state', 'id': adapted_record.id,
+                    'source_state_id': block_id, 'semantic_adaptation': adaptation,
                     'native_identity': self._native_block_identity(adapted),
                     **({'state_derivation':adapted.derivation} if adapted.derivation is not None else {})})
         else:
@@ -771,7 +775,7 @@ class Engine:
 
     def _native_prefill_impl(self, seq):
         self._validate_native_state_modes(seq.request.native_state_modes,
-            {value for kind, value in seq.prompt_plan or () if kind in ('native_state','native_state_constant')})
+            {value['id'] if isinstance(value,dict) else value for kind, value in seq.prompt_plan or () if kind in ('native_state','native_state_constant')})
         if seq.request.rl_capture:
             from ..model.native_adapters import execution_binding, SCHEMA
             seq.native_rl_policy = dict(self.execution_native_identity)
@@ -824,7 +828,8 @@ class Engine:
                     seq.cache = output["cache"]
                     seq.logits = self._native_logits(output["h_final"])
             elif kind in ("native_state","native_state_constant"):
-                self._native_consume(seq, value,stop_gradient=kind=='native_state_constant')
+                self._native_consume(seq, value['id'] if isinstance(value,dict) else value,stop_gradient=kind=='native_state_constant',
+                    source_occurrence=value.get('source_occurrence') if isinstance(value,dict) else None)
             else:
                 raise RequestError("neuralese-native-state-unavailable", "native serving accepts native_state parts, not projected blocks")
         if seq.cache is None or seq.logits is None:
@@ -1044,7 +1049,8 @@ class Engine:
                     if kinds[segment] != "native_state":
                         raise RequestError("neuralese-native-state-text", "legacy projected blocks cannot initialize native state")
                     temp = Sequence(GenerationRequest(messages=[], rl_capture=True, native_state_modes=native_state_modes), Future(), cache=cache)
-                    self._native_consume(temp, block_id,stop_gradient=bool(rendered.block_stop_gradients and rendered.block_stop_gradients[segment]))
+                    self._native_consume(temp, block_id,stop_gradient=bool(rendered.block_stop_gradients and rendered.block_stop_gradients[segment]),
+                        source_occurrence=rendered.block_source_occurrences[segment] if rendered.block_source_occurrences else None)
                     cache = temp.cache
                     source_segments.extend(temp.native_rl_prompt)
                     source_imports.extend(temp.native_imports)

@@ -7,7 +7,7 @@
  * `<call id>#<seq>` (its event's position in that call's trace).
  */
 import {activeRecorder} from './model-recording.js';
-import { isNeuraleseRef } from './neuralese.js';
+import { isNeuraleseRef, isNativeStateId } from './neuralese.js';
 import type { NativeTraceRecorder, TraceEvent } from './trace.js';
 
 export const GRAPH_VERSION = 'natlang.exec-graph/1';
@@ -48,15 +48,15 @@ function rememberProducer(block: string, node: string): void {
   if (PRODUCERS.size > PRODUCER_LIMIT) PRODUCERS.delete(PRODUCERS.keys().next().value!);
 }
 /** An input edge for a block: from its producing node, or from `external` (a file, another task, an older record). */
-export function blockInput(block: string, port?: string): GraphInput {
-  return { node: PRODUCERS.get(block) ?? 'external', block, ...(port ? { port } : {}) };
+export function blockInput(block: string, port?: string, sourceOccurrence?:string): GraphInput {
+  return { node: sourceOccurrence ?? (isNativeStateId(block) ? 'external' : PRODUCERS.get(block) ?? 'external'), block, ...(port ? { port } : {}) };
 }
 /** Block inputs for every soft value inside `value`, with ports naming where each one sits. */
 export function valueInputs(value: unknown, port: string): GraphInput[] {
   const found: GraphInput[] = [];
   const visit = (item: unknown, path: string, depth: number) => {
     if (depth > 32 || item === null || typeof item !== 'object') return;
-    if (isNeuraleseRef(item)) { found.push(blockInput(item.$neuralese.id, path)); return; }
+    if (isNeuraleseRef(item)) { found.push(blockInput(item.$neuralese.id, path,item.$neuralese.source_occurrence)); return; }
     if (Array.isArray(item)) item.forEach((entry, index) => visit(entry, `${path}[${index}]`, depth + 1));
     else for (const [key, entry] of Object.entries(item)) visit(entry, `${path}.${key}`, depth + 1);
   };

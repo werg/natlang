@@ -161,7 +161,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             raise ValueError('native RL needs its exact positive-temperature sampling law')
         if set(law) - {'temperature', 'seed', 'guidance', 'probabilities'}:
             raise ValueError('native RL sampling processor needs explicit replay support')
-        own, mask, reads, read_stops = [], [], [], {}
+        own, mask, reads, read_stops, read_sources = [], [], [], [], []
         for segment in capture.get('prompt') or []:
             if segment.get('kind') == 'tokens':
                 ids = _tokens(segment.get('token_ids'))
@@ -187,7 +187,8 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     raise ValueError('foreign native RL state needs an explicit adaptation/reencoding capture')
                 if 'stop_gradient' in segment and segment['stop_gradient'] is not True:
                     raise ValueError('native input stop_gradient must be explicitly true or absent')
-                read_stops[len(own)] = segment.get('stop_gradient', False)
+                read_stops.append(segment.get('stop_gradient', False))
+                read_sources.append(segment.get('source_occurrence'))
                 reads.append((len(own), segment['id'], receipt))
             else:
                 raise ValueError('unknown native RL prompt segment')
@@ -250,7 +251,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         if actual_writes != declared_writes:
             raise ValueError('native RL captured write ranges do not cover actual sampled produce spans')
         spans = []
-        for write in writes:
+        for write_index, write in enumerate(writes):
             begin, end = write.get('begin_sample'), write.get('end_sample')
             lo, hi = write.get('payload_begin'), write.get('payload_end')
             if (any(type(value) is not int for value in (begin, end, lo, hi))
@@ -284,8 +285,17 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             span = (prompt_length+lo, prompt_length+hi)
             spans.append(span)
             occurrence = (turn.get('written_nodes') or {}).get(block_id)
+            if 'written_occurrences' in turn:
+                inventory=turn['written_occurrences']
+                if not isinstance(inventory,list) or len(inventory)!=len(writes):
+                    raise ValueError('native writes need their exact complete occurrence inventory')
+                item=inventory[write_index]
+                if (not isinstance(item,dict) or set(item)!={'index','id','node'} or item['index']!=write_index
+                        or item['id']!=block_id or not isinstance(item['node'],str)):
+                    raise ValueError('native write occurrence differs from its actual capture')
+                occurrence=item['node']
             writers.setdefault(block_id, []).append((name, *span, occurrence))
-        prepared[name] = {'turn': turn, 'own': tuple(own), 'mask': mask, 'reads': reads, 'read_stops': read_stops,
+        prepared[name] = {'turn': turn, 'own': tuple(own), 'mask': mask, 'reads': reads, 'read_stops': read_stops, 'read_sources': read_sources,
                           'events': events, 'spans': spans, 'actor_identity':actor_identity,'adapter_binding':binding}
     if not prepared:
         raise ValueError('native RL graph has no captured turns')
@@ -296,10 +306,28 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         for name, item in list(pending.items()):
             actor_identity,binding=item['actor_identity'],item['adapter_binding']
             imports, dependencies = [], set()
-            for at, block_id, receipt in item['reads']:
+            for read_index, (at, block_id, receipt) in enumerate(item['reads']):
                 choices = writers.get(block_id, [])
                 occurrence_binding = (item['turn'].get('read_bindings') or {}).get(block_id)
                 outside = (item['turn'].get('external_read_bindings') or {}).get(block_id)
+                if 'read_occurrences' in item['turn']:
+                    inventory=item['turn']['read_occurrences']
+                    if not isinstance(inventory,list) or len(inventory)!=len(item['reads']):
+                        raise ValueError('native reads need their exact complete occurrence inventory')
+                    use=inventory[read_index]
+                    if (not isinstance(use,dict) or set(use)-{'index','id','source_state_id','node','source','stop_gradient'}
+                            or not {'index','id','source_state_id','node','source'}<=set(use)
+                            or use['index']!=read_index or use['id']!=block_id or use['source_state_id']!=block_id
+                            or use.get('stop_gradient',False)!=item['read_stops'][read_index]
+                            or not isinstance(use['source'],str) or not use['source']):
+                        raise ValueError('native read occurrence differs from its actual capture')
+                    origin=use['source']
+                    captured={choice[3] for choices in writers.values() for choice in choices}
+                    occurrence_binding=origin if origin in captured else None
+                    outside=origin if origin not in captured else None
+                captured_source=item['read_sources'][read_index]
+                if captured_source is not None and captured_source!=(outside or occurrence_binding):
+                    raise ValueError('native input changed its transported source occurrence')
                 if outside is not None:
                     if (not isinstance(outside,str) or not outside
                             or occurrence_binding is not None
@@ -328,7 +356,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                         if getattr(block, 'adapter_binding', None) != binding:
                             raise ValueError('native RL external state adapter binding differs from its actor')
                     start, stop = 0, len(block.token_ids)
-                imports.append(ImportSpan(at, source, start, stop, stop_gradient=item['read_stops'].get(at, False)))
+                imports.append(ImportSpan(at, source, start, stop, stop_gradient=item['read_stops'][read_index]))
             if any(dependency in pending for dependency in dependencies):
                 continue
             # All exact roles, including STOP and delimiter inputs, come from

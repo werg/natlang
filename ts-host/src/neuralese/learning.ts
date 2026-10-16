@@ -412,7 +412,7 @@ const stopped = new WeakSet<object>();
 /** `v` as a constant: its Neuralese values receive no gradient. */
 export function stopGradient<T>(v: T): T {
   const copy = (value: unknown): unknown => {
-    if (isNeuraleseRef(value)) { const ref = neuraleseRef(value.$neuralese.type, value.$neuralese.id,true); stopped.add(ref); return ref; }
+    if (isNeuraleseRef(value)) { const ref = neuraleseRef(value.$neuralese.type, value.$neuralese.id,true,value.$neuralese.source_occurrence); stopped.add(ref); return ref; }
     if (Array.isArray(value)) return value.map(copy);
     if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype)
       return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, copy(item)]));

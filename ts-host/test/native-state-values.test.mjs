@@ -399,3 +399,35 @@ test('agent request and graph preserve a native constant use without changing th
   assert.equal(reads.length,1);assert.equal(reads[0].stop_gradient,true);
   assert.equal((await store.getNativeState(artifact.id)).id,artifact.id);
 });
+
+test('equal native IDs retain independent writer origins through typed values, contexts and archives', async () => {
+  const { neuraleseRefSentinel, soleSentinelUse }=await import('../dist/native/neuralese.js');
+  const { save,nzExports,Context,softFunction,softFunctionOf }=await import('../dist/runtime/contexts.js');
+  const { blockInput }=await import('../dist/native/graph.js');
+  const { stopGradient }=await import('../dist/neuralese/learning.js');
+  const store=new MemoryNeuraleseStore(),artifact=await store.putNativeState(nativeStateFixture());
+  const first=neuraleseRef('Neuralese<string>',artifact.id,false,'call:first#write-0');
+  const second=neuraleseRef('Neuralese<string>',artifact.id,false,'call:second#write-0');
+  const stopped=stopGradient(first);
+  assert.equal(stopped.$neuralese.source_occurrence,first.$neuralese.source_occurrence);
+  assert.notEqual(neuraleseRefSentinel(first),neuraleseRefSentinel(second));
+  assert.deepEqual(soleSentinelUse(neuraleseRefSentinel(stopped)),{id:artifact.id,stop_gradient:true,source_occurrence:'call:first#write-0'});
+  assert.equal(blockInput(artifact.id,'read',first.$neuralese.source_occurrence).node,'call:first#write-0');
+  assert.notEqual(Context.empty().with({memo:first}).id,Context.empty().with({memo:second}).id);
+  const body=softFunction({type:'() => string',body:stopped});
+  const wire=await save({first,second,body},{store,dialect:'native-state/fixture'});
+  const exports=nzExports(await loadNz(wire));
+  assert.equal(exports.first.$neuralese.source_occurrence,'call:first#write-0');
+  assert.equal(exports.second.$neuralese.source_occurrence,'call:second#write-0');
+  assert.equal(softFunctionOf(exports.body).bodySourceOccurrence,'call:first#write-0');
+  assert.equal(sourceWithLiteralCalls(`return ${neuraleseRefSentinel(first)};`),`return __neuralese(${JSON.stringify(artifact.id)}, undefined, "call:first#write-0");`);
+});
+
+test('actual eval compiler preserves native constant and source metadata in a typed result', async()=>{
+  const {neuraleseRefSentinel}=await import('../dist/native/neuralese.js');
+  const store=new MemoryNeuraleseStore(),artifact=await store.putNativeState(nativeStateFixture());
+  const reference=neuraleseRef('Neuralese<string>',artifact.id,true,'exact-source#write');
+  const target=open({type:'() => Neuralese<string>',instructions:'Return the typed memo.'},{neuralese:runtimeFor(store)}).session;
+  const result=await target.applyAsync('eval',{code:`const memo: Neuralese<string> = ${neuraleseRefSentinel(reference)}; memo;`,finish:true});
+  assert.deepEqual(target.lam.return,reference,JSON.stringify(result));
+});
