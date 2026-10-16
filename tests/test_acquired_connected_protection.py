@@ -98,3 +98,16 @@ def test_durable_source_closure_receipt_rejects_changed_current_hold_sets(tmp_pa
     changed={**protected,'held':protected['held']|{'new-held'}}
     with pytest.raises(ValueError,match='stale for current protection'):
         verify_global_source_closure(first,changed,receipt_path=receipt)
+
+
+def test_durable_source_closure_receipt_pins_implementation_dependencies(tmp_path,monkeypatch):
+    original=base(tmp_path,monkeypatch)
+    first=project(original,tmp_path/'closed')
+    protected=teacher.current_protection(first)
+    receipt=tmp_path/'closure-receipt.json'
+    verify_global_source_closure(first,protected,write_receipt_path=receipt)
+    value=json.loads(receipt.read_text())
+    value['implementation_files']['connected_group_closure']['sha256']='0'*64
+    receipt.write_text(json.dumps(value))
+    with pytest.raises(ValueError,match='implementation dependency changed'):
+        verify_global_source_closure(first,protected,receipt_path=receipt)

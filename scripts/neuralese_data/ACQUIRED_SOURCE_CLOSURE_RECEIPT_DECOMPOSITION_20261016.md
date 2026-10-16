@@ -13,7 +13,9 @@ that shared closure.
    durable receipt binding the exact
    projection manifest, inherited component/projection files, all normalized
    export receipts and source bytes, each `complete.json` inventory, and the
-   resulting accounting/component digest.
+   resulting accounting/component digest. It also records exact code-file
+   bindings for the closure verifier, session parser, connected-group closure,
+   current-protection/source-review policy, JSONL I/O, and hashing.
 3. A later model/view process may reuse the receipt only when it revalidates
    the current protection sets and hashes every bound input. It checks the
    exact input set, source/export relationships, closure accounting, and

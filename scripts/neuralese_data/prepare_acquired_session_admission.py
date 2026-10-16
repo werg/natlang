@@ -98,6 +98,21 @@ def acquired_source_closure(path, protection):
 SOURCE_CLOSURE_RECEIPT_SCHEMA = 'natlang.acquired-source-closure-receipt/1'
 
 
+def _source_closure_implementation_bindings():
+    root = Path(__file__).resolve().parents[2]
+    paths = {
+        'closure_verifier': Path(__file__),
+        'session_stream_parser': root / 'scripts/neuralese_data/build_acquired_full_session_graphs.py',
+        'connected_group_closure': root / 'scripts/neuralese_data/splits.py',
+        'current_protection': root / 'scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py',
+        'source_review_policy': root / 'scripts/source_review.py',
+        'jsonl_io': root / 'training/neuralese/natlang_neuralese/common/jsonio.py',
+        'hashing': root / 'training/neuralese/natlang_neuralese/common/hashing.py',
+    }
+    return {name: {'path': str(path.resolve(strict=True)), 'sha256': sha256_file_hex(path),
+                   'bytes': path.stat().st_size} for name, path in sorted(paths.items())}
+
+
 def _source_closure_artifacts(path, manifest):
     """Return the complete exact input closure, including per-directory inventories."""
     path = Path(path).resolve(strict=True)
@@ -110,6 +125,13 @@ def _source_closure_artifacts(path, manifest):
 
     for item in manifest.get('files', []):
         add(bound(path.parent / item['path'], item))
+    component_name = manifest.get('source_group_components')
+    if component_name is not None:
+        component_binding = next((item for item in manifest.get('files', [])
+                                  if item.get('path') == component_name), None)
+        if component_binding is None:
+            raise ValueError('source-group component inventory lacks an explicit manifest binding')
+        add(bound(path.parent / component_name, component_binding))
     inherited = manifest.get('inherited_source_components') or {}
     for item in inherited.values():
         add(bound(path.parent / item['path'], item))
@@ -159,6 +181,8 @@ def verify_global_source_closure(path, protection, *, receipt_path=None, write_r
                 or receipt.get('protection_sha256') != canonical_json_sha256_hex(current_protection)
                 or receipt.get('verifier_sha256') != sha256_file_hex(__file__)):
             raise ValueError('durable acquired-source closure receipt is stale for current protection or verifier')
+        if receipt.get('implementation_files') != _source_closure_implementation_bindings():
+            raise ValueError('durable acquired-source closure implementation dependency changed')
         artifacts = _source_closure_artifacts(manifest_path, manifest)
         if artifacts != receipt.get('input_artifacts'):
             raise ValueError('durable acquired-source closure input inventory changed')
@@ -189,6 +213,7 @@ def verify_global_source_closure(path, protection, *, receipt_path=None, write_r
             'protection': protection_binding,
             'protection_sha256': canonical_json_sha256_hex(protection_binding),
             'input_artifacts': _source_closure_artifacts(manifest_path, manifest),
+            'implementation_files': _source_closure_implementation_bindings(),
             'accounting': accounting, 'verifier_sha256': sha256_file_hex(__file__),
             'training_admission': False}
         write_json_durable(write_receipt_path, receipt)
