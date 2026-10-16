@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import gzip
 from pathlib import Path
 
 from .common import Reject
@@ -17,13 +18,15 @@ def acquired_rows(ref, limit=None):
     receipt = json.loads((root / 'acquisition.json').read_text())
     if receipt.get('status') != 'acquired' or not receipt.get('revision'):
         raise Reject('source snapshot is not completely acquired and pinned: '+ref)
-    known = {entry['path'] for entry in receipt['files'] if Path(entry['path']).suffix == '.parquet'}
+    def supported(name):
+        return name.endswith(('.parquet', '.jsonl', '.jsonl.gz', '.jsonl.zst'))
+    known = {entry['path'] for entry in receipt['files'] if supported(entry['path'])}
     if ACQUIRED_FILES is not None and not ACQUIRED_FILES <= known:
-        raise Reject('requested file is not a bound Parquet source in this receipt')
+        raise Reject('requested file is not a bound source in this receipt')
     index = 0
     for entry in receipt['files']:
         relative = Path(entry['path'])
-        if relative.suffix != '.parquet':
+        if not supported(str(relative)):
             continue
         if ACQUIRED_FILES is not None and str(relative) not in ACQUIRED_FILES:
             continue
@@ -32,7 +35,19 @@ def acquired_rows(ref, limit=None):
             raise Reject('acquired source file differs: '+str(relative))
         if sha256_file_hex_cached(path) != entry['sha256']:
             raise Reject('acquired source digest differs: '+str(relative))
-        for row_index, row in agents._parquet_groups(path):
+        if relative.suffix == '.parquet':
+            rows = agents._parquet_groups(path)
+        else:
+            def json_rows():
+                from natlang_neuralese.common.jsonio import open_jsonl_text
+                opener = gzip.open if str(path).endswith('.gz') else open_jsonl_text
+                options = {'mode': 'rt', 'encoding': 'utf-8'} if str(path).endswith('.gz') else {}
+                with opener(path, **options) as stream:
+                    for number, line in enumerate(stream):
+                        if line.strip():
+                            yield number, json.loads(line)
+            rows = json_rows()
+        for row_index, row in rows:
             if limit is not None and index >= limit:
                 return
             index += 1
@@ -135,3 +150,75 @@ def cooperdata_acquired(limit=None):
                 yield child, trajectory
             except (Reject, ValueError, TypeError, KeyError) as error:
                 yield child, Reject(str(error))
+
+
+def general_agent_acquired(ref, limit=None):
+    """Structured upstream sessions; no tool observations or rewards invented."""
+    from . import agents
+    for receipt, rid, row in acquired_rows(ref, limit):
+        try:
+            if not isinstance(row, dict):
+                raise Reject('source data row is not an object')
+            path = rid.rsplit(':', 1)[0]
+            if ref == 'D36' and not path.startswith('trajectories/'):
+                raise Reject('duplicate tokenized representation; original trajectories are the consumer')
+            if row.get('images'):
+                raise Reject('image-bearing session requires supported multimodal input; raw retained')
+            raw = row.get('messages') or row.get('conversations')
+            if isinstance(raw, str):
+                raw = json.loads(raw)
+            tools = row.get('tools') or row.get('available_tools')
+            if isinstance(tools, str):
+                tools = json.loads(tools)
+            metadata = row.get('metadata') or {}
+            if isinstance(metadata, str):
+                metadata = json.loads(metadata)
+            bound_row = dict(row)
+            for key in ('instance_id', 'repo', 'resolved', 'reward', 'status'):
+                if bound_row.get(key) is None and key in metadata:
+                    bound_row[key] = metadata[key]
+            task = bound_row.get('instance_id') or row.get('question') or row.get('uuid') or row.get('trajectory_id') or rid
+            teacher = row.get('model') or row.get('teacher_model') or metadata.get('model')
+            trajectory = _reported_session(ref, receipt, rid, bound_row, raw,
+                task_id=task, session_id=row.get('uuid') or row.get('trajectory_id') or rid,
+                teacher=teacher, tools=tools)
+            trajectory.lineage['notes']['original_source_metadata'] = {key: row.get(key) for key in
+                ('subset_name', 'source', 'domain', 'exit_status', 'trajectory_format',
+                 'reward', 'status', 'used_in', 'question_quality_assessment', 'response_quality_assessment')}
+            if bound_row.get('reward') is not None and float(bound_row['reward']) <= 0:
+                trajectory.outcome['label'] = 'failed'
+            if row.get('exit_status') in ('incomplete', 'error', 'failed') or bound_row.get('status') in ('error', 'failed'):
+                trajectory.outcome['label'] = 'failed'
+            trajectory.outcome['details'].update(reported_reward=bound_row.get('reward'),
+                reported_exit_status=row.get('exit_status'), reported_status=bound_row.get('status'))
+            yield rid, trajectory
+        except (Reject, ValueError, TypeError, KeyError) as error:
+            yield rid, Reject(str(error))
+
+
+def toucan_acquired(limit=None):
+    yield from general_agent_acquired('D26', limit)
+
+
+def toolmind_acquired(limit=None):
+    yield from general_agent_acquired('D27', limit)
+
+
+def nemotron_agentic_acquired(limit=None):
+    yield from general_agent_acquired('D28', limit)
+
+
+def ultradata_acquired(limit=None):
+    yield from general_agent_acquired('D38', limit)
+
+
+def swe_zero_acquired(limit=None):
+    yield from general_agent_acquired('D23', limit)
+
+
+def coderforge_acquired(limit=None):
+    yield from general_agent_acquired('D36', limit)
+
+
+def orchard_acquired(limit=None):
+    yield from general_agent_acquired('D37', limit)

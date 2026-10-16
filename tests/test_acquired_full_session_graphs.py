@@ -6,9 +6,10 @@ from transformers import AutoTokenizer
 from scripts.neuralese_data.build_acquired_full_session_graphs import session_graphs, held_session_targets
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import provision
 from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
+from natlang_neuralese.common.paths import resolve
 
-BASES=[Path('/home/werg/data/dgxops/qad-drift-probe/base'),
-       Path('/home/werg/data/models/mellum21-12b-a2.5b-thinking')]
+BASES=[resolve('data_nvme','dgxops/qad-drift-probe/base'),
+       resolve('models','mellum21-12b-a2.5b-thinking')]
 
 
 def value():

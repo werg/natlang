@@ -112,7 +112,7 @@ def test_receipt_file_shards_retain_exact_original_row_identity(tmp_path,monkeyp
     selected=list(acquired.acquired_rows('D35'))
     assert selected[0][1]=='sessions.parquet:0'
     monkeypatch.setattr(acquired,'ACQUIRED_FILES',frozenset({'other.parquet'}))
-    with pytest.raises(Reject,match='not a bound Parquet source'):
+    with pytest.raises(Reject,match='not a bound source'):
         list(acquired.acquired_rows('D35'))
 
 
@@ -128,3 +128,37 @@ def test_conversion_records_row_rejection_then_keeps_following_trajectory(tmp_pa
     assert seen==[row]
     rejection=json.loads((tmp_path/'upstream.fixture-acquired.rejects.jsonl').read_text())
     assert rejection['row']=='bad' and rejection['reason']=='missing original session'
+
+
+@pytest.mark.parametrize('ref',['D26','D27','D28','D38','D23','D36','D37'])
+def test_general_sources_keep_structured_history_and_metadata(ref,tmp_path,monkeypatch):
+    rows=[{'messages':json.dumps(messages()),'uuid':'session','tools':'[]',
+           'metadata':json.dumps({'instance_id':'protected','repo':'org/repo','model':'source-teacher'}),
+           'reward':0 if ref=='D36' else 1}]
+    root=fixture(tmp_path,monkeypatch,ref,rows)
+    if ref=='D36':
+        receipt=json.loads((root/'acquisition.json').read_text());entry=receipt['files'][0]
+        entry['path']='trajectories/sessions.parquet';(root/'trajectories').mkdir()
+        (root/'sessions.parquet').rename(root/entry['path']);(root/'acquisition.json').write_text(json.dumps(receipt))
+    _,trajectory=next(acquired.general_agent_acquired(ref))
+    assert not isinstance(trajectory,Reject)
+    assert trajectory.messages[1]['reasoning']=='Inspect first.'
+    assert trajectory.messages[2]['content']=='Observed file listing.'
+    assert trajectory.split=='test' and group_key('swe-instance','protected') in trajectory.split_groups
+    assert trajectory.outcome['label']==('failed' if ref=='D36' else 'teacher')
+
+
+def test_bound_jsonl_is_streamed_and_images_remain_explicit_omissions(tmp_path,monkeypatch):
+    root=fixture(tmp_path,monkeypatch,'D28',[])
+    path=root/'agent.jsonl.gz'
+    import gzip
+    rows=[{'messages':messages(),'uuid':'one'}, {'messages':messages(),'uuid':'two','images':[{'path':'unavailable.png'}]}]
+    with gzip.open(path,'wt') as stream:
+        for row in rows:stream.write(json.dumps(row)+'\n')
+    receipt=json.loads((root/'acquisition.json').read_text());receipt['files']=[{'path':path.name,
+        'bytes':path.stat().st_size,'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}]
+    (root/'acquisition.json').write_text(json.dumps(receipt))
+    result=list(acquired.nemotron_agentic_acquired())
+    assert len(result)==2 and result[0][0]=='agent.jsonl.gz:0'
+    assert not isinstance(result[0][1],Reject)
+    assert isinstance(result[1][1],Reject) and 'multimodal' in str(result[1][1])

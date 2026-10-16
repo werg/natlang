@@ -21,3 +21,13 @@ than terminating conversion of the remaining source.
 The receipt verifier, bounded source readers and field mappings are crisp
 mechanisms: they preserve source facts without selecting a teacher or admission
 policy. Admission and full-recipe exposure remain separate operational steps.
+
+The same receipt-bound reader now covers JSONL/gzip/zstd and seven further
+structured sources: Toucan, ToolMind, Nemotron-Agentic, UltraData, SWE-ZERO,
+CoderForge raw trajectories and Orchard SWE. Source messages/tools may be JSON
+strings; decode them without trimming. Preserve actual metadata task/repository
+identities, upstream teacher and reported rewards/status. Known failures are
+non-positive; no upstream reward is a local execution certificate. CoderForge's
+pretokenized view duplicates the raw sessions and is explicitly omitted in favor
+of those original messages. Image-bearing Orchard sessions remain explicitly
+pending supported multimodal input; do not pretend missing images were observed.

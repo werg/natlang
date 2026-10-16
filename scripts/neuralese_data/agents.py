@@ -924,8 +924,17 @@ CORPORA.update({'gatc-sessions': (gatc_sessions, 4), "wideseek": (wideseek, 4), 
                 'agentic-coding-sessions': (agentic_coding_sessions, 4)})
 
 from .acquired_agents import (open_swe_acquired, swe_rebench_acquired,
-                              nemotron_terminal_acquired, cooperdata_acquired)
+                              nemotron_terminal_acquired, cooperdata_acquired,
+                              toucan_acquired, toolmind_acquired, nemotron_agentic_acquired,
+                              ultradata_acquired, swe_zero_acquired, coderforge_acquired, orchard_acquired)
 CORPORA.update({'open-swe-acquired': (open_swe_acquired, 4),
                 'swe-rebench-acquired': (swe_rebench_acquired, 4),
                 'nemotron-terminal-acquired': (nemotron_terminal_acquired, 4),
                 'cooperdata-acquired': (cooperdata_acquired, 4)})
+CORPORA.update({'toucan-acquired': (toucan_acquired, 4),
+                'toolmind-acquired': (toolmind_acquired, 4),
+                'nemotron-agentic-acquired': (nemotron_agentic_acquired, 4),
+                'ultradata-acquired': (ultradata_acquired, 4),
+                'swe-zero-acquired': (swe_zero_acquired, 4),
+                'coderforge-acquired': (coderforge_acquired, 4),
+                'orchard-acquired': (orchard_acquired, 4)})
