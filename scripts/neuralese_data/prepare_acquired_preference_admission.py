@@ -23,8 +23,44 @@ from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import curr
 from scripts.neuralese_data.decision_holds import load_decision_holds
 from scripts.neuralese_data.prepare_acquired_session_admission import bound,verify_global_source_closure,decision_contract
 
+CODE_ROOT=Path(__file__).resolve().parents[2]
 
-def verify_conversion(directory,*,protection_path,base,prepared=None):
+
+def _verification_dependencies():
+    """Code that can change the meaning of a cached source/render verification."""
+    root=CODE_ROOT
+    paths={
+        'admission':Path(__file__),
+        'preference_builder':root/'scripts/neuralese_data/build_acquired_preference_graphs.py',
+        'preference_reader':root/'scripts/neuralese_data/acquired_preferences.py',
+        'session_reader':root/'scripts/neuralese_data/build_acquired_full_session_graphs.py',
+        'source_admission':root/'scripts/neuralese_data/prepare_acquired_session_admission.py',
+        'source_policy':root/'scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py',
+        'decision_holds':root/'scripts/neuralese_data/decision_holds.py',
+        'graph_parser':root/'training/neuralese/natlang_neuralese/data/native_graph_schema.py',
+        'pair_renderer':root/'training/neuralese/natlang_neuralese/data/native_preference.py',
+        'pair_objective':root/'training/neuralese/natlang_neuralese/train/native_preference.py',
+    }
+    return {name:{'path':path.resolve(strict=True).relative_to(root).as_posix(),
+                  'bytes':path.stat().st_size,'sha256':sha256_file_hex(path)}
+            for name,path in sorted(paths.items())}
+
+
+def _cached_verification(path,identity):
+    if not path.is_file():return None
+    record=json.loads(path.read_text())
+    payload=record.get('payload')
+    if (record.get('schema')!='natlang.offline-preference-view-verification/1'
+            or not isinstance(payload,dict)
+            or record.get('payload_sha256')!=canonical_json_sha256_hex(payload)
+            or payload.get('identity_sha256')!=canonical_json_sha256_hex(identity)
+            or canonical_json_sha256_hex(payload.get('identity'))!=canonical_json_sha256_hex(identity)):
+        return None
+    return payload.get('result')
+
+
+def verify_conversion(directory,*,protection_path,base,prepared=None,
+                      verified_closures=None,verification_receipt_path=None):
     directory=Path(directory);receipt_path=directory/'receipt.json'
     receipt=json.loads(receipt_path.read_text());binding=receipt.get('binding') or {}
     if (receipt.get('schema')!='natlang.acquired-offline-preference-graphs/1'
@@ -34,10 +70,14 @@ def verify_conversion(directory,*,protection_path,base,prepared=None):
     protection=current_protection(protection_path)
     closure_binding=binding.get('source_closure_receipt')
     closure_path=bound(closure_binding['path'],closure_binding) if closure_binding else None
-    if closure_path is None:
-        verify_global_source_closure(protection_path,protection)
-    else:
-        verify_global_source_closure(protection_path,protection,receipt_path=closure_path)
+    closure_key=(str(closure_path.resolve()) if closure_path else str(Path(protection_path).resolve()),
+                 sha256_file_hex(closure_path) if closure_path else protection['proof']['sha256'])
+    if verified_closures is None or closure_key not in verified_closures:
+        if closure_path is None:
+            verify_global_source_closure(protection_path,protection)
+        else:
+            verify_global_source_closure(protection_path,protection,receipt_path=closure_path)
+        if verified_closures is not None:verified_closures.add(closure_key)
     if binding.get('protection')!=protection['proof']:
         raise ValueError('offline preference conversion uses different current source protection')
     holds=sorted((ROOT/'training/decision-holds').glob('*.jsonl'))
@@ -56,6 +96,68 @@ def verify_conversion(directory,*,protection_path,base,prepared=None):
     if (source.resolve()!= (export_path.parent/'full-trajectories.jsonl.zst').resolve()
             or export['outputs'][source.name]!=binding['source']['sha256']):
         raise ValueError('offline source differs from its complete normalized source contract')
+    # A completed view receipt is reusable only after all of its byte-bound
+    # products and durable shard outputs still match.  The durable attestation
+    # is per model/view; a stopped sibling view can be recomputed independently.
+    source_artifacts=[binding['export_receipt'],binding['source'],*receipt.get('outputs',[]),
+                      receipt.get('objective',{}),receipt.get('row_proof',{}),receipt.get('omissions',{})]
+    if closure_binding:source_artifacts.append(closure_binding)
+    for item in source_artifacts:
+        if item and item.get('path'):
+            bound(item['path'],item)
+    units=binding.get('source_units')
+    if type(units) is not int or units<1:raise ValueError('offline verification receipt lacks exact source-unit count')
+    end,shards=completed_shards(directory/'pair-shards',binding,units,
+                                schema=SHARD_SCHEMA,additional_outputs=ADDITIONAL)
+    if end!=units or shards!=receipt.get('shards'):
+        raise ValueError('offline conversion lacks its exact completed durable source frontier')
+    for item in receipt.get('outputs',[]):
+        path=Path(item['path'])
+        if path.parent.name not in {'train','test'} or path.resolve()!=(directory/path.parent.name/'native-graphs.jsonl.zst').resolve():
+            raise ValueError('offline admission consumes aggregate outputs only')
+        bound(item['path'],item)
+    for key in ('objective','row_proof','omissions'):
+        bound(receipt[key]['path'],receipt[key])
+    identity={'conversion_receipt':{'path':str(receipt_path.resolve()),'bytes':receipt_path.stat().st_size,
+                                    'sha256':sha256_file_hex(receipt_path)},
+        'conversion_binding':binding,'verified_shards':shards,
+        'runtime':_runtime(),'verifier_dependencies':_verification_dependencies(),
+        'protection':protection['proof'],'decision_holds':decision_contract(decision_bindings),
+        'tokenizer_base':tokenizer_inventory(base),'prepared_tokenizer':prepared.binding,
+        'source_artifacts':[{'path':str(Path(item['path']).resolve()),'bytes':item.get('bytes',Path(item['path']).stat().st_size),
+                             'sha256':item['sha256']} for item in source_artifacts if item and item.get('path')]}
+    identity_sha=canonical_json_sha256_hex(identity)
+    if verification_receipt_path is not None:
+        cached=_cached_verification(Path(verification_receipt_path),identity)
+        if cached is not None:return cached
+    render_checkpoint=None;verified_renders={}
+    if verification_receipt_path is not None:
+        render_checkpoint=Path(verification_receipt_path).with_name(
+            Path(verification_receipt_path).stem+'-'+identity_sha+'.renders.jsonl')
+        if render_checkpoint.exists():
+            # Only newline-terminated, individually fsynced records are
+            # committed. Recover a torn final append without losing prior rows.
+            valid_end=0
+            with render_checkpoint.open('r+b') as stream:
+                while True:
+                    line=stream.readline()
+                    if not line:break
+                    if not line.endswith(b'\n'):
+                        stream.seek(valid_end);stream.truncate();stream.flush();os.fsync(stream.fileno());break
+                    record=json.loads(line)
+                    if (record.get('schema')!='natlang.offline-preference-render-checkpoint/1'
+                            or record.get('identity_sha256')!=identity_sha
+                            or not isinstance(record.get('source_record_sha256'),str)
+                            or not isinstance(record.get('id'),str)
+                            or not isinstance(record.get('graph_sha256'),str)
+                            or not isinstance(record.get('objective_sha256'),str)):
+                        raise ValueError('offline preference render checkpoint has a different or malformed binding')
+                    key=record['source_record_sha256']
+                    value={'id':record['id'],'graph_sha256':record['graph_sha256'],
+                           'objective_sha256':record['objective_sha256']}
+                    if key in verified_renders and verified_renders[key]!=value:
+                        raise ValueError('offline preference render checkpoint repeats a source with different output')
+                    verified_renders[key]=value;valid_end=stream.tell()
     expected={};omitted=[];frontier=0;units=0
     for indices,record,error in normalized_preference_records(source):
         if tuple(indices)!=tuple(range(frontier,frontier+len(indices))):
@@ -77,11 +179,6 @@ def verify_conversion(directory,*,protection_path,base,prepared=None):
             raise ValueError('offline normalized session changed its original source binding')
         actual_sessions+=1
     if actual_sessions!=frontier:raise ValueError('offline source session count differs')
-    end,shards=completed_shards(directory/'pair-shards',binding,units,schema=SHARD_SCHEMA,additional_outputs=ADDITIONAL)
-    if end!=units or shards!=receipt['shards']:
-        raise ValueError('offline conversion lacks its exact completed durable source frontier')
-    for item in [*receipt['outputs'],receipt['objective'],receipt['row_proof'],receipt['omissions']]:
-        bound(item['path'],item)
     if list(sessions(receipt['omissions']['path']))!=omitted:
         raise ValueError('offline omission ledger differs from current exact source eligibility')
     objective=NativePreferenceObjective(receipt['objective']['path'])
@@ -128,12 +225,27 @@ def verify_conversion(directory,*,protection_path,base,prepared=None):
         record,reason=(None,str(error)) if error else protected_pair(record,protection,decision_ids)
         if reason:continue
         source_sha=canonical_json_sha256_hex(record)
-        graph,spec=pair_graph(record,prepared.tokenizer,
-            tokenizer_fingerprint=prepared.expanded_fingerprint)
-        expected_render={'id':graph['id'],'graph_sha256':canonical_json_sha256_hex(graph),
-            'objective_sha256':canonical_json_sha256_hex(spec)}
-        if source_sha in checked or rendered.get(source_sha)!=expected_render:
-            raise ValueError('offline stored graph/objective differs from exact original-alternative tokenizer rendering')
+        if source_sha in checked:
+            raise ValueError('offline normalized source repeats an immutable preference occurrence')
+        cached_render=verified_renders.get(source_sha)
+        if cached_render is None:
+            graph,spec=pair_graph(record,prepared.tokenizer,
+                tokenizer_fingerprint=prepared.expanded_fingerprint)
+            expected_render={'id':graph['id'],'graph_sha256':canonical_json_sha256_hex(graph),
+                'objective_sha256':canonical_json_sha256_hex(spec)}
+            if rendered.get(source_sha)!=expected_render:
+                raise ValueError('offline stored graph/objective differs from exact original-alternative tokenizer rendering')
+            cached_render={'id':expected_render['id'],'graph_sha256':expected_render['graph_sha256'],
+                           'objective_sha256':expected_render['objective_sha256']}
+            if render_checkpoint is not None:
+                line={'schema':'natlang.offline-preference-render-checkpoint/1',
+                    'identity_sha256':identity_sha,'source_record_sha256':source_sha,**cached_render}
+                with render_checkpoint.open('ab') as stream:
+                    stream.write((json.dumps(line,sort_keys=True,separators=(',',':'))+'\n').encode())
+                    stream.flush();os.fsync(stream.fileno())
+            verified_renders[source_sha]=cached_render
+        elif rendered.get(source_sha)!=cached_render:
+            raise ValueError('offline stored graph/objective differs from its exact durable render checkpoint')
         checked.add(source_sha)
     if checked!=seen_source:
         raise ValueError('offline original-alternative rendering inventory differs from admitted graphs')
@@ -146,10 +258,16 @@ def verify_conversion(directory,*,protection_path,base,prepared=None):
         raise ValueError('offline protections changed during admission')
     for item in [binding['export_receipt'],binding['source'],*receipt['outputs'],receipt['objective'],receipt['row_proof'],receipt['omissions']]:
         bound(item['path'],item)
-    return {'receipt':_bound(receipt_path),'objective':receipt['objective'],'source':binding['source'],
+    result={'receipt':_bound(receipt_path),'objective':receipt['objective'],'source':binding['source'],
         'outputs':outputs,'counts':dict(counts),'groups':{key:sorted(value) for key,value in groups.items()},
         'proofs':proofs,'source_membership':sorted(expected),'source_units':units,'normalized_sessions':frontier,
         'exact_original_alternative_renders':len(checked),'source_render_verified':True}
+    if verification_receipt_path is not None:
+        payload={'identity':identity,'identity_sha256':identity_sha,'result':result}
+        write_json_durable(Path(verification_receipt_path),{
+            'schema':'natlang.offline-preference-view-verification/1','payload':payload,
+            'payload_sha256':canonical_json_sha256_hex(payload)})
+    return result
 
 
 def main(argv=None):
@@ -167,13 +285,18 @@ def prepare(args):
     initial_runtime=_runtime()
     initial_holds=load_decision_holds(sorted((ROOT/'training/decision-holds').glob('*.jsonl')))[1]
     if not isinstance(models,dict) or len(models)<2:raise ValueError('offline admission requires both production model views')
-    if any(path.name!='.conversion.lock' for path in args.output.iterdir()):
+    if any(path.name not in {'.conversion.lock','conversion-verifications'} for path in args.output.iterdir()):
         raise ValueError('offline admission output must be a new immutable proposal directory')
-    verified={};reference=None;all_groups={'train':set(),'test':set()}
+    cache_root=args.output/'conversion-verifications';cache_root.mkdir(exist_ok=True)
+    verified_closures=set();verified={};reference=None;all_groups={'train':set(),'test':set()}
     for name,declaration in models.items():
         prepared=prepare_tokenizer(declaration['base'])
-        views=[verify_conversion(path,protection_path=args.protection,base=declaration['base'],prepared=prepared)
-               for path in declaration['conversions']]
+        views=[]
+        for index,path in enumerate(declaration['conversions']):
+            cache_path=cache_root/f'{name}-{index:04d}.json'
+            views.append(verify_conversion(path,protection_path=args.protection,base=declaration['base'],
+                prepared=prepared,verified_closures=verified_closures,
+                verification_receipt_path=cache_path))
         membership=[source for view in views for source in view['source_membership']]
         if len(set(membership))!=len(membership):raise ValueError('offline admission repeats source pairs across conversions')
         if reference is not None and set(membership)!=reference:raise ValueError('offline model views differ in exact source pair membership')

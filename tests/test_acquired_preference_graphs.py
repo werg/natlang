@@ -156,6 +156,48 @@ def test_independent_admission_checks_every_pair_source_mask_and_protection(tmp_
         admission.verify_conversion(tmp_path/'output',protection_path=tmp_path/'protection.json',base=tmp_path/'base')
 
 
+def test_verified_model_view_cache_skips_rerender_only_for_same_exact_inputs(tmp_path,monkeypatch):
+    from scripts.neuralese_data import prepare_acquired_preference_admission as admission
+    args,_,_=setup_conversion(tmp_path,monkeypatch)
+    builder.main(args)
+    for name in ('current_protection','verify_global_source_closure','load_decision_holds','_runtime'):
+        monkeypatch.setattr(admission,name,getattr(builder,name))
+    monkeypatch.setattr(admission,'ROOT',builder.ROOT)
+    cache=tmp_path/'view-verification.json'
+    verified=set()
+    original_pair=admission.pair_graph
+    calls=[]
+    def interrupt_after_one(record,tokenizer,**kwargs):
+        calls.append(1)
+        if len(calls)==2:raise RuntimeError('simulated stop between verified source pairs')
+        return original_pair(record,tokenizer,**kwargs)
+    monkeypatch.setattr(admission,'pair_graph',interrupt_after_one)
+    with pytest.raises(RuntimeError,match='simulated stop'):
+        admission.verify_conversion(tmp_path/'output',protection_path=tmp_path/'protection.json',
+            base=tmp_path/'base',verified_closures=verified,verification_receipt_path=cache)
+    checkpoint=next(tmp_path.glob('view-verification-*.renders.jsonl'))
+    assert len(checkpoint.read_text().splitlines())==1 and not cache.exists()
+    calls.clear();monkeypatch.setattr(admission,'pair_graph',lambda *a,**kw:(calls.append(1),original_pair(*a,**kw))[1])
+    first=admission.verify_conversion(tmp_path/'output',protection_path=tmp_path/'protection.json',
+        base=tmp_path/'base',verified_closures=verified,verification_receipt_path=cache)
+    assert first['exact_original_alternative_renders']==2 and cache.is_file() and len(calls)==1
+    # The source, model tokenizer, protection, holds and code bindings are
+    # unchanged. Both completed record checks and the complete view are reused.
+    calls.clear()
+    monkeypatch.setattr(admission,'pair_graph',lambda *a,**kw: (_ for _ in ()).throw(AssertionError('rerendered cached view')))
+    second=admission.verify_conversion(tmp_path/'output',protection_path=tmp_path/'protection.json',
+        base=tmp_path/'base',verified_closures=verified,verification_receipt_path=cache)
+    assert second==first
+    # A damaged durable attestation cannot authorize reuse.
+    record=json.loads(cache.read_text());record['payload']['result']['source_units']+=1
+    write_json_durable(cache,record)
+    # The full-view attestation is now invalid, but the per-record checkpoints
+    # still let us reconstruct it without re-running either tokenizer render.
+    repaired=admission.verify_conversion(tmp_path/'output',protection_path=tmp_path/'protection.json',
+        base=tmp_path/'base',verified_closures=verified,verification_receipt_path=cache)
+    assert not calls and repaired['source_units']==first['source_units']
+
+
 def test_admission_cli_preserves_existing_held_prefix_and_emits_executable_shared_stage_inputs(tmp_path,monkeypatch):
     from scripts.neuralese_data import prepare_acquired_preference_admission as admission
     args,_,values=setup_conversion(tmp_path,monkeypatch)
