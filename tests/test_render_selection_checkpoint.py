@@ -145,6 +145,7 @@ def test_selector_binding_includes_split_aliases_and_legacy_migration_is_semanti
     source.write_text(json.dumps(_row('a0', 'pa')) + '\n')
     args = _args([source])
     original = selection_input_binding(args)
+    assert original['options']['selector_code_sha256'] == renderer.LEGACY_SELECTOR_SEMANTICS_SHA256
     monkeypatch.setattr(renderer, 'HELD_SPLIT_ALIASES', (*renderer.HELD_SPLIT_ALIASES, 'qa'))
     changed = selection_input_binding(args)
     assert changed['options']['selector_code_sha256'] != original['options']['selector_code_sha256']

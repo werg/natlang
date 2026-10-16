@@ -69,7 +69,7 @@ LEGACY_SELECTOR_FILE_SHA256 = {'797e534147c258b5453c146365e53763133ac45ec468193b
 # current selector implementation still has this independently reviewed
 # semantic fingerprint. This prevents the legacy file allowlist from silently
 # authorizing a later selector-policy change.
-LEGACY_SELECTOR_SEMANTICS_SHA256 = '86e1602edd923cfe0a22661d8e6645258979ed1fa2d761825a84fa9c4d1405aa'
+LEGACY_SELECTOR_SEMANTICS_SHA256 = '69f7da7f1dc08c01ca9deb554f0275072c82e2666615d60a166e9c105eeb804b'
 # Upstream held-out split names rendered as test (recorded as selection counts split_mapped:<name>->test and as each
 # row's source_split). Any other split other than train/test stays an omission with its reason.
 HELD_SPLIT_ALIASES = ('validation', 'valid', 'val', 'dev')
@@ -548,8 +548,8 @@ def selection_input_binding(args):
                           'validate_candidate_selection_row', '_selection_state', 'select', 'full_sample')
     selector_code = '\n'.join(inspect.getsource(globals()[name]) for name in selector_functions)
     selector_dependencies = {
-        str(ROOT / 'scripts/neuralese_data/records.py'): file_sha(ROOT / 'scripts/neuralese_data/records.py'),
-        str(ROOT / 'training/neuralese/natlang_neuralese/common/resumable_jsonl_frames.py'):
+        'scripts/neuralese_data/records.py': file_sha(ROOT / 'scripts/neuralese_data/records.py'),
+        'training/neuralese/natlang_neuralese/common/resumable_jsonl_frames.py':
             file_sha(ROOT / 'training/neuralese/natlang_neuralese/common/resumable_jsonl_frames.py'),
     }
     selector_sha = sha(canonical({
@@ -557,8 +557,7 @@ def selection_input_binding(args):
         'dependencies': selector_dependencies,
         # These module-level values affect split normalization, registered-path
         # resolution and the protected-index representation used by helpers.
-        'constants': {'held_split_aliases': HELD_SPLIT_ALIASES, 'prefix_bytes': _PREFIX,
-                      'root': str(ROOT.resolve())},
+        'constants': {'held_split_aliases': HELD_SPLIT_ALIASES, 'prefix_bytes': _PREFIX},
     }).encode())
     options = {
         'corpus_id': args.corpus_id,
