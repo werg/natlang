@@ -203,6 +203,9 @@ def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch)
     interrupted=json.loads((output/'resume-state.json').read_text())
     assert interrupted['completed_source_record_frontier']==4
     assert len(interrupted['shards'])==2
+    cleanup=[json.loads(line) for line in (output/'cleanup-receipt.jsonl').read_text().splitlines()]
+    assert [item['directory'] for item in cleanup]==['session-shards/shard-00000004']
+    assert cleanup[0]['files']
     builder.main()
     with open_jsonl_text(output/'test/native-graphs.jsonl.zst') as stream:
         assert [json.loads(line)['id'] for line in stream]==['a','b']

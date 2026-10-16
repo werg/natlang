@@ -106,6 +106,22 @@ def _record_uncommitted_cleanup(shard_root, directory):
         os.close(dir_fd)
 
 
+def _stop_writer_without_deleting_temp(writer):
+    """Quiesce a failed shard compressor while retaining its temp for cleanup proof."""
+    if writer.encoder.poll() is None:
+        try:
+            writer.encoder.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+    if writer.encoder.poll() is None:
+        writer.encoder.terminate()
+    writer.encoder.wait()
+    if not writer.out.closed:
+        writer.out.flush()
+        os.fsync(writer.out.fileno())
+        writer.out.close()
+
+
 def completed_shards(shard_root, binding, expected_sessions):
     """Return a contiguous, content-verified session frontier; reject broken committed receipts."""
     binding_sha = canonical_json_sha256_hex(binding)
@@ -401,7 +417,8 @@ def main():
             outputs = [writer.finish() for writer in writers.values()]
         except BaseException:
             for writer in writers.values():
-                writer.abort()
+                _stop_writer_without_deleting_temp(writer)
+            _record_uncommitted_cleanup(shard_root, shard_dir)
             shutil.rmtree(shard_dir, ignore_errors=True)
             raise
         receipt = {'schema': 'natlang.acquired-full-session-shard/1', 'binding_sha256': canonical_json_sha256_hex(binding),
