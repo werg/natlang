@@ -45,6 +45,9 @@ import shutil
 import subprocess
 import sys
 import time
+import inspect
+import sqlite3
+import tempfile
 from collections import Counter, defaultdict
 from contextlib import ExitStack
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -57,6 +60,11 @@ sys.path.insert(0, str(ROOT / 'scripts' / 'neuralese_data'))
 
 SCHEMA = 'natlang.native-turn-render/1'
 RENDERINGS = ('full', 'program-header', 'whole-trajectory')
+# The Search/OWL selection checkpoint was committed while selection and
+# rendering shared one source file. Accept this exact legacy file binding once
+# the selector inputs below validate byte-for-byte; render-only code changes
+# must not force a 658k-row reselection.
+LEGACY_SELECTOR_FILE_SHA256 = {'797e534147c258b5453c146365e53763133ac45ec468193b66fba442419bdccf'}
 # Upstream held-out split names rendered as test (recorded as selection counts split_mapped:<name>->test and as each
 # row's source_split). Any other split other than train/test stays an omission with its reason.
 HELD_SPLIT_ALIASES = ('validation', 'valid', 'val', 'dev')
@@ -528,6 +536,18 @@ def selection_input_binding(args):
         'reserved': file_bindings([args.reserved] if args.reserved else []),
         'protected': file_bindings([args.protected] if args.protected else []),
     }
+    selector_functions = ('jsonl_lines', 'normalize_text', '_strings', 'protected_hits', 'reserved_needles',
+                          'reserved_normalize', 'reserved_hit', 'index_needles', 'program_key', 'chain_key',
+                          'split_chain_key', 'registered_source_pieces', 'candidate_selection_correction_ref',
+                          'candidate_selection_owner_item_sha', 'registered_candidate_selection_admission',
+                          'validate_candidate_selection_row', '_selection_state', 'select', 'full_sample')
+    selector_code = '\n'.join(inspect.getsource(globals()[name]) for name in selector_functions)
+    selector_dependencies = {
+        str(ROOT / 'scripts/neuralese_data/records.py'): file_sha(ROOT / 'scripts/neuralese_data/records.py'),
+        str(ROOT / 'training/neuralese/natlang_neuralese/common/resumable_jsonl_frames.py'):
+            file_sha(ROOT / 'training/neuralese/natlang_neuralese/common/resumable_jsonl_frames.py'),
+    }
+    selector_sha = sha(canonical({'functions': selector_code, 'dependencies': selector_dependencies}).encode())
     options = {
         'corpus_id': args.corpus_id,
         'include_admits': bool(args.include_admits),
@@ -539,7 +559,7 @@ def selection_input_binding(args):
         'candidate_selection_admission_sha256': (
             sha(canonical(args.candidate_selection_admission).encode('utf-8'))
             if args.candidate_selection_admission is not None else None),
-        'selector_code_sha256': file_sha(Path(__file__).resolve()),
+        'selector_code_sha256': selector_sha,
         'selector_policy': 'native-turn-source-order-selection/1',
     }
     binding = {'schema': 'natlang.native-turn-selection-inputs/1', 'files': files, 'options': options}
@@ -592,7 +612,24 @@ def select(args, shard_dir: Path, state_path: Path, binding: dict):
         if existing.get('schema') != 'natlang.native-turn-selection-checkpoint/1':
             raise ValueError('selection state is complete legacy data, not an incremental checkpoint')
         if existing.get('binding') != binding:
-            raise ValueError('selection checkpoint inputs or selector semantics changed')
+            previous = existing.get('binding')
+            compatible = False
+            if isinstance(previous, dict):
+                previous_options = previous.get('options') or {}
+                old_selector_sha = previous_options.get('selector_code_sha256')
+                candidate = dict(previous)
+                candidate_options = dict(previous_options)
+                candidate_options['selector_code_sha256'] = binding['options']['selector_code_sha256']
+                candidate['options'] = candidate_options
+                candidate.pop('sha256', None)
+                candidate['sha256'] = sha(canonical(candidate).encode())
+                compatible = old_selector_sha in LEGACY_SELECTOR_FILE_SHA256 and candidate == binding
+            if not compatible:
+                raise ValueError('selection checkpoint inputs or selector semantics changed')
+            # Record the narrower selector binding atomically. The selected
+            # frame table and source frontier are unchanged.
+            existing['binding'] = binding
+            write_json_durable(state_path, existing)
         omissions, counts = existing['omissions'], Counter(existing['counts'])
         strata = defaultdict(set, {key: set(values) for key, values in existing['strata'].items()})
         blocked, protected_cache = existing['blocked'], existing['protected']
@@ -994,7 +1031,7 @@ def qualified_whole_trajectory_row(row):
     return {**row, 'source_row_id': legacy_id, 'id': legacy_id + ':source-sha256:' + digest}
 
 
-def render_shard(job):
+def _render_shard_materialized(job):
     (shard_path, out_dir, tok_name, blocked, corpus, held_groups, decision_exclude, header_as_full, full_programs,
      renderings, *storage_options) = job
     compress_text = bool(storage_options and storage_options[0])
@@ -1014,7 +1051,7 @@ def render_shard(job):
     with open_jsonl_text(shard_path) as f:
         for line in f:
             row = json.loads(line)
-            row['_source_record_sha256'] = sha(line.rstrip('\n').encode('utf-8'))
+            row['_source_record_sha256'] = row.pop('_stream_source_sha256', None) or sha(line.rstrip('\n').encode('utf-8'))
             records.append(row)
     stem = Path(shard_path).name.removesuffix('.zst').removesuffix('.jsonl')
     result = {'shard': stem, 'tokenizer': tok_name, 'records': len(records)}
@@ -1112,6 +1149,18 @@ def render_shard(job):
     # Whole trajectory.
     fingerprint = tokenizer_fingerprint(tok)
     source_hashes, writer_sources = authenticated_context_writer_sources(records)
+    # The streaming wrapper supplies writers found in other trajectories of
+    # this selected shard. Keep local entries authoritative and add only
+    # distinct writer records; otherwise a same-trajectory writer would be
+    # counted twice and become spuriously ambiguous.
+    for block_id, candidates in (_G.get('cross_trajectory_writer_sources') or {}).items():
+        current = writer_sources.setdefault(block_id, [])
+        current_ids = {(item.get('writer_record_id'), item.get('body_sha256')) for item in current}
+        for candidate in candidates:
+            identity = (candidate.get('writer_record_id'), candidate.get('body_sha256'))
+            if identity not in current_ids:
+                current.append(candidate)
+                current_ids.add(identity)
     records_by_id = {record['id']: record for record in records}
     wt = []
     for record, members in whole_trajectory_records(records, blocked):
@@ -1168,6 +1217,272 @@ def render_shard(job):
     path.write_text(''.join(canonical(o) + '\n' for o in omissions))
     write_done(Path(out_dir), tok_name, stem, result)
     return result
+
+
+def _trajectory_key(record):
+    ref = record.get('source_ref') or {}
+    trajectory = ref.get('trajectory_id') or record.get('teacher_trajectory_id')
+    # Legacy records without an explicit trajectory still retain invocation
+    # isolation, exactly as chain_key does.
+    return str(trajectory) if trajectory is not None else chain_key(record)
+
+
+def _atomic_json(path, value):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + '.tmp')
+    temporary.write_text(canonical(value) + '\n')
+    with temporary.open('rb') as stream:
+        os.fsync(stream.fileno())
+    os.replace(temporary, path)
+    descriptor = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def render_shard(job):
+    """Render one selected shard with bounded, trajectory-scoped memory.
+
+    Selection remains the existing immutable shard. Rows are spooled to a
+    rebuildable SQLite index, and each complete trajectory is rendered with
+    the established materialized renderer into independently checksummed
+    files. A group receipt is committed only after every rendering and omission
+    file is durable. Restart verifies those receipts and reuses complete groups;
+    an unreceipted group is discarded and rendered again.
+    """
+    (shard_path, out_dir, tok_name, blocked, corpus, held_groups, decision_exclude, header_as_full, full_programs,
+     renderings, *storage_options) = job
+    compress_text = bool(storage_options and storage_options[0])
+    target_exclude = storage_options[1] if len(storage_options) > 1 else set()
+    shard_path, out_dir = Path(shard_path), Path(out_dir)
+    stem = shard_path.name.removesuffix('.zst').removesuffix('.jsonl')
+    outer = out_dir / 'trajectory-stream' / tok_name / stem
+    groups_root, receipts_root = outer / 'groups', outer / 'receipts'
+    groups_root.mkdir(parents=True, exist_ok=True)
+    receipts_root.mkdir(parents=True, exist_ok=True)
+    source_sha = file_sha(shard_path)
+    code_binding = {
+        str(Path(__file__).resolve()): file_sha(Path(__file__).resolve()),
+        str(ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py'):
+            file_sha(ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py'),
+        str(ROOT / 'scripts/neuralese_data/strip_generic_system_prompt.py'):
+            file_sha(ROOT / 'scripts/neuralese_data/strip_generic_system_prompt.py'),
+    }
+    job_binding = sha(canonical({
+        'source_sha256': source_sha, 'tokenizer': tok_name, 'corpus': corpus,
+        'blocked': blocked, 'held_groups': sorted(held_groups),
+        'decision_exclude': sorted(decision_exclude), 'target_exclude': sorted(target_exclude),
+        'header_as_full': header_as_full, 'full_programs': None if full_programs is None else sorted(full_programs),
+        'renderings': list(renderings), 'compress_text': compress_text, 'code': code_binding,
+    }).encode())
+
+    with tempfile.TemporaryDirectory(prefix=f'natlang-{stem}-', dir=outer) as temporary:
+        db = sqlite3.connect(str(Path(temporary) / 'rows.sqlite'))
+        db.execute('PRAGMA journal_mode=OFF')
+        db.execute('PRAGMA synchronous=OFF')
+        db.execute('CREATE TABLE rows (seq INTEGER PRIMARY KEY, trajectory TEXT NOT NULL, row_id TEXT, '
+                   'source_sha TEXT NOT NULL, payload TEXT NOT NULL)')
+        db.execute('CREATE INDEX rows_trajectory_seq ON rows(trajectory, seq)')
+        db.execute('CREATE INDEX rows_id_seq ON rows(row_id, seq)')
+        db.execute('CREATE TABLE emitted (mode TEXT NOT NULL, seq INTEGER NOT NULL, group_index INTEGER NOT NULL, '
+                   'row_index INTEGER NOT NULL, line TEXT NOT NULL)')
+        insert = []
+        total = 0
+        with open_jsonl_text(shard_path) as stream:
+            for line in stream:
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                source_sha = sha(line.rstrip('\n').encode('utf-8'))
+                insert.append((total, _trajectory_key(record), record.get('id'), source_sha, line.rstrip('\n')))
+                total += 1
+                if len(insert) >= 256:
+                    db.executemany('INSERT INTO rows VALUES (?, ?, ?, ?, ?)', insert)
+                    db.commit()
+                    insert.clear()
+        if insert:
+            db.executemany('INSERT INTO rows VALUES (?, ?, ?, ?, ?)', insert)
+            db.commit()
+
+        trajectories_sql = ('SELECT trajectory, MIN(seq) AS first_seq FROM rows '
+                            'GROUP BY trajectory ORDER BY first_seq')
+        # Build the exact cross-trajectory soft-writer index one trajectory at
+        # a time. Same-run provider-expanded lookups are handled within each
+        # complete trajectory by the existing authenticator.
+        from natlang_neuralese.data.text_corpus import authenticated_context_writer_sources
+        cross_writers = {}
+        for trajectory, _first_seq in db.execute(trajectories_sql):
+            local = []
+            for payload, source_sha in db.execute(
+                    'SELECT payload, source_sha FROM rows WHERE trajectory=? ORDER BY seq', (trajectory,)):
+                record = json.loads(payload)
+                record['_source_record_sha256'] = source_sha
+                local.append(record)
+            local_hashes, local_sources = authenticated_context_writer_sources(local)
+            for block_id, candidates in local_sources.items():
+                current = cross_writers.setdefault(block_id, [])
+                by_identity = {(item.get('writer_record_id'), item.get('body_sha256')) for item in current}
+                for candidate in candidates:
+                    identity = (candidate.get('writer_record_id'), candidate.get('body_sha256'))
+                    if identity not in by_identity:
+                        current.append(candidate)
+                        by_identity.add(identity)
+            del local, local_hashes, local_sources
+
+        _G['cross_trajectory_writer_sources'] = cross_writers
+        trajectory_count = db.execute('SELECT COUNT(*) FROM (SELECT trajectory FROM rows GROUP BY trajectory)').fetchone()[0]
+        aggregate = {'shard': stem, 'tokenizer': tok_name, 'records': total,
+                     'trajectory_groups': trajectory_count, 'streaming': True}
+
+        def accumulate(result):
+            for key, value in result.items():
+                if key in {'shard', 'tokenizer', 'records'}:
+                    continue
+                if isinstance(value, int):
+                    aggregate[key] = aggregate.get(key, 0) + value
+                elif key.startswith('receipt_') and isinstance(value, dict):
+                    receipt = aggregate.setdefault(key, {})
+                    for receipt_key, receipt_value in value.items():
+                        if isinstance(receipt_value, int):
+                            receipt[receipt_key] = receipt.get(receipt_key, 0) + receipt_value
+                        else:
+                            receipt.setdefault(receipt_key, receipt_value)
+                elif key == 'parity' and isinstance(value, dict):
+                    parity = aggregate.setdefault('parity', {})
+                    for item, count in value.items():
+                        parity[item] = parity.get(item, 0) + count
+
+        for group_index, (trajectory, _first_seq) in enumerate(db.execute(trajectories_sql)):
+            group_id = sha(trajectory.encode('utf-8'))
+            group_dir = groups_root / group_id
+            receipt_path = receipts_root / f'{group_id}.json'
+            group_rows = []
+            source_record_hashes = []
+            for payload, source_sha in db.execute(
+                    'SELECT payload, source_sha FROM rows WHERE trajectory=? ORDER BY seq', (trajectory,)):
+                record = json.loads(payload)
+                record['_stream_source_sha256'] = source_sha
+                group_rows.append(record)
+                source_record_hashes.append(source_sha)
+            source_ids = [row.get('id') for row in group_rows]
+            binding = sha(canonical({'job': job_binding, 'trajectory': trajectory,
+                                     'source_ids': source_ids,
+                                     'source_record_hashes': source_record_hashes}).encode())
+            expected_receipt = None
+            if receipt_path.is_file():
+                expected_receipt = json.loads(receipt_path.read_text())
+                if expected_receipt.get('binding') != binding:
+                    raise ValueError(f'committed trajectory binding changed: {trajectory}')
+                valid = True
+                for relative, digest in expected_receipt.get('outputs', {}).items():
+                    path = group_dir / relative
+                    if not path.is_file() or file_sha(path) != digest:
+                        valid = False
+                        break
+                if not valid:
+                    raise ValueError(f'committed trajectory output checksum mismatch: {trajectory}')
+            if expected_receipt is not None:
+                accumulate(expected_receipt['result'])
+                del group_rows
+                continue
+            if group_dir.exists():
+                shutil.rmtree(group_dir)
+            group_dir.mkdir(parents=True)
+            temp_source = group_dir / f'{group_id}.jsonl'
+            with temp_source.open('w', encoding='utf-8') as stream:
+                for row in group_rows:
+                    stream.write(canonical(row) + '\n')
+                stream.flush()
+                os.fsync(stream.fileno())
+            del group_rows
+            group_job = (str(temp_source), str(group_dir), tok_name, blocked, corpus, held_groups,
+                         decision_exclude, header_as_full, full_programs, renderings, compress_text,
+                         target_exclude)
+            result = _render_shard_materialized(group_job)
+            temp_source.unlink(missing_ok=True)
+            outputs = {}
+            for path in sorted(group_dir.rglob('*')):
+                if path.is_file() and path != receipt_path and not path.name.endswith('.tmp'):
+                    outputs[str(path.relative_to(group_dir))] = file_sha(path)
+            group_receipt = {'schema': 'natlang.native-turn-trajectory-render/1',
+                             'binding': binding, 'trajectory_sha256': sha(trajectory.encode()),
+                             'source_record_ids': source_ids, 'outputs': outputs, 'result': result}
+            _atomic_json(receipt_path, group_receipt)
+            accumulate(result)
+
+        # Sort the materialized trajectory outputs back into exact selected
+        # source order without retaining rows in Python. The scratch index is
+        # rebuildable; durable group frames/receipts remain the resume frontier.
+        for mode in renderings:
+            destination = out_dir / mode / tok_name / (f'{stem}.jsonl.zst' if compress_text else f'{stem}.jsonl')
+            db.execute('DELETE FROM emitted')
+            row_index = 0
+            for trajectory, _first_seq in db.execute(trajectories_sql):
+                group_id = sha(trajectory.encode('utf-8'))
+                group_file = groups_root / group_id / mode / tok_name / (
+                    f'{group_id}.jsonl.zst' if compress_text else f'{group_id}.jsonl')
+                if not group_file.exists():
+                    continue
+                with open_jsonl_text(group_file) as stream:
+                    for line in stream:
+                        row = json.loads(line)
+                        source_id = row.get('id')
+                        if mode == 'whole-trajectory':
+                            source_rows = row.get('source_records') or []
+                            if source_rows:
+                                source_id = source_rows[0].get('id')
+                        found = db.execute('SELECT seq FROM rows WHERE row_id=? ORDER BY seq LIMIT 1',
+                                           (source_id,)).fetchone()
+                        seq = found[0] if found else _first_seq
+                        db.execute('INSERT INTO emitted VALUES (?, ?, ?, ?, ?)',
+                                   (mode, seq, row_index, row_index, line))
+                        row_index += 1
+                db.commit()
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = (destination.with_name(destination.stem + '.tmp.zst') if compress_text
+                         else destination.with_name(destination.name + '.tmp'))
+            from natlang_neuralese.common.jsonio import write_jsonl_text
+            with write_jsonl_text(temporary) as stream:
+                for (line,) in db.execute('SELECT line FROM emitted WHERE mode=? ORDER BY seq, group_index, row_index',
+                                          (mode,)):
+                    stream.write(line if line.endswith('\n') else line + '\n')
+            with temporary.open('rb') as stream:
+                os.fsync(stream.fileno())
+            os.replace(temporary, destination)
+
+        omission_path = out_dir / 'omissions' / tok_name / f'{stem}.jsonl'
+        db.execute('DELETE FROM emitted')
+        row_index = 0
+        for trajectory, first_seq in db.execute(trajectories_sql):
+            group_id = sha(trajectory.encode('utf-8'))
+            group_file = groups_root / group_id / 'omissions' / tok_name / f'{group_id}.jsonl'
+            if not group_file.exists():
+                continue
+            with group_file.open(encoding='utf-8') as stream:
+                for line in stream:
+                    if not line.strip():
+                        continue
+                    row = json.loads(line)
+                    found = db.execute('SELECT seq FROM rows WHERE row_id=? ORDER BY seq LIMIT 1',
+                                       (row.get('id'),)).fetchone()
+                    db.execute('INSERT INTO emitted VALUES (?, ?, ?, ?, ?)',
+                               ('omissions', found[0] if found else first_seq, row_index, row_index, line))
+                    row_index += 1
+        db.commit()
+        omission_path.parent.mkdir(parents=True, exist_ok=True)
+        omission_tmp = omission_path.with_name(omission_path.name + '.tmp')
+        with omission_tmp.open('w', encoding='utf-8', newline='\n') as stream:
+            for (line,) in db.execute("SELECT line FROM emitted WHERE mode='omissions' ORDER BY seq, group_index, row_index"):
+                stream.write(line if line.endswith('\n') else line + '\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(omission_tmp, omission_path)
+        db.close()
+        aggregate['trajectories_committed'] = trajectory_count
+        write_done(out_dir, tok_name, stem, aggregate)
+        return aggregate
 
 
 def write_done(work: Path, tok_name: str, stem: str, result: dict):

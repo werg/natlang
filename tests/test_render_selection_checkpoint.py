@@ -109,3 +109,31 @@ def test_selection_checkpoint_rejects_changed_source_bytes(tmp_path):
 
     with pytest.raises(ValueError, match='inputs or selector semantics changed'):
         select(args, checkpoint_dir, tmp_path / 'selection-state.json', selection_input_binding(args))
+
+
+def test_legacy_whole_renderer_hash_migrates_only_when_all_selection_inputs_match(tmp_path):
+    source = tmp_path / 'input.jsonl'
+    source.write_text(json.dumps(_row('a0', 'pa')) + '\n')
+    args = _args([source])
+    binding = selection_input_binding(args)
+    shard_dir, state_path = tmp_path / 'selected', tmp_path / 'selection-state.json'
+    shard_dir.mkdir()
+    select(args, shard_dir, state_path, binding)
+
+    state = json.loads(state_path.read_text())
+    legacy = dict(state['binding'])
+    legacy_options = dict(legacy['options'])
+    legacy_options['selector_code_sha256'] = '797e534147c258b5453c146365e53763133ac45ec468193b66fba442419bdccf'
+    legacy['options'] = legacy_options
+    legacy.pop('sha256', None)
+    from natlang_neuralese.common.jsonio import canonical_json_str
+    from natlang_neuralese.common.hashing import sha256_hex
+    legacy['sha256'] = sha256_hex(canonical_json_str(legacy).encode())
+    state['binding'] = legacy
+    state_path.write_text(json.dumps(state))
+
+    select(args, shard_dir, state_path, binding)
+    migrated = json.loads(state_path.read_text())
+    assert migrated['binding'] == binding
+    selected = [row for path in sorted(shard_dir.glob('*.jsonl.zst')) for row in _decode(path)]
+    assert selected == [_row('a0', 'pa')]
