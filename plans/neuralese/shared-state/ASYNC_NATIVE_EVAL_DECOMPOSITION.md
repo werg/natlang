@@ -34,3 +34,12 @@ provenance. Existing request and sampler bindings must never be edited in place.
 All steps above are crisp transfer/identity/durability/process plumbing. This
 extends existing task_cadence and task_eval_dispatch, not another eval queue,
 trainer, collector, provider account or task-selection policy.
+
+2026-10-16 memory scheduling correction: new native evaluator unit names include
+their declared backbone architecture, so the memory ledger learns separate job
+families for LFM and Mellum. A Mellum peak must not inflate every LFM request's
+reservation and preempt useful data work. Unit naming is crisp accounting, not
+a different evaluation or selection policy. Existing dispatch records retain
+their exact unit identity across dispatcher upgrades; never duplicate an active
+or queued evaluator because its naming convention changed. Legacy request names
+remain unchanged. Budget estimation and measured memory guards still apply.

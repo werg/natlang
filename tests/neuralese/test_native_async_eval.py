@@ -245,3 +245,33 @@ def test_exhausted_dispatch_is_native_unscored(tmp_path,monkeypatch):
     result=json.loads((Path(active['stage_out'])/'task-eval.jsonl').read_text())
     assert result['task_successes'] is None and result['model_outcome']=='unscored'
     assert result['evaluation_provenance']['source_checkpoint_sha256']==export['receipt']['identity']['sha256']
+
+
+def test_native_dispatch_memory_families_are_separate_and_live_units_stay_owned(tmp_path,monkeypatch):
+    import importlib.util
+    path=Path(__file__).resolve().parents[2]/'scripts/task_eval_dispatch.py'
+    module=importlib.util.spec_from_file_location('native_dispatch_family_test',path)
+    dispatcher=importlib.util.module_from_spec(module);module.loader.exec_module(dispatcher)
+    args={'stage_out':str(tmp_path/'stage'),'step':7,'native_state':True,
+          'evaluation_provenance':{'model_config':{'architecture':'lfm2'}}}
+    lfm=dispatcher.unit_name(tmp_path,args)
+    args['evaluation_provenance']['model_config']['architecture']='mellum'
+    mellum=dispatcher.unit_name(tmp_path,args)
+    from scripts.memory_ledger import family
+    assert family(lfm)=='taskeval-native-lfm2'
+    assert family(mellum)=='taskeval-native-mellum'
+    args['native_state']=False
+    legacy=dispatcher.unit_name(tmp_path,args)
+    assert family(legacy)=='taskeval'
+    request=tmp_path/'request';request.mkdir();queue=tmp_path/'queue';queue.mkdir()
+    args['native_state']=True
+    (request/'request.json').write_text(json.dumps(args))
+    (request/'dispatch.json').write_text(json.dumps({'unit':legacy,'attempts':1}))
+    (queue/'pointer.json').write_text(json.dumps({'request':str(request)}))
+    observed=[]
+    def state(unit):
+        observed.append(unit)
+        return 'active' if unit==legacy else 'none'
+    monkeypatch.setattr(dispatcher,'unit_state',state)
+    assert dispatcher.dispatch(queue)==[]
+    assert observed==[legacy]

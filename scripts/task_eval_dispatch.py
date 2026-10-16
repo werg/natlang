@@ -52,7 +52,10 @@ def requests(queue: Path) -> list[Path]:
 
 def unit_name(request_dir: Path, request: dict) -> str:
     stage = hashlib.sha256(request['stage_out'].encode()).hexdigest()[:8]
-    return f"taskeval-{stage}-{request['step']:07d}"
+    architecture = ((request.get('evaluation_provenance') or {}).get('model_config') or {}).get('architecture')
+    family = ('taskeval-native-' + (architecture if architecture in
+              {'lfm2', 'lfm2_moe', 'maple', 'mellum'} else 'unknown')) if request.get('native_state') else 'taskeval'
+    return f"{family}-{stage}-{request['step']:07d}"
 
 
 def unit_state(unit: str) -> str:
@@ -126,9 +129,9 @@ def dispatch(queue: Path, *, max_attempts: int = 3, dry_run: bool = False) -> li
             request = json.loads((request_dir / 'request.json').read_text())
         except (OSError, json.JSONDecodeError):
             continue
-        unit = unit_name(request_dir, request)
         record_path = request_dir / 'dispatch.json'
         record = json.loads(record_path.read_text()) if record_path.exists() else {'attempts': 0}
+        unit = record.get('unit') or unit_name(request_dir, request)
         state = unit_state(unit)
         if state in ('active', 'waiting', 'unknown') or alive(record.get('launcher_pid')):
             continue
