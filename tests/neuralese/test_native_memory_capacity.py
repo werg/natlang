@@ -214,3 +214,45 @@ def test_held_capacity_check_is_explicit_read_only_and_preserves_all_training_st
     assert result['passed'] and result['capacity']['cases'][0]['id']=='novel'
     assert result['optimizer_updates']==0
     assert_exact(before,optimizer.state_dict());assert_exact(weights,model.state_dict());assert torch.equal(rng,torch.get_rng_state())
+
+
+def test_combined_successful_case_envelopes_preserve_both_dimensions_and_bind_parent(tmp_path):
+    import json
+    from natlang_neuralese.eval.native_memory import combine_capacity_proofs
+    from natlang_neuralese.train.native_resident import binding
+    identity={'actual':'runtime'};proofs=[]
+    for i,(tokens,slots) in enumerate([(112008,124339),(96447,173589)]):
+        path=tmp_path/f'proof-{i}.json'
+        path.write_text(json.dumps({'passed':True,'identity':identity,'runtime_code_sha256':'c'*64,
+            'parent_checkpoint_sha256':'a'*64,'optimizer_updates':0,'numerical_reference':{'passed':True},
+            'capacity':{'passed':True,'cases':[{'status':'passed','forward_tokens':tokens,'kv_slots':slots}]}}))
+        proofs.append(binding(path))
+    certificate=combine_capacity_proofs(tmp_path,proofs,identity=identity,code_sha='c'*64,checkpoint_sha256='a'*64)
+    value=json.loads(certificate.read_text());assert value['limits']=={'forward_tokens':112008,'kv_slots':173589}
+    before=certificate.read_bytes()
+    assert combine_capacity_proofs(tmp_path,proofs,identity=identity,code_sha='c'*64,checkpoint_sha256='a'*64)==certificate
+    assert certificate.read_bytes()==before
+    with pytest.raises(ValueError,match='unchanged-parent'):
+        combine_capacity_proofs(tmp_path,proofs,identity=identity,code_sha='c'*64,checkpoint_sha256='b'*64)
+    path=tmp_path/'proof-1.json';row=json.loads(path.read_text());row['passed']=False;path.write_text(json.dumps(row))
+    with pytest.raises(ValueError,match='unchanged-parent'):
+        combine_capacity_proofs(tmp_path,[proofs[0],binding(path)],identity=identity,code_sha='c'*64,checkpoint_sha256='a'*64)
+
+
+def test_actual_two_capacity_cohorts_publish_one_bound_case_union_without_optimizer_updates(tmp_path,monkeypatch):
+    import json
+    from pathlib import Path
+    from natlang_neuralese.eval import native_memory as memory
+    from natlang_neuralese.train.native_resident import binding
+    model,optimizer,train,roles,config,args=prepared_fixture(tmp_path,monkeypatch)
+    first=json.loads(args.memory_qualification);second=tmp_path/'second.json'
+    second.write_text(json.dumps({**json.loads(Path(first['path']).read_text()),'cohort':'second exact source cohort'}))
+    args.memory_qualification=json.dumps([first,binding(second)])
+    weights=copy.deepcopy(model.state_dict());moments=copy.deepcopy(optimizer.state_dict());rng=torch.get_rng_state().clone()
+    report=memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
+    assert report['passed'] and len(report['checks'])==2
+    capacity=json.loads(args.resident_geometry_qualification.read_text())
+    proof=json.loads(Path(capacity['evidence']['path']).read_text())
+    assert len(proof['proofs'])==2 and len(proof['capacity']['cases'])==2
+    assert all(case['status']=='passed' for case in proof['capacity']['cases'])
+    assert_exact(weights,model.state_dict());assert_exact(moments,optimizer.state_dict());assert torch.equal(rng,torch.get_rng_state())
