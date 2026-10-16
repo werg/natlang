@@ -58,7 +58,16 @@ def reference_module(old_package, new_package):
     spec = importlib.util.spec_from_file_location('natlang_neuralese.model._index_old_reference',
         Path(old_package)/'model/shared_state.py')
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    previous = sys.modules.get(spec.name)
+    sys.modules[spec.name] = module  # dataclasses resolve postponed annotations through the registered module.
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        if previous is None:
+            sys.modules.pop(spec.name, None)
+        else:
+            sys.modules[spec.name] = previous
+        raise
     return module, old, new
 
 

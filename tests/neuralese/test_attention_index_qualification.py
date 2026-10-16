@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from scripts.neuralese_data.qualify_native_attention_index import diagnostic_optimizer, paired_case, tensor_digest
+from scripts.neuralese_data.qualify_native_attention_index import diagnostic_optimizer, paired_case, reference_module, tensor_digest
 from natlang_neuralese.model import shared_state
 from natlang_neuralese.train.native_state_sft import make_native_optimizer
 from test_shared_state import tiny
@@ -58,3 +58,11 @@ def test_real_reference_output_mismatch_fails_and_restores_dispatch():
     assert not result['passed']
     assert shared_state.forward_graph is original
     assert all(parameter.grad is None for parameter in model.parameters())
+
+
+def test_old_reference_module_registers_real_dataclass_annotations(tmp_path):
+    source='from __future__ import annotations\nfrom dataclasses import dataclass\n@dataclass\nclass State:\n    value: int\n'
+    for name,text in [('old',source),('new',source+'# reviewed index change\n')]:
+        path=tmp_path/name/'model/shared_state.py';path.parent.mkdir(parents=True);path.write_text(text)
+    reference,_,_=reference_module(tmp_path/'old',tmp_path/'new')
+    assert reference.State(7).value==7
