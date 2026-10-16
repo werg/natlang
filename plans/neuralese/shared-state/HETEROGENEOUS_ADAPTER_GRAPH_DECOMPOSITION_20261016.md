@@ -57,3 +57,30 @@ a producer trajectory recursively.
 
 Implementation is pending. This decomposition does not claim that per-invocation
 actors currently execute, nor that existing unsupported routes are complete.
+
+Internal executor implementation now exists in `model/native_actor_graph.py`.
+Every effective matrix is materialized once from captured base objects before
+any functional scope. Nested adapted scopes and use after the operation lease
+expires fail closed. The ordinary single-actor path and actor banks share the
+same effective-weight constructor. Graph attention stays combined; only layer
+projections and feed-forward are grouped, with a linear physical-row index.
+
+Local mechanism evidence: `native-invocation-actors-engine-oracle-20261016`
+passed4 cases in37.61s, both real CUDA ports with checkpointing on/off, all
+admissible layer matrices, different XS/tiny actors and a repeated actor. The
+independent incremental oracle executes actual Engine._native_forward per token
+and the same exact native splice mechanism on differentiable source captures.
+All hidden/logit/loss and coefficient-gradient gates remain strict, including
+consumer loss reaching the producer's coefficients. This is an oracle only;
+the graph executor does not invoke it. Source/target identity receipts, public
+service admission/gradient artifacts, immutable optimizer continuation and
+heterogeneous RL capture/replay remain unfinished and unadvertised.
+
+`native-invocation-actors-qualified-20261016` passed25 CUDA cases in91.60s
+(new executor plus existing all-target/FP8/backend carrier coverage) and quick.
+Forward instrumentation verifies exactly one physical-row visit per layer and
+two distinct-actor groups, not three invocation replays. Failure/lifetime tests
+verify exact restoration. `native-invocation-actor-request-bindings-20261016`
+passed the focused request-binding reuse regression and quick: canonical actor
+matrices may be reused while each invocation retains its own request spelling,
+including explicit empty versus inherited base bindings.

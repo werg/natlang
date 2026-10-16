@@ -68,6 +68,29 @@ def _finish(port, layer, h, out, attention):
     return feed_forward_residual(layer, h, getattr(port, 'ffn_chunk_tokens', 0))
 
 
+
+def _actor_layer_inputs(bank,groups,port,layer,h,attention):
+    if bank is None:
+        return _layer_inputs(port,layer,h,attention)
+    merged=None
+    for name,rows in groups:
+        values=bank.execute(name,lambda:_layer_inputs(port,layer,h.index_select(1,rows),attention))
+        dim=2 if attention else 1
+        if merged is None:
+            merged=[value.new_zeros((*value.shape[:dim],h.shape[1],*value.shape[dim+1:])) for value in values]
+        merged=[target.index_copy(dim,rows,value) for target,value in zip(merged,values)]
+    return tuple(merged)
+
+
+def _actor_finish(bank,groups,port,layer,h,out,attention):
+    if bank is None:
+        return _finish(port,layer,h,out,attention)
+    result=torch.zeros_like(h)
+    for name,rows in groups:
+        value=bank.execute(name,lambda:_finish(port,layer,h.index_select(1,rows),out.index_select(2 if attention else 1,rows),attention))
+        result=result.index_copy(1,rows,value)
+    return result
+
 def _convolve(layer, gated, c, plan, rows):
     kernel = layer.conv.conv
     width = kernel.weight.shape[-1]
@@ -112,6 +135,9 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
         state = tuple(tuple(torch.cat([item[i][j] for item in external], dim=2 if port.is_attention(i) else 1)
                             for j in range(2 if port.is_attention(i) else 1)) for i in range(port.num_layers))
         return {'h_final': h, 'states': state if retain_states else (), 'plan': plan}
+    from .native_actor_graph import invocation_actor_bank
+    actor_bank=invocation_actor_bank(port)
+    actor_groups=actor_bank.row_groups(plan,device) if actor_bank is not None else ()
     state = []
     masks = {}
     checkpointed = bool(getattr(port, 'checkpoint_layers', False)) and torch.is_grad_enabled()
@@ -124,7 +150,7 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
 
         def run_layer(value, *imported, index=i, attention=attention, window=window):
             layer = port.layers[index]
-            values = _layer_inputs(port, layer, value, attention)
+            values = _actor_layer_inputs(actor_bank,actor_groups,port,layer,value,attention)
             if attention:
                 q, k, v = values
                 if imported:
@@ -144,7 +170,7 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
                     gated = torch.cat([gated, *imported], dim=1)
                 captured = (gated,)
                 out = _convolve(layer, gated, c, plan, range(plan.token_count))
-            updated = _finish(port, layer, value, out, attention)
+            updated = _actor_finish(actor_bank,actor_groups,port,layer,value,out,attention)
             return (updated, *captured) if retain_states else (updated,)
 
         if checkpointed:
@@ -173,6 +199,9 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
     device = port.embedding_weight.device
     if plan.token_count == 0:
         return forward_graph(port, plan, adapter, embeddings=embeddings, external_blocks=external_blocks, external_identity=external_identity)
+    from .native_actor_graph import invocation_actor_bank
+    actor_bank=invocation_actor_bank(port)
+    if actor_bank is not None: actor_bank.row_groups(plan,device)
     external = _external_layers(port, plan, external_blocks, external_identity)
     layer_cache = [[] for _ in port.layers]
     outputs = []
@@ -188,7 +217,8 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
             h = adapter(h, plan.tensor(plan.producing[offset:offset+count], device, torch.bool)[None])
         for i, layer in enumerate(port.layers):
             attention = port.is_attention(i)
-            values = _layer_inputs(port, layer, h, attention)
+            values = (actor_bank.execute(node.name,lambda:_layer_inputs(port,layer,h,attention))
+                      if actor_bank is not None else _layer_inputs(port,layer,h,attention))
             cache = layer_cache[i]
             if attention:
                 q, k, v = values
@@ -223,7 +253,8 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                         conv = F.conv1d(data.to(c.dtype), kernel.weight, kernel.bias, groups=data.shape[1])
                         parts.append(conv.transpose(1, 2) * c[:, local:local+1])
                 out = torch.cat(parts, dim=1)
-            h = _finish(port, layer, h, out, attention)
+            h = (actor_bank.execute(node.name,lambda:_finish(port,layer,h,out,attention))
+                 if actor_bank is not None else _finish(port,layer,h,out,attention))
         outputs.append(h)
     states = tuple(tuple(torch.cat([entry[field] for entry in cache], dim=2 if len(cache[0]) == 2 else 1)
                          for field in range(len(cache[0]))) for cache in layer_cache)

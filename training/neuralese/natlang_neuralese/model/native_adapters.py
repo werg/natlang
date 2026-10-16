@@ -194,6 +194,35 @@ class _Operation(nn.Module):
         return self.callback()
 
 
+def _effective_replacements(parameters, resolved, gradient_precision):
+    """Construct once from immutable base objects, never another actor's scope."""
+    replacement = {}
+    for _, scale, spec, coefficients, bases in resolved:
+        for name, coefficient in coefficients.items():
+            weight = parameters[name]
+            left, right = (bases[prefix+name].to(device=weight.device, dtype=torch.float32)
+                           for prefix in ('left.', 'right.'))
+            projection = bases.get('projection.'+name)
+            core = coefficient_core(spec['kind'], coefficient.to(device=weight.device), spec['rank'],
+                projection.to(device=weight.device) if projection is not None else None)
+            delta = ((left @ core) @ right.transpose(-2, -1)) * scale
+            key = 'model.'+name
+            if gradient_precision == 'fp32' and weight.dtype != torch.float32:
+                from .native_weight_carrier import rounded_weight_carrier
+                replacement[key] = rounded_weight_carrier(replacement.get(key, weight), delta, weight.dtype)
+            else:
+                replacement[key] = replacement.get(key, weight) + delta.to(weight.dtype)
+    storage_dtypes = {}
+    if gradient_precision == 'fp32':
+        for key, value in replacement.items():
+            dtype = parameters[key.removeprefix('model.')].dtype
+            if dtype not in (torch.float16, torch.bfloat16, torch.float32):
+                raise ValueError('FP32 coefficient carriers require FP16, BF16 or FP32 native weights')
+            if dtype != torch.float32:
+                storage_dtypes[id(value)] = dtype
+    return replacement, storage_dtypes
+
+
 def run_native(engine, callback, entries=None, *, leaves=None, gradient_precision=None):
     """Run one atomic native operation with exact temporary parameter substitution.
 
@@ -223,29 +252,8 @@ def run_native(engine, callback, entries=None, *, leaves=None, gradient_precisio
             if not resolved:
                 return callback()
             parameters = target_parameters(engine.shared_model)
-            replacement = {}
-            for _, scale, spec, coefficients, bases in resolved:
-                for name, coefficient in coefficients.items():
-                    weight = parameters[name]
-                    left, right = (bases[prefix+name].to(device=weight.device, dtype=torch.float32)
-                                   for prefix in ('left.', 'right.'))
-                    projection = bases.get('projection.'+name)
-                    core = coefficient_core(spec['kind'], coefficient.to(device=weight.device), spec['rank'],
-                        projection.to(device=weight.device) if projection is not None else None)
-                    delta = ((left @ core) @ right.transpose(-2, -1)) * scale
-                    key = 'model.'+name
-                    if gradient_precision == 'fp32' and weight.dtype != torch.float32:
-                        from .native_weight_carrier import rounded_weight_carrier
-                        replacement[key] = rounded_weight_carrier(replacement.get(key, weight), delta, weight.dtype)
-                    else:
-                        replacement[key] = replacement.get(key, weight) + delta.to(weight.dtype)
-            if gradient_precision == 'fp32':
-                for key, value in replacement.items():
-                    dtype = parameters[key.removeprefix('model.')].dtype
-                    if dtype not in (torch.float16, torch.bfloat16, torch.float32):
-                        raise ValueError('FP32 coefficient carriers require FP16, BF16 or FP32 native weights')
-                    if dtype != torch.float32:
-                        _ACTIVE.get()[-1][5][id(value)] = dtype
+            replacement, storage_dtypes = _effective_replacements(parameters, resolved, gradient_precision)
+            _ACTIVE.get()[-1][5].update(storage_dtypes)
             _ACTIVE.get()[-1][4].update(id(value) for value in replacement.values())
             if gradient_precision == 'fp32':
                 from .native_weight_carrier import carrier_linear_modules
