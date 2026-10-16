@@ -941,3 +941,24 @@ capability changes. Recovery restores the complete original episode and exact
 state occurrences, or implements the missing differentiable lowering. If these
 details reach the executing model, measure recovery in the next live window;
 mechanism tests alone do not qualify new model-facing error wording.
+
+## 2026-10-16: graded native RL execution task scaffolds
+
+Prepared twelve independently authored train-task inputs: typed literal returns,
+arithmetic/records, compositional optional-tool work, and three private typed
+writer/reader scaffolds. No existing model prompt or reward rule is changed;
+correct execution is rewarded with or without Neuralese. Static source SHA is
+`5839a9edd822d99abe003ca798b8636d8bf17cd18132bbf8a8903c3ebf5d735d`.
+**Measurement debt:** about48 actual executor samples per frozen runtime variant,
+including private return/write-out branches AND whole-student-root mode for each
+production task, before these instructions enter
+production. Root owns that window on retained step6711; historical diagnostics
+are not current-policy RL. Pending source rows are rejected by production
+selection. Preserve all72 existing train tasks in the full packet; do not admit
+student diagnostic trajectories as strong-teacher training data. Existing
+ordinary natlang recovery advice remains unchanged; no new runtime errors or
+public semantics were introduced by these static tasks.
+
+The optional `selectTrainingTasks.nl` policy is also prepared but has no live NL
+execution qualification; the shared crisp default serves until that policy is
+measured through its existing pluggable interface.
