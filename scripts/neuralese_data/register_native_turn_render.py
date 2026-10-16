@@ -107,6 +107,8 @@ def member_entry(a, receipt):
                   'container': 'natlang-neuralese:26.09', 'renderer_code': receipt['renderer_code'],
                   'receipt': f'{a.path}/receipt.json', 'sources': receipt['sources'],
                   'exclude_programs': receipt['exclude_programs'], 'reserved': receipt.get('reserved'), 'protected': receipt['protected'],
+                  **({'target_exclude_ids': receipt['target_exclude_ids'],
+                      'target_hold_policy': receipt['target_hold_policy']} if receipt.get('target_hold_policy') else {}),
                   'held_text': receipt['held_text']},
     }
 

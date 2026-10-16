@@ -42,6 +42,8 @@ def document_identity(row):
     identity = {key: row.get(key) for key in IDENTITY_FIELDS}
     identity['source_groups'] = sorted(row.get('source_groups') or [])
     identity.update({key: row.get(key) or [] for key in PROVENANCE_FIELDS})
+    identity.update({key: row[key] for key in ('assistant_turn_count', 'context_only_assistant_turns',
+        'target_exclusion_bindings', 'target_source_bindings', 'target_source_record_ids', 'context_only_source_record_ids') if key in row})
     return identity
 
 

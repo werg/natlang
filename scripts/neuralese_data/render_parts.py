@@ -71,7 +71,7 @@ def file_identity(path: Path) -> dict:
 def render_binding(sources: list[Path], corpus_id: str, cpus: int, budget_gb: int, docker_gb: int,
                    part_decisions: int, compress_all: bool, protected: Path | None, reserved: Path | None,
                    held_text: list[Path] | None, decision_exclude_ids: list[Path] | None,
-                   exclude_programs: list[Path] | None) -> dict:
+                   exclude_programs: list[Path] | None, target_exclude_ids: list[Path] | None = None) -> dict:
     """Identity of every semantic input/control used by a resumable render output."""
     effective_protected = protected or REPO / PROTECTED
     effective_reserved = reserved or REPO / 'training/source-split-reservations.json'
@@ -79,9 +79,10 @@ def render_binding(sources: list[Path], corpus_id: str, cpus: int, budget_gb: in
     controls = [{'kind': kind, **file_identity(path)} for kind, paths in (
         ('protected', [effective_protected]), ('reserved', [effective_reserved]),
         ('held-text', effective_held), ('decision-exclude-ids', decision_exclude_ids or []),
+        ('target-exclude-ids', target_exclude_ids or []),
         ('exclude-programs', exclude_programs or [])) for path in paths]
     policy_paths = ([effective_protected, effective_reserved] + effective_held +
-                    (decision_exclude_ids or []) + (exclude_programs or []))
+                    (decision_exclude_ids or []) + (exclude_programs or []) + (target_exclude_ids or []))
     controls.extend({'kind': 'control-provenance-proof', **file_identity(proof)}
                     for source in policy_paths
                     if (proof := source.with_suffix('.proof.json')).is_file())
@@ -242,7 +243,8 @@ def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, c
                 cpus: int, budget_gb: int, docker_gb: int, *, compress_all: bool = False,
                 protected: Path | None = None, reserved: Path | None = None,
                 held_text: list[Path] | None = None, decision_exclude_ids: list[Path] | None = None,
-                exclude_programs: list[Path] | None = None, policy_binding_sha256: str | None = None) -> None:
+                exclude_programs: list[Path] | None = None, policy_binding_sha256: str | None = None,
+                target_exclude_ids: list[Path] | None = None) -> None:
     part = out / 'parts' / f'p{k:02d}'
     if (part / 'receipt.json').exists():
         if policy_binding_sha256 is not None:
@@ -297,6 +299,8 @@ def render_part(sources: list[Path], out: Path, k: int, start: int, stop: int, c
                    '--held-text', *[str(p) for p in held_text]]
             if decision_exclude_ids:
                 cmd.extend(['--decision-exclude-ids', *[str(p) for p in decision_exclude_ids]])
+            if target_exclude_ids:
+                cmd.extend(['--target-exclude-ids', *[str(p) for p in target_exclude_ids]])
             if exclude_programs:
                 cmd.extend(['--exclude-programs', *[str(p) for p in exclude_programs]])
             if compress_all:
@@ -392,7 +396,7 @@ def merge_parts(out: Path, *, compress_all: bool = False) -> dict:
             seen = set()
             for path in part_files(out, rendering, tok):
                 for _, row in read_rows(path):
-                    key = (row['split'], text_sha(row))
+                    key = (row['split'], text_sha(row), tuple(row.get('context_only_assistant_turns', [])))
                     if row['split'] == 'train' and set(row.get('source_groups') or []) & held_groups:
                         drop.setdefault(row['id'], 'train_document_shares_held_source_group_across_parts')
                     elif row['split'] == 'train' and key[1] in held_texts:
@@ -477,10 +481,11 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
            docker_gb: int = 8, part_decisions: int = PART_DECISIONS, *, compress_all: bool = False,
            protected: Path | None = None, reserved: Path | None = None,
            held_text: list[Path] | None = None, decision_exclude_ids: list[Path] | None = None,
-           exclude_programs: list[Path] | None = None, stream_source_parts: bool = False) -> dict:
+           exclude_programs: list[Path] | None = None, stream_source_parts: bool = False,
+           target_exclude_ids: list[Path] | None = None) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     custom_policy_requested = any(value is not None for value in
-                                   (protected, reserved, held_text, decision_exclude_ids, exclude_programs))
+                                   (protected, reserved, held_text, decision_exclude_ids, exclude_programs, target_exclude_ids))
     binding_path = out / 'render-policy-binding.json'
     has_unbound_output = (not binding_path.exists() and
                           ((out / 'receipt.json').exists() or (out / 'parts.json').exists() or
@@ -503,7 +508,7 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
         binding_sha256 = None
     else:
         binding = render_binding(sources, corpus_id, cpus, budget_gb, docker_gb, part_decisions, compress_all,
-                                 protected, reserved, held_text, decision_exclude_ids, exclude_programs)
+                                 protected, reserved, held_text, decision_exclude_ids, exclude_programs, target_exclude_ids)
         binding_sha256 = validate_binding(binding_path, binding, legacy_description='render output')
     if (out / 'receipt.json').exists():
         receipt = load(out / 'receipt.json')
@@ -515,7 +520,8 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
         render_part(sources, out, k, start, stop, corpus_id, unit_prefix, cpus, budget_gb, docker_gb,
                     compress_all=compress_all, protected=protected, reserved=reserved,
                     held_text=held_text, decision_exclude_ids=decision_exclude_ids,
-                    exclude_programs=exclude_programs, policy_binding_sha256=binding_sha256)
+                    exclude_programs=exclude_programs, policy_binding_sha256=binding_sha256,
+                    target_exclude_ids=target_exclude_ids)
         if compress_all:
             compress_part_views(out / 'parts' / f'p{k:02d}')
         receipts.append(load(out / 'parts' / f'p{k:02d}' / 'receipt.json'))
@@ -540,7 +546,7 @@ def render(sources: list[Path], out: Path, corpus_id: str, unit_prefix: str, cpu
     else:
         completed_binding = render_binding(sources, corpus_id, cpus, budget_gb, docker_gb, part_decisions,
                                            compress_all, protected, reserved, held_text,
-                                           decision_exclude_ids, exclude_programs)
+                                           decision_exclude_ids, exclude_programs, target_exclude_ids)
         completed_sha = hashlib.sha256(json.dumps(completed_binding, sort_keys=True,
                                                    separators=(',', ':')).encode()).hexdigest()
         if completed_sha != binding_sha256:
@@ -612,7 +618,9 @@ def main() -> None:
     p.add_argument('--held-text', type=Path, action='append',
                    help='additional rendered held-text member supplying source groups; repeatable (shared held corpora always apply)')
     p.add_argument('--decision-exclude-ids', type=Path, action='append',
-                   help='reviewed JSONL {id} decision exclusions, also truncating whole-trajectory chains; repeatable')
+                   help='JSONL {id} dedup exclusions; decisions still complete whole trajectories; repeatable')
+    p.add_argument('--target-exclude-ids', type=Path, action='append',
+                   help='JSONL {id} quality target holds, context retained with zero native target loss; repeatable')
     p.add_argument('--exclude-programs', type=Path, action='append',
                    help='reviewed JSONL {id, reason_code?} whole-program exclusions; repeatable')
     p.add_argument('--link', action='store_true',
@@ -622,7 +630,7 @@ def main() -> None:
                      args.cpus, args.budget_gb, args.docker_gb, compress_all=args.compress_all,
                      protected=args.protected, reserved=args.reserved, held_text=args.held_text,
                      decision_exclude_ids=args.decision_exclude_ids, exclude_programs=args.exclude_programs,
-                     stream_source_parts=args.stream_source_parts)
+                     stream_source_parts=args.stream_source_parts, target_exclude_ids=args.target_exclude_ids)
     print(json.dumps({'rendered': args.corpus_id, 'parts': receipt['parts']}), flush=True)
     if args.register:
         sys.path.insert(0, str(Path(__file__).resolve().parent))

@@ -711,10 +711,77 @@ def whole_trajectory_records(records: list[dict], blocked: dict) -> list[tuple[d
     return out
 
 
+def whole_trajectory_target_holds(record, members, messages, records_by_id, source_hashes, target_exclude):
+    """Bind quality-held decisions to assistant ordinals without changing context."""
+    held = sorted(set(members) & set(target_exclude))
+    if not held:
+        return {}
+    targets = sorted(set(members) - set(target_exclude))
+    if not targets:
+        raise ValueError('whole trajectory has no independently admitted decision targets')
+    original = record.get('messages') or []
+    assistants = sum(message.get('role') == 'assistant' for message in original)
+    if sum(message.get('role') == 'assistant' for message in messages) != assistants:
+        raise ValueError('target hold mapping changed assistant count during context authentication')
+    from natlang_neuralese.data.text_corpus import target_with_teacher_reasoning
+    bindings, positive_bindings, seen_turns = [], [], set()
+    for identifier in sorted(members):
+        member = records_by_id[identifier]
+        if (member.get('split') != record.get('split') or
+                set(member.get('source_groups') or []) != set(record.get('source_groups') or [])):
+            raise ValueError('target hold members require the same split and complete source groups')
+        prefix = member.get('messages') or []
+        if (len(prefix) > len(original) or prefix != original[:len(prefix)]
+                or (identifier != record['id'] and
+                    (len(prefix) == len(original) or original[len(prefix)].get('role') != 'assistant'))):
+            raise ValueError('decision is not bound to an assistant in its exact source prefix')
+        actual = record.get('target') if len(prefix) == len(original) else original[len(prefix)]
+        target = member.get('target')
+        if (not isinstance(target, dict) or target.get('role') != 'assistant' or
+                actual not in (target, target_with_teacher_reasoning(member))):
+            raise ValueError('decision target differs from the actual source assistant')
+        ordinal = sum(message.get('role') == 'assistant' for message in prefix)
+        if ordinal in seen_turns:
+            raise ValueError('multiple source decisions claim the same assistant turn')
+        seen_turns.add(ordinal)
+        digest = source_hashes[identifier]
+        if not isinstance(digest, str) or re.fullmatch(r'[0-9a-f]{64}', digest) is None:
+            raise ValueError('decision lacks its exact source record digest')
+        (bindings if identifier in held else positive_bindings).append(
+            {'id': identifier, 'source_record_sha256': digest,
+             'source_target_sha256': _message_digest(actual), 'assistant_turn': ordinal})
+    return {'assistant_turn_count': assistants + 1,
+            'context_only_assistant_turns': sorted({item['assistant_turn'] for item in bindings}),
+            'target_exclusion_bindings': bindings, 'target_source_bindings': positive_bindings,
+            'target_source_record_ids': targets,
+            'context_only_source_record_ids': held}
+
+
+def bind_target_hold_policy(out, sources, holds):
+    """A resumed shard may never silently retain a different target mask."""
+    path = out / 'target-hold-policy.json'
+    if not holds and not path.exists():
+        return None
+    binding = {'schema': 'natlang.native-turn-target-holds/1',
+               'sources': [{'path': str(source), 'sha256': file_sha(source)} for source in sources],
+               'target_exclude_ids': [{'path': str(hold), 'sha256': file_sha(hold)} for hold in holds]}
+    if path.exists():
+        if json.loads(path.read_text()) != binding:
+            raise ValueError('render target hold policy changed; use a fresh output directory')
+    else:
+        if (out / 'work' / 'selection-state.json').exists() or (out / 'receipt.json').exists():
+            raise ValueError('existing render has no target hold binding; use a fresh output directory')
+        temporary = path.with_suffix('.tmp')
+        temporary.write_text(canonical(binding)+'\n')
+        temporary.replace(path)
+    return {'file': path.name, 'sha256': file_sha(path)}
+
+
 def render_shard(job):
     (shard_path, out_dir, tok_name, blocked, corpus, held_groups, decision_exclude, header_as_full, full_programs,
      renderings, *storage_options) = job
     compress_text = bool(storage_options and storage_options[0])
+    target_exclude = storage_options[1] if len(storage_options) > 1 else set()
     # Per-decision renderings are rendered only when one of them is requested; the program-header parity check needs
     # both, so with program-header requested the full rendering is rendered too (and kept per --full-sample).
     per_decision = {'full', 'program-header'} & set(renderings)
@@ -753,8 +820,14 @@ def render_shard(job):
     rows = {}
     # Decisions already rendered elsewhere (--decision-exclude-ids: e.g. the 4962 union's source records) are not
     # rendered again as decision documents; they still complete their whole trajectories.
-    decision_records = [r for r in records if r['id'] not in decision_exclude]
-    result['decision_excluded'] = len(records) - len(decision_records)
+    decision_records = [r for r in records if r['id'] not in decision_exclude and r['id'] not in target_exclude]
+    result['decision_excluded'] = sum(r['id'] in decision_exclude for r in records)
+    result['target_excluded'] = sum(r['id'] in target_exclude for r in records)
+    omissions.extend({'id': r['id'], 'rendering': 'decision', 'stage': 'quality-target-hold',
+                      'reason': 'explicit_target_hold',
+                      'source_record_sha256': r['_source_record_sha256'],
+                      'whole_trajectory_context_eligible': True}
+                     for r in records if r['id'] in target_exclude)
     for mode in (('full',) if header_as_full else ('full', 'program-header')) if per_decision else ():
         if not decision_records:
             rows[mode] = []
@@ -829,11 +902,14 @@ def render_shard(job):
     # Whole trajectory.
     fingerprint = tokenizer_fingerprint(tok)
     source_hashes, writer_sources = authenticated_context_writer_sources(records)
+    records_by_id = {record['id']: record for record in records}
     wt = []
     for record, members in whole_trajectory_records(records, blocked):
         try:
             piece_map = _G['pieces']
             messages, _, _ = authenticated_crisp_context_messages(record, piece_map, writer_sources)
+            target_holds = whole_trajectory_target_holds(record, members, messages,
+                records_by_id, source_hashes, target_exclude)
             # Gates above bind the exact source target; the teacher reasoning is added only for rendering.
             target = crisp_messages([target_with_teacher_reasoning(record)], piece_map, handover_notes(record))[0]
             text, ids = native_gold_document(tok, messages, target, record.get('tools') or [],
@@ -852,8 +928,10 @@ def render_shard(job):
         wt.append({'text': text, 'token_ids': ids, 'tokenizer_sha256': fingerprint, 'split': record['split'],
                    'runtime_opening_assistant_turns': opening,
                    'source_groups': sorted(set(g for g in record.get('source_groups') or [] if isinstance(g, str) and g)),
-                   'id': 'whole-trajectory:' + record['id'], 'source_record_ids': members,
+                   'id': 'whole-trajectory:' + record['id'],
+                   'source_record_ids': target_holds.get('target_source_record_ids', members),
                    'source_records': [{'id': m, 'sha256': source_hashes[m]} for m in members],
+                   **target_holds,
                    'corpus': corpus, 'prompt_rendering': 'program-header', 'supervision': 'whole-trajectory',
                    **({'system_prompt_mode': 'program-own'} if header_as_full else {})})
     rows['whole-trajectory'] = wt
@@ -918,7 +996,8 @@ def whole_trajectory_target_tokens(row, count_roles):
             runs[-1] += 1
         inside = is_assistant
     skip = row.get('runtime_opening_assistant_turns', 0)
-    return sum(runs[skip:]), sum(runs[:skip]), c
+    held = set(row.get('context_only_assistant_turns', []))
+    return sum(size for index, size in enumerate(runs) if index >= skip and index not in held), sum(runs[:skip]), c
 
 
 def held_groups_from(paths):
@@ -969,7 +1048,7 @@ def merge(out: Path, mode: str, tok_name: str, shards: list[str], held_external:
                             omissions.append({'id': row['id'], 'reason': 'train_copy_of_held_document'})
                             continue
                     key = (row['split'], sha(row['text'].encode()), sha(canonical(row['token_ids']).encode()),
-                           row.get('supervised_suffix_start'))
+                           row.get('supervised_suffix_start'), tuple(row.get('context_only_assistant_turns', [])))
                     if key in seen:
                         # Same document as a kept one: its source decisions are covered there (lineage kept here).
                         omissions.append({'id': row['id'], 'reason': 'exact_duplicate_document',
@@ -1030,6 +1109,8 @@ def main(argv=None):
     p.add_argument('--train-only', action='store_true', help='leave held rows out entirely (their held set lives elsewhere)')
     p.add_argument('--decision-exclude-ids', type=Path, nargs='*', default=[],
                    help='jsonl {id}: decisions already rendered elsewhere; used only inside whole trajectories')
+    p.add_argument('--target-exclude-ids', type=Path, nargs='*', default=[],
+                   help='jsonl {id}: quality-held targets; retain whole-trajectory context with zero native target weight')
     p.add_argument('--reserved', type=Path, help='explicit test reservations (training/source-split-reservations.json)')
     p.add_argument('--protected', type=Path)
     p.add_argument('--held-text', type=Path, nargs='*', default=[])
@@ -1076,6 +1157,7 @@ def main(argv=None):
     out.mkdir(parents=True, exist_ok=True)
     if (out / 'receipt.json').exists():
         p.error(f'refusing to overwrite a finished render: {out}')
+    target_hold_policy = bind_target_hold_policy(out, a.source, a.target_exclude_ids)
     t0 = time.time()
     shard_dir = out / 'work' / 'selected'
     state_path = out / 'work' / 'selection-state.json'
@@ -1112,9 +1194,12 @@ def main(argv=None):
     decision_exclude = set()
     for path in a.decision_exclude_ids:
         decision_exclude.update(json.loads(line)['id'] for line in jsonl_lines(path) if line.strip())
+    target_exclude = set()
+    for path in a.target_exclude_ids:
+        target_exclude.update(json.loads(line)['id'] for line in jsonl_lines(path) if line.strip())
     full_set = None if full_programs is None else set(full_programs)
     jobs = [(str(shard_paths[s]), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
-             a.program_header_as_full, full_set, tuple(a.renderings), a.compress_text)
+             a.program_header_as_full, full_set, tuple(a.renderings), a.compress_text, target_exclude)
             for s in shards for name in tokenizers]
     results = []
     pending = []
@@ -1160,6 +1245,8 @@ def main(argv=None):
         for o in omissions:
             f.write(canonical(o) + '\n')
     receipts = {k: v for res in results for k, v in res.items() if k.startswith('receipt_')}
+    if bind_target_hold_policy(out, a.source, a.target_exclude_ids) != target_hold_policy:
+        raise ValueError('render target hold policy changed before completion')
     receipt = {
         'schema': SCHEMA, 'corpus_id': a.corpus_id,
         'sources': {str(s): {'sha256': file_sha(s), 'bytes': s.stat().st_size} for s in a.source},
@@ -1168,6 +1255,9 @@ def main(argv=None):
         'source_piece_table_sha256': sha(canonical(pieces).encode()) if pieces else None,
         'explicit_piece_bindings': explicit_piece_bindings,
         'exclude_programs': [{'path': str(e), 'sha256': file_sha(e)} for e in a.exclude_programs],
+        'target_exclude_ids': (json.loads((out / target_hold_policy['file']).read_text())['target_exclude_ids']
+                               if target_hold_policy is not None else []),
+        **({'target_hold_policy': target_hold_policy} if target_hold_policy is not None else {}),
         'reserved': ({'path': str(a.reserved), 'sha256': file_sha(a.reserved)} if a.reserved else None),
         'reserved_groups': len(reserved_groups),
         'protected': ({'path': str(a.protected), 'sha256': file_sha(a.protected),

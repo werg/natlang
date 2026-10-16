@@ -165,20 +165,88 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
         assistant_runs.append((begin, index))
     if opening_turns > len(assistant_runs):
         raise ValueError('runtime-opening assistant turn count exceeds the source trajectory')
+    held_turns = row.get('context_only_assistant_turns')
+    held_tokens = [False] * len(ids)
+    hold_fields = ('assistant_turn_count', 'target_exclusion_bindings', 'target_source_bindings',
+                   'target_source_record_ids', 'context_only_source_record_ids')
+    if held_turns is None and any(key in row for key in hold_fields):
+        raise ValueError('whole-trajectory target hold metadata is incomplete')
+    if held_turns is not None:
+        if (not isinstance(held_turns, list) or not held_turns
+                or any(type(index) is not int or not 0 <= index < len(assistant_runs) for index in held_turns)
+                or held_turns != sorted(set(held_turns))
+                or type(row.get('assistant_turn_count')) is not int
+                or row['assistant_turn_count'] != len(assistant_runs)):
+            raise ValueError('target holds require exact distinct assistant turn ordinals and count')
+        bindings = row.get('target_exclusion_bindings')
+        source_entries = row.get('source_records')
+        if (not isinstance(bindings, list) or not bindings or not isinstance(source_entries, list)
+                or any(not isinstance(item, Mapping) or not isinstance(item.get('id'), str)
+                       or not isinstance(item.get('sha256'), str) for item in source_entries)):
+            raise ValueError('target holds require exact source record bindings')
+        source_hashes = {item['id']: item['sha256'] for item in source_entries}
+        if (len(source_hashes) != len(source_entries)
+                or any(not isinstance(item, Mapping) or not isinstance(item.get('id'), str)
+                       or item['id'] not in source_hashes
+                       or not re.fullmatch(r'[0-9a-f]{64}', source_hashes[item['id']])
+                       or item.get('source_record_sha256') != source_hashes[item['id']]
+                       or type(item.get('assistant_turn')) is not int
+                       or item['assistant_turn'] not in held_turns for item in bindings)):
+            raise ValueError('target hold binding differs from source record or assistant span')
+        held_ids = [item['id'] for item in bindings]
+        target_ids, context_ids = row.get('target_source_record_ids'), row.get('context_only_source_record_ids')
+        if (not isinstance(target_ids, list) or not isinstance(context_ids, list)
+                or any(not isinstance(value, str) or not value for value in target_ids + context_ids)):
+            raise ValueError('target/context source identities must be lists of nonempty strings')
+        positive_bindings = row.get('target_source_bindings')
+        if (not isinstance(positive_bindings, list) or not positive_bindings
+                or any(not isinstance(item, Mapping) or not isinstance(item.get('id'), str)
+                       or item.get('id') not in source_hashes
+                       or item.get('source_record_sha256') != source_hashes[item['id']]
+                       or not re.fullmatch(r'[0-9a-f]{64}', source_hashes[item['id']])
+                       or type(item.get('assistant_turn')) is not int
+                       or not opening_turns <= item['assistant_turn'] < len(assistant_runs)
+                       or item['assistant_turn'] in held_turns
+                       for item in positive_bindings)):
+            raise ValueError('positive target bindings must name exact unheld assistant spans')
+        all_bindings = bindings + positive_bindings
+        if (any(not re.fullmatch(r'[0-9a-f]{64}', str(item.get('source_target_sha256', '')))
+                for item in all_bindings)
+                or len({item['assistant_turn'] for item in all_bindings}) != len(all_bindings)
+                or len({item['id'] for item in positive_bindings}) != len(positive_bindings)
+                or set(item['id'] for item in positive_bindings) != set(target_ids or [])):
+            raise ValueError('source targets require unique exact authenticated assistant bindings')
+        if (not isinstance(target_ids, list) or not target_ids or not isinstance(context_ids, list)
+                or any(not isinstance(value, str) or not value for value in target_ids + context_ids)
+                or len(set(held_ids)) != len(held_ids)
+                or set(context_ids) != set(held_ids) or set(target_ids) & set(context_ids)
+                or set(target_ids) != set(row.get('source_record_ids') or [])
+                or set(target_ids) | set(context_ids) != set(source_hashes)
+                or {item['assistant_turn'] for item in bindings} != set(held_turns)):
+            raise ValueError('target/context source identities do not close over the exact held spans')
+        for index in held_turns:
+            begin, end = assistant_runs[index]
+            held_tokens[begin:end] = [True] * (end-begin)
     opening_spans = assistant_runs[:opening_turns]
     context_labels = list(labels)
     for begin, end in opening_spans:
         context_labels[begin:end] = [other_role] * (end - begin)
     failed = failed_assistant_mask(ids, labels, tokenizer.decode)
+    excluded = [bool(failure or held) for failure, held in zip(failed, held_tokens)]
     target_spans = [(begin, end) for begin, end in assistant_runs[opening_turns:]
-                    if not any(failed[begin:end])]
+                    if not any(excluded[begin:end])]
+    if held_turns is not None and not target_spans:
+        raise ValueError('whole trajectory has no unheld successful assistant targets')
+    if held_turns is not None and any(assistant_runs[item['assistant_turn']] not in target_spans
+                                     for item in positive_bindings):
+        raise ValueError('positive source target maps to a runtime-failed assistant span')
     # Apply the existing segment policy per assistant turn. Each complete turn
     # gets target mass while intervening prompts and tool feedback remain
     # lower-weight context; rejected assistant turns are excluded everywhere.
     weights_tensor = segmented_position_weights(
         torch.ones((1, len(ids)), dtype=torch.float32), target_spans,
         roles=torch.tensor([context_labels], dtype=torch.long), context_weight=context_weight,
-        feedback_weight=feedback_weight, exclude=torch.tensor([list(failed)], dtype=torch.bool))[0]
+        feedback_weight=feedback_weight, exclude=torch.tensor([excluded], dtype=torch.bool))[0]
     weights = weights_tensor.tolist()
     # Native graph CE predicts from token 0 onward; the schema also requires
     # the first own token to be explicitly non-target.
@@ -199,6 +267,10 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
                    'failure_detector': 'natlang_neuralese.train.text_supervision.failed_assistant_mask',
                    'role_parser': 'natlang_neuralese.train.text_supervision.chat_roles',
                    'weighting': 'natlang_neuralese.train.text_supervision.segmented_position_weights'}
+    if held_turns is not None:
+        role_policy.update(name='whole-trajectory-context-feedback-target-holds-v3',
+                           context_only_assistant_turns=held_turns,
+                           context_only_assistant_tokens_masked=sum(held_tokens))
     return {
         'schema': SCHEMA,
         'id': 'text:' + identifier,
@@ -211,6 +283,7 @@ def whole_trajectory_text_row_graph(row: Mapping[str, Any], *, source_tokenizer_
             'source_twin_id': twin_id, 'source_tokenizer_fingerprint': source_tokenizer_fingerprint,
             'source_text_sha256': _sha_text(text), 'supervision_policy': role_policy,
             'runtime_opening_assistant_turns': row.get('runtime_opening_assistant_turns', 0),
+            **({key: row[key] for key in (*hold_fields, 'context_only_assistant_turns')} if held_turns is not None else {}),
             'context_attestations': row.get('neuralese_context_attestations', [])},
     }
 

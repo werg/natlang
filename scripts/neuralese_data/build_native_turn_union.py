@@ -121,7 +121,7 @@ def rows(path: Path, *, split=None):
 
 
 def _row_identity(row: dict) -> dict:
-    return {
+    identity = {
         'split': row['split'],
         'source_groups': tuple(sorted(row['source_groups'])),
         'source_record_ids': tuple(row.get('source_record_ids') or ()),
@@ -129,6 +129,9 @@ def _row_identity(row: dict) -> dict:
         'source_identity_sha256': (sha(canonical(document_identity(row)).encode())
                                    if row.get('source_record_ids') else None),
     }
+    if 'context_only_assistant_turns' in row:
+        identity['target_mask'] = tuple(row['context_only_assistant_turns'])
+    return identity
 
 
 def _same_twin_identity(left, right):
@@ -311,7 +314,8 @@ def plan_member_rows(order: list[str], member_rows: dict, supersedes: dict,
     selected = set()
     seen_text = {}
     for rid, candidate in sorted(selected_by_id.items(), key=lambda item: member_rank[item[1]['member']]):
-        key = (candidate['identity']['split'], candidate['identity']['twin_text_sha256'])
+        key = (candidate['identity']['split'], candidate['identity']['twin_text_sha256'],
+               candidate['identity'].get('target_mask'))
         if key in seen_text:
             kept_member, kept_id = seen_text[key]
             if kept_member in supersedes.get(candidate['member'], set()):
