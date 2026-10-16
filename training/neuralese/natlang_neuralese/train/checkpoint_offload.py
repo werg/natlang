@@ -289,11 +289,25 @@ def pruned_copy(path, dest, *, partial_suffix=PART_SUFFIX, schemas=None) -> dict
     except Exception:
         return None
     dropped = sorted(k for k in state if is_optimizer_key(k)) if isinstance(state, dict) else []
+    native_training = (state.get('training') if isinstance(state, dict) and
+        state.get('schema') == 'natlang.neuralese-native-checkpoint/1' else None)
+    nested = sorted(k for k in native_training if is_optimizer_key(k)) if isinstance(native_training, dict) else []
+    dropped += ['training.' + key for key in nested]
     if schemas is not None and isinstance(state, dict) and state.get('schema') not in schemas:
         dropped = []  # 'auto': a writer whose non-latest copies are continuation parents or pinned
     if not dropped:
         return None
     kept = {k: v for k, v in state.items() if not is_optimizer_key(k)}
+    if nested:
+        kept['training'] = {key: value for key, value in native_training.items() if key not in nested}
+        try:
+            from ..common.hashing import sha256_file_hex_cached
+        except ImportError:  # The existing offload worker runs this file directly.
+            sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+            from natlang_neuralese.common.hashing import sha256_file_hex_cached
+        kept['inference_source'] = {'schema': 'natlang.native-inference-source/1',
+            'training_checkpoint_sha256': sha256_file_hex_cached(path),
+            'training_checkpoint_bytes': before.st_size, 'step': state.get('step')}
     dest.parent.mkdir(parents=True, exist_ok=True)
     partial = dest.with_name(dest.name + partial_suffix)
     try:

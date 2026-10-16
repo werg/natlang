@@ -5,7 +5,7 @@ import pytest
 from natlang_neuralese.model.native_model import (
     CHECKPOINT_SCHEMA, load_native_model, load_native_checkpoint, model_state, native_identity,
 )
-from natlang_neuralese.model.shared_state import Invocation, compile_graph
+from natlang_neuralese.model.shared_state import Invocation, ImportSpan, compile_graph
 
 
 def tiny_source(path):
@@ -63,6 +63,47 @@ def test_native_loader_rejects_legacy_checkpoint(tmp_path):
     torch.save({'schema': 'natlang.neuralese-direct/1'}, checkpoint)
     with pytest.raises(ValueError, match='legacy projection'):
         load_native_checkpoint(checkpoint)
+
+
+@pytest.mark.parametrize('family', ['lfm', 'mellum'])
+def test_native_weights_only_child_export_keeps_exact_model_and_refuses_resume(tmp_path, family):
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.train.checkpoint_offload import child_copy, load_state
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    from natlang_neuralese.serve import load_native_engine
+    engine = engine_fixture(tmp_path, family)
+    full = tmp_path/'full-parent.pt'
+    view = tmp_path/'inference.pt'
+    state = load_state(engine.native_checkpoint)
+    state.update(step=5000, training={'optimizer': {'state': {'moment': torch.arange(100000)}},
+        'rng': {'cpu': torch.get_rng_state()}, 'exposure_counts': {'exact-source-row': 7}})
+    torch.save(state, full)
+    original_sha = sha256_file_hex_cached(full)
+    record = child_copy(full, view, prune=True)  # actual direct-file worker import path
+    assert record['optimizer_pruned'] and record['bytes'] < record['source_bytes']
+    written = load_state(view)
+    assert written['optimizer_pruned_keys'] == ['training.optimizer']
+    assert 'optimizer' not in written['training']
+    assert written['training']['exposure_counts'] == state['training']['exposure_counts']
+    assert torch.equal(written['training']['rng']['cpu'], state['training']['rng']['cpu'])
+    assert written['inference_source']['training_checkpoint_sha256'] == original_sha
+    assert sha256_file_hex_cached(full) == original_sha
+    with pytest.raises(ValueError, match='weights-only checkpoint'):
+        load_native_checkpoint(view)
+    restored = load_native_engine(str(view), device='cpu')
+    try:
+        assert restored.rl_policy_binding['inference_source'] == written['inference_source']
+        assert restored.native_identity['checkpoint_sha256'] == record['sha256']
+        assert restored.native_identity['checkpoint_sha256'] != original_sha
+        plan = compile_graph([Invocation('producer',(4,5,6,7), producing=((1,3),)),
+            Invocation('consumer',(8,9),imports=(ImportSpan(1,'producer',1,3),))])
+        with torch.no_grad():
+            assert torch.equal(engine.shared_model.logits(engine.shared_model(plan)['h_final']),
+                               restored.shared_model.logits(restored.shared_model(plan)['h_final']))
+        for name, parameter in engine.shared_model.named_parameters():
+            assert torch.equal(parameter, dict(restored.shared_model.named_parameters())[name])
+    finally:
+        engine.store.close();restored.store.close()
 
 
 def test_native_composite_checkpoint_applies_named_patch_and_has_restorable_effective_identity(tmp_path):

@@ -1,4 +1,4 @@
-"""Verified native LFM exports in the existing asynchronous task-eval protocol."""
+"""Verified native student exports in the existing asynchronous task-eval protocol."""
 from __future__ import annotations
 import fcntl
 import json
@@ -20,10 +20,10 @@ def file_binding(path):
 def verified_export(state):
     receipt=state['receipt']; identity=receipt['identity']
     proof=receipt.get('independent_verification') or {}
-    if (receipt.get('role')!='lfm' or receipt.get('private') is not True
+    if (receipt.get('role') not in {'lfm','mellum'} or receipt.get('private') is not True
             or proof.get('sha256')!=identity.get('sha256') or proof.get('bytes')!=identity.get('bytes')
             or not isinstance(state.get('last_verified_step'),int)):
-        raise ValueError('native eval requires the existing independently verified private LFM export')
+        raise ValueError('native eval requires an independently verified private student export')
     return receipt
 
 
@@ -50,7 +50,7 @@ def verify_request(request):
 
 
 def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=None,device='cuda'):
-    """Seal exact original bytes; no pruning, projection heads or guessed source dtype."""
+    """Seal verified export bytes; keep a derived view's original parent separate."""
     from ..train.checkpoint_policy import CheckpointPolicy
     from ..model.native_model import CHECKPOINT_SCHEMA,base_inventory
     from .task_cadence import ASYNC_SCHEMA,TaskEval,parse_task_eval
@@ -59,8 +59,18 @@ def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=No
         raise ValueError('native eval checkpoint differs from independently verified export')
     state=CheckpointPolicy.load(checkpoint)
     config=state.get('model_config') or {}
-    if state.get('schema')!=CHECKPOINT_SCHEMA or config.get('architecture') not in {'lfm2','lfm2_moe'}:
-        raise ValueError('native async export path accepts full native LFM only; no legacy or Mellum fallback')
+    if state.get('schema')!=CHECKPOINT_SCHEMA or config.get('architecture') not in {'lfm2','lfm2_moe','maple','mellum'}:
+        raise ValueError('native async export path requires a supported native student checkpoint')
+    inference_source=state.get('inference_source')
+    if state.get('optimizer_pruned'):
+        import re
+        if (not isinstance(inference_source,dict) or inference_source.get('schema')!='natlang.native-inference-source/1'
+                or not isinstance(inference_source.get('training_checkpoint_sha256'),str)
+                or not re.fullmatch('[0-9a-f]{64}',inference_source['training_checkpoint_sha256'])
+                or type(inference_source.get('training_checkpoint_bytes')) is not int
+                or inference_source['training_checkpoint_bytes']<=identity['bytes']
+                or inference_source.get('step')!=step):
+            raise ValueError('native inference export lacks its exact original full-parent provenance')
     if state.get('step')!=step:
         raise ValueError('native eval export step differs from actual saved checkpoint')
     actual_base=base_inventory(base)
@@ -86,6 +96,9 @@ def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=No
     provenance={'schema':'natlang.native-async-task-eval-binding/1',
         'historical':True,'qualifies_current_weights':False,'checkpoint':file_binding(weights),
         'source_checkpoint_sha256':identity['sha256'],'source_export':source_export,
+        **({'inference_source':inference_source,
+            'source_training_checkpoint_sha256':inference_source['training_checkpoint_sha256']}
+           if inference_source is not None else {}),
         'model_config':config,'execution':{'device':device,'sdpa_backend':'default'},'runtime':{'path':str(runtime),'sha256':canonical_json_sha256_hex(runtime_files),
                                       'inventory':runtime_files},
         'packet':file_binding(packet),'case_indices':spec['cases'],

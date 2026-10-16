@@ -122,7 +122,8 @@ def test_native_protocol_mode_requires_boolean():
         task_cadence.parse_task_eval({'packet':{'path':'x','sha256':'a'*64},'neuralese_server':'false'})
 
 
-def test_verified_existing_download_cannot_be_replaced_by_stale_pending(tmp_path,monkeypatch):
+@pytest.mark.parametrize('role',['lfm','mellum'])
+def test_verified_existing_download_cannot_be_replaced_by_stale_pending(tmp_path,monkeypatch,role):
     import importlib.util
     import sys
     import types
@@ -134,9 +135,41 @@ def test_verified_existing_download_cannot_be_replaced_by_stale_pending(tmp_path
     destination=tmp_path/'checkpoint.pt';destination.write_bytes(b'verified')
     destination.with_suffix('.pt.pending').write_bytes(b'leftover rejected download')
     identity=file_binding(destination)
-    result=module.fetch({'private':True,'role':'lfm','identity':identity,
+    result=module.fetch({'private':True,'role':role,'identity':identity,
                         'independent_verification':identity},destination)
     assert result['sha256']==identity['sha256'] and destination.read_bytes()==b'verified'
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_actual_native_inference_view_seals_restores_and_keeps_distinct_parent(tmp_path,family):
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.train.checkpoint_offload import load_state,pruned_copy
+    from natlang_neuralese.eval.native_async import verified_export
+    _,_,_,spec,_=fixture(tmp_path/'protocol')
+    (tmp_path/'trained').mkdir()
+    original=engine_fixture(tmp_path/'trained',family)
+    state=load_state(original.native_checkpoint)
+    state.update(step=5000,training={'optimizer':{'moment':torch.arange(100000)},'rng':{'cpu':torch.get_rng_state()}})
+    full=tmp_path/'full.pt';torch.save(state,full)
+    source_sha=sha256_file_hex_cached(full)
+    view=tmp_path/'inference.pt';pruned_copy(full,view)
+    identity=file_binding(view)
+    exported={'last_verified_step':5000,'receipt':{'role':family,'private':True,'identity':identity,
+        'independent_verification':dict(identity)}}
+    assert verified_export(exported)==exported['receipt']
+    active=seal_request(view,identity=identity,step=5000,spec=spec,out=tmp_path/'eval',
+        base=Path(original.model_config['base']),queue=tmp_path/'queue',source_export=exported['receipt'],device='cpu')
+    request_dir=Path(active['request']);request=json.loads((request_dir/'request.json').read_text())
+    restored=task_cadence.restore_engine({**request,'dir':str(request_dir)})
+    try:
+        provenance=request['evaluation_provenance']
+        assert provenance['source_checkpoint_sha256']==identity['sha256']!=source_sha
+        assert provenance['source_training_checkpoint_sha256']==source_sha
+        assert restored.native_identity['checkpoint_sha256']==identity['sha256']
+        assert restored.rl_policy_binding['inference_source']['training_checkpoint_sha256']==source_sha
+        for name,parameter in original.shared_model.named_parameters():
+            assert torch.equal(parameter,dict(restored.shared_model.named_parameters())[name])
+    finally:original.store.close();restored.store.close()
 
 
 def test_native_collector_infrastructure_is_unscored(tmp_path,monkeypatch):

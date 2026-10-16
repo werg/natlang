@@ -197,7 +197,7 @@ def _bind_backbone_revision(model, checkpoint_sha256):
     }
 
 
-def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, participant=None):
+def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, participant=None, allow_weights_only=False):
     """Return (model, tokenizer, roles, model_config, full_checkpoint_state)."""
     from pathlib import Path
     path = Path(path).resolve(strict=True)
@@ -210,6 +210,9 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
             return load_native_composite_checkpoint(path, base=base, device=device, dtype=dtype)
     from ..train.checkpoint_policy import CheckpointPolicy
     state = CheckpointPolicy.load(path, shared_participant=participant)
+    if state.get('optimizer_pruned') and not allow_weights_only:
+        from ..train.checkpoint_offload import require_optimizer
+        require_optimizer(state, path)
     if state.get('schema') == SHARED_CHECKPOINT_SCHEMA:
         if participant not in state['participants']:
             raise ValueError('shared native checkpoint requires an explicit existing participant')

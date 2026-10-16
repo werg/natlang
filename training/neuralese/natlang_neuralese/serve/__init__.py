@@ -159,7 +159,7 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
     from .store import TensorStore
 
     model, tokenizer, roles, config, _state = load_native_checkpoint(
-        checkpoint, base=base, device=device, dtype=dtype, participant=participant)
+        checkpoint, base=base, device=device, dtype=dtype, participant=participant, allow_weights_only=True)
     model.eval()
     for parameter in model.parameters():
         parameter.requires_grad_(False)
@@ -177,6 +177,8 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
         'checkpoint_sha256': checkpoint_sha256, 'communication': 'native-state',
         'native_identity': dict(identity),
         **({'native_participant': participant} if participant is not None else {})}
+    if _state.get('inference_source') is not None:
+        engine.rl_policy_binding['inference_source'] = dict(_state['inference_source'])
     if semantic_adapter:
         from ..model.semantic_channel import SemanticChannel
         bind_native_semantic_channel(engine, SemanticChannel.load(semantic_adapter,device=device), participant)

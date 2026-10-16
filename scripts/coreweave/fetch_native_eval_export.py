@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch an existing verified private LFM export for owner-host task evaluation.
+"""Fetch an existing verified private student export for owner-host task evaluation.
 
 Uses the same private W&B file lookup/stream/SHA path as periodic checkpoint
 verification. No sandbox resource changes, credential upload or URL output.
@@ -19,9 +19,9 @@ def fetch(receipt,destination):
     import requests
     import wandb
     identity=receipt['identity'];proof=receipt.get('independent_verification') or {}
-    if (receipt.get('private') is not True or receipt.get('role')!='lfm'
+    if (receipt.get('private') is not True or receipt.get('role') not in {'lfm','mellum'}
             or any(proof.get(key)!=identity[key] for key in ('bytes','sha256'))):
-        raise ValueError('private LFM export lacks independent byte/hash verification')
+        raise ValueError('private student export lacks independent byte/hash verification')
     destination=Path(destination);destination.parent.mkdir(parents=True,exist_ok=True)
     pending=destination.with_name(destination.name+'.pending')
     started=time.time();digest=hashlib.sha256();size=0
