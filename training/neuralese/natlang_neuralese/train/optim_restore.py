@@ -380,11 +380,15 @@ def port_saved_slot_names(saved, kind, child):
     return list(bound)
 
 
-def load_named_port_state(optimizer,saved,*,allow_added_names=(),allow_promoted_names=()):
+def load_named_port_state(optimizer,saved,*,allow_added_names=(),allow_promoted_names=(),native_optimizer_migration=None):
     """Restore raw PortMuonAdamW by actual names, preserving per-name group options."""
     from .optim import FORMAT
+    from .native_optimizer_migration import migrate_native_ordinary_optimizer, own_transition_history, validate_transition_history
+    if native_optimizer_migration is not None:
+        saved=migrate_native_ordinary_optimizer(optimizer,saved,native_optimizer_migration)
     if saved.get('format')!=FORMAT:
         raise OptimizerRestoreError('port optimizer checkpoint format differs')
+    validate_transition_history(saved.get('native_optimizer_transitions',[]),optimizer.schema)
     prior={entry['name']:entry for entry in saved['schema']}
     current={entry['name']:entry for entry in optimizer.schema}
     if len(prior)!=len(saved['schema']) or len(current)!=len(optimizer.schema):
@@ -397,6 +401,11 @@ def load_named_port_state(optimizer,saved,*,allow_added_names=(),allow_promoted_
         promoted=(name in allow_promoted_names and contract['dtype'] in ('torch.bfloat16','torch.float16')
                   and actual=={**contract,'dtype':'torch.float32'})
         if actual!=contract and not promoted:
+            if contract.get('optimizer')=='muon' and actual.get('optimizer')=='adamw' and name in optimizer._force_adamw_names:
+                from .native_optimizer_migration import POLICY
+                raise OptimizerRestoreError('native ordinary optimizer kind changed for '+name+
+                    '; explicitly declare --native-optimizer-migration '+POLICY+
+                    ' to start new Adam history while preserving original Muon buffers')
             raise OptimizerRestoreError('optimizer parameter name/shape/dtype/partition changed: '+name)
     by_name={};group_serial=0
     for kind,child in _saved_children(saved):
@@ -437,3 +446,4 @@ def load_named_port_state(optimizer,saved,*,allow_added_names=(),allow_promoted_
         child.load_state_dict(state)
     optimizer.param_groups=optimizer._groups()
     own_host_tensors(optimizer)
+    optimizer._native_optimizer_transitions=own_transition_history(saved.get('native_optimizer_transitions',[]))
