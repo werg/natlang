@@ -235,7 +235,8 @@ def test_functional_update_rejects_missing_or_forged_history_without_reset(state
 @pytest.mark.parametrize('family',['lfm','mellum'])
 @pytest.mark.parametrize('algorithm',['sgd','adam'])
 @pytest.mark.parametrize('heterogeneous',[False,True])
-def test_repeated_real_native_updates_recompute_exact_earlier_actor_bindings(tmp_path,family,algorithm,heterogeneous):
+@pytest.mark.parametrize('file_offload',[False,True])
+def test_repeated_real_native_updates_recompute_exact_earlier_actor_bindings(tmp_path,family,algorithm,heterogeneous,file_offload):
     from dataclasses import replace
     from test_native_serving_adapters import engine_fixture
     from natlang_neuralese.model.native_adapters import create_adapter,target_parameters,run_native
@@ -243,6 +244,10 @@ def test_repeated_real_native_updates_recompute_exact_earlier_actor_bindings(tmp
     from natlang_neuralese.train.optim import functional_named_service_step
     engine=engine_fixture(tmp_path,family)
     model=engine.shared_model
+    offload=None
+    if file_offload:
+        from natlang_neuralese.common.checkpoint_offload import configure_checkpoint_input_offload
+        offload=configure_checkpoint_input_offload(model.port,enabled=True,directory=tmp_path/'saved-inputs')
     parameter_name=next(name for name in target_parameters(model) if name.endswith('v_proj.weight'))
     base=create_adapter(engine,{'kind':'xs','rank':2,'parameter_names':[parameter_name]})
     initial=[torch.full_like(base.artifact.tensors[parameter_name],value).to(engine.device)
@@ -282,6 +287,9 @@ def test_repeated_real_native_updates_recompute_exact_earlier_actor_bindings(tmp
     try:
         expected=run(False);actual=run(True)
         torch.testing.assert_close(actual,expected,rtol=2e-5,atol=3e-6)
+        if offload is not None:
+            stats=offload.snapshot()
+            assert stats['checkpoint_calls']>0 and stats['packs']>0 and stats['unpacks']>0
         assert all(value.norm()>0 and torch.isfinite(value).all() for value in actual[1])
         for got,reference in zip(actual[1],expected[1]):
             relative=(got-reference).double().norm()/reference.double().norm()

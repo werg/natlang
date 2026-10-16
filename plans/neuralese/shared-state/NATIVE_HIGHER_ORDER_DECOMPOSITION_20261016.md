@@ -95,3 +95,15 @@ Checkpointed and uncheckpointed hypergradients must satisfy global relative-L2
 and cosine checks as well as elementwise checks; tiny coordinates alone cannot
 pass on absolute tolerance. These are engineering checks of the internal backend,
 not completion of the still-open HTTP/typed derivation-program/archive contract.
+
+### File-backed checkpoint interaction qualification
+
+The same two-update native reference-arithmetic oracle now runs with exact
+file-backed checkpoint inputs: both ports, SGD and Adam, and uniform and
+heterogeneous writer/reader actors. It compares final loss, actual updated
+coefficients and nonzero outer root gradients against uncheckpointed execution,
+including relative-L2/cosine checks and actual file pack/unpack counters. The
+12:45 local CPU and CUDA runs passed all 16 cases each (CUDA 7.90 s), using the
+stride-preserving storage implementation 72957ded9. This qualifies the native
+higher-order interaction; it does not qualify production whole-graph capacity
+or expose the unfinished public derivative-program API.
