@@ -550,6 +550,8 @@ def build_parser():
     parser.add_argument('--held-eval-graphs', type=int, default=0)
     parser.add_argument('--checkpoint-every', type=int, default=0)
     parser.add_argument('--checkpoint-seconds', type=float, default=3600.)
+    parser.add_argument('--checkpoint-input-offload', action=argparse.BooleanOptionalAction, default=None,
+        help='store nonreentrant layer-checkpoint inputs on host RAM; omission inherits the saved mode')
     parser.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--chunk-tokens', type=int, default=128)
     parser.add_argument('--fp8-training', choices=('off', 'te-fp8', 'triton-experts'), default='off')
@@ -833,6 +835,14 @@ def main(argv=None):
         backend = None
     if config['architecture'] in {'mellum', 'maple'} and backend is None:
         raise ValueError('native Mellum/Maple production SFT requires its shared triton-experts FP8 memory path')
+    inherited_offload = (saved_training.get('options') or {}).get('checkpoint_input_offload', False)
+    args.checkpoint_input_offload = (inherited_offload if args.checkpoint_input_offload is None
+                                     else args.checkpoint_input_offload)
+    if type(args.checkpoint_input_offload) is not bool or (args.checkpoint_input_offload and not args.checkpoint_layers):
+        raise ValueError('checkpoint input offload requires actual nonreentrant layer checkpointing')
+    from ..common.checkpoint_offload import configure_checkpoint_input_offload
+    configure_checkpoint_input_offload(model.port, enabled=args.checkpoint_input_offload)
+    checkpoint_options['checkpoint_input_offload'] = args.checkpoint_input_offload
     model.port.checkpoint_layers = args.checkpoint_layers
     model.to(args.device)
     model.train()
@@ -947,7 +957,9 @@ def main(argv=None):
             geometry_qualification=args.resident_geometry_qualification,
             geometry_identity={'model_config': config, 'batch_graphs': args.batch_graphs,
                 'batch_tokens': args.batch_tokens, 'checkpoint_layers': args.checkpoint_layers,
-                'chunk_tokens': args.chunk_tokens})
+                'chunk_tokens': args.chunk_tokens, 'checkpoint_input_offload': args.checkpoint_input_offload,
+                'fp8': {**training_identity['fp8'],
+                        'input_gradient_precision': getattr(backend, 'input_gradient_precision', None)}})
         if resident.state:
             checkpoint_options['resident_adoption'] = {'generation': resident.generation,
                 'history': resident.state['history']}
@@ -1031,6 +1043,8 @@ def main(argv=None):
                         'checkpoint_step': last_saved_step,
                         'communication_exposure': communication_exposure(train.entries, exposure_counts, required_visits)}
             progress['learning_rates']=optimizer.native_learning_rates
+            progress['checkpoint_input_offload'] = {'enabled': args.checkpoint_input_offload,
+                'checkpoint_calls': getattr(model.port.activation_checkpoint, 'calls', 0)}
             if getattr(model, 'native_sparse_updates', None):
                 progress['sparse_row_updates'] = model.native_sparse_updates
             if str(args.device).startswith('cuda'):

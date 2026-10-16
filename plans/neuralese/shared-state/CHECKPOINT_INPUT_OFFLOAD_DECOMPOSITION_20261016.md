@@ -31,3 +31,5 @@ precision contexts. Full target-model memory qualification belongs in the next
 useful cloud runtime boundary; small local models do not establish that limit.
 
 Primary API: [PyTorch saved tensor offload](https://docs.pytorch.org/docs/stable/autograd.html#torch.autograd.graph.save_on_cpu).
+
+Shared trainer wiring: native SFT accepts `--checkpoint-input-offload` / `--no-checkpoint-input-offload`; omission inherits the saved effective mode. Installation follows the actual backend checkpoint hook. Semantic model/phase options use the same wrapper; shared participant payloads retain their effective training option for selected/sharded SFT/RL continuation. No model identity, optimizer moment or source admission policy changes. Resident geometry identity includes this mode plus actual expert input-adjoint precision and model/packing configuration. Ledger `native-offload-wiring-2003` passed105 focused tests (actual SFT on→inherit→off resume, semantic save, both-port wrapper/gradient tests, resident/rate/recipe integration); required quick2004 also passed. Full trained-parent target capacity remains required before long rows are scheduled.

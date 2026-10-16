@@ -217,7 +217,8 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
         shared_training = {'optimizer': entry.get('optimizer'), 'fp8': entry.get('fp8'),
             'sft_progress': entry.get('sft_progress', {}), 'global_step': entry.get('global_step', state['training']['step']),
             'rng': state['training'].get('rng'), 'step': state['training']['step'],
-            'options': (state['training'].get('config_history') or [{}])[-1].get('config', {})}
+            'options': {**(state['training'].get('config_history') or [{}])[-1].get('config', {}),
+                        **entry.get('training_options', {})}}
         state = {'schema': CHECKPOINT_SCHEMA, 'model_config': entry['model_config'],
                  **entry['model_state'], 'shared_participant': participant,
                  'shared_step': state['training']['step'], 'shared_training': shared_training}
