@@ -520,11 +520,12 @@ class ResidentAdoption:
                     or any(payload['geometry'][key] > limits[key] for key in limits)):
                 raise ValueError('resident append exceeds qualified geometry')
             _check_indexes(payload['indexes'])
-            from ..data.native_sources import NativeGraphSource
-            train = NativeGraphSource(bound(payload['train']), payload['tokenizer_fingerprint'],
-                required_split='train', role_ids=payload['role_ids'])
-            held = NativeGraphSource(bound(payload['held']), payload['tokenizer_fingerprint'],
-                required_split='test', role_ids=payload['role_ids'])
+            from .native_source_preparation import NativeSourcePreparation
+            source_preparation = NativeSourcePreparation(payload['tokenizer_fingerprint'], payload['role_ids'])
+            source_preparation.retain(self.train)
+            source_preparation.retain(self.held)
+            train = source_preparation.load(payload['train'], split='train')
+            held = source_preparation.load(payload['held'], split='test')
             if (held.entries[:len(self.held.entries)] != self.held.entries or len(held) < len(self.held)
                     or len(held) != payload['held_rows'] or digest(held.entries) != payload['held_entries_sha256']):
                 raise ValueError('resident held rows are not an exact class-preserving append')

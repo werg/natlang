@@ -12,7 +12,7 @@ from natlang_neuralese.common.jsonio import write_json_durable as write_json
 from test_native_state_sft import graph
 
 
-def setup(tmp_path, fingerprint='tokenizer-sha', role_ids=(), geometry_identity=None):
+def setup(tmp_path, fingerprint='tokenizer-sha', role_ids=(), geometry_identity=None, manifest_train=False):
     paths = {}
     for name, ids, split in [('old', ['a','b'], 'train'), ('new', ['a','b','c'], 'train'),
                              ('held', ['held'], 'test')]:
@@ -22,6 +22,10 @@ def setup(tmp_path, fingerprint='tokenizer-sha', role_ids=(), geometry_identity=
             rows.append(row)
         paths[name] = tmp_path/(name+'.jsonl')
         paths[name].write_text(''.join(json.dumps(row)+'\n' for row in rows))
+    if manifest_train:
+        leaf=paths['old'];paths['old']=tmp_path/'old-manifest.json'
+        write_json(paths['old'],{'schema':'natlang.native-graph-sources/1','sources':[
+            {'kind':'native-graphs',**resident.binding(leaf)}]})
     old_recipe = {'schema':'natlang.neuralese-training-recipe/1','id':'resident','identity_qualification':'native_state_runtime_qualified',
         'input_bindings': {'train':resident.binding(paths['old']), 'held':resident.binding(paths['held'])},
         'stages':[{'id':'sft','kind':'native_state_sft','requires':[],
@@ -70,6 +74,45 @@ def test_actual_indexes_append_commit_and_crash_projection_recovery(tmp_path,mon
     loaded=NativeGraphSource(paths['new'],'tokenizer-sha',required_split='train')
     resumed=resident.ResidentAdoption(directory,stage_id='sft',recipe_binding=state['payload']['recipe'],train=loaded,held=manager.held)
     assert resumed.poll(7) is None
+
+
+def test_resident_append_reuses_loaded_tree_without_reopening_old_leaf(tmp_path,monkeypatch):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    paths,directory,manager,recipe=setup(tmp_path,manifest_train=True)
+    old_train,old_held=manager.train,manager.held
+    extra=tmp_path/'extra.jsonl'
+    extra.write_text(paths['new'].read_text().splitlines()[-1]+'\n')
+    source=tmp_path/'append.json'
+    write_json(source,{'schema':'natlang.native-graph-sources/1','sources':[
+        {'kind':'native-graphs',**resident.binding(paths['old'])},
+        {'kind':'native-graphs',**resident.binding(extra)}]})
+    value=json.loads(recipe.read_text());value['input_bindings']['train']=resident.binding(source)
+    write_json(recipe,value)
+    resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=())
+    original=NativeGraphSource.__init__
+    opened=[]
+    def track(self,path,*args,**kwargs):
+        opened.append(Path(path).resolve())
+        assert Path(path).resolve() not in {old_train.path.resolve(),old_held.path.resolve(),
+            old_train.children[0].path.resolve()}
+        return original(self,path,*args,**kwargs)
+    monkeypatch.setattr(NativeGraphSource,'__init__',track)
+    train,held=manager.poll(9)
+    assert train.children[0] is old_train and held is old_held
+    assert train.entries[0] is old_train.entries[0]
+    assert train.ordered_ids()==['a','b','c']
+    assert opened==[extra.resolve()]
+
+
+def test_reused_resident_tree_rejects_changed_leaf_before_commit(tmp_path,monkeypatch):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
+    paths,directory,manager,recipe=setup(tmp_path)
+    resident.prepare(directory,recipe,'sft',tokenizer_fingerprint='tokenizer-sha',role_ids=())
+    # The new root is valid; the unchanged held root must still be reverified.
+    paths['held'].write_text(paths['held'].read_text().replace('"id": "held"','"id": "edited"'))
+    assert manager.poll(9) is None
+    assert resident.current(directory) is None
+    assert manager.train.ordered_ids()==['a','b']
 
 
 def test_rejection_does_not_commit_or_change_loaded_source_and_same_pending_is_not_retried(tmp_path,monkeypatch):

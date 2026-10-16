@@ -16,9 +16,14 @@ or new training admission decision.
    unchanged. Exact values, order and canonical hashes remain unchanged.
 4. Test against ordinary loading across nested manifests, explicit/inherited
    priorities, duplicate IDs, cycles and changed files. Verify retained object
-   identity as well as equal values. Keep learner adoption memory distinct from
-   external CPU preparation: this does not claim a running learner reuses its
-   old source objects during adoption.
+   identity as well as equal values.
+5. During learner adoption, seed the same factory with the actual loaded train
+   and held trees. Reverify immutable bytes before retaining a referenced tree;
+   build only new subtrees and parent metadata. Keep the pool local to one poll
+   so rejected requests cannot accumulate trees. Existing append/protection,
+   geometry, runtime and atomic commit checks still run before changing SGD.
+   Object reuse is not a claim that full production adoption fits host memory;
+   measure that separately on the target VM.
 
 The immediate consumer is the SHA-bound external CoreWeave CPU preparer. It may
 use the unchanged frozen leaf parser/index policy and explicitly staged metadata

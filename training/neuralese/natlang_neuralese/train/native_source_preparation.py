@@ -1,4 +1,4 @@
-"""Reuse immutable validated source trees within one CPU preparation only."""
+"""Reuse immutable validated source trees within one preparation or adoption."""
 from pathlib import Path
 from ..common.hashing import sha256_file_hex_cached
 
@@ -28,6 +28,17 @@ class NativeSourcePreparation:
             key = self._key(value.path, value.file_sha256, value.required_split, value.pair_model)
             self.sources[key] = value
             pending.extend(getattr(value, 'children', ()))
+
+    def retain(self, source):
+        """Seed from an already loaded tree; reverify its bytes before reuse."""
+        pending = [source]
+        while pending:
+            value = pending.pop()
+            if (value.tokenizer_fingerprint != self.tokenizer_fingerprint
+                    or tuple(value.role_ids) != self.role_ids):
+                raise ValueError('retained source changed tokenizer or role contract')
+            pending.extend(getattr(value, 'children', ()))
+        self._remember(source)
 
     def _verify(self, source):
         pending = [source]
