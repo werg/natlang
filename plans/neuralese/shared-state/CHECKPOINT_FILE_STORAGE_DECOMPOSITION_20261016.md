@@ -50,3 +50,14 @@ not serialized. Counters reflect the copied span, including necessary gaps.
 The targeted69-test integration passed13.61s, including10 new CPU/CUDA layout
 regressions plus both-native gradient/update/RNG and continuation checks. No
 production capacity or throughput claim follows from these local checks.
+
+
+Deployment preparation: frozen3042af96a386 plus only this feature and the exact
+stride repair is candidate248cd0924, prepared in
+`/home/werg/data/dgxops/lfm-checkpoint-file-candidate-root-20261016`.
+Its six changed runtime modules preserve the frozen attention, linear kernels,
+optimizer and source validator. Thirty-four focused checks passed7.10s in that
+package; the one offline-preference recipe-kind case was not applicable because
+that frozen package predates the preference stage. Main includes and tests the
+full shared preference integration. Candidate preparation does not establish
+actual cloud long-graph capacity or authorize counting pending rows as exposed.

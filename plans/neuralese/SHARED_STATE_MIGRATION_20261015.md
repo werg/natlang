@@ -49,16 +49,17 @@ through the projected-value implementation.
 ## Current status
 
 Raw native-state production training is deployed on BOTH sandboxes through
-shared `native_state_sft` jobs under `/work/native-production`. Direct SDK
-inspection on October 16 at 10:12 UTC found LFM at6493 (81% sampled GPU
-utilization) and Mellum at7177 (88%). Mellum recovered the exact committed7000
-checkpoint after host-memory pressure killed the uncheckpointed7134 process;
-its7000 parent records21,395 credited visits. The rejected-table buffering bug
-in D20 normalization is fixed in4ecd2a791. Lost uncheckpointed updates do not
-count as exposure. Both models are again performing real optimizer updates.
-Native interface rows use FP32 AdamW masters at.0003; LFM reasoning rows use
-.0003, while Mellum reasoning/backbone/adapter rates remain3e-6. These are
-current settings, not evidence of optimal rates or downstream task lift.
+shared `native_state_sft` jobs under `/work/native-production`. At11:11 UTC
+October16 Mellum was advancing at7663 on runtime4bda74b8c99a. LFM stopped after
+6654 when simultaneous CPU index materialization, a separate model qualifier
+and training exhausted host RAM. Its exact committed6620 parent is preserved;
+34 unsaved updates are not credited. Recovery is serialized with preparation
+and qualification rather than counting prelaunch free memory as a reservation.
+An earlier Mellum host OOM recovered its committed7000 parent; rejected-table
+buffering in D20 normalization was fixed in4ecd2a791. Native interface rows use
+FP32 AdamW masters at.0003; LFM reasoning rows use.0003, while Mellum reasoning,
+backbone and adapter rates remain3e-6. These are current settings, not evidence
+of optimal rates or downstream task lift.
 
 The immutable6181 LFM parent records25,755 graph visits/916,597 active rows,
 including10,985/26,312 original foundation graphs. Mellum6813 records21,070
@@ -77,10 +78,13 @@ D12 feature-status now adds the complete1,993 factual views per model:
 LFM1,488 fit/505 pending and Mellum1,613 fit/380 pending. Both are staged;
 no pending row is truncated or counted as visited. Search completed-shard
 admission continuously verifies source-bound receipts for both models.
-Resident adoption and sequential mmap advice packages have passed independent
-review and actual sandbox preflights; safe handoff to the latest committed
-parents is in progress. These are explicit future adoptions, not a claim that
-the running processes already use those packages.
+Resident adoption and sequential mmap advice packages are now deployed on
+both models (LFM3042af96a386; Mellum4bda74b8c99a, including the exact combined
+active/pending continuation fix60ecb1505). Mellum has adopted26,907 new train
+rows and169 held rows; adoption is not exposure. LFM's new94,236-physical/
+157,075-total-KV certificate01386db6c736592e6d69584a39b48d3414a126d65e5949a6522ee8e8e4e07bdd
+covers the longer complete case. Its75,700-train/156-held append still needs a
+corrected geometry-report row offset and safe adoption after recovery.
 
 Resident transactions now support pending-only and combined active/pending
 adoption through the existing atomic commit point. Independent review found
@@ -92,15 +96,22 @@ Mandatory post-joint interleave, objective revisions with preserved visit
 credits, and resumable both-model source conversion/admission are integrated
 (23c15cb69/3faedf374/2b7f68c60). Every admitted pair is independently re-rendered
 from its original source and tokenizer; all-pair token/source proof tests pass.
-Actual full D24 preference conversion, target pair-capacity qualification and
-production-stage adoption remain unfinished; no deployed preference exposure
+The complete D24 source contains147,985 SFT sessions and12,413 alternative
+pairs. Exact ZIP/JSONL content-multiset coverage is verified (62e918569).
+Resumable per-export LFM→Mellum conversion and member-level incremental
+admission are underway. Actual D24 admission, target pair-capacity qualification
+and production-stage adoption remain unfinished; no deployed preference exposure
 is claimed. Native SFT, typed durable child handoffs, contextual writes,
 empty values and hierarchical views remain integrated.
 
 Full-model raw-state references and fixed-delta tests established the deployed
 channel. Subsequent prefix-sharing investigation found and repaired a separate
 sparse-attention traversal-order defect in newer code. LFM prefix reuse passes
-local strict checks; Mellum's remaining adjoint differences are localized to
+local strict checks and the actual H100 trained6620-parent check (candidate
+8fc03eb2c250):13,431→8,188 physical queries, bitwise hidden/logits/loss,
+input-adjoint relativeL2 4.14e-6 under unchanged gates. Concurrent timing is not
+isolated throughput evidence. Source-index continuation and actual production
+adoption remain separate obligations; Mellum's remaining adjoint differences are localized to
 BF16 fan-in rounding and nonlinear FP8 input-adjoint quantization. Prefix reuse
 remains off in current production. See
 `shared-state/CAUSAL_PREFIX_QUALIFICATION_20261016.md`; do not transfer a
@@ -126,6 +137,12 @@ stage evidence and starts with any two supported ready models; later model or
 curriculum/data changes trigger continued work. Semantic adapter exports bind
 the exact joint checkpoint, participant and small source tokenizers. Learned
 decoding feeds the actual native cache/serving path, with explicit alignment.
+
+File-backed checkpoint inputs (a7f7bc66b/72957ded9) preserve exact strided
+layouts through repeated unpack and higher-order derivatives, with leased
+stores and strict stale cleanup. Independent actual native CUDA derivative
+checks passed43 cases. Actual cloud long-graph capacity and throughput remain
+unqualified; the implementation does not imply pending rows have been used.
 
 The complete replacement remains OPEN. Real source-witnessed paired conversion
 and both production recipe bindings are implemented and active. A full-size

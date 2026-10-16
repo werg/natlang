@@ -167,3 +167,28 @@ Both-model exact trained-parent restore/config/source checks plus existing
 prefix objective and CUDA mask regression tests passed22 cases in6.68s.
 The frozen production prefix package and actual H100 trained-parent test remain
 in progress; prefix reuse is still disabled in production.
+
+
+## Actual trained-parent H100 qualification and source-index continuation
+
+On October16 the frozen3042af96a386 production runtime was extended only with
+prefix packing, stable invocation serialization and the ordered sparse mask,
+then the exact-parent qualifier051b4cc88 (candidate8fc03eb2c250). The H100 run
+restored immutable trained6620 rather than starting from base. It passed:
+13,431 original physical rows →8,188 (-39.04%), bitwise hidden/logits/loss,
+input-gradient maximum5.59e-8, relativeL2 4.14e-6, cosine.999999999991.
+Peak allocated CUDA was4.35GB. The concurrent28.39/7.24-second timings are
+not isolated trainer throughput. Actual proof is
+`/home/werg/data/dgxops/lfm-trained-prefix-8fc-actual-parent-6620-proof-20261016.json`.
+No production prefix adoption is implied by this diagnostic.
+
+Source-index continuation399162917 avoids revalidating unchanged raw graphs
+for this exact extension. Six existing validation-policy files must be
+byte-identical; the entire compiler AST must equal the previous compiler after
+removing only the exact default-false field, serializer and three guards that
+cannot run for parsed source invocations. The unchanged raw parser cannot set
+that field. Existing content/tokenizer/split/role keys and every metadata entry
+are preserved. New source bytes remain cache misses. Fourteen focused tests
+include real old/new loaders, a cache hit without source parsing, and changed
+source rejection; independent review is complete. Frozen3042→8fc policy proof
+passed. This is neither new data admission nor numerical/capacity qualification.
