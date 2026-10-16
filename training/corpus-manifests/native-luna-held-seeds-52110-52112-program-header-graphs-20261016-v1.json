@@ -1,0 +1,59 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "native-luna-held-seeds-52110-52112-program-header-graphs-20261016-v1",
+  "owner": "dgx",
+  "path": "runs/luna-seeds-native-20261016-v1",
+  "files": [
+    {
+      "path": "composition.json",
+      "bytes": 593707,
+      "sha256": "5158e17c9c1c76f341982aef2f078fa00905d8c24012cae05201ab532e8d28cd"
+    },
+    {
+      "path": "graphs/lfm25/program-header/receipt.json",
+      "bytes": 1475,
+      "sha256": "bb4df09770402f92232d889b7a56677a81d15d41ce86b0a9dbe7d72df8d88b42"
+    },
+    {
+      "path": "graphs/lfm25/program-header/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "graphs/lfm25/program-header/train/native-graphs.jsonl.zst",
+      "bytes": 474149,
+      "sha256": "9893c933a4c3bb09ebfb244303b6f8ea0b4d88692ca36c686e585fffd36d901b"
+    },
+    {
+      "path": "graphs/mellum21/program-header/receipt.json",
+      "bytes": 1486,
+      "sha256": "d80ea246e1eef3611b15208b2d452635ae5e1d9a33198970eb568e41b68b8885"
+    },
+    {
+      "path": "graphs/mellum21/program-header/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "graphs/mellum21/program-header/train/native-graphs.jsonl.zst",
+      "bytes": 455479,
+      "sha256": "4209f5fc80cd3170cbdb23ef9ef32018b2551c8fb8d352c73f12f77e8aa2510f"
+    },
+    {
+      "path": "source/lfm25/program-header.jsonl.zst",
+      "bytes": 637173,
+      "sha256": "37b4c9168bda4a0806839da815cef0cdb26a3cb2a4c7e3cff291716e416f25b7"
+    },
+    {
+      "path": "source/mellum21/program-header.jsonl.zst",
+      "bytes": 616780,
+      "sha256": "bece2394252a8f7aed84c7b3a95a88aa10a573ffe88eb465eee7e2028fa55ae3"
+    },
+    {
+      "path": "validation-proof.json",
+      "bytes": 3021,
+      "sha256": "c581a134ee0efb931363811de7cee0ef638ec6353dab3867f019a8041b2c6cf6"
+    }
+  ],
+  "bytes": 2783296
+}

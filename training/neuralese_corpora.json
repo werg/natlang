@@ -108843,6 +108843,50 @@
       "split": "17,048 train-only graph rows per model; no held/test rows in this supplement. Original FULL view identities are rebased to a deterministic view-qualified namespace so the independently useful FULL rendering can coexist with the header rendering; the original source groups/split remain unchanged.",
       "training_admission": true,
       "training_admission_reason": "Derived from an already admitted exact FULL source view by changing only graph IDs to distinguish it from the already independently admitted header rendering. Source split/protection decisions, source groups, tokenization, targets and graph payloads remain exactly inherited. The derivation proof binds both original manifests, complete cache-index collision audit and per-row old/new bindings. Registration does not claim student exposure."
+    },
+    {
+      "id": "native-luna-held-seeds-52110-52112-program-header-graphs-20261016-v1",
+      "owner": "dgx",
+      "path": "runs/luna-seeds-native-20261016-v1",
+      "include": [
+        "composition.json",
+        "validation-proof.json",
+        "source/lfm25/program-header.jsonl.zst",
+        "source/mellum21/program-header.jsonl.zst",
+        "graphs/lfm25/program-header/receipt.json",
+        "graphs/lfm25/program-header/train/native-graphs.jsonl.zst",
+        "graphs/lfm25/program-header/test/native-graphs.jsonl.zst",
+        "graphs/mellum21/program-header/receipt.json",
+        "graphs/mellum21/program-header/train/native-graphs.jsonl.zst",
+        "graphs/mellum21/program-header/test/native-graphs.jsonl.zst"
+      ],
+      "source_class": "view-qualified-static-native-graph-transformations-of-admitted-luna-teacher-turns",
+      "split": "Train only. The complete admitted program-header renderings of s52110, s52111, and s52112 are included; the source corpora contain no held rows.",
+      "admission": "1,282 admitted program-header rows per model from s52110/s52111/s52112. IDs are deterministically qualified by corpus and rendering view to make this additional static view distinct from other renderings. The original source_record_ids, source groups, rendered token IDs and suffix boundaries are preserved.",
+      "training_admission": true,
+      "training_admission_reason": "The three source render manifests and all six model-specific text files were checked against immutable SHA/size bindings. The current live held, quality, pending source-review and decision-hold closures have zero intersections. Both model outputs parsed through the shared native graph schema; exact row counts, splits, graph-ID sets, original source IDs, tokenizer fingerprints and final artifact hashes match. Program-header is a suffix-bounded ordinary text graph, with context weight 0.05 and target weight 1.0; no native producer/consumer edges are inferred.",
+      "derived_from": [
+        "luna-held-shapes-s52110-render-20261015-v1",
+        "luna-held-shapes-s52111-render-20261015-v1",
+        "luna-held-shapes-s52112-render-20261015-v1"
+      ],
+      "license_provenance": "Inherited unchanged from the admitted source corpora; owner accepts all licenses.",
+      "note": "This is an additional view-qualified native SFT continuation. It is not yet exposed to either student until appended to both active input manifests and consumed by training.",
+      "source_bindings": {
+        "composition_sha256": "5158e17c9c1c76f341982aef2f078fa00905d8c24012cae05201ab532e8d28cd",
+        "validation_proof_sha256": "c581a134ee0efb931363811de7cee0ef638ec6353dab3867f019a8041b2c6cf6",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "current_source_review_registry_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+        "source_text_manifests": {
+          "luna-held-shapes-s52110-render-20261015-v1": "8f5c4d12889aa34f65c9a57e5110ab051163f0a5a23e13ef016b4eee21401229",
+          "luna-held-shapes-s52111-render-20261015-v1": "2d37f64a098890bd08112345bb5b3a49ca733e9618328743ebba806ce88c3252",
+          "luna-held-shapes-s52112-render-20261015-v1": "44c34ff56fb6f46be40dbc1eb6925062483d0e6dc71df4c872ebcdc6c2d963e9"
+        },
+        "model_ids": {
+          "lfm25": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+          "mellum21": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f"
+        }
+      }
     }
   ],
   "coverage_backlog": [
