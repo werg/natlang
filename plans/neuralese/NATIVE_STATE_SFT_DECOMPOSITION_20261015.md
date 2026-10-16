@@ -112,3 +112,16 @@ numerical tolerances, then restores RNG/backend state/counters. A passed check
 records no optimizer update and grants no task/foundation qualification. Useful
 subsequent updates provide separate finite-loss and execution telemetry. Disabled
 backend/missing-tolerance requests fail before expensive source/model loading.
+
+## Preserve completed updates when held evaluation fails (2026-10-16)
+
+The supervisor decides whether a failed evaluation needs repair or a restart.
+The trainer supplies exact durability: after a successful optimizer update and
+row-exposure accounting, a held-cadence exception saves that completed state
+through the existing atomic checkpoint writer, restores pre-evaluation RNG,
+and re-raises the original failure. Failed evaluation does not qualify the
+weights or overwrite prior held/task evidence as current evidence. Errors in
+the optimizer update never enter this recovery path because in-backward updates
+may have partially changed parameters. Checkpoint-write failure preserves the
+previous durable slot and is attached to the original evaluation exception.
+This is crisp exception/durability plumbing, not another recovery policy.

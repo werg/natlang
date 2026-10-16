@@ -851,3 +851,96 @@ def test_source_index_tracks_validation_dependencies_without_training_or_kernel_
         changed.add(dependency)
         third = NativeGraphSource(path, 'tokenizer-sha', required_split='train')
         assert calls == [True] and third.entries == first.entries
+
+
+@pytest.mark.parametrize('recovery_save_fails', [False, True])
+def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_resume(tmp_path, monkeypatch, recovery_save_fails):
+    import json
+    import torch
+    from test_native_serve import _tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+
+    base = tmp_path / 'base'
+    _tiny_source(base)
+    _, _, _, config = load_native_model(base, dtype=torch.float32, rank=4)
+    paths = {}
+    for split in ('train', 'test'):
+        row = dict(graph(split), split=split, source_groups=[split],
+                   tokenizer_fingerprint=config['tokenizer_fingerprint'])
+        paths[split] = tmp_path / (split + '.jsonl')
+        paths[split].write_text(json.dumps(row) + '\n')
+
+    def run(out, resume=None):
+        argv = ['--base', str(base), '--dtype', 'float32', '--rank', '4', '--device', 'cpu',
+            '--native-graphs', str(paths['train']), '--held-native-graphs', str(paths['test']),
+            '--epochs', '3', '--eval-every', '1', '--checkpoint-every', '1', '--seed', '23', '--out', str(out)]
+        if resume:
+            argv += ['--continue-from', str(resume)]
+        return trainer.main(argv)
+
+    reference = tmp_path / 'reference'
+    assert run(reference) == 0
+    original = trainer._evaluate_cadence
+    calls = 0
+    failure = ValueError('source changed after index validation')
+
+    def fail_second(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            torch.rand(13)  # Failed evaluation must not perturb continued training RNG.
+            raise failure
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(trainer, '_evaluate_cadence', fail_second)
+    original_save = trainer._save
+    def save(*args, **kwargs):
+        if recovery_save_fails and 'held_evaluation_failure' in kwargs['metrics']:
+            raise OSError('injected full disk')
+        return original_save(*args, **kwargs)
+    monkeypatch.setattr(trainer, '_save', save)
+    interrupted = tmp_path / 'interrupted'
+    with pytest.raises(ValueError) as caught:
+        run(interrupted)
+    assert caught.value is failure
+    slot = interrupted / 'checkpoint.pt'
+    saved = torch.load(slot, map_location='cpu', weights_only=False)
+    saved_step = 1 if recovery_save_fails else 2
+    assert saved['training']['step'] == saved['training']['global_step'] == saved_step
+    assert saved['training']['exposure_counts'] == {'train': saved_step}
+    assert saved['training']['optimizer']
+    metrics = saved['training']['metrics']
+    if recovery_save_fails:
+        assert any('injected full disk' in note for note in failure.__notes__)
+        assert 'held_evaluation_failure' not in metrics
+    else:
+        assert 'held' not in metrics and 'task_eval' not in metrics
+        assert metrics['held_evaluation_failure']['message'] == str(failure)
+        assert metrics['previous_evaluation_metrics']['step'] == 1
+    assert not (interrupted / 'native-training-receipt.json').exists()
+    monkeypatch.setattr(trainer, '_evaluate_cadence', original)
+    assert run(interrupted, slot) == 0
+    actual = torch.load(slot, map_location='cpu', weights_only=False)
+    expected = torch.load(reference / 'checkpoint.pt', map_location='cpu', weights_only=False)
+
+    def equal(left, right):
+        if torch.is_tensor(left):
+            torch.testing.assert_close(left, right, rtol=0, atol=0)
+        elif isinstance(left, dict):
+            assert left.keys() == right.keys()
+            for key in left:
+                equal(left[key], right[key])
+        elif isinstance(left, (list, tuple)):
+            assert len(left) == len(right)
+            for a, b in zip(left, right):
+                equal(a, b)
+        elif hasattr(left, 'shape'):
+            assert (left == right).all()
+        else:
+            assert left == right
+
+    for key in ('optimizer', 'rng', 'exposure_counts', 'global_step', 'cursor'):
+        equal(actual['training'][key], expected['training'][key])
+    for key in actual.keys() - {'training'}:
+        equal(actual[key], expected[key])
