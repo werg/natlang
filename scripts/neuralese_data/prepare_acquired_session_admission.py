@@ -16,7 +16,7 @@ from scripts.neuralese_data.build_acquired_full_session_graphs import (
 from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
 from scripts.neuralese_data.decision_holds import load_decision_holds
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(os.environ.get('NATLANG_REPO_ROOT', Path(__file__).resolve().parents[2])).resolve()
 
 
 def bound(path, binding):
@@ -106,6 +106,34 @@ def verify_global_source_closure(path, protection):
         if stored != components:
             raise ValueError('protected source component inventory differs from complete normalized sources')
     return accounting
+
+
+def source_member_scope(projection, selected_bindings):
+    """Describe one independently complete source member within a full closure.
+
+    Conversion/admission can publish a complete file member before sibling
+    files finish rendering, while the projection still proves protection over
+    the entire declared source set. This helper makes the unfinished members
+    explicit and refuses a member not present in that global projection.
+    """
+    declared = projection.get('normalized_export_bindings')
+    if not isinstance(declared, list) or not declared:
+        raise ValueError('incremental member needs a complete projected source closure')
+    by_content = {}
+    for item in declared:
+        by_content.setdefault((item.get('sha256'), item.get('source_sha256')), []).append(item)
+    selected_content = {(item.get('sha256'), item.get('source_sha256')) for item in selected_bindings}
+    if len(selected_bindings) != 1 or len(selected_content) != 1 or len(by_content.get(next(iter(selected_content)), [])) != 1:
+        raise ValueError('incremental member must be one exact export bound by the global projection')
+    selected = next(iter(selected_content))
+    return {'kind': 'complete-normalized-source-member', 'selected_exports': [
+            {'path': item['path'], 'sha256': item['sha256'], 'source_sha256': item['source_sha256']}
+            for item in by_content[selected]],
+        'global_export_bindings_sha256': canonical_json_sha256_hex(declared),
+        'pending_exports': [
+            {'path': item['path'], 'sha256': item['sha256'], 'source_sha256': item['source_sha256']}
+            for item in declared if (item.get('sha256'), item.get('source_sha256')) != selected],
+        'pending_export_count': len(declared) - 1}
 
 
 def verify_graph_source(graph, value, *, protection, held_sources, fingerprint):
@@ -260,6 +288,8 @@ def main(argv=None):
     parser.add_argument('--conversion-protection', type=Path, help='exact prior projection bound by unchanged numeric conversion receipts; eligibility uses --protection')
     parser.add_argument('--id', required=True)
     parser.add_argument('--registry-path', required=True)
+    parser.add_argument('--incremental-member', action='store_true',
+                        help='admit one complete source export while retaining the full global protection closure')
     parser.add_argument('--original-root', type=Path, required=True)
     parser.add_argument('--model', action='append', required=True, help='NAME=exact local tokenizer base directory')
     args = parser.parse_args(argv)
@@ -281,6 +311,19 @@ def main(argv=None):
             args.conversion_protection, args.protection)
         if current != protection:
             raise ValueError('current eligibility protection changed before cohort audit')
+    member_scope = None
+    if args.incremental_member:
+        if len(paths) != 1:
+            raise ValueError('incremental member admission accepts exactly one complete normalized source export')
+        export_path = paths[0]
+        export = json.loads(export_path.read_text())
+        source_path = export_path.parent / 'full-trajectories.jsonl.zst'
+        projection = json.loads(args.protection.read_text())
+        member_scope = source_member_scope(projection, [{'path': str(export_path.resolve()),
+            'sha256': sha256_file_hex(export_path), 'source_sha256': sha256_file_hex(source_path)}])
+        source_kind = export.get('contract', {}).get('source', {}).get('path', '')
+        if not source_kind.startswith('jsonl_sft/'):
+            raise ValueError('incremental SFT member admission cannot consume a preference or non-SFT source')
     held_ids, decision_bindings = load_decision_holds(sorted((ROOT / 'training/decision-holds').glob('*.jsonl')))
     held_sources = held_ids | {value.split(':decision:', 1)[0] for value in held_ids}
     out = args.native_root / ('admission-' + args.id)
@@ -359,6 +402,8 @@ def main(argv=None):
         'model_tokenizer_inventories': inventories,
         'train_held_group_intersections': 0, 'row_proof_sha256': sha256_file_hex(out / 'row-proof.jsonl'),
         'training_sources': 'aggregate outputs only; durability shards are not additional sources'}
+    if member_scope is not None:
+        audit['source_scope'] = member_scope
     if conversion_protection is not None:
         from scripts.neuralese_data.continue_acquired_protection import projection_evidence
         bundles = {role: projection_evidence(path, out) for role, path in (
@@ -377,12 +422,15 @@ def main(argv=None):
             'new_global_source_closure': global_accounting}
     write_json_durable(out / 'audit.json', audit)
     include.extend(str(path.relative_to(args.native_root)) for path in out.iterdir() if path.is_file())
+    reason = ('One complete normalized SFT source member is source-curated, not oracle or native-execution verified. '
+        'Both pinned tokenizer views preserve the full global 15-export held/quality/pending closure and exact decision holds. '
+        'Other normalized source members remain explicitly pending.') if member_scope is not None else (
+        'Source-curated third-party SFT, not oracle or native-execution verified. Exact complete source sessions, '
+        'full reasoning views and both pinned tokenizer variants preserve current global held/quality/pending '
+        'and exact decision holds. Eligibility is not training exposure.')
     entry = {'id': args.id, 'owner': 'dgx', 'path': args.registry_path, 'include': sorted(include),
         'source_class': 'source-curated-complete-acquired-agent-native-session-graphs',
-        'training_admission': True, 'training_admission_reason':
-            'Source-curated third-party SFT, not oracle or native-execution verified. Exact complete source sessions, '
-            'full reasoning views and both pinned tokenizer variants preserve current global held/quality/pending '
-            'and exact decision holds. Eligibility is not training exposure.',
+        'training_admission': True, 'training_admission_reason': reason,
         'split': 'original source split and complete cross-source global held-group closure; no truncation',
         'license': 'exact source license facts retained in each graph acquired_session provenance',
         'build': {'audit': str((out / 'audit.json').relative_to(args.native_root)),

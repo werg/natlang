@@ -78,6 +78,28 @@ def iter_acquired_file_rows(path):
         raise Reject('unsupported acquired source file: '+path.name)
 
 
+def iter_acquired_file_row_ids(path):
+    """Enumerate source row positions without materializing unused Parquet columns."""
+    path=Path(path)
+    if path.suffix=='.parquet':
+        import pyarrow.parquet as pq
+        # The file's immutable byte digest is checked by the caller before this
+        # metadata is trusted. Parquet row groups provide exact positional
+        # accounting without decoding any column payload.
+        yield from range(pq.ParquetFile(str(path)).metadata.num_rows)
+        return
+    if str(path).endswith(('.jsonl','.jsonl.gz','.jsonl.zst')):
+        import gzip
+        from natlang_neuralese.common.jsonio import open_jsonl_text
+        opener=gzip.open if str(path).endswith('.gz') else open_jsonl_text
+        options={'mode':'rt','encoding':'utf-8'} if str(path).endswith('.gz') else {}
+        with opener(path,**options) as stream:
+            for number,line in enumerate(stream):
+                if line.strip():yield number
+        return
+    raise Reject('metadata-only row accounting supports Parquet and JSONL files only')
+
+
 def _bound_acquired_path(root,entry):
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
     relative=Path(entry['path']);path=(root/relative).resolve(strict=True)
@@ -169,7 +191,7 @@ def validate_acquisition(ref, receipt, receipt_path, *, root):
     return receipt
 
 
-def acquired_rows(ref, limit=None):
+def acquired_rows(ref, limit=None, *, metadata_only_files=frozenset()):
     from . import agents
     root = agents.EXPANSION_ROOT / ref
     receipt = load_acquisition(ref)
@@ -184,7 +206,10 @@ def acquired_rows(ref, limit=None):
         if ACQUIRED_FILES is not None and str(relative) not in ACQUIRED_FILES:
             continue
         path=_bound_acquired_path(root,entry)
-        rows=iter_acquired_file_rows(path)
+        metadata_only = str(relative) in metadata_only_files
+        if metadata_only and path.suffix!='.parquet':
+            raise Reject('metadata-only acquired row accounting requires a Parquet source')
+        rows=((row_index,None) for row_index in iter_acquired_file_row_ids(path)) if metadata_only else iter_acquired_file_rows(path)
         for row_index, row in rows:
             if limit is not None and index >= limit:
                 return

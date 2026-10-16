@@ -32,6 +32,20 @@ def test_decision_hold_contract_uses_exact_immutable_file_identity_across_checko
         assert decision_contract(first)!=decision_contract([{**second[0],key:value}])
 
 
+def test_incremental_member_requires_one_exact_projected_export_and_lists_pending_siblings():
+    from scripts.neuralese_data.prepare_acquired_session_admission import source_member_scope
+    declared=[{'path':f'/source/{i}.json','sha256':str(i)*64,'source_sha256':str(i+1)*64} for i in range(15)]
+    selected=[{'path':'/alias/0.json','sha256':declared[0]['sha256'],
+               'source_sha256':declared[0]['source_sha256']}]
+    scope=source_member_scope({'normalized_export_bindings':declared},selected)
+    assert scope['kind']=='complete-normalized-source-member'
+    assert scope['selected_exports']==[declared[0]]
+    assert scope['pending_export_count']==14 and len(scope['pending_exports'])==14
+    with pytest.raises(ValueError):source_member_scope({'normalized_export_bindings':declared},selected*2)
+    with pytest.raises(ValueError):source_member_scope({'normalized_export_bindings':declared},[
+        {**selected[0],'source_sha256':'f'*64}])
+
+
 @pytest.fixture(scope='module',params=BASES,ids=['lfm','mellum'])
 def admitted(request):
     base=request.param

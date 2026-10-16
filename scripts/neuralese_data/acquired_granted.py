@@ -359,7 +359,7 @@ def swe_raw_contexts(records, *, source_id=None):
 
 def swe_chat_acquired(limit=None):
     """Whole raw contexts; every source event has an explicit export accounting row."""
-    from .acquired_agents import acquired_rows, _reported_session
+    from .acquired_agents import acquired_rows, _reported_session, load_acquisition, ACQUIRED_FILES
     from .records import group_key
     previous = None; buffered = []; receipt = None
 
@@ -434,7 +434,11 @@ def swe_chat_acquired(limit=None):
     if limit is not None:
         raise Reject('SWE complete contexts require exact file selection, not a raw-event limit')
     transcript_prefixes = ('transcripts/', 'transcripts_subagent/', 'transcripts_compact/')
-    for current, rid, row in acquired_rows('D20'):
+    receipt_files=load_acquisition('D20')['files']
+    metadata_only_files={entry['path'] for entry in receipt_files
+        if entry['path'].endswith('.parquet') and not entry['path'].startswith(transcript_prefixes)
+        and (ACQUIRED_FILES is None or entry['path'] in ACQUIRED_FILES)}
+    for current, rid, row in acquired_rows('D20', metadata_only_files=metadata_only_files):
         path, index = rid.rsplit(':', 1)
         if previous is not None and path != previous:
             if buffered:

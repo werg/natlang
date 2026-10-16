@@ -245,20 +245,28 @@ def test_swe_real_reader_index_join_all_events_accounted_and_no_inferred_edges(t
     changed=list(swe_chat_acquired());assert all(isinstance(value,Reject) for _,value in changed)
 
 
-def test_swe_rejects_nontranscript_tables_as_rows_without_file_buffer(monkeypatch):
-    from scripts.neuralese_data import acquired_agents
+def test_swe_rejects_nontranscript_tables_as_rows_without_file_buffer(tmp_path,monkeypatch):
+    import hashlib
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from scripts.neuralese_data import acquired_agents, agents
     from scripts.neuralese_data.acquired_granted import swe_chat_acquired
 
     # Model the large conversations/commits tables as a lazy stream. The
     # adapter must yield accounting as it consumes rows and must not invoke
     # whole-file ancestry conversion for these source-index tables.
     count = 20_000
-    def rows(ref, limit=None):
-        assert ref == 'D20'
-        for index in range(count):
-            yield RECEIPT, f'conversations.parquet:{index}', {'payload': index}
-
-    monkeypatch.setattr(acquired_agents, 'acquired_rows', rows)
+    root=tmp_path/'D20';root.mkdir()
+    path=root/'conversations.parquet'
+    pq.write_table(pa.table({'payload':list(range(count))}),path,row_group_size=128)
+    entry={'path':'conversations.parquet','bytes':path.stat().st_size,
+           'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+    (root/'acquisition.json').write_text(json.dumps({**RECEIPT,'status':'acquired','files':[entry]}))
+    monkeypatch.setattr(agents,'EXPANSION_ROOT',tmp_path)
+    monkeypatch.setattr(acquired_agents,'ACQUIRED_FILES',None)
+    monkeypatch.setattr(acquired_agents,'ACQUIRED_RECEIPTS',{})
+    monkeypatch.setattr(agents,'_parquet_groups',lambda *args,**kwargs: (_ for _ in ()).throw(
+        AssertionError('metadata-only D20 rows must not decode Parquet payload columns')))
     monkeypatch.setattr('scripts.neuralese_data.acquired_granted.swe_source_index',
                         lambda receipt: (_ for _ in ()).throw(AssertionError('index loaded for rejected table')))
     result = swe_chat_acquired()
