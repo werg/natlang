@@ -389,13 +389,14 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     # Pending turns are revisited; append once only after all
                     # source dependencies have become executable.
                     imports.append(ImportSpan(at,key,0,len(semantic['target_token_ids']),
-                        stop_gradient=item['read_stops'][read_index]))
+                        **({'stop_gradient':True} if item['read_stops'][read_index] else {})))
                     # This immutable observation binds source graph geometry and
                     # archive provenance only. The codec executor replaces it
                     # with the differentiable current decode before execution.
                     externals[key]=fetch_block(block_id)
                     continue
-                imports.append(ImportSpan(at, source, start, stop, stop_gradient=item['read_stops'][read_index]))
+                imports.append(ImportSpan(at, source, start, stop,
+                    **({'stop_gradient':True} if item['read_stops'][read_index] else {})))
             if any(dependency in pending for dependency in dependencies):
                 continue
             semantic_dependencies.extend(resolved_codecs)

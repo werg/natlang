@@ -74,6 +74,25 @@ def test_graph_replay_matches_incremental_actor_including_write_and_terminal_act
     assert block.token_ids.tolist() == [5, 6]  # no learner mutation of archived observations
 
 
+@pytest.mark.parametrize('stop', [False, True])
+def test_optional_import_stop_keyword_preserves_legacy_default_and_explicit_stop(monkeypatch, stop):
+    from natlang_neuralese.rl import native_replay
+    _, roles, identity, _, block, turns = actor_rollout('lfm')
+    for segment in turns[0]['sampling']['prompt']:
+        if segment['kind'] == 'native_state' and stop:
+            segment['stop_gradient'] = True
+    constructor = native_replay.ImportSpan
+    seen = []
+    def import_span(at, source, start, end, **options):
+        seen.append(options)
+        if not stop:
+            assert not options  # Old production ports implement the default four-field import.
+        return constructor(at, source, start, end, **options)
+    monkeypatch.setattr(native_replay, 'ImportSpan', import_span)
+    native_replay.compile_replay(turns, identity=identity, roles=roles, fetch_block=lambda key: block)
+    assert seen and all(options == ({'stop_gradient': True} if stop else {}) for options in seen)
+
+
 def test_native_replay_rejects_missing_law_or_mismatched_writer_payload():
     _, roles, identity, _, block, turns = actor_rollout('lfm')
     guided = copy.deepcopy(turns)

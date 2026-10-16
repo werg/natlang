@@ -92,3 +92,9 @@ sampling interventions are not production qualification or measured model lift.
   in the backward. Deterministic payloads have no invented sampling density.
 - Full-policy replay opts into model-weight dependencies in `GradSession`;
   argument-only replay keeps its existing semantics by default.
+
+Raw replay import compatibility: the existing four-field import denotes a live
+producer-to-consumer gradient edge. Exact replay plumbing omits the optional
+`stop_gradient` keyword for that default, allowing qualified older native ports
+to execute the same graph. A source-declared true stop remains explicit and is
+never removed for compatibility; an unsupported port rejects it.
