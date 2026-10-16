@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from neuralese_data import bgkit, dedup, inventory, schnitzel, splits, swe_compaction  # noqa: E402
 from neuralese_data.common import Reject  # noqa: E402
 from neuralese_data.records import content_hash, exact_refs_from, strip_markup, validate  # noqa: E402
+from natlang_neuralese.data.records import read_record_rows, read_records  # noqa: E402
 
 SCRIPT = ROOT / "scripts/neuralese_port_records.py"
 
@@ -197,3 +198,29 @@ def test_cli_validate_reports_errors(tmp_path):
     assert result.returncode == 1
     report = json.loads(result.stdout)
     assert report["records"] == 2 and report["duplicate_ids"] == 1 and "task" in report["errors"]
+
+
+def test_streaming_rows_keep_exact_offsets_and_legacy_reader_behavior(tmp_path):
+    first, second = _rec(1, "A"), _rec(2, "B", split="eval")
+    path = tmp_path / "records.jsonl"
+    prefix = b"\n  "
+    line1 = json.dumps(first, ensure_ascii=False).encode("utf-8") + b"\n"
+    line2 = json.dumps(second, ensure_ascii=False).encode("utf-8") + b"\n"
+    path.write_bytes(prefix + line1 + b"\n" + line2)
+
+    rows = list(read_record_rows([path], strict=True))
+    assert [(row.line_number, row.byte_offset, row.raw["id"]) for row in rows] == [
+        (2, 1, first["id"]), (4, len(prefix) + len(line1) + 1, second["id"])]
+    assert rows[0].raw == first and rows[0].record.id == first["id"]
+    assert [record.id for record in read_records([path], split="train")] == [first["id"]]
+
+
+def test_streaming_rows_strict_errors_keep_source_location(tmp_path):
+    path = tmp_path / "bad.jsonl"
+    path.write_text("{}\n", encoding="utf-8")
+    try:
+        list(read_record_rows([path], strict=True))
+    except ValueError as exc:
+        assert f"{path}:1:" in str(exc)
+    else:
+        raise AssertionError("strict record stream accepted an invalid source row")

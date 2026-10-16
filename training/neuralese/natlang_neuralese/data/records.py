@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, NamedTuple
 
 VERSION = "natlang.port-record/1"
 TASKS = {"consume", "reconstruct", "continue", "chain", "compare"}
@@ -126,22 +126,49 @@ def parse_record(raw: dict) -> PortRecord:
     )
 
 
-def read_records(paths: Iterable[str | Path], split: str | None = None, imitation_only: bool = True,
-                 strict: bool = False) -> Iterator[PortRecord]:
-    """Records from JSONL files. Invalid rows raise when `strict`, else are skipped."""
-    for path in paths:
-        with open(path) as handle:
+class PortRecordRow(NamedTuple):
+    """One strict stream item with its exact source location and unprojected fields."""
+    path: Path
+    line_number: int
+    byte_offset: int
+    raw_line: bytes
+    raw: dict
+    record: PortRecord
+
+
+def read_record_rows(paths: Iterable[str | Path], *, strict: bool = False) -> Iterator[PortRecordRow]:
+    """Stream records with source offsets while using the canonical port-record parser.
+
+    Binary line reads make offsets stable across platforms and retain the exact
+    source line for crosswalk hashing. Invalid rows are skipped unless strict,
+    matching ``read_records``.
+    """
+    for source_path in paths:
+        path = Path(source_path)
+        with path.open("rb") as handle:
+            offset = 0
             for number, line in enumerate(handle, 1):
+                start = offset
+                offset += len(line)
                 if not line.strip():
                     continue
                 try:
-                    record = parse_record(json.loads(line))
-                except (RecordError, json.JSONDecodeError) as error:
+                    raw = json.loads(line)
+                    record = parse_record(raw)
+                except (RecordError, json.JSONDecodeError, UnicodeDecodeError) as error:
                     if strict:
                         raise RecordError(f"{path}:{number}: {error}") from error
                     continue
-                if split is not None and record.split != split:
-                    continue
-                if imitation_only and not record.is_imitation_target:
-                    continue
-                yield record
+                yield PortRecordRow(path, number, start, line, raw, record)
+
+
+def read_records(paths: Iterable[str | Path], split: str | None = None, imitation_only: bool = True,
+                 strict: bool = False) -> Iterator[PortRecord]:
+    """Records from JSONL files. Invalid rows raise when `strict`, else are skipped."""
+    for item in read_record_rows(paths, strict=strict):
+        record = item.record
+        if split is not None and record.split != split:
+            continue
+        if imitation_only and not record.is_imitation_target:
+            continue
+        yield record
