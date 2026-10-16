@@ -179,3 +179,37 @@ def validate_invocation_behavior_provenance(provenance,base):
     if provenance.get('behavior_policy_sha256')!=canonical_json_sha256_hex(policy):
         raise NativeAdapterError('native invocation behavior descriptor digest changed')
     return policy
+
+
+from contextlib import contextmanager
+
+
+@contextmanager
+def invocation_graph_scope(port, names):
+    """A graph view shares immutable actor weights and the enclosing AD lifetime."""
+    bank=invocation_actor_bank(port)
+    if bank is None:
+        yield None
+        return
+    names=set(names)
+    if not names or not names<=set(bank.actors):
+        raise NativeAdapterError('native graph segment must retain actual declared invocation actors')
+    import copy
+    view=copy.copy(bank)
+    view.actors={name:actor for name,actor in bank.actors.items() if name in names}
+    view.source_names={source:target for source,target in bank.source_names.items() if target in names}
+    token=_BANKS.set((*_BANKS.get(),view))
+    try:yield view
+    finally:_BANKS.reset(token)
+
+
+@contextmanager
+def suspend_invocation_graph(port):
+    """A codec baseline uses its exact uniform actor, not episode row ownership.
+
+    The caller enters that actor via bank.execute; only layer-major routing is
+    suspended. Functional weights, gradient carriers and the AD lifetime stay.
+    """
+    token=_BANKS.set(tuple(bank for bank in _BANKS.get() if bank.engine.shared_model.port is not port))
+    try:yield
+    finally:_BANKS.reset(token)

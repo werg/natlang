@@ -67,3 +67,41 @@ both its constant flag and exact producer. This exposed and fixed the internal
 intrinsic declaration's missing third argument before publication (one focused
 Node case passed). Default private literals still use the original one-argument
 form. No added model operation or instruction is needed.
+
+Differentiable codec component (in progress, 2026-10-16): the executor now
+schedules native masked graph segments around explicit codec dependencies. It
+uses the actual inference posterior mean, actual target baseline and tokenizer
+alignment; retains source, codec and consumer adjoints; and records native
+segment, codec and target-baseline execution counts. Whole-episode capture
+compilation authenticates original compact wire, observed decoded state, exact
+codec/offset/alignment receipt and actual producer occurrence. Immutable observed
+state binds archived graph geometry; it is replaced by the live current decode
+before forward, never used as an in-episode producer substitute. Explicit stopped
+uses detach only the imported path. Ordinary/raw objectives keep their original
+model call through the optional shared-objective hook.
+
+Current component evidence: CPU14 actual two-port/same-model/cross-model
+composition and incremental cached producer/consumer adjoint tests passed in
+3.42s. CPU29 combined core/replay tests passed in4.06s, including mixed live and
+stopped uses and pre-forward cycle rejection. CPU32 archive/admission/shared
+trainer-objective and existing whole-episode/raw regressions passed in3.50s.
+One new test initially compared distinct CPU GEMM row positions bitwise and
+observed a 7.45e-9 difference; the exact stop invariant is now tested against the
+same physical layout with only the AD flag changed, bitwise. No numerical
+threshold or production arithmetic was changed.
+
+Still required before production semantic RL enablement: complete actual
+multi-participant capture/objective lowering and shared phase scheduler;
+participant plus VAE optimizer/RNG/checkpoint/exposure continuation; atomic
+updated inference adapter export; exact new dependency/capacity scope; integrated
+independent review. Loading a frozen channel into the single-model native stage
+alone would strand codec state and is deliberately not advertised as closure.
+Public semantic GradSession/code/state optimizer extras remain separately open.
+Final component CPU51 passed5.52s, including real empty payloads (only actual
+control markers, zero invented payload tokens), full archived semantic sampling
+and shared-objective integration. Quick passed22ratchets+TScheck. Initial CUDA
+attempt failed before execution at model.to(cuda), with unified-memory context
+allocation OOM; the supervisor measured only6GiB MemFree after cache release and
+requested no blind retry while live evaluations/forensic decoding occupy memory.
+Thus this revision has no CUDA codec qualification yet; earlier raw occurrence
+CUDA evidence does not substitute for it. No serving capability was enabled.

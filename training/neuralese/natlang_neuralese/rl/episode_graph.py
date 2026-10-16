@@ -63,7 +63,7 @@ def rollout_turn_names(turns):
     return result
 
 
-def validate_rollout_graph(rollout):
+def validate_rollout_graph(rollout,*,semantic=False):
     turns = rollout.get('turns') or []
     events = rollout.get('execution_graph', [])
     if events is None:
@@ -79,18 +79,18 @@ def validate_rollout_graph(rollout):
             raise ValueError('whole-episode model-turn event changed its actual invocation owner')
         capture=turn.get('sampling') or {}
         from .native_occurrences import graph_binding
-        graph_binding(name,capture,nodes)
+        graph_binding(name,capture,nodes,semantic=semantic)
     return names, nodes
 
 
-def whole_episode_turns(rollout):
+def whole_episode_turns(rollout,*,semantic=False):
     """Authenticate all captures and preserve explicit external-vs-local origins."""
     import copy
-    names, nodes = validate_rollout_graph(rollout)
+    names, nodes = validate_rollout_graph(rollout,semantic=semantic)
     result = []
     for name, turn in zip(names, rollout['turns']):
         from .native_occurrences import graph_binding
-        binding=graph_binding(name,turn.get('sampling') or {},nodes)
+        binding=graph_binding(name,turn.get('sampling') or {},nodes,semantic=semantic)
         captured_writers={event['node'] for event in nodes.values() if event.get('kind')=='block_write'}
         outside={block:node for block,node in binding['read_bindings'].items() if node not in captured_writers}
         binding['read_bindings']={block:node for block,node in binding['read_bindings'].items() if block not in outside}

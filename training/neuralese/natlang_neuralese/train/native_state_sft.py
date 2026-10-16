@@ -355,7 +355,9 @@ def packed_graph_loss(model, examples, *, checkpoint_layers=True, chunk_tokens=1
         forward_inputs = objective.forward_inputs(context)
     else:
         forward_inputs = {}
-    result = model(plan, retain_states=False, **(forward_inputs or {}))
+    graph_forward = getattr(objective, 'forward_graph', None) if objective is not None else None
+    result = (graph_forward(model, context, forward_inputs or {}) if graph_forward is not None else
+              model(plan, retain_states=False, **(forward_inputs or {})))
     if objective is not None:
         loss, details = objective(model, result, context)
         if not isinstance(loss, torch.Tensor) or loss.ndim != 0 or not torch.isfinite(loss.detach()):

@@ -101,13 +101,17 @@ class SemanticChannel:
             positions=local.positions, embeddings=local.embeddings, layers=(),
             **{key: getattr(block, key) for key in ('architecture', 'tokenizer_fingerprint',
                 'checkpoint_sha256', 'embedding_weight_sha256')},
-            code=code, offsets=offsets, offset_policy=policy,derivation=derivation,
+            code=code, offsets=offsets, offset_policy=policy,derivation=derivation,adapter_binding=block.adapter_binding,
             source_model=source_name, adapter_sha256=self.adapter_sha256).validate()
 
     def adapt(self, block, *, target_name, target_model, target_tokenizer, target_identity,
-              allow_nearest=False,source_state_id=None):
+              allow_nearest=False,source_state_id=None,target_adapter_binding=None):
         from .semantic_message import SemanticStateMessage, retained_source_offsets
         self.require_target(target_name, target_identity)
+        if target_adapter_binding is not None:
+            from .native_adapters import validate_state_binding
+            from types import SimpleNamespace
+            validate_state_binding(target_adapter_binding,SimpleNamespace(**target_identity))
         message = block if isinstance(block, SemanticStateMessage) else self.message(block,source_state_id=source_state_id)
         message.validate()
         source_name = self.model_name(message)
@@ -126,7 +130,7 @@ class SemanticChannel:
         op, close = target_model.marker_ids[:2]
         plan = compile_graph([Invocation('__semantic_payload', (op, *ids, close), producing=((1, 1+len(ids)),))])
         baseline = capture_block(target_model(plan), '__semantic_payload', 1, 1+len(ids),
-                                 text=block.text, **target_identity)
+                                 text=block.text, adapter_binding=target_adapter_binding, **target_identity)
         device = next(self.vae.parameters()).device
         code = message.code.to(device=device, dtype=next(self.vae.parameters()).dtype)
         receipt = {'source_model': source_name, 'adapter_sha256': self.adapter_sha256,

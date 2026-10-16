@@ -57,7 +57,8 @@ class StateLayout:
         return NativeStateBlock(text=baseline.text, token_ids=baseline.token_ids,
             tokenizer_fingerprint=baseline.tokenizer_fingerprint, checkpoint_sha256=baseline.checkpoint_sha256,
             embedding_weight_sha256=baseline.embedding_weight_sha256, embeddings=baseline.embeddings,
-            positions=baseline.positions, layers=tuple(layers), architecture=baseline.architecture).validate()
+            positions=baseline.positions, layers=tuple(layers), architecture=baseline.architecture,
+            adapter_binding=baseline.adapter_binding).validate()
 
 
 def alignment_weights(source_offsets, target_offsets, *, device='cpu', allow_nearest=False):
