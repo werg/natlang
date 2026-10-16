@@ -87,7 +87,8 @@ def d12_session(evaluation):
 def test_d12_failed_actions_are_context_only_and_target_is_exact_reported_status(monkeypatch):
     evaluation={'both_passed':False,'feature1':{'passed':True,'exit_code':0},
         'feature2':{'passed':False,'exit_code':17,'error':'do not copy this prose'},
-        'apply_status':'applied','merge':{'status':'conflict','error':'do not copy'}}
+        'apply_status':{'agent1':'applied','agent2':'applied'},
+        'merge':{'status':'conflict','error':'do not copy'}}
     monkeypatch.setattr('neuralese_data.acquired_archives.cooper_archive_acquired',
         lambda:iter([('upstream:expansion:D12:session:final',d12_session(evaluation))]))
     row_id,t=next(diagnosis.d12_feature_status_diagnoses())
@@ -101,7 +102,8 @@ def test_d12_failed_actions_are_context_only_and_target_is_exact_reported_status
     target=json.loads(t.messages[2]['content'])
     assert target=={'schema':'natlang.d12-reported-feature-status/1',
         'features':[{'feature':'feature1','passed':True},{'feature':'feature2','passed':False}],
-        'both_passed':False,'apply_status':'applied','merge_status':'conflict',
+        'both_passed':False,'apply_status':{'agent1':'applied','agent2':'applied'},
+        'merge_status':'conflict',
         'exit_codes':{'feature1':0,'feature2':17}}
     assert 'FAILED ACTION' not in t.messages[2]['content']
     assert 'error' not in t.messages[2]['content']
@@ -122,6 +124,8 @@ def test_d12_status_rejects_inconsistent_or_unstructured_reports(monkeypatch):
         {'both_passed':True,'feature1':{'passed':True},'feature2':{'passed':True}},
         {'both_passed':False,'feature1':{'passed':True},'feature2':{'passed':True}},
         {'both_passed':False,'feature1':{'passed':1},'feature2':{'passed':False}},
+        {'both_passed':False,'feature1':{'passed':True},'feature2':{'passed':False},
+         'apply_status':{'agent1':'applied','unexpected':'extra'}},
     ]
     for evaluation in invalid:
         monkeypatch.setattr('neuralese_data.acquired_archives.cooper_archive_acquired',
