@@ -46,3 +46,44 @@ def test_archived_state_digest_comes_from_its_receipt_or_the_archive_manifest(tm
     monkeypatch.setenv('NATLANG_HASH_CACHE', str(tmp_path / 'other-cache.jsonl'))
     (archive / 'manifest.jsonl').write_text(json.dumps({**record, 'sha256': 'e' * 64}) + '\n')
     assert hashing.sha256_file_hex_cached(dest) == 'e' * 64  # given resolved: the manifest
+
+
+def test_incremental_log_lookup_reads_only_appends_and_keeps_first_entry(tmp_path):
+    cache=tmp_path/'cache.jsonl'
+    cache.write_text(json.dumps({'key':'first','sha256':'a'})+'\n')
+    assert hashing._cached_file_digest(cache,'first')=='a'
+    original=hashing._CACHE_INDEX['entries']
+    position=hashing._CACHE_INDEX['position']
+    assert hashing._cached_file_digest(cache,'missing') is None
+    assert hashing._CACHE_INDEX['position']==position
+    with cache.open('a') as stream:
+        stream.write(json.dumps({'key':'first','sha256':'b'})+'\n')
+        stream.write(json.dumps({'key':'second','sha256':'c'})+'\n')
+    assert hashing._cached_file_digest(cache,'second')=='c'
+    assert hashing._cached_file_digest(cache,'first')=='a'
+    assert hashing._CACHE_INDEX['entries'] is original
+    assert hashing._CACHE_INDEX['position']==cache.stat().st_size
+
+
+def test_partial_append_is_retried_and_malformed_complete_lines_do_not_block(tmp_path):
+    cache=tmp_path/'cache.jsonl'
+    cache.write_bytes(b'not-json\n{"key":"later","sha256":')
+    assert hashing._cached_file_digest(cache,'later') is None
+    assert hashing._CACHE_INDEX['position']==len(b'not-json\n')
+    with cache.open('ab') as stream:stream.write(b'"d"}\n')
+    assert hashing._cached_file_digest(cache,'later')=='d'
+
+
+@pytest.mark.parametrize('change',['replace','truncate','same-size'])
+def test_cache_rotation_truncation_and_rewrite_invalidate_old_entries(tmp_path,change):
+    cache=tmp_path/'cache.jsonl'
+    first=json.dumps({'key':'first','sha256':'a'})+'\n'
+    second=json.dumps({'key':'other','sha256':'b'})+'\n'
+    cache.write_text(first+(' ' * 50+'\n' if change=='truncate' else ''))
+    assert hashing._cached_file_digest(cache,'first')=='a'
+    if change=='replace':
+        replacement=tmp_path/'replacement';replacement.write_text(second);replacement.replace(cache)
+    else:
+        cache.write_text(second)
+    assert hashing._cached_file_digest(cache,'first') is None
+    assert hashing._cached_file_digest(cache,'other')=='b'

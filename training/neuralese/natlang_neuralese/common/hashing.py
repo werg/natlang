@@ -7,11 +7,14 @@ from __future__ import annotations
 
 import hashlib
 import os
+import threading
 from typing import Any
 
 from .jsonio import canonical_json_bytes
 
 FILE_CHUNK_BYTES = 1024 * 1024
+_CACHE_INDEX_LOCK = threading.RLock()
+_CACHE_INDEX = {'path': None, 'signature': None, 'position': 0, 'entries': {}}
 
 
 def sha256_hex(data: bytes) -> str:
@@ -73,6 +76,43 @@ def _archive_receipt_digest(path, real: str, size: int) -> str | None:
     return None
 
 
+def _cached_file_digest(cache, key):
+    """Index the existing append log once, then consume only complete appends."""
+    import json
+    cache_path = os.path.abspath(cache)
+    with _CACHE_INDEX_LOCK:
+        try:
+            with open(cache, 'rb') as handle:
+                status = os.fstat(handle.fileno())
+                signature = (status.st_dev, status.st_ino, status.st_size,
+                             status.st_mtime_ns, status.st_ctime_ns)
+                previous = _CACHE_INDEX['signature']
+                reset = (_CACHE_INDEX['path'] != cache_path or previous is None
+                         or previous[:2] != signature[:2]
+                         or signature[2] < previous[2]
+                         or (signature[2] == previous[2] and signature != previous))
+                if reset:
+                    _CACHE_INDEX.update(path=cache_path, signature=None, position=0, entries={})
+                if _CACHE_INDEX['signature'] != signature:
+                    handle.seek(_CACHE_INDEX['position'])
+                    while True:
+                        line = handle.readline()
+                        if not line or not line.endswith(b'\n'):
+                            break
+                        _CACHE_INDEX['position'] = handle.tell()
+                        try:
+                            entry = json.loads(line)
+                        except (ValueError, UnicodeError):
+                            continue
+                        if isinstance(entry, dict) and isinstance(entry.get('key'), str) and entry.get('sha256'):
+                            _CACHE_INDEX['entries'].setdefault(entry['key'], entry['sha256'])
+                    _CACHE_INDEX['signature'] = signature
+                return _CACHE_INDEX['entries'].get(key)
+        except OSError:
+            _CACHE_INDEX.update(path=cache_path, signature=None, position=0, entries={})
+            return None
+
+
 def sha256_file_hex_cached(path: str | os.PathLike[str]) -> str:
     """``sha256_file_hex`` without re-reading a file already hashed: verified digests are cached by (realpath, size,
     mtime_ns) in ``~/.cache/natlang/sha256-cache.jsonl`` (NATLANG_HASH_CACHE), and a symlink left by the archive mover
@@ -83,17 +123,9 @@ def sha256_file_hex_cached(path: str | os.PathLike[str]) -> str:
     status = os.stat(real)
     key = f"{real}|{status.st_size}|{status.st_mtime_ns}"
     cache = _hash_cache_path()
-    try:
-        with open(cache) as handle:
-            for line in handle:
-                try:
-                    entry = json.loads(line)
-                except ValueError:
-                    continue
-                if entry.get("key") == key:
-                    return entry["sha256"]
-    except OSError:
-        pass
+    cached = _cached_file_digest(cache, key)
+    if cached is not None:
+        return cached
     digest = _archive_receipt_digest(path, real, status.st_size) or sha256_file_hex(real)
     try:
         cache.parent.mkdir(parents=True, exist_ok=True)
