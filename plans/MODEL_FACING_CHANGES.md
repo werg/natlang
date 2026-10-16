@@ -888,3 +888,15 @@ archives. No prompt, sampling setting or public higher-order capability changes.
 Greedy capture explicitly reports no policy density. If these recovery details
 reach an executing model, measure them in the next roughly48-sample live window
 before model-facing adoption; transport/graph tests are not behavioral evidence.
+
+
+## 2026-10-16: shared recorded-objective validation (measurement debt)
+
+The internal native query objective validates exact graph/query coordinates and
+finite decision targets. Its proper-score equations now share the legacy
+decision arithmetic; the existing `neuralese-grad-term` validation rejects
+non-numeric/non-finite rewards and invalid probability mass explicitly. No
+prompt or public higher-order capability is added. These recovery details are
+unmeasured model-facing debt if exposed; include them in the next live executor
+window before adopting a model-facing service surface. Actual numeric/HVP and
+archive tests are mechanism evidence only.

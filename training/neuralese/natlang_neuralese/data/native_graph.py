@@ -48,13 +48,15 @@ def text_graph(row, tokenizer, *, tokenizer_fingerprint, source_id, context_weig
 
 
 def graph_loss(model, example, *, checkpoint_layers=True, chunk_tokens=128,
-               external_blocks=None, external_identity=None, boundary_token_ids=None):
+               external_blocks=None, external_identity=None, boundary_token_ids=None, objective=None):
     """One graph forward and token-weighted CE; never recursive producer replay."""
     if chunk_tokens < 1:
         raise ValueError('loss chunk size must be positive')
     model.port.checkpoint_layers = checkpoint_layers
     result = model(example.plan, external_blocks=external_blocks, external_identity=external_identity,
                    retain_states=False)
+    if objective is not None:
+        return objective(model, example, result)
     return graph_loss_from_result(model, example, result, chunk_tokens=chunk_tokens,
                                   boundary_token_ids=boundary_token_ids)
 

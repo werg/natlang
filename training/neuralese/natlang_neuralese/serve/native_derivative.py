@@ -93,7 +93,12 @@ def _rewrite_request(request,bindings,values,roots):
     # Policy manifests bind actual immutable actors/rollouts and must be retargeted
     # through that objective's shared current-policy implementation, never by JSON
     # replacement. Refuse unsupported retargeting before evaluating wrong logits.
-    if isinstance(body.get('objective'),dict) and any(roots[name].ident!=value.ident for name,value in selected.items()):
+    if isinstance(body.get('objective'),dict) and body['objective'].get('kind')=='native-query':
+        objective=body['objective']
+        if objective.get('graph_sha256')!=canonical_json_sha256_hex(request['graph']):
+            raise ValueError('native derivative query objective changed its original graph binding')
+        objective['graph_sha256']=canonical_json_sha256_hex(graph)
+    elif isinstance(body.get('objective'),dict) and any(roots[name].ident!=value.ident for name,value in selected.items()):
         raise ValueError('native derivative registered-policy updates need exact shared objective retargeting')
     return body,selected
 

@@ -480,3 +480,14 @@ configure a store supporting native artifacts before recording communication.
 Greedy structural receipts have no behavior probability and cannot be used as
 on-policy RL samples. This capture mechanism does not advertise public order-2
 GradSession support.
+Assistant-only producer blocks follow the same typed result checks as tool returns.
+For an ordinary string result rejected with `type-mismatch`, read the imported
+Neuralese through a typed natlang call and return its actual answer text; an
+internal artifact ID is not the answer. Explicit Neuralese returns retain the
+original block. Literal text that merely spells a marker remains literal.
+
+For a decision-objective `neuralese-grad-term` or native objective validation
+error, provide finite numeric rewards or nonnegative finite probabilities with
+positive total mass, exactly one entry per declared option. Keep the recorded
+conditional token queries bound to their actual graph and avoid assigning a
+likelihood to a forced input after an imported state.

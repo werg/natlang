@@ -286,3 +286,31 @@ behavior logp; ordinary RL continues to reject that schema. No temperature is
 changed to obtain a receipt. Focused typed transport, compact-state, guidance
 and RL replay regression:25PASS17.66s, with unchanged layering baseline. Public
 GradSession objective/decision/derived-turn lowering remains open and guarded.
+
+### Inline recorded objectives
+
+A recorded learning objective is exact query data over an authenticated native
+invocation graph. Its crisp verifier binds the full graph SHA, validates each
+query/next-own-token pair and finite objective parameters before forward, then
+uses the existing shared graph forward and token-mask readout. NLL terms select
+sum or mean, optional sampling temperature/masks and an explicit signed weight.
+Finite decisions sum continuation log-probabilities per option before the same
+proper score or expected-reward equation used by the public objective. Stopped
+teacher distillation selects independently rendered teacher rows in the SAME
+masked graph, stops that teacher distribution, and scores the aligned student
+rows. Producers receive adjoints through actual shared-state edges, not separate
+recursive replays. No legacy Gaussian probability is assigned to raw KV.
+
+The inline query artifact is an internal lowering target; it does not by itself
+make public recorded-turn translation or GradSession order2 complete. Explicit
+reference arithmetic and derived actor bindings remain in the finite program.
+
+Inline objective qualification: actual both-port CUDA query and adapted-RL
+integration21PASS25.96s; CPU finite-program/RL regression31PASS2skip8.01s. New
+NLL adjoints match existing graph CE with one forward and survive two actual
+SGD/Adam updates before the outer derivative. Proper-score/manual gradients
+and stopped-teacher gradients pass all four rules; Python→TypeScript file/
+Memory/OPFS/.nz→Python state-program closure passes4cases5.41s, including the
+new inline objective declaration. Queries crossing an import boundary reject
+before forward; no likelihood is invented for an imported slot's forced input.
+Public recorded-turn rendering/lowering and decision capture are still open.

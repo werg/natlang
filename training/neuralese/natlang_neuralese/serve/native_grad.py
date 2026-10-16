@@ -82,7 +82,7 @@ def native_graph_gradient(engine, body, owner, *, coefficient_targets=None, eval
                     or any(not isinstance(entries,list) for entries in declarations.values())):
                 raise ValueError('invocation_adapters must map actual invocation names to explicit adapter lists')
             source_names={name:name for name in names}
-            if isinstance(body.get('objective'),dict):
+            if isinstance(body.get('objective'),dict) and body['objective'].get('kind')=='native-policy':
                 from ..train.native_state_sft import pack_native_graphs
                 packed,_,_,_=pack_native_graphs([example])
                 source_names={before.name:after.name for before,after in zip(example.plan.invocations,packed.invocations)}
@@ -152,7 +152,12 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
         if body.get('native_identity') not in (None, expected):
             raise ValueError('gradient request is bound to another exact live checkpoint')
         objective = None
-        if isinstance(objective_request, dict):
+        query_objective = None
+        is_policy = isinstance(objective_request,dict) and objective_request.get('kind')=='native-policy'
+        if isinstance(objective_request,dict) and objective_request.get('kind')=='native-query':
+            from .native_query_objective import NativeQueryObjective
+            query_objective = NativeQueryObjective(objective_request,row,example,vocabulary=engine.shared_model.port.output_weight.shape[0])
+        elif isinstance(objective_request, dict):
             if objective_request.get('kind') != 'native-policy':
                 raise ValueError('only the registered native-policy objective is supported')
             spec_path = objective_request.get('path')
@@ -174,7 +179,7 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
         for name, binding in example.external_states.items():
             record = engine.store.get_native_state(binding['id'])
             if record is None:
-                if isinstance(objective_request, dict):
+                if is_policy:
                     continue  # The registered policy objective resolves its immutable block bundle.
                 raise ValueError(f'unknown external native state {binding["id"]}')
             block = record.block
@@ -209,7 +214,7 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
             else:
                 copied, leaves = _leaf_block(block)
             leaf_map.update({f'external.{name}.{key}': value for key, value in leaves.items()})
-            if isinstance(objective_request, dict):
+            if is_policy:
                 state_overrides[binding['id']] = copied
             else:
                 imported[name] = copied
@@ -280,10 +285,11 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
             loss, stats = packed_graph_loss(engine.shared_model, [example], objective=objective)
         else:
             loss, stats = graph_loss(engine.shared_model, example, external_blocks=imported,
-                                     external_identity=input_identities)
+                                     external_identity=input_identities,objective=query_objective)
         def provenance_for(names):
-            return {'objective': ('native-graph-token-ce/1' if not isinstance(objective_request, dict)
-            else objective.spec['schema'].removeprefix('natlang.')), 'graph_id': example.id,
+            return {'objective': (query_objective.spec['schema'].removeprefix('natlang.') if query_objective is not None else
+                'native-graph-token-ce/1' if objective is None else objective.spec['schema'].removeprefix('natlang.')),
+            **({'query_objective_sha256':canonical_json_sha256_hex(query_objective.spec)} if query_objective is not None else {}), 'graph_id': example.id,
             'graph_sha256': graph_sha256, 'target_kind': kind,
             'external_source_identities': input_identities,
             'external_adapter_state_contracts': {name: {key: value for key, value in receipt.items()

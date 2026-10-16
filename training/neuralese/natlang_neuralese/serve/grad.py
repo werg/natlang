@@ -559,8 +559,11 @@ class GradSession:
             if not isinstance(rewards, list) or len(rewards) != len(options):
                 raise RequestError("neuralese-grad-term", "expectedReward needs target.rewards, one per option")
             scores, _ = self.decision_logprobs(term.get("messages") or [], term.get("tools"), options, leaves)
-            p = torch.softmax(scores.float(), 0)
-            return -(p * torch.tensor([float(r) for r in rewards], device=p.device)).sum()
+            from ..common.decision_objective import decision_loss
+            try:
+                return decision_loss(scores.float(),rule=rule,rewards=rewards)
+            except ValueError as error:
+                raise RequestError('neuralese-grad-term',str(error)) from error
         probabilities = target.get("probabilities") if isinstance(target, dict) else None
         if probabilities is None and isinstance(teacher, dict):
             # Conditioned distillation: the target is the same model's readout given the teacher's messages (its
@@ -571,16 +574,12 @@ class GradSession:
         if not isinstance(probabilities, list) or len(probabilities) != len(options):
             raise RequestError("neuralese-grad-term", "decision needs target.probabilities (one per option) or a teacher")
         scores, _ = self.decision_logprobs(term.get("messages") or [], term.get("tools"), options, leaves)
-        logp = torch.log_softmax(scores, 0)
-        goal = torch.tensor([float(p) for p in probabilities], device=logp.device)
-        goal = goal / goal.sum()
-        if rule == "logLoss":
-            return -(goal * logp).sum()
-        if rule == "brier":
-            return ((logp.exp() - goal) ** 2).sum()
-        if rule == "rps":
-            return ((torch.cumsum(logp.exp(), 0) - torch.cumsum(goal, 0))[:-1] ** 2).sum() / max(1, len(options) - 1)
-        raise RequestError("neuralese-grad-term", f"unknown decision rule {rule!r}")
+        from ..common.decision_objective import decision_loss
+        try:
+            return decision_loss(scores,rule=rule,probabilities=probabilities)
+        except ValueError as error:
+            raise RequestError('neuralese-grad-term',str(error)) from error
+
 
     # Terms ---------------------------------------------------------------------------------
     def _term(self, term: dict, leaves: dict) -> torch.Tensor:

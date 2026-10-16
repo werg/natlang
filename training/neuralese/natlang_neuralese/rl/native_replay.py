@@ -354,6 +354,13 @@ def replay_logps(model, replay, *, checkpoint_layers=True, chunk_tokens=128):
 
 def action_logps(model, hidden, actions, *, chunk_tokens=128):
     """Shared chunked readout for standalone qualification and trainer callbacks."""
+    logps = token_action_logps(model, hidden, actions, chunk_tokens=chunk_tokens)
+    return logps, torch.tensor([action['behavior_logp'] for action in actions],
+                              device=hidden.device, dtype=torch.float32)
+
+
+def token_action_logps(model, hidden, actions, *, chunk_tokens=128):
+    """Exact masked conditional scores; no invented behavior-density field."""
     if chunk_tokens < 1:
         raise ValueError('native RL loss chunks must be positive')
     from torch.utils.checkpoint import checkpoint
@@ -366,6 +373,10 @@ def action_logps(model, hidden, actions, *, chunk_tokens=128):
         from ..common.sampling import masked_log_distribution
         log_probs=masked_log_distribution(model.logits(states),temperature,allowed=allowed,banned=banned)
         return log_probs.gather(1,labels[:,None]).squeeze(1)
+    from ..common.native_higher_order import capture_reference_execution,active_reference_arithmetic
+    if active_reference_arithmetic() is not None:
+        from ..model.native_adapters import capture_native_execution
+        score=capture_reference_execution(capture_native_execution(score))
     for (temperature,allowed,banned),indices in groups.items():
         for start in range(0,len(indices),chunk_tokens):
             selected=indices[start:start+chunk_tokens]
@@ -373,8 +384,7 @@ def action_logps(model, hidden, actions, *, chunk_tokens=128):
             labels=torch.tensor([actions[i]['token_id'] for i in selected],device=hidden.device)
             values=checkpoint(score,hidden[queries],labels,temperature,allowed,banned,use_reentrant=False)
             for index,value in zip(selected,values.unbind()):logps[index]=value
-    return torch.stack(logps), torch.tensor([action['behavior_logp'] for action in actions],
-                                           device=hidden.device, dtype=torch.float32)
+    return torch.stack(logps)
 
 
 def _validate_adapter_transition(engine,before_identity,before_binding,after_identity,after_binding,bundle,archive_owner):

@@ -90,7 +90,8 @@ def test_actual_state_updates_restore_immutable_origin_and_named_moments(tmp_pat
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
-def test_python_ts_program_state_archive_nz_browser_and_restore(tmp_path,family):
+@pytest.mark.parametrize('objective_kind',['ce','query'])
+def test_python_ts_program_state_archive_nz_browser_and_restore(tmp_path,family,objective_kind):
     import base64,json,os,subprocess
     from pathlib import Path
     from test_native_derivative_program import program
@@ -105,6 +106,12 @@ def test_python_ts_program_state_archive_nz_browser_and_restore(tmp_path,family)
         objective['request']=copy.deepcopy(objective['request']);objective['request'].pop('adapters')
         graph=objective['request']['graph'];graph['external_states']={'prior':{'id':ident,'token_count':2}}
         graph['nodes']=graph['nodes'][1:];graph['nodes'][0]['imports']=[{'source':'prior','start':0,'stop':2,'at':2}]
+        if objective_kind=='query':
+            from test_native_query_objective import query_spec
+            node=graph['nodes'][0]
+            objective['request']['objective']=query_spec(graph,[{'kind':'nll','reduction':'mean','actions':[
+                {'query':index-1,'token_id':token} for index,(token,weight) in
+                enumerate(zip(node['token_ids'],node['target_weights'])) if weight]}])
     try:
         result=execute_derivative_program(engine,source)
         artifacts={}

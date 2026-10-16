@@ -159,7 +159,7 @@ def validate_finite_program(program,*,bound=False):
                 or any(key in request for key in ('target','order','derived','create_graph'))
                 or not isinstance(request.get('graph'),dict)):
             raise ValueError('native derivative objectives need a complete shared native graph request without a separate target')
-        if isinstance(request.get('objective'),dict):
+        if isinstance(request.get('objective'),dict) and request['objective'].get('kind')!='native-query':
             raise ValueError('native derivative registered-policy objectives require portable bound objective assets')
     for node in nodes:
         if (not isinstance(node,dict) or not isinstance(node.get('name'),str) or not node['name']

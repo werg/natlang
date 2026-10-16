@@ -90,7 +90,7 @@ function finiteProgramDependencies(value:unknown):string[]{
     for(const [name,current] of Object.entries(item.bindings))if(!kinds.has(name)||typeof current!=='string'||available.get(current)!==kinds.get(name))return fail();
     const request=item.request,graph=request.graph;
     if(request.schema!=='natlang.native-gradient-request/1'||['target','order','derived','create_graph'].some(key=>Object.hasOwn(request,key))||
-      !object(graph)||object(request.objective))return fail();
+      !object(graph)||(object(request.objective)&&request.objective.kind!=='native-query'))return fail();
     const invocation=request.invocation_adapters;
     if(invocation!==undefined&&(!object(invocation)))return fail();
     for(const entries of [request.adapters??[],...Object.values((invocation??{}) as Obj)]){

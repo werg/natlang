@@ -1,0 +1,137 @@
+"""Inline conditional scores, one-forward integration and real derived updates."""
+import copy
+from types import SimpleNamespace
+import pytest
+import torch
+from test_native_derivative_program import program
+from test_native_serving_adapters import engine_fixture, nonzero_adapter
+from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+from natlang_neuralese.data.native_graph import parse_graph
+from natlang_neuralese.serve.native_grad import native_graph_gradient
+from natlang_neuralese.serve.native_derivative import execute_derivative_program
+from natlang_neuralese.serve.native_query_objective import NativeQueryObjective, SCHEMA
+
+
+def query_spec(graph, terms):
+    return {'kind':'native-query','schema':SCHEMA,'graph_sha256':canonical_json_sha256_hex(graph),'terms':terms}
+
+
+def query_nll(graph):
+    return query_spec(graph,[{'kind':'nll','reduction':'mean','actions':[
+        {'query':5,'token_id':graph['nodes'][1]['token_ids'][1]},
+        {'query':7,'token_id':8},{'query':8,'token_id':9}]}])
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_inline_native_loss_and_all_selected_adjoints_equal_existing_ce_one_forward(tmp_path,family,monkeypatch):
+    engine=engine_fixture(tmp_path,family)
+    adapter,name=nonzero_adapter(engine)
+    request=copy.deepcopy(program(engine,adapter)['outer']['request'])
+    request['target']={'kind':'adapter','id':adapter.id}
+    forwards=[]
+    original=engine.shared_model.forward
+    def counted(*args,**kwargs):
+        forwards.append(True)
+        return original(*args,**kwargs)
+    monkeypatch.setattr(engine.shared_model,'forward',counted)
+    try:
+        ce=native_graph_gradient(engine,request,None)
+        ce_grad=engine.store.get_native_tensor_artifact(ce['gradient']['id']).artifact.tensors[name]
+        request['objective']=query_nll(request['graph'])
+        scored=native_graph_gradient(engine,request,None)
+        query_grad=engine.store.get_native_tensor_artifact(scored['gradient']['id']).artifact.tensors[name]
+        assert len(forwards)==2, 'one graph forward per complete objective'
+        assert scored['loss']==pytest.approx(ce['loss'],abs=1e-6)
+        torch.testing.assert_close(query_grad,ce_grad,rtol=2e-5,atol=3e-6)
+        assert query_grad.double().norm()>0
+        assert (query_grad-ce_grad).double().norm()/ce_grad.double().norm()<2e-5
+        assert scored['objective']=='native-query-objective/1'
+        bad=copy.deepcopy(request);bad['objective']['terms'][0]['actions'][0]['token_id']=0
+        with pytest.raises(Exception,match='actual next own input token'):
+            native_graph_gradient(engine,bad,None)
+        bad=copy.deepcopy(request);bad['objective']['terms'][0]['actions']=[{'query':6,'token_id':engine.role_tokens.consume_close}]
+        with pytest.raises(Exception,match='actual next own input token'):
+            native_graph_gradient(engine,bad,None)
+        assert len(forwards)==2, 'invalid coordinates reject before forward'
+    finally:engine.store.close()
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('algorithm',['sgd','adam'])
+def test_inline_query_two_updated_actors_preserve_hypergradient(tmp_path,family,algorithm):
+    engine=engine_fixture(tmp_path,family)
+    adapter,name=nonzero_adapter(engine)
+    original=program(engine,adapter,algorithm)
+    queried=copy.deepcopy(original)
+    for objective in [queried['outer'],*(node for node in queried['nodes'] if node['kind']=='gradient')]:
+        objective['request']['objective']=query_nll(objective['request']['graph'])
+    try:
+        ce=execute_derivative_program(engine,original)
+        query=execute_derivative_program(engine,queried)
+        actual=engine.store.get_native_tensor_artifact(query['gradients']['a']['id']).artifact.tensors[name]
+        expected=engine.store.get_native_tensor_artifact(ce['gradients']['a']['id']).artifact.tensors[name]
+        assert query['loss']==pytest.approx(ce['loss'],abs=1e-6)
+        torch.testing.assert_close(actual,expected,rtol=2e-5,atol=3e-6)
+        assert (actual-expected).double().norm()/expected.double().norm()<2e-5
+        for node in ('a1','a2'):
+            a=engine.store.get_native_tensor_artifact(query['outputs'][node]).artifact.tensors[name]
+            b=engine.store.get_native_tensor_artifact(ce['outputs'][node]).artifact.tensors[name]
+            torch.testing.assert_close(a,b,rtol=2e-5,atol=3e-6)
+    finally:engine.store.close()
+
+
+@pytest.mark.parametrize('rule',['logLoss','brier','rps','expectedReward'])
+def test_signed_query_decision_and_stopped_teacher_exact_manual_oracle(rule):
+    graph={'schema':'natlang.neuralese-native-graph/1','id':'conditional-oracle','split':'train',
+        'source_groups':['explicit-training-example'],'tokenizer_fingerprint':'f'*64,'nodes':[
+            {'name':'option-a','token_ids':[0,1,2],'target_weights':[0,0,0]},
+            {'name':'option-b','token_ids':[3,1,2],'target_weights':[0,0,0]}]}
+    example=parse_graph(graph,tokenizer_fingerprint='f'*64)
+    actions=lambda queries:[{'query':q,'token_id':t} for q,t in zip(queries,[1,2])]
+    a,b=actions([0,1]),actions([3,4])
+    term={'kind':'decision','options':[a,b],'rule':rule,'probabilities':[.3,.7],'rewards':[-1.,2.],'weight':-.4}
+    spec=query_spec(graph,[term,{'kind':'distill','actions':a,'teacher_actions':b,'weight':.8},
+                                {'kind':'nll','actions':a,'reduction':'sum','weight':.2}])
+    objective=NativeQueryObjective(spec,graph,example,vocabulary=4)
+    torch.manual_seed(32)
+    h=torch.randn(6,4,requires_grad=True)
+    model=SimpleNamespace(logits=lambda value:value)
+    actual,_=objective(model,example,{'plan':example.plan,'h_final':h[None]})
+    log=h.log_softmax(-1)
+    scores=torch.stack([log[0,1]+log[1,2],log[3,1]+log[4,2]])
+    # Proper scores use the public readout's log-softmax then exp; the
+    # expected-reward branch uses softmax directly, as its existing contract.
+    p=scores.softmax(0) if rule=='expectedReward' else scores.log_softmax(0).exp()
+    goal=p.new_tensor([.3,.7])
+    proper=(-(goal*scores.log_softmax(0)).sum() if rule=='logLoss' else
+            ((p-goal)**2).sum() if rule=='brier' else
+            ((p.cumsum(0)-goal.cumsum(0))[:-1]**2).sum() if rule=='rps' else
+            -(p*p.new_tensor([-1.,2.])).sum())
+    from natlang_neuralese.serve.grad import GradSession
+    legacy=object.__new__(GradSession)
+    legacy.decision_logprobs=lambda *_args:(scores, None)
+    legacy_value=legacy._decision_term({'options':['a','b'],'rule':rule,
+        'target':{'probabilities':[.3,.7],'rewards':[-1.,2.]}},{})
+    torch.testing.assert_close(legacy_value,proper,rtol=0,atol=0)
+    teacher=log[[3,4]].detach()
+    kl=(teacher.exp()*(teacher-log[[0,1]])).sum(-1).mean()
+    expected=-.4*proper+.8*kl-.2*(log[0,1]+log[1,2])
+    assert actual.item()==pytest.approx(expected.item(),abs=1e-7)
+    ga=torch.autograd.grad(actual,h,retain_graph=True)[0]
+    ge=torch.autograd.grad(expected,h)[0]
+    torch.testing.assert_close(ga,ge,rtol=2e-6,atol=2e-7)
+    isolated=NativeQueryObjective(query_spec(graph,[spec['terms'][1]]),graph,example,vocabulary=4)
+    loss,_=isolated(model,example,{'plan':example.plan,'h_final':h[None]})
+    stopped=torch.autograd.grad(loss,h)[0]
+    assert torch.count_nonzero(stopped[3:])==0
+    assert stopped[:2].norm()>0
+
+
+def test_query_masks_and_graph_binding_fail_before_forward():
+    graph={'schema':'natlang.neuralese-native-graph/1','id':'masked','split':'train','source_groups':['train'],
+        'tokenizer_fingerprint':'f'*64,'nodes':[{'name':'x','token_ids':[0,1],'target_weights':[0,0]}]}
+    example=parse_graph(graph,tokenizer_fingerprint='f'*64)
+    spec=query_spec(graph,[{'kind':'nll','reduction':'mean','actions':[{'query':0,'token_id':1,'banned_token_ids':[1]}]}])
+    with pytest.raises(ValueError,match='excludes its target'):NativeQueryObjective(spec,graph,example,vocabulary=4)
+    spec['graph_sha256']='0'*64
+    with pytest.raises(ValueError,match='exact graph'):NativeQueryObjective(spec,graph,example,vocabulary=4)
