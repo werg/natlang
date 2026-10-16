@@ -82,7 +82,7 @@ def test_offload_small_actual_weight_comparison_uses_bitwise_all_gradient_digest
     assert model.port.activation_checkpoint is hook
 
 
-def prepared_fixture(tmp_path,monkeypatch):
+def prepared_fixture(tmp_path,monkeypatch,novel_split="train"):
     import json
     from types import SimpleNamespace
     from pathlib import Path
@@ -96,8 +96,8 @@ def prepared_fixture(tmp_path,monkeypatch):
     configure_checkpoint_input_offload(model.port,enabled=True)
     sources=[]
     for name in ('active','novel'):
-        path=tmp_path/(name+'.jsonl');path.write_text(json.dumps(graph(name))+'\n')
-        sources.append(NativeGraphSource(path,'tokenizer-sha',required_split='train',role_ids=(58,59,60,61)))
+        path=tmp_path/(name+'.jsonl');row=graph(name);split=novel_split if name=='novel' else 'train';row['split']=split;path.write_text(json.dumps(row)+'\n')
+        sources.append(NativeGraphSource(path,'tokenizer-sha',required_split=split,role_ids=(58,59,60,61)))
     active,novel=sources
     args=SimpleNamespace(out=tmp_path/'out',checkpoint_input_offload=True,checkpoint_layers=True,
         chunk_tokens=3,batch_tokens=32,batch_graphs=1,device='cpu',fp8_training='off',fp8_recipe='delayed',
@@ -109,7 +109,7 @@ def prepared_fixture(tmp_path,monkeypatch):
         'identity':memory.capacity_identity(config,args,None),
         'runtime_code_sha256':resident.digest(resident.code_inventory(Path(memory.__file__).parents[1])),
         'source':resident.binding(novel.path),'indexes':resident._source_witness(novel),
-        'cases':[row(novel)],'reference':row(active)}
+        'cases':[row(novel)],'reference':row(active),'split':novel_split}
     path=tmp_path/'request.json';path.write_text(json.dumps(request))
     args.memory_qualification=json.dumps(resident.binding(path))
     return model,optimizer,active,SimpleNamespace(ids=(58,59,60,61)),config,args
@@ -204,3 +204,13 @@ def test_later_novel_oom_retains_independently_qualified_cohort_capacity(tmp_pat
     from natlang_neuralese.train.recipe import stage_parameter_args
     encoded=stage_parameter_args({'memory_qualification':[first,second]})
     assert encoded[0]=='--memory-qualification' and json.loads(encoded[1])==[first,second]
+
+
+def test_held_capacity_check_is_explicit_read_only_and_preserves_all_training_state(tmp_path,monkeypatch):
+    from natlang_neuralese.eval import native_memory as memory
+    model,optimizer,train,roles,config,args=prepared_fixture(tmp_path,monkeypatch,novel_split='test')
+    before=copy.deepcopy(optimizer.state_dict());weights=copy.deepcopy(model.state_dict());rng=torch.get_rng_state().clone()
+    result=memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
+    assert result['passed'] and result['capacity']['cases'][0]['id']=='novel'
+    assert result['optimizer_updates']==0
+    assert_exact(before,optimizer.state_dict());assert_exact(weights,model.state_dict());assert torch.equal(rng,torch.get_rng_state())
