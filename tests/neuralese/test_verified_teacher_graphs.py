@@ -578,3 +578,33 @@ def test_continuation_parent_is_evidence_not_an_unmapped_response_collection(tmp
     assert set(result['collections'])=={remote}
     assert len(result['collections'][remote]['continuation_proofs'])==5
     assert result['teacher']==collection['teacher']
+
+
+def test_nested_continuation_authenticates_history_without_mutation(tmp_path):
+    flat, transferred = continuation_fixture(tmp_path)
+    inner_keys = ('original_source', 'original_queue', 'drain_frontier', 'actor',
+                  'actual_teacher_execution_identity', 'entries', 'source_indices_seeds_preserved')
+    outer = {key: value for key, value in flat.items() if key not in inner_keys}
+    outer['schema'] = 'natlang.sandbox-strong-teacher-collection/1'
+    outer['at'] = 20
+    outer['continuation'] = {'schema': flat['schema'], 'at': 10, **{key: flat[key] for key in inner_keys}}
+    path = tmp_path / 'before.json'; path.write_text('{}')
+    ref = {'path': '/remote/before.json', 'sha256': converter.sha256_file(path), 'bytes': path.stat().st_size}
+    outer['metadata_history'] = [{'binding': ref, 'reason': 'packet restored'}]
+    transferred[ref['path']] = [{**ref, 'path': str(path), 'source': ref['path']}]
+    before = copy.deepcopy(outer)
+    proofs = converter.collection_provenance(outer, transferred)
+    assert len(proofs) == 6 and proofs['metadata_history:0']['sha256'] == ref['sha256']
+    assert outer == before
+    transferred.pop(ref['path'])
+    with pytest.raises(ValueError, match='not transferred: metadata_history:0'):
+        converter.collection_provenance(outer, transferred)
+
+
+def test_nested_continuation_rejects_conflicting_actor(tmp_path):
+    flat, transferred = continuation_fixture(tmp_path)
+    flat['schema'] = 'natlang.sandbox-strong-teacher-collection/1'
+    flat['continuation'] = {'schema': 'natlang.sandbox-strong-teacher-continuation/1',
+                            'actor': {**flat['actor'], 'sha256': 'f'*64}}
+    with pytest.raises(ValueError, match='conflicts with outer actor'):
+        converter.collection_provenance(flat, transferred)

@@ -201,15 +201,35 @@ def collection_provenance(collection, transferred, *, seen=()):
     if schema not in {'natlang.sandbox-strong-teacher-collection/1',
                        'natlang.sandbox-strong-teacher-continuation/1'}:
         raise ValueError('collection receipt differs from supported collection/continuation schemas')
+    nested = collection.get('continuation')
+    if nested is not None:
+        if (schema != 'natlang.sandbox-strong-teacher-collection/1'
+                or not isinstance(nested, dict)
+                or nested.get('schema') != 'natlang.sandbox-strong-teacher-continuation/1'):
+            raise ValueError('collection has an invalid nested teacher continuation')
+        for name, value in nested.items():
+            if name not in {'schema', 'at'} and name in collection and collection[name] != value:
+                raise ValueError('nested teacher continuation conflicts with outer ' + name)
+        # The immutable outer receipt supplies the restored packet contract. Keep
+        # nested actor/runtime identities exactly as written, without rewriting it.
+        collection = {**collection, **nested}
     if schema.endswith('collection/1') and 'original_source' not in collection:
         return {}
     digest = canonical_json_sha256_hex(collection)
     if digest in seen:
         raise ValueError('teacher continuation parent cycle')
     proofs = {}
-    for name in ('original_source', 'original_queue', 'drain_frontier', 'actor',
-                 'actual_teacher_execution_identity'):
-        reference = collection.get(name)
+    references = {name: collection.get(name) for name in (
+        'original_source', 'original_queue', 'drain_frontier', 'actor',
+        'actual_teacher_execution_identity')}
+    history = collection.get('metadata_history', [])
+    if not isinstance(history, list):
+        raise ValueError('teacher continuation metadata history is not a list')
+    for index, entry in enumerate(history):
+        if not isinstance(entry, dict):
+            raise ValueError('teacher continuation metadata history lacks a binding')
+        references['metadata_history:' + str(index)] = entry.get('binding')
+    for name, reference in references.items():
         if (not isinstance(reference, dict) or not isinstance(reference.get('path'), str)
                 or not isinstance(reference.get('sha256'), str) or len(reference['sha256']) != 64
                 or type(reference.get('bytes')) is not int or reference['bytes'] < 1):

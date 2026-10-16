@@ -42,3 +42,5 @@ teacher/runtime remains the continuation's own identity. Original collection
 receipts supplied only as parent evidence are not new response collections.
 This extends the same exact source verifier, without relabeling a continuation
 as a fresh collection or granting training credit to interrupted work.
+
+Continuation receipts also retain the historical collection envelope with a typed nested continuation. The verifier authenticates its five exact inputs and every metadata-history binding; the outer restored packet fields and nested actual actor remain immutable. Conflicting identity fields are rejected; envelope timestamps may differ.
