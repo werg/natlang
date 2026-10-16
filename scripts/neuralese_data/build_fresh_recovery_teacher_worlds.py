@@ -16,7 +16,7 @@ DOMAINS={'inventory':('stock','available'),'finance':('ledger','approved'),
     'builds':('builds','passed'),'telemetry':('metrics','critical'),
     'support':('tickets','urgent'),'shipping':('shipments','ready'),
     'packages':('catalog','stable'),'research':('evidence','confirmed')}
-VARIANTS=('namespace-reuse','api-recovery','typed-result-recovery','readback-recovery')
+VARIANTS=('namespace-reuse','api-recovery','typed-argument-recovery','readback-recovery')
 TYPES='export type Row = { id:string; category:string; value:number; active:boolean };\nexport type Policy = { category:string; minimum:number };\nexport type Summary = { ids:string[]; total:number; count:number };\n'
 
 
@@ -49,7 +49,7 @@ def worlds(shapes=16):
             seeds={
                 'namespace-reuse':f'const {namespace} = {namespace}.page(1); return {namespace};',
                 'api-recovery':f'return {namespace}.get_all_pages();',
-                'typed-result-recovery':'return {ids:[],total:0,count:"unavailable"};',
+                'typed-argument-recovery':'return await select_record({id:"seed",category:policy.category,value:"unavailable",active:true},policy);',
                 'readback-recovery':f"return JSON.parse(await folder.file('missing-{domain}-{shape}.json').readText());"}
             for variant in VARIANTS:
                 identifier=f'{group}:{variant}'
