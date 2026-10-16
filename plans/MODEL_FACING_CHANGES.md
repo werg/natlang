@@ -982,3 +982,17 @@ integration skills. If the executing model receives an ambiguous-origin or
 capture-inventory rejection, measure that recovery in the next approximately48
 live executor samples; mechanism tests do not qualify new error-wording effects.
 Semantic-codec RL remains guarded until genuine differentiable lowering passes.
+
+### Native marker failure feedback (2026-10-16; measurement pending)
+
+The negotiated native marker recovery path now returns the existing native
+open/close/consume-marker/nested rejection as feedback to the executing call:
+“Return a complete native value or the declared ordinary result; this reply
+has an incomplete or misplaced native-state delimiter.” Exact malformed draws
+and prior completed writes remain captured; no prefix tool calls execute.
+This adds model-visible recovery on requests that previously terminated at
+transport. The frozen LF7750 full96 and PH48 diagnostics use the prior runtime
+and do **not** measure this feedback. Debt: about48 live executor samples per
+variant in the next own-teacher window, preserving actor/runtime/task hashes;
+no task-quality or live-cutover qualification is claimed by deterministic
+HTTP/replay regressions.

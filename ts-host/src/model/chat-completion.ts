@@ -6,6 +6,7 @@
  * and token accounting.
  */
 import type { DecisionScorer, ModelContentPart, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
+import { nativeProtocolFailure } from '../native/native-protocol.js';
 import { runtimePartsToText, type RuntimeContentPart } from '../native/neuralese.js';
 
 type Json = Record<string, unknown>;
@@ -294,6 +295,9 @@ export function chatCompletionModelTurn(transport: ChatTransport, options: ChatC
       const cached = (usage?.prompt_tokens_details as Json | undefined)?.cached_tokens ?? (body.timings as Json | undefined)?.cache_n;
       if (typeof cached === 'number') { cachedTokens += cached; hasCached = true; }
       const truncated = choice?.finish_reason === 'length';
+      const protocolFailure=nativeProtocolFailure(body);
+      if(protocolFailure)return finish({calls:[],text:contentText(message?.content),
+        protocol_failure:protocolFailure,...counts(),raw_response:body});
       try {
         const calls: [string, Json][] = (rawCalls ?? []).map((raw, index) => {
           const fn = raw.function as Json | undefined;

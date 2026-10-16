@@ -55,6 +55,7 @@ from ..write import Opened, read_back
 from .batch import split_rows, step_rows
 from .chat import RequestError, build_message, placeholder, render_messages, split_escaped
 from .store import Block, TensorStore, make_block
+from .native_protocol import capture_enabled
 
 WRITE = object()  # a forced-plan item: run the write procedure here
 
@@ -196,6 +197,8 @@ class GenerationRequest:
     # Set by the transport when the client has gone (a streamed reply's connection closed): the engine drops the
     # sequence at its next round and fails its future with RequestError("cancelled").
     cancelled: bool = False
+    native_protocol_recovery: bool = False  # negotiated typed failed-turn response
+    native_store_owner: str | None = None  # existing HTTP owner protects trace dependencies before reply
     rl_capture: bool = False  # optional exact rollout sampling receipt
     native_recording: bool = False  # structural receipt also permits greedy, without a sampled density
     native_state_modes: dict | None = None  # explicit input-ID keyed transport declarations
@@ -231,6 +234,8 @@ class Sequence:
     pending: list = field(default_factory=list)  # undecoded token IDs while streaming
     adapters: list = field(default_factory=list)  # resolved (spec, coefficients, scale) of the request's adapters
     started: float = field(default_factory=time.perf_counter)
+    native_trace_enabled: bool = False
+    native_protocol_failure: dict | None = None
     native_capture_chunks: list = field(default_factory=list)
     native_capture_ids: list[int] = field(default_factory=list)
     native_capture_open: bool = False
@@ -682,7 +687,7 @@ class Engine:
         observed_id = block_id if exact else None
         open_out = self._native_forward([self.role_tokens.consume_open], seq.cache)
         seq.cache = open_out["cache"]
-        if seq.request.rl_capture:
+        if capture_enabled(seq):
             seq.native_rl_prompt.append({"kind": "tokens", "token_ids": [self.role_tokens.consume_open],
                                          "producing": [False]})
         seq.native_own_position += 1
@@ -696,7 +701,7 @@ class Engine:
                 embedding_weight_sha256=source['embedding_weight_sha256'], stop_gradient=stop_gradient)
             mode = 'same-base-adapter-state'
             observed_id = block_id
-            if seq.request.rl_capture:
+            if capture_enabled(seq):
                 seq.native_rl_prompt.append({'kind': 'native_state', 'id': block_id,
                     'native_identity': source, 'adapter_state_consumption': state_receipt,
                     **({'state_derivation':block.derivation} if block.derivation is not None else {})})
@@ -706,7 +711,7 @@ class Engine:
                                      tokenizer_fingerprint=self.model_config["tokenizer_fingerprint"],
                                      embedding_weight_sha256=self.embedding_weight_sha256, stop_gradient=stop_gradient)
             mode = "exact-native-state"
-            if seq.request.rl_capture:
+            if capture_enabled(seq):
                 seq.native_rl_prompt.append({"kind": "native_state", "id": block_id,
                     "native_identity": self._native_block_identity(block),
                     **({'state_derivation':block.derivation} if block.derivation is not None else {})})
@@ -725,8 +730,8 @@ class Engine:
                                      tokenizer_fingerprint=self.model_config['tokenizer_fingerprint'],
                                      embedding_weight_sha256=self.embedding_weight_sha256, stop_gradient=stop_gradient)
             mode = 'learned-semantic-state-deltas'
-            if seq.request.rl_capture:
-                adapted_record = self.store.put_native_state(adapted)
+            if capture_enabled(seq):
+                adapted_record = self.store.put_native_state(adapted, owner=seq.request.native_store_owner)
                 observed_id = adapted_record.id
                 seq.native_rl_prompt.append({'kind': 'native_state', 'id': adapted_record.id,
                     'source_state_id': block_id, 'semantic_adaptation': adaptation,
@@ -742,13 +747,13 @@ class Engine:
                 output = self._native_forward(fallback_ids, seq.cache)
                 seq.cache = output["cache"]
             mode = "best-effort-text-retokenization"
-            if seq.request.rl_capture:
+            if capture_enabled(seq):
                 seq.native_rl_prompt.append({"kind": "tokens", "token_ids": fallback_ids,
                                              "producing": [False] * len(fallback_ids)})
             seq.native_own_position += len(fallback_ids)
         close_out = self._native_forward([self.role_tokens.consume_close], seq.cache)
         seq.cache = close_out["cache"]
-        if seq.request.rl_capture:
+        if capture_enabled(seq):
             seq.native_rl_prompt.append({"kind": "tokens", "token_ids": [self.role_tokens.consume_close],
                                          "producing": [False]})
         seq.native_own_position += 1
@@ -767,7 +772,7 @@ class Engine:
     @staticmethod
     def _native_record_input(seq, token, *, producing, sample_index=None):
         """Record one actual own-token input; imported KV slots never advance this coordinate."""
-        if seq.request.rl_capture or seq.guide is not None:
+        if capture_enabled(seq) or seq.guide is not None:
             seq.native_rl_inputs.append({'token_id': int(token),
                 'input_role': 'produce' if producing else 'ordinary', 'sample_index': sample_index})
         seq.native_own_position += 1
@@ -784,9 +789,10 @@ class Engine:
                 'native_state_modes must map actual native input IDs to same-base-adapter-state')
 
     def _native_prefill_impl(self, seq):
+        seq.native_trace_enabled = seq.request.native_protocol_recovery
         self._validate_native_state_modes(seq.request.native_state_modes,
             {value['id'] if isinstance(value,dict) else value for kind, value in seq.prompt_plan or () if kind in ('native_state','native_state_constant')})
-        if seq.request.rl_capture:
+        if capture_enabled(seq):
             from ..model.native_adapters import execution_binding, SCHEMA
             seq.native_rl_policy = dict(self.execution_native_identity)
             bindings = execution_binding(self)
@@ -829,7 +835,7 @@ class Engine:
                 seq.native_template_value_type = value_type
         for kind, value in seq.prompt_plan or ():
             if kind == "tokens":
-                if seq.request.rl_capture and value:
+                if capture_enabled(seq) and value:
                     seq.native_rl_prompt.append({"kind": "tokens", "token_ids": list(value),
                                                  "producing": [False] * len(value)})
                 seq.native_own_position += len(value)
@@ -896,7 +902,8 @@ class Engine:
                 torch.empty((1, 0), dtype=torch.long, device=self.device), seq.cache, producing=True))
         block, record = self._native_store_capture(
             seq.native_capture_ids, seq.native_capture_chunks,
-            text=self.tokenizer.decode(seq.native_capture_ids, skip_special_tokens=False))
+            text=self.tokenizer.decode(seq.native_capture_ids, skip_special_tokens=False),
+            owner=seq.request.native_store_owner)
         seq.blocks.append(record)
         seq.items.append(record)
         seq.native_item_positions.append(seq.native_write_start_own)
@@ -906,9 +913,9 @@ class Engine:
         if seq.native_template_suffix:
             seq.native_forced_tokens = seq.native_template_suffix
             seq.native_template_suffix = []
-        if seq.request.rl_capture:
+        if capture_enabled(seq):
             seq.native_rl_writes.append({"state_id": record.id,
-                **({'raw_state_id': self.store.put_native_state(block).id}
+                **({'raw_state_id': self.store.put_native_state(block, owner=seq.request.native_store_owner).id}
                    if record.block.metadata()['schema'] == 'neuralese.semantic-state/1' else {}),
                 "begin_sample": seq.native_write_start_sample,
                 "end_sample": (seq.native_write_close_sample + 1
@@ -928,7 +935,7 @@ class Engine:
         if seq.request.on_delta is not None and seq.guide is None:
             seq.request.on_delta({"native_state": record.meta()})
 
-    def _native_store_capture(self, token_ids, chunks, *, text):
+    def _native_store_capture(self, token_ids, chunks, *, text, owner=None):
         """Store one actual producer span through the common versioned native-state path."""
         from ..model.state_block import NativeStateBlock
         from ..model.shared_state import concatenate_captures
@@ -947,7 +954,7 @@ class Engine:
         block.validate()
         channel = getattr(self, 'semantic_channel', None)
         stored = channel.message(block) if channel is not None and self.execution_native_identity in channel.bindings.values() else block
-        return block, self.store.put_native_state(stored)
+        return block, self.store.put_native_state(stored, owner=owner)
 
     def native_write_text(self, text: str, *, value_type: str | None = None, adapters=None):
         return self._native_run(lambda: self._native_write_text_impl(text, value_type=value_type), adapters)
@@ -1124,7 +1131,7 @@ class Engine:
             if seq.phase == "done":
                 continue
             try:
-                if (seq.request.rl_capture and seq.native_rl_policy is not None
+                if (capture_enabled(seq) and seq.native_rl_policy is not None
                         and self.execution_native_identity != seq.native_rl_policy):
                     raise RequestError('neuralese-native-actor-changed',
                         'keep the exact adapter binding unchanged until this invocation finishes')
@@ -1161,7 +1168,7 @@ class Engine:
                 terminal = token in self.stop_ids
                 producing_input = seq.native_capture_open and token not in (
                     self.role_tokens.produce_open, self.role_tokens.produce_close)
-                if seq.request.rl_capture or seq.guide is not None:
+                if capture_enabled(seq) or seq.guide is not None:
                     seq.rl_samples.append({"index": sample_index, "token_id": token, "logp": sampled_logp,
                                            **({'banned_token_ids': sorted(seq.bans.get(seq.native_own_position, ()))}
                                               if seq.guide is not None else {}),
@@ -1213,7 +1220,7 @@ class Engine:
                     if not self._native_guide(seq):
                         self._emit(seq, token=token)
             except Exception as error:  # one malformed sequence must not stop other requests
-                self._fail(seq, error)
+                self._native_protocol_fail(seq, error)
 
     # Decoding ------------------------------------------------------------------------------
     def _round(self, sequences: list[Sequence]):
@@ -1250,6 +1257,15 @@ class Engine:
             self._batched(text_rows, self._text_batch)
         if sketch_rows:
             self._batched(sketch_rows, self._sketch_batch)
+
+    def _native_protocol_fail(self, seq, error):
+        from .native_protocol import FAILURE_CODES,failure_descriptor
+        if (not isinstance(error,RequestError) or error.code not in FAILURE_CODES
+                or not seq.request.native_protocol_recovery or seq.native_rl_policy is None):
+            return self._fail(seq,error)
+        seq.native_protocol_failure=failure_descriptor(self,seq,error)
+        seq.finish_reason='error';seq.phase='done'
+        if not seq.future.done():seq.future.set_result(self._native_response(seq))
 
     def _fail(self, seq: Sequence, error: Exception):
         seq.phase = "done"
@@ -1736,6 +1752,11 @@ class Engine:
                     call['function']['arguments'] = arguments_text(arguments)
                 except (KeyError, TypeError, json.JSONDecodeError):
                     continue
+        if seq.native_protocol_failure is not None:
+            from .native_protocol import generated_tokens
+            # No action from a malformed turn executes, including an earlier
+            # parseable tool call. Exact original tokens remain in the receipt.
+            message={'role':'assistant','content':self.tokenizer.decode(generated_tokens(seq),skip_special_tokens=False)}
         records = [item for item in seq.items if hasattr(item, "block") and hasattr(item, "meta")]
         response = {"id": seq.request.request_id, "object": "chat.completion", "created": int(time.time()),
                 "model": self.model_name,
@@ -1745,7 +1766,7 @@ class Engine:
                 "native_state": {"blocks": [record.meta() for record in records], "imports": seq.native_imports}}
         if seq.guide is not None:
             response['x_natlang_guidance'] = {'rejections': seq.guide.rejections}
-        if seq.request.rl_capture:
+        if seq.request.rl_capture or seq.native_protocol_failure is not None:
             response["x_natlang_rl_capture"] = {"schema": ("natlang.native-structural-capture/1"
                     if seq.request.temperature <= 0 else "natlang.native-rl-sampling/3"
                     if seq.native_rl_adapter_binding else "natlang.native-rl-sampling/2"),
@@ -1758,4 +1779,14 @@ class Engine:
                 "sampling_law": {"temperature": seq.request.temperature, "seed": seq.native_sampling_seed,
                                  "guidance": seq.guide is not None, "probabilities": ("greedy-argmax"
                                      if seq.request.temperature <= 0 else "post-processing-normalized")}}
+        if seq.native_protocol_failure is not None:
+            failure=seq.native_protocol_failure
+            response['x_natlang_native_failure']=failure
+            capture=response['x_natlang_rl_capture']
+            capture['schema']=('natlang.native-structural-capture/2' if seq.request.temperature<=0
+                               else 'natlang.native-rl-sampling/4')
+            capture['protocol_failure']=failure
+            response['usage']['completion_tokens']=len(seq.rl_samples)+sum(
+                value.get('sample_index') is None for value in seq.native_rl_inputs)
+            response['usage']['total_tokens']=response['usage']['prompt_tokens']+response['usage']['completion_tokens']
         return response

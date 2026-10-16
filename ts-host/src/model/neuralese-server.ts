@@ -445,6 +445,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const recorder=activeRecorder();
     const nativeRecording=!!recorder&&(capabilities?.native_state as {enabled?:boolean}|undefined)?.enabled===true;
     if(nativeRecording)body={...body,x_natlang_native_recording:true};
+    if(Array.isArray(capabilities?.capabilities)&&capabilities.capabilities.includes('native.protocol-recovery'))body={...body,x_natlang_native_protocol_recovery:true};
     if (body.guidance && capabilities && !serves(capabilities, 'guidance.check'))
       throw Object.assign(new Error('neuralese-guidance-unavailable: this model server does not implement the requested guidance; use a server with guidance support'), { code: 'neuralese-guidance-unavailable' });
     if (body.neuralese_template && capabilities) {
@@ -508,7 +509,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     if(recorder){
       const message=(reply.choices as Json[]|undefined)?.[0]?.message as Json|undefined;
       const capture=reply.x_natlang_rl_capture as Record<string,unknown>|undefined;
-      if(nativeRecording&&(!capture||!['natlang.native-rl-sampling/1','natlang.native-rl-sampling/2','natlang.native-rl-sampling/3','natlang.native-structural-capture/1'].includes(String(capture.schema))||
+      if(nativeRecording&&(!capture||!['natlang.native-rl-sampling/1','natlang.native-rl-sampling/2','natlang.native-rl-sampling/3','natlang.native-rl-sampling/4','natlang.native-structural-capture/1','natlang.native-structural-capture/2'].includes(String(capture.schema))||
           !Array.isArray(capture.prompt)||!Array.isArray(capture.samples)))
         throw Object.assign(new Error('neuralese-native-grad-invalid: native learning needs the actual server sampling receipt'),{code:'neuralese-native-grad-invalid'});
       if(nativeRecording&&archiveIds.size&&!store)

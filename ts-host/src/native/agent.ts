@@ -1,3 +1,4 @@
+import { nativeProtocolFailure, nativeProtocolFeedback } from './native-protocol.js';
 import { programGuidance } from '../adaptation/prompts.js';
 import { formatType } from './types.js';
 import type { Type, TypeEnv } from './types.js';
@@ -513,27 +514,10 @@ export class NativeToolAgent {
     return bank?.size && supportsNeuralese(this.driver) ? softenMessages(messages, bank) : [...messages];
   }
 
-  /**
-   * Turn the Neuralese content of a reply into conversation text: blocks a backend wrote (content parts) and literals
-   * written as marker text (stored through the write port) become block markers in the reply and call arguments.
-   */
-  private async decodeNeuralese(response: ModelTurn, session: NativeSession, turn: number, turnNode?: string,
-      allowAssistantResult = true): Promise<ModelTurn> {
-    const carries = (value: unknown): boolean => typeof value === 'string' ?
-      value.includes('<|neuralese|>') || nativeStateSentinelIds(value).length > 0 :
-      Array.isArray(value) ? value.some(carries) : !!value && typeof value === 'object' &&
-        (['neuralese', 'native_state'].includes(String((value as { type?: unknown }).type)) ||
-          Object.values(value).some(carries));
-    const serverBlocks = (response.raw_response?.neuralese as { blocks?: NeuraleseBlockMeta[] } | undefined)?.blocks ?? [];
+  /** Record only actually completed native writes, even when the containing turn failed. */
+  private async nativeWriteOrigins(response: ModelTurn, session: NativeSession, turn: number, turnNode?: string): Promise<Map<string,string[]>> {
     const nativeBlocks = (response.raw_response?.native_state as { blocks?: Record<string, unknown>[] } | undefined)?.blocks ?? [];
-    const rawChoices = response.raw_response?.choices as Array<{ message?: { content?: unknown } }> | undefined;
-    const content = rawChoices?.[0]?.message?.content;
-    if (!carries(response.text) && !carries(response.calls) && !carries(content) && !serverBlocks.length && !nativeBlocks.length) return response;
-    const returnType = session.lam.type.kind === 'lambda' ? formatType(session.lam.type.returns) : undefined;
-    const producer = { call_id: session.runtime.currentCallId ?? null, turn,
-      ...(returnType ? { result_type: returnType } : {}) };
-    const port = this.options.neuralese?.port;
-    const expectedReturn = session.lam.type.kind === 'lambda' ? session.env.resolve(session.lam.type.returns) : undefined;
+    const producer = {call_id:session.runtime.currentCallId??null,turn};
     const nativeOrigins=new Map<string,string[]>();
     for (const block of nativeBlocks.filter(block => typeof block.id === 'string')) {
       const id = block.id as string;
@@ -555,6 +539,31 @@ export class NativeToolAgent {
         turnNode ? [{ node: turnNode, port: 'turn' }] : []);
       if(node)nativeOrigins.set(id,[...(nativeOrigins.get(id)??[]),node]);
     }
+    return nativeOrigins;
+  }
+
+  /**
+   * Turn the Neuralese content of a reply into conversation text: blocks a backend wrote (content parts) and literals
+   * written as marker text (stored through the write port) become block markers in the reply and call arguments.
+   */
+  private async decodeNeuralese(response: ModelTurn, session: NativeSession, turn: number, turnNode?: string,
+      allowAssistantResult = true): Promise<ModelTurn> {
+    const carries = (value: unknown): boolean => typeof value === 'string' ?
+      value.includes('<|neuralese|>') || nativeStateSentinelIds(value).length > 0 :
+      Array.isArray(value) ? value.some(carries) : !!value && typeof value === 'object' &&
+        (['neuralese', 'native_state'].includes(String((value as { type?: unknown }).type)) ||
+          Object.values(value).some(carries));
+    const serverBlocks = (response.raw_response?.neuralese as { blocks?: NeuraleseBlockMeta[] } | undefined)?.blocks ?? [];
+    const nativeBlocks = (response.raw_response?.native_state as { blocks?: Record<string, unknown>[] } | undefined)?.blocks ?? [];
+    const rawChoices = response.raw_response?.choices as Array<{ message?: { content?: unknown } }> | undefined;
+    const content = rawChoices?.[0]?.message?.content;
+    if (!carries(response.text) && !carries(response.calls) && !carries(content) && !serverBlocks.length && !nativeBlocks.length) return response;
+    const returnType = session.lam.type.kind === 'lambda' ? formatType(session.lam.type.returns) : undefined;
+    const producer = { call_id: session.runtime.currentCallId ?? null, turn,
+      ...(returnType ? { result_type: returnType } : {}) };
+    const port = this.options.neuralese?.port;
+    const expectedReturn = session.lam.type.kind === 'lambda' ? session.env.resolve(session.lam.type.returns) : undefined;
+    const nativeOrigins=await this.nativeWriteOrigins(response,session,turn,turnNode);
     const originUses=new Map<string,number>();
     const withNativeOrigins=(value:unknown):unknown=>{
       if(Array.isArray(value))return value.map(withNativeOrigins);
@@ -1247,6 +1256,22 @@ export class NativeToolAgent {
       if (response.prompt_tokens !== undefined && sentChars > 0) tokensPerChar = response.prompt_tokens / sentChars;
       turns++;
       session.runtime.checkInterruption();
+      if(response.protocol_failure){
+        const failure=nativeProtocolFailure(response.raw_response);
+        if(!failure)throw new Error('neuralese-native-protocol-integrity: failed turn lost its server receipt');
+        await this.nativeWriteOrigins(response,session,turns,turnNode);
+        const recorded=response.raw_response?.x_natlang_native_recorded_turn;
+        if(turnNode&&typeof recorded==='string')activeRecorder()?.linkNativeTurn?.(recorded,turnNode);
+        tokens+=response.completion_tokens===undefined?limit??0:Math.max(1,response.completion_tokens);
+        session.runtime.trace.emit('model_protocol_failure',{call_id:callId,turn:turns,
+          code:failure.code,failed_turn:turnNode,failure});
+        if(timedOut()||(maxTokens!==undefined&&tokens>maxTokens))return 'episode token or wall-clock budget exhausted';
+        // Record the actual non-executable reply before the same call repairs it.
+        // Neither a parsed prefix call nor an unfinished block becomes a result.
+        messages.push({role:'assistant',content:response.text??'',...thought(response.reasoning)},
+          {role:'user',content:nativeProtocolFeedback(failure)});
+        continue;
+      }
       response = await this.decodeNeuralese(response, session, turns, turnNode, availableTools === allTools || lastTurn);
       const recordedNativeTurn=response.raw_response?.x_natlang_native_recorded_turn;
       if(turnNode&&typeof recordedNativeTurn==='string')activeRecorder()?.linkNativeTurn?.(recordedNativeTurn,turnNode);

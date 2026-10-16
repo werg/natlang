@@ -28,6 +28,7 @@ class NativeReplay:
     external_invocations: dict | None = None
     semantic_dependencies: tuple = ()
     written_sources: tuple = ()
+    protocol_failures: dict | None = None
 
 
 def _tokens(ids):
@@ -45,6 +46,8 @@ def _input_stream(capture, prompt_length):
     if capture['schema'] == 'natlang.native-rl-sampling/1':
         return [{**sample, 'forced': False, 'source_sample': sample['index']}
                 for sample in capture.get('samples') or []], capture.get('writes') or []
+    from ..serve.native_protocol import validate_failure
+    failure=validate_failure(capture,prompt_length)
     samples = capture.get('samples') or []
     if any(sample.get('index') != index for index, sample in enumerate(samples)):
         raise ValueError('native RL sample indices must retain their actual order')
@@ -67,14 +70,15 @@ def _input_stream(capture, prompt_length):
                 raise ValueError('native RL sampled input/query coordinate differs from actual model inputs')
             event = {**sample, 'forced': False, 'source_sample': sample_index}
             consumed.add(sample_index)
-        stream.append({**event, 'index': len(stream)})
+        stream.append({**event, 'index': len(stream), 'fed':True})
     for sample_index, sample in enumerate(samples):
         if sample_index in consumed:
             continue
-        if (not sample.get('terminal') or sample_index != len(samples)-1
+        rejected=bool(failure and failure['trigger']=='sample' and failure['sample_index']==sample_index and not failure['fed'])
+        if ((not sample.get('terminal') and not rejected) or sample_index != len(samples)-1
                 or sample.get('query_own_position') != prompt_length+len(stream)-1):
             raise ValueError('native RL unconsumed action is not its actual final terminal sample')
-        stream.append({**sample, 'index': len(stream), 'forced': False, 'source_sample': sample_index})
+        stream.append({**sample, 'index': len(stream), 'forced': False, 'source_sample': sample_index, 'fed':False})
     order = [event['source_sample'] for event in stream if not event['forced']]
     if order != list(range(len(samples))):
         raise ValueError('native RL model inputs reorder the actual sampled action stream')
@@ -129,18 +133,19 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
             raise ValueError('native RL graph turn identities must be unique')
         capture = turn.get('sampling') or {}
         actor_identity=(invocation_actors['invocations'][name]['native_identity'] if invocation_actors is not None else identity)
-        greedy = capture.get('schema') == 'natlang.native-structural-capture/1'
+        greedy = capture.get('schema') in ('natlang.native-structural-capture/1','natlang.native-structural-capture/2')
         decision = capture.get('schema') == 'natlang.native-decision-capture/1'
-        schemas = {'natlang.native-rl-sampling/1', 'natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3'}
+        schemas = {'natlang.native-rl-sampling/1', 'natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3','natlang.native-rl-sampling/4'}
         if structural:
-            schemas.add('natlang.native-structural-capture/1')
+            schemas.update(('natlang.native-structural-capture/1','natlang.native-structural-capture/2'))
             schemas.add('natlang.native-decision-capture/1')
         if (capture.get('schema') not in schemas
                 or capture.get('policy') != actor_identity
                 or not decision and capture.get('sample_range_convention') != 'half-open'):
             raise ValueError('native RL capture has a different policy or unsupported sampling schema')
         binding = capture.get('adapter_binding')
-        if capture['schema'] == 'natlang.native-rl-sampling/3' or (greedy or decision) and binding is not None:
+        if (capture['schema'] == 'natlang.native-rl-sampling/3'
+                or (capture['schema']=='natlang.native-rl-sampling/4' or greedy or decision) and binding is not None):
             from types import SimpleNamespace
             from ..model.native_adapters import validate_state_binding
             validate_state_binding(binding, SimpleNamespace(**actor_identity))
@@ -205,6 +210,8 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         if not own or any(at == len(own) for at, _, _ in reads):
             raise ValueError('native RL prompt must end in its own consumer query token')
         prompt_length = len(own)
+        from ..serve.native_protocol import validate_failure,validate_failure_draw
+        failure=validate_failure(capture,prompt_length)
         samples, writes = _input_stream(capture, prompt_length)
         events, actual_writes, opened = [], [], None
         for index, sample in enumerate(samples):
@@ -217,7 +224,10 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     or type(sample.get('terminal')) is not bool
                     or (sample['terminal'] and index != len(samples)-1)):
                 raise ValueError('native RL sampled-token stream is malformed')
-            if token == roles.produce_open:
+            failed_draw=bool(failure and failure['trigger']=='sample' and sample['source_sample']==failure['sample_index'])
+            if failed_draw:
+                expected_role=validate_failure_draw(failure,sample,opened,roles)
+            elif token == roles.produce_open:
                 if opened is not None:
                     raise ValueError('native RL produce spans cannot nest')
                 opened = index
@@ -230,9 +240,9 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                 expected_role = 'ordinary'
             else:
                 expected_role = 'produce' if opened is not None else 'ordinary'
-            if token in (roles.consume_open, roles.consume_close) or sample['input_role'] != expected_role:
+            if (not failed_draw and token in (roles.consume_open, roles.consume_close)) or sample['input_role'] != expected_role:
                 raise ValueError('native RL sampled control marker/embedding role disagrees with its write span')
-            if sample['terminal'] and opened is not None:
+            if sample['terminal'] and opened is not None and not failed_draw:
                 raise ValueError('native RL terminal token occurs inside a producer payload')
             allowed = sample.get('allowed_token_ids')
             banned = sample.get('banned_token_ids')
@@ -253,8 +263,10 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     'behavior_logp': sample['logp'], 'temperature': float(temperature),
                     'allowed_token_ids': allowed, 'banned_token_ids': banned, 'turn': name, 'sample': sample['source_sample']})
             own.append(token); mask.append(sample['input_role'] == 'produce')
-        if opened is not None:
+        if opened is not None and failure is None:
             raise ValueError('native RL capture ended inside a producer payload')
+        if failure and failure['trigger']=='length' and opened is None:
+            raise ValueError('native protocol length failure lacks an unfinished actual producer span')
         declared_writes = [(write.get('begin_sample'), write.get('end_sample'),
                             write.get('payload_begin'), write.get('payload_end'))
                            for write in writes]
@@ -306,7 +318,7 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     raise ValueError('native write occurrence differs from its actual capture')
                 occurrence=item['node']
             writers.setdefault(block_id, []).append((name, *span, occurrence))
-        prepared[name] = {'turn': turn, 'own': tuple(own), 'mask': mask, 'reads': reads, 'read_stops': read_stops, 'read_sources': read_sources, 'read_semantics':read_semantics,
+        prepared[name] = {'protocol_failure':failure,'turn': turn, 'own': tuple(own), 'mask': mask, 'reads': reads, 'read_stops': read_stops, 'read_sources': read_sources, 'read_semantics':read_semantics,
                           'events': events, 'spans': spans, 'actor_identity':actor_identity,'adapter_binding':binding}
     if not prepared:
         raise ValueError('native RL graph has no captured turns')
@@ -419,7 +431,8 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
         for offset, item in zip(plan.offsets, ordered) for event in item['events'])
     written_sources=tuple({'state_id':ident,'invocation':name,'start':start,'stop':stop,'node':occurrence}
         for ident,values in writers.items() for name,start,stop,occurrence in values)
-    return NativeReplay(plan, actions, externals, dict(identity), adapter_binding if invocation_actors is None else None, external_receipts, invocation_actors, external_invocations,tuple(semantic_dependencies),written_sources)
+    return NativeReplay(plan, actions, externals, dict(identity), adapter_binding if invocation_actors is None else None, external_receipts, invocation_actors, external_invocations,tuple(semantic_dependencies),written_sources,
+        {name:value['protocol_failure'] for name,value in prepared.items() if value['protocol_failure']})
 
 
 def replay_logps(model, replay, *, checkpoint_layers=True, chunk_tokens=128,semantic_channel=None):
@@ -914,6 +927,7 @@ def prepare_objective(rollouts, *, identity, roles, fetch_block, block_bundle=No
             objective_rows[identifier] = {'graph_sha256': canonical_json_sha256_hex(graph_identity(example)),
                 'episode_turns': episode_turns,
                 'actions': list(replay.actions), 'advantage': float(advantage or 0.),
+                **({'protocol_failures':replay.protocol_failures} if replay.protocol_failures else {}),
                 'external_consumption_receipts': replay.external_receipts or {},
                 **({'external_invocations':replay.external_invocations or {}} if replay.invocation_actors is not None else {}),
                 'task_id': rollout['task_id'], 'sample': rollout.get('sample'),

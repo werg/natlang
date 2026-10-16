@@ -28,7 +28,13 @@ export type ModelTurnRequest = { invocation_id?: string; messages: unknown[]; to
 export type ModelContentPart = { type: 'text'; text: string } | { type: 'neuralese'; id: string; value_type?: 'string' | 'unknown' } |
   { type: 'native_state'; id: string };
 /** Calls are an ordered, non-atomic batch. Dependent calls belong in later turns. */
-export type ModelTurn = { calls?: [string, Record<string, unknown>][]; text?: string;
+/** A server-observed malformed native control turn, never executable model text. */
+export type NativeProtocolFailure = { schema: 'natlang.native-marker-failure/1';
+  code: 'neuralese-native-state-open' | 'neuralese-native-state-close' | 'neuralese-native-state-consume-marker' | 'neuralese-native-state-nested';
+  message: string; trigger: 'sample' | 'length'; sample_index: number | null; fed: boolean;
+  own_input_count: number; generated_input_count: number; max_tokens: number; stop_token_ids: number[] };
+
+export type ModelTurn = { protocol_failure?: NativeProtocolFailure; calls?: [string, Record<string, unknown>][]; text?: string;
   raw_calls?: unknown[]; completion_tokens?: number; prompt_tokens?: number;
   /** Exact rendered-provider-context and explicit text-channel emulation provenance, when an adapter supplies it. */
   transport_provenance?: Record<string, unknown>;

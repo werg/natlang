@@ -596,6 +596,7 @@ export function trajectoryTurn(request: ModelTurnRequest, response: ModelTurn): 
       ...(planned ? { execution_plan: response.execution_plan } : {}),
       ...(response.completion_tokens === undefined ? {} : { completion_tokens: response.completion_tokens }),
       ...(response.prompt_tokens === undefined ? {} : { prompt_tokens: response.prompt_tokens }),
+      ...(response.protocol_failure ? {protocol_failure:structuredClone(response.protocol_failure)} : {}),
       ...(response.transport_provenance ? { transport_provenance: structuredClone(response.transport_provenance) } : {}) },
     tools_offered: structuredClone(request.tools), assistant: { content: response.text ?? '',
       ...(planned ? { execution_plan: response.execution_plan } : {}),

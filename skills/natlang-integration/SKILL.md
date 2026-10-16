@@ -528,3 +528,14 @@ Pass the original typed value rather than rebuilding a reference from its ID.
 If native graph verification rejects ambiguous origins, restore the complete
 recorded episode and its typed source references; do not substitute a detached
 external state for an in-episode producer.
+
+Native protocol recovery is negotiated by `native.protocol-recovery` and the
+boolean `x_natlang_native_protocol_recovery` request field. Treat a response's
+host-verified `x_natlang_native_failure` as one non-executable model turn,
+retain its complete sampling/4 (or greedy structural-capture/2) receipt and
+completed artifacts, then give the same call the typed delimiter feedback.
+Never reconstruct an unfinished block or execute a parsed prefix tool call.
+The open/close/consume-marker/nested error codes mean repair the native reply
+or return the declared ordinary type. A `neuralese-native-protocol-integrity`
+error instead requires repairing the client/server receipt or restoring a
+matching runtime; model-generated text cannot supply a trusted receipt.

@@ -1,3 +1,5 @@
+import { nativeProtocolFailure, nativeProtocolFeedback } from '../native/native-protocol.js';
+import { canonical } from '../native/canonical-data.js';
 /**
  * The Neuralese instance of the builtin `view(value, instructions?)` on a server (plans/neuralese/DECISIONS.md
  * 2026-10-09: "one summarizer family" and "representation chosen by use"). A view is a template write of view's body:
@@ -56,17 +58,20 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
       const response = await fetchModel(`${base}/v1/neuralese/view`, { method: 'POST',
         headers: { 'content-type': 'application/json', ...options.headers },
         body: JSON.stringify({ value: site.value, ...(site.instructions ? { instructions: site.instructions } : {}), system,
+          ...(server.capabilities?.includes('native.protocol-recovery')?{x_natlang_native_protocol_recovery:true}:{}),
           ...(options.window ? { window: options.window } : {}) }) });
       if (!response.ok) throw new Error(`native view failed (${response.status}): ${(await response.text()).slice(0, 1000)}`);
-      const result = await response.json() as { id: string; source_turns?: NativeViewTurn[] };
+      const result = await response.json() as { id?: string; source_turns?: NativeViewTurn[]; x_natlang_native_failure?:unknown };
       if (!Array.isArray(result.source_turns) || !result.source_turns.length)
         throw new Error('neuralese-view-source-integrity: native views must preserve every actual chunk and combine turn');
       const trace = traceFor(currentFrame()?.parentCallId);
       const written = new Set<string>();
       for (const [index, turn] of result.source_turns.entries()) {
         const receipt = turn.response?.x_natlang_rl_capture;
-        if (!['natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3'].includes(receipt?.schema) || !Array.isArray(receipt.writes))
+        if (!['natlang.native-rl-sampling/2', 'natlang.native-rl-sampling/3','natlang.native-rl-sampling/4'].includes(receipt?.schema) || !Array.isArray(receipt.writes))
           throw new Error('neuralese-view-source-integrity: native view turn lacks exact sampled producer provenance');
+        const failure=nativeProtocolFailure(turn.response);
+        if(failure&&index!==result.source_turns.length-1)throw new Error('neuralese-view-source-integrity: sampled view continued after a failed turn');
         const imports = requestNativeStateIds(turn.messages);
         for (const id of imports) await archiveNativeState(client, id);
         for (const observation of receipt.prompt) if (observation.kind === 'native_state') {
@@ -78,7 +83,7 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
             if (observed.metadata[key] !== observation.native_identity?.[key] || observed.metadata[key] !== receipt.policy[key])
               throw new Error('neuralese-view-source-integrity: decoded observation differs from the consuming policy');
         }
-        const node = graphNode(trace, 'model_turn', { turn: index + 1, calls: ['return_result'],
+        const node = graphNode(trace, 'model_turn', { turn: index + 1, calls: failure?[]:['return_result'],
           temperature: 1, seed: null, source_kind: 'native-view', source_turn: turn },
           imports.map(id => blockInput(id, 'native-state')));
         for (const write of receipt.writes) {
@@ -112,13 +117,21 @@ export function serverViewer(options: { endpoint: string; headers?: Record<strin
               own.slice(start, stop).some((token, index) => BigInt(token) !== values.getBigInt64(index * 8, true)))
             throw new Error('neuralese-view-source-integrity: actual producer payload differs from the archived view');
           written.add(write.state_id);
-          graphNode(trace, 'block_write', { block: write.state_id, format: 'native-state',
+          graphNode(trace, 'block_write', { turn:node??'', block: write.state_id, format: 'native-state',
             length: artifact.tensors.token_ids!.shape[0], width: artifact.tensors.embeddings!.shape[1],
             truncated: false, stops: [], native_identity: write.native_identity, source_turn: turn },
             node ? [{ node, port: 'turn' }] : []);
         }
       }
-      if (!written.has(result.id)) throw new Error('neuralese-view-source-integrity: final view is not an actual output of the preserved turns');
+      const failed=nativeProtocolFailure(result.source_turns.at(-1)!.response);
+      if(failed){
+        if(result.id!==undefined||canonical(failed)!==canonical(result.x_natlang_native_failure))
+          throw new Error('neuralese-view-source-integrity: failed view result changed its final source turn');
+        await options.onSourceTurns?.(result.source_turns);
+        throw Object.assign(new Error(nativeProtocolFeedback(failed)),{code:failed.code,native_source_turns:result.source_turns});
+      }
+      if(result.x_natlang_native_failure!==undefined||!result.id||!written.has(result.id))
+        throw new Error('neuralese-view-source-integrity: final view is not an actual output of the preserved turns');
       await options.onSourceTurns?.(result.source_turns);
       return neuraleseRef(VIEW_TYPE, result.id);
     }

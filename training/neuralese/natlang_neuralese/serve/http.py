@@ -87,7 +87,7 @@ CAPABILITIES = sorted([
     "native.text-write", "native.init-body", "render", "score", "store", "store.owners", "store.native-state", "template", "template.argument-path", "template.value-type", "view", "write"])
 NATIVE_CAPABILITIES = sorted([
     "chat", "chat.stream", "decide", "score", "grad", "optim", "guidance", "guidance.check", "native.text-write", "native.init-body", "parts.value-type", "render", "store", "store.native-state", "store.native-tensor-artifact",
-    "store.owners", "template", "template.argument-path", "template.value-type", "view"])
+    "native.protocol-recovery", "store.owners", "template", "template.argument-path", "template.value-type", "view"])
 NATIVE_CAPABILITY_GAPS = sorted(set(CAPABILITIES) - set(NATIVE_CAPABILITIES))
 
 
@@ -413,6 +413,8 @@ def make_handler(engine: Engine):
 
                     body = self._object()
 
+                    class ViewModelFailure(Exception):
+                        pass
                     source_turns = []
                     native = bool(getattr(engine, "native_state_enabled", False))
                     def write(messages):
@@ -424,14 +426,18 @@ def make_handler(engine: Engine):
                         # The template write of view's body: the reply forced to return_result, its value written.
                         request = GenerationRequest(messages=messages, tools=TOOLS, template=dict(TEMPLATE),
                                                     max_tokens=engine.max_block + REPLY_TOKENS,
-                                                    temperature=1.0 if native else 0.0, rl_capture=native)
+                                                    temperature=1.0 if native else 0.0, rl_capture=native,
+                                                    native_protocol_recovery=native and body.get('x_natlang_native_protocol_recovery') is True,
+                                                    native_store_owner=self._owner)
                         response = engine.submit(request).result()
                         if native:
                             receipt = response.get("x_natlang_rl_capture")
-                            if not isinstance(receipt, dict) or receipt.get("schema") not in {"natlang.native-rl-sampling/2", "natlang.native-rl-sampling/3"}:
+                            if not isinstance(receipt, dict) or receipt.get("schema") not in {"natlang.native-rl-sampling/2", "natlang.native-rl-sampling/3", "natlang.native-rl-sampling/4"}:
                                 raise RequestError("neuralese-view-source", "native view must retain its actual template sampling receipt")
                             source_turns.append({"messages": messages, "tools": TOOLS, "template": dict(TEMPLATE),
                                                  "response": response})
+                            if response.get("x_natlang_native_failure") is not None:
+                                raise ViewModelFailure()
                         blocks = (response.get("native_state" if native else "neuralese") or {}).get("blocks") or []
                         if not blocks:
                             raise RequestError("neuralese-view", "a view write produced no block")
@@ -457,8 +463,12 @@ def make_handler(engine: Engine):
                         fits = lambda messages: engine.prompt_positions(native_messages(messages), TOOLS) + reserve < engine.context
                     else:
                         window = window_of(engine, instructions, body.get("window"), system)
-                    block, parts = write_view(write, system, body.get("value") or "", instructions, engine.tokenizer,
-                                              window, fits=fits)
+                    try:
+                        block, parts = write_view(write, system, body.get("value") or "", instructions, engine.tokenizer,
+                                                  window, fits=fits)
+                    except ViewModelFailure:
+                        return self._json(200, {'x_natlang_native_failure':source_turns[-1]['response']['x_natlang_native_failure'],
+                            'source_turns':source_turns,'window':window})
                     record = engine.store.get_native_state(block) if native else engine.lookup(block)
                     return self._json(201, {**record.meta(), "parts": parts, "window": window,
                                            **({"source_turns": source_turns} if native else {})})
@@ -530,6 +540,8 @@ def make_handler(engine: Engine):
                 self._error(500, "internal", f"{type(error).__name__}: {error}")
 
         def _chat(self, body: dict):
+            if 'x_natlang_native_protocol_recovery' in body and type(body['x_natlang_native_protocol_recovery']) is not bool:
+                raise RequestError('bad-request', 'x_natlang_native_protocol_recovery must be boolean')
             request = GenerationRequest(
                 messages=body.get("messages") or [], tools=body.get("tools"),
                 max_tokens=completion_limit(body),
@@ -538,6 +550,8 @@ def make_handler(engine: Engine):
                 neuralese_max_length=body.get("neuralese_max_length"), forced=body.get("x_natlang_forced"),
                 neuralese_length=body.get("neuralese_length"), neuralese_passes=body.get("neuralese_passes"),
                 template=body.get("neuralese_template"), adapters=body.get("x_natlang_adapters"),
+                native_protocol_recovery=body.get('x_natlang_native_protocol_recovery') is True,
+                native_store_owner=self._owner,
                 rl_capture=bool(body.get('x_natlang_rl_capture', False) or body.get('x_natlang_native_recording', False)),
                 native_recording=bool(body.get('x_natlang_native_recording', False)),
                 native_state_modes=body.get('x_natlang_native_state_modes'),
@@ -652,6 +666,8 @@ def make_handler(engine: Engine):
                                                                         c["function"]["arguments"])}}
                                                       for i, c in enumerate(calls)]}))
                 extra = {"x_natlang_message": message, "usage": response["usage"]}
+                if 'x_natlang_native_failure' in response:
+                    extra['x_natlang_native_failure']=response['x_natlang_native_failure']
                 if "native_state" in response:
                     extra["native_state"] = response["native_state"]
                 if "neuralese" in response:

@@ -319,3 +319,28 @@ matching dialect fails; the runtime reports `neuralese-unsupported-backend` or
 A server's cached execution must agree with recomputation on the same committed
 sequence: identical greedy continuations and logits within the tolerance stated by
 the parity suite (`conformance/neuralese/`).
+
+#### Native marker failure observations
+
+`native.protocol-recovery` advertises boolean request opt-in
+`x_natlang_native_protocol_recovery`. Without opt-in, native marker violations
+retain their existing error behavior. With opt-in, an actual malformed native
+draw yields a completion with `finish_reason: "error"`, ordinary raw sampled
+text, no executable tool calls, and `x_natlang_native_failure` schema
+`natlang.native-marker-failure/1`. Its matching `x_natlang_rl_capture` uses
+`natlang.native-rl-sampling/4` for positive temperature or
+`natlang.native-structural-capture/2` for greedy capture. The descriptor binds
+code, message, exact final sample index (or explicit length boundary), actual
+fed disposition, own/generated input counts, maximum and stop-token IDs.
+Capture retains the actual actor, normalized draw logps, forced inputs,
+producing masks, imports and completed writes. Greedy observations are not
+policy-gradient samples. An unfinished span supplies no artifact.
+
+Clients preserve the failed turn before feeding its typed rejection back to
+the same invocation. All actual sampled actions and complete episode
+occurrences remain part of graph replay. Native view failure envelopes contain
+all actual `source_turns` through the failed chunk/combine turn and the failure,
+with no fabricated final `id`. Existing store owners immediately hold newly
+created producer/decoded trace dependencies, including dependencies that only
+become public when generation fails. Clients must not collect their own
+in-flight requests' dependencies; foreign-owner collection cannot remove them.

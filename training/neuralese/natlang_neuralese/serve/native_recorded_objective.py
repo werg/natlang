@@ -113,7 +113,7 @@ def lower_recorded_objective(engine,turns,events,terms,*,owner=None):
         if law not in ('model-conditional','sampled-policy'):
             raise ValueError('native likelihood must explicitly declare model-conditional or sampled-policy law')
         capture=_capture(turn)
-        if law=='sampled-policy' and capture['schema']=='natlang.native-structural-capture/1':
+        if law=='sampled-policy' and capture['schema'] in ('natlang.native-structural-capture/1','natlang.native-structural-capture/2'):
             raise ValueError('native policy gradient requires an actual positive-temperature sampled trajectory')
         name=compiled.invocations[turn['native']['id']][0]
         length=prompt_length(turn)

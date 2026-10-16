@@ -513,3 +513,13 @@ Pass the original typed value rather than rebuilding a reference from its ID.
 If native graph verification rejects ambiguous origins, restore the complete
 recorded episode and its typed source references; do not substitute a detached
 external state for an in-episode producer.
+
+Native marker failure recovery: when the native executor reports
+`neuralese-native-state-open`, `neuralese-native-state-close`,
+`neuralese-native-state-consume-marker` or `neuralese-native-state-nested`,
+that sampled reply executes no tools and supplies no return value. Repair the
+same call with a complete native value or its declared ordinary result. Any
+completed writes from the failed reply retain their actual provenance; an
+unfinished span is never a communication block. Do not copy an opaque state ID
+into an ordinary string result. The runtime retains the failed draw for graph
+learning instead of silently retrying the model transport.
