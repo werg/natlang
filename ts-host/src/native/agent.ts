@@ -545,12 +545,13 @@ export class NativeToolAgent {
       }
       return [name, decodedArgs];
     };
+    const structuredResult = !response.calls?.length && !response.truncated && isContentParts(content) &&
+      content.some(part => part.type !== 'text');
     const decoded = { ...response,
-      ...(response.text === undefined ? {} : { text: await decodeTurnValue(response.text, port,
+      ...(structuredResult ? { text: '' } : response.text === undefined ? {} : { text: await decodeTurnValue(response.text, port,
         { ...producer, marker_context: 'assistant-text' }, written) as string }),
       ...(response.calls === undefined ? {} : { calls: await Promise.all(response.calls.map(decodeCall)) as ModelTurn['calls'] }) };
-    if (!response.calls?.length && !response.truncated && isContentParts(content) &&
-        content.some(part => part.type !== 'text')) {
+    if (structuredResult) {
       // Actual producer parts are a typed return, not an opaque-ID string.
       // Literal strings never enter this branch, even if they spell a marker.
       decoded.text = '';

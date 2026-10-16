@@ -272,6 +272,8 @@ for (const format of ['native_state', 'neuralese']) for (const channel of ['tool
     const port = format === 'neuralese' ? new StandInNeuralesePort(store, hashingEmbedder(8), 8) : undefined;
     const artifact = port ? await port.write('opaque transport payload') : await store.putNativeState(nativeStateFixture());
     const neuralese = port ? { store, port, dialect: port.dialect } : runtimeFor(store);
+    let incidentalWrites = 0;
+    if (port) { const write = port.write.bind(port); port.write = async (...args) => { incidentalWrites++; return write(...args); }; }
     const requests = [];
     let replyMode = 'block';
     const server = createServer(async (request, response) => {
@@ -293,7 +295,7 @@ for (const format of ['native_state', 'neuralese']) for (const channel of ['tool
       response.setHeader('content-type', 'application/json');
       const parts = [{ type: format, id: artifact.id }];
       const value = requests.length !== 1 ? 'actual HTTP answer' : replyMode === 'literal' ?
-        neuraleseSentinel(artifact.id) : replyMode === 'mixed' ? [{ type: 'text', text: 'prefix ' }, ...parts] : parts;
+        neuraleseSentinel(artifact.id) : replyMode === 'mixed' ? [{ type: 'text', text: '<|neuralese|>literal text<|/neuralese|> ' }, ...parts] : parts;
       const message = channel === 'assistant' ? { role: 'assistant', content: value } :
         { role: 'assistant', content: '', tool_calls: [{ id: 'reply-' + requests.length, type: 'function',
           function: { name: 'return_result', arguments: JSON.stringify({ status: 'success', value }) } }] };
@@ -320,6 +322,7 @@ for (const format of ['native_state', 'neuralese']) for (const channel of ['tool
           assert.equal(target.lam.return, replyMode === 'literal' ? neuraleseSentinel(artifact.id) : 'actual HTTP answer');
           assert.equal(requests.length, replyMode === 'literal' ? 1 : 2);
           if (replyMode === 'mixed') assert.match(JSON.stringify(requests[1].messages), /type-mismatch/);
+          assert.equal(incidentalWrites, 0, 'sourced text runs must not create an incidental producer');
         }
       }
     } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
