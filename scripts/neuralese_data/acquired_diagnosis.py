@@ -87,6 +87,7 @@ def d12_feature_status_diagnoses(limit=None):
     Failed assistant turns remain serialized as tool context, never targets.
     This is source-curated status supervision, not a cause/fix diagnosis.
     """
+    from copy import copy, deepcopy
     from .acquired_archives import cooper_archive_acquired
 
     emitted=0
@@ -117,9 +118,11 @@ def d12_feature_status_diagnoses(limit=None):
             reported={'schema':'natlang.d12-reported-feature-status/1',
                       'features':features,'both_passed':both}
             if 'apply_status' in evaluation:
-                if not isinstance(evaluation['apply_status'],str):
-                    raise Reject('D12 apply status is not structured text')
-                reported['apply_status']=evaluation['apply_status']
+                apply_status=evaluation['apply_status']
+                if (not isinstance(apply_status,dict) or set(apply_status)!={'agent1','agent2'}
+                        or any(not isinstance(value,str) for value in apply_status.values())):
+                    raise Reject('D12 apply status is not the exact two-agent structured record')
+                reported['apply_status']={key:apply_status[key] for key in ('agent1','agent2')}
             merge=evaluation.get('merge')
             if isinstance(merge,dict) and 'status' in merge:
                 if not isinstance(merge['status'],str):
@@ -151,7 +154,8 @@ def d12_feature_status_diagnoses(limit=None):
             # Keep literal model control spellings as data inside the tool body.
             context=context.replace('<','\\u003c')
             target=json.dumps(reported,ensure_ascii=False,separators=(',',':'))
-            derived=deepcopy(original)
+            derived=copy(original)
+            derived.lineage=deepcopy(original.lineage)
             view_digest=hashlib.sha256((source_id+'\0'+source_binding['evaluation_sha256']).encode()).hexdigest()
             derived.id=f'{source_id}:d12-feature-status:{view_digest[:20]}'
             derived.family='source_reported_feature_status'
