@@ -1,7 +1,7 @@
 /** Exact native state service plumbing shared by typed writes, body init and views. */
 import { fetchModel } from '../model/chat-completion.js';
-import { HttpNeuraleseStore, requestNativeStateIds } from '../model/neuralese-server.js';
-import { nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlockMeta,
+import { HttpNeuraleseStore, requestNativeStateIds, restoreBlocks } from '../model/neuralese-server.js';
+import { archiveNativeTensorFrom, nativeStateBlockMeta, type NativeStateArtifact, type NeuraleseBlockMeta,
   type NeuralesePort, type NeuraleseStore } from '../native/neuralese-store.js';
 import { hexDigest } from '../native/hash.js';
 import { neuraleseServerInfo, serves, type NeuraleseServerInfo } from '../model/neuralese-info.js';
@@ -23,9 +23,11 @@ export async function archiveNativeState(options: NativeClientOptions, id: strin
   if (!options.store.putNativeState || !options.store.getNativeState)
     return failure('neuralese-native-archive-unavailable', 'configure a store that preserves native multi-tensor state');
   const found = await options.store.getNativeState(id);
-  if (found) return found;
-  const remote = new HttpNeuraleseStore(options.endpoint, options.headers), artifact = await remote.getNativeState(id);
+  const remote = new HttpNeuraleseStore(options.endpoint, options.headers);
+  const artifact = found ?? await remote.getNativeState(id);
   if (!artifact) return failure('neuralese-unknown-native-state', `native source ${id} is unavailable; restore its exact artifact`);
+  for (const binding of artifact.metadata.adapter_binding?.adapters ?? []) await archiveNativeTensorFrom(remote, options.store, binding.id);
+  if (found) return found;
   const { id: _, ...input } = artifact;
   const saved = await options.store.putNativeState(input);
   if (saved.id !== id) return failure('neuralese-block-integrity', `native source ${id} changed during archival`);
@@ -88,6 +90,12 @@ export async function nativeTextOperation(options: NativeClientOptions, operatio
   if (!options.store.putNativeState || !options.store.getNativeState)
     return failure('neuralese-native-archive-unavailable', 'configure a native-capable archive before writing typed state');
   await restoreNativeInputs(options, body);
+  if (Array.isArray(body.adapters)) {
+    const ids = body.adapters.map(entry => typeof entry === 'string' ? entry : (entry as { id?: string }).id);
+    if (ids.some(id => typeof id !== 'string')) return failure('neuralese-native-adapter-invalid', 'native adapters require exact coefficient artifact IDs');
+    const missing = await restoreBlocks(new HttpNeuraleseStore(options.endpoint, options.headers), options.store, ids as string[]);
+    if (missing.length) return failure('neuralese-unknown-native-artifact', `restore native adapter coefficients and bases ${missing.join(', ')}`);
+  }
   const response = await fetchModel(`${options.endpoint.replace(/\/$/, '')}/v1/neuralese/native-states/${operation}`, {
     method: 'POST', headers: { 'content-type': 'application/json', ...options.headers }, body: JSON.stringify(body) });
   if (!response.ok) return failure('neuralese-native-write', `${operation} failed (${response.status}): ${(await response.text()).slice(0, 1000)}`);

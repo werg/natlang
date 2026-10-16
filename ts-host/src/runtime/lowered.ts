@@ -447,7 +447,7 @@ export function folder(codebase: Record<string, ItemRecord>): Record<string, unk
  */
 export function nzModule(base64: string): Record<string, unknown> {
   const loaded = loadNzSync(fromBase64(base64));
-  registerImportedBlocks(loaded.blocks.values(), loaded.nativeStates.values());
+  registerImportedBlocks(loaded.blocks.values(), loaded.nativeStates.values(), loaded.nativeTensors.values());
   return nzExports(loaded);
 }
 export { importedBlocks };

@@ -31,6 +31,10 @@ const SENTINEL_OPEN = '', SENTINEL_CLOSE = '';
 const SENTINEL = /(nz1_[a-z2-7]+)/g;
 const NATIVE_SENTINEL_OPEN = '', NATIVE_SENTINEL_CLOSE = '';
 const NATIVE_STATE_ID = /^nzs1_[a-z2-7]{52}$/;
+const NATIVE_TENSOR_ID = /^nnt1_[a-z2-7]{52}$/;
+export function isNativeTensorArtifactId(value: unknown): value is string {
+  return typeof value === 'string' && NATIVE_TENSOR_ID.test(value);
+}
 const NATIVE_SENTINEL = /(nzs1_[a-z2-7]{52})/g;
 
 export function isNativeStateId(value: unknown): value is string {
@@ -76,7 +80,7 @@ export function nativeStateTextToParts(text: string): RuntimeContentPart[] {
   return parts;
 }
 
-export function isNeuraleseId(value: unknown): value is string { return typeof value === 'string' && (ID.test(value) || NATIVE_STATE_ID.test(value)); }
+export function isNeuraleseId(value: unknown): value is string { return typeof value === 'string' && (ID.test(value) || NATIVE_STATE_ID.test(value) || NATIVE_TENSOR_ID.test(value)); }
 
 export function neuraleseRef(type: string, id: string): NeuraleseRef {
   if (!isNeuraleseId(id)) throw new TypeError(`not a Neuralese block ID: ${JSON.stringify(id)}`);
@@ -94,6 +98,7 @@ export function isNeuraleseRef(value: unknown): value is NeuraleseRef {
 
 /** The conversation-text marker for a block. */
 export function neuraleseSentinel(id: string): string {
+  if (isNativeTensorArtifactId(id)) throw new Error('neuralese-native-tensor-as-state: bind native adapters with withAdapters; named tensor artifacts cannot be consumed as communication state');
   if (!isNeuraleseId(id)) throw new TypeError(`not a Neuralese block ID: ${JSON.stringify(id)}`);
   return isNativeStateId(id) ? nativeStateSentinel(id) : `${SENTINEL_OPEN}${id}${SENTINEL_CLOSE}`;
 }

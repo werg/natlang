@@ -68,10 +68,13 @@ def _score_item(engine, item, adapters=None):
         raise RequestError("neuralese-decision", "each decision item must be an object")
     options = item.get("continuations", item.get("options"))
     plan, continuations = _decision_render(engine, item.get("messages") or [], item.get("tools"), options)
-    if item.get("adapters", adapters):
-        raise RequestError("neuralese-adapters-unavailable",
-                           "legacy projected adapters cannot be applied to native-state parameters")
-    request = GenerationRequest(messages=item.get("messages") or [], tools=item.get("tools"), max_tokens=0)
+    bindings = item.get('adapters', adapters)
+    return engine._native_run(lambda: _score_rendered(engine, item, plan, continuations, bindings), bindings)
+
+
+def _score_rendered(engine, item, plan, continuations, bindings):
+    request = GenerationRequest(messages=item.get("messages") or [], tools=item.get("tools"), max_tokens=0,
+                                adapters=bindings)
     sequence = Sequence(request, None, prompt_plan=plan)
     engine._native_prefill(sequence)
     base_cache, base_logits = sequence.cache, sequence.logits
@@ -81,11 +84,8 @@ def _score_item(engine, item, adapters=None):
 
 def decide_native(engine, body: dict) -> dict:
     """Score candidate replies from a single exact native prompt cache."""
-    if body.get("adapters"):
-        raise RequestError("neuralese-adapters-unavailable",
-                           "legacy projected adapters cannot be applied to native-state parameters")
     return _score_item(engine, {"messages": body.get("messages") or [], "tools": body.get("tools"),
-                                "options": body.get("options") or []})
+                                "options": body.get("options") or []}, body.get('adapters'))
 
 
 def decide_many_native(engine, body: dict) -> dict:

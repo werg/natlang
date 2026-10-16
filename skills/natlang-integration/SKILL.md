@@ -342,3 +342,24 @@ optimizer to bypass it. Sparse row shape/dtype errors require the exact saved
 row contract, not broadcasting or silent casts. Reload actors from
 the new actual checkpoint and rebind/requalify semantic communication after
 updates. No new instruction text or reasoning-format workaround is needed.
+
+Native adapters share the existing xs/tiny coefficient algebra and immutable
+named tensor transport. `nativeAdapterCreate` requires the exact native identity
+and named layer matrices; `nativeGraphGradient` accepts active `adapters` and
+`target: {kind: 'adapter', id}`. `nativeAdapterOptimizerStep` returns new
+coefficients and an exact-parent resumable optimizer state. Archive the frozen
+basis dependency, not just the coefficients; `.nz` native tensor inventories
+preserve this closure and wire metadata numeric spellings. Existing artifact
+IDs do not change when transferred between Python and JavaScript.
+
+An adapted producer exports raw state bound to the base identity and exact
+ordered adapter IDs/scales. Its effective checkpoint hash differs from the base;
+a consumer must apply that same binding to splice it exactly, or explicitly
+reencode its text. Never reuse a base-bound semantic decoder as if it had been
+qualified for changed weights. For `neuralese-native-adapter-invalid`, restore
+matching coefficients/bases and use actual native matrix names. For
+`neuralese-native-tensor-as-state`, bind the adapter with `withAdapters` instead
+of sending it as communication state. `neuralese-native-adapter-rl-unavailable`
+means use first-order native graph objectives; adapted-policy capture/replay is
+not implemented by direct adapter serving. A store lacking named tensor support
+must report `neuralese-native-archive-unavailable` before loading these artifacts.

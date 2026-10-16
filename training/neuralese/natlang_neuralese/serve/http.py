@@ -324,7 +324,7 @@ def make_handler(engine: Engine):
             try:
                 if getattr(engine, "native_state_enabled", False):
                     unavailable = {
-                        "/v1/neuralese/adapters": "adapters.create", "/v1/neuralese/embed": "embed",
+                        "/v1/neuralese/embed": "embed",
                         "/v1/neuralese/write": "write",
                         "/v1/neuralese/init_body": "init-body", "/v1/neuralese/encode": "encode",
                     }.get(self.path)
@@ -332,12 +332,12 @@ def make_handler(engine: Engine):
                         return self._unavailable(unavailable)
                 if self.path == "/v1/neuralese/native-states/write-text":
                     body = self._object()
-                    return self._json(201, engine.native_write_text(body.get("text"), value_type=body.get("type")))
+                    return self._json(201, engine.native_write_text(body.get("text"), value_type=body.get("type"), adapters=body.get('adapters')))
                 if self.path == "/v1/neuralese/native-states/init-body":
                     body = self._object()
                     return self._json(201, engine.native_init_body(body.get("messages") or [], body.get("tools"),
                         body.get("placeholder"), body.get("text"), value_type=body.get("type"),
-                        placeholder_occurrence=body.get("placeholder_occurrence")))
+                        placeholder_occurrence=body.get("placeholder_occurrence"), adapters=body.get('adapters')))
                 if self.path == "/v1/chat/completions":
                     return self._chat(self._object())
                 if self.path == "/v1/neuralese/collect":
@@ -381,6 +381,13 @@ def make_handler(engine: Engine):
                 if self.path == "/v1/neuralese/adapters":
                     body = self._object()
                     with grad_lock:
+                        if getattr(engine, 'native_state_enabled', False):
+                            from ..model.native_adapters import create_adapter
+                            try:
+                                with engine.native_execution_lock:
+                                    return self._json(201, create_adapter(engine, body, self._owner).meta())
+                            except (ValueError, TypeError, RuntimeError) as error:
+                                raise RequestError('neuralese-native-adapter-invalid', str(error)) from error
                         return self._json(201, new_adapter(engine, body).meta())
                 if self.path == "/v1/neuralese/embed":
                     body = self._object()

@@ -540,7 +540,7 @@ function folderNzData(dir: string, files: SourceFiles, items: Record<string, Ite
       throw new NatlangSourceError(path, `a .nz file in a callable folder needs an identifier name to bind as ${JSON.stringify(name)}`);
     if (Object.hasOwn(items, name)) throw new NatlangSourceError(path, `${JSON.stringify(name)} is both an item and a .nz file in ${dir}`);
     const loaded = loadNzSync(files.readBytes!(path));
-    registerImportedBlocks(loaded.blocks.values(), loaded.nativeStates.values());
+    registerImportedBlocks(loaded.blocks.values(), loaded.nativeStates.values(), loaded.nativeTensors.values());
     data[name] = loaded.exports;
   }
   // The folder's own skills (S2 §2.3): `skills/**` files, bound by default as data entries under their paths.

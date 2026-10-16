@@ -111,6 +111,26 @@ def active(rows):
         _ACTIVE.reset(token)
 
 
+def singular_bases(weight, rank, version=2):
+    """The adapter's shared, sign-canonical top singular subspace (batched too)."""
+    u, _, vh = torch.linalg.svd(weight, full_matrices=False)
+    left, right = u[..., :rank], vh[..., :rank, :].transpose(-2, -1)
+    if version >= 2:
+        signs = torch.sign(left.gather(-2, left.abs().argmax(-2, keepdim=True))).clamp_min(0) * 2 - 1
+        left, right = left * signs, right * signs
+    return left.contiguous(), right.contiguous()
+
+
+def coefficient_core(kind, coefficients, rank, projections=None):
+    """One coefficient algebra for legacy/native xs and tiny adapters."""
+    coefficients = coefficients.float()
+    if kind == 'xs':
+        return coefficients.reshape(*coefficients.shape[:-1], rank, rank)
+    if kind != 'tiny' or projections is None:
+        raise ValueError('tiny adapter coefficients require their frozen projection matrices')
+    return torch.einsum('...j,jab->...ab', coefficients, projections)
+
+
 class AdapterBank:
     """Frozen bases of one backbone: top-r singular vectors per adapted matrix, fixed random matrices for `tiny`,
     and the forward hooks that apply active adapters."""
@@ -187,12 +207,7 @@ class AdapterBank:
             # Normal tensors even when first needed under inference mode: gradient sessions save them for backward.
             with torch.inference_mode(False), torch.no_grad():
                 weight = _weight(module).detach().float().clone()
-                u, _, vh = torch.linalg.svd(weight, full_matrices=False)
-                u_r, v_r = u[:, :rank], vh[:rank].t()  # U_r [out, r], V_r [in, r]
-                if version >= 2:
-                    signs = torch.sign(u_r.gather(0, u_r.abs().argmax(0, keepdim=True))).clamp_min(0) * 2 - 1
-                    u_r, v_r = u_r * signs, v_r * signs
-                self._bases[key] = (u_r.contiguous(), v_r.contiguous())
+                self._bases[key] = singular_bases(weight, rank, version)
         return self._bases[key]
 
     def projections(self, spec: AdapterSpec, row: int, device) -> torch.Tensor:
@@ -209,9 +224,8 @@ class AdapterBank:
     def core(self, spec: AdapterSpec, coefficients: torch.Tensor, row: int) -> torch.Tensor:
         """R (r × r) of one adapted matrix."""
         c = coefficients[row].float()
-        if spec.kind == "xs":
-            return c.view(spec.rank, spec.rank)
-        return torch.einsum("j,jab->ab", c, self.projections(spec, row, c.device))
+        return coefficient_core(spec.kind, c, spec.rank,
+            self.projections(spec, row, c.device) if spec.kind == 'tiny' else None)
 
     def lora(self, spec: AdapterSpec, coefficients: torch.Tensor) -> dict[str, tuple[torch.Tensor, torch.Tensor]]:
         """The adapter as rank-r LoRA factors per module (`model.layers.<l>.<name>` → (A [r, in], B [out, r]))."""

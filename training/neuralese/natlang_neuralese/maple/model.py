@@ -392,12 +392,18 @@ class DenseExperts(nn.Module):
         """All experts' (precision-ramped) weights as [E, 2*ff, d] and [E, d, ff], one op per tensor."""
         from .ternary import QUANT_MIX
 
-        if QUANT_MIX.get("cache") is not None:  # generation under no_grad: compute the deployed values once
-            key = (id(self), dtype)
-            if key not in QUANT_MIX["cache"]:
-                with torch.no_grad():
-                    QUANT_MIX["cache"][key] = (self._value(self.gate_up, dtype), self._value(self.down, dtype))
-            return QUANT_MIX["cache"][key]
+        # A functional native adapter replaces these exact bank tensors for
+        # one call. Its effective weights must neither read nor populate the
+        # immutable base generation cache.
+        if QUANT_MIX.get("cache") is not None:
+            from ..model.native_adapters import substituted_native_weight
+            adapted = substituted_native_weight(self.gate_up) or substituted_native_weight(self.down)
+            if not adapted:
+                key = (id(self), dtype)
+                if key not in QUANT_MIX["cache"]:
+                    with torch.no_grad():
+                        QUANT_MIX["cache"][key] = (self._value(self.gate_up, dtype), self._value(self.down, dtype))
+                return QUANT_MIX["cache"][key]
         return self._value(self.gate_up, dtype), self._value(self.down, dtype)
 
     def run_weights(self, x: torch.Tensor, gate_up: torch.Tensor, down: torch.Tensor) -> torch.Tensor:

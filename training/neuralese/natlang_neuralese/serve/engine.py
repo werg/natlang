@@ -263,8 +263,14 @@ class Engine:
         self.shared_model, self.role_tokens = shared_model, role_tokens
         self.model_config = dict(model_config or {})
         self.native_state_enabled = shared_model is not None
+        self.native_execution_lock = threading.RLock()
         self.checkpoint_sha256 = checkpoint_sha256
         self.embedding_weight_sha256 = embedding_weight_sha256
+        if self.native_state_enabled:
+            self.native_identity = {'checkpoint_sha256': checkpoint_sha256,
+                'tokenizer_fingerprint': self.model_config.get('tokenizer_fingerprint'),
+                'embedding_weight_sha256': embedding_weight_sha256,
+                'architecture': self.model_config.get('architecture') or self.backbone.config.model_type}
         if self.native_state_enabled:
             if heads is not None or role_tokens is None or not checkpoint_sha256 or not embedding_weight_sha256:
                 raise ValueError("native serving requires role tokens and exact checkpoint/embedding identities, with no PortHeads")
@@ -584,20 +590,35 @@ class Engine:
                 raise RequestError("forced-plan", f"unsupported forced item {item!r}")
         return plan
 
+    def _native_run(self, callback, adapters=None):
+        from ..model.native_adapters import run_native, NativeAdapterError
+        try:
+            return run_native(self, callback, adapters)
+        except NativeAdapterError as error:
+            raise RequestError('neuralese-native-adapter-invalid', str(error)) from error
+
+    @property
+    def execution_native_identity(self):
+        from ..model.native_adapters import execution_identity
+        return execution_identity(self)
+
     def _native_forward(self, ids, cache, *, producing=False):
+        return self._native_run(lambda: self._native_forward_impl(ids, cache, producing=producing))
+
+    def _native_forward_impl(self, ids, cache, *, producing=False):
         from ..model.shared_state import native_step
         token_ids = torch.tensor([ids], dtype=torch.long, device=self.backbone.embedding_weight.device)
         return native_step(self.shared_model, token_ids, cache, producing=producing)
 
     def _native_logits(self, hidden):
-        return self.shared_model.logits(hidden[:, -1])
+        return self._native_run(lambda: self.shared_model.logits(hidden[:, -1]))
 
     def _native_exact(self, block):
         architecture = self.model_config.get("architecture") or self.backbone.config.model_type
         layer_kinds = tuple("attention" if self.backbone.is_attention(index) else "finite_convolution"
                              for index in range(self.backbone.num_layers))
         try:
-            block.require_native(checkpoint_sha256=self.checkpoint_sha256,
+            block.require_native(checkpoint_sha256=self.execution_native_identity["checkpoint_sha256"],
                                  tokenizer_fingerprint=self.model_config["tokenizer_fingerprint"],
                                  embedding_weight_sha256=self.embedding_weight_sha256,
                                  architecture=architecture, layer_kinds=layer_kinds)
@@ -606,6 +627,9 @@ class Engine:
             return False
 
     def _native_consume(self, seq, block_id):
+        return self._native_run(lambda: self._native_consume_impl(seq, block_id), seq.request.adapters)
+
+    def _native_consume_impl(self, seq, block_id):
         from ..model.shared_state import splice_block
         record = self.store.get_native_state(block_id)
         if record is None:
@@ -622,7 +646,7 @@ class Engine:
         seq.native_own_position += 1
         if exact:
             seq.cache = splice_block(self.shared_model, seq.cache, block,
-                                     checkpoint_sha256=self.checkpoint_sha256,
+                                     checkpoint_sha256=self.execution_native_identity["checkpoint_sha256"],
                                      tokenizer_fingerprint=self.model_config["tokenizer_fingerprint"],
                                      embedding_weight_sha256=self.embedding_weight_sha256)
             mode = "exact-native-state"
@@ -630,16 +654,17 @@ class Engine:
                 seq.native_rl_prompt.append({"kind": "native_state", "id": block_id,
                     "native_identity": self._native_block_identity(block)})
         elif (getattr(self, 'semantic_channel', None) is not None and
+              self.execution_native_identity in self.semantic_channel.bindings.values() and
               self._native_block_identity(block) in self.semantic_channel.bindings.values()):
             try:
                 adapted, adaptation = self.semantic_channel.adapt(block, target_name=self.semantic_participant,
-                    target_model=self.shared_model, target_tokenizer=self.tokenizer, target_identity=self.native_identity,
+                    target_model=self.shared_model, target_tokenizer=self.tokenizer, target_identity=self.execution_native_identity,
                     allow_nearest=True)
             except ValueError as error:
                 raise RequestError('neuralese-semantic-adapter-mismatch',
                     f'{error}; restore the matching model/adapter export or write the text with the target native writer') from error
             seq.cache = splice_block(self.shared_model, seq.cache, adapted,
-                                     checkpoint_sha256=self.checkpoint_sha256,
+                                     checkpoint_sha256=self.execution_native_identity["checkpoint_sha256"],
                                      tokenizer_fingerprint=self.model_config['tokenizer_fingerprint'],
                                      embedding_weight_sha256=self.embedding_weight_sha256)
             mode = 'learned-semantic-state-deltas'
@@ -687,8 +712,12 @@ class Engine:
         seq.native_own_position += 1
 
     def _native_prefill(self, seq):
-        if seq.request.adapters:
-            raise RequestError("native-adapters-unsupported", "native shared-state serving does not yet implement legacy block adapters")
+        return self._native_run(lambda: self._native_prefill_impl(seq), seq.request.adapters)
+
+    def _native_prefill_impl(self, seq):
+        if seq.request.adapters and seq.request.rl_capture:
+            raise RequestError('neuralese-native-adapter-rl-unavailable',
+                'adapted policy capture needs matching adapter-aware replay; use graph coefficient gradients instead')
         if seq.request.forced or seq.request.neuralese_length is not None or seq.request.neuralese_passes is not None:
             raise RequestError("native-write-controls-unsupported", "native shared-state serving uses sampled role markers, not legacy forced writes")
         if seq.request.neuralese_max_length is not None or seq.request.neuralese_temperature:
@@ -832,17 +861,23 @@ class Engine:
         expected = torch.as_tensor(token_ids, dtype=torch.int64, device=fields["token_ids"].device)
         if not torch.equal(fields["token_ids"], expected):
             raise ValueError("captured producer token IDs differ from the declared source span")
+        from ..model.native_adapters import execution_binding, SCHEMA as ADAPTER_SCHEMA
+        bindings = execution_binding(self)
         block = NativeStateBlock(text=text, tokenizer_fingerprint=self.model_config["tokenizer_fingerprint"],
-                                 checkpoint_sha256=self.checkpoint_sha256,
+                                 checkpoint_sha256=self.execution_native_identity["checkpoint_sha256"],
                                  embedding_weight_sha256=self.embedding_weight_sha256,
                                  architecture=self.model_config.get("architecture") or self.backbone.config.model_type,
-                                 **fields)
+                                 adapter_binding=({'schema': ADAPTER_SCHEMA, 'base_native_identity': self.native_identity,
+                                                   'adapters': bindings} if bindings else None), **fields)
         block.validate()
         channel = getattr(self, 'semantic_channel', None)
-        stored = channel.message(block) if channel is not None else block
+        stored = channel.message(block) if channel is not None and self.execution_native_identity in channel.bindings.values() else block
         return block, self.store.put_native_state(stored)
 
-    def native_write_text(self, text: str, *, value_type: str | None = None):
+    def native_write_text(self, text: str, *, value_type: str | None = None, adapters=None):
+        return self._native_run(lambda: self._native_write_text_impl(text, value_type=value_type), adapters)
+
+    def _native_write_text_impl(self, text: str, *, value_type: str | None = None):
         """Force supplied text through this model's actual producer transform and archive its native state."""
         if not getattr(self, "native_state_enabled", False):
             raise RequestError("neuralese-native-state-unavailable", "native text writes require shared-state serving")
@@ -874,7 +909,11 @@ class Engine:
         result["source_text_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
         return result
 
-    def native_init_body(self, messages, tools, placeholder: str, text: str, *, value_type: str | None = None, placeholder_occurrence: int | None = None):
+    def native_init_body(self, messages, tools, placeholder: str, text: str, *, value_type: str | None = None, placeholder_occurrence: int | None = None, adapters=None):
+        return self._native_run(lambda: self._native_init_body_impl(messages, tools, placeholder, text,
+            value_type=value_type, placeholder_occurrence=placeholder_occurrence), adapters)
+
+    def _native_init_body_impl(self, messages, tools, placeholder: str, text: str, *, value_type: str | None = None, placeholder_occurrence: int | None = None):
         """Capture supplied body tokens at their actual rendered causal position in a soft call."""
         if not getattr(self, "native_state_enabled", False):
             raise RequestError("neuralese-native-state-unavailable", "native body initialization requires shared-state serving")
@@ -992,6 +1031,13 @@ class Engine:
         return result
 
     def _native_round(self, sequences):
+        for seq in sequences:
+            try:
+                self._native_run(lambda: self._native_round_impl([seq]), seq.request.adapters)
+            except Exception as error:
+                self._fail(seq, error)
+
+    def _native_round_impl(self, sequences):
         """Native marker-token generation through the same scheduler and TensorStore."""
         for seq in sequences:
             if seq.request.cancelled:

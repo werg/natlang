@@ -19,7 +19,7 @@ DOMAIN = 'natlang.neuralese-native-tensor-artifact/1'
 _DTYPES = {torch.float16: ('F16', 2), torch.bfloat16: ('BF16', 2),
            torch.float32: ('F32', 4), torch.float64: ('F64', 8)}
 _FROM_SAFE = {name: (dtype, size) for dtype, (name, size) in _DTYPES.items()}
-_KINDS = {'parameter-set', 'parameter-gradient', 'parameter-update', 'state-gradient', 'optimizer-state'}
+_KINDS = {'parameter-set', 'parameter-gradient', 'parameter-update', 'state-gradient', 'optimizer-state', 'adapter-basis', 'adapter-coefficients', 'adapter-gradient'}
 
 
 def _raw(tensor):
@@ -35,6 +35,9 @@ class NativeTensorArtifact:
     tensors: dict[str, torch.Tensor]
     source_artifact_id: str | None = None
     provenance: dict | None = None
+    # Wire metadata bytes are identity-bearing. Preserve numeric spellings
+    # across Python/JS (1.0/1, 1e-09/1e-9) without changing existing IDs.
+    canonical_metadata: str | None = None
 
     def validate(self):
         if self.kind not in _KINDS:
@@ -72,8 +75,17 @@ class NativeTensorArtifact:
                 'tensors': tensors}
 
 
+def _metadata_text(artifact):
+    metadata = artifact.metadata()
+    if artifact.canonical_metadata is not None:
+        if json.loads(artifact.canonical_metadata) != metadata:
+            raise ValueError('native artifact preserved metadata bytes differ from its actual fields')
+        return artifact.canonical_metadata
+    return json.dumps(metadata, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+
+
 def native_tensor_artifact_id(artifact):
-    metadata = json.dumps(artifact.metadata(), ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()
+    metadata = _metadata_text(artifact).encode()
     digest = hashlib.sha256()
     digest.update(DOMAIN.encode() + b'\0' + struct.pack('<Q', len(metadata)) + metadata)
     for name, tensor in sorted(artifact.tensors.items()):
@@ -97,9 +109,10 @@ def encode_native_tensor_artifact(artifact):
         payloads.append(raw)
         offset += len(raw)
     artifact_id = native_tensor_artifact_id(artifact)
-    metadata = {'id': artifact_id, **artifact.metadata()}
-    entries['__metadata__'] = {'natlang.native_tensor_artifact': json.dumps(
-        metadata, ensure_ascii=False, sort_keys=True, separators=(',', ':'))}
+    # id sorts first in the existing metadata schema; insert it without
+    # reserializing any identity-bearing numeric token.
+    entries['__metadata__'] = {'natlang.native_tensor_artifact':
+        '{"id":' + json.dumps(artifact_id) + ',' + _metadata_text(artifact)[1:]}
     header = json.dumps(entries, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()
     header += b' ' * ((8 - len(header) % 8) % 8)
     return struct.pack('<Q', len(header)) + header + b''.join(payloads)
@@ -115,7 +128,8 @@ def decode_native_tensor_artifact(body):
         header = json.loads(body[8:8 + header_size])
         if not isinstance(header, dict):
             raise ValueError('native tensor header must be an object')
-        metadata = json.loads(header.get('__metadata__', {}).get('natlang.native_tensor_artifact', '{}'))
+        metadata_text = header.get('__metadata__', {}).get('natlang.native_tensor_artifact', '{}')
+        metadata = json.loads(metadata_text)
         if not isinstance(metadata, dict) or metadata.get('schema') != SCHEMA:
             raise ValueError('unsupported native tensor artifact schema')
         tensors, spans = {}, []
@@ -146,8 +160,10 @@ def decode_native_tensor_artifact(body):
         actual = {name: (_DTYPES[value.dtype][0], list(value.shape)) for name, value in tensors.items()}
         if expected != actual:
             raise ValueError('native tensor descriptors differ from metadata inventory')
+        prefix = '{"id":' + json.dumps(metadata.get('id')) + ','
+        canonical_metadata = '{' + metadata_text[len(prefix):] if metadata_text.startswith(prefix) else None
         artifact = NativeTensorArtifact(metadata['kind'], metadata['native_identity'], tensors,
-            metadata.get('source_artifact_id'), metadata.get('provenance'))
+            metadata.get('source_artifact_id'), metadata.get('provenance'), canonical_metadata)
         artifact.validate()
         actual_id = native_tensor_artifact_id(artifact)
         if metadata.get('id') != actual_id:

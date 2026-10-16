@@ -9,6 +9,16 @@ from natlang_neuralese.model.shared_state import SharedStateModel
 from test_shared_state import tiny
 
 
+def _service_engine(**fields):
+    from types import SimpleNamespace
+    from threading import RLock
+    from natlang_neuralese.serve.native_grad import _identity
+    engine = SimpleNamespace(**fields)
+    engine.native_identity = _identity(engine)
+    engine.native_execution_lock = RLock()
+    return engine
+
+
 def row():
     return {'schema': SCHEMA, 'id': 'native-train-example', 'split': 'train',
         'source_groups': ['native-train-source'], 'tokenizer_fingerprint': 'f' * 64,
@@ -68,7 +78,7 @@ def test_native_gradient_service_returns_exact_named_trainable_tensors(tmp_path)
 
     model = SharedStateModel(tiny('lfm'), marker_ids=(58, 59, 60, 61), rank=4)
     store = TensorStore(tmp_path)
-    engine = SimpleNamespace(shared_model=model, store=store,
+    engine = _service_engine(shared_model=model, store=store,
         checkpoint_sha256='1' * 64, embedding_weight_sha256='2' * 64,
         model_config={'architecture': 'lfm2', 'tokenizer_fingerprint': 'f' * 64})
     model.requires_grad_(False)
@@ -94,7 +104,7 @@ def test_native_gradient_service_rejects_held_rows_and_unselected_parameters():
 
     model = SharedStateModel(tiny('lfm'), marker_ids=(58, 59, 60, 61), rank=4)
     store = TensorStore()
-    engine = SimpleNamespace(shared_model=model, store=store,
+    engine = _service_engine(shared_model=model, store=store,
         checkpoint_sha256='1' * 64, embedding_weight_sha256='2' * 64,
         model_config={'architecture': 'lfm2', 'tokenizer_fingerprint': 'f' * 64})
     request = {'schema': 'natlang.native-gradient-request/1', 'graph': row(),
@@ -136,7 +146,7 @@ def test_native_gradient_service_returns_producer_kv_and_hybrid_state_gradients(
     graph = row()
     graph['external_states'] = {'prior': {'id': stored.id, 'token_count': 2}}
     graph['nodes'][1]['imports'] = [{'at': 1, 'source': 'prior', 'start': 0, 'stop': 2}]
-    engine = SimpleNamespace(shared_model=model, store=store, checkpoint_sha256=identity['checkpoint_sha256'],
+    engine = _service_engine(shared_model=model, store=store, checkpoint_sha256=identity['checkpoint_sha256'],
         embedding_weight_sha256=identity['embedding_weight_sha256'], model_config={
             'architecture': identity['architecture'], 'tokenizer_fingerprint': identity['tokenizer_fingerprint']})
     reply = native_graph_gradient(engine, {'schema': 'natlang.native-gradient-request/1', 'graph': graph,
@@ -198,7 +208,7 @@ def test_native_policy_gradient_scores_imported_kv_and_finite_convolution(tmp_pa
         'rows': {example.id: {'graph_sha256': canonical_json_sha256_hex(graph_identity(example)),
             'actions': [{'query': 0, 'token_id': 7, 'behavior_logp': -2.0,
                          'temperature': 1.0, 'allowed_token_ids': None}], 'advantage': 1.0}}}))
-    engine = SimpleNamespace(shared_model=model, store=store, checkpoint_sha256=identity['checkpoint_sha256'],
+    engine = _service_engine(shared_model=model, store=store, checkpoint_sha256=identity['checkpoint_sha256'],
         embedding_weight_sha256=identity['embedding_weight_sha256'], model_config={
             'architecture': identity['architecture'], 'tokenizer_fingerprint': identity['tokenizer_fingerprint']})
     reply = native_graph_gradient(engine, {'schema': 'natlang.native-gradient-request/1',

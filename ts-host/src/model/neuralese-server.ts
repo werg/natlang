@@ -31,7 +31,7 @@ import { serves } from './neuralese-info.js';
 import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
   isNativeStateId, partsToText, runtimePartsToText, runtimeTextToParts, type ContentPart, type RuntimeContentPart } from '../native/neuralese.js';
 import { constantBlock, decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
-  decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId,
+  decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId, nativeTensorArtifactDependencies, archiveNativeTensorFrom,
   nativeTensorArtifactBlockMeta, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
   type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseDtype, type NeuraleseStore } from '../native/neuralese-store.js';
 
@@ -84,14 +84,27 @@ export function isUnknownBlockError(error: unknown): boolean {
  */
 export async function restoreBlocks(remote: NeuraleseStore, archive: NeuraleseStore | undefined,
     ids: Iterable<string>): Promise<string[]> {
-  const missing: string[] = [];
-  for (const id of new Set(ids)) {
-    if (await remote.has(id)) continue;
+  const missing: string[] = [], visited = new Set<string>();
+  const restore = async (id: string): Promise<void> => {
+    if (visited.has(id)) return;
+    visited.add(id);
+    if (id.startsWith('nnt1_')) {
+      const artifact = await archive?.getNativeTensorArtifact?.(id) ?? await remote.getNativeTensorArtifact?.(id);
+      if (!artifact || !remote.putNativeTensorArtifact) { missing.push(id); return; }
+      for (const dependency of nativeTensorArtifactDependencies(artifact)) await restore(dependency);
+      if (!(await remote.has(id))) {
+        const { id: _, ...input } = artifact;
+        if ((await remote.putNativeTensorArtifact(input)).id !== id) throw new Error(`native artifact changed while restoring ${id}`);
+      }
+      return;
+    }
+    if (await remote.has(id)) return;
     const block = (archive && await archive.get(id)) ?? constantBlock(id);
-    if (!block) { missing.push(id); continue; }
+    if (!block) { missing.push(id); return; }
     const { id: _, ...rest } = block.meta;
     await remote.put({ ...rest, data: block.data });
-  }
+  };
+  for (const id of new Set(ids)) await restore(id);
   return missing;
 }
 
@@ -165,7 +178,7 @@ export class HttpNeuraleseStore implements NeuraleseStore {
     return true;
   }
   async putNativeTensorArtifact(artifact: Omit<NativeTensorArtifact, 'id'>): Promise<NativeTensorArtifact> {
-    const id = nativeTensorArtifactContentId(artifact.metadata, artifact.tensors);
+    const id = nativeTensorArtifactContentId(artifact.metadata, artifact.tensors, artifact.canonicalMetadata);
     const response = await this.request(`/native-tensor-artifacts/${id}`, { method: 'PUT',
       body: encodeNativeTensorArtifact(artifact) as BodyInit, headers: { 'content-type': 'application/octet-stream' } });
     if (!response.ok) throw new Error(`native tensor artifact upload failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
@@ -477,9 +490,9 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       if (!meta?.id || !store) continue;
       if (!store.putNativeState || !store.getNativeState)
         throw new Error('neuralese-native-archive-unavailable: configure a store that preserves native-state artifacts');
-      if (await store.hasNativeState?.(meta.id)) continue;
-      const artifact = await remote.getNativeState(meta.id);
+      const artifact = await store.getNativeState(meta.id) ?? await remote.getNativeState(meta.id);
       if (!artifact) throw new Error(`neuralese-unknown-native-state: server reported ${meta.id} but has no artifact`);
+      for (const binding of artifact.metadata.adapter_binding?.adapters ?? []) await archiveNativeTensorFrom(remote, store, binding.id);
       const { id: _, ...input } = artifact;
       const local = await store.putNativeState(input);
       if (local.id !== meta.id) throw new Error(`native-state ${meta.id} arrived with identity ${local.id}`);

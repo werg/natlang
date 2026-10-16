@@ -5,7 +5,7 @@
  * This module is the codec and the export loader. It knows nothing of callables: soft-function exports are returned
  * as `NzSoftFunctionSpec` values, which the runtime turns into callables (runtime/contexts.ts).
  */
-import { decodeNativeState, encodeNativeState, nativeStateBlockMeta, type NativeStateArtifact, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseDtype,
+import { decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta, nativeTensorArtifactDependencies, type NativeTensorArtifact, decodeNativeState, encodeNativeState, nativeStateBlockMeta, type NativeStateArtifact, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseDtype,
   type NeuraleseStore } from './neuralese-store.js';
 import { isNeuraleseRef, neuraleseRef, type NeuraleseRef } from './neuralese.js';
 import { readTypeAliases } from './type-aliases.js';
@@ -31,6 +31,7 @@ export type NzHeader = {
   exports: Record<string, { type: string; value: unknown; description?: string }>;
   blocks: Record<string, NzBlockHeader>;
   native_states?: Record<string, { bytes: number }>;
+  native_tensors?: Record<string, { bytes: number }>;
   skill?: NzSkill;
   provenance?: Record<string, unknown>;
 };
@@ -67,7 +68,7 @@ export function canonicalJson(value: unknown): string {
 
 /** Encode a header and its blocks as safetensors bytes. Tensors are ordered by name; offsets are contiguous. */
 export function encodeNz(header: NzHeader, blocks: ReadonlyMap<string, Uint8Array>): Uint8Array {
-  const names = [...Object.keys(header.blocks), ...Object.keys(header.native_states ?? {})].sort();
+  const names = [...Object.keys(header.blocks), ...Object.keys(header.native_states ?? {}), ...Object.keys(header.native_tensors ?? {})].sort();
   if (new Set(names).size !== names.length) throw new NzFileError('neuralese-file-format', 'native and legacy inventories overlap');
   const tensors: Record<string, unknown> = {};
   let offset = 0;
@@ -75,7 +76,7 @@ export function encodeNz(header: NzHeader, blocks: ReadonlyMap<string, Uint8Arra
     const data = blocks.get(name);
     if (!data) throw new NzFileError('neuralese-unknown-block', `no bytes for block ${name}`);
     const meta = header.blocks[name]!;
-    tensors[name] = header.native_states?.[name] ?
+    tensors[name] = header.native_states?.[name] || header.native_tensors?.[name] ?
       { dtype: 'U8', shape: [data.length], data_offsets: [offset, offset + data.length] } :
       { dtype: meta.dtype, shape: [meta.length, meta.width], data_offsets: [offset, offset + data.length] };
     offset += data.length;
@@ -97,7 +98,7 @@ export function encodeNz(header: NzHeader, blocks: ReadonlyMap<string, Uint8Arra
 }
 
 /** Decode safetensors bytes into the natlang header and its blocks, checking that every block hashes to its name. */
-export function decodeNz(bytes: Uint8Array): { header: NzHeader; blocks: Map<string, NeuraleseBlock>; nativeStates: Map<string, NativeStateArtifact> } {
+export function decodeNz(bytes: Uint8Array): { header: NzHeader; blocks: Map<string, NeuraleseBlock>; nativeStates: Map<string, NativeStateArtifact>; nativeTensors: Map<string, NativeTensorArtifact> } {
   if (bytes.length < 8) throw new NzFileError('neuralese-file-format', 'not a safetensors file');
   const size = Number(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigUint64(0, true));
   if (8 + size > bytes.length) throw new NzFileError('neuralese-file-format', 'header length exceeds the file');
@@ -141,7 +142,25 @@ export function decodeNz(bytes: Uint8Array): { header: NzHeader; blocks: Map<str
     if (artifact.id !== id) throw new NzFileError('neuralese-block-integrity', `native state ${id} hashes to ${artifact.id}`);
     nativeStates.set(id, artifact);
   }
-  return { header, blocks, nativeStates };
+  const nativeTensors = new Map<string, NativeTensorArtifact>();
+  for (const [id, meta] of Object.entries(header.native_tensors ?? {})) {
+    const tensor = outer[id] as { dtype?: string; shape?: number[]; data_offsets?: [number, number] } | undefined;
+    const offsets = tensor?.data_offsets;
+    if (blocks.has(id) || nativeStates.has(id) || !/^nnt1_[a-z2-7]{52}$/.test(id) ||
+        !Number.isSafeInteger(meta.bytes) || meta.bytes < 1 || tensor?.dtype !== 'U8' ||
+        tensor.shape?.length !== 1 || tensor.shape[0] !== meta.bytes || !offsets ||
+        offsets.some(value => !Number.isSafeInteger(value) || value < 0) || offsets[1] > data.length ||
+        offsets[1] - offsets[0] !== meta.bytes)
+      throw new NzFileError('neuralese-file-format', `native tensor ${id}: tensor and inventory disagree`);
+    const artifact = decodeNativeTensorArtifact(data.slice(offsets[0], offsets[1]));
+    if (artifact.id !== id) throw new NzFileError('neuralese-block-integrity', `native tensor ${id} changed`);
+    nativeTensors.set(id, artifact);
+  }
+  for (const artifact of nativeTensors.values()) for (const dependency of nativeTensorArtifactDependencies(artifact))
+    if (!nativeTensors.has(dependency)) throw new NzFileError('neuralese-unknown-block', `native artifact lacks dependency ${dependency}`);
+  for (const state of nativeStates.values()) for (const entry of state.metadata.adapter_binding?.adapters ?? [])
+    if (!nativeTensors.has(entry.id)) throw new NzFileError('neuralese-unknown-block', `adapted native state lacks coefficients ${entry.id}`);
+  return { header, blocks, nativeStates, nativeTensors };
 }
 
 function checkHeaderShape(header: NzHeader): void {
@@ -169,6 +188,7 @@ export type LoadedNz = {
   types: Record<string, string>;
   blocks: Map<string, NeuraleseBlock>;
   nativeStates: Map<string, NativeStateArtifact>;
+  nativeTensors: Map<string, NativeTensorArtifact>;
 };
 
 /** Resolve another file's export for a cross-file `$ref` (`./other.nz#name`). */
@@ -185,6 +205,9 @@ export async function loadNz(bytes: Uint8Array, options: { store?: NeuraleseStor
     if (loaded.nativeStates.size && !options.store.putNativeState)
       throw new NzFileError('neuralese-file-format', 'the configured store cannot preserve native-state artifacts');
     for (const { id: _, ...artifact } of loaded.nativeStates.values()) await options.store.putNativeState!(artifact);
+    if (loaded.nativeTensors.size && !options.store.putNativeTensorArtifact)
+      throw new NzFileError('neuralese-file-format', 'the configured store cannot preserve named native tensors');
+    for (const { id: _, ...artifact } of loaded.nativeTensors.values()) await options.store.putNativeTensorArtifact!(artifact);
   }
   return loaded;
 }
@@ -192,16 +215,18 @@ export async function loadNz(bytes: Uint8Array, options: { store?: NeuraleseStor
 /** `loadNz` without storing blocks; compiled module code and declaration generation use it. */
 const IMPORTED_BLOCKS = new Map<string, NeuraleseBlock>();
 const IMPORTED_NATIVE_STATES = new Map<string, NativeStateArtifact>();
+const IMPORTED_NATIVE_TENSORS = new Map<string, NativeTensorArtifact>();
 /** Record blocks of `.nz` files loaded without a store (compiled imports, companion folders) for runtimes to adopt. */
-export function registerImportedBlocks(blocks: Iterable<NeuraleseBlock>, nativeStates: Iterable<NativeStateArtifact> = []): void {
+export function registerImportedBlocks(blocks: Iterable<NeuraleseBlock>, nativeStates: Iterable<NativeStateArtifact> = [], nativeTensors: Iterable<NativeTensorArtifact> = []): void {
   for (const block of blocks) IMPORTED_BLOCKS.set(block.meta.id, block);
   for (const artifact of nativeStates) IMPORTED_NATIVE_STATES.set(artifact.id, structuredClone(artifact));
+  for (const artifact of nativeTensors) IMPORTED_NATIVE_TENSORS.set(artifact.id, structuredClone(artifact));
 }
 /** Blocks of `.nz` files loaded without a store; a runtime with a tensor store puts them into it before a call. */
 export function importedBlocks(): ReadonlyMap<string, NeuraleseBlock> { return IMPORTED_BLOCKS; }
 
 /** Put every imported block a store lacks into it. Cheap when nothing new was imported since the last call. */
-export async function adoptImportedBlocks(store: Pick<NeuraleseStore, 'has' | 'put' | 'putNativeState'>): Promise<void> {
+export async function adoptImportedBlocks(store: Pick<NeuraleseStore, 'has' | 'put' | 'putNativeState' | 'putNativeTensorArtifact'>): Promise<void> {
   const done = ADOPTED.get(store) ?? new Set<string>();
   ADOPTED.set(store, done);
   for (const [id, block] of IMPORTED_BLOCKS) {
@@ -222,11 +247,20 @@ export async function adoptImportedBlocks(store: Pick<NeuraleseStore, 'has' | 'p
     }
     done.add(id);
   }
+  for (const [id, artifact] of IMPORTED_NATIVE_TENSORS) {
+    if (done.has(id)) continue;
+    if (!(await store.has(id))) {
+      if (!store.putNativeTensorArtifact) throw new NzFileError('neuralese-file-format', 'compiled native tensor needs a named tensor store');
+      const { id: _, ...input } = artifact;
+      await store.putNativeTensorArtifact(input);
+    }
+    done.add(id);
+  }
 }
 const ADOPTED = new WeakMap<object, Set<string>>();
 
 export function loadNzSync(bytes: Uint8Array, resolve?: NzResolver): LoadedNz {
-  const { header, blocks, nativeStates } = decodeNz(bytes);
+  const { header, blocks, nativeStates, nativeTensors } = decodeNz(bytes);
   const env = new TypeEnv(Object.fromEntries(Object.entries(header.types ? readTypeAliases(header.types) : {})
     .map(([name, text]) => [name, parseType(text)])));
   const types: Record<string, string> = {};
@@ -248,6 +282,8 @@ export function loadNzSync(bytes: Uint8Array, resolve?: NzResolver): LoadedNz {
     return values[name] = value;
   };
   const block = (id: string, where: string) => {
+    const named = nativeTensors.get(id);
+    if (named) return { meta: nativeTensorArtifactBlockMeta(named), data: encodeNativeTensorArtifact(named) };
     const native = nativeStates.get(id);
     if (native) return { meta: nativeStateBlockMeta(native), data: encodeNativeState(native) };
     if (!blocks.has(id)) throw new NzFileError('neuralese-unknown-block', `${where} uses block ${id}, which the file does not hold`);
@@ -293,15 +329,16 @@ export function loadNzSync(bytes: Uint8Array, resolve?: NzResolver): LoadedNz {
     return Object.fromEntries(Object.entries(record).map(([key, item]) => [key, decodeValue(item, `${where}.${key}`)]));
   };
   for (const name of Object.keys(header.exports)) exportValue(name);
-  for (const [name, type] of Object.entries(parsedTypes)) checkExport(name, type, values[name], env, header, blocks, nativeStates);
-  return { header, exports: values, types, blocks, nativeStates };
+  for (const [name, type] of Object.entries(parsedTypes)) checkExport(name, type, values[name], env, header, blocks, nativeStates, nativeTensors);
+  return { header, exports: values, types, blocks, nativeStates, nativeTensors };
 }
 
 /** Check one export against its declared type, and the dialect of every soft value it holds. */
 function checkExport(name: string, type: Type, value: unknown, env: TypeEnv, header: NzHeader,
-  blocks: Map<string, NeuraleseBlock>, nativeStates: Map<string, NativeStateArtifact>): void {
+  blocks: Map<string, NeuraleseBlock>, nativeStates: Map<string, NativeStateArtifact>, nativeTensors: Map<string, NativeTensorArtifact>): void {
   const dialectOf = (id: string) => blocks.get(id)?.meta.dialect ??
-    (nativeStates.has(id) ? nativeStateBlockMeta(nativeStates.get(id)!).dialect : header.dialect);
+    (nativeStates.has(id) ? nativeStateBlockMeta(nativeStates.get(id)!).dialect :
+     nativeTensors.has(id) ? nativeTensorArtifactBlockMeta(nativeTensors.get(id)!).dialect : header.dialect);
   const softValues = (type: Type, value: unknown, path: string): void => {
     let resolved = type;
     if (type.kind === 'name') try { resolved = env.resolve(type); } catch { resolved = type; }
@@ -347,14 +384,25 @@ export async function saveNz(exports: Record<string, NzSaveExport>, options: { s
   const blocks = new Map<string, Uint8Array>();
   const headers: Record<string, NzBlockHeader> = {};
   const nativeHeaders: Record<string, { bytes: number }> = {};
+  const nativeTensorHeaders: Record<string, { bytes: number }> = {};
   const use = async (id: string, where: string) => {
-    if (headers[id] || nativeHeaders[id]) return;
+    if (headers[id] || nativeHeaders[id] || nativeTensorHeaders[id]) return;
+    if (id.startsWith('nnt1_')) {
+      const artifact = await options.store.getNativeTensorArtifact?.(id);
+      if (!artifact) throw new NzFileError('neuralese-unknown-block', `${where} uses named native tensor ${id} not held by the store`);
+      const wire = encodeNativeTensorArtifact(artifact);
+      nativeTensorHeaders[id] = { bytes: wire.length };
+      blocks.set(id, wire);
+      for (const dependency of nativeTensorArtifactDependencies(artifact)) await use(dependency, 'native adapter dependency');
+      return;
+    }
     if (id.startsWith('nzs1_')) {
       const artifact = await options.store.getNativeState?.(id);
       if (!artifact) throw new NzFileError('neuralese-unknown-block', `${where} uses native state ${id} not held by the store`);
       const wire = encodeNativeState(artifact);
       nativeHeaders[id] = { bytes: wire.length };
       blocks.set(id, wire);
+      for (const entry of artifact.metadata.adapter_binding?.adapters ?? []) await use(entry.id, 'native adapted state');
       return;
     }
     const block = await options.store.get(id);
@@ -401,13 +449,15 @@ export async function saveNz(exports: Record<string, NzSaveExport>, options: { s
     for (const nested of Object.values(object)) await sourceDependencies(nested);
   };
   await sourceDependencies(options.provenance);
-  const header: NzHeader = { format: NZ_FORMAT, dialect: options.dialect, exports: {}, blocks: headers, ...(Object.keys(nativeHeaders).length ? { native_states: nativeHeaders } : {}),
+  const header: NzHeader = { format: NZ_FORMAT, dialect: options.dialect,
+    ...(Object.keys(nativeTensorHeaders).length ? { native_tensors: nativeTensorHeaders } : {}), exports: {}, blocks: headers, ...(Object.keys(nativeHeaders).length ? { native_states: nativeHeaders } : {}),
     ...(options.types ? { types: options.types } : {}), ...(options.skill ? { skill: options.skill } : {}),
     ...(options.provenance ? { provenance: options.provenance } : {}) };
   for (const [name, entry] of Object.entries(exports))
     header.exports[name] = { type: entry.type, value: await encodeValue(entry.value, `export ${name}`),
       ...(entry.description ? { description: entry.description } : {}) };
   if (Object.keys(nativeHeaders).length) header.native_states = nativeHeaders;
+  if (Object.keys(nativeTensorHeaders).length) header.native_tensors = nativeTensorHeaders;
   const bytes = encodeNz(header, blocks);
   loadNzSync(bytes); // A file that does not load is never written.
   return bytes;

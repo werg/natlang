@@ -340,3 +340,18 @@ optimizer to bypass it. Sparse row shape/dtype errors require the exact saved
 row contract, not broadcasting or silent casts. Reload actors from
 the new actual checkpoint and rebind/requalify semantic communication after
 updates. No new instruction text or reasoning-format workaround is needed.
+
+Native functional adapters use exact-base named tensor coefficients and frozen
+SVD bases. On a native service, `adapters.create({parameterNames, rank, kind})`
+selects actual named layer matrices; retain the returned `Adapter` and bind it
+with `withAdapters`. Native first-order graph learning uses
+`nativeGraphGradient` with `target: {kind: 'adapter', id}` and the same active
+adapter IDs, followed by `nativeAdapterOptimizerStep`; this does not enable the
+legacy recorded-turn GradSession API or higher-order objectives. Keep the
+coefficient, basis and optimizer artifacts together when saving or restoring.
+`neuralese-native-adapter-invalid` requires restoring the exact coefficient and
+basis artifacts for the current checkpoint and selecting its advertised matrix
+names. `neuralese-native-tensor-as-state` requires binding adapters with
+`withAdapters`, rather than passing named tensor artifacts as communication
+state. `neuralese-native-adapter-rl-unavailable` requires using native graph
+coefficient objectives until an adapter-aware policy replay service is available.

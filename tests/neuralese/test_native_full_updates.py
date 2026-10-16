@@ -150,8 +150,13 @@ def test_native_service_does_not_silently_downgrade_requested_second_order(extra
         native_graph_gradient(SimpleNamespace(),{'schema':'natlang.native-gradient-request/1',**extra},None)
 
 
-def test_native_service_does_not_ignore_requested_adapter():
-    from types import SimpleNamespace
+def test_native_service_does_not_ignore_requested_adapter(tmp_path):
     from natlang_neuralese.serve.chat import RequestError
-    with pytest.raises(RequestError,match='identity-bound checkpoint'):
-        native_graph_gradient(SimpleNamespace(),{'schema':'natlang.native-gradient-request/1','adapters':[{'id':'unsupported'}]},None)
+    from test_native_serving_adapters import engine_fixture
+    engine = engine_fixture(tmp_path, 'lfm')
+    try:
+        with pytest.raises(RequestError,match='unknown native adapter'):
+            native_graph_gradient(engine,{'schema':'natlang.native-gradient-request/1',
+                'adapters':[{'id':'unsupported'}]},None)
+    finally:
+        engine.store.close()

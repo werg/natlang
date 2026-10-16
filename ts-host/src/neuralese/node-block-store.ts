@@ -18,7 +18,7 @@
  */
 import { mkdir, open, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { checkBlockShape, neuraleseContentId, decodeNativeState, encodeNativeState, nativeStateBlockMeta,
+import { nativeArtifactDependencyClosure, checkBlockShape, neuraleseContentId, decodeNativeState, encodeNativeState, nativeStateBlockMeta,
   decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactBlockMeta,
   type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseBlock, type NeuraleseBlockInput,
   type NeuraleseBlockMeta, type NeuraleseStore } from '../native/neuralese-store.js';
@@ -304,6 +304,7 @@ export class FileNeuraleseStore implements NeuraleseStore {
   }
 
   async collect(referenced: ReadonlySet<string>): Promise<string[]> {
+    referenced = await nativeArtifactDependencyClosure(this, [...referenced, ...this.pins.keys()]);
     const removed: string[] = [];
     for (const id of [...this.index.keys()]) {
       if (referenced.has(id) || this.pins.has(id)) continue;

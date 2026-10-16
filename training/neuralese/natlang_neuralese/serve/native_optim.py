@@ -51,6 +51,11 @@ def _copy_parameter_targets(model, names):
 
 
 def native_optimizer_step(engine, body, owner):
+    with engine.native_execution_lock:
+        return _native_optimizer_step_impl(engine, body, owner)
+
+
+def _native_optimizer_step_impl(engine, body, owner):
     """Publish named backbone/interface updates without modifying the live actor."""
     if body.get('schema') != 'natlang.native-optimizer-request/1':
         raise RequestError('neuralese-native-optim-schema', 'native optimizer requests need schema natlang.native-optimizer-request/1')
@@ -63,6 +68,10 @@ def native_optimizer_step(engine, body, owner):
         if record is None:
             raise ValueError('optimizer request needs an available named native gradient artifact')
         gradient = record.artifact
+        if gradient.kind == 'adapter-gradient':
+            from ..model.native_adapters import optimize_adapter
+            with engine.native_execution_lock:
+                return optimize_adapter(engine, gradient, body.get('optimizer'), body.get('optimizer_state_id'), owner)
         if gradient.kind != 'parameter-gradient' or gradient.native_identity != identity:
             raise ValueError('gradient kind or model identity differs from the live checkpoint')
         names = set(gradient.tensors)

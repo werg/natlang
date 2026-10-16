@@ -51,18 +51,31 @@ def _parameter_targets(model, requested):
 
 
 def native_graph_gradient(engine, body, owner):
+    if body.get('schema') != 'natlang.native-gradient-request/1':
+        raise RequestError('neuralese-native-grad-schema', 'native graph gradients require schema natlang.native-gradient-request/1')
+    if type(body.get('order',1)) is not int or body.get('order',1) != 1 or body.get('derived') or body.get('create_graph'):
+        raise RequestError('neuralese-native-grad-order', 'native graph learning currently accepts first-order objectives only; remove derived computations or use a service advertising grad.order2')
+    from ..model.native_adapters import resolve_adapters, run_native
+    try:
+        resolved = resolve_adapters(engine, body.get('adapters'))
+        leaves = {ident: {name: value.detach().clone().requires_grad_(True)
+                         for name, value in coefficients.items()}
+                  for ident, _, _, coefficients, _ in resolved}
+        return run_native(engine, lambda: _native_graph_gradient_impl(engine, body, owner, leaves),
+                          body.get('adapters'), leaves=leaves)
+    except RequestError:
+        raise
+    except (ValueError, KeyError, TypeError, RuntimeError) as error:
+        raise RequestError('neuralese-native-grad-invalid', str(error)) from error
+
+
+def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
     """Evaluate one actual native graph and return a durable named gradient.
 
     `target` selects either named native model parameters or one exact imported
     NativeStateBlock. No implicit parameter inventory or lossy block flattening
     is allowed, so callers can pair the result with a declared optimizer/update.
     """
-    if body.get('schema') != 'natlang.native-gradient-request/1':
-        raise RequestError('neuralese-native-grad-schema', 'native graph gradients require schema natlang.native-gradient-request/1')
-    if type(body.get('order',1)) is not int or body.get('order',1) != 1 or body.get('derived') or body.get('create_graph'):
-        raise RequestError('neuralese-native-grad-order', 'native graph learning currently accepts first-order objectives only; remove derived computations or use a service advertising grad.order2')
-    if body.get('adapters'):
-        raise RequestError('neuralese-adapters-unavailable', 'native graph learning requires an applied, identity-bound checkpoint; reload that checkpoint before requesting gradients')
     objective_request = body.get('objective', 'graph-ce')
     if objective_request not in ('graph-ce', None) and not isinstance(objective_request, dict):
         raise RequestError('neuralese-native-grad-objective', 'objective must be graph-ce or a registered native-policy spec binding')
@@ -78,6 +91,8 @@ def native_graph_gradient(engine, body, owner):
         if body.get('graph_sha256') not in (None, graph_sha256):
             raise ValueError('declared graph digest differs from the supplied graph row')
         expected = _identity(engine)
+        from ..model.native_adapters import execution_identity
+        effective = execution_identity(engine)
         if body.get('native_identity') not in (None, expected):
             raise ValueError('gradient request is bound to another exact live checkpoint')
         imported, leaf_map, state_overrides = {}, {}, {}
@@ -90,7 +105,7 @@ def native_graph_gradient(engine, body, owner):
             block = record.block
             if len(block.token_ids) != binding['token_count']:
                 raise ValueError(f'external state token count changed for {name}')
-            block.require_native(**expected)
+            block.require_native(**effective)
             copied, leaves = _leaf_block(block)
             leaf_map.update({f'external.{name}.{key}': value for key, value in leaves.items()})
             if isinstance(objective_request, dict):
@@ -112,6 +127,17 @@ def native_graph_gradient(engine, body, owner):
             target_tensors = selected
             artifact_kind = 'parameter-gradient'
             source_id = None
+        elif kind == 'adapter':
+            source_id = target.get('id')
+            available = adapter_leaves.get(source_id)
+            if available is None:
+                raise ValueError('adapter gradient target must be active by its exact native coefficient artifact ID')
+            requested = target.get('names', sorted(available))
+            if (not isinstance(requested, list) or not requested or len(set(requested)) != len(requested)
+                    or any(name not in available for name in requested)):
+                raise ValueError('adapter gradient names must uniquely select active coefficient tensors')
+            target_tensors = {name: available[name] for name in requested}
+            artifact_kind = 'adapter-gradient'
         elif kind == 'native-state':
             state_id = target.get('id')
             if not isinstance(state_id, str):
@@ -129,10 +155,12 @@ def native_graph_gradient(engine, body, owner):
             artifact_kind = 'state-gradient'
             source_id = state_id
         else:
-            raise ValueError('target.kind must be model-parameters or native-state')
+            raise ValueError('target.kind must be model-parameters, native-state or adapter')
         if not target_tensors:
             raise ValueError('gradient target has no tensors')
         if isinstance(objective_request, dict):
+            if body.get('adapters'):
+                raise ValueError('native-policy replay does not yet bind adapted actor weights; use graph-ce for coefficient gradients')
             if objective_request.get('kind') != 'native-policy':
                 raise ValueError('only the registered native-policy objective is supported')
             spec_path = objective_request.get('path')
@@ -149,7 +177,7 @@ def native_graph_gradient(engine, body, owner):
             loss, stats = packed_graph_loss(engine.shared_model, [example], objective=objective)
         else:
             loss, stats = graph_loss(engine.shared_model, example, external_blocks=imported,
-                                     external_identity=expected)
+                                     external_identity=effective)
         grads = torch.autograd.grad(loss, tuple(target_tensors.values()), allow_unused=True)
         tensors = {name: grad.detach() for name, grad in zip(target_tensors, grads) if grad is not None}
         if set(tensors) != set(target_tensors):
@@ -159,11 +187,12 @@ def native_graph_gradient(engine, body, owner):
             {'objective': ('native-graph-token-ce/1' if not isinstance(objective_request, dict)
                            else 'native-policy-objective/1'), 'graph_id': example.id,
              'graph_sha256': graph_sha256, 'target_kind': kind,
-             'target_names': sorted(tensors), 'loss': float(loss.detach()), 'stats': stats,
+             'target_names': sorted(tensors), 'effective_native_identity': effective,
+             'adapters': body.get('adapters') or [], 'loss': float(loss.detach()), 'stats': stats,
              **({'objective_spec_sha256': objective_request['sha256']} if isinstance(objective_request, dict) else {})}).validate()
         stored = engine.store.put_native_tensor_artifact(artifact, owner)
         return {'loss': float(loss.detach()), 'stats': stats, 'gradient': stored.meta(),
-                'native_identity': expected, 'objective': artifact.provenance['objective']}
+                'native_identity': expected, 'effective_native_identity': effective, 'objective': artifact.provenance['objective']}
     except RequestError:
         raise
     except (ValueError, KeyError, TypeError, OSError, RuntimeError) as error:

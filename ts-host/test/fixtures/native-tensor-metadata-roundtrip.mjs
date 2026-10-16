@@ -1,0 +1,12 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { decodeNativeTensorArtifact, encodeNativeTensorArtifact, MemoryNeuraleseStore } from '../../dist/native/neuralese-store.js';
+const [input, output] = process.argv.slice(2);
+const wire = new Uint8Array(await readFile(input));
+const original = decodeNativeTensorArtifact(wire);
+const store = new MemoryNeuraleseStore();
+const { id, ...artifact } = original;
+const saved = await store.putNativeTensorArtifact(artifact);
+if (saved.id !== id) throw new Error('immutable metadata changed in local store');
+const fetched = await store.getNativeTensorArtifact(id);
+await writeFile(output, encodeNativeTensorArtifact(fetched));
+console.log(JSON.stringify({ id, canonical: fetched.canonicalMetadata }));

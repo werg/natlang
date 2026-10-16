@@ -469,7 +469,7 @@ class TensorStore:
         cpu_tensors = {name: tensor.detach().to('cpu').contiguous().clone()
                        for name, tensor in artifact.tensors.items()}
         stored_artifact = NativeTensorArtifact(artifact.kind, dict(artifact.native_identity), cpu_tensors,
-            artifact.source_artifact_id, dict(artifact.provenance or {})).validate()
+            artifact.source_artifact_id, dict(artifact.provenance or {}), artifact.canonical_metadata).validate()
         record = NativeTensorRecord(native_tensor_artifact_id(stored_artifact), stored_artifact)
         with self._lock:
             found = self._load(record.id)
@@ -520,6 +520,26 @@ class TensorStore:
             self._db.execute("UPDATE pins SET count = count - 1 WHERE id = ? AND owner = ?", (block_id, owner or ""))
             self._db.execute("DELETE FROM pins WHERE count <= 0")
 
+    def _required_closure(self, roots):
+        keep = set(roots)
+        pending = list(keep)
+        for block_id in pending:
+            record = self._load(block_id)
+            dependencies = []
+            if isinstance(record, NativeTensorRecord):
+                meta = record.artifact
+                if (meta.kind in ('adapter-coefficients', 'adapter-gradient') or
+                        meta.kind == 'optimizer-state' and (meta.provenance or {}).get('scope') == 'natlang.native-adapter/1'):
+                    dependencies = [meta.source_artifact_id] if meta.source_artifact_id else []
+            elif isinstance(record, NativeStateRecord):
+                binding = getattr(record.block, 'adapter_binding', None)
+                dependencies = [entry['id'] for entry in binding['adapters']] if binding else []
+            for dependency in dependencies:
+                if dependency not in keep:
+                    keep.add(dependency)
+                    pending.append(dependency)
+        return keep
+
     def collect(self, referenced: set[str], owner: str | None = None) -> list[str]:
         """Drop what is no longer needed and return the removed IDs.
 
@@ -528,6 +548,16 @@ class TensorStore:
         owner holds or pins and `referenced` does not name is dropped."""
         with self._lock:
             db = self._db
+            pins = [row[0] for row in db.execute('SELECT id FROM pins')]
+            if owner is None:
+                roots = [row[0] for row in db.execute('SELECT id FROM holds')] + pins
+                referenced = self._required_closure(set(referenced) | set(roots))
+                protected = set()
+            else:
+                own_pins = [row[0] for row in db.execute('SELECT id FROM pins WHERE owner = ?', (owner,))]
+                referenced = self._required_closure(set(referenced) | set(own_pins))
+                foreign = [row[0] for row in db.execute('SELECT id FROM holds WHERE owner != ?', (owner,))]
+                protected = self._required_closure(foreign + pins)
             db.execute("BEGIN")
             try:
                 db.execute("CREATE TEMP TABLE IF NOT EXISTS keep (id TEXT PRIMARY KEY)")
@@ -546,6 +576,7 @@ class TensorStore:
                     db.executemany("DELETE FROM holds WHERE id = ? AND owner = ?", [(i, owner) for i in released])
                     removed = [i for i in released if db.execute(
                         "SELECT 1 FROM holds WHERE id = ? UNION ALL SELECT 1 FROM pins WHERE id = ?", (i, i)).fetchone() is None]
+                removed = [i for i in removed if i not in protected]
                 db.executemany("DELETE FROM blocks WHERE id = ?", [(i,) for i in removed])
                 db.execute("COMMIT")
             except BaseException:

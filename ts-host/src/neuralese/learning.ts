@@ -26,6 +26,7 @@ import { HttpNeuraleseStore, restoreBlocks } from '../model/neuralese-server.js'
 import * as deltaOps from './deltas.js';
 import { setSystemPromptSource, systemPromptBank, type SystemPromptBank } from '../native/system-prompts.js';
 import { setAdapterSource, setRecorderSource, type AdapterBinding, type RecordedTurn, type TurnRecorder } from './recording.js';
+import { archiveNativeTensorArtifact } from './native-tensor-client.js';
 import { createNeuraleseLibrary, type StandardLibrary } from './combinators.js';
 import type { ReplayRecordSink } from './replay-records.js';
 
@@ -371,7 +372,7 @@ async function lawLoss(explicit: StandardLibrary | undefined, name: LawName, arg
 /** The type of an adapter value: `Adapter` (spec/SPEC.md; its structure is in the block's dialect). */
 export const ADAPTER_TYPE = 'Adapter';
 export type AdapterSpecOptions = { kind?: 'xs' | 'tiny'; rank?: number; u?: number; layers?: number[];
-  targets?: Array<'out' | 'ffn_down' | 'ffn_up'>; seed?: number };
+  targets?: Array<'out' | 'ffn_down' | 'ffn_up'>; seed?: number; parameterNames?: string[] };
 type AdapterUse = NeuraleseRef | { adapter: NeuraleseRef; scale?: number };
 
 const adapterScope = new AsyncLocalStorage<readonly AdapterBinding[]>();
@@ -630,7 +631,14 @@ export function createLearning(explicit?: LearningService, options: { library?: 
     adapters: {
       /** A zero adapter for the server's backbone (the identity until trained); see model/tiny_adapters.py. */
       async create(options: AdapterSpecOptions = {}): Promise<NeuraleseRef> {
-        const meta = await post(service('adapters.create'), '/v1/neuralese/adapters', { ...options, type: ADAPTER_TYPE });
+        const active = service('adapters.create');
+        const { parameterNames, ...common } = options;
+        const meta = await post(active, '/v1/neuralese/adapters', { ...common,
+          ...(parameterNames ? { parameter_names: parameterNames } : {}), type: ADAPTER_TYPE });
+        if (String(meta.id).startsWith('nnt1_')) {
+          if (!active.store) throw new LearningError('neuralese-native-archive-unavailable', 'configure a named tensor archive before creating native adapters');
+          await archiveNativeTensorArtifact(active.endpoint, active.store, String(meta.id), active.headers);
+        }
         return neuraleseRef(ADAPTER_TYPE, String(meta.id));
       },
     },

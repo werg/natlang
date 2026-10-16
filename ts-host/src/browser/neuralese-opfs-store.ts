@@ -286,7 +286,8 @@ export class OpfsNeuraleseStore implements NeuraleseStore {
 
   /** Put every block of a `.nz` file (checked against its ID by the decoder). Returns the block IDs, in file order. */
   async importNz(bytes: Uint8Array): Promise<string[]> {
-    const { blocks, nativeStates } = decodeNz(bytes);
+    const { blocks, nativeStates, nativeTensors } = decodeNz(bytes);
+    if (nativeTensors.size) throw new Error("neuralese-native-archive-unavailable: use a named tensor archive for native adapters");
     for (const block of blocks.values()) {
       const { id: _, ...rest } = block.meta;
       await this.put({ ...rest, data: block.data });

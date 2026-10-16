@@ -162,13 +162,15 @@ export async function buildStandardLibrary(options: { endpoint: string; headers?
 export async function loadStandardLibrary(bytes: Uint8Array, store?: NeuraleseStore): Promise<StandardLibrary> {
   if (typeof bytes === 'string')
     throw new TypeError('loadStandardLibrary takes the .nz file\'s bytes here; read the file first (fetch(url).then(r => r.arrayBuffer())), or use @natlang/node, which also takes a path');
-  const { header, blocks, nativeStates } = decodeNz(bytes);
+  const { header, blocks, nativeStates, nativeTensors } = decodeNz(bytes);
   if (store) for (const block of blocks.values()) if (!(await store.has(block.meta.id))) {
     const { id: _, ...rest } = block.meta;
     await store.put({ ...rest, data: block.data });
   }
   if (store && nativeStates.size && !store.putNativeState) throw new Error('neuralese-native-archive-unavailable: native standard library needs a native-capable archive');
   if (store) for (const { id: _, ...artifact } of nativeStates.values()) await store.putNativeState!(artifact);
+  if (store && nativeTensors.size && !store.putNativeTensorArtifact) throw new Error('neuralese-native-archive-unavailable: native library needs a named tensor archive');
+  if (store) for (const { id: _, ...artifact } of nativeTensors.values()) await store.putNativeTensorArtifact!(artifact);
   const bodies = {} as Record<CombinatorName, string>;
   const exports = header.exports as Record<string, { value?: unknown; description?: string }>;
   let width = 0, dialect = '';

@@ -719,3 +719,12 @@ LR 1e-5. All learned sparse rows now use FP32 masters; declared legacy upgrades
 exactly promote old sparse values/moments while preserving backbone arithmetic,
 initial logits, RNG and exposure. No prompt or token spelling changes. Live
 behavioral measurement remains the same pending training-window debt above.
+
+2026-10-16 native serving adapter implementation (independent review pending):
+new exact-bound coefficient/basis errors teach restoring the current model's
+artifacts; attempting to consume a named tensor as communication teaches
+`withAdapters`; adapted-policy RL capture explicitly directs callers to native
+graph coefficient objectives. Both integration skills include recovery. No
+prompt instruction was added. Live 48-sample executor measurement of these new
+error/recovery forms remains debt for the next useful own-model teacher window;
+functional CPU/CUDA and typed HTTP transport checks qualify mechanisms only.
