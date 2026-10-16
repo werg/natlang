@@ -143,6 +143,24 @@ This is a source-coverage decision encoded in natural-language policy; the
 existing serving probe, native graph renderers, exact source hashes, and split
 verifiers are crisp mechanisms. It changes no prompts or serving behavior.
 
+## Acquired full-session durable conversion (2026-10-16)
+
+The complete input is first scanned to finish the source-wide held-group
+closure. Conversion then advances in bounded, ordered session shards. Each
+committed shard pins the complete input digest and record range, source/export
+receipts, held/quality/pending protection proof, current decision-hold file
+bindings, tokenizer fingerprints, and the exact renderer/runtime file hashes.
+It writes train and held graph frames plus an explicit omission ledger, then
+publishes the shard receipt before advancing the durable frontier. A restart
+reuses only a contiguous prefix whose binding and every output digest match;
+uncommitted shard scratch is rebuilt from its source range. Final train/test
+outputs concatenate the verified compressed frames without rewriting graph
+rows, and session/graph/omission counts must account for the complete source.
+
+Exact file hashing, shard receipts, and atomic final assembly are crisp
+durability mechanisms. Split closure and admission reasons remain explicit
+source policy; a shard boundary never changes a session's data or split.
+
 The whole original trajectory supplies `writer_context_records` to the shared
 authenticated writer index; only the chosen endpoints become target rows. A
 reader may need an earlier approved writer beyond the selected edge endpoints.

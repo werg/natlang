@@ -122,7 +122,8 @@ def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch)
     from natlang_neuralese.common.hashing import sha256_file_hex
     rows=[]
     for name,split,group in [('a','train','group-a'),('b','test','group-a'),
-                             ('c','train','group-c'),('d','train','group-d')]:
+                             ('c','train','group-c'),('d','train','group-d'),
+                             ('e','train','group-e')]:
         row=value();row['trajectory'].update(id=name,split=split,split_groups=[group]);rows.append(row)
     rows[3]['positive_candidate']=False
     source=tmp_path/'full-trajectories.jsonl.zst'
@@ -138,20 +139,37 @@ def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch)
     monkeypatch.setattr(builder,'current_protection',lambda p:{'held':set(),'quality':set(),'pending':set(),'proof':{}})
     holds=sorted((Path(builder.__file__).resolve().parents[2]/'training/decision-holds').glob('*.jsonl'))
     monkeypatch.setattr(builder,'load_decision_holds',lambda paths:({'c:decision:0000'},[]))
-    monkeypatch.setattr(builder,'session_graphs',lambda row,t,**options:iter([{'id':row['trajectory']['id'],'split':options['split']}]))
+    should_interrupt={'value':True}
+    def session_graphs_stub(row,t,**options):
+        if row['trajectory']['id']=='e' and should_interrupt['value']:
+            should_interrupt['value']=False
+            raise RuntimeError('simulated interruption after first committed shard')
+        return iter([{'id':row['trajectory']['id'],'split':options['split']}])
+    monkeypatch.setattr(builder,'session_graphs',session_graphs_stub)
     output=tmp_path/'graphs'
     argv=['builder','--export-receipt',str(receipt),'--base-tokenizer','fixture',
-          '--protection','fixture','--output',str(output)]
+          '--protection','fixture','--output',str(output),'--chunk-sessions','2']
     for hold in holds:argv+=['--decision-hold',str(hold)]
-    monkeypatch.setattr(sys,'argv',argv);builder.main()
+    monkeypatch.setattr(sys,'argv',argv)
+    with pytest.raises(RuntimeError,match='simulated interruption'):
+        builder.main()
+    interrupted=json.loads((output/'resume-state.json').read_text())
+    assert interrupted['completed_source_record_frontier']==4
+    assert len(interrupted['shards'])==2
+    builder.main()
     with open_jsonl_text(output/'test/native-graphs.jsonl.zst') as stream:
         assert [json.loads(line)['id'] for line in stream]==['a','b']
     omissions=[json.loads(line) for line in (output/'omissions.jsonl').read_text().splitlines()]
     assert [(r['id'],r['reason']) for r in omissions]==[
         ('c','current-decision-hold'),('d','source-reported-non-positive')]
+    completed=json.loads((output/'receipt.json').read_text())
+    assert completed['source_record_count']==5 and len(completed['shards'])==3
+    assert completed['counts']['positive_sessions']==3
     rows[0]['trajectory']['split']='unknown'
     with write_jsonl_text(source) as stream:
         for row in rows:stream.write(json.dumps(row)+'\n')
     data=json.loads(receipt.read_text());data['outputs'][source.name]=sha256_file_hex(source);receipt.write_text(json.dumps(data))
+    argv[argv.index(str(output))]=str(tmp_path/'invalid-graphs')
+    monkeypatch.setattr(sys,'argv',argv)
     with pytest.raises(ValueError,match='unknown source session split'):
         builder.main()

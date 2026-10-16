@@ -4,7 +4,10 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 import json
+import os
 from pathlib import Path
+import shutil
+import tempfile
 
 from transformers import AutoTokenizer
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
@@ -36,6 +39,85 @@ def held_session_targets(value, held_sources):
     trajectory = value['trajectory']
     identities = {trajectory['id'], *source_target_ids(value)}
     return sorted(identities & held_sources)
+
+
+def runtime_bindings():
+    root = Path(__file__).resolve().parents[2]
+    package = root / 'training' / 'neuralese' / 'natlang_neuralese'
+    paths = {
+        'builder': Path(__file__).resolve(),
+        'text_corpus': package / 'data' / 'text_corpus.py',
+        'native_graph_conversion': package / 'data' / 'native_graph_conversion.py',
+        'prompt_rendering': package / 'data' / 'prompt_rendering.py',
+        'serve_chat': package / 'serve' / 'chat.py',
+        'jsonio': package / 'common' / 'jsonio.py',
+        'graph_writer': root / 'scripts' / 'neuralese_data' / 'build_native_graph_text_corpus.py',
+    }
+    files = {name: {'path': str(path), 'sha256': sha256_file_hex(path)} for name, path in paths.items()}
+    return {'files': files, 'fingerprint': canonical_json_sha256_hex(files)}
+
+
+def completed_shards(shard_root, binding, expected_sessions):
+    """Return a contiguous, content-verified session frontier; reject broken committed receipts."""
+    binding_sha = canonical_json_sha256_hex(binding)
+    frontier = 0
+    verified = []
+    shard_root.mkdir(parents=True, exist_ok=True)
+    for directory in sorted(shard_root.glob('shard-*')):
+        receipt_path = directory / 'receipt.json'
+        if not receipt_path.exists():
+            shutil.rmtree(directory)
+            continue
+        receipt = json.loads(receipt_path.read_text())
+        if receipt.get('schema') != 'natlang.acquired-full-session-shard/1' or receipt.get('binding_sha256') != binding_sha:
+            raise ValueError(f'completed session shard has different source/policy/runtime binding: {directory}')
+        start, stop = receipt.get('source_record_start'), receipt.get('source_record_stop')
+        if (start != frontier or directory.name != f'shard-{start:08d}' or type(stop) is not int
+                or stop <= start or stop > expected_sessions or receipt.get('source_record_count') != stop - start):
+            raise ValueError(f'completed session shards are not a contiguous in-range prefix: {directory}')
+        if {item.get('path') for item in receipt.get('outputs', [])} != {
+                'train/native-graphs.jsonl.zst', 'test/native-graphs.jsonl.zst'}:
+            raise ValueError(f'completed session shard has an unexpected output set: {directory}')
+        output_row_counts = {}
+        for output in receipt.get('outputs', []):
+            path = directory / output['path']
+            if path.stat().st_size != output['bytes'] or sha256_file_hex(path) != output['sha256']:
+                raise ValueError(f'completed session shard output differs from its receipt: {path}')
+            output_row_counts[output['path']] = output['rows']
+        if (output_row_counts['train/native-graphs.jsonl.zst'] != receipt['counts'].get('graphs:train', 0)
+                or output_row_counts['test/native-graphs.jsonl.zst'] != receipt['counts'].get('graphs:test', 0)):
+            raise ValueError(f'completed session shard row counts differ from its source accounting: {directory}')
+        omission = directory / 'omissions.jsonl'
+        if sha256_file_hex(omission) != receipt.get('omissions_sha256'):
+            raise ValueError(f'completed session shard omission ledger differs from receipt: {omission}')
+        verified.append({'path': str(receipt_path), 'sha256': sha256_file_hex(receipt_path),
+                         'start': start, 'stop': stop, 'counts': receipt['counts']})
+        frontier = stop
+    if frontier > expected_sessions:
+        raise ValueError('session shard frontier exceeds the source session count')
+    return frontier, verified
+
+
+def _sync_concat(destination, inputs):
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix='.' + destination.name + '.', suffix='.tmp', dir=destination.parent)
+    try:
+        with os.fdopen(fd, 'wb') as output:
+            for path in inputs:
+                with Path(path).open('rb') as source:
+                    shutil.copyfileobj(source, output, length=8 * 1024 * 1024)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temp_name, destination)
+        directory_fd = os.open(destination.parent, os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except BaseException:
+        Path(temp_name).unlink(missing_ok=True)
+        raise
 
 
 def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint, split):
@@ -129,7 +211,10 @@ def main():
     parser.add_argument('--protection', type=Path, required=True)
     parser.add_argument('--decision-hold', type=Path, action='append', required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--chunk-sessions', type=int, default=100)
     args = parser.parse_args()
+    if args.chunk_sessions <= 0:
+        raise ValueError('--chunk-sessions must be a positive integer')
     export = json.loads(args.export_receipt.read_text())
     if export.get('schema') != 'natlang.normalized-agent-source-file/1':
         raise ValueError('source needs its complete normalized export receipt')
@@ -147,10 +232,12 @@ def main():
     source_fp = tokenizer_fingerprint(tokenizer)
     provision(tokenizer)
     expanded_fp = tokenizer_fingerprint(tokenizer)
-    # Complete source-file held-group closure before writing either split. Final
+    # Complete source-file held-group closure before writing any shard. Final
     # corpus admission also closes groups across all source files and views.
     held = set(protection['held'])
+    source_rows = 0
     for value in sessions(source):
+        source_rows += 1
         trajectory = value['trajectory']
         if trajectory['split'] not in ('train', 'test', 'validation'):
             raise ValueError('unknown source session split must not become train')
@@ -159,65 +246,165 @@ def main():
             raise ValueError('normalized session differs from original export source binding')
         if trajectory['split'] in ('test', 'validation'):
             held.update(trajectory['split_groups'])
+    if source_rows != export.get('complete_sessions'):
+        raise ValueError('normalized source row count differs from its complete export receipt')
     if (args.output / 'receipt.json').exists():
         raise ValueError('completed graph output is immutable; use its bound receipt')
-    writers = {split: GraphWriter(args.output / split / 'native-graphs.jsonl.zst') for split in ('train', 'test')}
-    counts = Counter()
     args.output.mkdir(parents=True, exist_ok=True)
-    try:
-        with (args.output / 'omissions.jsonl').open('w') as omissions:
-            for value in sessions(source):
-                trajectory = value['trajectory']; identifier = trajectory['id']; groups = set(trajectory['split_groups'])
-                reason = None
-                if not value.get('positive_candidate') or trajectory['outcome'].get('label') == 'failed':
-                    reason = 'source-reported-non-positive'
-                elif groups & (protection['quality'] | protection['pending']):
-                    reason = 'current-source-quality-or-pending-protection'
-                elif held_session_targets(value, held_sources):
-                    reason = 'current-decision-hold'
-                elif not source_target_ids(value):
-                    reason = 'source-session-without-assistant-target'
-                if reason:
-                    omissions.write(json.dumps({'id': identifier, 'source_row': value['source_row'], 'reason': reason,
-                        'original_target_ids': source_target_ids(value),
-                        'matched_hold_sources': held_session_targets(value, held_sources),
-                        'hold_matching_scope': 'conservative original source/target identity prefix; no claim of raw-row hash equality',
-                        'sibling_targets_retained_in_bound_source': reason == 'current-decision-hold'})+'\n')
-                    counts[reason] += 1
-                    continue
-                split = 'test' if groups & held else 'train'
-                rendered = session_graphs(value, tokenizer, source_fingerprint=source_fp,
-                        expanded_fingerprint=expanded_fp, split=split)
-                for graph in rendered:
-                    writers[split].write(graph)
-                    counts['graphs:'+split] += 1
-                    if (graph.get('conversion', {}).get('acquired_session', {}).get('view')
-                            == 'full-prefix-reasoning-target'):
-                        counts['auxiliary_reasoning_graphs:'+split] += 1
-                counts['positive_sessions'] += 1
-        outputs = [writer.finish() for writer in writers.values()]
-    except BaseException:
-        for writer in writers.values():
-            writer.abort()
-        raise
+    runtime = runtime_bindings()
+    binding = {'source': {'path': str(source), 'sha256': digest, 'sessions': source_rows},
+        'export_receipt': {'path': str(args.export_receipt), 'sha256': sha256_file_hex(args.export_receipt)},
+        'source_contract': export['contract'], 'protection': protection['proof'],
+        'decision_holds': decision_bindings, 'decision_hold_ids_sha256': canonical_json_sha256_hex(sorted(decision_ids)),
+        'source_tokenizer_fingerprint': source_fp, 'expanded_tokenizer_fingerprint': expanded_fp,
+        'runtime': runtime, 'chunk_sessions': args.chunk_sessions,
+        'held_group_closure_sha256': canonical_json_sha256_hex(sorted(held))}
+    shard_root = args.output / 'session-shards'
+    state_path = args.output / 'resume-state.json'
+    previous_state_frontier = 0
+    if state_path.exists():
+        state = json.loads(state_path.read_text())
+        if state.get('binding') != binding:
+            raise ValueError('resume state is bound to different source, holds, renderer or runtime')
+        previous_state_frontier = state.get('completed_source_record_frontier', 0)
+    else:
+        write_json_durable(state_path, {'schema': 'natlang.acquired-session-resume/1', 'binding': binding,
+                                        'binding_sha256': canonical_json_sha256_hex(binding),
+                                        'completed_source_record_frontier': 0})
+    frontier, shard_receipts = completed_shards(shard_root, binding, source_rows)
+    if previous_state_frontier > frontier:
+        raise ValueError('resume state claims a source frontier without matching committed shard receipts')
+    counts = Counter()
+    for item in shard_receipts:
+        counts.update(item['counts'])
+    if frontier:
+        write_json_durable(state_path, {'schema': 'natlang.acquired-session-resume/1', 'binding': binding,
+            'binding_sha256': canonical_json_sha256_hex(binding), 'completed_source_record_frontier': frontier,
+            'shards': shard_receipts})
+
+    def process(value, omissions, writers, shard_counts):
+        trajectory = value['trajectory']; identifier = trajectory['id']; groups = set(trajectory['split_groups'])
+        reason = None
+        if not value.get('positive_candidate') or trajectory['outcome'].get('label') == 'failed':
+            reason = 'source-reported-non-positive'
+        elif groups & (protection['quality'] | protection['pending']):
+            reason = 'current-source-quality-or-pending-protection'
+        elif held_session_targets(value, held_sources):
+            reason = 'current-decision-hold'
+        elif not source_target_ids(value):
+            reason = 'source-session-without-assistant-target'
+        if reason:
+            omissions.write(json.dumps({'id': identifier, 'source_row': value['source_row'], 'reason': reason,
+                'original_target_ids': source_target_ids(value),
+                'matched_hold_sources': held_session_targets(value, held_sources),
+                'hold_matching_scope': 'conservative original source/target identity prefix; no claim of raw-row hash equality',
+                'sibling_targets_retained_in_bound_source': reason == 'current-decision-hold'})+'\n')
+            shard_counts[reason] += 1
+            return
+        split = 'test' if groups & held else 'train'
+        for graph in session_graphs(value, tokenizer, source_fingerprint=source_fp,
+                                    expanded_fingerprint=expanded_fp, split=split):
+            writers[split].write(graph)
+            shard_counts['graphs:'+split] += 1
+            if graph.get('conversion', {}).get('acquired_session', {}).get('view') == 'full-prefix-reasoning-target':
+                shard_counts['auxiliary_reasoning_graphs:'+split] += 1
+        shard_counts['positive_sessions'] += 1
+
+    sessions_iterator = iter(sessions(source))
+    for _ in range(frontier):
+        try:
+            next(sessions_iterator)
+        except StopIteration as exc:
+            raise ValueError('resume frontier exceeds actual source records') from exc
+    record_index = frontier
+    while record_index < source_rows:
+        try:
+            value = next(sessions_iterator)
+        except StopIteration:
+            break
+        shard_start = record_index
+        shard_dir = shard_root / f'shard-{shard_start:08d}'
+        if shard_dir.exists():
+            shutil.rmtree(shard_dir)
+        shard_dir.mkdir(parents=True)
+        writers = {split: GraphWriter(shard_dir / split / 'native-graphs.jsonl.zst') for split in ('train', 'test')}
+        shard_counts = Counter()
+        shard_stop = shard_start
+        omissions_path = shard_dir / 'omissions.jsonl'
+        try:
+            with omissions_path.open('w', encoding='utf-8', newline='\n') as omissions:
+                while True:
+                    process(value, omissions, writers, shard_counts)
+                    shard_stop += 1
+                    record_index += 1
+                    if shard_stop - shard_start >= args.chunk_sessions:
+                        break
+                    try:
+                        value = next(sessions_iterator)
+                    except StopIteration:
+                        break
+            outputs = [writer.finish() for writer in writers.values()]
+        except BaseException:
+            for writer in writers.values():
+                writer.abort()
+            shutil.rmtree(shard_dir, ignore_errors=True)
+            raise
+        receipt = {'schema': 'natlang.acquired-full-session-shard/1', 'binding_sha256': canonical_json_sha256_hex(binding),
+            'source_record_start': shard_start, 'source_record_stop': shard_stop,
+            'source_record_count': shard_stop - shard_start, 'counts': dict(shard_counts),
+            'outputs': [{**output, 'path': str(Path(output['path']).relative_to(shard_dir))} for output in outputs],
+            'omissions_sha256': sha256_file_hex(omissions_path), 'runtime': runtime,
+            'source_sha256': digest, 'protection': protection['proof'], 'decision_holds': decision_bindings,
+            'source_tokenizer_fingerprint': source_fp, 'expanded_tokenizer_fingerprint': expanded_fp}
+        receipt_path = shard_dir / 'receipt.json'
+        write_json_durable(receipt_path, receipt)
+        shard_receipts.append({'path': str(receipt_path), 'sha256': sha256_file_hex(receipt_path),
+            'start': shard_start, 'stop': shard_stop, 'counts': dict(shard_counts)})
+        frontier = shard_stop
+        counts.update(shard_counts)
+        write_json_durable(state_path, {'schema': 'natlang.acquired-session-resume/1', 'binding': binding,
+            'binding_sha256': canonical_json_sha256_hex(binding), 'completed_source_record_frontier': frontier,
+            'shards': shard_receipts})
+        if frontier != record_index:
+            raise AssertionError('durable shard frontier differs from processed input count')
+    if frontier != source_rows:
+        raise ValueError(f'conversion did not reach the complete source frontier: {frontier}/{source_rows}')
     if sum(counts[key] for key in ('positive_sessions', 'source-reported-non-positive',
             'current-source-quality-or-pending-protection', 'current-decision-hold',
             'source-session-without-assistant-target')) != export['complete_sessions']:
         raise ValueError('complete normalized source session accounting differs')
     if sha256_file_hex(source) != digest:
         raise ValueError('source changed during rendering')
-    current_protection(args.protection)
+    final_protection = current_protection(args.protection)
+    if final_protection['proof'] != protection['proof']:
+        raise ValueError('current source protection changed during rendering')
     if (sorted((Path(__file__).resolve().parents[2] / 'training' / 'decision-holds').glob('*.jsonl')) != current_holds
-            or load_decision_holds(current_holds)[1] != decision_bindings):
+            or load_decision_holds(current_holds)[1] != decision_bindings
+            or canonical_json_sha256_hex(sorted(load_decision_holds(current_holds)[0]))
+                != binding['decision_hold_ids_sha256']):
         raise ValueError('current decision holds changed during rendering')
+    outputs = []
+    for split in ('train', 'test'):
+        chunk_paths = [Path(item['path']).parent / split / 'native-graphs.jsonl.zst' for item in shard_receipts]
+        output_path = args.output / split / 'native-graphs.jsonl.zst'
+        _sync_concat(output_path, chunk_paths)
+        expected_rows = sum(output['rows'] for item in shard_receipts
+            for output in json.loads(Path(item['path']).read_text())['outputs']
+            if output['path'] == f'{split}/native-graphs.jsonl.zst')
+        outputs.append({'path': str(output_path), 'rows': expected_rows, 'bytes': output_path.stat().st_size,
+                        'sha256': sha256_file_hex(output_path)})
+    omissions_path = args.output / 'omissions.jsonl'
+    _sync_concat(omissions_path, [Path(item['path']).parent / 'omissions.jsonl' for item in shard_receipts])
     write_json_durable(args.output / 'receipt.json', {'schema': 'natlang.acquired-full-session-graphs/1',
         'source': {'path': str(source), 'sha256': digest},
         'export_receipt': {'path': str(args.export_receipt), 'sha256': sha256_file_hex(args.export_receipt)},
         'protection': protection['proof'], 'decision_holds': decision_bindings,
         'source_tokenizer_fingerprint': source_fp, 'expanded_tokenizer_fingerprint': expanded_fp,
-        'builder_sha256': sha256_file_hex(__file__),
+        'builder_sha256': sha256_file_hex(__file__), 'runtime': runtime,
         'counts': dict(counts), 'outputs': outputs, 'training_admission': False,
-        'omissions_sha256': sha256_file_hex(args.output / 'omissions.jsonl')})
+        'source_record_count': source_rows, 'held_group_closure_sha256': binding['held_group_closure_sha256'],
+        'shards': shard_receipts, 'resume_state_sha256': sha256_file_hex(state_path),
+        'omissions_sha256': sha256_file_hex(omissions_path)})
 
 
 if __name__ == '__main__':
