@@ -571,6 +571,7 @@ def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--native-graphs', type=Path, required=True)
     parser.add_argument('--foundation-native-graphs', type=Path)
+    parser.add_argument('--pending-native-sources', action='append', default=[])
     parser.add_argument('--refresh-at-checkpoint', action=argparse.BooleanOptionalAction, default=False,
         help='return an explicit incomplete continuation for semantic refresh at the next declared checkpoint boundary')
     parser.add_argument('--learn-reasoning-boundaries', action=argparse.BooleanOptionalAction, default=False,
@@ -761,6 +762,9 @@ def main(argv=None):
          sorted(source_row_bindings.items()), sorted(held_row_bindings.items())],
         ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
     source_order = train.ordered_ids()
+    from .native_pending_sources import load_pending_sources
+    checkpoint_options['_pending_native_source_declarations'] = [
+        load_pending_sources(path, tokenizer_fingerprint=fingerprint) for path in args.pending_native_sources]
     checkpoint_options['_communication_ids']=[entry['id'] for entry in train.entries if entry.get('communication')]
     foundation_source = (NativeGraphSource(args.foundation_native_graphs, fingerprint, required_split='train', role_ids=roles.ids)
                          if args.foundation_native_graphs else train)
@@ -1039,7 +1043,29 @@ def main(argv=None):
     # A no-update continuation still needs its own durable checkpoint, and an
     # explicitly changed optimizer algorithm must be saved even at a completed
     # exposure boundary. Neither operation earns another graph visit.
-    metadata_dirty = last_saved_step < 0 or args.native_optimizer_migration is not None
+    # Validate new declarations against carried/active exact row identities BEFORE updates.
+    from .native_continuation import _retain_pending_sources
+    pending_frame = _retain_pending_sources({
+        'source_row_bindings': source_row_bindings, 'source_row_order': source_order,
+        'exposure_counts': dict(exposure_counts), 'options': checkpoint_options},
+        carried_progress.get(args.stage_id or 'native-graph-ce') or {})
+    pending_sources_changed = (pending_frame.get('pending_source_declarations') !=
+        (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('pending_source_declarations'))
+    pending_parent_sha = (sha256_file_hex_cached(policy.slot) if policy.slot.is_file() else
+        ((checkpoint_options.get('continuation') or {}).get('checkpoint_sha256')))
+    admission_record = ((resume or saved_training).get('options') or {}).get('_pending_source_admission')
+    if pending_sources_changed and pending_parent_sha and not len(pending_batches):
+        admission_record = {'schema': 'natlang.native-pending-source-admission/1',
+            'parent_checkpoint_sha256': pending_parent_sha, 'new_optimizer_updates': 0,
+            'global_step': global_step,
+            'declarations': sorted(pending_frame.get('pending_source_declarations') or {})}
+    elif len(pending_batches):
+        admission_record = None  # An actual subsequent update is a new continuation.
+    if admission_record is not None:
+        checkpoint_options['_pending_source_admission'] = admission_record
+    metadata_dirty = (last_saved_step < 0 or args.native_optimizer_migration is not None
+        or pending_frame.get('pending_source_declarations') !=
+        (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('pending_source_declarations'))
     eval_at = max(1, args.eval_every)
     started = time.time()
     def foundation_exposure():
@@ -1331,6 +1357,9 @@ def main(argv=None):
         ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
     communication = communication_exposure(train.entries, exposure_counts, required_visits)
     mandatory_sft = progress_obligations(carried_progress)
+    completed = completed and mandatory_sft['complete']
+    pending_source_admission = ({**admission_record, 'checkpoint_sha256': checkpoint_sha}
+        if admission_record and admission_record['global_step'] == global_step and step == resumed_step else None)
     continuation_boundary = {'kind': 'semantic-refresh', 'reached': bool(refresh_boundary and step>resumed_step),
         'new_optimizer_updates':step-resumed_step, 'checkpoint_sha256':checkpoint_sha}
     foundation_ready = bool(foundation_boundary and runtime_report.get('passed') is True and task_receipt_ok)
@@ -1340,6 +1369,7 @@ def main(argv=None):
               'resident_adoption': resident_receipt,
               'communication_exposure': communication, 'completed': completed,
               'foundation_ready': foundation_ready, 'communication_foundation': foundation, 'mandatory_sft': mandatory_sft,
+              'pending_source_admission': pending_source_admission,
               'continuation_boundary': continuation_boundary,
               'raw_communication_rows':raw_communication_rows(carried_progress),
               'numerics_ok': runtime_report.get('passed') is True, 'qualified': False,
@@ -1360,6 +1390,7 @@ def main(argv=None):
         'resident_adoption': resident_receipt,
         'communication_exposure': communication, 'foundation_ready': foundation_ready,
         'communication_foundation': foundation, 'mandatory_sft': mandatory_sft,
+              'pending_source_admission': pending_source_admission,
         'continuation_boundary':continuation_boundary,
         'raw_communication_rows':raw_communication_rows(carried_progress), 'model_id': config['architecture'] + ':' +
         config['base_inventory_sha256'], 'lineage': str(args.out.resolve()),
