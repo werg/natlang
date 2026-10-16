@@ -85,11 +85,28 @@ returning string can receive an intermediate `Neuralese<string>` from root eval
 and continue through the existing ordinary write-out path; this has an existing
 host test, but requires actual native executor qualification here.
 
-**Pending:** root supervises baseline/candidate executor measurement using
-retained trained step 6711 and an exact frozen runtime pair. That historical
-student is a diagnostic actor, not the current cloud policy. About 48 samples
-per variant and exact checkpoint/runtime/sampling/result evidence are required
-in each intended root mode before adopting the new instructions. Authored-root
+**Live diagnostic in progress (2026-10-16):** the retained trained LFM step7750
+checkpoint `f26338f6599334e59d6f30f9d27a63fa665dfb95d3d88972d6ea43fbfc2a5b94`
+runs against the exact frozen TS runtime
+`e93c3ff248dfb73f84eae9f2baf1af3a7e4726ed3b23fd78ac6530c44a732613`.
+The ledger unit is `native-rl-curriculum-7750-diagnostic3-20261016`; artifacts are
+under `/mnt/external/natlang-development-data/native-curriculum-qualification-20261016/`.
+Each of the 12 authored TRAIN inputs receives four samples in each root mode:
+the original contracts retain the three private authored roots, and the second
+packet uses the shared `student_root_row` transform. Seeds match across modes,
+with temperature0.6 and the existing collector limits. The actor receipt binds
+checkpoint, complete Python/TS runtime inventories, source and sampling; original
+trajectories and queue journals remain available. The first startup omitted frozen
+rendering-contract assets and produced only fetch-failed infrastructure attempts;
+those receipts are separated under `transport-attempt-001`. The corrected launch
+binds the pinned prompt assets and requires native-info preflight before collection.
+The original async evaluation then completed and cleaned its weights; the exact
+verified private export is being independently pinned in the diagnostic directory.
+`native-curriculum-verified-parent-waiter-20261016` starts the corrected diagnostic
+after successful verified publication; failed fetches do not launch a model.
+These96 samples are diagnostics,
+not training admission or measurements of the current cloud policy. Completed
+48-sample results in each intended root mode remain required before adoption. Authored-root
 diagnostics do not qualify the corresponding whole-student-root prompts. The
 production selector rejects
 `qualification:pending-live-48`. Qualification is not corpus admission; publish
