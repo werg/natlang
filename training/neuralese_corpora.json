@@ -119883,6 +119883,98 @@
       }
     },
     {
+      "id": "qwen-verified-positive-native-graphs-20261015-v20",
+      "owner": "dgx",
+      "path": "runs/qwen-verified-positive-native-graphs-20261015-v20",
+      "include": [
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "mellum21/receipt.json",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "validation-proof.json",
+        "decision-hold-closure-proof.json"
+      ],
+      "source_class": "verified-strong-teacher-positive-native-whole-trajectory-ordinary-SFT-graphs",
+      "split": "Train-only. 5,286 unique new graphs per model; empty test files; no held evaluation rows are claimed.",
+      "admission": "220 verified Qwen3.8-Flash-Next trajectories yielded 5,499 eligible assistant turns. 213 exact token/weight duplicates per model were omitted after comparison against V1–V19 verified-positive views, leaving 5,286 new train graphs per model. 333 source actions remain explicit omissions because no original provider action or nonempty assistant reply was available. Full captured prompts and trajectories remain bound.",
+      "training_admission": true,
+      "training_admission_reason": "Independent validation recomputed source and decision-admission bindings, parsed both complete views, matched graph IDs across models, verified current source-group protections, and joined every positive target decision ID against the exact current sorted decision-hold files with zero intersections. Registration is not evidence of student exposure.",
+      "derived_from": [
+        "qwen-positive-clean-actions-20261015-v1",
+        "qwen-verified-positive-native-graphs-20261015-v1-v2",
+        "qwen-verified-positive-native-graphs-20261015-v10",
+        "qwen-verified-positive-native-graphs-20261015-v11",
+        "qwen-verified-positive-native-graphs-20261015-v12",
+        "qwen-verified-positive-native-graphs-20261015-v13",
+        "qwen-verified-positive-native-graphs-20261015-v14",
+        "qwen-verified-positive-native-graphs-20261015-v15",
+        "qwen-verified-positive-native-graphs-20261015-v16",
+        "qwen-verified-positive-native-graphs-20261015-v17",
+        "qwen-verified-positive-native-graphs-20261015-v19-lfm-prefix",
+        "qwen-verified-positive-native-graphs-20261015-v19-mellum-prefix",
+        "qwen-verified-positive-native-graphs-20261015-v3",
+        "qwen-verified-positive-native-graphs-20261015-v4",
+        "qwen-verified-positive-native-graphs-20261015-v5",
+        "qwen-verified-positive-native-graphs-20261015-v6",
+        "qwen-verified-positive-native-graphs-20261015-v7",
+        "qwen-verified-positive-native-graphs-20261015-v8",
+        "qwen-verified-positive-native-graphs-20261015-v9"
+      ],
+      "license_provenance": "Project-collected trajectories from the pinned RadixArk/Qwen3.8-Flash-Next-NVFP4 teacher revision. License provenance remains a source fact; no license exclusion.",
+      "note": "Incremental train-only continuation for both students. Exact target-weight dedup preserves prior coverage. Actual training exposure must be recorded by each model continuation.",
+      "source_binding": {
+        "raw_source": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v20/native-trajectories.jsonl",
+          "sha256": "e18ce9b5098fb179c1de6156b120385c6e11f23f0bc4990cdaabb3721214693f",
+          "bytes": 365165280,
+          "rows": 220
+        },
+        "transfer_receipt": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v20/transfer-receipt.json",
+          "sha256": "d83402e530e0410ea11977bcdef1258e8ba9e6fefc82c51951289dd54f35ae45"
+        },
+        "batch_source_bindings": {
+          "path": "/home/werg/data/dgxops/qwen-verified-positive-trajectories-20261015-v20/batch-source-bindings.json",
+          "sha256": "022547a31d9ce1ddfc4bd2786c508857a22fdf6306444d6078350d1e0cdbc428"
+        },
+        "actual_source_binding_verification_sha256": "2dfaa2e9ea1dfe5fd7946de4c28e56a21ddfacf1437f5085faebe95ba39f6431",
+        "decision_admission_cache_sha256": "5a5327e34e914021e240347c16ab8ebc03446ab62c8188f8943b88c26dad4185",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "current_source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+        "validation_proof_sha256": "ffc44166442a2f4a5b749346d70ddd7a47080d1192e6bf061e6edb19f25fe030",
+        "eligible_turns": 5499,
+        "duplicate_omissions_per_model": 213,
+        "action_omissions_per_model": 333,
+        "decision_hold_closure": {
+          "path": "runs/qwen-verified-positive-native-graphs-20261015-v20/decision-hold-closure-proof.json",
+          "sha256": "df7bc30980c7989378d726106e1787fc50cc04045a1df07cffc0291b5e58004e",
+          "scope": "All 5,286 positive target decision IDs per model joined against 4,596 current decision-hold IDs; zero intersections."
+        },
+        "models": {
+          "lfm25": {
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "build_receipt_sha256": "881a8ba554d4083378f2786198ee6cfe473a988072c31adf0097b904b8bbc6a6",
+            "train_sha256": "1bc5d1cce74e0cf4bc1b538847307484b6f72de0e6c622b00b8206bc83c62c49",
+            "test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+            "rows": 5286,
+            "tokens": 37111291,
+            "expanded_tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105"
+          },
+          "mellum21": {
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "build_receipt_sha256": "3975980bf7a77be7bdd8b6c1c0c270f0edf65ba1ea48305c3c8d7d4c2ad5421e",
+            "train_sha256": "2de3e0acdc51ddd4c36887baae98519dfb8d262a987b400b716a2144a49758b6",
+            "test_sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c",
+            "rows": 5286,
+            "tokens": 37485196,
+            "expanded_tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f"
+          }
+        }
+      }
+    },
+    {
       "id": "qwen-verified-positive-native-graphs-20261015-v19-lfm-prefix",
       "owner": "dgx",
       "path": "runs/qwen-verified-positive-native-graphs-20261015-v19",
