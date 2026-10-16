@@ -1,117 +1,118 @@
-# CoreWeave supervision — 2026-10-16 06:47 UTC
+# CoreWeave supervision — 2026-10-16 07:40 UTC
 
-DGX owns execution; Pop is closed. Two training sandboxes and one self-hosted
-Qwen3.8-Flash-Next NVFP4 teacher; no further allocation. Comprehensive adaptive
-training of both models remains the objective. Neither original 26,312-graph
-communication foundation is complete. Expanded 57,144 is tracked separately.
-No trained joint dialect, production RL or task-lift claim.
+DGX owns all work; Pop closed. Two training sandboxes plus one self-hosted
+strong Qwen teacher. Comprehensive adaptive training remains active. Neither
+original 26,312-graph communication foundation is complete; expanded 57,144
+refresh and Mellum's 107,766 active communication rows are separate counts.
+No completed joint dialect, production RL or task-lift claim.
 
-## Actual training and recovery parents
+## Live training and exact recovery
 
-- Both learners now make real AdamW updates for native ordinary parameters;
-  backbone MuonSR is unchanged. Explicit migration preserves weights, RNG,
-  exposure, unaffected optimizer state and historical Muon buffers as provenance.
-  New Adam moments honestly start at zero. Shared fixes cbcbb223b/f1630b52d;
-  native transport=true, noise=1. Input/output role rates .0003 for both;
-  LF reasoning .0003, M reasoning/backbone/adapter 3e-6. These rates are adjustable.
-- LF runtime /work/native-runtime/6b7284057078, recipe538107/trainer538125.
-  Last measured5445, 69 post-migration updates; 102 communication graphs with
-  positive producer-marker gold support. Actual5378:6593 supervisedTPS/GPU100%,
-  16.33GB peak. checkpoint_layers=true/inputoffload=false: CPU input offload
-  previously hit the real64GiB host limit. Required exact5376 parent:
-  2,241,135,623 bytes, SHAed2c99000b86c3aeb3b5f7d03026e03e2e879186e8644bbef6c9faad08b935e7.
-  Original foundation9037/26312 at5376. New-source capacity requires a real
-  current no-offload certificate; never rekey the old offload=true proof.
-- M runtime /work/native-runtime/28432eb5e0c8, recipe353591/trainer353599.
-  Last measured5504,119 post-migration updates; 70 positive-supported comm graphs.
-  Actual5399:5528supervisedTPS/GPU99%,54.52GB peak. Checkpoint/inputoffload=true.
-  Exact5385 parent48,041,003,941 bytes,
-  SHA0d467f4c3249817e1b39795e24329fad3929f8b0c73b7136514ccd42052cea18.
-  811971 bound rows; original foundation7371/26312 at5385. b98abb0f2 fixes exact
-  V8 resident predecessor recovery without resetting exposure. Big2/Search
-  resident CPU prepare355075 scans97600new train+9972held; do not restart it.
-- M5500 held producer-end argmax22/22, meanp=.9783; producer-begin remains weak
-  (.000935/NLL7.535). Different held cohorts prohibit matched temporal claims.
-  Keep actual task, held loss and per-row gradient/update telemetry.
-- Measured capacity continuation24cb71bbf bounds ordinary Adam storage delta
-  against exact old numerical/capacity proof and approved runtime inventories.
-  M current derived cert e95aa1b0084455d64524fcea98135002c518fa3cfc794aecd4044b98691c3df4
-  at control/mellum-native-adam-recovery-20261016-v1/inherited-capacity-resident-predecessor.json;
-  limits112008physical/173589KV. New-parent measurement is not claimed.
+Both native ordinary optimizers now use actual AdamW updates; backbone MuonSR
+continues. Explicit migration preserves weights/RNG/exposure/unaffected state,
+retains old Muon provenance and honestly starts new Adam moments at zero.
+Native transport=true/noise=1; producer/consumer rates .0003 both lines,
+LF reasoning .0003, M reasoning/backbone/adapter 3e-6. Monitor actual changed
+coordinates alongside gradients (cbcbb223b/f1630b52d), not gradient-only learning.
 
-## Teacher and data admission
+- LF runtime `/work/native-runtime/6b7284057078`, recipe538107/trainer538125.
+  Durable5500:2,241,321,775B SHA250730be479148b04c5c332539e3520c6c15f44135f4ca5a01ec48e308607bdc,
+  independent full private PUT/GET verified. Latest audited5750 original
+  foundation9860 complete/16452 pending. Checkpointing=true/inputoffload=false
+  after actual64GiB host OOM with offload. Current recipe804180train/15827held.
+  New sources require an actual current no-offload capacity handoff; cloud owns it.
+- Mellum runtime `/work/native-runtime/28432eb5e0c8`, recipe353591/trainer353599.
+  Durable5750:47,988,383,449B SHAc495eb35ec466901117ba5e329a7f2cee68487c06ac629ae059d6445071b0588,
+  full PUT/GET verified;6000 saved, export/hash audit pending. Original foundation
+ 7747complete/18565pending at6000. Checkpoint/inputoffload=true. Exact derived
+  capacity e95aa1b0084455d64524fcea98135002c518fa3cfc794aecd4044b98691c3df4:
+ 112008physical/173589KV, approved historical numerical/storage continuation.
+- M Big2 actually adopted5750:909571train/25799held; Search7027 adopted5810:
+ 916598train. Per-ID audit6000 shows EXACT0 new Big2/Search visits; do not confuse
+ loaded/adopted with trained. V9–V14 plus Search0000–2 append guardian366559
+ actually armed07:18:52; skips already-active leaves and waits old guardian drain.
+- Scheduling audit found original source order wins within communication tier;
+ main delay is1:1 ordinary interleave/long graphs. Cloud preparing shared4:1
+ original-foundation phase, then normal mix, preserving every quota/visit/RNG.
+ Do not stop learners for an unqualified candidate.
+- Original foundation readiness/controller PID364879 waits actual completion.
+ LF terminal ferry cw-lfm-foundation-ferry-2239 active, readiness published LAST,
+ controller/dependency checks and full optimizer closure required before VAE.
 
-- Teacher batch12 closed3826:3354success,95semantic,366invalid,11typed model-budget.
-  Root actual3826 closure qualified with teacher_batch_completion.py (50004e610);
-  typed budget closure advances scheduling, never relabels failures as usable data.
-- Fresh batch13 started06:15:59 parent584911,512 reference-qualified fresh cases,
-  two variants/1024queued,8workers. Successor guardian588486 waits exact parent
-  identity and drained workers, validates closure, launches canonical v6 feeder.
-  No extra sandbox. Fresh packet schema support currently blocks V15 harvesting:
-  cloud fixes exporter nested protection; source agent fixes converter admission.
-- V14 ACTUALLY registered72f78f1d1:2250train/model, source134trajectories244790997B
-  SHAd8c628457eeab0860bb54329837d3087a00c3177fb0e230c03dd194496e89ada.
-  Staging2219 completed both; registered/staged is not exposure. V8 actual M
-  resident adoption; later teacher batches await actual per-row exposure.
-- D12 full cohort ACTUALLY admitted2945f45af:5025 original sessions,2826 usable
-  whole train graphs/model,2199 nonpositive omissions/model,0held. All6archives
-  both tokenizers. Global held closure16455groups. Source audit plus4 exact
-  source-render examples; no oracle/native execution claim.
-- D12 capacity partition preserves all5652 original row bytes and provenance:
-  receipt59632e5e1a253925ac4730144bcf8b2673db4f5175c3c1f1bd3a2b1aa6d640f5.
-  LF993fit/1833long at32768/32768 UNQUALIFIED operational limits;
-  M2526fit/300long at112008/173589. Partition is not yet registered/staged/adopted.
-  Never append both full aggregate and its fit subset. Shared integration1be58289e carries mandatory
-  exact pending-row obligations in continuation/SFT/recipe/readiness, including
-  zero-update declaration admission and later activation without double credit.
-- Local9624normalized sessions/730actual export receipts coverD12/D15/D16/D18.
-  Frozen3259 original converter remains active onD15. Parallel D16/D18 low-priority
-  units use same frozen converter, exact source/hold binding and disjoint leases;
-  original worker will verify/reuse their receipts. Sources not yet exposed.
-- LF durable full-native worker525307/525311, runtime82bc5b377, output
-  /work/data-preparation/acquired-agent-full-native-20261016-v2-durable:
-  seven100-source-record shards/frontier700 committed06:02; full completion
-  and admission unclaimed. Full normalizersD22/D35 andD17/D25 need refresh.
-  AdditionalD28/D27/D26/D38/D23 normalized worker stagedLFv2; cloud owns actual
-  launch at available CPU slot. M full-session native handoff remains required.
-  All16acquired sources have adapters;D09/D20/D24/D39 actual authenticated403.
+## Continuous generation and data
 
-## Evaluations and checks
+Teacher current RadixArk/Qwen3.8-Flash-Next-NVFP4 revision7b719225242aacd3dbd3f9407468c2ee9a9d2594,
+PennyRoyal/SGLang SM120 fa9c2673131621cafb9a527e61d97c25eac130a9;
+PLE NVMe,4 running engine requests,8 collection workers, reasoning medium.
+Fresh batch13 parent584911,512qualified cases/1024tasks, successor588486.
+Latest07:32 GPU98%,3running/.67KV utilization; instantaneous utilization is not throughput.
 
-- Corrected actual-native LF5000 unit taskeval-dbb7eb81-0005000 remains active.
-  Latest file discovery shows10 job results, refreshing semantic counts. Earlier
-  five completed were semantic failures despite native writes/three reads;
-  investigate runtime/control read-out, never infer inability from aggregate loss.
-- M inference-only view verified24,556,281,665bytes,
-  SHAe897b6854839735c09ea3324e3e6bf0e48c3155ab49d5f0b9da9aaab4b40b6b2;
-  exact full5000 training parent unchanged. Fetch/baseinventory/seal/queue ACTUAL
-  completed06:28. taskeval-c2be9511-0005000 ACTIVE, now actual job result files,
-  ~53.4GiB combined CPU/GPU use. Single existing dispatcher serves both.
-- Standing broad check24cb71bbf hung at41% on root's unbounded process identity
-  retry with fake/nonmatching PID. Explicit unit stopped; not verified. Fix
-  e48425811 bounds identity observation, retains ownership token and child
-  supervision, tests absent PID and actual shebang wrapper recovery. Actual37
-  readiness/semantic/RL focused tests PASS22.44s +quick. Standing timer runs
-  latest main; keep one broad suite. Last fully green a6b8d5beb7.
+- V15 ACTUALLY admitted03b47dc75:162verified source trajectories,4384train/model,
+ 0held. Exact source/protection/decision-hold/twin/parse checks passed. Cloud
+ staging/adoption/exposure remain separate. V16 incremental exporter queued2245.
+- Global source hold BUG fixed d1a730abb: union-find closure across ALL source
+ groups, including omitted/failed sessions. Actual9624sessions/730exports:
+ held16455→16777,quality65161/pending398 unchanged. Immutable new projection
+ `/home/werg/data/dgxops/acquired-connected-source-protection-20261016-v2/protection-manifest.json`
+ SHA1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704.
+ Actual80focused tests + quick passed; supports exact inherited component inventory.
+- D16/D18 BOTH corrected conversions terminal success07:34, logical root
+ `runs/acquired-connected-native-graphs-20261016-v2`. Admission/source rerender
+ driver `admit-connected-d16-d18-root-20261016` submitted. No admission/exposure
+ claim yet. Old flawed outputs retained only for current repair/parity until safe removal.
+- D12 full source admitted2945f45af:5025sessions,2826positive whole rows/model,
+ 2199nonpositive omissions,0held. Capacity partition exact original row bytes:
+ LF993fit/1833mandatorylong (UNQUALIFIED32768 envelope),M2526fit/300long.
+ New closed-protection eligibility certificate51052a240b296c11fe22a59125cdf416fdf863b3024b248bbdc1590f2f445990
+ and portable closed proposal dec5ccb2be3e4c97a1cec2b93192b2e4c9a6c71643e441c8f1cf75bfd255afb8
+ ready. Root adopted code0c5be6bda; integrated tests pending. Derivative not yet
+ registered/staged. NEVER append full aggregate and fit duplicate. Mandatory-long
+ integration1be58289e retains exact zero-credit obligations and optimizer history;
+ old cloud numerical runtimes still require explicit qualified upgrade to use it.
+- Original D15 frozen3259 converter reached332source/model pairs, ledger-preempted
+ 07:35; existing requeue owns resume, no duplicate. Local D12/D15 unchanged
+ numerically under stricter closure need explicit eligibility continuation.
+- LF full-native runner525307/driver525311 (82bc runtime), source frontier1800
+ latest measured; D22/D35normalizers active. Five-source D28→D27→D26→D38→D23
+ actual547850 launched07:07:59. Full corpus completion/admission unclaimed.
+- M D17/D25 full normalization complete11640+67074sessions. Durable native
+ runner370857 ACTUALLY launched07:30:17, exactd1 runtime, one nice19 CPU worker
+ both tokenizers; first computes qualified local full-source closure before render.
+- Authenticated HF403 refreshed07:36 for D09/20/24/39; owner given direct links.
+ SWE-chat/MiroVerse/MidTool auto acceptance, PinchBench manual approval.
 
-## Storage and retired operations
+## Inference, checks and storage
 
-- Search four existing workers retain earned receipts/runtime SHA. USB rotational
-  external scratch causes heavy I/O stalls. Relocation writers paused after M
-  ferry completion; root~20GiB/external~34GiB free. Source bytes remain until
-  SHA+file/directory fsync. Tiny exact dedup watchers remain. No live scratch move.
-- SQLite optimization a01b16d34: defer secondary indexes until bulk insert and
- 64MiB cache;3focused parity tests PASS. Agent preparing subset execution and
-  mixed-version final manifest before deploying to unstarted current shards.
-  Never relabel old groups as produced by new renderer code.
-- Root pruned only verified redundant transfer TARs:1534506981B then876794139B;
-  original sources and both cloud verified copies retained. Required diagnostic
-  parents/source/frozen runtime receipts stay until dependencies are resolved.
-- Found retired natlang-clef-pools-daily.timer still externally generating.
-  STOPPED/DISABLED timer+service. Guard52c671cc0 forbids new API generation before
-  writes; existing historical render/register retained.2focused tests+quickPASS.
-  Other generator timers audit found no active unauthorized generator.
+Native HTTP arguments were flattening actual Neuralese parts into literal strings;
+typed coercion compounded it. Shared fixes10690e6ea+f01c69593 preserve provenance
+through HTTP/nested typed coercion, retain legitimate raw literal strings and
+teach normal type errors. Root50tests+build and quick PASS. Actual48TRAIN baseline
+versus48candidate measurement assigned native reviewer on existing Qwen endpoint;
+not yet deployed to frozen evaluation runtimes. No held examples used for training.
+M5000 old-runtime eval was ledger-preempted/requeued; LF5500 eval active. Root
+reviewing whether further known-bug old-runtime work is useful before corrected rerun.
 
-Root coord ACK06:43 (next due07:33 latest); monitor all learners, source workers,
-queues, exporters, evaluations, guardians, storage and actual exposure. No hour
-sleep while these implementation, admission and diagnosis tasks remain.
+Search old renderer stopped by ledger; obsolete32GB requeue CANCELLED by root.
+Optimized SQLite deferred indexes/64MiBcache, exclusive lease, subset resume,
+strict group+aggregate checks/mixed provenance integrated and independently reviewed.
+Legacy ALL stored tokenizer fingerprints/source/output SHAs PASS both models;
+actual historical source manifest has NO pieces. Representative exact rerender
+parity v3 queued; no cutover/reuse before it passes. Source agent owns qualified
+12–16GB/4worker resume plus exact4SQLite scratch cleanup. No broad filesystem walks.
+
+Standing fullcheck e484 failed two fixture assumptions after actual Adam migration;
+3608 fixes preserve strict numeric/state/update assertions,18actualCUDA tests PASS.
+Current standing fullcheck11fcd is ledger-requeued; never launch a duplicate broad run.
+Root continuation/geometry integrated focused check submitted; old helper
+geometry reuse adopted a4fe31254, not yet deployed.
+
+New NVIDIA FP4-Local b9ce18a6887e18c089fdea8509a33e63429a3300 public/ungated,
+102192011716weightbytes vs current135253622894sourcebytes. New compressed scales
+require recommended custom vLLM RTX PRO container release-10152026, not blind load
+in current Penny. Cloud preparing same-sandbox pinned image/download/storage check,
+then bounded throughput+verified-quality comparison at a drained boundary.
+
+Root07:39 disk12GiB free/external52GiB; storage hygiene urgent, preserve required
+parents/reusable sources/held data. Retired external Clef generator timer+service
+remain disabled;52c671cc0 hard guard forbids new external API generation.
+Coord ACK07:37,next<=08:27. No hour sleep while these admissions/fixes remain.
