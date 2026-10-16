@@ -68,6 +68,19 @@ The fixed thinking-row limit is established. Its complete contribution to every
 held task failure is not yet established; continue examining actual actions and
 task quality after repair.
 
+Current-parent check (2026-10-16): the independently pinned LFM step7750
+checkpoint `f26338f6599334e59d6f30f9d27a63fa665dfb95d3d88972d6ea43fbfc2a5b94`
+has FP32 learned delimiter rows with difference L2 **2.647594**, maximum
+difference **0.2924004**, and cosine **0.3048175**. The same exact RMS-bound
+calculation gives pair log-odds capacity **295.2649**, compared with the original
+frozen bound 0.007926. Thus the old fixed pair-probability ceiling no longer
+explains current failures. This is an upper bound, not an achieved probability
+or task qualification. The corrected step7750 task evaluation remains 0/16;
+investigate actual actions, source exposure, objectives and runtime behavior.
+The ledgered CPU calculation retained the verified parent and changed no
+parameters, rates, optimizer state or training admission. Evidence is
+`/home/werg/data/dgxops/lfm7750-delimiter-capacity-20261016.json`.
+
 ## Repair and acceptance
 
 Independent review also reproduced a precision defect at the production learning
