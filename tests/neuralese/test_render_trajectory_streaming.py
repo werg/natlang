@@ -57,6 +57,9 @@ class _CharacterChatTokenizer:
         for message in messages:
             role = message.get('role', 'user')
             text += f'<|im_start|>{role}\n{message.get("content") or ""}'
+            reasoning = message.get('reasoning_content')
+            if isinstance(reasoning, str):
+                text += '<think>' + reasoning + '</think>'
             calls = message.get('tool_calls') or []
             if calls:
                 text += '<|tool_call_start|>' + json.dumps(calls, sort_keys=True) + '<|tool_call_end|>'
@@ -125,6 +128,7 @@ def _trajectory_rows():
             '$write': {'name': 'soft-state:' + block_id, 'block_id': block_id,
                        'type': 'Neuralese<string>', 'source': 'shared producer payload'}}})},
     }]
+    a0['target']['reasoning_content'] = 'writer reasoning retained in history'
     b0 = record('b0', 'trajectory-b', 'test', ['g-b'], b_context, 'answer B0')
     a1_messages = [*a_context, a0['target'], {'role': 'user', 'content': 'follow up A'}]
     b1_messages = [*b_context, b0['target'], {'role': 'user', 'content': 'follow up B'}]
@@ -137,7 +141,7 @@ def _trajectory_rows():
     return [a0, b0, a1, b1, c0, duplicate]
 
 
-def test_real_materializer_and_streaming_wrapper_are_byte_equivalent(tmp_path):
+def test_real_materializer_and_streaming_wrapper_are_byte_equivalent(tmp_path, monkeypatch):
     from scripts.neuralese_data.strip_generic_system_prompt import strip_row
     tokenizers = {'lfm25': _CharacterChatTokenizer(), 'mellum21': _CharacterChatTokenizer()}
     renderer._G.clear()
@@ -150,6 +154,17 @@ def test_real_materializer_and_streaming_wrapper_are_byte_equivalent(tmp_path):
             stream.write(renderer.canonical(row) + '\n')
     modes = ('full', 'program-header', 'whole-trajectory')
     blocked = {renderer.split_chain_key(rows[2]): len(rows[2]['messages'])}
+    sql_traces = []
+    real_connect = renderer.sqlite3.connect
+
+    def traced_connect(*args, **kwargs):
+        connection = real_connect(*args, **kwargs)
+        statements = []
+        connection.set_trace_callback(statements.append)
+        sql_traces.append(statements)
+        return connection
+
+    monkeypatch.setattr(renderer.sqlite3, 'connect', traced_connect)
     for tokenizer_name in ('lfm25', 'mellum21'):
         ref_dir, stream_dir = tmp_path / f'ref-{tokenizer_name}', tmp_path / f'stream-{tokenizer_name}'
         job_ref = (str(selected), str(ref_dir), tokenizer_name, blocked, 'fixture', set(), {'b0'}, False,
@@ -173,6 +188,16 @@ def test_real_materializer_and_streaming_wrapper_are_byte_equivalent(tmp_path):
         assert ref_receipt['parity'] == stream_receipt['parity']
         assert _read(ref_dir / 'omissions' / tokenizer_name / 'actual-selected.jsonl') == \
                _read(stream_dir / 'omissions' / tokenizer_name / 'actual-selected.jsonl')
+
+    assert len(sql_traces) == 2
+    for statements in sql_traces:
+        normalized = [statement.strip().upper() for statement in statements]
+        assert 'PRAGMA CACHE_SIZE=-65536' in normalized
+        last_insert = max(i for i, statement in enumerate(normalized)
+                         if statement.startswith('INSERT INTO ROWS'))
+        trajectory_index = normalized.index('CREATE INDEX ROWS_TRAJECTORY_SEQ ON ROWS(TRAJECTORY, SEQ)')
+        id_index = normalized.index('CREATE INDEX ROWS_ID_SEQ ON ROWS(ROW_ID, SEQ)')
+        assert last_insert < trajectory_index < id_index
 
 
 def test_streamed_trajectory_groups_are_exact_and_resume_after_interruption(tmp_path, monkeypatch):

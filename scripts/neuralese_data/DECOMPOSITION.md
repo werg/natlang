@@ -222,3 +222,12 @@ Live backend/template, rendering settings, base metadata and binding mutations
 fail closed. Callable success/interruption tests verify explicit lease closure;
 the shared inventory test verifies unchanged base inventory and no tokenizer
 preparation reads of safetensors shards. The ledgered quick check passed.
+# Search renderer SQLite spool indexing
+
+The shard renderer's temporary SQLite index is exact durability/performance
+plumbing, not a model decision. It keeps the existing row schema, indexes,
+lookup order, trajectory grouping, and serialized output unchanged. The
+renderer first inserts source rows into the unindexed spool, then builds the
+same two indexes and runs the existing queries. A per-worker 64 MiB SQLite
+page cache bounds page retention while indexes are built and queried. The
+reference materialized renderer remains the behavioral oracle for output bytes.

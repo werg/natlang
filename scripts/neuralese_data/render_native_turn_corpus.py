@@ -1276,10 +1276,11 @@ def render_shard(job):
         db = sqlite3.connect(str(Path(temporary) / 'rows.sqlite'))
         db.execute('PRAGMA journal_mode=OFF')
         db.execute('PRAGMA synchronous=OFF')
+        # Keep the per-worker page cache bounded while sorting/indexing a large
+        # selected shard. Negative cache_size values are kibibytes in SQLite.
+        db.execute('PRAGMA cache_size=-65536')
         db.execute('CREATE TABLE rows (seq INTEGER PRIMARY KEY, trajectory TEXT NOT NULL, row_id TEXT, '
                    'source_sha TEXT NOT NULL, payload TEXT NOT NULL)')
-        db.execute('CREATE INDEX rows_trajectory_seq ON rows(trajectory, seq)')
-        db.execute('CREATE INDEX rows_id_seq ON rows(row_id, seq)')
         db.execute('CREATE TABLE emitted (mode TEXT NOT NULL, seq INTEGER NOT NULL, group_index INTEGER NOT NULL, '
                    'row_index INTEGER NOT NULL, line TEXT NOT NULL)')
         insert = []
@@ -1299,6 +1300,13 @@ def render_shard(job):
         if insert:
             db.executemany('INSERT INTO rows VALUES (?, ?, ?, ?, ?)', insert)
             db.commit()
+
+        # Index creation is deliberately after the bulk load: maintaining both
+        # secondary indexes for every 256-row insert caused random writes across
+        # multi-gigabyte temporary databases on the external source disk.
+        db.execute('CREATE INDEX rows_trajectory_seq ON rows(trajectory, seq)')
+        db.execute('CREATE INDEX rows_id_seq ON rows(row_id, seq)')
+        db.commit()
 
         trajectories_sql = ('SELECT trajectory, MIN(seq) AS first_seq FROM rows '
                             'GROUP BY trajectory ORDER BY first_seq')
