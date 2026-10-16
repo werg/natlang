@@ -11,6 +11,41 @@ from .records import group_key
 ACQUIRED_FILES = None  # Optional exact receipt-file shard, never an implicit row limit.
 ACQUIRED_RECEIPTS = {}  # Explicit immutable selected-file snapshots; never the mutable download journal.
 
+# A source ref is normalized through the existing shared Trajectory adapter.
+# Keep this lookup beside those adapters so export workers do not maintain a
+# second, incomplete copy of the ref-to-corpus contract.
+FULL_TRAJECTORY_CORPORA = {
+    'D13': 'team-cooperation-acquired',
+    'D14': 'qwen-cooperation-acquired',
+    'D17': 'cooperdata-acquired',
+    'D19': 'agent-collusion-raw-acquired',
+    'D20': 'swe-chat-acquired',
+    'D22': 'open-swe-acquired',
+    'D23': 'swe-zero-acquired',
+    'D24': 'miroverse-acquired',
+    'D25': 'swe-rebench-acquired',
+    'D26': 'toucan-acquired',
+    'D27': 'toolmind-acquired',
+    'D28': 'nemotron-agentic-acquired',
+    'D32': 'openresearcher-structured-acquired',
+    'D35': 'nemotron-terminal-acquired',
+    'D36': 'coderforge-acquired',
+    'D37': 'orchard-acquired',
+    'D38': 'ultradata-acquired',
+}
+
+
+def full_trajectory_corpus(ref):
+    """Resolve a pinned source ref through the canonical complete-session adapter."""
+    from . import agents
+    try:
+        name = FULL_TRAJECTORY_CORPORA[ref]
+    except KeyError as error:
+        raise Reject('no complete-session adapter is registered for ' + str(ref)) from error
+    if name not in agents.CORPORA:
+        raise Reject('complete-session adapter is unavailable for ' + str(ref))
+    return name, agents.CORPORA[name]
+
 
 def supported_acquired_file(name):
     """One shared pinned-file predicate for conversion and export inventories."""
