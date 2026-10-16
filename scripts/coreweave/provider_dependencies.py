@@ -49,6 +49,11 @@ def dependency_closure(request, *, namespace='/work/native-production'):
         for name, frame in progress.items():
             if obligations[name]['complete']:
                 continue  # Completed historical source files are not read by mandatory SFT.
+            for declaration in (frame.get('pending_source_declarations') or {}).values():
+                from natlang_neuralese.train.native_pending_sources import pending_source_dependencies
+                path = bound(declaration['binding'])
+                for reference in pending_source_dependencies(path):
+                    bound(reference)
             for source in frame.get('source_receipts', []):
                 graphs(bound(source))
 
@@ -112,6 +117,12 @@ def dependency_closure(request, *, namespace='/work/native-production'):
             if declaration.get('base'):
                 relocations.setdefault(name,declaration['base'])
         # Exact fields consumed by production.run/native semantic refresh.
+        if value.get('pending_native_sources'):
+            from natlang_neuralese.train.native_pending_sources import pending_source_dependencies
+            reference = value['pending_native_sources']
+            path = bound(reference) if isinstance(reference, dict) else add(reference)
+            for item in pending_source_dependencies(path):
+                bound(item)
         for key in ('seed_native_graphs', 'held_native_graphs', 'foundation_native_graphs'):
             if value.get(key):
                 graphs(bound(value[key]) if isinstance(value[key], dict) else value[key])

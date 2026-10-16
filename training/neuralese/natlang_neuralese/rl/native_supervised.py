@@ -26,12 +26,20 @@ def continuation_config(config,stage,*,checkpoint,adapter,out):
         'semantic_adapter':adapter,'production_stage':stage['id'],'trainer_parameters':parameters,
         'seed_native_graphs':sources['native_graphs']['path'],
         'held_native_graphs':sources['held_native_graphs']['path']}
+    if 'pending_native_sources' in sources:
+        result['pending_native_sources'] = sources['pending_native_sources']['path']
+        if '--pending-native-sources' not in result['seed_command']:
+            result['seed_command'] = list(result['seed_command']) + ['--pending-native-sources', '{pending_native_sources}']
     return result,sources
 
 
 def stage_pending(adapter,participant,stage,sources,epochs):
     progress=(adapter['models'][participant].get('mandatory_sft') or {}).get('stages',{}).get(stage)
-    return not (progress and progress.get('complete') is True
+    pending = sources.get('pending_native_sources')
+    if pending and (not progress or pending['sha256'] not in (progress.get('pending_source_declarations') or {})):
+        return True  # Persist a newly declared obligation even when active CE is already complete.
+    return not (progress and (progress.get('complete') is True or
+        progress.get('active_remaining_graph_visits') == 0)
         and progress.get('train_source_sha256')==sources['native_graphs']['sha256']
         and progress.get('held_source_sha256')==sources['held_native_graphs']['sha256']
         and progress.get('epochs')==epochs)
@@ -60,7 +68,17 @@ def execute(config,state,state_path,control):
         raise RuntimeError('mandatory supervised continuation produced no durable checkpoint/report')
     report=json.loads(report_path.read_text())
     boundary=report.get('continuation_boundary') or {}
-    usable=(report.get('completed') is True or (boundary.get('kind')=='semantic-refresh'
+    admission = report.get('pending_source_admission') or {}
+    declared = config.get('pending_native_sources')
+    declared_sha = sha256_file_hex_cached(declared) if declared else None
+    metadata_admitted = (admission.get('schema') == 'natlang.native-pending-source-admission/1'
+        and admission.get('new_optimizer_updates') == 0
+        and admission.get('parent_checkpoint_sha256') == sha256_file_hex_cached(state['checkpoint'])
+        and admission.get('checkpoint_sha256') == sha256_file_hex_cached(checkpoint)
+        and declared_sha is not None and declared_sha in (admission.get('declarations') or [])
+        and any(declared_sha in (stage.get('pending_source_declarations') or {})
+            for stage in ((report.get('mandatory_sft') or {}).get('stages') or {}).values()))
+    usable=(metadata_admitted or report.get('completed') is True or (boundary.get('kind')=='semantic-refresh'
         and boundary.get('reached') is True and boundary.get('new_optimizer_updates',0)>0))
     if not usable or report.get('numerics_ok') is not True:
         state.update(phase='mandatory_sft_pending',last_learner_progress=report)

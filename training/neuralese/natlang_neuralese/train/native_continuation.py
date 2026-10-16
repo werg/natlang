@@ -102,14 +102,57 @@ def stage_key(training):
     return str((training.get('options') or {}).get('stage_id') or 'native-graph-ce')
 
 
+def _retain_pending_sources(frame,previous):
+    """Merge mandatory source declarations into the existing CE frame, with no earned credit."""
+    active=frame.get('source_row_bindings') or {}
+    pending=copy.deepcopy(previous.get('pending_source_rows') or {})
+    declarations=copy.deepcopy(previous.get('pending_source_declarations') or {})
+    quotas=dict(previous.get('required_visits') or {})
+    for key,required in required_visits(frame.get('source_row_order') or list(active),
+            float((frame.get('options') or {}).get('epochs',1))).items():
+        quotas[key]=max(quotas.get(key,0),required)
+    for declaration in (frame.get('options') or {}).get('_pending_native_source_declarations') or []:
+        reference=declaration['binding'];fingerprint=reference['sha256']
+        record={key:copy.deepcopy(value) for key,value in declaration.items() if key!='rows'}
+        if fingerprint in declarations and declarations[fingerprint]!=record:
+            raise ValueError('pending source declaration changed without a new immutable binding')
+        declarations[fingerprint]=record
+        reject_withdrawn_targets(frame,{key:row['binding'] for key,row in declaration['rows'].items()})
+        for key,row in declaration['rows'].items():
+            prior=pending.get(key)
+            if prior and prior['binding']!=row['binding']:
+                raise ValueError('pending native source changed an existing row binding: '+key)
+            if key in active and active[key]!=row['binding']:
+                raise ValueError('active native source differs from its pending admitted row: '+key)
+            pending[key]={'binding':row['binding'],'required_visits':max(
+                row['required_visits'],(prior or {}).get('required_visits',0))}
+            quotas[key]=max(quotas.get(key,0),row['required_visits'])
+    counts=frame.setdefault('exposure_counts',{})
+    for key,row in list(pending.items()):
+        quotas[key]=max(quotas.get(key,0),row['required_visits'])
+        if key in active:
+            if active[key]!=row['binding']:
+                raise ValueError('capacity activation changed pending native row semantics: '+key)
+            # Existing exact credits belong to this one row, not a second
+            # pending counter. A newly active row earns no visits by admission.
+            counts[key]=max(int(counts.get(key,0)),int((previous.get('exposure_counts') or {}).get(key,0)))
+            del pending[key]
+        else:
+            counts[key]=int((previous.get('exposure_counts') or {}).get(key,0))
+    frame['required_visits']=quotas
+    if declarations or pending:
+        frame['pending_source_rows']=pending
+        frame['pending_source_declarations']=declarations
+    return frame
+
+
 def collect_sft_progress(training):
     """Capture an actual CE schedule, retaining older mandatory stages unchanged."""
     result=copy.deepcopy(training.get('sft_progress') or {})
     if training.get('schema')==TRAINING_SCHEMA and (training.get('identity') or {}).get('objective') is None:
         frame={key:copy.deepcopy(value) for key,value in training.items() if key not in _TRANSIENT}
-        order=frame.get('source_row_order') or list(frame.get('source_row_bindings') or {})
-        frame['required_visits']=required_visits(order,float((frame.get('options') or {}).get('epochs',1)))
         key=stage_key(training)
+        _retain_pending_sources(frame,result.get(key) or {})
         frame.setdefault('completed_foundations',(result.get(key) or {}).get('completed_foundations',[]))
         result[key]=frame
     return result
@@ -145,6 +188,11 @@ def progress_obligations(progress):
             'train_source_sha256':(frame.get('source_receipts') or [{}])[0].get('sha256'),
             'held_source_sha256':(frame.get('source_receipts') or [{},{}])[-1].get('sha256'),
             'epochs':(frame.get('options') or {}).get('epochs',1)}
+        if frame.get('pending_source_declarations') or frame.get('pending_source_rows'):
+            stages[stage].update(
+                pending_source_graph_visits=sum(value for key,value in missing.items() if key in (frame.get('pending_source_rows') or {})),
+                active_remaining_graph_visits=sum(value for key,value in missing.items() if key not in (frame.get('pending_source_rows') or {})),
+                pending_source_declarations=copy.deepcopy(frame.get('pending_source_declarations') or {}))
     return {'schema':PROGRESS_SCHEMA,'complete':bool(stages) and all(x['complete'] for x in stages.values()),
         'remaining_graph_visits':sum(x['remaining_graph_visits'] for x in stages.values()),'stages':stages}
 

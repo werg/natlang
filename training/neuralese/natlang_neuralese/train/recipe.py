@@ -38,7 +38,7 @@ HANDLERS = {
     # graph files are already admitted and carry explicit split provenance.
     'native_state_sft': {'module': 'natlang_neuralese.train.native_state_sft',
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
-                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'withdrawn_native_graphs'},
+                         'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'withdrawn_native_graphs', 'pending_native_sources'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
                              'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'checkpoint_input_offload', 'chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'seed', 'task_eval',
@@ -455,6 +455,9 @@ def native_source_dependencies(path, *, parents=()):
 
 
 def _bind_native_source_dependencies(inputs):
+    if 'pending_native_sources' in inputs:
+        from .native_pending_sources import pending_source_dependencies
+        inputs['pending_native_sources']['dependencies'] = pending_source_dependencies(inputs['pending_native_sources']['path'])
     if 'withdrawn_native_graphs' in inputs:
         proof=Path(inputs['withdrawn_native_graphs']['path'])
         value=json.loads(proof.read_text())
@@ -506,7 +509,7 @@ def stage_input_args(resolved, kind):
         if role in resolved and role in supported:
             args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'native_graphs',
-                 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'withdrawn_native_graphs',
+                 'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'withdrawn_native_graphs', 'pending_native_sources',
                  'rl_block_bundle', 'continue_from', 'continue_identity',
                  'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',

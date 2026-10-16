@@ -106,6 +106,12 @@ def validate_ready(path, requirement):
             or report.get('checkpoint_sha256') != checkpoint['sha256']
             or exposure.get('consumed_updates', 0) <= 0 or exposure.get('supervised_token_visits', 0) <= 0):
         raise ValueError('native readiness has no bound completed optimizer/data exposure')
+    obligations = receipt.get('mandatory_sft')
+    if obligations is not None or report.get('mandatory_sft') is not None:
+        if (not isinstance(obligations, dict) or obligations != report.get('mandatory_sft')
+                or obligations.get('schema') != 'natlang.native-sft-progress/1'
+                or (not foundation_boundary and obligations.get('complete') is not True)):
+            raise ValueError('native stage completion cannot omit mandatory pending source exposure')
     communication = receipt.get('communication_exposure') or {}
     if (communication != report.get('communication_exposure')
             or (not foundation_boundary and communication.get('complete') is not True)

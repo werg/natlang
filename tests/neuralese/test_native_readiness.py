@@ -179,6 +179,10 @@ def test_optional_rl_launch_waits_for_shared_validation_and_uses_same_child_supe
         stop.requested = True
         return Child(False)
     monkeypatch.setattr(controller.subprocess, 'Popen', launch)
+    # This is a controller-only child fixture, not an actual /proc process.
+    monkeypatch.setattr(controller, '_owned_process_identity', lambda pid, launch, **kwargs: {
+        'pid': pid, 'start_ticks': 1, 'boot_id': 'control-fixture',
+        'argv': launch['argv'], 'cwd': launch['cwd']} if pid == 12345 else None)
     def pause(seconds):
         if not qualified:
             stop.requested = True

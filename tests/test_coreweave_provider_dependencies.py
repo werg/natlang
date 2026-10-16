@@ -178,3 +178,30 @@ def test_compiled_task_runtime_requires_and_binds_external_prelude(tmp_path):
     (host/'prelude.js').write_text('// different runtime semantics\n')
     with pytest.raises(ValueError,match='pre-staged asset content differs'):
         deps.verify_assets([asset])
+
+
+def test_pending_source_declarations_and_complete_cohort_are_carried_dependencies(tmp_path):
+    import torch
+    full_rows=write(tmp_path/'all.jsonl','all admitted rows')
+    long_rows=write(tmp_path/'long.jsonl','capacity deferred rows')
+    evidence=write(tmp_path/'partition.json',{'exact_unchanged':True})
+    full=write(tmp_path/'full.json',{'schema':'natlang.native-graph-sources/1','sources':[
+        {'kind':'native-graphs',**full_rows}]})
+    pending=write(tmp_path/'long.json',{'schema':'natlang.native-graph-sources/1','sources':[
+        {'kind':'native-graphs',**long_rows}]})
+    declaration=write(tmp_path/'pending.json',{'schema':'natlang.native-pending-sources/1',
+        'tokenizer_fingerprint':'1'*64,'sources':[{'full_cohort':full,'pending_native_graphs':pending,
+            'evidence':[evidence],'rows':[{'id':'long','binding':'2'*64,'required_visits':1}]}]})
+    frame={'required_visits':{'long':1},'exposure_counts':{},'source_receipts':[],
+        'pending_source_declarations':{'declaration':{'binding':declaration}}}
+    checkpoint=tmp_path/'state.pt';torch.save({'sft_progress':{'ce':frame}},checkpoint)
+    binding={'path':str(checkpoint),'sha256':deps.sha256_file_hex_cached(checkpoint)}
+    closure=deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
+    assert {row['path'] for row in closure['files']}=={str(checkpoint),*[
+        item['path'] for item in (declaration,full,pending,full_rows,long_rows,evidence)]}
+    config=write(tmp_path/'config.json',{'pending_native_sources':declaration})
+    closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
+    assert declaration['path'] in {row['path'] for row in closure['files']}
+    Path(long_rows['path']).write_text('changed')
+    with pytest.raises(ValueError,match='content hash mismatch'):
+        deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))
