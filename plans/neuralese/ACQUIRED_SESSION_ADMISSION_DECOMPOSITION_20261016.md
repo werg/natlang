@@ -30,3 +30,17 @@ positive session per model, re-renders through the existing canonical
 session_graphs mechanism with the actual pinned tokenizers, and compares every
 stored graph token, weight, view and provenance value exactly. This is a source
 render spotcheck, not a full-cohort re-render or a task-quality oracle.
+
+After full source admission, partition complete ordinary rows against explicit
+physical/KV envelopes without changing a byte of any row. The exact coverage
+ledger proves the disjoint fit/remaining-long union and records every original
+graph identity, binding and split. Limits are operational inputs, never a new
+capacity qualification. Only the existing actual resident capacity certificate
+may authorize appending the fit view. The long manifest remains a mandatory
+source obligation; its declaration must feed existing native_continuation
+progress/readiness rather than becoming a second exposure counter. This
+integration remains open until the shared trainer/readiness contract is tested.
+Preserve
+earned credits when pending rows later become active, and never call the whole
+recipe complete while any declared row remains owed. Foundation readiness may
+still permit adaptive cross-model work while carrying all these obligations.
