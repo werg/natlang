@@ -650,7 +650,7 @@ def test_rotating_held_cadence_preserves_whole_long_graphs_and_final_coverage(tm
     assert trainer.held_cadence_indices(entries,2,graph_budget=2)==([2,3],0)
     class Source:
         file_sha256='1'*64
-        entries=[{'forward_tokens':size} for size in (3,4,20,2)]
+        entries=[{'id':str(index),'forward_tokens':size} for index,size in enumerate((3,4,20,2))]
         def __len__(self):return len(self.entries)
         def iter_indices(self,indices):return iter(indices)
     seen=[]

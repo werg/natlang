@@ -51,6 +51,14 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
     for record in sorted(records, key=lambda row: row['role']):
         role = record['role']; line = 'lfm25' if role == 'lfm' else 'mellum21'
         recipe_path = _bound({'path': record['recipe_path'], 'sha256': record['recipe_sha256']})
+        adoption_binding = record.get('resident_adoption')
+        if adoption_binding:
+            from .native_resident import current
+            adoption_path = _bound(adoption_binding)
+            adoption = current(adoption_path.parent)
+            if (not adoption or adoption_path.name != 'current.json' or adoption['payload']['recipe']['path'] != str(recipe_path)
+                    or adoption['payload']['recipe']['file_sha256'] != record['recipe_sha256']):
+                raise ValueError('resident release does not bind its actual current recipe')
         recipe = resolve_recipe_data(recipe_path)
         stages = [stage for stage in recipe['stages'] if stage['kind'] == 'native_state_sft']
         if len(stages) != 1:
@@ -95,6 +103,7 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
             'trainer_exit': str(Path(record['control'])/'exit.json'),
             'trainer_launch': binding(Path(record['control'])/'launch.json'),
             'trainer_recipe': str(recipe_path),
+            **({'resident_adoption': adoption_binding} if adoption_binding else {}),
             'recipe_sha256': recipe_identity_sha256(recipe_path), 'stage_ids': [stage['id']],
             'readiness_boundary': 'communication-foundation',
             'foundation_sources': inputs['foundation_native_graphs'],

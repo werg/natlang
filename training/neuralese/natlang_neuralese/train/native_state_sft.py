@@ -386,7 +386,7 @@ def scheduled_indices(examples, *, seed, epoch, prior_ids=None):
     return old + new
 
 
-def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None):
+def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None, graph_classes=None):
     from ..data.native_graph import graph_loss
     previous_mode = model.training
     model.eval()
@@ -396,6 +396,7 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None)
     boundary_sums = {str(token): dict.fromkeys(
         ('count', 'weight', 'nll_sum', 'correct_weight', 'probability_sum'), 0.)
         for token in boundary_ids}
+    classes = {}
     try:
         with scope, torch.no_grad():
             total_weight, total_loss, total_correct, total_tokens, total_graphs, forward_tokens = 0., 0., 0., 0, 0, 0
@@ -406,6 +407,16 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None)
                     for key, value in sums.items():
                         boundary_sums[token][key] += value
                 weight = detail['weight']
+                if graph_classes is not None:
+                    name = graph_classes[example.id]
+                    sums = classes.setdefault(name, {'loss_sum': 0., 'correct_sum': 0., 'weight': 0.,
+                        'graphs': 0, 'supervised_tokens': 0, 'forward_tokens': 0})
+                    sums['loss_sum'] += float(loss) * weight
+                    sums['correct_sum'] += detail['accuracy'] * weight
+                    sums['weight'] += weight
+                    sums['graphs'] += 1
+                    sums['supervised_tokens'] += detail['supervised_tokens']
+                    sums['forward_tokens'] += example.plan.token_count
                 total_loss += float(loss) * weight
                 total_correct += detail['accuracy'] * weight
                 total_weight += weight
@@ -423,7 +434,10 @@ def _evaluate(model, examples, *, checkpoint_layers, chunk_tokens, backend=None)
         for token, sums in boundary_sums.items()}
     return {'loss': total_loss / total_weight, 'weighted_accuracy': total_correct / total_weight,
             'weight': total_weight, 'supervised_tokens': total_tokens, 'examples': total_graphs,
-            'forward_tokens': forward_tokens, 'boundaries': boundaries}
+            'forward_tokens': forward_tokens, 'boundaries': boundaries,
+            'classes': {name: {**sums, 'loss': sums['loss_sum']/sums['weight'] if sums['weight'] else None,
+                'weighted_accuracy': sums['correct_sum']/sums['weight'] if sums['weight'] else None}
+                for name, sums in classes.items()}}
 
 
 def held_cadence_indices(entries, cursor=0, *, token_budget=0, graph_budget=0):
@@ -449,7 +463,9 @@ def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backen
     cursor = next_coverage['cursor']
     started = time.monotonic()
     result = _evaluate(model, source.iter_indices(indices), checkpoint_layers=args.checkpoint_layers,
-                       chunk_tokens=args.chunk_tokens, backend=backend)
+                       chunk_tokens=args.chunk_tokens, backend=backend,
+                       graph_classes={source.entries[i]['id']: ('communication' if source.entries[i].get('communication')
+                                      else 'ordinary') for i in indices})
     result.update(scope='full' if len(indices) == len(source) else 'cadence-subset',
                   source_sha256=source.file_sha256,
                   source_graphs=len(source), cursor_before=int(coverage.get('cursor', 0)),
@@ -556,6 +572,8 @@ def build_parser():
     parser.add_argument('--gradient-atol', type=float, default=None)
     parser.add_argument('--qualify-training-backend', action=argparse.BooleanOptionalAction, default=False,
         help='qualify actual enabled backend on restored live weights before useful updates; preserve RNG/state')
+    parser.add_argument('--resident-data-directory', type=Path)
+    parser.add_argument('--resident-geometry-qualification', type=Path)
     parser.add_argument('--recipe-binding', default=None)
     parser.add_argument('--stage-id', default=None)
     parser.add_argument('--prerequisite-stages', default='[]')
@@ -565,6 +583,14 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    resident_state = None
+    if args.resident_data_directory is not None:
+        from .native_resident import recover
+        resident_state = recover(args.resident_data_directory)
+        if resident_state and resident_state['payload']['stage_id'] == args.stage_id:
+            args.native_graphs = Path(resident_state['payload']['train']['path'])
+            args.held_native_graphs = Path(resident_state['payload']['held']['path'])
+            args.recipe_binding = json.dumps(resident_state['payload']['recipe'])
     checkpoint_options = {key: str(value) if isinstance(value, Path) else value
                           for key, value in vars(args).items()}
     if not (math.isfinite(args.epochs) and args.epochs > 0) or min(args.batch_graphs, args.eval_every,
@@ -654,6 +680,15 @@ def main(argv=None):
     fingerprint = tokenizer_fingerprint(tokenizer)
     if fingerprint != config['tokenizer_fingerprint']:
         raise ValueError('loaded tokenizer differs from native model configuration')
+    if resident_state and resume and resident_state['payload']['stage_id'] == args.stage_id:
+        prior = (resume.get('source_receipts') or [{}])[0]
+        if prior.get('sha256') != resident_state['payload']['train']['sha256']:
+            args.continued_native_graphs = Path(prior['path'])
+            checkpoint_options['continued_native_graphs'] = str(args.continued_native_graphs)
+        prior_held = (resume.get('source_receipts') or [{}, {}])[1]
+        if prior_held.get('sha256') != resident_state['payload']['held']['sha256']:
+            args.continued_held_native_graphs = Path(prior_held['path'])
+            checkpoint_options['continued_held_native_graphs'] = str(args.continued_held_native_graphs)
     train = NativeGraphSource(args.native_graphs, fingerprint, required_split='train', role_ids=roles.ids)
     held = NativeGraphSource(args.held_native_graphs, fingerprint, required_split='test', role_ids=roles.ids)
     train_groups, held_groups = train.groups, held.groups
@@ -923,6 +958,19 @@ def main(argv=None):
     if args.refresh_at_checkpoint and not (args.checkpoint_every or args.checkpoint_seconds):
         raise ValueError('semantic refresh needs a declared checkpoint step/time cadence')
     schedule = stream_pending_batches(train, pending_batches)
+    resident = None
+    if args.resident_data_directory is not None:
+        from .native_resident import ResidentAdoption
+        resident = ResidentAdoption(args.resident_data_directory, stage_id=args.stage_id,
+            recipe_binding=json.loads(args.recipe_binding), train=train, held=held,
+            geometry_qualification=args.resident_geometry_qualification,
+            geometry_identity={'model_config': config, 'batch_graphs': args.batch_graphs,
+                'batch_tokens': args.batch_tokens, 'checkpoint_layers': args.checkpoint_layers,
+                'chunk_tokens': args.chunk_tokens})
+        if resident.state:
+            checkpoint_options['resident_adoption'] = {'generation': resident.generation,
+                'history': resident.state['history']}
+    metadata_dirty = False
     eval_at = max(1, args.eval_every)
     started = time.time()
     def foundation_exposure():
@@ -936,8 +984,39 @@ def main(argv=None):
     def foundation_pending():
         return bool(foundation_template and foundation_template['graphs'] and not foundation_missing and
                     foundation_template['cohort_sha256'] not in prior_foundations)
-    with contextlib.closing(schedule):
-        while step < total_end and not policy.signaled and not foundation_pending():
+    try:
+        while not policy.signaled and not foundation_pending():
+            if resident is not None:
+                expanded = resident.poll(global_step)
+                if expanded is not None:
+                    schedule.close()
+                    metadata_dirty = True
+                    train, held = expanded
+                    args.held_native_graphs = held.path
+                    held_row_bindings = held.bindings
+                    args.native_graphs = train.path
+                    args.recipe_binding = json.dumps(resident.recipe_binding)
+                    source_row_bindings = train.bindings
+                    source_order = train.ordered_ids()
+                    source_receipts = [train.receipt(), held.receipt()]
+                    source_hash = hashlib.sha256(json.dumps(
+                        [source_receipts[0]['sha256'], source_receipts[1]['sha256'],
+                         sorted(source_row_bindings.items()), sorted(held_row_bindings.items())],
+                        ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+                    training_identity['train_source_hash'] = source_hash
+                    training_identity['held_sha256'] = held.file_sha256
+                    for key in source_row_bindings:
+                        exposure_counts.setdefault(key, 0)
+                    checkpoint_options.update(native_graphs=str(train.path), held_native_graphs=str(held.path), recipe_binding=args.recipe_binding,
+                        resident_adoption={'generation': resident.generation, 'history': resident.state['history']})
+                    checkpoint_options['_communication_ids'] = [entry['id'] for entry in train.entries if entry.get('communication')]
+                    required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
+                        epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens)
+                    total_end = step + len(pending_batches)
+                    target_rows = sum(required_visits.values())
+                    schedule = stream_pending_batches(train, pending_batches)
+            if policy.signaled or step >= total_end:
+                break
             update_started = time.monotonic()
             visit, indices, pass_end, batch = next(schedule)
             batch_tokens = sum(train.entries[index]['forward_tokens'] for index in indices)
@@ -1013,6 +1092,7 @@ def main(argv=None):
                       architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
                       fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
                 last_saved_step = step
+                metadata_dirty = False
                 if policy.signaled:
                     break
                 checkpoint_sha = sha256_file_hex_cached(policy.slot)
@@ -1044,6 +1124,7 @@ def main(argv=None):
                       architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
                       fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
                 last_saved_step = step
+                metadata_dirty = False
             if args.refresh_at_checkpoint and due_checkpoint:
                 refresh_boundary = True
                 break
@@ -1054,7 +1135,9 @@ def main(argv=None):
                 pass
             else:
                 raise ValueError('native source schedule exceeds its declared updates')
-    if (step != resumed_step or policy.signaled) and last_saved_step != step:
+    finally:
+        schedule.close()
+    if metadata_dirty or ((step != resumed_step or policy.signaled) and last_saved_step != step):
         if not policy.signaled and not metrics.get('held'):
             metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
                 coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end, backend=backend)
@@ -1174,7 +1257,10 @@ def main(argv=None):
     continuation_boundary = {'kind': 'semantic-refresh', 'reached': bool(refresh_boundary and step>resumed_step),
         'new_optimizer_updates':step-resumed_step, 'checkpoint_sha256':checkpoint_sha}
     foundation_ready = bool(foundation_boundary and runtime_report.get('passed') is True and task_receipt_ok)
+    resident_receipt = ({'generation': resident.generation, 'directory': str(resident.directory.resolve()),
+                         'history': resident.state['history']} if resident and resident.state else None)
     report = {'schema': 'natlang.neuralese-native-sft-report/1',
+              'resident_adoption': resident_receipt,
               'communication_exposure': communication, 'completed': completed,
               'foundation_ready': foundation_ready, 'communication_foundation': foundation, 'mandatory_sft': mandatory_sft,
               'continuation_boundary': continuation_boundary,
@@ -1194,6 +1280,7 @@ def main(argv=None):
     write_json(args.out / 'report.json', report)
     write_json(args.out / 'native-training-receipt.json', {
         'schema': 'natlang.native-training-readiness/1',
+        'resident_adoption': resident_receipt,
         'communication_exposure': communication, 'foundation_ready': foundation_ready,
         'communication_foundation': foundation, 'mandatory_sft': mandatory_sft,
         'continuation_boundary':continuation_boundary,
