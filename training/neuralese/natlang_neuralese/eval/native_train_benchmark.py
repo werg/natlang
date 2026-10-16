@@ -34,7 +34,9 @@ def read_only_comparison(model, batch, *, layouts=((True, 1024), (False, 2048)),
         raise ValueError('need a baseline, positive chunks and at least two repetitions')
     device = next(model.parameters()).device
     rng = capture_training_rng_state(device)
-    training, checkpoint_layers = model.training, model.port.checkpoint_layers
+    training = model.training
+    had_checkpoint_layers = hasattr(model.port, 'checkpoint_layers')
+    checkpoint_layers = getattr(model.port, 'checkpoint_layers', None)
     reference, baseline_loss, records = None, None, []
     supervised_tokens = sum(sum(weight > 0 for weight in row.target_weights) for row in batch)
     def sync():
@@ -91,7 +93,11 @@ def read_only_comparison(model, batch, *, layouts=((True, 1024), (False, 2048)),
                 'graph_ids': [row.id for row in batch], 'cases': records}
     finally:
         model.zero_grad(set_to_none=True)
-        model.train(training); model.port.checkpoint_layers = checkpoint_layers
+        model.train(training)
+        if had_checkpoint_layers:
+            model.port.checkpoint_layers = checkpoint_layers
+        else:
+            delattr(model.port, 'checkpoint_layers')
         restore_training_rng_state(rng, device)
 
 

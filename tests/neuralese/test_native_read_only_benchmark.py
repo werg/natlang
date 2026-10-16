@@ -9,12 +9,16 @@ from natlang_neuralese.train.native_state_sft import make_native_optimizer
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
-def test_actual_backbone_read_only_comparison_preserves_weights_and_rng(tmp_path,family):
+@pytest.mark.parametrize('checkpoint_setting',['inherited',True])
+def test_actual_backbone_read_only_comparison_preserves_weights_and_rng(tmp_path,family,checkpoint_setting):
     from test_native_full_updates import source
     from natlang_neuralese.model.native_model import load_native_model
     dtype=source(tmp_path/"base",family)
     model,_,roles,config=load_native_model(tmp_path/"base",dtype=dtype,rank=4)
-    model.port.checkpoint_layers=True
+    if checkpoint_setting != 'inherited':
+        model.port.checkpoint_layers=checkpoint_setting
+    had_checkpoint_layers=hasattr(model.port,'checkpoint_layers')
+    original_checkpoint_layers=getattr(model.port,'checkpoint_layers',None)
     model.eval()
     optimizer,named=make_native_optimizer(model,lr=3e-6,in_backward=False)
     example=parse_graph({'schema':'natlang.neuralese-native-graph/1','id':'read-only-whole',
@@ -30,7 +34,10 @@ def test_actual_backbone_read_only_comparison_preserves_weights_and_rng(tmp_path
     assert all(torch.equal(before[name],p) for name,p in model.named_parameters())
     assert all(p.grad is None for p in model.parameters())
     assert torch.equal(rng,torch.get_rng_state()) and python_rng==random.getstate()
-    assert not model.training and model.port.checkpoint_layers
+    assert not model.training
+    assert hasattr(model.port,'checkpoint_layers') == had_checkpoint_layers
+    if had_checkpoint_layers:
+        assert model.port.checkpoint_layers == original_checkpoint_layers
 
 
 def test_read_only_comparison_rejects_invalid_probe_before_forward():
