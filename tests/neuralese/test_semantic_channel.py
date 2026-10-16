@@ -1,5 +1,6 @@
 """Learned cross-model decoding reaches the real native serving cache path."""
 from types import SimpleNamespace
+from threading import RLock
 
 import pytest
 import torch
@@ -27,6 +28,7 @@ def test_semantic_cross_model_import_uses_learned_native_delta_and_archives_rl_o
     assert adapted.architecture == target.identity['architecture']
     assert adapted.token_ids.tolist() == [8, 9, 10]
     engine = object.__new__(Engine)
+    engine.native_execution_lock = RLock()
     engine.shared_model, engine.backbone, engine.tokenizer = target.model, target.model.port, target.tokenizer
     engine.model_config, engine.native_identity = target.config, target.identity
     engine.role_tokens = RoleTokens(*target.model.marker_ids)
@@ -35,7 +37,7 @@ def test_semantic_cross_model_import_uses_learned_native_delta_and_archives_rl_o
     engine.semantic_channel, engine.semantic_participant = channel, 'mellum'
     engine.store = TensorStore()
     record = engine.store.put_native_state(channel.message(source) if compact else source)
-    seq = SimpleNamespace(cache=None, request=SimpleNamespace(rl_capture=True), native_rl_prompt=[],
+    seq = SimpleNamespace(cache=None, request=SimpleNamespace(rl_capture=True, adapters=[]), native_rl_prompt=[],
                           native_own_position=0, native_imports=[])
     with torch.no_grad():
         engine._native_consume(seq, record.id)

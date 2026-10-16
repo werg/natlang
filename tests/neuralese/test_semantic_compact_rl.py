@@ -31,6 +31,7 @@ def test_compact_actual_producer_archive_and_rl_logp_gradient_replay(tmp_path, f
     channel = SemanticChannel(vae, {'source': identity, 'peer': peer.identity},
         {'source': tokenizer, 'peer': peer.tokenizer}, adapter_sha256='a'*64)
     engine = object.__new__(Engine)
+    engine.native_identity = identity
     engine.model_config = {'tokenizer_fingerprint': identity['tokenizer_fingerprint'], 'architecture': identity['architecture']}
     engine.checkpoint_sha256 = identity['checkpoint_sha256']
     engine.embedding_weight_sha256 = identity['embedding_weight_sha256']
