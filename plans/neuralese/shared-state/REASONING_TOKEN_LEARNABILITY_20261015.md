@@ -168,3 +168,14 @@ yet changed. Exact scripts, source hashes, IDs, actual optimizer rates,
 per-update movement and held measurements are under
 `/home/werg/data/dgxops/native-sparse-diverse-20261016/`. The completed baseline
 saved measurements only; no diagnostic model checkpoint was retained.
+
+
+Production follow-through, 2026-10-16 01:00 UTC: LFM now uses the shared named
+optimizer continuation at sparse-row rate .003 and backbone3e-6. Actual cloud
+updates changed all1024 thinking-row coordinates; update4151 was safely saved
+with full optimizer/RNG for the next data append. Mellum uses the same named
+mechanism but retains its inherited3e-6 pending its own held/actual-parent
+assessment. These supersede the earlier notes saying no production rate changed.
+LF4000 task evaluation is running; two completed logic cases return structurally
+valid answers but fail the exact oracle. Improved token learnability does not
+establish task competence, and current task quality remains under investigation.
