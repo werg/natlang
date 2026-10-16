@@ -69,20 +69,22 @@ def test_capacity_failure_restores_hooks_backend_rng_and_existing_state(monkeypa
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
-def test_offload_small_actual_weight_comparison_uses_bitwise_all_gradient_digests(family):
+@pytest.mark.parametrize('checkpoint_layers',[True,False])
+def test_offload_small_actual_weight_comparison_uses_bitwise_all_gradient_digests(family,checkpoint_layers):
     from natlang_neuralese.eval.native_memory import offload_numerical_parity
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
     if family=='mellum':model.port.hf.natlang_precision='bf16'
     optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
     hook=configure_checkpoint_input_offload(model.port,enabled=True)
     report=offload_numerical_parity(model,optimizer,examples()[0],chunk_tokens=3,
-        checkpoint_sha256='a'*64,source_binding={})
+        checkpoint_sha256='a'*64,source_binding={},checkpoint_layers=checkpoint_layers)
+    assert report['candidate_checkpoint_layers'] is checkpoint_layers
     assert report['passed'] and report['gradient_parameters']>0
     assert not report['different_gradient_names'] and not report['missing_gradient_names']
     assert model.port.activation_checkpoint is hook
 
 
-def prepared_fixture(tmp_path,monkeypatch,novel_split="train"):
+def prepared_fixture(tmp_path,monkeypatch,novel_split="train",checkpoint_layers=True):
     import json
     from types import SimpleNamespace
     from pathlib import Path
@@ -93,13 +95,13 @@ def prepared_fixture(tmp_path,monkeypatch,novel_split="train"):
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'indexes'))
     model=SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4)
     optimizer,_=make_native_optimizer(model,lr=3e-6,in_backward=True)
-    configure_checkpoint_input_offload(model.port,enabled=True)
+    configure_checkpoint_input_offload(model.port,enabled=checkpoint_layers)
     sources=[]
     for name in ('active','novel'):
         path=tmp_path/(name+'.jsonl');row=graph(name);split=novel_split if name=='novel' else 'train';row['split']=split;path.write_text(json.dumps(row)+'\n')
         sources.append(NativeGraphSource(path,'tokenizer-sha',required_split=split,role_ids=(58,59,60,61)))
     active,novel=sources
-    args=SimpleNamespace(out=tmp_path/'out',checkpoint_input_offload=True,checkpoint_layers=True,
+    args=SimpleNamespace(out=tmp_path/'out',checkpoint_input_offload=checkpoint_layers,checkpoint_layers=checkpoint_layers,
         chunk_tokens=3,batch_tokens=32,batch_graphs=1,device='cpu',fp8_training='off',fp8_recipe='delayed',
         fp8_amax_history_len=16,resident_geometry_qualification=None)
     args.out.mkdir();config={'tokenizer_fingerprint':'tokenizer-sha'}
@@ -239,12 +241,13 @@ def test_combined_successful_case_envelopes_preserve_both_dimensions_and_bind_pa
         combine_capacity_proofs(tmp_path,[proofs[0],binding(path)],identity=identity,code_sha='c'*64,checkpoint_sha256='a'*64)
 
 
-def test_actual_two_capacity_cohorts_publish_one_bound_case_union_without_optimizer_updates(tmp_path,monkeypatch):
+@pytest.mark.parametrize('checkpoint_layers',[True,False])
+def test_actual_two_capacity_cohorts_publish_one_bound_case_union_without_optimizer_updates(tmp_path,monkeypatch,checkpoint_layers):
     import json
     from pathlib import Path
     from natlang_neuralese.eval import native_memory as memory
     from natlang_neuralese.train.native_resident import binding
-    model,optimizer,train,roles,config,args=prepared_fixture(tmp_path,monkeypatch)
+    model,optimizer,train,roles,config,args=prepared_fixture(tmp_path,monkeypatch,checkpoint_layers=checkpoint_layers)
     first=json.loads(args.memory_qualification);second=tmp_path/'second.json'
     second.write_text(json.dumps({**json.loads(Path(first['path']).read_text()),'cohort':'second exact source cohort'}))
     args.memory_qualification=json.dumps([first,binding(second)])
@@ -256,3 +259,13 @@ def test_actual_two_capacity_cohorts_publish_one_bound_case_union_without_optimi
     assert len(proof['proofs'])==2 and len(proof['capacity']['cases'])==2
     assert all(case['status']=='passed' for case in proof['capacity']['cases'])
     assert_exact(weights,model.state_dict());assert_exact(moments,optimizer.state_dict());assert torch.equal(rng,torch.get_rng_state())
+
+
+def test_noncheckpointed_numerical_failure_requires_explicit_exact_state_fallback(tmp_path,monkeypatch):
+    from natlang_neuralese.eval import native_memory as memory
+    model,optimizer,train,roles,config,args=prepared_fixture(tmp_path,monkeypatch,checkpoint_layers=False)
+    monkeypatch.setattr(memory,'offload_numerical_parity',lambda *a,**k:{'passed':False})
+    with pytest.raises(ValueError,match='checkpointed fallback required'):
+        memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
+    with pytest.raises(ValueError,match='checkpointed fallback required'):
+        memory.run_prepared(model,optimizer,train,roles,config,args,backend=None,checkpoint_sha256='a'*64)
