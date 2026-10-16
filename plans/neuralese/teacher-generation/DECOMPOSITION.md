@@ -13,3 +13,11 @@ The numbered policy above is the natural-language program. `scripts/coreweave/te
 Routine qualified runtime/server/model revisions use the same control and append immutable configuration snapshots; they preserve the live old owner, source debt and next batch. A retry binds its own existing serving-identity producer bytes and exact engine process identities. The queue verifies that descriptor immediately before each case, so a later engine change cannot silently inherit the old batch's actor attribution. Unstarted prepared intents are revised explicitly; already live attempts retain their actual actor.
 
 `run_bonsai_queue.py --drain-file` is a case-boundary service: finish the active collector, fsync the completed/unstarted key frontier, and return75 before launching another collector. Completed keys are skipped on resume. If the teacher actor changes, the caller must preserve the old completed actor scope and publish a separately actor-bound continuation for remaining keys.
+
+A configured collector fanout may change at a cooperative between-case boundary.
+The natural-language production policy chooses the useful fanout. Exact guardian
+plumbing verifies the original owner and every collector have drained, keeps the
+original batch/source/seed/results immutable, partitions only unstarted queue
+keys, and CAS-adopts a waiting same-batch successor before publishing its arm
+marker. Existing terminal failures and repair debt remain unchanged. No actor,
+prompt, quality decision or batch-completion claim is changed by the mechanism.

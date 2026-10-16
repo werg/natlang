@@ -80,6 +80,109 @@ def recover_token(token, *, script_prefix='feed-evidence-'):
 def public_identity(identity):
     return {key: value for key, value in identity.items() if key != 'argv'}
 
+
+def fanout_frontier(queue, journals, workers):
+    """Partition exact unstarted keys after collectors have finished their cases."""
+    if type(workers) is not int or workers < 1:
+        raise ValueError('fanout needs a positive worker count')
+    entries = [json.loads(line) for line in Path(queue).read_text().splitlines() if line]
+    by_key = {entry['key']: entry for entry in entries}
+    if not entries or len(by_key) != len(entries):
+        raise ValueError('fanout queue needs distinct original keys')
+    started, finished = set(), {}
+    for journal in journals:
+        for line in Path(journal).read_text().splitlines():
+            if not line: continue
+            row = json.loads(line)
+            if row.get('event') not in ('start', 'finish'): continue
+            key = row['key']
+            if key not in by_key: raise ValueError('fanout journal contains a foreign key')
+            if row['event'] == 'start': started.add(key)
+            else:
+                if key in finished and finished[key] != row:
+                    raise ValueError('fanout journal has conflicting terminal observations')
+                finished[key] = row
+    if started - finished.keys():
+        raise ValueError('fanout still has an unfinished started case')
+    remaining = [entry for entry in entries if entry['key'] not in finished]
+    return {'schema':'natlang.teacher-drained-fanout/1', 'queue':binding(queue),
+        'journals':[binding(path) for path in journals], 'workers':workers,
+        'finished_keys':sorted(finished), 'unstarted_keys':[entry['key'] for entry in remaining],
+        'shards':[remaining[index::workers] for index in range(workers)],
+        'training_admission':False, 'original_completion_claim':False}
+
+
+def adopt_drained_fanout(folder, transition_path):
+    """CAS a drained same-batch owner; preserve original results and repair debt.
+
+    The caller holds guardian.lock and has already launched a waiting successor.
+    ARMED is published only after durable owner adoption, never before it.
+    """
+    folder, transition_path = Path(folder), Path(transition_path)
+    transition = json.loads(transition_path.read_text())
+    if transition.get('schema') != 'natlang.teacher-drained-fanout-transition/1':
+        raise ValueError('fanout transition schema differs')
+    def checked(reference):
+        if binding(reference['path']) != reference:
+            raise ValueError('fanout transition binding changed')
+        return json.loads(Path(reference['path']).read_text())
+    identity = binding(transition_path)
+    transition_id = transition['id']
+    if (not isinstance(transition_id,str) or not transition_id
+            or Path(transition_id).name != transition_id or transition_id in ('.','..')):
+        raise ValueError('fanout transition id escaped its control directory')
+    state = json.loads((folder/'state.json').read_text())
+    prior = state.get('fanout_transitions', [])
+    arm = folder/'fanout'/transition['id']/'ARMED.json'
+    if any(row['transition'] == identity for row in prior):
+        if state.get('owner') == transition['owner'] and not arm.exists():
+            write(arm, {'transition':identity,'owner':transition['owner']})
+        return state
+    original = checked(transition['original_state'])
+    if state != original or state.get('active_batch') != transition['batch']:
+        raise ValueError('fanout no longer owns the exact original batch/state')
+    intent = checked(transition['drain'])
+    if intent.get('owner') != state['owner'] or not Path(intent['drain_file']).exists():
+        raise ValueError('fanout lacks its exact operator drain')
+    if alive(state.get('owner')) or any(alive(child) for child in intent['children']):
+        raise ValueError('fanout original owner or collectors remain alive')
+    config = checked(transition['config'])
+    old_config = checked(original['config'])
+    if ({key:value for key,value in config.items() if key != 'feeder'} !=
+            {key:value for key,value in old_config.items() if key != 'feeder'}):
+        raise ValueError('fanout changed actor/runtime or unrelated configuration')
+    if config['control'] != str(folder) or config['drain_file'] != intent['drain_file']:
+        raise ValueError('fanout changed its control/drain namespace')
+    if binding(config['feeder']) != transition['feeder']:
+        raise ValueError('fanout feeder bytes changed')
+    plan = checked(transition['frontier'])
+    actual = fanout_frontier(plan['queue']['path'],
+        [item['path'] for item in plan['journals']], plan['workers'])
+    if actual != plan: raise ValueError('fanout queue/journal frontier changed')
+    expected_root = Path(config['root'])/'evidence-collections-v2'/f"batch-{transition['batch']:04d}"
+    if Path(plan['queue']['path']) != expected_root/'queue.jsonl':
+        raise ValueError('fanout belongs to another original queue')
+    if ({Path(item['path']) for item in plan['journals']} !=
+            set(expected_root.glob('journal*.jsonl'))):
+        raise ValueError('fanout omitted an original journal')
+    if live_batch_workers(expected_root):
+        raise ValueError('fanout still has actual live original collectors')
+    if binding(expected_root/'teacher-source.json') != transition['source']:
+        raise ValueError('fanout original source actor changed')
+    owner = recover_token(transition['process_token'])
+    if (owner is None or public_identity(owner) != transition['owner']
+            or config['feeder'].encode() not in owner['argv']):
+        raise ValueError('fanout successor is not its exact waiting owner/token')
+    verify_teacher_identity(config['teacher_identity']['path'],server=config['server'],model_id=config['model_id'])
+    config_revision(folder,state,transition['config']['path'],publish=False)
+    state['owner'] = transition['owner']
+    state.setdefault('fanout_transitions', []).append({'transition':identity,
+        'frontier':transition['frontier'], 'batch':transition['batch'],
+        'original_source':transition['source'], 'claim':'same batch; original outcomes unchanged'})
+    write(folder/'state.json',state)
+    write(arm, {'transition':identity,'owner':state['owner']})
+    return state
+
 def assess(entries, journal, codes, score):
     completion = batch_completion(entries, journal, codes, score)
     finishes = {row['key']: row for row in journal if row.get('event') == 'finish'}
@@ -294,7 +397,7 @@ def config_revision(folder, state, path, *, publish=True):
     if publish: write(folder/'state.json',state)
     return config
 
-def run(config_path, *, external_transition=None, external_reconciliation=None):
+def run(config_path, *, external_transition=None, external_reconciliation=None, drained_fanout_transition=None):
     config_path = Path(config_path); config = json.loads(config_path.read_text()); folder = Path(config['control']); folder.mkdir(parents=True, exist_ok=True)
     lock = (folder/'guardian.lock').open('a'); fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     if not config.get('teacher_identity'):raise ValueError('production guardian needs explicit actual teacher execution identity')
@@ -308,6 +411,10 @@ def run(config_path, *, external_transition=None, external_reconciliation=None):
         write(target, state)
     if bool(external_transition) != bool(external_reconciliation):
         raise ValueError('external transition requires its authenticated reconciliation')
+    if drained_fanout_transition is not None:
+        if external_transition is not None:
+            raise ValueError('choose one exact owner transition')
+        state = adopt_drained_fanout(folder,drained_fanout_transition)
     if external_transition is not None:
         try:
             from .teacher_external_reconciliation import adopt_external_transition
@@ -338,8 +445,10 @@ def run(config_path, *, external_transition=None, external_reconciliation=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__); parser.add_argument('--config', required=True)
     parser.add_argument('--external-transition'); parser.add_argument('--external-reconciliation')
+    parser.add_argument('--drained-fanout-transition')
     args = parser.parse_args()
-    try: run(args.config, external_transition=args.external_transition, external_reconciliation=args.external_reconciliation)
+    try: run(args.config, external_transition=args.external_transition, external_reconciliation=args.external_reconciliation,
+             drained_fanout_transition=args.drained_fanout_transition)
     except BaseException as error:
         try:
             config = json.loads(Path(args.config).read_text()); write(Path(config['control'])/'error.json',
