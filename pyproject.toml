@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
+data = ["zstandard==0.25.0"]
 # Pins mirror .venv-neuralese (Python 3.12). Only packages imported by natlang_neuralese/ and scripts/ are listed;
 # gguf (from the llama.cpp checkout), vllm, bitsandbytes and wandb are not in that venv and so are not declared.
 # torch is pinned without its +cu130 local tag; install the CUDA build from the matching PyTorch index.

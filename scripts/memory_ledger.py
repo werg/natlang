@@ -207,8 +207,15 @@ def cgroup_balloon_headroom(root='/sys/fs/cgroup', membership='/proc/self/cgroup
             return 0
         available = float('inf')
         while True:
-            with open(os.path.join(current, 'memory.max')) as stream:
-                maximum = stream.read().strip()
+            try:
+                with open(os.path.join(current, 'memory.max')) as stream:
+                    maximum = stream.read().strip()
+            except FileNotFoundError:
+                # The host's v2 root has controllers but no memory.max. A
+                # namespaced root with a real limit still takes the normal path.
+                if current == root and os.path.isfile(os.path.join(root, 'cgroup.controllers')):
+                    return available
+                raise
             if maximum != 'max':
                 with open(os.path.join(current, 'memory.current')) as stream:
                     used = int(stream.read())

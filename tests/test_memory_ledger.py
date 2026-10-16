@@ -943,6 +943,9 @@ def test_cgroup_balloon_room_honors_parent_limit_and_unknown_membership(tmp_path
     membership=tmp_path/'membership';membership.write_text('0::/app/job\n')
     assert ledger.cgroup_balloon_headroom(str(root),str(membership))==3*GIB//4
     assert ledger.cgroup_balloon_headroom(str(root),str(tmp_path/'missing'))==0
+    # Actual host v2 roots expose controllers, not a memory.max file.
+    (root/'memory.max').unlink();(root/'cgroup.controllers').write_text('memory cpu')
+    assert ledger.cgroup_balloon_headroom(str(root),str(membership))==3*GIB//4
 
 
 @pytest.mark.parametrize('room,expected',[(GIB//2,0),(5*GIB//2,2),([3*GIB,3*GIB,GIB//4],1)])
