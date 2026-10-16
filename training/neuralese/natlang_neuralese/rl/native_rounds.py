@@ -75,7 +75,10 @@ def bootstrap_configs(plan_path, completion_path, out):
             semantic_adapter=adapter_path, semantic_refresh_config=refresh_config,
             checkpoint=Path(adapter['checkpoint']['path']), base=Path(declaration['base']),
             production_stage=declaration['production_stage'], runtime=runtime,
-            out=out/model, config=config_path, port=declaration['port'])
+            out=out/model, config=config_path, port=declaration['port'],
+            coefficient_policy=_bound(declaration['coefficient_policy']) if declaration.get('coefficient_policy') else None,
+            coefficient_optimizer=declaration.get('coefficient_optimizer'),
+            coefficient_task_eval=declaration.get('coefficient_task_eval'))
         config = configure_native(args)
         overrides = declaration.get('commands') or {}
         if set(overrides) - {'actor_command', 'learner_command', 'seed_command', 'round_command',
@@ -208,6 +211,8 @@ def _run_rounds(config_paths, out, *, rounds=None, device='cuda', stop):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         latest = out/'latest.json'
         completed = 0
+        deployment=None
+        coefficient_updates={}
         while rounds is None or completed < rounds:
             if stop.requested:
                 return {'phase': 'requested_stop', 'production_complete': False}
@@ -229,6 +234,12 @@ def _run_rounds(config_paths, out, *, rounds=None, device='cuda', stop):
                 if len(adapters) != 1 or len(parents) != 1:
                     raise ValueError('parallel native learners must start from the same immutable joint parent')
                 adapter = next(iter(adapters))
+            coefficient_latest=out/'coefficient-latest.json'
+            if coefficient_latest.exists():
+                coefficient_cycle=json.loads(coefficient_latest.read_text())
+                if coefficient_cycle.get('schema')!='natlang.native-coefficient-rounds/1':
+                    raise ValueError('coefficient joint cycle receipt changed its actual schema')
+                cycle=max(cycle,coefficient_cycle['next_round'])
             # Real production configs declare the full recipe. Minimal direct
             # round fixtures may omit it; they exercise only the sealed RL job.
             if any(config.get('production_recipe') for config in configs):
@@ -262,7 +273,20 @@ def _run_rounds(config_paths, out, *, rounds=None, device='cuda', stop):
                 return {'phase': 'requested_stop', 'states': states, 'production_complete': False}
             updates = {name: state['pending_native_checkpoint'] for name, state in zip(names, states)
                        if state.get('pending_native_checkpoint')}
+            coefficient_updates={name:{'policy':{'path':state['coefficient_policy'],
+                'sha256':sha256_file_hex_cached(state['coefficient_policy'])},'trained_rounds':state['trained_rounds']}
+                for config,name,state in zip(configs,names,states)
+                if config.get('coefficient_policy') and state.get('phase')=='collect'
+                and (state.get('last_learner_progress') or {}).get('schema')=='natlang.native-coefficient-training-report/1'
+                and state['last_learner_progress'].get('qualification_complete') is True}
             semantic_pending=(json.loads(Path(adapter).read_text()).get('semantic_obligations') or {}).get('complete') is False
+            if not updates and not semantic_pending and coefficient_updates:
+                write_json_durable(coefficient_latest,{'schema':'natlang.native-coefficient-rounds/1',
+                    'next_round':cycle+1,'policies':coefficient_updates,
+                    'base_checkpoint_updated':False,'semantic_refresh_executed':False,
+                    'unchanged_semantic_adapter':{'path':str(Path(adapter).resolve()),'sha256':sha256_file_hex_cached(adapter)}})
+                completed+=1
+                continue
             if not updates and not semantic_pending and rounds is None:
                 import time
                 for _ in range(300):
@@ -289,7 +313,8 @@ def _run_rounds(config_paths, out, *, rounds=None, device='cuda', stop):
             for config in configs:
                 apply_deployment(config, deployment)
             completed += 1
-        return {'phase': 'collect', 'deployment': deployment, 'production_complete': False}
+        return {'phase': 'collect', 'deployment': deployment,
+                **({'coefficient_policies':coefficient_updates} if coefficient_updates else {}),'production_complete': False}
 
 
 def run_rounds(config_paths, out, *, rounds=None, device='cuda', stop=None):

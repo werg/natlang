@@ -13,10 +13,15 @@ from natlang_neuralese.serve.native_grad import native_graph_gradient
 from natlang_neuralese.serve.native_optim import native_optimizer_step
 
 
-def engine_fixture(tmp_path, family, *, service_template=False):
+def engine_fixture(tmp_path, family, *, service_template=False, context=None):
     import os
     device=os.environ.get('NATLANG_NATIVE_ADAPTER_TEST_DEVICE','cpu')
     dtype = source(tmp_path/'base', family)
+    if context is not None:
+        from transformers import AutoConfig
+        config=AutoConfig.from_pretrained(tmp_path/'base')
+        config.max_position_embeddings=context
+        config.save_pretrained(tmp_path/'base')
     if service_template:
         from transformers import AutoTokenizer
         from tokenizers.pre_tokenizers import WhitespaceSplit

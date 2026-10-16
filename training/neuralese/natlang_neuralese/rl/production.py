@@ -20,7 +20,7 @@ from ..common.paths import root
 from .task_rollouts import prepare, score
 
 
-def validate_actor_receipts(receipts, *, policy_id, neuralese_server, expected_native=None):
+def validate_actor_receipts(receipts, *, policy_id, neuralese_server, expected_native=None, expected_coefficient=None):
     """Attest native and legacy actors explicitly, without projected-head aliases."""
     import re
     if not receipts or any(not receipt or receipt.get('checkpoint_sha256') != policy_id
@@ -52,6 +52,9 @@ def validate_actor_receipts(receipts, *, policy_id, neuralese_server, expected_n
                 receipt.get('semantic_adapter_sha256') != expected_native['semantic_adapter_sha256']
                 for receipt in receipts.values()):
             raise ValueError('native RL actor differs from the requested shared participant or semantic adapter')
+    if expected_coefficient is not None and any(receipt.get('coefficient_policy')!=expected_coefficient
+            or receipt.get('coefficient_policy_sha256')!=expected_coefficient['policy_sha256'] for receipt in receipts.values()):
+        raise ValueError('native RL actor differs from its exact declared coefficient policy')
     return receipts
 
 
@@ -78,7 +81,7 @@ class RunControl:
 
 def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, workers=4,
             root_mode='student', runtime=None, seed_base=700000, neuralese_server=True,
-            case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None):
+            case_seconds=600, max_model_requests=128, max_turns=160, control=None, expected_native=None, coefficient_policy=None):
     """Bounded subprocess fanout; existing collector and exact task verifier."""
     if control is not None and control.stop.requested:
         raise InterruptedError('collection stop requested')
@@ -98,6 +101,12 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
                     for p in sorted((runtime / 'dist').rglob('*.js'))},
         'collector_sha256': sha256_file_hex(root('repo') / 'scripts/run_bonsai_queue.py'),
         **({'expected_native_actor': expected_native} if expected_native is not None else {})}
+    coefficient_runtime=None
+    if coefficient_policy is not None:
+        from ..model.native_coefficient_policy import runtime_binding
+        coefficient_policy=Path(coefficient_policy).resolve(strict=True)
+        coefficient_runtime=runtime_binding(json.loads(coefficient_policy.read_text()),coefficient_policy)
+        binding['coefficient_policy']={'path':str(coefficient_policy),'sha256':sha256_file_hex(coefficient_policy),'runtime':coefficient_runtime}
     receipt = out / 'collection-binding.json'
     if receipt.exists():
         if json.loads(receipt.read_text()) != binding:
@@ -114,7 +123,7 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     def actor_receipts():
         receipts = {url: json.loads(Server(url).get_bytes('/v1/neuralese/info'))
                     .get('rl_policy_binding') for url in endpoints}
-        return validate_actor_receipts(receipts, policy_id=policy_id, neuralese_server=neuralese_server, expected_native=expected_native)
+        return validate_actor_receipts(receipts, policy_id=policy_id, neuralese_server=neuralese_server, expected_native=expected_native,expected_coefficient=coefficient_runtime)
     actors = actor_receipts()
     preparation = prepare(SimpleNamespace(cases=Path(cases), out=out, rows=rows, offset=offset,
         group=group, temperature=1., case_seconds=case_seconds,
@@ -125,7 +134,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
     directory = out / 'workers'
     directory.mkdir(exist_ok=True)
     config = out / 'sampling-config.json'
-    write_json_durable(config, {'guidance': False, 'x_natlang_rl_capture': True})
+    write_json_durable(config, {'guidance': False, 'x_natlang_rl_capture': True,
+        **({'x_natlang_native_coefficient_policy':coefficient_runtime} if coefficient_runtime is not None else {})})
     runtime = Path(runtime or root('repo') / 'ts-host')
     if not (runtime / 'dist/teacher/cli.js').is_file():
         raise FileNotFoundError('RL requires the built natlang collector runtime')
@@ -184,7 +194,8 @@ def collect(*, cases, out, endpoints, policy_id, rows, offset=0, group=4, worker
         report['block_bundle'] = str(out / 'blocks/manifest.json')
     if actor_receipts() != actors:
         raise ValueError('RL actor policy changed during collection')
-    report.update(collector_workers=results, preparation=preparation,
+    report.update(**({'coefficient_policy':binding['coefficient_policy']} if coefficient_runtime is not None else {}),
+                  collector_workers=results, preparation=preparation,
                   actor_receipts=actors, collection_complete=not (control and control.stop.requested))
     write_json_durable(out / 'score.json', report)
     return report
@@ -215,6 +226,24 @@ def run_command(template, values):
             raise subprocess.CalledProcessError(code, command)
 
 
+def _bind_collected_coefficient_policy(values,kwargs,binding,identity):
+    """Verify exact actor publication before a live or recovered collection."""
+    from ..common.hashing import sha256_file_hex_cached
+    from ..model.native_coefficient_policy import verify_base_transition
+    if not isinstance(binding,dict) or set(binding)!={'path','sha256'}:
+        raise RuntimeError('managed coefficient actor omitted its actual policy binding')
+    try:
+        target=Path(binding['path']).resolve(strict=True)
+        if sha256_file_hex_cached(target)!=binding['sha256']:
+            raise ValueError('coefficient actor policy bytes changed')
+        verify_base_transition(kwargs['coefficient_policy'],target,identity=identity,
+            cancel_stale_reason=values.get('coefficient_cancel_stale_reason'))
+    except (OSError,ValueError,KeyError,TypeError) as error:
+        raise RuntimeError('managed coefficient actor publication failed exact verification: '+str(error)) from error
+    kwargs['coefficient_policy']=str(target)
+    values.update(coefficient_policy=str(target),coefficient_policy_sha256=binding['sha256'])
+
+
 def collect_with_actor(config, values, **kwargs):
     """Optional colocated actor lifecycle; its parent is the ledger/sandbox unit.
 
@@ -223,6 +252,11 @@ def collect_with_actor(config, values, **kwargs):
     """
     completed = Path(kwargs['out']) / 'score.json'
     if completed.is_file() and json.loads(completed.read_text()).get('collection_complete'):
+        saved=json.loads(completed.read_text())
+        if kwargs.get('coefficient_policy') is not None:
+            receipt=next(iter(saved['actor_receipts'].values()))
+            binding=saved.get('coefficient_policy') or {}
+            _bind_collected_coefficient_policy(values,kwargs,{key:binding.get(key) for key in ('path','sha256')},receipt['native_identity'])
         return collect(**kwargs)  # sealed packet already owns exact durable blocks
     control = kwargs.get('control')
     template = config.get('actor_command')
@@ -237,6 +271,7 @@ def collect_with_actor(config, values, **kwargs):
             part = part.replace('{' + key + '}', str(value))
         command.append(part)
     from .grpo import Server
+    from ..common.hashing import sha256_file_hex_cached
     with (Path(values['out']) / 'actor.log').open('a') as log:
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
         try:
@@ -248,6 +283,9 @@ def collect_with_actor(config, values, **kwargs):
                 try:
                     info = json.loads(Server(kwargs['endpoints'][0], timeout=2).get_bytes('/v1/neuralese/info'))
                     if (info.get('rl_policy_binding') or {}).get('checkpoint_sha256') == values['policy_id']:
+                        if kwargs.get('coefficient_policy') is not None:
+                            actor=info['rl_policy_binding']
+                            _bind_collected_coefficient_policy(values,kwargs,actor.get('coefficient_policy_binding'),actor['native_identity'])
                         break
                 except (OSError, ValueError):
                     pass
@@ -330,7 +368,7 @@ def expected_native_actor(adapter_path, participant, policy_id):
 
 def initial_controller_state(config):
     return {'schema':'natlang.rl-production-state/1','round':0,'offset':0,
-        'checkpoint':config['checkpoint'],'trained_rounds':0,'collected_task_ids':[],
+        'checkpoint':config['checkpoint'],**({'coefficient_policy':config['coefficient_policy']} if config.get('coefficient_policy') else {}),'trained_rounds':0,'collected_task_ids':[],
         'attempted_task_ids':[],'trained_task_ids':[],'trained_supervised_tokens':0,
         'trained_target_tokens':0,'production_complete':False}
 
@@ -415,6 +453,19 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 values['rl_tokenizer'] = str(Path(values['semantic_adapter']).parent /
                     export['tokenizers'][config['native_participant']]['path'])
             values['trainer_args'] = stage_parameter_args(config.get('trainer_parameters', {}))
+            values['seed_trainer_args']=stage_parameter_args(config.get('seed_trainer_parameters',config.get('trainer_parameters',{})))
+            if config.get('coefficient_policy'):
+                policy_path=Path(state.get('coefficient_policy',config['coefficient_policy'])).resolve(strict=True)
+                # An already sealed round keeps its original collection actor
+                # while the learner/publication is resumed. The current policy
+                # may already have advanced; never recollect or relabel that row.
+                if state.get('active_update_round')==str(round_dir) and state.get('update_coefficient_policy'):
+                    sealed=state['update_coefficient_policy']
+                    policy_path=Path(sealed['path']).resolve(strict=True)
+                    if sha256_file_hex(policy_path)!=sealed['sha256']:
+                        raise ValueError('sealed coefficient round source policy changed during publication recovery')
+                values.update(coefficient_policy=str(policy_path),coefficient_policy_sha256=sha256_file_hex(policy_path),
+                    coefficient_cancel_stale_reason=config.get('coefficient_cancel_stale_reason'))
             if config.get('heads'):
                 values['heads_sha256'] = sha256_file_hex(Path(config['heads']))
             if config.get('before_collect'):
@@ -427,6 +478,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     root_mode=config.get('root_mode', 'student'), runtime=config.get('runtime'),
                     seed_base=700000 + state['round'] * 1000000,
                     neuralese_server=config.get('neuralese_server', True),
+                    coefficient_policy=values.get('coefficient_policy'),
                     case_seconds=config.get('case_seconds', 600),
                     max_model_requests=config.get('max_model_requests', 128),
                     max_turns=config.get('max_turns', 160), control=control, expected_native=expected_native)
@@ -439,6 +491,10 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 write_json_durable(state_path, state)
                 return state
             values['block_bundle'] = report.get('block_bundle', '')
+            if report.get('coefficient_policy'):
+                state['coefficient_policy']=report['coefficient_policy']['path']
+                values.update(coefficient_policy=state['coefficient_policy'],
+                              coefficient_policy_sha256=report['coefficient_policy']['sha256'])
             rows = list(read_jsonl(round_dir / 'rollouts.jsonl'))
             collected = set(state.get('collected_task_ids', [])) | {r['task_id'] for r in rows if r.get('turns')}
             attempted = set(state.get('attempted_task_ids', [])) | {r['id'] for r in selected}
@@ -499,6 +555,8 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 values['rollouts'] = state['update_rollouts']
                 rft_stages = state.get('update_stages', ['all'])
             values['mode'] = mode
+            if config.get('coefficient_policy') and state.get('active_update_round')!=str(round_dir):
+                state['update_coefficient_policy']={'path':values['coefficient_policy'],'sha256':values['coefficient_policy_sha256']}
             state.update(phase='updating', update_mode=mode, active_update_round=str(round_dir),
                          update_rollouts=values['rollouts'], update_stages=rft_stages)
             write_json_durable(state_path, state)
@@ -508,7 +566,9 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 stage_out = base_learner_out if len(rft_stages) == 1 else base_learner_out.parent / ('learner-' + kind)
                 values.update(learner_out=str(stage_out), rft_document_kind=kind)
                 learner_report = stage_out / 'report.json'
-                already_complete = learner_report.is_file() and json.loads(learner_report.read_text()).get('completed')
+                saved_progress=json.loads(learner_report.read_text()) if learner_report.is_file() else {}
+                already_complete=bool(saved_progress.get('completed') and
+                    (not (config.get('coefficient_policy') and mode!='seed') or saved_progress.get('qualification_complete') is True))
                 if config.get('before_update') and not already_complete:
                     run_command(config['before_update'], values)
                 if not already_complete:
@@ -521,6 +581,13 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 if not checkpoint.is_file() or not learner_report.is_file():
                     raise RuntimeError('learner produced no recoverable full checkpoint/progress report')
                 progress = json.loads(learner_report.read_text())
+                coefficient_update=bool(config.get('coefficient_policy') and mode!='seed')
+                if coefficient_update:
+                    if (progress.get('schema')!='natlang.native-coefficient-training-report/1'
+                            or progress.get('base_checkpoint_unchanged') is not True):
+                        raise ValueError('coefficient learner did not preserve its actual full-backbone parent')
+                    if progress.get('completed') and not progress.get('qualification_complete'):
+                        raise ValueError('coefficient learner completed data but lacks actual current-policy held/task qualification')
                 counts = trained_counts(stage_out, progress)
                 per_stage = state.setdefault('trained_stage_counts', {})
                 previous_counts = per_stage.get(str(stage_out), {})
@@ -547,11 +614,18 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                         last_learner_progress=progress, phase='publishing')
                     write_json_durable(state_path, state)
                 # Next full substage continues exact P/TCP + optimizer from this one.
+                if coefficient_update:
+                    published=progress['policy']
+                    if sha256_file_hex(Path(published['path']))!=published['sha256']:
+                        raise ValueError('coefficient learner publication bytes changed')
+                    state['coefficient_policy']=published['path']
+                    values.update(coefficient_policy=published['path'],coefficient_policy_sha256=published['sha256'])
+                    checkpoint=Path(state['checkpoint'])  # actual unchanged backbone, never the coefficient state slot
                 values.update(checkpoint=str(checkpoint), continue_identity=str(stage_out / 'identity-check.json'),
                               continue_monitor_reference=str(stage_out / 'monitor-reference.pt'))
             if pending:
                 continue
-            if config.get('native_state'):
+            if config.get('native_state') and not (config.get('coefficient_policy') and mode!='seed'):
                 state.update(phase='awaiting_semantic_refresh', pending_native_checkpoint=str(checkpoint),
                              pending_native_round_dir=str(round_dir))
                 write_json_durable(state_path, state)
@@ -579,6 +653,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 # Colocated actor is drained/stopped; the next lease loads this
                 # checkpoint and attests it before any rollout is admitted.
                 state['actor_policy_pending_load'] = values['policy_id']
+                if config.get('coefficient_policy'):state['coefficient_policy_pending_load']=values['coefficient_policy_sha256']
             state.update(checkpoint=str(checkpoint), round=state['round'] + 1,
                          offset=(selection[-1]['row'] + 1) % len(cases),
                          trained_rounds=state['trained_rounds'] + 1, phase='collect',
@@ -650,6 +725,32 @@ def configure_native(args):
             raise ValueError('native production foundation requires its exact declared foundation_native_graphs source')
         config['foundation_native_graphs']=foundation['path']
         config['seed_command'] += ['--foundation-native-graphs','{foundation_native_graphs}']
+    coefficient_policy=getattr(args,'coefficient_policy',None)
+    if coefficient_policy is not None:
+        from ..model.native_coefficient_policy import policy_core
+        core=policy_core(json.loads(Path(coefficient_policy).read_text()))
+        if core['base_native_identity']!=adapter['models'][args.native_participant]['native_identity']:
+            raise ValueError('coefficient production policy must bind the actual declared shared participant')
+        coefficient_optimizer=getattr(args,'coefficient_optimizer',None)
+        if not isinstance(coefficient_optimizer,dict) or coefficient_optimizer.get('name') not in {'adam','sgd'}:
+            raise ValueError('coefficient production requires its explicit shared named Adam/SGD settings')
+        config['coefficient_policy']=str(Path(coefficient_policy).resolve(strict=True))
+        config['seed_trainer_parameters']=dict(parameters)
+        config['trainer_parameters']={key:value for key,value in parameters.items()
+            if key in HANDLERS['native_coefficient_rl']['parameters']}
+        config['trainer_parameters']['coefficient_optimizer']=coefficient_optimizer
+        if getattr(args,'coefficient_task_eval',None) is not None:
+            config['trainer_parameters']['task_eval']=args.coefficient_task_eval
+        from ..eval.task_cadence import parse_task_eval
+        if (parse_task_eval(config['trainer_parameters'].get('task_eval')) or {}).get('async'):
+            raise ValueError('coefficient task evaluation currently requires explicit synchronous task_eval; preserve actual actor bindings instead of using a base-only async snapshot')
+        config['actor_command'] += ['--coefficient-policy','{coefficient_policy}',
+            '--coefficient-policy-sha256','{coefficient_policy_sha256}',
+            '--coefficient-rebase-out','{out}/coefficient-rebase']
+        config['coefficient_cancel_stale_reason']='Actual backbone advanced at a safe whole-policy update boundary; retain completed credits and moments/RNG, cancel untrained stale behavior and recollect on the new base.'
+        config['actor_command'] += ['--coefficient-cancel-stale-reason','{coefficient_cancel_stale_reason}']
+        config['learner_command'] += ['--coefficient-policy','{coefficient_policy}']
+        config['seed_command']=[part.replace('{trainer_args}','{seed_trainer_args}') for part in config['seed_command']]
     write_json_durable(args.config, config)
     return config
 
@@ -747,6 +848,7 @@ def main(argv=None):
     c.add_argument('--group', type=int, default=4)
     c.add_argument('--workers', type=int, default=4)
     c.add_argument('--runtime', type=Path)
+    c.add_argument('--coefficient-policy',type=Path)
     g = sub.add_parser('configure', help='bind shared local/CoreWeave loop to an exact mixed production checkpoint')
     g.add_argument('--model', choices=['lfm', 'mellum'], required=True)
     for key in ('checkpoint', 'base', 'cases', 'runtime', 'out', 'config'):
@@ -755,6 +857,9 @@ def main(argv=None):
     g.add_argument('--heads', type=Path)
     g.add_argument('--native-state', action='store_true')
     g.add_argument('--native-participant')
+    g.add_argument('--coefficient-policy',type=Path)
+    g.add_argument('--coefficient-optimizer',type=json.loads)
+    g.add_argument('--coefficient-task-eval',type=json.loads)
     for key in ('semantic-adapter', 'semantic-refresh-config', 'seed-native-graphs', 'held-native-graphs'):
         g.add_argument('--' + key, type=Path)
     g.add_argument('--production-recipe', type=Path, required=True)
@@ -773,7 +878,7 @@ def main(argv=None):
             stop.restore()
     else:
         print(json.dumps(collect(cases=a.cases, out=a.out, endpoints=a.endpoint, policy_id=a.policy_id,
-            rows=a.rows, group=a.group, workers=a.workers, runtime=a.runtime)))
+            rows=a.rows, group=a.group, workers=a.workers, runtime=a.runtime,coefficient_policy=a.coefficient_policy)))
 
 
 if __name__ == '__main__':

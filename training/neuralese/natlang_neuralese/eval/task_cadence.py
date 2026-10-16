@@ -243,6 +243,13 @@ class TaskEval:
             env['NATLANG_SOURCE_REVIEWS'] = str(runtime.parent / 'training' / 'source-reviews')
             children = []
             queues = self._queues(run, repeat)
+            coefficient_runtime=getattr(engine,'native_coefficient_policy_runtime',None)
+            coefficient_args=[]
+            if coefficient_runtime is not None:
+                config=run/'native-coefficient-request.json'
+                from ..common.jsonio import write_json_durable
+                write_json_durable(config,{'x_natlang_native_coefficient_policy':coefficient_runtime})
+                coefficient_args=['--chat-request-config',str(config)]
             for queue, journal, _ in queues:
                 log = (queue.parent / 'supervisor.log').open('w')
                 # The collector's default model ID is the local Bonsai teacher. This endpoint serves the
@@ -252,7 +259,7 @@ class TaskEval:
                      '--runtime', str(self.spec.get('runtime') or self.repo / 'ts-host'), '--server', url,
                      '--model-id', engine.model_name,
                      '--chat-completions-url', url + '/v1/chat/completions', '--model-concurrency', '2',
-                     '--identical-turn-limit', str(self.spec['identical_turn_limit']),
+                     '--identical-turn-limit', str(self.spec['identical_turn_limit']), *coefficient_args,
                      *(['--neuralese-server'] if self.spec.get('neuralese_server') else [])],
                     cwd=self.repo, env=env, stdout=log, stderr=subprocess.STDOUT), log))
             codes = []
@@ -314,7 +321,9 @@ class TaskEval:
         measured = repeat_noise if repeat_noise is not None else self.measured_noise()
         noise = max(self.spec['noise_successes'], measured or 0)
         previous = self.previous(step)
+        coefficient_runtime=getattr(getattr(self,'engine',None),'native_coefficient_policy_runtime',None)
         summary = {'schema': SCHEMA, 'step': step, 'task_successes': score['task_successes'],
+                   **({'coefficient_policy_sha256':coefficient_runtime['policy_sha256']} if coefficient_runtime is not None else {}),
                    'cases': len(self.rows), 'task_success_rate': score['task_success_rate'],
                    'outcome_counts': score['outcome_counts'], 'complete': score['complete'],
                    'eligible': eligible,
@@ -403,6 +412,8 @@ class TaskEval:
             summary = {'schema': SCHEMA, 'step': step, 'task_successes': None, 'task_success_rate': None, 'model_outcome': 'unscored', 'cases': len(self.rows),
                        'outcome_counts': None, 'eligible': False, 'error': f'{type(error).__name__}: {error}',
                        'packet_sha256': self.spec['packet']['sha256'], 'case_indices': self.spec['cases'],
+                       **({'coefficient_policy_sha256':getattr(self,'engine').native_coefficient_policy_runtime['policy_sha256']}
+                          if getattr(getattr(self,'engine',None),'native_coefficient_policy_runtime',None) is not None else {}),
                        'code_commit': _git_head(), 'seconds': time.time() - started,
                        'run': str(self.root / f'step-{step:07d}')}
             with (self.out / 'task-eval.jsonl').open('a') as handle:

@@ -205,6 +205,14 @@ def refuse_retired_parameters(parameters):
 
 def validate_stage_parameters(kind, parameters):
     """Validate parameter shapes whose CLI actions are not scalar values."""
+    if kind=='native_coefficient_rl':
+        if 'epochs' in parameters and (type(parameters['epochs']) is not int or parameters['epochs']<1):
+            raise ValueError('native coefficient epochs must be a positive integer')
+        if parameters.get('fp8_training','off') not in {'off','triton-experts'}:
+            raise ValueError('native coefficient FP8 backend must be an actually qualified shared expert backend')
+        if 'coefficient_optimizer' in parameters and (not isinstance(parameters['coefficient_optimizer'],dict)
+                or parameters['coefficient_optimizer'].get('name') not in {'adam','sgd'}):
+            raise ValueError('native coefficient optimizer must declare the shared named Adam/SGD mechanism')
     if kind in {'native_state_sft','native_state_rl'}:
         from .native_learning_rates import validate_learned_row_rate
         for name in ('learned_row_learning_rate','interface_row_learning_rate'):
@@ -307,9 +315,18 @@ HANDLERS['native_state_rl'] = {
         {'rl_tokenizer', 'rl_mode', 'native_participant'},
     'result': 'checkpoint.pt'}
 
+HANDLERS['native_coefficient_rl'] = {
+    'module':'natlang_neuralese.rl.native_stage',
+    'required_inputs':{'rollouts','held_native_graphs','continue_from','coefficient_policy'},
+    'optional_inputs':{'rl_block_bundle'},
+    'parameters':{'rl_tokenizer','rl_mode','epochs','base','native_participant','device','coefficient_optimizer',
+                  'task_eval','task_eval_every','held_eval_graphs','held_eval_tokens','chunk_tokens',
+                  'checkpoint_layers','fp8_training','fp8_recipe'},
+    'result':'checkpoint.pt'}
+COEFFICIENT_NATIVE_KINDS=frozenset({'native_coefficient_rl'})
 NATIVE_TRAINING_KINDS = frozenset({'native_state_sft', 'native_state_rl'})
 SHARED_NATIVE_KINDS = frozenset({'native_semantic_training', 'native_shared_stage_controller'})
-HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | SHARED_NATIVE_KINDS
+HEADLESS_NATIVE_KINDS = NATIVE_TRAINING_KINDS | SHARED_NATIVE_KINDS | COEFFICIENT_NATIVE_KINDS
 NATIVE_IDENTITY_QUALIFICATION = 'native_state_runtime_qualified'
 
 
@@ -1224,6 +1241,11 @@ def require_gate(report, kind, *, training_progress=False):
                 return
             raise ValueError('Neuralese direct stage not qualified (held CE below base, final task '
                              'successes >= min_successes; base drift and behaviour gate report-only, owner 2026-10-15)')
+    elif kind in COEFFICIENT_NATIVE_KINDS:
+        if (report.get('schema')!='natlang.native-coefficient-training-report/1'
+                or report.get('completed') is not True or report.get('qualification_complete') is not True
+                or report.get('base_checkpoint_unchanged') is not True):
+            raise ValueError('native coefficient policy lacks complete exposure and actual current-policy held/task checks')
     elif kind in NATIVE_TRAINING_KINDS:
         if report.get('schema') != 'natlang.neuralese-native-sft-report/1' or report.get('completed') is not True:
             raise ValueError('native-state SFT has not completed its declared graph exposure')
@@ -2472,7 +2494,7 @@ def main(argv=None):
                     gate = json.loads((directory / ('runtime-report.json' if kind=='raw_runtime_qualification' else 'report.json')).read_text())
                 elif kind=='verified_heads_handoff':
                     gate=json.loads((directory/'report.json').read_text())
-                elif kind in ('core_text_warmup','neuralese_direct') or kind in NATIVE_TRAINING_KINDS:
+                elif kind in ('core_text_warmup','neuralese_direct') or kind in NATIVE_TRAINING_KINDS | COEFFICIENT_NATIVE_KINDS:
                     gate=json.loads((directory/'report.json').read_text())
                 elif kind in SHARED_NATIVE_KINDS:
                     gate=json.loads((directory/'shared-stage-completion.json').read_text())

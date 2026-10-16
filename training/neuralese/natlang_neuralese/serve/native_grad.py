@@ -50,7 +50,21 @@ def _parameter_targets(model, requested):
     return {name: available[name] for name in requested}
 
 
-def native_graph_gradient(engine, body, owner):
+def native_coefficient_gradients(engine, body, targets, owner=None):
+    """Learner seam: all selected coefficient adjoints from ONE current graph.
+
+    The HTTP single-target contract stays unchanged. This shares its exact
+    objective/import/actor execution and emits existing per-actor artifacts.
+    """
+    if (not isinstance(targets,list) or not targets or any(not isinstance(item,dict) or
+            set(item)-{'id','names'} or not isinstance(item.get('id'),str) for item in targets)
+            or len({item['id'] for item in targets})!=len(targets)):
+        raise ValueError('coefficient gradient targets must uniquely declare actual actor IDs and named tensors')
+    return native_graph_gradient(engine,{**body,'target':{'kind':'adapter',**targets[0]}},owner,
+                                 coefficient_targets=targets)
+
+
+def native_graph_gradient(engine, body, owner, *, coefficient_targets=None):
     if body.get('schema') != 'natlang.native-gradient-request/1':
         raise RequestError('neuralese-native-grad-schema', 'native graph gradients require schema natlang.native-gradient-request/1')
     if type(body.get('order',1)) is not int or body.get('order',1) != 1 or body.get('derived') or body.get('create_graph'):
@@ -91,12 +105,12 @@ def native_graph_gradient(engine, body, owner):
             try:
                 for parameter in restore:parameter.requires_grad_(True)
                 return run_invocation_actors(engine,names,declarations,
-                    lambda bank:_native_graph_gradient_impl(engine,body,owner,leaves,actor_bank=bank),
+                    lambda bank:_native_graph_gradient_impl(engine,body,owner,leaves,actor_bank=bank,coefficient_targets=coefficient_targets),
                     default=body.get('adapters'),leaves=leaves,
                     gradient_precision=body.get('adapter_gradient_precision','storage'),source_names=source_names)
             finally:
                 for parameter,enabled in restore.items():parameter.requires_grad_(enabled)
-        return run_native(engine, lambda: _native_graph_gradient_impl(engine, body, owner, leaves),
+        return run_native(engine, lambda: _native_graph_gradient_impl(engine, body, owner, leaves,coefficient_targets=coefficient_targets),
                           body.get('adapters'), leaves=leaves,
                           gradient_precision=body.get('adapter_gradient_precision', 'storage'))
     except RequestError:
@@ -105,7 +119,7 @@ def native_graph_gradient(engine, body, owner):
         raise RequestError('neuralese-native-grad-invalid', str(error)) from error
 
 
-def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_bank=None):
+def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_bank=None, coefficient_targets=None):
     """Evaluate one actual native graph and return a durable named gradient.
 
     `target` selects either named native model parameters or one exact imported
@@ -200,16 +214,25 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
             artifact_kind = 'parameter-gradient'
             source_id = None
         elif kind == 'adapter':
-            source_id = target.get('id')
-            available = adapter_leaves.get(source_id)
-            if available is None:
-                raise ValueError('adapter gradient target must be active by its exact native coefficient artifact ID')
-            requested = target.get('names', sorted(available))
-            if (not isinstance(requested, list) or not requested or len(set(requested)) != len(requested)
-                    or any(name not in available for name in requested)):
-                raise ValueError('adapter gradient names must uniquely select active coefficient tensors')
-            target_tensors = {name: available[name] for name in requested}
-            artifact_kind = 'adapter-gradient'
+            groups=[]
+            for declaration in coefficient_targets if coefficient_targets is not None else [target]:
+                selected_id=declaration.get('id')
+                available=adapter_leaves.get(selected_id)
+                if available is None:
+                    raise ValueError('adapter gradient target must be active by its exact native coefficient artifact ID')
+                requested=declaration.get('names',sorted(available))
+                if (not isinstance(requested,list) or not requested or len(set(requested))!=len(requested)
+                        or any(name not in available for name in requested)):
+                    raise ValueError('adapter gradient names must uniquely select active coefficient tensors')
+                groups.append((selected_id,{name:available[name] for name in requested}))
+            if coefficient_targets is None:
+                source_id,target_tensors=groups[0]
+            else:
+                # The compound names are local gradient coordinates only;
+                # emitted artifacts retain each original parameter name.
+                source_id=None
+                target_tensors={(index,name):value for index,(_,values) in enumerate(groups) for name,value in values.items()}
+            artifact_kind='adapter-gradient'
         elif kind == 'native-state':
             state_id = target.get('id')
             if not isinstance(state_id, str):
@@ -242,8 +265,13 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
         if set(tensors) != set(target_tensors):
             absent = sorted(set(target_tensors) - set(tensors))
             raise ValueError(f'objective has no gradient path to requested tensors: {absent}')
-        artifact = NativeTensorArtifact(artifact_kind, expected, tensors, source_id,
-            {'objective': ('native-graph-token-ce/1' if not isinstance(objective_request, dict)
+        artifacts=[]
+        selections=([(selected_id,{name:tensors[(index,name)] for name in values})
+                    for index,(selected_id,values) in enumerate(groups)]
+                    if coefficient_targets is not None else [(source_id,tensors)])
+        for selected_id,values in selections:
+            artifact=NativeTensorArtifact(artifact_kind,expected,values,selected_id,
+                {'objective': ('native-graph-token-ce/1' if not isinstance(objective_request, dict)
                            else objective.spec['schema'].removeprefix('natlang.')), 'graph_id': example.id,
              'graph_sha256': graph_sha256, 'target_kind': kind,
              'external_source_identities': input_identities,
@@ -251,7 +279,7 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
                  if key not in {'target_position_start', 'tokens'}} for name, receipt in {**consumption_receipts, **(objective.evaluation_external_contracts if objective is not None else {})}.items()},
              **({'external_consumption_receipts':objective.evaluation_external_contracts}
                 if objective is not None and objective.behavior_policy is not None else {}),
-             'target_names': sorted(tensors),
+             'target_names': sorted(values),
              **({'invocation_actors':actor_bank.receipt(),'actor_graph_sha256':canonical_json_sha256_hex(actor_bank.receipt()),'invocation_source_names':actor_bank.source_names}
                 if actor_bank is not None else {'effective_native_identity':effective}),
              'adapter_gradient_precision': body.get('adapter_gradient_precision', 'storage'),
@@ -265,9 +293,10 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves, *, actor_ba
                  **({'behavior_policy':objective.behavior_policy,'behavior_policy_sha256':objective.spec['behavior_policy_sha256']}
                     if objective.behavior_policy is not None else {'behavior_native_identity':objective.identity,'behavior_adapter_binding':objective.adapter_binding})}
                 if objective is not None else {})}).validate()
-        stored = engine.store.put_native_tensor_artifact(artifact, owner)
-        return {'loss': float(loss.detach()), 'stats': stats, 'gradient': stored.meta(),
-                'native_identity': expected, 'objective': artifact.provenance['objective'],
+            artifacts.append(engine.store.put_native_tensor_artifact(artifact,owner).meta())
+        return {'loss':float(loss.detach()),'stats':stats,
+                **({'gradients':artifacts} if coefficient_targets is not None else {'gradient':artifacts[0]}),
+                'native_identity':expected,'objective':artifact.provenance['objective'],
                 **({'invocation_actors':actor_bank.receipt(),'actor_graph_sha256':canonical_json_sha256_hex(actor_bank.receipt())}
                    if actor_bank is not None else {'effective_native_identity':effective})}
     except RequestError:

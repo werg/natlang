@@ -415,3 +415,9 @@ requires actual graph node names and exact-base coefficient/basis artifacts.
 Keep protected test rows out of gradient requests. Heterogeneous policy-objective
 admission/replay remains unavailable until its per-turn behavior contract is
 implemented and qualified; graph CE support does not imply that RL support.
+
+A declared native coefficient production policy binds generation and decisions
+to the same current actor. `neuralese-native-coefficient-policy` means restore
+the exact declared policy and coefficient archive; retry with that binding.
+Stable adapter handles are mapped by the declared policy, so retain those handles
+in the program rather than substituting an old coefficient artifact yourself.

@@ -1,9 +1,11 @@
+import {validateCoefficientRuntime} from '../model/native-coefficient-policy.js';
+
 /** Collection-specific OpenAI-compatible wire settings. No messages, tools or credentials. */
 export function chatRequestControls(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('chat request controls must be an object');
   const controls = value as Record<string, unknown>;
   const allowed = ['max_tokens', 'top_p', 'top_k', 'min_p', 'chat_template_kwargs', 'repetition_penalty', 'reasoning_effort',
-    'x_natlang_adapters', 'x_natlang_rl_capture', 'guidance'];
+    'x_natlang_adapters', 'x_natlang_rl_capture', 'guidance', 'x_natlang_native_coefficient_policy'];
   if (Object.keys(controls).some(key => !allowed.includes(key))) throw new Error('unsupported chat request control');
   if (controls.x_natlang_rl_capture !== undefined && typeof controls.x_natlang_rl_capture !== 'boolean')
     throw new Error('x_natlang_rl_capture must be boolean');
@@ -20,6 +22,7 @@ export function chatRequestControls(value: unknown): Record<string, unknown> {
         typeof (item as { id?: unknown }).id === 'string' && Number.isFinite((item as { scale?: unknown }).scale) &&
         Object.keys(item).every(key => key === 'id' || key === 'scale'))))
     throw new Error('x_natlang_adapters must be a list of {id, scale} adapter references');
+  if(controls.x_natlang_native_coefficient_policy!==undefined)validateCoefficientRuntime(controls.x_natlang_native_coefficient_policy);
   const serialized = JSON.stringify(controls);
   if (/"(?:apiKey|api_key|authorization|headers|messages|tools|endpoint)"\s*:/i.test(serialized)) throw new Error('credentials and conversation content are forbidden in chat controls');
   return JSON.parse(serialized);

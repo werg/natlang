@@ -32,6 +32,10 @@ def main() -> None:
     parser.add_argument('--native-participant', help='named model within a shared native checkpoint')
     parser.add_argument('--semantic-adapter', type=Path, help='checkpoint-bound shared semantic adapter receipt')
     parser.add_argument('--semantic-adapter-sha256')
+    parser.add_argument('--coefficient-policy',type=Path)
+    parser.add_argument('--coefficient-policy-sha256')
+    parser.add_argument('--coefficient-rebase-out',type=Path)
+    parser.add_argument('--coefficient-cancel-stale-reason')
     parser.add_argument('--prompt-rendering', choices=('full', 'program-header'), default='full')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--host', default='127.0.0.1')
@@ -48,6 +52,10 @@ def main() -> None:
         parser.error('direct diagnostic actors require --heads and --heads-sha256')
     if not args.native_state and (args.native_participant or args.semantic_adapter):
         parser.error('native participants and semantic adapters require --native-state')
+    if bool(args.coefficient_policy)!=bool(args.coefficient_policy_sha256):
+        parser.error('coefficient policy requires its exact --coefficient-policy-sha256')
+    if args.coefficient_policy and not args.native_state:
+        parser.error('coefficient policies require native-state serving')
     if bool(args.semantic_adapter) != bool(args.semantic_adapter_sha256):
         parser.error('semantic adapter needs its exact --semantic-adapter-sha256')
 
@@ -63,6 +71,7 @@ def main() -> None:
         bindings.append(('heads', heads, args.heads_sha256))
     if args.semantic_adapter:
         bindings.append(('semantic adapter', args.semantic_adapter.resolve(strict=True), args.semantic_adapter_sha256))
+    if args.coefficient_policy:bindings.append(('coefficient policy',args.coefficient_policy.resolve(strict=True),args.coefficient_policy_sha256))
     for label, path, expected in bindings:
         actual = sha256_file_hex(path)
         if actual != expected:
@@ -85,6 +94,19 @@ def main() -> None:
         if args.store_dir is not None:
             from natlang_neuralese.serve.store import TensorStore
             engine.store = TensorStore(args.store_dir)
+        if args.coefficient_policy:
+            from natlang_neuralese.model.native_coefficient_policy import policy_core,rebase_policy
+            from natlang_neuralese.rl.native_coefficient_stage import bind_policy
+            source=args.coefficient_policy.resolve(strict=True)
+            source_core=policy_core(json.loads(source.read_text()))
+            actual=source
+            if source_core['base_native_identity']!=engine.native_identity:
+                if args.coefficient_rebase_out is None:
+                    raise ValueError('coefficient policy changed base; explicitly configure its preserved-value rebase output')
+                actual=rebase_policy(engine,source,args.coefficient_rebase_out,cancel_stale_reason=args.coefficient_cancel_stale_reason)
+            bind_policy(engine,actual)
+            engine.rl_policy_binding['coefficient_policy_binding']={'path':str(actual),'sha256':sha256_file_hex(actual)}
+            engine.rl_policy_binding['coefficient_policy_source']={'path':str(source),'sha256':sha256_file_hex(source)}
         engine.start()
         server = serve(engine, args.host, args.port)
         print(json.dumps({'event': 'direct_training_checkpoint_serving',

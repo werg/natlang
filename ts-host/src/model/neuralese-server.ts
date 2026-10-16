@@ -28,6 +28,7 @@ import { coalescingScorer, explicitBatchScoreMany } from './scoring.js';
 import type { DecisionScorer, DecisionScores, ModelTurn, ModelTurnDelta, ModelTurnOptions, ModelTurnRequest } from '../contracts.js';
 import { activeAdapters, activeRecorder, type AdapterBinding, type TurnRecorder } from '../neuralese/recording.js';
 import { serves } from './neuralese-info.js';
+import {validateCoefficientRuntime,requireCoefficientAttestation,coefficientBindings,coefficientStateModes} from './native-coefficient-policy.js';
 import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
   isNativeStateId, partsToText, runtimePartsToText, runtimeTextToParts, type ContentPart, type RuntimeContentPart } from '../native/neuralese.js';
 import { constantBlock, decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
@@ -401,6 +402,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     ...(connection.apiKey ? { authorization: 'Bearer ' + connection.apiKey } : {}),
     ...(owner === undefined ? {} : { [OWNER_HEADER]: owner }) } };
   const remote = new HttpNeuraleseStore(http.endpoint, http.headers);
+  const coefficientPolicy=extra?.x_natlang_native_coefficient_policy===undefined?undefined:validateCoefficientRuntime(extra.x_natlang_native_coefficient_policy);
   const uploaded = new Set<string>();
   const nativeUploaded = new Set<string>();
   // What the server declares (`/v1/neuralese/info`), read once: whether it applies adapters as LoRAs, and whether it
@@ -427,7 +429,8 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     }
   };
   const adapterParts = async (bound: readonly { id: string; scale: number }[] = [], active: readonly AdapterBinding[] = activeAdapters()) => {
-    const adapters = [...active, ...bound];
+    if(coefficientPolicy)requireCoefficientAttestation(coefficientPolicy,await serverInfo());
+    const adapters = coefficientBindings(coefficientPolicy,active,bound);
     if (adapters.length) await uploadLoras(adapters.map(item => item.id));
     return adapters;
   };
@@ -445,7 +448,9 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         throw Object.assign(new Error(`neuralese-${capability.replaceAll('.', '-')}-unavailable: use a server that implements this typed readout`),
           { code: `neuralese-${capability.replaceAll('.', '-')}-unavailable` });
     }
-    if (nativeStateModes) body = { ...body, x_natlang_native_state_modes: nativeStateModes };
+    const consumptionModes=coefficientStateModes(coefficientPolicy,requestNativeStateIds(materializeNativeStateSentinels(body.messages) as unknown[]),nativeStateModes);
+    if (consumptionModes) body = { ...body, x_natlang_native_state_modes: consumptionModes };
+    if(coefficientPolicy){body={...body};delete body.x_natlang_native_coefficient_policy;}
     const adapters = await adapterParts((body.x_natlang_adapters ?? []) as { id: string; scale: number }[]);
     const inner = (await serverInfo())?.stream === true ? streamed : whole;
     // A streamed reply is assembled here, where its body is post-processed; its deltas go to the turn's observer, and a
@@ -469,7 +474,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
         tools: body.tools ? structuredClone(body.tools as unknown[]) : undefined, reply: structuredClone(message),
         blocks: structuredClone(((reply.neuralese as Json | undefined)?.blocks ?? []) as Json[]),
         ...(adapters.length ? { adapters: [...adapters] } : {}),
-        ...(nativeStateModes ? { native_state_modes: { ...nativeStateModes } } : {}) });
+        ...(consumptionModes ? { native_state_modes: { ...consumptionModes } } : {}) });
     }
     if (store) for (const meta of ((reply.neuralese as Json | undefined)?.blocks ?? []) as NeuraleseBlockMeta[]) {
       if (!(await store.has(meta.id))) {
@@ -528,7 +533,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
     const adapters = await adapterParts(bound ?? [], scope.adapters);
     scope.recorder?.record({ messages: structuredClone(messages), reply: { role: 'assistant', content: null }, blocks: [],
       decision: { options: [...replies] }, ...(adapters.length ? { adapters: [...adapters] } : {}),
-        ...(nativeStateModes ? { native_state_modes: { ...nativeStateModes } } : {}) });
+        ...(coefficientStateModes(coefficientPolicy,requestNativeStateIds(messages),nativeStateModes) ? { native_state_modes: coefficientStateModes(coefficientPolicy,requestNativeStateIds(messages),nativeStateModes) } : {}) });
     return adapters;
   };
   const decideRequest = async (messages: unknown[], replies: readonly string[], adapters: readonly { id: string; scale: number }[],
@@ -538,7 +543,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       const response = await fetchModel(http.endpoint.replace(/\/$/, '') + '/v1/neuralese/decide', { method: 'POST', signal,
         headers: { 'content-type': 'application/json', ...http.headers },
         body: JSON.stringify({ messages, options: replies, ...(adapters.length ? { adapters } : {}),
-          ...(nativeStateModes ? { native_state_modes: nativeStateModes } : {}) }) });
+          ...(coefficientStateModes(coefficientPolicy,requestNativeStateIds(messages),nativeStateModes) ? { native_state_modes: coefficientStateModes(coefficientPolicy,requestNativeStateIds(messages),nativeStateModes) } : {}) }) });
       if (response.status === 404 || response.status === 501) throw new Error('decision-unsupported: the server does not serve /v1/neuralese/decide');
       if (!response.ok) throw new Error(`neuralese decide HTTP ${response.status}: ${(await response.text()).slice(0, 2000)}`);
       return await response.json() as DecisionScores;

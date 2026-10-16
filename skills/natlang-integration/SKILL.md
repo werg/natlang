@@ -424,3 +424,14 @@ requires actual graph node names and exact-base coefficient/basis artifacts.
 Keep protected test rows out of gradient requests. Heterogeneous policy-objective
 admission/replay remains unavailable until its per-turn behavior contract is
 implemented and qualified; graph CE support does not imply that RL support.
+
+Native coefficient production requests may carry the typed
+`x_natlang_native_coefficient_policy` control. Restore its exact policy/archive
+and verify the server's full policy attestation before generation or decision.
+`neuralese-native-coefficient-policy` requires restoring that exact binding;
+never discard the requested policy or evaluate the base actor as a substitute.
+Coefficient checkpoints preserve a full native base separately from coefficients,
+named optimizer state and RNG/exposure. A backbone change creates explicitly
+new bound artifacts and requires fresh rollout collection; old KV and behavior
+must not be relabeled. Explicit stale-row cancellation retains completed credits
+and records untrained visits as uncredited, then recollects on the new base.

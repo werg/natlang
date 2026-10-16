@@ -786,3 +786,11 @@ No new prompt policy and no production controller adoption are introduced.
   Both-port actual sampling/runtime/HTTP and Python–TypeScript archive fixtures
   qualify mechanism only. Live48-sample executor feedback is debt for the next
   own-teacher window. No cloud, full-size or production-stage claim is made.
+
+- 2026-10-16: Explicit coefficient production policies bind runtime generation
+  and decisions to the same declared current actors. New
+  `neuralese-native-coefficient-policy` recovery text requests restoration of
+  the exact policy/archive. Both-port real collector and typed runtime fixtures
+  verify the mechanism; live48-sample feedback remains debt for the next own
+  self-hosted teacher window. Public capabilities/default recipes unchanged;
+  no cloud or task-lift claim.
