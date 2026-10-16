@@ -39,9 +39,27 @@ def iter_acquired_file_rows(path):
         raise Reject('unsupported acquired source file: '+path.name)
 
 
+def _bound_acquired_path(root,entry):
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    relative=Path(entry['path']);path=(root/relative).resolve(strict=True)
+    if not path.is_relative_to(root.resolve()) or path.stat().st_size!=entry['bytes']:
+        raise Reject('acquired source file differs: '+str(relative))
+    if sha256_file_hex_cached(path)!=entry['sha256']:
+        raise Reject('acquired source digest differs: '+str(relative))
+    return path
+
+
+def cooperation_trajectory_file(ref,name,known_files):
+    """Prefer the complete representation, retaining agents without one."""
+    name=str(name)
+    if not Path(name).name.startswith('agent') or not name.endswith('_traj.json'):return False
+    if ref=='D14' and not name.endswith('_full_traj.json'):
+        return name.removesuffix('_traj.json')+'_full_traj.json' not in known_files
+    return ref in ('D13','D14')
+
+
 def acquired_rows(ref, limit=None):
     from . import agents
-    from natlang_neuralese.common.hashing import sha256_file_hex_cached
     root = agents.EXPANSION_ROOT / ref
     receipt = json.loads((root / 'acquisition.json').read_text())
     if receipt.get('status') != 'acquired' or not receipt.get('revision'):
@@ -56,11 +74,7 @@ def acquired_rows(ref, limit=None):
             continue
         if ACQUIRED_FILES is not None and str(relative) not in ACQUIRED_FILES:
             continue
-        path = (root / relative).resolve(strict=True)
-        if not path.is_relative_to(root.resolve()) or path.stat().st_size != entry['bytes']:
-            raise Reject('acquired source file differs: '+str(relative))
-        if sha256_file_hex_cached(path) != entry['sha256']:
-            raise Reject('acquired source digest differs: '+str(relative))
+        path=_bound_acquired_path(root,entry)
         rows=iter_acquired_file_rows(path)
         for row_index, row in rows:
             if limit is not None and index >= limit:
@@ -239,53 +253,106 @@ def orchard_acquired(limit=None):
     yield from general_agent_acquired('D37', limit)
 
 
-def qwen_cooperation_acquired(limit=None):
-    """Every actual solver/compactor context, with one shared original task."""
-    for receipt,rid,row in acquired_rows('D14',limit):
+def _cooperation_neighbors(ref,receipt,path,known):
+    from . import agents
+    root=agents.EXPANSION_ROOT/ref
+    values={};bindings={};parent=Path(path).parent
+    for name in ('eval.json','result.json','metadata.json','conversation.json'):
+        relative=str(parent/name);entry=known.get(relative)
+        if entry is None:continue
+        source=_bound_acquired_path(root,entry)
+        # These files are original metadata/communication documents, not a
+        # collection whose list elements should be interpreted as sessions.
+        with source.open(encoding='utf-8') as stream:values[name]=json.load(stream)
+        bindings[name]=dict(entry)
+    return values,bindings
+
+
+def _cooperation_acquired(ref,limit=None):
+    """One complete-context mechanism for original and wrapped Cooper sources."""
+    from . import agents
+    known={};previous=None
+    for receipt,rid,row in acquired_rows(ref,limit):
+        if receipt is not previous:
+            known={entry['path']:entry for entry in receipt.get('files',[])};previous=receipt
         path=rid.rsplit(':',1)[0]
-        if not path.endswith('_full_traj.json'):
-            yield rid,Reject('non-session or duplicate summary; original agent full trajectory is the consumer')
+        if not cooperation_trajectory_file(ref,path,known):
+            yield rid,Reject('non-session or duplicate summary; complete original agent representation is the consumer')
             continue
         try:
             if not isinstance(row,dict):raise Reject('cooperation source is not an original trajectory object')
-            info=row.get('info') or {}
+            neighbors,neighbor_bindings=_cooperation_neighbors(ref,receipt,path,known)
+            parts=Path(path).parent.parts
+            repo=row.get('repo') or (parts[-3] if len(parts)>=3 else None)
+            task_id=row.get('task_id')
+            if task_id is None:task_id=parts[-2] if len(parts)>=2 else None
+            if repo is None or task_id is None:raise Reject('cooperation source lacks exact original benchmark task')
+            for value in neighbors.values():
+                if isinstance(value,dict) and (value.get('repo') not in (None,repo)
+                        or value.get('task_id') is not None and str(value['task_id'])!=str(task_id)):
+                    raise Reject('bound cooperation neighbor belongs to another original benchmark task')
+            info=row.get('info') or row.get('mini_swe_info') or {}
             if not isinstance(info,dict):raise Reject('cooperation source metadata is not an object')
             config=info.get('config') or {}
             if not isinstance(config,dict) or not isinstance(config.get('model') or {},dict):
                 raise Reject('cooperation source model configuration is not an object')
-            teacher=(config.get('model') or {}).get('model_name')
+            teacher=row.get('model') or (config.get('model') or {}).get('model_name')
             task=str(Path(path).parent)
-            contexts=[]
-            for index,segment in enumerate(row.get('segments') or []):
-                contexts.append((f'segment:{index}',segment.get('kind') if isinstance(segment,dict) else None,
-                                 segment.get('messages') if isinstance(segment,dict) else None))
+            segments=row.get('segments') if row.get('segments') is not None else row.get('mini_swe_segments') or []
+            if not isinstance(segments,list):raise Reject('cooperation source segment inventory is not an original list')
+            contexts=[(f'segment:{index}',segment.get('kind') if isinstance(segment,dict) else None,
+                       segment.get('messages') if isinstance(segment,dict) else None) for index,segment in enumerate(segments)]
             final=row.get('messages')
             duplicate=next((name for name,_,messages in contexts if messages==final and isinstance(final,list)),None)
             if duplicate is None:contexts.append(('final','final',final))
-            if not contexts:raise Reject('cooperation source contains no original context')
+            source_format=row.get('trajectory_format') or row.get('mini_swe_trajectory_format')
             for name,kind,messages in contexts:
                 child=rid+':'+name
                 try:
                     if not isinstance(messages,list) or any(not isinstance(item,dict) for item in messages):
                         raise Reject('missing original cooperation context messages')
                     terminal=[{'index':index,'event':item} for index,item in enumerate(messages) if item.get('role')=='exit']
-                    context=[item for item in messages if item.get('role')!='exit']
-                    if any(item.get('role') not in ('system','developer','user','assistant','tool','function') for item in context):
-                        raise Reject('unsupported original cooperation role; context retained in pinned source')
-                    t=_reported_session('D14',receipt,child,row,context,
-                        task_id=task,session_id=child,teacher=teacher)
+                    context=[];observations=[]
+                    for index,item in enumerate(messages):
+                        if item.get('role')=='exit':continue
+                        if item.get('role') not in ('system','developer','user','assistant','tool','function'):
+                            raise Reject('unsupported original cooperation role; context retained in pinned source')
+                        if (source_format=='codex_stream_log' and item.get('role')=='assistant'
+                                and isinstance(item.get('content'),str) and item['content'].startswith('[command] ')):
+                            observations.append({'index':index,'original_role':'assistant','kind':'combined-command-and-observation'})
+                            item={**item,'role':'tool'}
+                        context.append(item)
+                    t=_reported_session(ref,receipt,child,row,context,task_id=task,session_id=child,teacher=teacher)
+                    status=row.get('status') or info.get('exit_status')
+                    evaluation=neighbors.get('eval.json') or {}
+                    if not isinstance(evaluation,dict):raise Reject('cooperation evaluation facts are not an original object')
+                    failed=bool(status and status not in ('Submitted','Completed','success'))
+                    failed=failed or any(evaluation.get(key) is False for key in ('correct','both_passed')) or evaluation.get('eval')=='fail'
+                    failed=failed or any(isinstance(evaluation.get(key),dict) and evaluation[key].get('passed') is False
+                                         for key in ('feature1','feature2'))
+                    if failed:t.outcome['label']='failed'
+                    t.outcome['details'].update(reported_exit_status=status,reported_evaluation=evaluation,
+                        reported_evaluation_present='eval.json' in neighbors,executed_locally=False)
                     t.lineage['notes']['original_cooperation_context']={'path':path,'context':name,'kind':kind,
-                        'info':info,'trajectory_format':row.get('trajectory_format'),
-                        'final_duplicate_of':duplicate,'original_segment_count':len(row.get('segments') or []),
-                        'original_message_count':len(messages),'model_message_count':len(context),'terminal_events':terminal}
-                    t.split_groups.append(group_key('cooper-task',task))
-                    status=info.get('exit_status')
-                    if status and status not in ('Submitted','Completed','success'):
-                        t.outcome['label']='failed'
-                    t.outcome['details']['reported_exit_status']=status
+                        'info':info,'trajectory_format':source_format,'repo':repo,'task_id':task_id,
+                        'agent_id':row.get('agent_id'),'feature_id':row.get('feature_id'),'team':row.get('team'),
+                        'neighbors':neighbors,'neighbor_bindings':neighbor_bindings,
+                        'final_duplicate_of':duplicate,'original_segment_count':len(segments),
+                        'original_message_count':len(messages),'model_message_count':len(context),
+                        'terminal_events':terminal,'observed_command_logs':observations}
+                    t.split_groups.extend([group_key('cooper-task',task),group_key('cooper-task',f'{repo}:{task_id}')])
+                    if f'{repo}:{task_id}' in agents._bench_ids():t.split='test'
                     yield child,t
                 except (Reject,ValueError,TypeError,KeyError) as error:yield child,Reject(str(error))
         except (Reject,ValueError,TypeError,KeyError) as error:yield rid,Reject(str(error))
+
+
+def qwen_cooperation_acquired(limit=None):
+    yield from _cooperation_acquired('D14',limit)
+
+
+def team_cooperation_acquired(limit=None):
+    yield from _cooperation_acquired('D13',limit)
 
 
 def openresearcher_structured_acquired(limit=None):

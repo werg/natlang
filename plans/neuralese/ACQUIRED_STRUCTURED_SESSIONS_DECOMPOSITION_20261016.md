@@ -85,3 +85,56 @@ negative verdict alone is not actor failure: a correct negative evaluation can
 be useful teacher behavior. Failure classification uses reported incorrect
 verdict, nonpositive reward or actual failed task-check results; expectation is
 retained as a separate source fact, never a local oracle.
+
+## D13 team cooperation and shared cooperation mechanics
+
+1. Reuse the D14 context adapter for the D13 wrapper: original `messages`,
+   `mini_swe_segments`, `mini_swe_info` and format facts map to the same complete
+   context enumeration. Every actual agent/run/solver/summarizer/final context
+   remains distinct. D14 prefers `_full_traj.json` when that representation
+   exists, and otherwise retains the original `_traj.json` agent; a missing
+   preferred copy cannot discard extra agents.
+2. Verify adjacent evaluation/result/metadata/communication files against the
+   same acquisition receipt before joining their facts. Record every dependency
+   path/size/SHA in source provenance. Submitted is a finish status, not proof of
+   successful tests. Actual failed upstream checks remain explicitly non-positive;
+   source `verified`/held-out-test facts are upstream facts, not local certificates.
+   Missing optional neighbors remain explicit unknowns, not invented success.
+3. Keep original run/agent/feature identities and a common benchmark
+   `cooper-task` repository/task group across D13, D14 and existing D17 views,
+   alongside existing groups and original split facts. Agent aliases and different
+   task features must not bypass held-source closure.
+4. For source format `codex_stream_log`, upstream `[command]` messages combine
+   the command and its observed output in one text block labeled assistant.
+   Preserve the complete block as observed tool-log context with exact original
+   position/role provenance; never invent a typed call/output boundary. This
+   retains lower-weight whole-trajectory observation supervision rather than
+   presenting returned file listings as generated assistant answers. Other
+   original messages and genuine structured calls keep their existing handling.
+5. Validate all five acquired D13 run variants and both agents with pinned samples,
+   then the shared full-session converter on both actual production tokenizers.
+   Bulk export/admission and comprehensive model exposure remain separate work.
+
+D13 qualification (2026-10-16): all five run variants and both original agents
+were loaded through the shared reader from exact pinned bytes, including all
+four bound neighbor documents. The successful Codex variants retained 2+2
+contexts and 108+115 messages (164 combined command observations); the sampled
+unsuccessful MiniSWE variants retained 18+18+14 contexts, including every
+7/9/5-segment compaction inventory, and remained nonpositive. Both actual pinned
+tokenizers rendered all four successful complete agent sessions, preserving all
+assistant targets and lower-weight observations. LFM lengths were
+81,091/30,438/82,278/61,759 tokens; Mellum lengths were
+89,893/32,595/93,328/66,248, with no truncation. Both rejected the actual failed
+source from positive conversion. This proves format handling, not local task
+success or GPU training of these long rows. Production scheduling must account
+for their actual lengths.
+
+The focused suite passed 44 tests. The actual pinned-byte/tokenizer ledger unit
+`team-cooperation-both-agents-tokenizers-20261016` passed (7.4 CPU seconds,
+686 MB peak host memory); detailed immutable file/tokenizer bindings are in
+`/home/werg/data/dgxops/team-cooperation-source-proof-20261016.json`.
+Export selection uses the shared `cooperation_trajectory_file` predicate.
+Normalized export identity must include the acquisition/helper identity and
+bound neighbor inputs: identical agent bytes across runs can have different
+quality metadata. Full bulk conversion, cross-source held-group closure,
+admission and actual training exposure remain separate operations.

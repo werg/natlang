@@ -961,3 +961,6 @@ from .acquired_agents import qwen_cooperation_acquired, openresearcher_structure
 CORPORA.update({'qwen-cooperation-acquired':(qwen_cooperation_acquired,4),
                 'openresearcher-structured-acquired':(openresearcher_structured_acquired,4),
                 'agent-collusion-raw-acquired':(agent_collusion_raw_acquired,4)})
+
+from .acquired_agents import team_cooperation_acquired
+CORPORA['team-cooperation-acquired']=(team_cooperation_acquired,4)
