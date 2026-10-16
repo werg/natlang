@@ -13,13 +13,16 @@ ACQUIRED_FILES = None  # Optional exact receipt-file shard, never an implicit ro
 
 def supported_acquired_file(name):
     """One shared pinned-file predicate for conversion and export inventories."""
-    return str(name).endswith(('.parquet','.jsonl','.jsonl.gz','.jsonl.zst','.json','.json.gz'))
+    return str(name).endswith(('.parquet','.jsonl','.jsonl.gz','.jsonl.zst','.json','.json.gz','.tar.gz'))
 
 
 def iter_acquired_file_rows(path):
     """Yield original integer rows; blank JSONL lines keep their positions."""
     path=Path(path)
-    if path.suffix=='.parquet':
+    if str(path).endswith('.tar.gz'):
+        from .acquired_archives import iter_archive_rows
+        yield from iter_archive_rows(path)
+    elif path.suffix=='.parquet':
         from . import agents
         yield from agents._parquet_groups(path)
     elif str(path).endswith(('.json','.json.gz')):
@@ -268,20 +271,23 @@ def _cooperation_neighbors(ref,receipt,path,known):
     return values,bindings
 
 
-def _cooperation_acquired(ref,limit=None):
+def _cooperation_acquired(ref,limit=None,*,rows=None):
     """One complete-context mechanism for original and wrapped Cooper sources."""
     from . import agents
     known={};previous=None
-    for receipt,rid,row in acquired_rows(ref,limit):
+    for receipt,rid,row in (acquired_rows(ref,limit) if rows is None else rows):
         if receipt is not previous:
             known={entry['path']:entry for entry in receipt.get('files',[])};previous=receipt
-        path=rid.rsplit(':',1)[0]
-        if not cooperation_trajectory_file(ref,path,known):
+        path=row.get('_cooperation_member_path',rid.rsplit(':',1)[0]) if isinstance(row,dict) else rid.rsplit(':',1)[0]
+        if isinstance(row,dict) and row.get('_archive_omission'):
+            yield rid,Reject(row['_archive_omission']);continue
+        if not (ref=='D12' and isinstance(row,dict) and row.get('_cooperation_archive_selected') or cooperation_trajectory_file(ref,path,known)):
             yield rid,Reject('non-session or duplicate summary; complete original agent representation is the consumer')
             continue
         try:
             if not isinstance(row,dict):raise Reject('cooperation source is not an original trajectory object')
-            neighbors,neighbor_bindings=_cooperation_neighbors(ref,receipt,path,known)
+            if ref=='D12':neighbors,neighbor_bindings=row['_cooperation_neighbors'],row['_cooperation_neighbor_bindings']
+            else:neighbors,neighbor_bindings=_cooperation_neighbors(ref,receipt,path,known)
             parts=Path(path).parent.parts
             repo=row.get('repo') or (parts[-3] if len(parts)>=3 else None)
             task_id=row.get('task_id')
@@ -323,6 +329,8 @@ def _cooperation_acquired(ref,limit=None):
                             item={**item,'role':'tool'}
                         context.append(item)
                     t=_reported_session(ref,receipt,child,row,context,task_id=task,session_id=child,teacher=teacher)
+                    if ref=='D12' and row.get('_cooperation_archive_context',{}).get('view')=='complete-observed-stream-to-exact-final-response':
+                        t.messages=context
                     status=row.get('status') or info.get('exit_status')
                     evaluation=neighbors.get('eval.json') or {}
                     if not isinstance(evaluation,dict):raise Reject('cooperation evaluation facts are not an original object')
@@ -339,7 +347,8 @@ def _cooperation_acquired(ref,limit=None):
                         'neighbors':neighbors,'neighbor_bindings':neighbor_bindings,
                         'final_duplicate_of':duplicate,'original_segment_count':len(segments),
                         'original_message_count':len(messages),'model_message_count':len(context),
-                        'terminal_events':terminal,'observed_command_logs':observations}
+                        'terminal_events':terminal,'observed_command_logs':observations,
+                        'archive_context':row.get('_cooperation_archive_context')}
                     t.split_groups.extend([group_key('cooper-task',task),group_key('cooper-task',f'{repo}:{task_id}')])
                     if f'{repo}:{task_id}' in agents._bench_ids():t.split='test'
                     yield child,t

@@ -964,3 +964,13 @@ CORPORA.update({'qwen-cooperation-acquired':(qwen_cooperation_acquired,4),
 
 from .acquired_agents import team_cooperation_acquired
 CORPORA['team-cooperation-acquired']=(team_cooperation_acquired,4)
+
+from .acquired_diagnosis import mast_diagnosis_acquired,mascope_diagnosis_acquired
+CORPORA.update({'mast-diagnosis-acquired':(mast_diagnosis_acquired,4),
+                'mascope-diagnosis-acquired':(mascope_diagnosis_acquired,4)})
+
+from .acquired_archives import cooper_archive_acquired
+CORPORA['cooper-archive-acquired']=(cooper_archive_acquired,4)
+
+from .acquired_transformed_coop import qwen_comm4_acquired
+CORPORA['qwen-comm4-acquired']=(qwen_comm4_acquired,4)

@@ -138,3 +138,50 @@ Normalized export identity must include the acquisition/helper identity and
 bound neighbor inputs: identical agent bytes across runs can have different
 quality metadata. Full bulk conversion, cross-source held-group closure,
 admission and actual training exposure remain separate operations.
+
+## Remaining source formats: D12/D15/D16/D18
+
+1. Treat acquisition and archive traversal as exact services: validate pinned
+   file bytes, retain stable original member/row identities, never extract tar
+   paths or execute source material. A shared archive reader yields original
+   JSON documents with member provenance, and the cooperation context normalizer
+   handles their agent contexts and receipt-bound neighbor facts. Prefer complete
+   contexts over summaries; retain omitted raw formats explicitly for repair.
+2. The D15 dataset is an upstream transformed two-agent view. Preserve every
+   chronological original entry, actor, action, observation, reasoning and round
+   transformation receipt. Expose only the released view, with no claim that
+   unrecorded four-agent private contexts or native state are recoverable.
+3. D16/D18 provide observed multi-agent logs with source failure annotations.
+   Their natlang unit is an execution-diagnosis function: read the full observed
+   trace and return the exact source-reported annotation object. Static rendering
+   is crisp transcription, not a second quality policy or a generated repair.
+   Preserve all raw trace text as input; never supervise failed logged decisions
+   as positive agent actions. Null/missing labels and human-study taxonomy rounds
+   remain distinct facts, not invented zero labels. Source judge output is teacher
+   supervision, not an independently executed oracle.
+4. Share exact MAST source/task/content groups across D16 and the MAST-derived
+   D18 subset. Preserve source splits and leave-one-framework-out metadata;
+   cross-source protected-group closure precedes admission. Injected anomalies
+   retain their explicit synthetic provenance and task-family groups.
+5. Use the existing normalized full-session/native converter for both pinned
+   production tokenizers, current protections and decision holds. Export all
+   complete normalized sessions and resumable graph shards locally under the
+   memory ledger. Source conversion, actual admission and training exposure are
+   separate receipts. No downloading duplicate sources or external generation.
+
+Remaining-format qualification: 57 focused tests and the tracked-file quick
+check passed. Complete source preflight found 5,025 D12 contexts (2,826 source
+teacher candidates and 2,199 source-reported failures), 718 D15 actor views
+(611 candidates and 107 failures), 1,661 D16 source-diagnosis sessions, and
+2,220 D18 logs. The 83 MAST-clean `held_out` rows map explicitly to test, with
+original split facts retained. Both the nullable labels and source human-study
+rounds remain unchanged; execution-model identity is not misrepresented as the
+unknown annotation-judge identity.
+
+D12 source defects remain explicit: 19 Error records have no messages; one
+original JSON member is empty/malformed; three raw Codex stream logs end before
+the separately stored final response (including upstream disk-full recorder
+errors). The exact-suffix verifier rejects claiming those contexts complete.
+Non-session members and superseded summaries retain stable original archive
+ordinal/size/digest accounting. A malformed or binary member does not discard
+other usable members. No archive paths are extracted or executed.
