@@ -27,3 +27,7 @@ Validation: ledgered handoff/raw-round/drained-recipe integration passed 37 test
 with one existing CUDA skip (9.73 s, 635 MiB); final handoff suite passed all 24
 cases (4.73 s, 554 MiB), including actual nonleader-thread spawning with the
 children API absent, PID reuse/reparent/growth rejection and forged archive links.
+
+New drain/2 intents require complete tree evidence. Historical drain/1 receipts
+remain readable with their original scope; missing drain/2 links cannot silently
+fall back to the historical contract.

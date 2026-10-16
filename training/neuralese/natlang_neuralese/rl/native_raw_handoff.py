@@ -13,7 +13,8 @@ from ..train.native_readiness import _bound
 from ..train.native_resident import binding
 
 SCHEMA='natlang.native-raw-optimizer-handoff/1'
-INTENT='natlang.native-raw-optimizer-drain/1'
+INTENT='natlang.native-raw-optimizer-drain/2'
+LEGACY_INTENT='natlang.native-raw-optimizer-drain/1'
 
 
 def _process_stat(pid):
@@ -132,7 +133,9 @@ def _identity(value):
 
 def _verify_process_tree(intent):
     census=intent.get('process_tree')
-    if census is None:return  # Historical evidence keeps its original scope.
+    if census is None:
+        if intent.get('schema')==LEGACY_INTENT:return  # Preserve historical scope.
+        raise ValueError('raw handoff process census is required for drain/2')
     if not isinstance(census,dict) or census.get('schema')!='natlang.linux-process-census/1' or not isinstance(census.get('links'),list):
         raise ValueError('raw handoff process census schema is invalid')
     known={intent['owner']['pid']:intent['owner']};children={item['pid']:item for item in intent['children']}
@@ -157,7 +160,7 @@ def _verify_process_tree(intent):
 def complete_drain(intent, terminal, checkpoint, out, *, original_slot, resident_directory=None):
     """After owner/children drain and checkpoint pin, persist exact observations."""
     value=json.loads(_bound(intent).read_text())
-    if value.get('schema')!=INTENT:raise ValueError('raw handoff requires its exact pre-signal intent')
+    if value.get('schema') not in (INTENT,LEGACY_INTENT):raise ValueError('raw handoff requires its exact pre-signal intent')
     identities=[value['owner'],*value['children']]
     observations=[observe(item['pid']) for item in identities]
     if any(same_process(old,new) and new['state'] not in ('Z','X') for old,new in zip(identities,observations)):
@@ -198,7 +201,7 @@ def verify_handoff(reference, *, requirement=None):
     record=json.loads(_bound(reference).read_text())
     if record.get('schema')!=SCHEMA:raise ValueError('raw bootstrap needs an exact original-owner handoff receipt')
     intent=json.loads(_bound(record['intent']).read_text())
-    if intent.get('schema')!=INTENT or not isinstance(intent.get('children'),list):
+    if intent.get('schema') not in (INTENT,LEGACY_INTENT) or not isinstance(intent.get('children'),list):
         raise ValueError('raw handoff needs its original pre-signal process tree')
     launch=json.loads(_bound(intent['launch']).read_text())
     if intent.get('source_launch',intent['launch'])['sha256']!=intent['launch']['sha256']:

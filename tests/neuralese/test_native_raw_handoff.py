@@ -201,16 +201,26 @@ def test_census_never_admits_unrelated_process_or_stale_thread_pid(monkeypatch):
         handoff._capture_process_tree(owner)
 
 
-@pytest.mark.parametrize('tamper',['parent','omit','origin','reuse'])
+@pytest.mark.parametrize('tamper',['parent','omit','origin','reuse','missing'])
 def test_census_parent_evidence_survives_archive_validation(actual_drain,tamper):
     from natlang_neuralese.rl import native_raw_handoff as handoff
     reference=drained(actual_drain);record=json.loads(Path(reference['path']).read_text())
     intent_path=Path(record['intent']['path']);intent=json.loads(intent_path.read_text())
     links=intent['process_tree']['links']
-    if tamper=='parent':links[0]['child']['ppid']=999
+    if tamper=='missing':intent.pop('process_tree')
+    elif tamper=='parent':links[0]['child']['ppid']=999
     elif tamper=='omit':links.clear()
     elif tamper=='origin':links[0]['observed_by']=[]
     else:links[0]['parent']['start_ticks']='9999999999'
     write_json_durable(intent_path,intent);record['intent']=binding(intent_path)
     path=Path(reference['path']);write_json_durable(path,record)
     with pytest.raises(ValueError,match='census'):handoff.verify_handoff(binding(path))
+
+
+def test_historical_drain_intent_keeps_original_evidence_scope(actual_drain):
+    reference=drained(actual_drain);record=json.loads(Path(reference['path']).read_text())
+    path=Path(record['intent']['path']);intent=json.loads(path.read_text())
+    intent['schema']='natlang.native-raw-optimizer-drain/1';intent.pop('process_tree')
+    write_json_durable(path,intent);record['intent']=binding(path)
+    path=Path(reference['path']);write_json_durable(path,record)
+    verify_handoff(binding(path))
