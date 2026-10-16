@@ -3,9 +3,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from datetime import datetime, timezone
 from dataclasses import dataclass
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -24,6 +22,7 @@ from scripts.neuralese_data.build_native_graph_text_corpus import GraphWriter
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import provision
 from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
 from scripts.neuralese_data.decision_holds import load_decision_holds
+from scripts.neuralese_data.conversion_output_lease import acquire_output_lease
 
 
 def sessions(path):
@@ -80,25 +79,6 @@ def runtime_bindings(root=None):
     observed_paths = {name: str(path.resolve()) for name, path in paths.items()}
     return {'files': files, 'fingerprint': canonical_json_sha256_hex(files),
             'observed_paths': observed_paths}
-
-
-def acquire_output_lease(output):
-    """Acquire an exclusive output lease before inspecting or cleaning shard state."""
-    output = Path(output)
-    output.mkdir(parents=True, exist_ok=True)
-    lease_path = output / '.conversion.lock'
-    lease = lease_path.open('a+', encoding='utf-8')
-    try:
-        fcntl.flock(lease.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError as exc:
-        lease.close()
-        raise RuntimeError(f'an acquired-session conversion already owns {lease_path}') from exc
-    lease.seek(0)
-    lease.truncate()
-    lease.write(json.dumps({'pid': os.getpid(), 'started_at': datetime.now(timezone.utc).isoformat()}) + '\n')
-    lease.flush()
-    os.fsync(lease.fileno())
-    return lease
 
 
 def _record_uncommitted_cleanup(shard_root, directory):

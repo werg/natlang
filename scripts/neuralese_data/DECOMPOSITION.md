@@ -240,3 +240,10 @@ source SHA, render parameters, dependency SHAs, and an explicitly supplied old
 renderer SHA; the receipt itself is never rewritten. The final corpus receipt
 lists source and actual renderer SHA per shard, including mixed old/new
 shards, while its top-level renderer identity names the finalizer.
+
+Both resumable renderers acquire the same nonblocking output-directory lease
+before reading or changing checkpoints, shard receipts, or merged outputs. The
+Search/OWL migration accepts one exact historical code-binding inventory with
+canonical path labels; its renderer identity is allowlisted and its current
+dependencies must still match the recorded historical bytes. This lets a
+frozen new checkout resume completed work without relabelling old receipts.
