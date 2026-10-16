@@ -186,7 +186,7 @@ def make_handler(engine: Engine):
                                         "max_block_length": engine.max_block, "context": engine.context,
                                         "grad": True, "grad_order": 2 if not native_enabled else 1, "stream": True,
                                         "cutoff": None if native_enabled else engine.heads.cutoff,
-                                        "adapters": [] if native_enabled else ["xs", "tiny"],
+                                        "adapters": ["xs", "tiny"],
                                         "projections": {} if native_enabled else
                                             {name: {"source": p.source_dialect, "target": p.target, "identity": p.identity()}
                                              for name, p in engine.projections.items()},
@@ -196,6 +196,7 @@ def make_handler(engine: Engine):
                                                               **({'semantic_adapter_sha256': engine.semantic_channel.adapter_sha256}
                                                                  if getattr(engine, 'semantic_channel', None) else {}),
                                                               "consumption_modes": ["exact-native-state",
+                                                                                     "same-base-adapter-state",
                                                                                      "best-effort-text-retokenization"] +
                                                               (['learned-semantic-state-deltas'] if getattr(engine, 'semantic_channel', None) else []),
                                                               "architecture": engine.model_config.get("architecture"),

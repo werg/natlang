@@ -825,3 +825,15 @@ No new prompt policy and no production controller adoption are introduced.
   for one JSON object preserving the same schema, keys and values. Preserve the
   original wording observations as their own variant; the corrected wording
   still needs a live 48-sample self-hosted teacher measurement before adoption.
+
+## 2026-10-16: advertise qualified native adapter service operations
+
+The native HTTP info response now reports existing `xs`/`tiny` adapters and
+`same-base-adapter-state` consumption after root independent integrated40-case
+CUDA/typed-client qualification. Direct request names, prompts, schemas, errors
+and arithmetic are unchanged; first-order and exact-base restrictions remain.
+Authoring/integration references now describe actual advertised operations.
+This is API capability metadata, not a new generation prompt. If exposed in a
+model-facing service discovery tool, include that discovery surface in the next
+live executor measurement window; do not infer downstream task lift from API
+qualification.

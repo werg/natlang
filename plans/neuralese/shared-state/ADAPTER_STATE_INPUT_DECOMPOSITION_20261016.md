@@ -45,8 +45,10 @@ Crisp code authenticates identities, transports bytes, constructs exact masks,
 applies proven splices and verifies results. Capabilities remain unadvertised
 until integrated inference/training paths and independent review are complete.
 
-Implementation status: capability remains unadvertised pending independent
-integration review. Initial actual CUDA incremental/current-policy qualification
+Implementation status: root independent integrated review passed40 actual
+CUDA/typed-service cases in `native-adapter-integrated-independent-root-20261016`;
+HTTP info now advertises the existing explicit consumption mode. The following
+records retain the original numerical failure and its exact repair. Initial actual CUDA incremental/current-policy qualification
 failed on Mellum with coefficient max gap 3.990344703197479e-5 and maximum
 relative coordinate gap .0013894966104999185. That failure is retained in
 `/home/werg/data/dgxops/native-adapter-state-runtime-parity-20261016.log`.

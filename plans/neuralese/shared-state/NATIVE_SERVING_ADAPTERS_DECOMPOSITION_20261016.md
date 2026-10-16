@@ -106,8 +106,8 @@ LFM fixture and exceeded a3GB claim: that unit is OOM/INCOMPLETE, not green.
 The rerun excludes that expensive fixture; direct shared legacy algebra and the
 standing full suite cover its changed helper.
 
-Direct native adapter capabilities remain **unadvertised pending independent
-review**. Adapted-policy RL, higher order, legacy projection decoders and GGUF
+Direct native adapter capabilities are independently reviewed by root;
+current HTTP info advertises `xs`/`tiny` after the integrated checks below. Adapted-policy RL, higher order, legacy projection decoders and GGUF
 LoRA export remain separate explicit unsupported paths. This is not full
 learning-continuum or production cutover completion. The existing production
 models, recipes and unadapted kernel arithmetic are unchanged.
@@ -124,3 +124,23 @@ histories after convergence. The regression starts distinct same-basis parents,
 makes all coefficients exactly equal with momentum SGD, verifies distinct IDs
 and moments, then checks the next updates against exact different expected
 values. No model-facing errors, prompts or capability flags change.
+
+## Independent capability integration review (root, 2026-10-16)
+
+The owner requested bringing in deferred improvements. Root is independently
+reviewing direct adapter creation/application, first-order coefficient learning,
+immutable optimization and portable state/optimizer restart, including explicit
+same-base adapter-state imports and heterogeneous invocation actors. The existing
+HTTP info contract should advertise `xs`/`tiny` and `same-base-adapter-state`
+when these integrated paths pass the independent actual two-port checks. These
+are existing request names, not a new adapter mechanism. Parameter names remain
+explicit and exact-base/actor/archive validation remains mandatory. No order2,
+projection-decoder, full-size cloud throughput or task-quality capability is
+implied. Existing registered objectives and production readiness still govern
+training. Independent terminal evidence: `native-adapter-integrated-independent-root-20261016`
+passed40 cases in35.09s with actual CUDA LFM/Mellum ports, counted expert FP8
+paths, cached/flat gradients, heterogeneous actor sampling/replay, typed HTTP
+creation/update/scoring/generation, and portable optimizer/state restart. The
+typed client also verifies advertised adapters/mode and retained first-order
+limit. Build passed in `native-adapter-independent-build-root-20261016`.
+This is local integrated service qualification, not full-size cloud qualification.

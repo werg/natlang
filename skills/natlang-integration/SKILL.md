@@ -407,8 +407,8 @@ Native adapter-state transport uses `x_natlang_native_state_modes` on chat and
 input IDs to `same-base-adapter-state`. A mode error requires restoring exact
 source coefficient/basis closure or correcting the base/input declaration; never
 retry by silently dropping the declaration. Preserve source and target actor
-bindings and consumption receipts in archives. The capability remains
-unadvertised until the outstanding Mellum adjoint qualification is repaired.
+bindings and consumption receipts in archives. Require the server to advertise this exact native-state consumption mode;
+restore its complete source coefficient/basis closure before importing.
 
 An explicit `same-base-adapter-state` contextual import keeps distinct source
 and target actor receipts. Preserve `native_state_modes` when recording or
@@ -440,3 +440,11 @@ A produced Neuralese value remains an opaque typed reference. For a string-slot
 `type-mismatch`, return actual answer text, or pass the reference to a declared
 `Neuralese<T>` reader that returns the requested type. Do not return an artifact
 ID or internal marker as answer text. Literal string contents remain literal.
+
+Native services advertise direct `xs`/`tiny` adapters after integrated service
+qualification. Supply explicit `parameterNames` selecting actual native layer
+matrices and retain their exact coefficient/basis/optimizer archives. On an
+invalid native adapter request, correct those names or restore the matching
+checkpoint closure. Native `grad_order: 1` remains first order; advertised
+adapters and same-base state exchange do not imply higher-order gradients,
+legacy projection decoders or cross-base raw KV compatibility.

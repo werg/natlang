@@ -397,9 +397,8 @@ Native adapter-state exchange: an explicit `same-base-adapter-state` declaration
 may import raw state from another adapter actor only on the exact same base,
 tokenizer, embedding and architecture. For `neuralese-native-state-mode`, restore
 the source coefficient/basis artifacts and correct the exact input-ID declaration;
-use learned semantic adaptation for different bases. This mode remains
-unadvertised pending its full numerical qualification; do not infer support from
-matching tensor dimensions.
+use learned semantic adaptation for different bases. Use this mode only when the server advertises it in native-state consumption
+modes; matching tensor dimensions alone never establishes support.
 
 An explicit `same-base-adapter-state` contextual import keeps distinct source
 and target actor receipts. Preserve `native_state_modes` when recording or
@@ -426,3 +425,11 @@ A produced Neuralese value remains an opaque typed reference. For a string-slot
 `type-mismatch`, return actual answer text, or pass the reference to a declared
 `Neuralese<T>` reader that returns the requested type. Do not return an artifact
 ID or internal marker as answer text. Literal string contents remain literal.
+
+Native services advertise direct `xs`/`tiny` adapters after integrated service
+qualification. Supply explicit `parameterNames` selecting actual native layer
+matrices and retain their exact coefficient/basis/optimizer archives. On an
+invalid native adapter request, correct those names or restore the matching
+checkpoint closure. Native `grad_order: 1` remains first order; advertised
+adapters and same-base state exchange do not imply higher-order gradients,
+legacy projection decoders or cross-base raw KV compatibility.

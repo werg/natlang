@@ -11,6 +11,11 @@ import { nativeTextOperation } from '../../dist/model/native-state-client.js';
 import { saveNz, loadNz } from '../../dist/native/nz-file.js';
 const [endpoint, archive, fixturePath] = process.argv.slice(2);
 const fixture=JSON.parse(await readFile(fixturePath,'utf8'));
+const info=await (await fetch(endpoint+'/v1/neuralese/info')).json();
+assert.deepEqual(info.adapters,['xs','tiny']);
+assert.equal(info.grad_order,1);
+assert.ok(info.native_state.consumption_modes.includes('same-base-adapter-state'));
+assert.deepEqual(info.projections,{});
 const store=await FileNeuraleseStore.open(archive,{residentBytes:0});
 let adapter=await nativeAdapterCreate(endpoint,store,{nativeIdentity:fixture.identity,
   parameterNames:[fixture.target],rank:2});
