@@ -49,6 +49,45 @@ def graph():
     ])
 
 
+@pytest.mark.parametrize('device', ['cpu', 'cuda'])
+def test_convolution_gather_reused_through_checkpoint_recompute_with_exact_gradients(monkeypatch, device):
+    if device == 'cuda' and not torch.cuda.is_available():
+        pytest.skip('CUDA unavailable')
+    from natlang_neuralese.model import shared_state
+    port = tiny('lfm').to(device)
+    port.checkpoint_layers = True
+    plan = graph()
+    inputs = torch.randn(1, plan.token_count, port.embedding_weight.shape[1], device=device, requires_grad=True)
+    weight = torch.randn_like(inputs)
+    parameters = (inputs, *(parameter for parameter in port.parameters() if parameter.requires_grad))
+    original_index = shared_state._convolution_index
+    calls = []
+    def observed(*args):
+        calls.append(args[:2])
+        return original_index(*args)
+    monkeypatch.setattr(shared_state, '_convolution_index', observed)
+    actual = forward_graph(port, plan, embeddings=inputs)['h_final']
+    gradients = torch.autograd.grad((actual*weight).sum(), parameters, allow_unused=True)
+    assert len(calls) == 1  # same width in both layers AND their recomputations
+    original_convolve = shared_state._convolve
+    def rebuilding(layer, gated, c, plan, rows, *, index=None):
+        return original_convolve(layer, gated, c, plan, rows)
+    monkeypatch.setattr(shared_state, '_convolve', rebuilding)
+    expected = forward_graph(port, plan, embeddings=inputs)['h_final']
+    reference_gradients = torch.autograd.grad((expected*weight).sum(), parameters, allow_unused=True)
+    assert len(calls) >= 6  # new pass plus old per-layer/recomputation behavior
+    assert torch.equal(actual, expected)
+    for actual_gradient, expected_gradient in zip(gradients, reference_gradients):
+        assert (actual_gradient is None) == (expected_gradient is None)
+        if actual_gradient is not None:
+            assert torch.equal(actual_gradient, expected_gradient)
+    monkeypatch.setattr(shared_state, '_convolve', original_convolve)
+    before = len(calls)
+    other = compile_graph([Invocation('other', (7, 6, 5, 4))])
+    forward_graph(port, other)
+    assert len(calls) == before + 1  # never reuse another graph's positions
+
+
 @pytest.mark.parametrize('family', ['lfm', 'qwen', 'mellum'])
 def test_single_sequence_matches_existing_port(family):
     port = tiny(family)

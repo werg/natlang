@@ -68,11 +68,18 @@ def _finish(port, layer, h, out, attention):
     return feed_forward_residual(layer, h, getattr(port, 'ffn_chunk_tokens', 0))
 
 
-def _convolve(layer, gated, c, plan, rows):
+def _convolution_index(plan, width, rows, device):
+    predecessor = []
+    for row in rows:
+        history = plan.history(row, width)
+        predecessor.append([-1] * max(0, width-len(history)) + list(history))
+    return torch.tensor(predecessor, device=device)
+
+
+def _convolve(layer, gated, c, plan, rows, *, index=None):
     kernel = layer.conv.conv
-    width = kernel.weight.shape[-1]
-    predecessor = [([-1] * max(0, width-len(plan.history(r, width))) + list(plan.history(r, width))) for r in rows]
-    index = torch.tensor(predecessor, device=gated.device)
+    if index is None:
+        index = _convolution_index(plan, kernel.weight.shape[-1], rows, gated.device)
     padded = torch.cat([gated, gated.new_zeros(1, 1, gated.shape[-1])], dim=1)
     gathered = padded[:, index]  # B,Q,W,C; -1 selects the explicit zero row
     return _finite_convolution(kernel, gathered, c)
@@ -107,15 +114,22 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
         return {'h_final': h, 'states': state if retain_states else (), 'plan': plan}
     state = []
     masks = {}
+    convolution_indices = {}
     checkpointed = bool(getattr(port, 'checkpoint_layers', False)) and torch.is_grad_enabled()
     for i, layer in enumerate(port.layers):
         attention = port.is_attention(i)
         window = port.window(i) if attention and hasattr(port, 'window') else None
         if attention and window not in masks:
             masks[window] = graph_block_mask(plan, device, window) if h.is_cuda else plan.attention_mask(device, window)
+        convolution_index = None
+        if not attention:
+            width = layer.conv.conv.weight.shape[-1]
+            if width not in convolution_indices:
+                convolution_indices[width] = _convolution_index(plan, width, range(plan.token_count), device)
+            convolution_index = convolution_indices[width]
         external_i = tuple(value for item in external for value in item[i])
 
-        def run_layer(value, *imported, index=i, attention=attention, window=window):
+        def run_layer(value, *imported, index=i, attention=attention, window=window, convolution_index=convolution_index):
             layer = port.layers[index]
             values = _layer_inputs(port, layer, value, attention)
             if attention:
@@ -133,7 +147,7 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
                 if imported:
                     gated = torch.cat([gated, *imported], dim=1)
                 captured = (gated,)
-                out = _convolve(layer, gated, c, plan, range(plan.token_count))
+                out = _convolve(layer, gated, c, plan, range(plan.token_count), index=convolution_index)
             updated = _finish(port, layer, value, out, attention)
             return (updated, *captured) if retain_states else (updated,)
 
