@@ -2,8 +2,9 @@
 
 These modes cover fixed native backbone projections and vocabulary readout.
 The embedding-space low-rank adapter and shared-state junctions retain FP32.
-Stock backbone FFNs, custom routing, attention, state/gradient junctions and
-optimizer retain their existing arithmetic. No mode changes torch global flags.
+Stock backbone FFNs, custom routing, state/gradient junctions and optimizer
+retain their existing arithmetic. Attention has its own explicit FP32 setting;
+BF16 attention keeps its existing contract. Neither changes torch global flags.
 """
 from __future__ import annotations
 
@@ -11,6 +12,16 @@ import torch
 
 NATIVE_LINEAR_PRECISIONS = ('ieee', 'tf32', 'tf32x3', 'bf16', 'bf16x6')
 PRODUCTION_NATIVE_LINEAR_PRECISIONS = ('ieee', 'bf16x6')
+NATIVE_ATTENTION_PRECISIONS = ('ieee', 'tf32x3')
+
+
+def set_native_attention_precision(model, mode):
+    """Select per-model attention arithmetic without changing weights or globals."""
+    if mode not in NATIVE_ATTENTION_PRECISIONS:
+        raise ValueError(f'unsupported native attention precision {mode!r}')
+    model.native_attention_precision = mode
+    model.port.native_attention_precision = mode
+    return model
 
 
 def set_native_linear_precision(model, mode):
@@ -34,9 +45,10 @@ def set_native_linear_precision(model, mode):
 
 
 def same_source_precision_identity(previous, current):
-    """Only runtime GEMM arithmetic may change in an ordinary continuation."""
-    return ({k: v for k, v in previous.items() if k != 'native_linear_precision'} ==
-            {k: v for k, v in current.items() if k != 'native_linear_precision'})
+    """Only declared native arithmetic may change in an ordinary continuation."""
+    arithmetic = {'native_linear_precision', 'native_attention_precision'}
+    return ({k: v for k, v in previous.items() if k not in arithmetic} ==
+            {k: v for k, v in current.items() if k not in arithmetic})
 
 
 def resolve_native_training_precision(previous, requested=None):

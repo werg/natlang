@@ -53,8 +53,28 @@ Concurrent tiny timings are not production speedup evidence.
    attention is a declared architecture/runtime distinction, not a separate
    trainer. Diagnose failures rather than broadening numerical tolerances.
 
-All listed integration work remains OPEN. The local option override was isolated
-to its qualification subprocess and has not changed training, serving or any
-checkpoint. Crisp code is justified for exact arithmetic dispatch, identity,
-checkpoint durability and numerical verifiers; the preceding policy governs
-qualification, prioritization and adoption.
+The shared implementation now threads `native_attention_precision` through
+model construction, native identity, channel/full checkpoint restore, flattened
+graph, explicit cached reference, incremental serving, trainer continuations and
+SFT/preference/RL recipe tuning. Absent fields preserve the previous IEEE mode
+and identity. BF16 calls retain the same kernel options AND compiled contract;
+only FP32 TF32x3 selects the explicit single-stage pipeline. There is no process
+global mode or production override. Transitions preserve optimizer/RNG/exposure
+and record the unchanged-tolerance cached-reference qualification in history.
+
+Local integration passed38 cases, including real interrupted training followed
+by a TF32x3 update with exact optimizer/RNG restoration and prior row credits,
+legacy/default and explicit checkpoint restore, actual server loading,
+both-backbone graph/cached and incremental execution, and parameter adjoints.
+Two additional CUDA tests verify the actual selected TF32x3 kernel options,
+FP64 forward/QKV adjoints and bitwise graph/cached QKV gradients at widths64/128.
+BF16 mode-on versus mode-off full-model outputs and all parameter adjoints are
+bitwise identical. Strict cache comparison covers FP32 interface adjoints;
+BF16 LFM full-backbone cached adjoints show an existing diagnostic mismatch and
+are not being qualified for production by this work. Production LFM retains
+FP32 backbone masters and BF16x6 projections. No numerical tolerance was raised.
+
+Independent implementation review, actual trained-parent H100 normal/long
+qualification and production adoption remain OPEN. Crisp code is justified for
+exact arithmetic dispatch, identity, checkpoint durability and numerical
+verifiers; the preceding policy governs prioritization and adoption.

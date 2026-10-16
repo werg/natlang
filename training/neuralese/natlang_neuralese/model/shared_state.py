@@ -205,7 +205,8 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
                 if _fp32_kv_cotangents(port, q):
                     kr, value_slots = kr.float(), value_slots.float()
                 out = graph_attention(q, kr, value_slots, plan, window,
-                                      layer.self_attn.scaling, prepared_mask=masks[window], prepared_workspace=attention_workspace)
+                                      layer.self_attn.scaling, prepared_mask=masks[window], prepared_workspace=attention_workspace,
+                                      precision=getattr(port, 'native_attention_precision', 'ieee'))
             else:
                 gated, c = values
                 if imported:
@@ -284,7 +285,8 @@ def forward_reference(port, plan: GraphPlan, adapter=None, *, embeddings=None, e
                 layout = AttentionLayout(query_positions, len(logical))
                 if _fp32_kv_cotangents(port, q):
                     kr, value_slots = kr.float(), value_slots.float()
-                out = graph_attention(qr, kr, value_slots, layout, window, layer.self_attn.scaling)
+                out = graph_attention(qr, kr, value_slots, layout, window, layer.self_attn.scaling,
+                                      precision=getattr(port, 'native_attention_precision', 'ieee'))
 
             else:
                 gated, c = values
@@ -370,8 +372,12 @@ def graph_block_mask(plan, device, window=None):
     return mask
 
 
-def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=None, prepared_workspace=None):
+def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=None, prepared_workspace=None,
+                    precision='ieee'):
     global _flex
+    from .native_precision import NATIVE_ATTENTION_PRECISIONS
+    if precision not in NATIVE_ATTENTION_PRECISIONS:
+        raise ValueError('unsupported native attention precision: ' + str(precision))
     from ..common.native_higher_order import active_reference_arithmetic,reference_attention
     if active_reference_arithmetic() is not None:
         return reference_attention(q,k,v,plan,window,scale)
@@ -400,13 +406,18 @@ def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=No
             plan = workspace
         block_mask = prepared_mask if prepared_mask is not None else graph_block_mask(plan, q.device, window)
         options = {**flex_kernel_options(float32=q.dtype == torch.float32),
-                   **({'FLOAT32_PRECISION': "'ieee'"} if q.dtype == torch.float32 else {}),
+                   **({'FLOAT32_PRECISION': repr(precision)} if q.dtype == torch.float32 else {}),
                    'BACKEND': 'TRITON', 'NATLANG_FIXED_DELTA': True}
+        if q.dtype == torch.float32 and precision == 'tf32x3':
+            # Avoid the width128 default's excessive shared-memory pipeline on
+            # GB10; this changes staging, not the chronological reduction order.
+            options['num_stages'] = 1
         if q.dtype == torch.bfloat16 and k.dtype == v.dtype == torch.float32:
             from ..common.native_attention_carrier import kv_carrier_attention
             result = kv_carrier_attention(q,k,v,block_mask=block_mask,scale=scale,kernel_options=options)
         else:
-            compiled = _compiled_flex(q, k, v, scale)
+            compiled = _compiled_flex(q, k, v, scale,
+                precision=precision if q.dtype == torch.float32 else 'ieee')
             (result, _raw_lse) = compiled(q, k, v, block_mask=block_mask,scale=scale,kernel_options=options)
         result = result[..., :head_width]
         return result if physical_rows is None else result.index_select(2, physical_rows)
@@ -680,7 +691,8 @@ def native_step(model, ids, cache=None, *, producing=False):
             if window not in masks:
                 masks[window] = graph_block_mask(layout, ids.device, window) if ids.is_cuda else layout.attention_mask(ids.device, window)
             out = graph_attention(q, state.k, state.v, layout, window, layer.self_attn.scaling,
-                                  prepared_mask=masks[window])
+                                  prepared_mask=masks[window],
+                                  precision=getattr(port, 'native_attention_precision', 'ieee'))
 
         else:
             gated, c = values
@@ -868,6 +880,9 @@ def channel_checkpoint(model):
             token_override_dtype=str(model.extra_input_rows.dtype),
             extra_input_rows=model.extra_input_rows.detach().clone(),
             extra_output_rows=None if model.tied else model.extra_output_rows.detach().clone())
+    attention_mode = getattr(model, 'native_attention_precision', 'ieee')
+    if attention_mode != 'ieee':
+        result['native_attention_precision'] = attention_mode
     return result
 
 
@@ -882,6 +897,8 @@ def restore_channel_checkpoint(model, state):
             raise ValueError(f'native channel checkpoint {key} differs from this model')
     if state.get('native_linear_precision', 'ieee') != expected['native_linear_precision']:
         raise ValueError('native channel checkpoint native_linear_precision differs from this model')
+    if state.get('native_attention_precision', 'ieee') != expected.get('native_attention_precision', 'ieee'):
+        raise ValueError('native channel checkpoint native_attention_precision differs from this model')
     if tuple(state.get('token_override_ids', ())) != model.token_override_ids:
         raise ValueError('native channel checkpoint sparse token IDs differ')
     if model.token_override_ids and (state['extra_output_rows'] is None) != model.tied:
@@ -1000,7 +1017,7 @@ def compile_native_attention_contract(cache, entry, key):
     return cache[key]
 
 
-def _compiled_flex(q, k, v, scale):
+def _compiled_flex(q, k, v, scale, *, precision='ieee'):
     """Separate actual kernel contracts; never silently fall back to dense math.
 
     Dynamo's per-code-object specialization limit otherwise mixes architectures,
@@ -1012,7 +1029,7 @@ def _compiled_flex(q, k, v, scale):
     # Autograd prunes different Q/K/V adjoints for different selected adapter
     # targets. These are real compiled contracts, not dynamic sequence lengths.
     # Inference tensors and global grad/inference scopes have separate guards.
-    key = (q.dtype, k.dtype, v.dtype, q.shape[0], q.shape[1], k.shape[1], q.shape[-1], v.shape[-1],
+    key = (precision, q.dtype, k.dtype, v.dtype, q.shape[0], q.shape[1], k.shape[1], q.shape[-1], v.shape[-1],
            scale, native_attention_layout(q), native_attention_layout(k), native_attention_layout(v), torch.is_grad_enabled(), torch.is_inference_mode_enabled(),
            tuple((tensor.requires_grad, tensor.is_inference()) for tensor in (q, k, v)))
     return compile_native_attention_contract(_flex, _flex_entry, key)

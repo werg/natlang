@@ -585,9 +585,13 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
 
 
 def qualify_precision_transition(model, tokenizer, roles, config, *, previous_precision,
-                                 checkpoint_sha256, forward_atol, gradient_atol, device, backend=None):
+                                 checkpoint_sha256, forward_atol, gradient_atol, device, backend=None,
+                                 previous_attention_precision=None):
     """Check changed production arithmetic on the restored live weights, once."""
-    if config.get('native_linear_precision', 'ieee') != 'bf16x6' or previous_precision == 'bf16x6':
+    linear_changed = config.get('native_linear_precision', 'ieee') == 'bf16x6' and previous_precision != 'bf16x6'
+    attention_changed = (previous_attention_precision is not None
+        and config.get('native_attention_precision', 'ieee') != previous_attention_precision)
+    if not linear_changed and not attention_changed:
         return None
     if forward_atol is None or gradient_atol is None:
         raise ValueError('native arithmetic transition requires declared forward and gradient tolerances')
@@ -602,9 +606,13 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
     if not report['passed']:
         raise ValueError('native arithmetic transition failed the unchanged cached-reference checks: ' +
                          json.dumps(report, sort_keys=True))
-    return {'schema': 'natlang.native-arithmetic-transition-check/1',
+    result = {'schema': 'natlang.native-arithmetic-transition-check/1',
             'from': previous_precision, 'to': config['native_linear_precision'],
             'parent_weights_sha256': checkpoint_sha256, 'runtime_reference': report}
+    if attention_changed:
+        result['attention'] = {'from': previous_attention_precision,
+                               'to': config['native_attention_precision']}
+    return result
 
 
 def continuation_predecessors(training, declarations, *, stage_id):
@@ -680,9 +688,11 @@ def build_parser():
         help='reuse exact ordinary token prefixes with unchanged targets, losses and exposure')
     parser.add_argument('--dtype', choices=('float32', 'bfloat16', 'float16'), default=None,
         help='fresh backbone precision; required for a new lineage, resumes retain exact checkpoint dtype')
-    from ..model.native_precision import PRODUCTION_NATIVE_LINEAR_PRECISIONS
+    from ..model.native_precision import PRODUCTION_NATIVE_LINEAR_PRECISIONS, NATIVE_ATTENTION_PRECISIONS
     parser.add_argument('--native-linear-precision', choices=PRODUCTION_NATIVE_LINEAR_PRECISIONS, default=None,
         help='explicit native GEMM arithmetic transition; preserves source dtype, optimizer, RNG and row exposure')
+    parser.add_argument('--native-attention-precision', choices=NATIVE_ATTENTION_PRECISIONS, default=None,
+        help='explicit per-model attention arithmetic; restores optimizer, RNG and row exposure before qualification')
     from .native_optimizer_migration import POLICY as NATIVE_OPTIMIZER_MIGRATION
     parser.add_argument('--native-optimizer-migration',choices=(NATIVE_OPTIMIZER_MIGRATION,),default=None,
         help='explicit new AdamW history for formerly misrouted ordinary parameters; preserves original Muon buffers and all unaffected state')
@@ -800,6 +810,12 @@ def main(argv=None):
     requested_precision = resolve_native_training_precision(previous_precision, args.native_linear_precision)
     set_native_linear_precision(model, requested_precision)
     config['native_linear_precision'] = requested_precision
+    from ..model.native_precision import set_native_attention_precision
+    previous_attention_precision = config.get('native_attention_precision', 'ieee')
+    attention_precision = args.native_attention_precision or previous_attention_precision
+    set_native_attention_precision(model, attention_precision)
+    if args.native_attention_precision is not None:
+        config['native_attention_precision'] = attention_precision
     saved_training = resume or shared_resume or {}
     checkpoint_options['withdrawal_history']=list((saved_training.get('options') or {}).get('withdrawal_history') or [])
     token_history = list((saved_training.get('options') or {}).get('token_row_upgrade_history') or [])
@@ -818,6 +834,12 @@ def main(argv=None):
     if requested_precision != previous_precision:
         precision_history.append(transition)
     checkpoint_options['native_precision_history'] = precision_history
+    attention_history = list((saved_training.get('options') or {}).get('native_attention_precision_history') or [])
+    if attention_precision != previous_attention_precision:
+        attention_history.append({'from':previous_attention_precision,'to':attention_precision,
+            'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
+            'weights_optimizer_rng_exposure':'preserved' if saved_training else 'fresh'})
+    checkpoint_options['native_attention_precision_history'] = attention_history
     if args.dtype is not None and config['dtype'] != str(getattr(torch, args.dtype)):
         raise ValueError('declared dtype differs from the exact restored native checkpoint')
     if resume is None and (args.continued_native_graphs or args.continued_held_native_graphs):
@@ -1112,6 +1134,7 @@ def main(argv=None):
             del parent_state
     transition_check = qualify_precision_transition(model, tokenizer, roles, config,
         previous_precision=previous_precision,
+        previous_attention_precision=previous_attention_precision,
         checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
             if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'],
         forward_atol=args.forward_atol, gradient_atol=args.gradient_atol,
@@ -1119,6 +1142,8 @@ def main(argv=None):
     if transition_check is not None:
         checkpoint_options['native_precision_transition']['reference_check'] = transition_check
         write_json(args.out / 'precision-transition.json', transition_check)
+        if 'attention' in transition_check:
+            checkpoint_options['native_attention_precision_history'][-1]['reference_check'] = transition_check['runtime_reference']
     if args.qualify_training_backend:
         from ..eval.native_backend import qualify_training_backend
         backend_check = qualify_training_backend(model, tokenizer, roles, config, backend=backend,

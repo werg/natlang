@@ -79,6 +79,10 @@ def native_identity(model, config, *, checkpoint_sha256):
     mode = config.get('native_linear_precision', 'ieee')
     if mode != getattr(model, 'native_linear_precision', 'ieee'):
         raise ValueError('native identity arithmetic differs from the actual model')
+    attention_mode = config.get('native_attention_precision', 'ieee')
+    if (attention_mode != getattr(model, 'native_attention_precision', 'ieee')
+            or attention_mode != getattr(model.port, 'native_attention_precision', 'ieee')):
+        raise ValueError('native identity attention arithmetic differs from the actual model')
     for key, actual in (('sparse_row_dtype', str(model.input_rows.dtype)),
                         ('token_override_ids', list(model.token_override_ids))):
         if key in config and config[key] != actual:
@@ -87,6 +91,8 @@ def native_identity(model, config, *, checkpoint_sha256):
         raise ValueError('native identity sparse token dtype differs from the actual model')
     if mode != 'ieee':
         digest.update(canonical_json_bytes({'native_linear_precision': mode}))
+    if attention_mode != 'ieee':
+        digest.update(canonical_json_bytes({'native_attention_precision': attention_mode}))
     tensors = [('base_embedding', model.port.embedding_weight), ('role_input_rows', model.input_rows),
                *[('adapter.' + name, value) for name, value in model.adapter.state_dict().items()]]
     if model.token_override_ids:
@@ -127,7 +133,7 @@ def base_inventory(base):
     """Pin actual model/tokenizer inputs, reusing the shared verified file cache."""
     return _input_inventory(base, include_weights=True)
 
-def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", token_override_ids=None, token_override_dtype=torch.float32, sparse_row_dtype=torch.float32):
+def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", native_attention_precision=None, token_override_ids=None, token_override_dtype=torch.float32, sparse_row_dtype=torch.float32):
     """Return (SharedStateModel, tokenizer, RoleTokens, model_config).
 
     No PortHeads or projected communication module is created. Provision the
@@ -165,8 +171,9 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
         token_override_ids = reasoning_token_ids(tokenizer)
     model = SharedStateModel(port, marker_ids=roles.ids, rank=rank, token_override_ids=token_override_ids,
                              token_override_dtype=token_override_dtype, sparse_row_dtype=sparse_row_dtype)
-    from .native_precision import set_native_linear_precision
+    from .native_precision import set_native_linear_precision, set_native_attention_precision
     set_native_linear_precision(model, native_linear_precision)
+    set_native_attention_precision(model, native_attention_precision if native_attention_precision is not None else 'ieee')
     from ..data.text_corpus import tokenizer_fingerprint
     config = {'base': str(base), 'base_inventory': actual,
               'base_inventory_sha256': canonical_json_sha256_hex(actual),
@@ -175,6 +182,8 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
               'native_linear_precision': native_linear_precision,
               'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer), 'dtype': str(dtype)}
     config['sparse_row_dtype'] = str(model.input_rows.dtype)
+    if native_attention_precision is not None:
+        config['native_attention_precision'] = native_attention_precision
     if model.token_override_ids:
         config['token_override_ids'] = list(model.token_override_ids)
         config['token_override_dtype'] = str(model.extra_input_rows.dtype)
@@ -244,6 +253,7 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
     model, tokenizer, roles, config = load_native_model(base or saved['base'], rank=saved['rank'],
         device=device, dtype=requested_dtype, inventory=saved['base_inventory'],
         native_linear_precision=saved.get('native_linear_precision', 'ieee'),
+        native_attention_precision=saved.get('native_attention_precision'),
         token_override_ids=saved.get('token_override_ids', ()),
         token_override_dtype={'torch.float32':torch.float32,'torch.bfloat16':torch.bfloat16,
             'torch.float16':torch.float16}[saved.get('token_override_dtype', saved['dtype'])],
@@ -258,6 +268,8 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
             raise ValueError(f'native checkpoint {key} changed during restoration')
     if config.get('token_override_ids', []) != saved.get('token_override_ids', []):
         raise ValueError('native checkpoint sparse token overrides changed during restoration')
+    if config.get('native_attention_precision', 'ieee') != saved.get('native_attention_precision', 'ieee'):
+        raise ValueError('native checkpoint native_attention_precision changed during restoration')
     restore_model_state(model, state)
     _bind_backbone_revision(model, sha256_file_hex_cached(path))
     return model, tokenizer, roles, config, state
