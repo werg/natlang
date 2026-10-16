@@ -1375,6 +1375,29 @@
       "notes": "Shared RL bootstrap input for both students: 72 preserved S7 tasks plus56 admitted broad tasks. The pending12-task executor qualification is excluded. This task-source packet contains natlang task inputs/oracles, not native SFT graph rows."
     },
     {
+      "id": "decision-rich-train-20261016-v2-curriculum",
+      "owner": "dgx",
+      "path": "runs/decision-rich-train-20261016-v2-curriculum",
+      "include": [
+        "cases.jsonl",
+        "union-audit.json",
+        "broad-selection-proof.json",
+        "task-source-manifest.json"
+      ],
+      "source_class": "immutable-RL-task-source-with-explicit-scheduling-curriculum",
+      "split": "Train-only 128-task source. All original task inputs, source bindings, execution oracles and expected outputs are preserved exactly; only scheduling metadata is added.",
+      "admission": "Scheduling-only successor of the 128-row admitted decision-rich-train-20261016-v1 source. Exact lower-level map: one no-work level-0 task, three single-call level-1 task routers, eight one-record/one-child level-2 tasks; 116 rows remain level 3.",
+      "training_admission": true,
+      "training_admission_reason": "All rows derive from the existing audited train-only 128-row RL task source; source and current hold/protection intersections are rechecked in union-audit.json. This changes scheduling metadata only and does not admit any pending qualification rows.",
+      "derived_from": [
+        "decision-rich-train-20261016-v1"
+      ],
+      "task_source_manifest": "runs/decision-rich-train-20261016-v2-curriculum/task-source-manifest.json",
+      "snapshot_manifest": "training/corpus-manifests/decision-rich-train-20261016-v2-curriculum.json",
+      "license_provenance": "Inherited project-generated and upstream source-license facts remain bound by each preserved original task row and the v1 source audit; no source row or license fact is rewritten.",
+      "note": "Scheduling metadata is a curriculum prior, not an RL eligibility gate. Full 128-row task breadth remains included; pending 12-task executor qualification remains excluded. This is an RL task source, not neuralese SFT graph data."
+    },
+    {
       "id": "clef-rich-teacher-evidence-20261005-v1",
       "owner": "pop",
       "path": "runs",

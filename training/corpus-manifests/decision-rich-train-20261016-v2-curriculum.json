@@ -1,0 +1,30 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "decision-rich-train-20261016-v2-curriculum",
+  "owner": "dgx",
+  "path": "runs/decision-rich-train-20261016-v2-curriculum",
+  "files": [
+    {
+      "path": "broad-selection-proof.json",
+      "bytes": 15186,
+      "sha256": "64159bebab0fe0ce493e9a8b401641a5af29085d9a672d0441c9281f35ffa54d"
+    },
+    {
+      "path": "cases.jsonl",
+      "bytes": 13991491,
+      "sha256": "bfb1b595d013616cfca5c4bc4aab44a218e2398ffc505b1954405dbb56bfd53a",
+      "lines": 128
+    },
+    {
+      "path": "task-source-manifest.json",
+      "bytes": 1281,
+      "sha256": "c9eb2a9323e35bc72715780b0c40ad39c4898302996300be014a40ccf4931297"
+    },
+    {
+      "path": "union-audit.json",
+      "bytes": 66486,
+      "sha256": "e1c928edc669cc5a753ce9ac9ed66464780a5e5002cd601d70852bd05e1c16ec"
+    }
+  ],
+  "bytes": 14074444
+}

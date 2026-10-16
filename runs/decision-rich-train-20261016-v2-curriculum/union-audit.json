@@ -1,0 +1,1472 @@
+{
+  "schema": "natlang.rl-task-breadth-union-audit/1",
+  "training_admitted": false,
+  "base": {
+    "path": "/home/werg/natlang/runs/decision-rich-train-20261005-v2/cases.jsonl",
+    "sha256": "6f2a470a8de79d4fb9966fc5a5157ebdf16d3c58a02ae034322a2bdfcde20dca",
+    "rows": 72,
+    "all_train": true
+  },
+  "broad": {
+    "path": "/home/werg/data/dgxops/strong-teacher-broad-admitted-train-20261015/cases.jsonl",
+    "sha256": "5f67f3f9f9c6327b026df74188b5fe379b90a2ceaa61cd006630a9f615b2da5c",
+    "selection_proof": "/home/werg/data/dgxops/strong-teacher-broad-admitted-train-20261015/selection-proof.json",
+    "selection_proof_sha256": "64159bebab0fe0ce493e9a8b401641a5af29085d9a672d0441c9281f35ffa54d",
+    "rows": 56,
+    "all_train": true
+  },
+  "union": {
+    "path": "/home/werg/natlang/runs/decision-rich-train-20261016-v2-curriculum/cases.jsonl",
+    "sha256": "bfb1b595d013616cfca5c4bc4aab44a218e2398ffc505b1954405dbb56bfd53a",
+    "rows": 128,
+    "exact_same_id_duplicates": 0,
+    "same_id_different_payload": 0
+  },
+  "conflicting_ids": [],
+  "hold_sets": {
+    "decision_hold_files": {
+      "native-non-success-20261015-v1.jsonl": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177",
+      "semantic-ticket-crisp-bypass-20261015-v3.jsonl": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9"
+    },
+    "selection_proof_bound_hold_files": {
+      "native-non-success-20261015-v1.jsonl": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177",
+      "semantic-ticket-crisp-bypass-20261015-v3.jsonl": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9"
+    },
+    "same_hold_file_set_and_hashes": true
+  },
+  "current_protection": {
+    "held_groups_path": "/home/werg/data/e2e-current-protection-bundle-20261015-v1/held-union/full/source-groups/text-data.jsonl",
+    "held_groups_sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+    "held_group_count": 16133,
+    "quality_groups_path": "/home/werg/data/e2e-current-protection-bundle-20261015-v1/quality-groups.jsonl",
+    "quality_groups_sha256": "8138b7bb7315b4c04d7ead764fbc041cd90bea7d5502deb47732e9167d942dae",
+    "quality_group_count": 65161,
+    "union_rows_intersecting_current_decision_holds": 0,
+    "union_source_groups_intersecting_held": 0,
+    "union_source_groups_intersecting_quality": 0,
+    "held_intersection_ids": [],
+    "quality_intersection_ids": [],
+    "decision_hold_ids": []
+  },
+  "selection_protection": {
+    "cases": 56,
+    "cases_sha256": "5f67f3f9f9c6327b026df74188b5fe379b90a2ceaa61cd006630a9f615b2da5c",
+    "held_quality_groups": 70983,
+    "pending_review_groups": 398,
+    "held_and_pending_intersections": 0,
+    "omissions": {
+      "nontrain": 6
+    },
+    "source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+    "corpus_registry_sha256": "5b8af89a121e0accce4b87070e5f7df65809c37faa02367d2c9da1dc9f651197"
+  },
+  "policy": "preserve every train row; exact duplicate task rows are deduplicated only by identical task id and canonical row SHA; content variants get deterministic task IDs and original ID crosswalk; task levels are not invented.",
+  "source_registry_revalidation": {
+    "registry_path": "/home/werg/natlang/training/neuralese_corpora.json",
+    "registry_sha256": "9bca0ed8ee7b644cc392c51dd55e44deebc10fbbf4d4613e67d8648dab5681a6",
+    "registered_source_count": 15,
+    "all_sources_still_registered_admitted": true,
+    "all_source_files_sha_match_selection_proof": true,
+    "files": [
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/port-record-calls-s3-20261011-v1/turns/agent_continuation_household/00000.turns.jsonl.zst",
+        "corpus_id": "port-record-calls-s3-20261011-v1",
+        "expected_sha256": "401c0a9e3b4e2951b4a450843959fd54093038a8f7959b909bd2782b9a2b589d",
+        "actual_sha256": "401c0a9e3b4e2951b4a450843959fd54093038a8f7959b909bd2782b9a2b589d",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/port-record-calls-s3-20261011-v1",
+        "program_ids": 4
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/external-expansion-first-wave-20261014-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+        "corpus_id": "external-expansion-first-wave-20261014-v1",
+        "expected_sha256": "3756a14ee0d516e940088099298a8019e323c13034b2b455633968039896894e",
+        "actual_sha256": "3756a14ee0d516e940088099298a8019e323c13034b2b455633968039896894e",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/external-expansion-first-wave-20261014-v1",
+        "program_ids": 4
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/external-expansion-codeagent-native-20261014-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+        "corpus_id": "external-expansion-codeagent-native-20261014-v1",
+        "expected_sha256": "2863eb9a4df678aac1b891e35c73e3bc0a8f595c765d1c0715ffd59a368843e8",
+        "actual_sha256": "2863eb9a4df678aac1b891e35c73e3bc0a8f595c765d1c0715ffd59a368843e8",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/external-expansion-codeagent-native-20261014-v1",
+        "program_ids": 4
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/external-expansion-gatc-native-20261014-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+        "corpus_id": "external-expansion-gatc-native-20261014-v1",
+        "expected_sha256": "913f480adf6586ee26eb8a26c351f76bf7d03e1edc3a9f5b005b9dc1bf06c220",
+        "actual_sha256": "913f480adf6586ee26eb8a26c351f76bf7d03e1edc3a9f5b005b9dc1bf06c220",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/external-expansion-gatc-native-20261014-v1",
+        "program_ids": 4
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/external-expansion-agentic-coding-repeated-id-repair-20261014-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+        "corpus_id": "external-expansion-agentic-coding-repeated-id-repair-20261014-v1",
+        "expected_sha256": "03dca5e512ffeec9564b44715574db97469a961d9ff9e7dcf2455b7b7365399d",
+        "actual_sha256": "03dca5e512ffeec9564b44715574db97469a961d9ff9e7dcf2455b7b7365399d",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/external-expansion-agentic-coding-repeated-id-repair-20261014-v1",
+        "program_ids": 1
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/external-expansion-agentic-coding-native-20261014-v2/identity-repair/turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+        "corpus_id": "external-expansion-agentic-coding-native-20261014-v2",
+        "expected_sha256": "0203b55497ca45f1904dbae72a996e8d139313b784b30dbd6599b098de76a141",
+        "actual_sha256": "0203b55497ca45f1904dbae72a996e8d139313b784b30dbd6599b098de76a141",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/external-expansion-agentic-coding-native-20261014-v2",
+        "program_ids": 4
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/external-expansion-evidence-terminal-native-20261015-v2/turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+        "corpus_id": "external-expansion-evidence-terminal-native-20261015-v2",
+        "expected_sha256": "378e10c49c4e3787899e557e796e202e378425713a127a9f3279d289e7435c04",
+        "actual_sha256": "378e10c49c4e3787899e557e796e202e378425713a127a9f3279d289e7435c04",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/external-expansion-evidence-terminal-native-20261015-v2",
+        "program_ids": 4
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/static-s7k-curated-native-20261015-v1/turns/static_reference/00000.turns.jsonl.zst",
+        "corpus_id": "static-s7k-curated-native-20261015-v1",
+        "expected_sha256": "a3983a952c893dcd9b8da958dac29ef39c17b9c3c82efbc9bf1a149e74904922",
+        "actual_sha256": "a3983a952c893dcd9b8da958dac29ef39c17b9c3c82efbc9bf1a149e74904922",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/static-s7k-curated-native-20261015-v1",
+        "program_ids": 4
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/external-expansion-agentsynth-native-20261015-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+        "corpus_id": "external-expansion-agentsynth-native-20261015-v1",
+        "expected_sha256": "cce097a4580e2f8ad6e804b62ca28435204197e84919d661ba3e03c6718d1072",
+        "actual_sha256": "cce097a4580e2f8ad6e804b62ca28435204197e84919d661ba3e03c6718d1072",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/external-expansion-agentsynth-native-20261015-v1",
+        "program_ids": 4
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/external-expansion-deepnlp-native-20261015-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+        "corpus_id": "external-expansion-deepnlp-native-20261015-v1",
+        "expected_sha256": "347081a223532059bdd572c0edb5faa9cd4d28d8a9832e26581a5a9d4ecb72cf",
+        "actual_sha256": "347081a223532059bdd572c0edb5faa9cd4d28d8a9832e26581a5a9d4ecb72cf",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/external-expansion-deepnlp-native-20261015-v1",
+        "program_ids": 3
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/external-expansion-rightfit-native-20261015-v2/turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+        "corpus_id": "external-expansion-rightfit-native-20261015-v2",
+        "expected_sha256": "7aac1817aada5c24ce7fd371fc1e80764cadc84f7adafa450740e3013bf22be7",
+        "actual_sha256": "7aac1817aada5c24ce7fd371fc1e80764cadc84f7adafa450740e3013bf22be7",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/external-expansion-rightfit-native-20261015-v2",
+        "program_ids": 4
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/external-expansion-rightfit-native-long-20261015-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst",
+        "corpus_id": "external-expansion-rightfit-native-long-20261015-v1",
+        "expected_sha256": "2d54b035487d6fab2cf5c5ee8143c0b2b31f297c7f954531b6351a78c4a33b73",
+        "actual_sha256": "2d54b035487d6fab2cf5c5ee8143c0b2b31f297c7f954531b6351a78c4a33b73",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/external-expansion-rightfit-native-long-20261015-v1",
+        "program_ids": 4
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/external-expansion-deepdive-native-20261015-v1/turns/trajectory_continuation_research/00000.turns.jsonl.zst",
+        "corpus_id": "external-expansion-deepdive-native-20261015-v1",
+        "expected_sha256": "74f6bc53f2edd6e2d01559a02296aba103617ee99f3267f951be00798d7c9b0f",
+        "actual_sha256": "74f6bc53f2edd6e2d01559a02296aba103617ee99f3267f951be00798d7c9b0f",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/external-expansion-deepdive-native-20261015-v1",
+        "program_ids": 4
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/external-expansion-deepdive-native-long-20261015-v1/turns/trajectory_continuation_research/00000.turns.jsonl.zst",
+        "corpus_id": "external-expansion-deepdive-native-long-20261015-v1",
+        "expected_sha256": "2b7fd69f748ec984939346b78969bcf62b85e0e62401474c1dcba4b389839243",
+        "actual_sha256": "2b7fd69f748ec984939346b78969bcf62b85e0e62401474c1dcba4b389839243",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/external-expansion-deepdive-native-long-20261015-v1",
+        "program_ids": 4
+      },
+      {
+        "path": "/home/werg/natlang/data/neuralese/corpora/external-expansion-search-owl-native-20261015-v1/search-owl-native-20261015/turns/trajectory_continuation_research/00000.turns.jsonl.zst",
+        "corpus_id": "external-expansion-search-owl-native-20261015-v1",
+        "expected_sha256": "434c72b7fb09b474c12e163dba252d572b3afa10c857a33d0ddfcfd1c2a45d09",
+        "actual_sha256": "434c72b7fb09b474c12e163dba252d572b3afa10c857a33d0ddfcfd1c2a45d09",
+        "sha_matches": true,
+        "corpus_registered": true,
+        "training_admission": true,
+        "corpus_path": "data/neuralese/corpora/external-expansion-search-owl-native-20261015-v1",
+        "program_ids": 4
+      }
+    ]
+  },
+  "curriculum_schedule": {
+    "policy": "explicit scheduling metadata only; exact task inputs, prompts, source identities, executable references and expected outputs are unchanged",
+    "level_counts": {
+      "0": 1,
+      "1": 3,
+      "2": 8,
+      "3": 116
+    },
+    "assignments": [
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-0:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-1:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-1"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-2:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-3:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-3"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-4:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-4"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-5:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-6:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-7:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-1"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-8:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-9:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-3"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-10:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-4"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-11:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-12:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-13:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-1"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-14:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-15:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-3"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-16:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-4"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-17:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-18:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-19:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-1"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-20:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-21:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-3"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-22:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-4"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-23:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-24:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-25:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-1"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-26:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-27:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-3"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-28:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-4"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-29:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-30:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-31:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-1"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-32:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-33:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-3"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-34:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-4"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-35:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-36:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-37:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-1"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-38:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-39:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-3"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-40:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-4"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-41:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-42:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-43:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-1"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-44:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-45:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-3"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-46:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-4"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-47:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-48:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-49:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-1"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-50:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-51:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-3"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-52:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-4"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-53:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-54:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-55:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-1"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-56:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-57:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-3"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-58:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-4"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-59:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-60:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-61:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-1"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-62:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-63:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-3"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-64:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-4"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-65:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-66:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-67:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-1"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-68:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-69:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-3"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-70:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-4"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_extract_chain:s7202-71:evidence",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:extraction:fixture-5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:agent_continuation_household-2069bf75b7c49bc6146b:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "alfworld-game:json_2.1.1/train/look_at_obj_in_light-alarmclock-none-desklamp-301",
+          "alfworld-game:json_2.1.1/train/look_at_obj_in_light-alarmclock-none-desklamp-302"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:agent_continuation_household-6403da2541bcb9cb0425:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "alfworld-game:json_2.1.1/train/look_at_obj_in_light-alarmclock-none-desklamp-302"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:agent_continuation_household-02cb3cb0d2e5b833931a:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "alfworld-game:json_2.1.1/train/look_at_obj_in_light-alarmclock-none-desklamp-303"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:agent_continuation_household-19b86ccb7291dfe912d5:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "alfworld-game:json_2.1.1/train/look_at_obj_in_light-alarmclock-none-desklamp-304"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-c82bff68ccb533bad69e:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d08-task:logs/qwen35-9b-test-impl-split-coop/coop/anyhow_task/390/f1_f4",
+          "task:4dc18e47f0b27c211a19"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-d65d69a4e6b26a25fbe6:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d08-task:logs/qwen35-9b-test-impl-split-coop/coop/anyhow_task/436/f3_f5",
+          "task:cdf652f737d524f02bf8"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-2ad92d316bd45c6c0120:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d08-task:logs/qwen35-9b-test-impl-split-coop/coop/anyhow_task/436/f3_f4",
+          "expansion-d08-task:logs/qwen35-9b-test-impl-split-coop/coop/astroid_task/2937/f1_f4",
+          "task:21cd293c1dca4a05f4a4",
+          "task:cdf652f737d524f02bf8"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-5ba10200abbae57d211a:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d08-task:logs/qwen35-9b-test-impl-split-coop/coop/anyhow_task/436/f3_f4",
+          "expansion-d08-task:logs/qwen35-9b-test-impl-split-coop/coop/astroid_task/2937/f1_f3",
+          "expansion-d08-task:logs/qwen35-9b-test-impl-split-coop/coop/astroid_task/2937/f2_f3",
+          "task:21cd293c1dca4a05f4a4",
+          "task:c42bc95ef6a14f4ef1b6",
+          "task:cdf652f737d524f02bf8"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-8a7b4c147c014aab4b53:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d05-task:05859cac63b5bbae5ca3",
+          "expansion-d05-task:149fd8288d821a61fc1a",
+          "expansion-d05-task:78dd8c695050c9fe9642",
+          "expansion-d05-task:f0a8428ee880599f5910",
+          "task:05859cac63b5bbae5ca3",
+          "task:149fd8288d821a61fc1a",
+          "task:78dd8c695050c9fe9642",
+          "task:f0a8428ee880599f5910"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-181f70875ae5f0460536:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d05-task:216d66ba7a6e25bca0d9",
+          "expansion-d05-task:68f81d210224f1fc9056",
+          "expansion-d05-task:6f4d832bc943588d9a90",
+          "expansion-d05-task:d8ec1bdeec565674a81d",
+          "task:216d66ba7a6e25bca0d9",
+          "task:68f81d210224f1fc9056",
+          "task:6f4d832bc943588d9a90",
+          "task:d8ec1bdeec565674a81d"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-87eb595f0d68ed665c2a:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d05-task:18623bf4b38d87fa1f3b",
+          "expansion-d05-task:5b1aeebd44477f747fdb",
+          "expansion-d05-task:9c72b964709ae573f296",
+          "expansion-d05-task:a897d73f36738b92c7aa",
+          "task:18623bf4b38d87fa1f3b",
+          "task:5b1aeebd44477f747fdb",
+          "task:9c72b964709ae573f296",
+          "task:a897d73f36738b92c7aa"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-53bc040522fb903c489f:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d05-task:00176b60e31049a11ab0",
+          "expansion-d05-task:197010798a4586634291",
+          "expansion-d05-task:4e5c8d8def9b6809ca95",
+          "expansion-d05-task:da125d0127e038c69808",
+          "task:00176b60e31049a11ab0",
+          "task:197010798a4586634291",
+          "task:4e5c8d8def9b6809ca95",
+          "task:da125d0127e038c69808"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-cb5cca379f2cb6fce441:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d03-task:3e9d0654186f2c9f1a736ef4",
+          "gatc-component:3e9d0654186f2c9f1a736ef4",
+          "task:210062e7f0863dc029c0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-65422a63e48c9548273b:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d03-task:d357581401a83f863e7f5fff",
+          "gatc-component:d357581401a83f863e7f5fff",
+          "task:1a19fa0bea750dbb04c7"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-a4a1328fa34d711d1a18:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d03-task:0551a1b1038566620fc8d94c",
+          "expansion-d03-task:5f2171ff39cf7006b1e49b7e",
+          "expansion-d03-task:9c5aeb2bb41949d81f95549e",
+          "gatc-component:0551a1b1038566620fc8d94c",
+          "gatc-component:5f2171ff39cf7006b1e49b7e",
+          "gatc-component:9c5aeb2bb41949d81f95549e",
+          "task:790e57581571b816ca00",
+          "task:987ad0d02a349af6d6ec",
+          "task:e923015f6141764ce15b"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-1882bcb1f76ab9a62be1:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d03-task:4795beecf8845a3661906cda",
+          "expansion-d03-task:5f2171ff39cf7006b1e49b7e",
+          "expansion-d03-task:d946fa860698bec76786068b",
+          "expansion-d03-task:de81a18d807f6ed95aae3e80",
+          "gatc-component:4795beecf8845a3661906cda",
+          "gatc-component:5f2171ff39cf7006b1e49b7e",
+          "gatc-component:d946fa860698bec76786068b",
+          "gatc-component:de81a18d807f6ed95aae3e80",
+          "task:612d1cf0cf108f5d89bb",
+          "task:987ad0d02a349af6d6ec",
+          "task:9ae5647ab83ce386ffd4",
+          "task:fb1ad90c1edd3841ced7"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-1cea310e6c3bd88296d6:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d40-task:luozhouyang__python-string-similarity.115acaac.func_pm_ctrl_shuffle__llhbww8d",
+          "swe-instance:luozhouyang__python-string-similarity.115acaac.func_pm_ctrl_shuffle__llhbww8d",
+          "task:120c2e8a1896f6d8b3d8"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-19d97f94298786aa062a:iterate-records/1:content:2d681ad83f7e742ef6ae",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d40-task:agronholm__exceptiongroup.0b4f4937.pr_95",
+          "swe-instance:agronholm__exceptiongroup.0b4f4937.pr_95",
+          "task:5961a4d38876e17c5355"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-70f7b8f6dd6d3bf632bc:iterate-records/1:content:71eb8b305f46e604a27d",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d40-task:pyupio__safety.7654596b.pr_662",
+          "swe-instance:pyupio__safety.7654596b.pr_662",
+          "task:a3ab05d0bb89443a49d5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-9b4e8c44bbfcf3f6e2ff:iterate-records/1:content:0af40a6e926a04dfa902",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d40-task:pygments__pygments.27649ebb.lm_rewrite__w5ds4akl",
+          "swe-instance:pygments__pygments.27649ebb.lm_rewrite__w5ds4akl",
+          "task:73b3434a7eb5d3e99237"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-4f813cbdffeb40583439:iterate-records/1:content:9608374f840b218f2364",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d40-task:marshmallow-code__webargs.dbde72fe.pr_867",
+          "swe-instance:marshmallow-code__webargs.dbde72fe.pr_867",
+          "task:c2047aceecd37f0f446b"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-86d4b9920b7591ce0735:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d29-task:cb3ae1ef255a93b503e5",
+          "expansion-d29-task:d20363309e921b82e6bf",
+          "task:cb3ae1ef255a93b503e5",
+          "task:d20363309e921b82e6bf"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-39185cd5b20e4243808c:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d29-task:c71fbfffd1fdc572091b",
+          "expansion-d29-task:cb3ae1ef255a93b503e5",
+          "task:c71fbfffd1fdc572091b",
+          "task:cb3ae1ef255a93b503e5"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-4e2875dc588f2e36f718:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d29-task:663ac49b812673da6460",
+          "expansion-d29-task:c71fbfffd1fdc572091b",
+          "task:663ac49b812673da6460",
+          "task:c71fbfffd1fdc572091b"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-ab0b915da5ff6ae0e9fc:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d29-task:663ac49b812673da6460",
+          "expansion-d29-task:b8db598ebd6770fd1d73",
+          "expansion-d29-task:ddd86b403e2eaa02e85a",
+          "task:663ac49b812673da6460",
+          "task:b8db598ebd6770fd1d73",
+          "task:ddd86b403e2eaa02e85a"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_skill_catalog:s7001-0:catalog",
+        "level": 1,
+        "reason": "One exact skill-routing judgment and one bound skill read.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:skills:fixture-0"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_skill_catalog:s7001-1:catalog",
+        "level": 1,
+        "reason": "One exact skill-routing judgment and one bound skill read.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:skills:fixture-1"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_skill_catalog:s7001-2:catalog",
+        "level": 1,
+        "reason": "One exact skill-routing judgment and one bound skill read.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:skills:fixture-2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:authored-bounded-decisions-v1:decision_skill_catalog:s7001-3:catalog",
+        "level": 0,
+        "reason": "One exact no-work routing choice: the caller supplies 7 and the oracle chooses none.",
+        "source_groups": [
+          "authored-bounded-decisions-v1:skills:fixture-3"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-925453f2c3c7269c2ace:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d11-task:9c32cfa8ede2",
+          "task:478738b76eb4dc04580c"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-9e225901076762838742:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d11-task:af2830ef042f",
+          "expansion-d11-task:c4aa2385d77b",
+          "task:3b04802b8d6bf60282cb",
+          "task:a7d8800866181a794433"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-95a3d659e0b89d7455b5:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d11-task:7a4cbd44e64e",
+          "expansion-d11-task:af2830ef042f",
+          "task:3b04802b8d6bf60282cb",
+          "task:cc5de28c15a6cf793bf2"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-af8b5579b957a4a50969:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d11-task:67c9dc496ae8",
+          "expansion-d11-task:7a4cbd44e64e",
+          "task:cc5de28c15a6cf793bf2",
+          "task:ef8fe64eea1accf43f90"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-1c022bdcadf9fec98d87:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d07-task:e395cfc3-4fb3-498d-835b-2693c0406018",
+          "task:94f932f917bb1a45893d"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-b546399e287fc6f73a64:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d07-task:1bb6b62c-86ec-4932-8b69-c4f757432076",
+          "expansion-d07-task:25bbcca1-8652-4869-ae32-1c17c1048d68",
+          "task:17757d4f9fd4ab4ef0db",
+          "task:f2aaf2b260f2bcd394a7"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-0cd27e45f4d4c0fd4e88:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d07-task:61ce5437-fa38-4fdb-a6ad-427959412e35",
+          "task:c470a84db8fd9fb1fb6f"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-73929a98e60e3456299b:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d06-task:c4fc1fa96bc52124838b",
+          "expansion-d06-task:f82effc59ae4ba18a2a7",
+          "task:0f093aa8323764104256",
+          "task:47ed3e28e681cb7ec587"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-f9fdfe243f44510196f6:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d06-task:d8ebfd5cc6c85ccbb802",
+          "task:64172c2e076618e6ad0f"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-fad46c1ae3437c64c4bc:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d06-task:0cd20ca350beb8632b47",
+          "expansion-d06-task:dedb34bf5c53043ba4c2",
+          "task:65548c94ed4f18a9060e",
+          "task:d854771cef5f51275b2d"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-8cd4f8a5a860de885ca4:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d06-task:11da4d84f31b59a16cbc",
+          "expansion-d06-task:691a6523bc7fbe306fea",
+          "expansion-d06-task:968a9826120cd2bf2364",
+          "task:1c3689a509b341f99d04",
+          "task:37536324f470f73439aa",
+          "task:d234278a0b70e100318b"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-a200353b9248c54eeac7:iterate-records/1",
+        "level": 2,
+        "reason": "One admitted source record, one exact child answer, and one-item iterate/writeback.",
+        "source_groups": [
+          "expansion-d06-task:f82effc59ae4ba18a2a7",
+          "task:0f093aa8323764104256"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-8dc678c5f1e7463b663e:iterate-records/1",
+        "level": 2,
+        "reason": "One admitted source record, one exact child answer, and one-item iterate/writeback.",
+        "source_groups": [
+          "expansion-d06-task:f82effc59ae4ba18a2a7",
+          "task:0f093aa8323764104256"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-4e3d920afc01e871dea8:iterate-records/1",
+        "level": 2,
+        "reason": "One admitted source record, one exact child answer, and one-item iterate/writeback.",
+        "source_groups": [
+          "expansion-d06-task:f82effc59ae4ba18a2a7",
+          "task:0f093aa8323764104256"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_coding-4c5d87886d7bebdf6ff2:iterate-records/1",
+        "level": 2,
+        "reason": "One admitted source record, one exact child answer, and one-item iterate/writeback.",
+        "source_groups": [
+          "expansion-d06-task:c4fc1fa96bc52124838b",
+          "task:47ed3e28e681cb7ec587"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_research-a90fdb301a74cbe5bc0f:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d31-task:b330d3e24964117989a6",
+          "expansion-d31-task:b37ad7c5e036fa2e7a4c",
+          "expansion-d31-task:ff42f268f943cf2d6408",
+          "question:b330d3e24964117989a6",
+          "question:b37ad7c5e036fa2e7a4c",
+          "question:ff42f268f943cf2d6408",
+          "task:b330d3e24964117989a6",
+          "task:b37ad7c5e036fa2e7a4c",
+          "task:ff42f268f943cf2d6408"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_research-4964f044d01ce8aefd32:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d31-task:5500da0d2777965a7ddf",
+          "expansion-d31-task:617f151e9b3df352bebb",
+          "expansion-d31-task:92d25b604399b1509d1f",
+          "expansion-d31-task:b37ad7c5e036fa2e7a4c",
+          "question:5500da0d2777965a7ddf",
+          "question:617f151e9b3df352bebb",
+          "question:92d25b604399b1509d1f",
+          "question:b37ad7c5e036fa2e7a4c",
+          "task:5500da0d2777965a7ddf",
+          "task:617f151e9b3df352bebb",
+          "task:92d25b604399b1509d1f",
+          "task:b37ad7c5e036fa2e7a4c"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_research-44c82420a33186831623:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d31-task:8a75b8e3df8fad07b66d",
+          "expansion-d31-task:9f0b0d0c940f6b15f9c9",
+          "question:8a75b8e3df8fad07b66d",
+          "question:9f0b0d0c940f6b15f9c9",
+          "task:8a75b8e3df8fad07b66d",
+          "task:9f0b0d0c940f6b15f9c9"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_research-6d138acad0ed5d233670:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d31-task:2e44d119e9fe58eb26f5",
+          "expansion-d31-task:8a75b8e3df8fad07b66d",
+          "expansion-d31-task:d556cdb6ed89dbdf16b8",
+          "question:2e44d119e9fe58eb26f5",
+          "question:8a75b8e3df8fad07b66d",
+          "question:d556cdb6ed89dbdf16b8",
+          "task:2e44d119e9fe58eb26f5",
+          "task:8a75b8e3df8fad07b66d",
+          "task:d556cdb6ed89dbdf16b8"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_research-8472c675b149b593f2e9:iterate-records/1",
+        "level": 2,
+        "reason": "One admitted source record, one exact child answer, and one-item iterate/writeback.",
+        "source_groups": [
+          "expansion-d31-task:ff42f268f943cf2d6408",
+          "question:ff42f268f943cf2d6408",
+          "task:ff42f268f943cf2d6408"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_research-1a5a62c380d7ae7a17e6:iterate-records/1",
+        "level": 2,
+        "reason": "One admitted source record, one exact child answer, and one-item iterate/writeback.",
+        "source_groups": [
+          "expansion-d31-task:ff42f268f943cf2d6408",
+          "question:ff42f268f943cf2d6408",
+          "task:ff42f268f943cf2d6408"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_research-b877f79d0ce4393f8d25:iterate-records/1",
+        "level": 2,
+        "reason": "One admitted source record, one exact child answer, and one-item iterate/writeback.",
+        "source_groups": [
+          "expansion-d31-task:ff42f268f943cf2d6408",
+          "question:ff42f268f943cf2d6408",
+          "task:ff42f268f943cf2d6408"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_research-d95d1403b45a64c4dc86:iterate-records/1",
+        "level": 2,
+        "reason": "One admitted source record, one exact child answer, and one-item iterate/writeback.",
+        "source_groups": [
+          "expansion-d31-task:b37ad7c5e036fa2e7a4c",
+          "question:b37ad7c5e036fa2e7a4c",
+          "task:b37ad7c5e036fa2e7a4c"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_research-4732d8b5c4e89f4d582b:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d21-task:hotpotqa-5a7a06935542990198eaf050",
+          "expansion-d21-task:hotpotqa-5a7d0db955429909bec76924",
+          "expansion-d21-task:hotpotqa-5a82171f5542990a1d231f4a",
+          "expansion-d21-task:hotpotqa-5ade025e5542997dc790711e",
+          "task:8a8a5c5aef25ff9350fe",
+          "task:93c685a4cf6447f4c6c8",
+          "task:a47700e1e4f6c7e53bec",
+          "task:fed8517e8a0fafef5e97"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_research-32226730bdc8c047ed80:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d21-task:hotpotqa-5a7e36045542991319bc9440",
+          "expansion-d21-task:hotpotqa-5a832c3455429954d2e2ec41",
+          "expansion-d21-task:hotpotqa-5ab698885542995eadef002a",
+          "expansion-d21-task:hotpotqa-5ac2a912554299218029dae8",
+          "task:b282d368715fda90e80e",
+          "task:d4e2d56fdb1a54c0a816",
+          "task:de1863a2caf6b050484f",
+          "task:f01c6df57f096ccd85ad"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_research-b7fb28cb00f03ad46a97:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d21-task:hotpotqa-5a7a02235542996c55b2dcd3",
+          "expansion-d21-task:hotpotqa-5a8b63755542997f31a41cfe",
+          "expansion-d21-task:hotpotqa-5ac15df95542994d76dccded",
+          "expansion-d21-task:hotpotqa-5ae3918b5542994393b9e709",
+          "task:410d825462e822d73557",
+          "task:66f65e5be85faea4831a",
+          "task:8fb4735f6cbeeb78e746",
+          "task:b521030d336a4a49104c"
+        ]
+      },
+      {
+        "id": "inline-curriculum:port_record_calls:trajectory_continuation_research-34b659dbe37d44b76963:iterate-records/1",
+        "level": 3,
+        "reason": "Retained full-breadth task; no simpler execution claim is made.",
+        "source_groups": [
+          "expansion-d21-task:hotpotqa-5a8ce5c7554299441c6b9f64",
+          "expansion-d21-task:hotpotqa-5a8efd3c55429918e830d179",
+          "expansion-d21-task:hotpotqa-5ac061ab554299294b218fac",
+          "expansion-d21-task:hotpotqa-5add28c85542992ae4cec4be",
+          "task:49ffc60f19e4b829628f",
+          "task:6831222adcb12ba7ff85",
+          "task:a15b9904677603bfd9d8",
+          "task:af6078e9b6d00ce0b8d0"
+        ]
+      }
+    ],
+    "source_manifest": "/home/werg/natlang/runs/decision-rich-train-20261016-v1/task-source-manifest.json",
+    "source_manifest_sha256": "81bde773eecef1cad54b06719b22461a451af7d0112b999b9e96e6354a336f34",
+    "source_cases_sha256": "d99a1c0fca902a811fa95a9107345875d2f7e504bda9221dfc49cbc8a2026e9a",
+    "current_decision_hold_files": {
+      "native-non-success-20261015-v1.jsonl": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177",
+      "semantic-ticket-crisp-bypass-20261015-v3.jsonl": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9"
+    },
+    "current_protection_intersections": {
+      "decision_ids": [],
+      "held_groups": [],
+      "quality_groups": []
+    },
+    "all_128_original_rows_retained": true,
+    "non_scheduling_payloads_exactly_preserved": true
+  }
+}

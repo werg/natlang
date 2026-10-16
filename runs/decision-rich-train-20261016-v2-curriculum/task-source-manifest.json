@@ -1,0 +1,32 @@
+{
+  "schema": "natlang.rl-task-source/1",
+  "id": "decision-rich-train-20261016-v2-curriculum",
+  "cases": "cases.jsonl",
+  "cases_sha256": "bfb1b595d013616cfca5c4bc4aab44a218e2398ffc505b1954405dbb56bfd53a",
+  "rows": 128,
+  "split": "train",
+  "source_audit": "union-audit.json",
+  "source_audit_sha256": "e1c928edc669cc5a753ce9ac9ed66464780a5e5002cd601d70852bd05e1c16ec",
+  "broad_selection_proof": "broad-selection-proof.json",
+  "broad_selection_proof_sha256": "64159bebab0fe0ce493e9a8b401641a5af29085d9a672d0441c9281f35ffa54d",
+  "preserved_base": {
+    "id": "decision-rich-train-20261005-v2",
+    "rows": 72,
+    "sha256": "6f2a470a8de79d4fb9966fc5a5157ebdf16d3c58a02ae034322a2bdfcde20dca"
+  },
+  "added_admitted_train_rows": 56,
+  "broad_nontrain_omissions": 6,
+  "pending_qualification_rows_included": 0,
+  "derived_from_task_source": {
+    "id": "decision-rich-train-20261016-v1",
+    "manifest_sha256": "81bde773eecef1cad54b06719b22461a451af7d0112b999b9e96e6354a336f34",
+    "cases_sha256": "d99a1c0fca902a811fa95a9107345875d2f7e504bda9221dfc49cbc8a2026e9a"
+  },
+  "curriculum_levels": {
+    "0": 1,
+    "1": 3,
+    "2": 8,
+    "3": 116
+  },
+  "curriculum_policy": "Scheduling-only exact-ID annotations; original 128 train tasks and their full breadth remain intact."
+}
