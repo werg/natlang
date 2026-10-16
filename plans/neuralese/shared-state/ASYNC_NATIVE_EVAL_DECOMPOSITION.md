@@ -52,3 +52,23 @@ schedule metadata before runtime sealing. The LFM dispatcher exceeded its old
 3 GiB cgroup during full-checkpoint ingestion; restart with an 8 GiB ledger claim
 and preserve its existing export, queue, request and lease state. Focused async
 evaluation tests: 20 passed, including mutation isolation and transfer ownership.
+
+Assistant-provenance correction, 2026-10-16: `neuralese_server=true` alone is
+insufficient. Frozen runtime `43e248a8...` flattened genuine assistant wire
+parts into plain text before the typed return boundary. Two actual LFM7500
+captures returned strings matching real same-turn native block writes. This is
+a protocol defect; do not infer model inability or hypothetical repaired success.
+Canonical fixes `bdcfb630e`, `2027cfdb2`, and `705771bd6` preserve actual assistant
+parts, apply typed `return_result`, and prevent incidental writes/compaction
+from completing a call. Independent actual-HTTP tests passed four cases and
+compaction tests passed two. Future actor/evaluator runtime closures must include
+these mechanisms; an old frozen runtime does not inherit source-tree fixes.
+
+The affected7500 diagnostic was stopped with14 completed captures and2 unknown
+cases. Its exact captures, request and weights remain assigned to runtime/cache
+investigation; its global queue pointer was retired to prevent accidental retry.
+The LFM latest-export watcher now uses a new output root and the qualified current
+built runtime. Mellum's future-ingest spec uses the same corrected runtime,
+while its old7750 historical reports remain unchanged. New requests seal new
+runtime inventories; never edit an existing request or turn interrupted unknown
+work into negative training data.
