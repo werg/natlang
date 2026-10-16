@@ -282,3 +282,27 @@ semantic training, RL and serving use the same model/restore path. New actor and
 semantic adapter bindings must reference the actual updated checkpoint; never
 relabel an old adapter after changing weights. Both-port exact migration and
 learning tests are mechanism evidence, not full-size task-quality claims.
+
+## Capacity check at the raw-controller handoff
+
+Do not assume a `memory_qualification` declaration in the production recipe
+runs when the raw controller starts. `production.configure_native` removes it
+before building the seed arguments, and `native_supervised.continuation_config`
+removes it from later supervised quanta. Neither path proves that an initial
+restored-parent capacity check occurred.
+
+When a new runtime needs that check, first launch the declared shared native
+trainer with the exact bound requests. Its startup restores the actual saved
+optimizer before `native_memory.run_prepared` runs; the separate unarmed normal
+comparison alone does not measure that restored optimizer's memory. Preserve
+the passed proof and returned geometry certificate, then allow useful training
+and stop at a saved boundary. Configure raw operation with that certificate and
+publish the new saved checkpoint through the existing checkpoint publication
+mechanism. Preserve the original handoff and measured-parent identity: a later
+useful update produces a new parent, not a new MAX measurement. Later supervised
+quanta already omit the request; no second consume-once scheduler is needed.
+
+Check actual projection counters for a selected FP8 backend. A finite backward
+or enabled configuration does not establish that FP8 kernels executed. Keep
+this runtime/memory evidence separate from task quality and complete recipe
+exposure.
