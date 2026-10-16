@@ -186,7 +186,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
 
 
 def offload_numerical_parity(model, optimizer, example, *, backend=None, chunk_tokens=1024,
-                             checkpoint_sha256, source_binding, checkpoint_layers=True, checkpoint_input_offload=None, objective=None):
+                             checkpoint_sha256, source_binding, checkpoint_layers=True, checkpoint_input_offload=None, checkpoint_input_offload_directory=None, objective=None):
     """Bitwise full named-gradient parity, retaining only per-parameter digests."""
     from ..common.checkpoint_offload import configure_checkpoint_input_offload
     checkpoint_input_offload = checkpoint_layers if checkpoint_input_offload is None else checkpoint_input_offload
@@ -207,13 +207,16 @@ def offload_numerical_parity(model, optimizer, example, *, backend=None, chunk_t
         configure_checkpoint_input_offload(model.port,enabled=False)
         baseline=qualify_capacity(model,optimizer,[example],backend=backend,chunk_tokens=chunk_tokens,
             checkpoint_sha256=checkpoint_sha256,source_binding=source_binding,gradient_observer=reference,objective=objective)
-        configure_checkpoint_input_offload(model.port,enabled=checkpoint_input_offload)
+        configure_checkpoint_input_offload(model.port,enabled=checkpoint_input_offload,
+            directory=checkpoint_input_offload_directory)
         candidate=qualify_capacity(model,optimizer,[example],backend=backend,chunk_tokens=chunk_tokens,
             checkpoint_layers=checkpoint_layers,checkpoint_sha256=checkpoint_sha256,source_binding=source_binding,gradient_observer=compare,objective=objective)
         return {'passed':baseline['passed'] and candidate['passed'] and not mismatches
                     and seen==gradients.keys() and baseline['cases'][0].get('loss')==candidate['cases'][0].get('loss'),
                 'baseline':baseline,'offloaded':candidate,'candidate_checkpoint_layers':checkpoint_layers,
-                'candidate_checkpoint_input_offload':checkpoint_input_offload,'gradient_parameters':len(gradients),
+                'candidate_checkpoint_input_offload':checkpoint_input_offload,
+                **({'candidate_checkpoint_input_offload_directory':checkpoint_input_offload_directory} if checkpoint_input_offload_directory else {}),
+                'gradient_parameters':len(gradients),
                 'different_gradient_names':mismatches,'missing_gradient_names':sorted(gradients.keys()-seen),
                 'comparison':'bitwise named-gradient digests and loss, no retained full-model copies'}
     finally:
@@ -235,7 +238,9 @@ def capacity_identity(config,args,backend):
         from ..train.native_preference import NativePreferenceObjective
         objective={'objective':NativePreferenceObjective(args.objective_spec,
             beta=getattr(args,'preference_beta',None),margin=getattr(args,'preference_margin',None)).binding()}
-    return {**objective,'model_config':config,'batch_graphs':args.batch_graphs,'batch_tokens':args.batch_tokens,
+    return {**objective,
+        **({'checkpoint_input_offload_directory':args.checkpoint_input_offload_directory}
+           if getattr(args,'checkpoint_input_offload_directory',None) else {}),'model_config':config,'batch_graphs':args.batch_graphs,'batch_tokens':args.batch_tokens,
         'checkpoint_layers':args.checkpoint_layers,'chunk_tokens':args.chunk_tokens,
         'checkpoint_input_offload':args.checkpoint_input_offload,'runtime':memory_runtime(args.device),
         'fp8':{'kind':args.fp8_training,'recipe':args.fp8_recipe,'amax_history_len':args.fp8_amax_history_len,
@@ -317,6 +322,7 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
         if not (previous.get('numerical_reference') or {}).get('passed'):
             configure_checkpoint_input_offload(model.port,enabled=False)
             args.checkpoint_input_offload=False
+            args.checkpoint_input_offload_directory=None
             if not args.checkpoint_layers:
                 raise ValueError('noncheckpointed numerical qualification failed; exact-state checkpointed fallback required')
         if any(row['id'] in train.bindings for row in selected):
@@ -326,7 +332,8 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
         example=next(train.iter_indices([ref_index]))
         result['numerical_reference']=offload_numerical_parity(model,optimizer,example,backend=backend,
             chunk_tokens=args.chunk_tokens,checkpoint_sha256=checkpoint_sha256,source_binding=binding(train.path),
-            checkpoint_layers=args.checkpoint_layers,checkpoint_input_offload=args.checkpoint_input_offload,objective=objective)
+            checkpoint_layers=args.checkpoint_layers,checkpoint_input_offload=args.checkpoint_input_offload,
+            checkpoint_input_offload_directory=getattr(args,'checkpoint_input_offload_directory',None),objective=objective)
         if result['numerical_reference']['passed']:
             examples=list(source.iter_indices([row['index'] for row in selected]))
             result['capacity']=qualify_capacity(model,optimizer,examples,backend=backend,chunk_tokens=args.chunk_tokens,
@@ -343,6 +350,7 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
         # offload comparison fails. This is explicit telemetry, never a pass.
         configure_checkpoint_input_offload(model.port,enabled=False)
         args.checkpoint_input_offload=False
+        args.checkpoint_input_offload_directory=None
         if not args.checkpoint_layers:
             raise ValueError('noncheckpointed numerical qualification failed; exact-state checkpointed fallback required')
     if not result['passed']:

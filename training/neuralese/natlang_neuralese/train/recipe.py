@@ -40,7 +40,7 @@ HANDLERS = {
                          'required_inputs': {'native_graphs', 'held_native_graphs'},
                          'optional_inputs': {'continue_from', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'withdrawn_native_graphs', 'pending_native_sources'},
                          'parameters': {'base', 'rank', 'dtype', 'native_linear_precision', 'epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'weight_decay',
-                             'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'checkpoint_input_offload', 'chunk_tokens',
+                             'latent_ns', 'eval_every', 'held_eval_tokens', 'held_eval_graphs', 'checkpoint_every', 'checkpoint_seconds', 'checkpoint_layers', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'chunk_tokens',
                              'fp8_training', 'fp8_recipe', 'fp8_amax_history_len', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'seed', 'task_eval',
                              'task_eval_every', 'forward_atol', 'gradient_atol', 'qualify_training_backend', 'resident_geometry_qualification', 'memory_qualification', 'communication_foundation', 'foundation_communication_batches', 'refresh_at_checkpoint', 'learn_reasoning_boundaries', 'share_causal_prefixes'}, 'result': 'checkpoint.pt'},
     # Neuralese direct v1 (plans/neuralese/NEURALESE_DIRECT_V1.md): plain target SFT from a base model with the
@@ -223,6 +223,10 @@ def validate_stage_parameters(kind, parameters):
     if kind in {'native_state_sft','native_state_rl','native_offline_preference'} and 'checkpoint_input_offload' in parameters:
         if parameters['checkpoint_input_offload'] is not None and type(parameters['checkpoint_input_offload']) is not bool:
             raise ValueError('checkpoint_input_offload must be a boolean or omitted for inheritance')
+    if kind in {'native_state_sft','native_state_rl','native_offline_preference'}:
+        directory = parameters.get('checkpoint_input_offload_directory')
+        if directory is not None and not isinstance(directory,str):
+            raise ValueError('checkpoint_input_offload_directory must be a string or omitted for inheritance')
     if kind=='native_offline_preference':
         beta=parameters.get('preference_beta');margin=parameters.get('preference_margin')
         if beta is not None and (type(beta) not in (int,float) or not math.isfinite(beta) or beta<=0):
@@ -1388,9 +1392,9 @@ DIRECT_WINDOWING_PARAMETERS = ('train_target_tokens', 'merge_prefix_rows', 'coho
 def direct_windowing_handoffs(old_recipe, new_recipe, out):
     """Declared trainer-supported tuning, preserving each trainer's resume checks."""
     tuning = {'neuralese_direct': DIRECT_WINDOWING_PARAMETERS,
-              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'learn_reasoning_boundaries', 'native_linear_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'memory_qualification'),
-              'native_offline_preference': ('preference_beta', 'preference_margin', 'epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'learn_reasoning_boundaries', 'native_linear_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'memory_qualification'),
-              'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'native_linear_precision', 'checkpoint_input_offload')}
+              'native_state_sft': ('epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'learn_reasoning_boundaries', 'native_linear_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'memory_qualification'),
+              'native_offline_preference': ('preference_beta', 'preference_margin', 'epochs', 'batch_graphs', 'batch_tokens', 'chunk_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'communication_foundation', 'foundation_communication_batches', 'learn_reasoning_boundaries', 'native_linear_precision', 'share_causal_prefixes', 'fp8_recipe', 'resident_geometry_qualification', 'checkpoint_input_offload', 'checkpoint_input_offload_directory', 'memory_qualification'),
+              'native_state_rl': ('epochs', 'batch_graphs', 'batch_tokens', 'learning_rate', 'learned_row_learning_rate', 'interface_row_learning_rate', 'native_optimizer_migration', 'weight_decay', 'latent_ns', 'held_eval_tokens', 'held_eval_graphs', 'native_linear_precision', 'checkpoint_input_offload', 'checkpoint_input_offload_directory')}
     def parameters(recipe, stage):
         merged = dict(recipe.get('stage_parameter_defaults', {}).get(stage.get('kind'), {}))
         merged.update(stage.get('parameters', {}))

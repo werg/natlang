@@ -103,6 +103,9 @@ def validate_config(config):
         validate_native_optimizer_migration(declaration.get('native_optimizer_migration'))
         if 'checkpoint_input_offload' in declaration and type(declaration['checkpoint_input_offload']) is not bool:
             raise ValueError('semantic checkpoint_input_offload must be a boolean')
+        directory = declaration.get('checkpoint_input_offload_directory')
+        if directory is not None and not isinstance(directory,str):
+            raise ValueError('semantic checkpoint_input_offload_directory must be a string or omitted')
         for name in ('learned_row_learning_rate','interface_row_learning_rate'):
             if name in declaration:
                 validate_learned_row_rate(declaration[name],name=name)
@@ -181,10 +184,8 @@ def load_participant(name, binding, config, device):
         backend.restore_extra_state(inherited['fp8'])
     _adjust_lr(optimizer, config['backbone_lr'], declaration.get('learned_row_learning_rate',config.get('learned_row_learning_rate')),
         declaration.get('interface_row_learning_rate',config.get('interface_row_learning_rate')))
-    from ..common.checkpoint_offload import configure_checkpoint_input_offload
-    offload = declaration.get('checkpoint_input_offload',config.get('checkpoint_input_offload',
-        (inherited.get('options') or {}).get('checkpoint_input_offload',False)))
-    configure_checkpoint_input_offload(model.port,enabled=offload)
+    from ..common.checkpoint_offload import configure_checkpoint_storage_options
+    configure_checkpoint_storage_options(model.port,declaration,config,inherited.get('options') or {})
     model.port.checkpoint_layers = True
     model.train()
     result = SemanticParticipant(model, tokenizer, model_config, identity, optimizer, backend)
@@ -301,14 +302,13 @@ def _native_modules(participants):
 
 
 def save_shared(policy, participants, vae, optimizer, *, training, device):
-    from ..common.checkpoint_offload import CheckpointInputOffload
+    from ..common.checkpoint_offload import checkpoint_input_storage_options
     with _native_modules(participants):
         state = {'schema': SHARED_CHECKPOINT_SCHEMA,
             'participants': {name: {'model_config': entry.config, 'model_state': model_state(entry.model),
                 'source_identity': entry.identity, 'optimizer': entry.optimizer.state_dict(),
                 'sft_progress': entry.sft_progress, 'global_step': entry.global_step,
-                'training_options': {'checkpoint_input_offload': isinstance(
-                    getattr(entry.model.port, 'activation_checkpoint', None), CheckpointInputOffload)},
+                'training_options': checkpoint_input_storage_options(entry.model.port),
                 'fp8': entry.backend.extra_state() if entry.backend is not None else None}
                 for name, entry in participants.items()},
             'vae_specification': vae.specification(), 'vae_state': vae.state_dict(),
@@ -499,6 +499,9 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                 participant.global_step = saved.get('global_step', participant.global_step)
                 if participant.backend is not None:
                     participant.backend.restore_extra_state(saved['fp8'])
+                from ..common.checkpoint_offload import configure_checkpoint_storage_options
+                configure_checkpoint_storage_options(participant.model.port,
+                    config.get('models',{}).get(name,{}),config,saved.get('training_options') or {})
         if changed_models and not config.get('adaptive_refresh'):
             raise ValueError('changed participant weights require declared adaptive_refresh work in every semantic phase')
         if changed_models:
@@ -613,11 +616,9 @@ def run(config_path, participants_path, out, *, resume=None, max_updates=None, d
                            'learned_row_learning_rate',config.get('learned_row_learning_rate'))),
                        options.get('interface_row_learning_rate',config.get('models',{}).get(name,{}).get(
                            'interface_row_learning_rate',config.get('interface_row_learning_rate'))))
-            from ..common.checkpoint_offload import configure_checkpoint_input_offload, CheckpointInputOffload
-            enabled = options.get('checkpoint_input_offload',config.get('models',{}).get(name,{}).get(
-                'checkpoint_input_offload',config.get('checkpoint_input_offload',
-                    isinstance(getattr(participant.model.port, 'activation_checkpoint', None),CheckpointInputOffload))))
-            configure_checkpoint_input_offload(participant.model.port,enabled=enabled)
+            from ..common.checkpoint_offload import configure_checkpoint_storage_options
+            configure_checkpoint_storage_options(participant.model.port,options,
+                config.get('models',{}).get(name,{}),config)
             for key, value in participant.model.named_parameters():
                 value.requires_grad_(phase['kind'] != 'vae' and name in active and key in trainable[name])
         optimizer.zero_grad(set_to_none=True)

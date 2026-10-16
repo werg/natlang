@@ -661,7 +661,9 @@ def build_parser():
     parser.add_argument('--checkpoint-every', type=int, default=0)
     parser.add_argument('--checkpoint-seconds', type=float, default=3600.)
     parser.add_argument('--checkpoint-input-offload', action=argparse.BooleanOptionalAction, default=None,
-        help='store nonreentrant layer-checkpoint inputs on host RAM; omission inherits the saved mode')
+        help='store nonreentrant layer-checkpoint inputs on host RAM or explicit file storage; omission inherits the saved mode')
+    parser.add_argument('--checkpoint-input-offload-directory', default=None,
+        help='private file-backed checkpoint inputs in this directory; omission inherits, empty string selects CPU')
     parser.add_argument('--checkpoint-layers', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--chunk-tokens', type=int, default=128)
     parser.add_argument('--fp8-training', choices=('off', 'te-fp8', 'triton-experts'), default='off')
@@ -992,7 +994,14 @@ def main(argv=None):
     if type(args.checkpoint_input_offload) is not bool or (args.checkpoint_input_offload and not args.checkpoint_layers):
         raise ValueError('checkpoint input offload requires actual nonreentrant layer checkpointing')
     from ..common.checkpoint_offload import configure_checkpoint_input_offload
-    configure_checkpoint_input_offload(model.port, enabled=args.checkpoint_input_offload)
+    inherited_directory = (saved_training.get('options') or {}).get('checkpoint_input_offload_directory')
+    if args.checkpoint_input_offload_directory is None:
+        args.checkpoint_input_offload_directory = inherited_directory if args.checkpoint_input_offload else None
+    args.checkpoint_input_offload_directory = args.checkpoint_input_offload_directory or None
+    hook = configure_checkpoint_input_offload(model.port, enabled=args.checkpoint_input_offload,
+        directory=args.checkpoint_input_offload_directory)
+    args.checkpoint_input_offload_directory = getattr(hook, 'directory', None)
+    checkpoint_options['checkpoint_input_offload_directory'] = args.checkpoint_input_offload_directory
     checkpoint_options['checkpoint_input_offload'] = args.checkpoint_input_offload
     model.port.checkpoint_layers = args.checkpoint_layers
     model.to(args.device)
@@ -1088,6 +1097,7 @@ def main(argv=None):
         checkpoint_options['memory_qualification'] = {'passed':memory_check['passed'],
             'request':memory_check['request'],'parent_checkpoint_sha256':memory_check['parent_checkpoint_sha256']}
         checkpoint_options['checkpoint_input_offload'] = args.checkpoint_input_offload
+        checkpoint_options['checkpoint_input_offload_directory'] = args.checkpoint_input_offload_directory
         checkpoint_options['resident_geometry_qualification'] = (str(args.resident_geometry_qualification)
             if args.resident_geometry_qualification else None)
     # Actual per-row optimizer credits drive the schedule. Source identity
@@ -1253,7 +1263,7 @@ def main(argv=None):
             if mandatory_objective:progress['offline_preference']=details
             progress['learning_rates']=optimizer.native_learning_rates
             progress['checkpoint_input_offload'] = {'enabled': args.checkpoint_input_offload,
-                'checkpoint_calls': getattr(model.port.activation_checkpoint, 'calls', 0)}
+                **(model.port.activation_checkpoint.snapshot() if hasattr(model.port.activation_checkpoint, 'snapshot') else {'checkpoint_calls': 0})}
             if getattr(model, 'native_sparse_updates', None):
                 progress['sparse_row_updates'] = model.native_sparse_updates
             if objective is None and details:
