@@ -76,7 +76,8 @@ def batch_boundaries(entries, *, batch_graphs=1, batch_tokens=0):
     return boundaries
 
 
-def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1, batch_tokens=0):
+def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1, batch_tokens=0,
+                             foundation_ids=None, foundation_communication_batches=1):
     """Schedule only missing row visits, including rows appended after completion.
 
     Communication starts first and alternates with explicitly prioritized
@@ -85,6 +86,13 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
     changed packing and appended sources; fractional epochs cover the declared
     source prefix. The checkpoint's actual row counts determine what remains.
     """
+    if type(foundation_communication_batches) is not int or foundation_communication_batches < 1:
+        raise ValueError('foundation communication batches must be a positive integer')
+    foundation_ids = set(foundation_ids or ())
+    if any(entry['id'] in foundation_ids and not entry.get('communication') for entry in entries):
+        raise ValueError('fixed foundation priority requires genuine communication rows')
+    if foundation_ids - {entry['id'] for entry in entries}:
+        raise ValueError('fixed foundation priority cannot name absent source rows')
     whole = int(epochs)
     fractional = math.ceil((epochs - whole) * len(entries))
     quotas = {entry['id']: max(int(bool(entry.get('communication'))), whole + (index < fractional))
@@ -113,17 +121,31 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
         destination = (communication if entry.get('communication') else
                        urgent if entry.get('training_priority', 0) > 0 else ordinary)
         destination.append(batch)
+    def foundational(batch):
+        return bool(foundation_ids) and any(entries[index]['id'] in foundation_ids for index in batch[1])
+    communication.sort(key=lambda batch: not foundational(batch))
+    remaining_foundation_batches = sum(foundational(batch) for batch in communication)
     if urgent and communication:
         interleaved = []
-        for index in range(max(len(communication), len(urgent))):
-            if index < len(communication):
-                interleaved.append(communication[index])
-            if index < len(urgent):
-                interleaved.append(urgent[index])
+        comm_cursor = ordinary_cursor = 0
+        while comm_cursor < len(communication) or ordinary_cursor < len(urgent):
+            count = min(foundation_communication_batches, remaining_foundation_batches) if remaining_foundation_batches else 1
+            for _ in range(count):
+                if comm_cursor == len(communication):
+                    break
+                batch = communication[comm_cursor]
+                interleaved.append(batch)
+                remaining_foundation_batches -= int(foundational(batch))
+                comm_cursor += 1
+            if ordinary_cursor < len(urgent):
+                interleaved.append(urgent[ordinary_cursor])
+                ordinary_cursor += 1
         batches = interleaved + ordinary
-        last_by_visit = {visit: index for index, (visit, _, _) in enumerate(batches)}
-        batches = [(visit, indices, last_by_visit[visit] == index)
-                   for index, (visit, indices, _) in enumerate(batches)]
+    else:
+        batches = communication + urgent + ordinary
+    last_by_visit = {visit: index for index, (visit, _, _) in enumerate(batches)}
+    batches = [(visit, indices, last_by_visit[visit] == index)
+               for index, (visit, indices, _) in enumerate(batches)]
     return quotas, batches
 
 
@@ -576,6 +598,8 @@ def build_parser():
         help='return an explicit incomplete continuation for semantic refresh at the next declared checkpoint boundary')
     parser.add_argument('--learn-reasoning-boundaries', action=argparse.BooleanOptionalAction, default=False,
                         help='explicitly add learned existing reasoning token rows to an old parent')
+    parser.add_argument('--foundation-communication-batches', type=int,
+        help='while the exact declared foundation is pending, communication batches per priority ordinary batch')
     parser.add_argument('--communication-foundation', action=argparse.BooleanOptionalAction, default=False,
         help='pause at the complete admitted communication cohort with mandatory ordinary credits retained')
     parser.add_argument('--held-native-graphs', type=Path, required=True)
@@ -641,6 +665,8 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    if args.foundation_communication_batches is not None and args.foundation_communication_batches < 1:
+        raise ValueError('foundation communication batches must be a positive integer')
     resident_state = None
     if args.resident_data_directory is not None:
         from .native_resident import recover
@@ -768,6 +794,8 @@ def main(argv=None):
     checkpoint_options['_communication_ids']=[entry['id'] for entry in train.entries if entry.get('communication')]
     foundation_source = (NativeGraphSource(args.foundation_native_graphs, fingerprint, required_split='train', role_ids=roles.ids)
                          if args.foundation_native_graphs else train)
+    if args.foundation_communication_batches is not None and args.foundation_native_graphs is None:
+        raise ValueError('foundation scheduling requires the exact declared foundation source')
     if args.communication_foundation and args.foundation_native_graphs is None:
         raise ValueError('communication foundation requires its complete declared admitted source manifest')
     if args.communication_foundation:
@@ -1014,8 +1042,12 @@ def main(argv=None):
     # Adapt packing after a safe stop without replaying or skipping any row.
     if parent_continuation and not restored_progress:
         step = 0
+    foundation_priority_ids = ({entry['id'] for entry in foundation_source.entries if entry.get('communication')}
+                               if args.foundation_communication_batches is not None else None)
     required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
-        epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens)
+        epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens,
+        foundation_ids=foundation_priority_ids,
+        foundation_communication_batches=args.foundation_communication_batches or 1)
     target_rows = sum(required_visits.values())
     total_end = step + len(pending_batches)
     if step > total_end:
@@ -1025,7 +1057,7 @@ def main(argv=None):
     refresh_boundary = False
     if args.refresh_at_checkpoint and not (args.checkpoint_every or args.checkpoint_seconds):
         raise ValueError('semantic refresh needs a declared checkpoint step/time cadence')
-    schedule = stream_pending_batches(train, pending_batches)
+    schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids)
     resident = None
     if args.resident_data_directory is not None:
         from .native_resident import ResidentAdoption
@@ -1109,10 +1141,12 @@ def main(argv=None):
                         resident_adoption={'generation': resident.generation, 'history': resident.state['history']})
                     checkpoint_options['_communication_ids'] = [entry['id'] for entry in train.entries if entry.get('communication')]
                     required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
-                        epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens)
+                        epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens,
+                        foundation_ids=foundation_priority_ids,
+                        foundation_communication_batches=args.foundation_communication_batches or 1)
                     total_end = step + len(pending_batches)
                     target_rows = sum(required_visits.values())
-                    schedule = stream_pending_batches(train, pending_batches)
+                    schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids)
             if policy.signaled or step >= total_end:
                 break
             update_started = time.monotonic()
@@ -1147,6 +1181,9 @@ def main(argv=None):
                         'elapsed_seconds': time.time() - started, 'timestamp': time.time(),
                         'checkpoint_step': last_saved_step,
                         'communication_exposure': communication_exposure(train.entries, exposure_counts, required_visits)}
+            if foundation_priority_ids is not None:
+                progress['foundation_schedule'] = {'communication_batches_per_priority_ordinary': args.foundation_communication_batches,
+                    'fixed_foundation_graphs': sum(train.entries[index]['id'] in foundation_priority_ids for index in indices)}
             progress['learning_rates']=optimizer.native_learning_rates
             progress['checkpoint_input_offload'] = {'enabled': args.checkpoint_input_offload,
                 'checkpoint_calls': getattr(model.port.activation_checkpoint, 'calls', 0)}

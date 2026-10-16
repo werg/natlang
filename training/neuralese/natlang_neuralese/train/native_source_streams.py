@@ -6,13 +6,16 @@ def scheduling_rank(entry):
     return (not bool(entry.get('communication')), -entry.get('training_priority', 0))
 
 
-def stream_pending_batches(source, pending_batches):
+def stream_pending_batches(source, pending_batches, *, priority_ids=None):
     """Keep exact batch order without rescanning sources at every rank switch.
 
     Each rank/visit is already monotone in the production scheduler. Separate
     its source cursor from other ranks; retain the existing immutable source,
     parser and row-binding checks rather than caching parsed graph tensors.
     """
+    priority_ids = set(priority_ids or ())
+    def stream_key(visit, rank, indices):
+        return (visit, rank, bool(priority_ids) and any(source.entries[index]['id'] in priority_ids for index in indices))
     requests = {}
     for visit, indices, _ in pending_batches:
         if not indices:
@@ -20,13 +23,13 @@ def stream_pending_batches(source, pending_batches):
         rank = scheduling_rank(source.entries[indices[0]])
         if any(scheduling_rank(source.entries[index]) != rank for index in indices):
             raise ValueError('native pending source batch mixes curriculum ranks')
-        requests.setdefault((visit, rank), []).extend(indices)
+        requests.setdefault(stream_key(visit, rank, indices), []).extend(indices)
     if any(indices != sorted(set(indices)) for indices in requests.values()):
         raise ValueError('native pending source stream must be monotone and distinct')
     streams = {}
     try:
         for visit, indices, pass_end in pending_batches:
-            key = (visit, scheduling_rank(source.entries[indices[0]]))
+            key = stream_key(visit, scheduling_rank(source.entries[indices[0]]), indices)
             if key not in streams:
                 streams[key] = source.iter_indices(requests[key])
             try:
