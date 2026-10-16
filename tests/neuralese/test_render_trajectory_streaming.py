@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -35,13 +36,152 @@ def _read(path):
         return [json.loads(line) for line in stream if line.strip()]
 
 
+class _CharacterChatTokenizer:
+    """Small deterministic tokenizer exercising the real gold renderer."""
+    all_special_tokens = ('<|im_start|>', '<|im_end|>', '<|im_sep|>', '<|tool_call_start|>', '<|tool_call_end|>')
+    unk_token_id = 0
+    chat_template = 'fixture-chat-template'
+
+    def __init__(self):
+        self.natlang_history_reasoning = {'policy': 'undeclared', 'backbone': 'fixture', 'probe': {}}
+        self._special_ids = {value: index + 1 for index, value in enumerate(self.all_special_tokens)}
+        self._special_pattern = re.compile('(' + '|'.join(re.escape(x) for x in
+            sorted(self.all_special_tokens, key=len, reverse=True)) + ')')
+        self.backend_tokenizer = type('Backend', (), {'to_str': lambda _self: '{"type":"fixture"}'})()
+
+    def get_vocab(self):
+        return {chr(code): 1000 + code for code in range(128)} | self._special_ids
+
+    def apply_chat_template(self, messages, *, tools=None, tokenize=False, add_generation_prompt=False, **_kwargs):
+        text = ''
+        for message in messages:
+            role = message.get('role', 'user')
+            text += f'<|im_start|>{role}\n{message.get("content") or ""}'
+            calls = message.get('tool_calls') or []
+            if calls:
+                text += '<|tool_call_start|>' + json.dumps(calls, sort_keys=True) + '<|tool_call_end|>'
+            text += '<|im_end|>\n'
+        if add_generation_prompt:
+            text += '<|im_start|>assistant\n'
+        return text
+
+    def convert_tokens_to_ids(self, token):
+        return self._special_ids.get(token, self.unk_token_id)
+
+    def _encode(self, text):
+        ids, offsets = [], []
+        cursor = 0
+        for part in self._special_pattern.split(text):
+            if not part:
+                continue
+            end = cursor + len(part)
+            if part in self._special_ids:
+                ids.append(self._special_ids[part])
+                offsets.append((cursor, end))
+            else:
+                for index, char in enumerate(part):
+                    ids.append(1000 + ord(char))
+                    offsets.append((cursor + index, cursor + index + 1))
+            cursor = end
+        return ids, offsets
+
+    def __call__(self, text, *, return_offsets_mapping=False, **_kwargs):
+        ids, offsets = self._encode(text)
+        result = {'input_ids': ids}
+        if return_offsets_mapping:
+            result['offset_mapping'] = offsets
+        return result
+
+    def encode(self, text, **_kwargs):
+        return self._encode(text)[0]
+
+    def decode(self, ids, *, skip_special_tokens=False, **_kwargs):
+        pieces = []
+        reverse = {value: key for key, value in self._special_ids.items()}
+        for token in ids:
+            if token in reverse:
+                if not skip_special_tokens:
+                    pieces.append(reverse[token])
+            else:
+                pieces.append(chr(token - 1000))
+        return ''.join(pieces)
+
+
+def _trajectory_rows():
+    def record(identifier, trajectory, split, groups, messages, target):
+        return {'id': identifier, 'teacher_trajectory_id': trajectory,
+                'source_ref': {'trajectory_id': trajectory, 'invocation_id': 'invocation-' + trajectory},
+                'split': split, 'source_groups': groups, 'training_admission': {'approved': True},
+                'messages': messages, 'target': {'role': 'assistant', 'content': target}, 'tools': []}
+
+    a_context = [{'role': 'system', 'content': 'program system'}, {'role': 'user', 'content': 'input A'}]
+    b_context = [{'role': 'system', 'content': 'program system'}, {'role': 'user', 'content': 'input B'}]
+    a0 = record('a0', 'trajectory-a', 'train', ['g-a'], a_context, 'answer A0')
+    block_id = 'nz1_' + 'a' * 64
+    a0['decision'] = {'training_approved': True, 'failed_action': False}
+    a0['target']['tool_calls'] = [{
+        'id': 'call-a0', 'type': 'function',
+        'function': {'name': 'write', 'arguments': json.dumps({'value': {
+            '$write': {'name': 'soft-state:' + block_id, 'block_id': block_id,
+                       'type': 'Neuralese<string>', 'source': 'shared producer payload'}}})},
+    }]
+    b0 = record('b0', 'trajectory-b', 'test', ['g-b'], b_context, 'answer B0')
+    a1_messages = [*a_context, a0['target'], {'role': 'user', 'content': 'follow up A'}]
+    b1_messages = [*b_context, b0['target'], {'role': 'user', 'content': 'follow up B'}]
+    a1 = record('a1', 'trajectory-a', 'train', ['g-a'], a1_messages, 'answer A1')
+    b1 = record('b1', 'trajectory-b', 'test', ['g-b'], b1_messages, 'answer B1')
+    reader_context = [{'role': 'system', 'content': 'program system'},
+                      {'role': 'user', 'content': [{'type': 'neuralese', 'id': block_id}]}]
+    c0 = record('c0', 'trajectory-c', 'train', ['g-a'], reader_context, 'answer C0')
+    duplicate = record('a0-copy', 'trajectory-copy', 'train', ['g-a'], a_context, 'answer A0')
+    return [a0, b0, a1, b1, c0, duplicate]
+
+
+def test_real_materializer_and_streaming_wrapper_are_byte_equivalent(tmp_path):
+    from scripts.neuralese_data.strip_generic_system_prompt import strip_row
+    tokenizers = {'lfm25': _CharacterChatTokenizer(), 'mellum21': _CharacterChatTokenizer()}
+    renderer._G.clear()
+    renderer._G.update({'tok': tokenizers, 'pieces': {},
+                        'strip_row': strip_row, 'cross_trajectory_writer_sources': {}})
+    selected = tmp_path / 'actual-selected.jsonl'
+    with write_jsonl_text(selected) as stream:
+        rows = _trajectory_rows()
+        for row in rows:
+            stream.write(renderer.canonical(row) + '\n')
+    modes = ('full', 'program-header', 'whole-trajectory')
+    blocked = {renderer.split_chain_key(rows[2]): len(rows[2]['messages'])}
+    for tokenizer_name in ('lfm25', 'mellum21'):
+        ref_dir, stream_dir = tmp_path / f'ref-{tokenizer_name}', tmp_path / f'stream-{tokenizer_name}'
+        job_ref = (str(selected), str(ref_dir), tokenizer_name, blocked, 'fixture', set(), {'b0'}, False,
+                   None, modes, False, set())
+        ref_receipt = renderer._render_shard_materialized(job_ref)
+        renderer._G['cross_trajectory_writer_sources'] = {}
+        job_stream = (str(selected), str(stream_dir), tokenizer_name, blocked, 'fixture', set(), {'b0'}, False,
+                      None, modes, False, set())
+        stream_receipt = renderer.render_shard(job_stream)
+        for mode in modes:
+            reference_rows = _read(ref_dir / mode / tokenizer_name / 'actual-selected.jsonl')
+            streamed_rows = _read(stream_dir / mode / tokenizer_name / 'actual-selected.jsonl')
+            assert reference_rows == streamed_rows
+            if mode == 'full':
+                reader = next(row for row in reference_rows if row['id'] == 'c0')
+                assert 'shared producer payload' in reader['text']
+                assert reader['neuralese_context_attestations'][0]['writer_record_id'] == 'a0'
+        assert ref_receipt['records'] == stream_receipt['records']
+        for key in ('full', 'program-header', 'whole-trajectory', 'decontaminated', 'decision_excluded'):
+            assert ref_receipt.get(key, 0) == stream_receipt.get(key, 0)
+        assert ref_receipt['parity'] == stream_receipt['parity']
+        assert _read(ref_dir / 'omissions' / tokenizer_name / 'actual-selected.jsonl') == \
+               _read(stream_dir / 'omissions' / tokenizer_name / 'actual-selected.jsonl')
+
+
 def test_streamed_trajectory_groups_are_exact_and_resume_after_interruption(tmp_path, monkeypatch):
     selected = tmp_path / 'selected.jsonl.zst'
     source_rows = _source(selected)
     calls = []
 
     def materialized(job):
-        shard_path, out_dir, tokenizer, _blocked, _corpus, _held, _decision, _header, _full, modes, compressed, _target = job
+        shard_path, out_dir, tokenizer, _blocked, _corpus, _held, _decision, _header, _full, modes, compressed, *_storage = job
         group_source = Path(shard_path)
         group_root = Path(out_dir)
         group_id = group_source.name.removesuffix('.jsonl')

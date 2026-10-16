@@ -65,6 +65,11 @@ RENDERINGS = ('full', 'program-header', 'whole-trajectory')
 # the selector inputs below validate byte-for-byte; render-only code changes
 # must not force a 658k-row reselection.
 LEGACY_SELECTOR_FILE_SHA256 = {'797e534147c258b5453c146365e53763133ac45ec468193b66fba442419bdccf'}
+# The one legacy full-file selector hash above may migrate only while the
+# current selector implementation still has this independently reviewed
+# semantic fingerprint. This prevents the legacy file allowlist from silently
+# authorizing a later selector-policy change.
+LEGACY_SELECTOR_SEMANTICS_SHA256 = '86e1602edd923cfe0a22661d8e6645258979ed1fa2d761825a84fa9c4d1405aa'
 # Upstream held-out split names rendered as test (recorded as selection counts split_mapped:<name>->test and as each
 # row's source_split). Any other split other than train/test stays an omission with its reason.
 HELD_SPLIT_ALIASES = ('validation', 'valid', 'val', 'dev')
@@ -547,7 +552,14 @@ def selection_input_binding(args):
         str(ROOT / 'training/neuralese/natlang_neuralese/common/resumable_jsonl_frames.py'):
             file_sha(ROOT / 'training/neuralese/natlang_neuralese/common/resumable_jsonl_frames.py'),
     }
-    selector_sha = sha(canonical({'functions': selector_code, 'dependencies': selector_dependencies}).encode())
+    selector_sha = sha(canonical({
+        'functions': selector_code,
+        'dependencies': selector_dependencies,
+        # These module-level values affect split normalization, registered-path
+        # resolution and the protected-index representation used by helpers.
+        'constants': {'held_split_aliases': HELD_SPLIT_ALIASES, 'prefix_bytes': _PREFIX,
+                      'root': str(ROOT.resolve())},
+    }).encode())
     options = {
         'corpus_id': args.corpus_id,
         'include_admits': bool(args.include_admits),
@@ -623,7 +635,9 @@ def select(args, shard_dir: Path, state_path: Path, binding: dict):
                 candidate['options'] = candidate_options
                 candidate.pop('sha256', None)
                 candidate['sha256'] = sha(canonical(candidate).encode())
-                compatible = old_selector_sha in LEGACY_SELECTOR_FILE_SHA256 and candidate == binding
+                compatible = (old_selector_sha in LEGACY_SELECTOR_FILE_SHA256
+                              and binding['options']['selector_code_sha256'] == LEGACY_SELECTOR_SEMANTICS_SHA256
+                              and candidate == binding)
             if not compatible:
                 raise ValueError('selection checkpoint inputs or selector semantics changed')
             # Record the narrower selector binding atomically. The selected
@@ -1036,6 +1050,7 @@ def _render_shard_materialized(job):
      renderings, *storage_options) = job
     compress_text = bool(storage_options and storage_options[0])
     target_exclude = storage_options[1] if len(storage_options) > 1 else set()
+    writer_context_records = storage_options[2] if len(storage_options) > 2 else ()
     # Per-decision renderings are rendered only when one of them is requested; the program-header parity check needs
     # both, so with program-header requested the full rendering is rendered too (and kept per --full-sample).
     per_decision = {'full', 'program-header'} & set(renderings)
@@ -1081,7 +1096,8 @@ def _render_shard_materialized(job):
             continue
         r, receipt, omitted, provenance = gold_text_rows(decision_records, _G['pieces'], tokenizer=tok,
                                                          require_independent_splits=False, prompt_rendering=mode,
-                                                         target_reasoning=True)
+                                                         target_reasoning=True,
+                                                         writer_context_records=writer_context_records)
         for row, prov in zip(r, provenance):
             row['corpus'] = corpus
             row['prompt_rendering'] = mode
@@ -1148,19 +1164,13 @@ def _render_shard_materialized(job):
         result['full_outside_warmup_sample'] = before - len(rows['full'])
     # Whole trajectory.
     fingerprint = tokenizer_fingerprint(tok)
-    source_hashes, writer_sources = authenticated_context_writer_sources(records)
-    # The streaming wrapper supplies writers found in other trajectories of
-    # this selected shard. Keep local entries authoritative and add only
-    # distinct writer records; otherwise a same-trajectory writer would be
-    # counted twice and become spuriously ambiguous.
-    for block_id, candidates in (_G.get('cross_trajectory_writer_sources') or {}).items():
-        current = writer_sources.setdefault(block_id, [])
-        current_ids = {(item.get('writer_record_id'), item.get('body_sha256')) for item in current}
-        for candidate in candidates:
-            identity = (candidate.get('writer_record_id'), candidate.get('body_sha256'))
-            if identity not in current_ids:
-                current.append(candidate)
-                current_ids.add(identity)
+    # The streaming wrapper supplies the exact source rows for external
+    # writers referenced by this trajectory. Rebuild the authenticated writer
+    # index from those rows, rather than retaining large body strings in the
+    # shard-wide metadata index.
+    context_rows = list(records)
+    context_rows.extend(writer_context_records)
+    source_hashes, writer_sources = authenticated_context_writer_sources(context_rows)
     records_by_id = {record['id']: record for record in records}
     wt = []
     for record, members in whole_trajectory_records(records, blocked):
@@ -1225,21 +1235,6 @@ def _trajectory_key(record):
     # Legacy records without an explicit trajectory still retain invocation
     # isolation, exactly as chain_key does.
     return str(trajectory) if trajectory is not None else chain_key(record)
-
-
-def _atomic_json(path, value):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + '.tmp')
-    temporary.write_text(canonical(value) + '\n')
-    with temporary.open('rb') as stream:
-        os.fsync(stream.fileno())
-    os.replace(temporary, path)
-    descriptor = os.open(path.parent, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
 
 
 def render_shard(job):
@@ -1327,7 +1322,7 @@ def render_shard(job):
                 for candidate in candidates:
                     identity = (candidate.get('writer_record_id'), candidate.get('body_sha256'))
                     if identity not in by_identity:
-                        current.append(candidate)
+                        current.append({key: value for key, value in candidate.items() if key != 'body'})
                         by_identity.add(identity)
             del local, local_hashes, local_sources
 
@@ -1390,6 +1385,27 @@ def render_shard(job):
             if group_dir.exists():
                 shutil.rmtree(group_dir)
             group_dir.mkdir(parents=True)
+            from natlang_neuralese.data.text_corpus import _message_neuralese_ids, _message_soft_reads
+            referenced_blocks = set()
+            for row in group_rows:
+                referenced_blocks.update(_message_neuralese_ids(row.get('messages') or []))
+                referenced_blocks.update(read.get('block_id') for read in
+                                        _message_soft_reads(row.get('messages') or [])
+                                        if isinstance(read.get('block_id'), str))
+            writer_ids = sorted({candidate.get('writer_record_id')
+                                 for block_id in referenced_blocks
+                                 for candidate in cross_writers.get(block_id, [])
+                                 if isinstance(candidate.get('writer_record_id'), str)}
+                                - {row.get('id') for row in group_rows})
+            writer_context_records = []
+            for writer_id in writer_ids:
+                found = db.execute('SELECT payload, source_sha FROM rows WHERE row_id=? ORDER BY seq LIMIT 1',
+                                   (writer_id,)).fetchone()
+                if found is None:
+                    raise ValueError(f'cross-trajectory writer source disappeared from shard index: {writer_id}')
+                writer_record = json.loads(found[0])
+                writer_record['_source_record_sha256'] = found[1]
+                writer_context_records.append(writer_record)
             temp_source = group_dir / f'{group_id}.jsonl'
             with temp_source.open('w', encoding='utf-8') as stream:
                 for row in group_rows:
@@ -1399,7 +1415,7 @@ def render_shard(job):
             del group_rows
             group_job = (str(temp_source), str(group_dir), tok_name, blocked, corpus, held_groups,
                          decision_exclude, header_as_full, full_programs, renderings, compress_text,
-                         target_exclude)
+                         target_exclude, writer_context_records)
             result = _render_shard_materialized(group_job)
             temp_source.unlink(missing_ok=True)
             outputs = {}
@@ -1409,7 +1425,7 @@ def render_shard(job):
             group_receipt = {'schema': 'natlang.native-turn-trajectory-render/1',
                              'binding': binding, 'trajectory_sha256': sha(trajectory.encode()),
                              'source_record_ids': source_ids, 'outputs': outputs, 'result': result}
-            _atomic_json(receipt_path, group_receipt)
+            write_json_durable(receipt_path, group_receipt)
             accumulate(result)
 
         # Sort the materialized trajectory outputs back into exact selected
