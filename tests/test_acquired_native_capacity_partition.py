@@ -67,3 +67,16 @@ def test_uncommitted_partition_is_receipted_before_retry_cleanup_and_source_chan
     actual=json.loads(audit.read_text());path=Path(actual['conversions'][0]['outputs'][0]['path'])
     path.write_text(path.read_text().replace('"token_ids": [0','"token_ids": [99',1))
     with pytest.raises(ValueError,match='immutable'):partition(audit,samples,limits,tmp_path/'new')
+
+
+def test_logical_cohort_symlink_preserves_exact_physical_audit_binding(tmp_path):
+    audit,samples,_=source(tmp_path)
+    alias=tmp_path/'logical-cohort';alias.symlink_to(audit.parent,target_is_directory=True)
+    limits={m:{'forward_tokens':5,'kv_slots':5} for m in ('lfm','mellum')}
+    receipt=partition(alias/audit.name,alias/samples.name,limits,alias/'capacity')
+    assert receipt['binding']['audit']['path']==str(audit.resolve())
+    assert receipt['graphs']==6
+    assert partition(audit,samples,limits,audit.parent/'capacity')==receipt
+    alternate=json.loads(samples.read_text());alternate['cohort_audit']['path']=str(alias/audit.name)
+    samples.write_text(json.dumps(alternate))
+    assert partition(audit,samples,limits,audit.parent/'capacity-through-alias')['graphs']==6

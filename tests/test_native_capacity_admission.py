@@ -31,6 +31,10 @@ def test_derivative_keeps_original_eligibility_and_exact_pending_set_without_dou
         assert result['documents'][model]['pending_long_graphs']==1
         assert result['documents'][model]['earned_graph_visits']==0
         assert result['training_entrypoints'][model]['native_graphs'].endswith('/fit-sources.json')
+        assert result['training_entrypoints'][model]['held_native_graphs'] is None
+        assert result['training_entrypoints'][model]['pending_held_native_graphs'].endswith('/remaining-long-sources.json')
+        assert result['documents'][model]['fit_held_graphs']==0
+        assert result['documents'][model]['pending_long_held_graphs']==1
         assert not result['training_entrypoints'][model]['execution_qualified']
     with pytest.raises(ValueError,match='new immutable corpus ID'):
         propose(proposal,directory/'receipt.json',declarations,cohort_root=root,identifier='original',output=output)

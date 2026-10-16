@@ -38,12 +38,14 @@ def inside(geometry,limits):
 
 
 def partition(audit_path,samples_path,limits,out):
-    audit_path,samples_path,out=Path(audit_path),Path(samples_path),Path(out)
+    audit_path,samples_path,out=Path(audit_path).resolve(strict=True),Path(samples_path).resolve(strict=True),Path(out).resolve()
     audit_binding={'path':str(audit_path),'sha256':sha256_file_hex(audit_path)}
     samples_binding={'path':str(samples_path),'sha256':sha256_file_hex(samples_path)}
     audit=json.loads(audit_path.read_text());sample=json.loads(samples_path.read_text())
+    sample_audit=sample.get('cohort_audit',{})
     if (audit.get('schema')!='natlang.acquired-session-admission-audit/1' or audit.get('status')!='passed'
-            or sample.get('passed') is not True or sample.get('cohort_audit')!=audit_binding):
+            or sample.get('passed') is not True or sample_audit.get('sha256')!=audit_binding['sha256']
+            or not sample_audit.get('path') or Path(sample_audit['path']).resolve()!=audit_path):
         raise ValueError('capacity partition needs its complete source audit and bound source render samples')
     if (set(limits)!=set(audit['by_model']) or any(set(values)!={'forward_tokens','kv_slots'}
             or any(type(v) is not int or v<1 for v in values.values()) for values in limits.values())):

@@ -50,10 +50,17 @@ def propose(full_proposal, partition_receipt, declarations, *, cohort_root, iden
         entrypoints[model]={'native_graphs':str((directory/receipt['manifests'][model+':train:fit']).relative_to(root)),
             'pending_native_sources':str(path.relative_to(root)),
             'execution_qualified':False,'requires_actual_capacity_certificate':True}
+        # Held rows remain held even when their geometry cannot run yet. Never
+        # feed the complete held aggregate to a learner qualified only for fit.
+        for key, partition in (('held_native_graphs', 'fit'), ('pending_held_native_graphs', 'remaining-long')):
+            manifest=receipt['manifests'].get(model+':test:'+partition)
+            entrypoints[model][key]=str((directory/manifest).relative_to(root)) if manifest else None
         fit=receipt['counts'][model]['train:fit'];long=receipt['counts'][model]['train:remaining-long']
         documents[model]={'source_eligible_graphs':fit['rows']+long['rows'],
             'fit_train_graphs':fit['rows'],'fit_train_tokens':fit['tokens'],
             'pending_long_graphs':long['rows'],'pending_long_tokens':long['tokens'],'earned_graph_visits':0}
+        documents[model].update(fit_held_graphs=receipt['counts'][model]['test:fit']['rows'],
+            pending_long_held_graphs=receipt['counts'][model]['test:remaining-long']['rows'])
     proposal=copy.deepcopy(original);proposal.update(id=identifier,include=sorted(include),documents=documents,
         source_class='capacity-partition-of-admitted-complete-acquired-native-sessions',
         training_entrypoints=entrypoints,

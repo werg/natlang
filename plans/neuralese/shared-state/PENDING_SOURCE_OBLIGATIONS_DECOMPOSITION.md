@@ -48,3 +48,15 @@ inside the transferred corpus on another machine. Returned runtime bindings are
 resolved locally; no DGX absolute source path is required on a sandbox. A new
 portable declaration/proposal version is published rather than modifying a
 previous immutable declaration.
+# Held capacity views
+
+Capacity-derived admission declares a fit held entrypoint separately from a
+protected long held entrypoint, with exact row counts and explicit nulls for
+empty views. The trainer evaluates the fit held view under its measured
+geometry; long held rows retain their test split and remain protected until
+they can be evaluated. They never become training obligations or training
+examples. Crisp proposal construction reuses the existing exact partition
+manifests rather than parsing, changing or silently dropping held graphs.
+Resolve logical cohort symlinks before comparing bound audit paths so a
+registered logical path and its physical data path identify the same evidence.
+
