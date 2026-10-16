@@ -16,7 +16,7 @@ def require_raw_training(state):
     return training
 
 
-def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=True):
+def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=True, verified_checkpoint=None):
     import torch
     from transformers import AutoTokenizer
     from ..train.checkpoint_policy import CheckpointPolicy
@@ -24,7 +24,13 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
     from ..model.shared_state import provision_role_tokenizer
     from ..data.text_corpus import tokenizer_fingerprint
     checkpoint = Path(checkpoint).resolve(strict=True)
-    state = CheckpointPolicy.load(checkpoint)
+    if verified_checkpoint is None:
+        state = CheckpointPolicy.load(checkpoint)
+    else:
+        reference,state=verified_checkpoint
+        if (Path(reference['path']).resolve(strict=True)!=checkpoint or
+                sha256_file_hex_cached(checkpoint)!=reference['sha256']):
+            raise ValueError('reused raw checkpoint state belongs to another exact parent')
     if state.get('schema') != CHECKPOINT_SCHEMA:
         raise ValueError('raw native RL requires an actual single-model native checkpoint')
     if require_optimizer:require_raw_training(state)

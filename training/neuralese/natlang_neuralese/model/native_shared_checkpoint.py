@@ -27,12 +27,12 @@ def _load_raw(path, map_location='cpu'):
     return CheckpointPolicy.load(path, map_location, expand_shared=False)
 
 
-def shared_manifest(path):
+def shared_manifest(path, *, load=None):
     """Read metadata without expanding any participant payloads."""
     with Path(path).open('rb') as stream:
         if stream.read(2) != b'PK':
             return None
-    value = _load_raw(path)
+    value = (_load_raw if load is None else load)(path)
     if not isinstance(value, dict) or value.get('schema') != SHARDED_SCHEMA:
         return None
     if (not isinstance(value.get('participants'), dict) or not value['participants']

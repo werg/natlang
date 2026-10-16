@@ -17,6 +17,8 @@ from natlang_neuralese.train.recipe import native_source_dependencies
 def dependency_closure(request, *, namespace='/work/native-production'):
     files, assets, active_configs, relocations = {}, {}, set(), {}
     consumed_adapters = set()
+    consumed_checkpoints=set()
+    consumed_payloads=set()
     root = Path(namespace).absolute()
 
     def add(path, expected=None):
@@ -69,18 +71,30 @@ def dependency_closure(request, *, namespace='/work/native-production'):
         path = bound(value) if isinstance(value, dict) else add(value)
         selected=request.get('native_participant') if request.get('kind')=='round' else None
         if selected is None and isinstance(value,dict):selected=value.get('participant')
+        context=(selected,semantic_only,tuple(sorted((type(key).__name__,str(key),str(value)) for key,value in relocations.items())))
+        marker=(str(path.resolve()),files[str(path)]['sha256'],context)
+        if marker in consumed_checkpoints:return
+        consumed_checkpoints.add(marker)
+        decoded={}
+        def load_once(child):
+            from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+            key=str(Path(child).resolve())
+            if key not in decoded:decoded[key]=CheckpointPolicy.load(child,expand_shared=False)
+            return decoded[key]
         for digest, child in composite_dependencies(path, participant=selected,
-                semantic_only=semantic_only).items():
+                semantic_only=semantic_only,checkpoint_loader=load_once).items():
             # Bundle resolver may resolve an offload symlink outside the root.
             # Such a dependency needs an explicit portable bundle before use.
             add(child, digest)
             with child.open('rb') as stream:
                 binary = stream.read(2) == b'PK'
-            if binary:
+            payload=(str(child.resolve()),digest,context)
+            if binary and payload not in consumed_payloads:
+                consumed_payloads.add(payload)
                 # Trusted hash-bound native Torch checkpoints use mmap; tensor
                 # payloads stay on disk and are never restored into a model.
                 from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
-                state = CheckpointPolicy.load(child, expand_shared=False)
+                state = load_once(child)
                 training_inputs(state)
                 training_inputs(state.get('training'))
                 training_inputs(state.get('shared_training'))
@@ -93,6 +107,7 @@ def dependency_closure(request, *, namespace='/work/native-production'):
                     if declaration is not None:
                         asset(relocations.get(name,declaration['base']), base=True, expected=declaration['base_inventory'])
                 del state
+            decoded.pop(str(child.resolve()),None)
 
     def graphs(path):
         path = add(path)

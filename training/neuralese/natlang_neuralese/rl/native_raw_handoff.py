@@ -201,7 +201,7 @@ def complete_drain(intent, terminal, checkpoint, out, *, original_slot, resident
     return binding(out)
 
 
-def verify_handoff(reference, *, requirement=None):
+def verify_handoff_metadata(reference, *, requirement=None):
     """Verify bound trusted supervisor evidence, not a generated model assertion."""
     record=json.loads(_bound(reference).read_text())
     if record.get('schema')!=SCHEMA:raise ValueError('raw bootstrap needs an exact original-owner handoff receipt')
@@ -249,6 +249,14 @@ def verify_handoff(reference, *, requirement=None):
                    or any(type(item) is not int or item<0 for item in pin[key]) for key in ('original_inode','pin_inode'))
             or pin['original_inode']==pin['pin_inode']):
         raise ValueError('raw handoff lost its exact independently pinned checkpoint evidence')
+    return record
+
+
+def verify_handoff(reference, *, requirement=None):
+    record=verify_handoff_metadata(reference,requirement=requirement)
+    intent=json.loads(_bound(record['intent']).read_text())
+    identities=[intent['owner'],*intent['children']]
+    checkpoint=_bound(record['checkpoint'])
     # Optimizer/RNG/schema checks are shared with the real actor factory; do not
     # construct a tokenizer/model just to inspect a handoff checkpoint.
     from ..train.checkpoint_policy import CheckpointPolicy
@@ -398,14 +406,16 @@ def prepare_drained_recipe_handoff(handoff, recipe, out, *, package=None):
     return binding(out)
 
 
-def verify_drained_recipe_handoff(reference, *, handoff):
+def verify_drained_recipe_handoff(reference, *, handoff, verified_handoff=None):
     """Recompute the existing policy verifier; a self-consistent receipt is insufficient."""
     from ..train import native_resident as resident
     from ..train.recipe import lineage_handoff
     value=json.loads(_bound(reference).read_text())
     if value.get('schema') not in (RECIPE_HANDOFF,LEGACY_RECIPE_HANDOFF) or value.get('handoff')!=handoff:
         raise ValueError('drained recipe handoff belongs to another original owner')
-    record,saved=verify_handoff(handoff)
+    record,saved=(verify_handoff(handoff) if verified_handoff is None else verified_handoff)
+    if record!=json.loads(_bound(handoff).read_text()):
+        raise ValueError('reused handoff verification belongs to another exact receipt')
     state,original_plan,_=_drained_plan_authority(record,saved);del saved
     if value.get('checkpoint')!=record['checkpoint']:
         raise ValueError('drained recipe handoff changed its exact parent')

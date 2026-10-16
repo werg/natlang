@@ -19,7 +19,7 @@ from .native_composite import SCHEMA, resolve_composite_artifact
 BUNDLE_SCHEMA = 'natlang.native-checkpoint-bundle/1'
 
 
-def composite_dependencies(checkpoint, *, participant=None, semantic_only=False):
+def composite_dependencies(checkpoint, *, participant=None, semantic_only=False, checkpoint_loader=None):
     """Verify every parent/parameter/optimizer/training role without loading weights."""
     current = Path(checkpoint).resolve(strict=True)
     result, seen = {}, set()
@@ -31,7 +31,7 @@ def composite_dependencies(checkpoint, *, participant=None, semantic_only=False)
             prefix = stream.read(1)
         if prefix != b'{':
             from .native_shared_checkpoint import shared_manifest, shared_dependencies
-            manifest = shared_manifest(current)
+            manifest = shared_manifest(current,load=checkpoint_loader)
             if manifest is not None:
                 for source in shared_dependencies(manifest, current, participant=participant,
                                                   semantic_only=semantic_only).values():

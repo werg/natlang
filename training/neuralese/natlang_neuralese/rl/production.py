@@ -743,8 +743,10 @@ def configure_native(args):
             raise ValueError('native RL parent participant and semantic adapter must bind the same actual shared checkpoint')
     else:
         from .native_raw_policy import prepare_raw_policy
+        verified=getattr(args,'verified_native_checkpoint',None)
+        parent_sha=verified[0]['sha256'] if verified is not None else sha256_file_hex(args.checkpoint)
         raw = prepare_raw_policy(args.checkpoint, base=args.base,
-            tokenizer_out=args.out/'actor-tokenizers'/sha256_file_hex(args.checkpoint))
+            tokenizer_out=args.out/'actor-tokenizers'/parent_sha,verified_checkpoint=verified)
     recipe = resolve_recipe_data(args.production_recipe)
     stages = [stage for stage in recipe['stages'] if stage['id'] == args.production_stage]
     if len(stages) != 1 or stages[0]['kind'] not in {'native_state_sft', 'native_state_rl','native_offline_preference'}:

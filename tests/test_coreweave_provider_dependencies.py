@@ -320,3 +320,38 @@ def test_carried_offline_preference_objective_is_exact_consumed_dependency(tmp_p
     else:
         result={row['path'] for row in deps.dependency_closure({'parent_checkpoint':binding},namespace=str(tmp_path))['files']}
         assert result==({str(checkpoint)} if condition=='complete' else {str(checkpoint),source['path'],objective['path']})
+
+
+def test_same_full_checkpoint_is_decoded_once_per_closure_and_keeps_alias_paths(tmp_path,monkeypatch):
+    import torch
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    parent=tmp_path/'parent.pt';torch.save({'schema':'native-bare-test','training':{}},parent)
+    alias=tmp_path/'alias.pt';alias.symlink_to(parent)
+    reference={'path':str(parent),'sha256':deps.sha256_file_hex_cached(parent)}
+    config=write(tmp_path/'config.json',{'models':{'student':{'checkpoint':str(parent)}}})
+    state=write(tmp_path/'state.json',{'checkpoint':str(parent)})
+    actual=CheckpointPolicy.load;calls=[]
+    def load(path,*args,**kwargs):
+        calls.append(str(Path(path).resolve()));return actual(path,*args,**kwargs)
+    monkeypatch.setattr(CheckpointPolicy,'load',load)
+    request={'config':config,'parent_checkpoint':{**reference,'path':str(alias)},'state':state}
+    closure=deps.dependency_closure(request,namespace=str(tmp_path))
+    assert calls==[str(parent)]
+    assert {str(parent),str(alias)}<={item['path'] for item in closure['files']}
+    calls.clear();deps.dependency_closure(request,namespace=str(tmp_path))
+    assert calls==[str(parent)]  # Nothing persists across invocations.
+    alias.unlink();alias.write_text('changed alias')
+    with pytest.raises(ValueError,match='hash changed'):deps.dependency_closure(request,namespace=str(tmp_path))
+
+
+def test_checkpoint_participant_context_is_not_coalesced(tmp_path,monkeypatch):
+    import torch
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    parent=tmp_path/'parent.pt';torch.save({'training':{}},parent)
+    config=write(tmp_path/'config.json',{'models':{'student':{'checkpoint':str(parent)}}})
+    reference={'path':str(parent),'sha256':deps.sha256_file_hex_cached(parent),'participant':'other'}
+    actual=CheckpointPolicy.load;calls=[]
+    def load(path,*args,**kwargs):calls.append(path);return actual(path,*args,**kwargs)
+    monkeypatch.setattr(CheckpointPolicy,'load',load)
+    deps.dependency_closure({'config':config,'parent_checkpoint':reference},namespace=str(tmp_path))
+    assert len(calls)==2

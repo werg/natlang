@@ -41,6 +41,15 @@ def test_raw_policy_identity_and_tokenizer_match_actual_loaded_model_without_con
     assert actual['native_participant'] is None and actual['semantic_adapter_sha256'] is None
     assert tokenizer_fingerprint(AutoTokenizer.from_pretrained(actual['tokenizer']))==config['tokenizer_fingerprint']
     assert torch.equal(before,torch.get_rng_state())
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    saved=CheckpointPolicy.load(checkpoint)
+    monkeypatch.setattr(CheckpointPolicy,'load',lambda *a,**kw:pytest.fail('repeated full-parent deserialization'))
+    reused=prepare_raw_policy(checkpoint,base=base,tokenizer_out=tmp_path/'reused-tokenizer',
+        verified_checkpoint=({'path':str(checkpoint),'sha256':sha256_file_hex(checkpoint)},saved))
+    assert reused['native_identity']==expected and torch.equal(before,torch.get_rng_state())
+    with pytest.raises(ValueError,match='another exact parent'):
+        prepare_raw_policy(checkpoint,base=base,tokenizer_out=tmp_path/'bad-tokenizer',
+            verified_checkpoint=({'path':str(checkpoint),'sha256':'0'*64},saved))
 
 
 @pytest.mark.parametrize('tamper',['weights-only','legacy','roles','tokenizer','rng','schedule'])
@@ -78,7 +87,12 @@ def test_bare_native_factory_keeps_actual_recipe_and_omits_shared_artifact_requi
     args=SimpleNamespace(model='lfm',checkpoint=checkpoint,base=base,semantic_adapter=None,native_participant=None,
         semantic_refresh_config=None,production_stage='native_full',port=8097,
         **{key:tmp_path/key for key in ('seed_native_graphs','held_native_graphs','production_recipe','out','config','cases','runtime')})
-    result=production.configure_native(args)
+    from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
+    saved=CheckpointPolicy.load(checkpoint)
+    args.verified_native_checkpoint=({'path':str(checkpoint),'sha256':sha256_file_hex(checkpoint)},saved)
+    with monkeypatch.context() as reused:
+        reused.setattr(CheckpointPolicy,'load',lambda *a,**kw:pytest.fail('factory reloaded verified native parent'))
+        result=production.configure_native(args)
     assert result['native_actor_mode']=='raw-state' and 'semantic_adapter' not in result
     for command in ('actor_command','learner_command','seed_command'):
         assert '--native-participant' not in result[command] and '--semantic-adapter' not in result[command]
