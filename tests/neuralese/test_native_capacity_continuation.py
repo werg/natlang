@@ -190,3 +190,37 @@ def test_raw_measurement_cannot_forge_an_inherited_memory_allowance(tmp_path,inj
     cert['evidence']=binding(proof);cert_path.write_text(json.dumps(cert));review['source_certificate']=binding(cert_path)
     with pytest.raises(ValueError,match='raw measured cases'):
         invoke(tmp_path,old,new,review)
+
+
+@pytest.mark.parametrize('policy',['metadata','loader-io'])
+def test_loader_io_requires_its_separate_explicit_review_policy(tmp_path,policy):
+    phase,old,new,review,_=metadata_chain(tmp_path)
+    for name in ('checkpoint_policy.py','checkpoint_readahead.py'):
+        (new/'train'/name).write_text('reviewed exact-mapping sequential OS hint\n')
+    review['new_code']=code_inventory(new)
+    review['changes']={name:{'old':review['old_code'].get(name),'new':review['new_code'].get(name)}
+        for name in review['old_code'].keys()|review['new_code'].keys()
+        if review['old_code'].get(name)!=review['new_code'].get(name)}
+    if policy=='metadata':
+        with pytest.raises(ValueError,match='unreviewed forward/runtime'):
+            invoke(phase,old,new,review)
+    else:
+        review['optimizer_policy']=mechanism.LOADER_IO_POLICY
+        result=invoke(phase,old,new,review)
+        certificate=json.loads(result.read_text())
+        evidence=json.loads(Path(certificate['evidence']['path']).read_text())
+        assert evidence['continuation_policy']==mechanism.LOADER_IO_POLICY
+        assert evidence['new_parent_measured'] is False
+        # A later continuation must reverify the distinct I/O policy chain.
+        again=phase/'later';again.mkdir()
+        review.update(source_certificate=binding(result),old_code=code_inventory(new),
+            old_parent_checkpoint_sha256='c'*64,new_parent_checkpoint_sha256='d'*64)
+        later=phase/'next-package'
+        import shutil
+        shutil.copytree(new,later)
+        (later/'train/native_pending_sources.py').write_text('next reviewed scheduling metadata\n')
+        review['new_code']=code_inventory(later)
+        review['changes']={'train/native_pending_sources.py':{
+            'old':review['old_code']['train/native_pending_sources.py'],
+            'new':review['new_code']['train/native_pending_sources.py']}}
+        assert invoke(again,new,later,review).is_file()

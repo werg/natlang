@@ -30,6 +30,15 @@ METADATA_CHANGES = {
     'train/native_readiness.py', 'train/native_resident.py',
     'rl/native_supervised.py', 'rl/production.py',
 }
+LOADER_IO_POLICY = 'native-resident-mmap-advice-v1'
+LOADER_IO_CHANGES = METADATA_CHANGES | {
+    'train/checkpoint_policy.py', 'train/checkpoint_readahead.py',
+}
+
+
+def allowed_changes(policy):
+    return {POLICY: ALLOWED_CHANGES, METADATA_POLICY: METADATA_CHANGES,
+            LOADER_IO_POLICY: LOADER_IO_CHANGES}.get(policy, set())
 
 
 def _memory_allowance(review):
@@ -40,7 +49,7 @@ def _memory_allowance(review):
         if (parameter.get('dtype') != 'torch.float32' or not parameter.get('shape')
                 or any(type(n) is not int or n < 1 for n in parameter['shape'])):
             raise ValueError('capacity continuation requires the unchanged FP32 ordinary layout')
-    if review['optimizer_policy'] == METADATA_POLICY:
+    if review['optimizer_policy'] in {METADATA_POLICY, LOADER_IO_POLICY}:
         extra = review.get('metadata_extra_bytes')
         if (review.get('optimizer_state_unchanged') is not True
                 or type(extra) is not int or extra < (64 << 20)):
@@ -61,7 +70,7 @@ def _proof_cases(reference, *, identity, code_sha, parent, seen=()):
             for name in review['old_code'].keys() | review['new_code'].keys()
             if review['old_code'].get(name) != review['new_code'].get(name)}
         policy = review.get('optimizer_policy')
-        allowed = ALLOWED_CHANGES if policy == POLICY else METADATA_CHANGES if policy == METADATA_POLICY else set()
+        allowed = allowed_changes(policy)
         if (value.get('passed') is not True or value.get('identity') != identity
                 or value.get('runtime_code_sha256') != code_sha or value.get('optimizer_updates') != 0
                 or value.get('new_parent_measured') is not False
@@ -124,7 +133,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     if (review.get('schema') != 'natlang.native-capacity-continuation-review/1'
             or review.get('approved') is not True
             or review.get('parameter_layout_unchanged') is not True
-            or review.get('optimizer_policy') not in {POLICY, METADATA_POLICY}):
+            or review.get('optimizer_policy') not in {POLICY, METADATA_POLICY, LOADER_IO_POLICY}):
         raise ValueError('capacity continuation requires an approved exact optimizer review')
     old, new = code_inventory(old_package), code_inventory(new_package)
     if old != review.get('old_code') or new != review.get('new_code'):
@@ -132,7 +141,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     changes = {name: {'old': old.get(name), 'new': new.get(name)}
         for name in old.keys() | new.keys() if old.get(name) != new.get(name)}
     policy = review['optimizer_policy']
-    allowed = ALLOWED_CHANGES if policy == POLICY else METADATA_CHANGES
+    allowed = allowed_changes(policy)
     if not changes or set(changes) - allowed or changes != review.get('changes'):
         raise ValueError('capacity continuation contains unreviewed forward/runtime changes')
     identity = review['identity']

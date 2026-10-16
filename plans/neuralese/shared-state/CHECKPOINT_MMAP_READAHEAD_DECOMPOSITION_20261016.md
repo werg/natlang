@@ -35,3 +35,14 @@ sequential kernel flag, values/RNG/private-file isolation stayed exact, and
 CUDA allocation remained zero. Exact source SHA and both receipts are in
 `/home/werg/data/dgxops/checkpoint-readahead-cloud-qualification-root-20261016.json`.
 This is target OS/loader mechanism evidence, not full-restore timing evidence.
+
+Capacity continuation uses a distinct `native-resident-mmap-advice-v1` review
+policy; the prior metadata-only policy still rejects loader changes.31 tests
+cover this separation and recursive continuation. Root independently verified
+both actual frozen package inventories (exactly four changed modules), the
+reviewed resident patch, unchanged loader semantics plus the hint, and23/28
+recursive evidence files. A proposal incorrectly named the historic measured
+origin as its current source parent; the verifier rejected it. Approved reviews
+now use the source proof's actual continued parent, retaining the historical
+measurement solely in the evidence chain. Latest production drain identities
+must still be rebound without rollback or a fictitious new measurement.
