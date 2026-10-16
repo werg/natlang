@@ -4,11 +4,12 @@ import torch
 from natlang_neuralese.model.shared_state import graph_attention, AttentionLayout
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(),reason='native sparse CUDA kernel')
-def test_attention_carrier_preserves_forward_and_unrounded_kv_gradient_sum():
+@pytest.mark.parametrize('device',['cpu','cuda'])
+def test_attention_carrier_preserves_forward_and_unrounded_kv_gradient_sum(device):
+    if device=='cuda' and not torch.cuda.is_available(): pytest.skip('native sparse CUDA kernel')
     torch.manual_seed(1701)
-    query=torch.randn(1,2,2,16,device='cuda',dtype=torch.bfloat16,requires_grad=True)
-    key=torch.randn(1,1,5,16,device='cuda',dtype=torch.bfloat16).float().requires_grad_(True)
+    query=torch.randn(1,2,2,16,device=device,dtype=torch.bfloat16,requires_grad=True)
+    key=torch.randn(1,1,5,16,device=device,dtype=torch.bfloat16).float().requires_grad_(True)
     value=torch.randn_like(key).to(torch.bfloat16).float().requires_grad_(True)
     gradient=torch.randn_like(query)
     layout=AttentionLayout((3,4),5)
@@ -19,8 +20,23 @@ def test_attention_carrier_preserves_forward_and_unrounded_kv_gradient_sum():
     assert dk.dtype==dv.dtype==torch.float32
     baseline=torch.autograd.grad(plain,(query,key,value),gradient,retain_graph=True)
     assert torch.equal(dq,baseline[0])
-    assert torch.equal(dk.to(torch.bfloat16).float(),baseline[1])
-    assert torch.equal(dv.to(torch.bfloat16).float(),baseline[2])
+    if device=='cuda':
+        assert torch.equal(dk.to(torch.bfloat16).float(),baseline[1])
+        assert torch.equal(dv.to(torch.bfloat16).float(),baseline[2])
+    else:
+        # Native CPU Flash stores into BF16 after each grouped-query head.
+        # Prove those extra stores account for the baseline, while the carrier
+        # sums the same per-head cotangents before storing the shared result.
+        accumulated=[torch.zeros_like(key),torch.zeros_like(value)]
+        heads=[]
+        for head in range(query.shape[1]):
+            one=graph_attention(query[:,head:head+1],key,value,layout,None,.25)
+            gradients=torch.autograd.grad(one,(key,value),gradient[:,head:head+1],retain_graph=True)
+            heads.append(gradients)
+            accumulated=[(old+new).to(torch.bfloat16).float() for old,new in zip(accumulated,gradients)]
+        for actual,rounded in zip(baseline[1:],accumulated): assert torch.equal(actual,rounded)
+        for actual,parts in zip((dk,dv),zip(*heads)):
+            torch.testing.assert_close(actual.double(),torch.stack([part.double() for part in parts]).sum(0),atol=2e-7,rtol=2e-5)
     partials=[]
     for index in range(2):
         current=graph_attention(query[:,:,index:index+1],key,value,AttentionLayout((3+index,),5),None,.25)

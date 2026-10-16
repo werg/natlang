@@ -89,7 +89,7 @@ def _finite_convolution(kernel, histories, c):
 
 
 def _fp32_kv_cotangents(port, tensor):
-    if tensor.is_cuda and tensor.dtype == torch.bfloat16:
+    if tensor.dtype == torch.bfloat16:
         from .native_adapters import native_fp32_state_cotangents
         return native_fp32_state_cotangents(port)
     return False
@@ -320,6 +320,9 @@ def graph_attention(q, k, v, plan, window, scale, *, flex=None, prepared_mask=No
         result = result[..., :head_width]
         return result if physical_rows is None else result.index_select(2, physical_rows)
 
+    if not q.is_cuda and q.dtype == torch.bfloat16 and k.dtype == v.dtype == torch.float32:
+        from ..common.native_attention_carrier import cpu_kv_carrier_attention
+        return cpu_kv_carrier_attention(q,k,v,mask=prepared_mask if prepared_mask is not None else plan.attention_mask(q.device,window),scale=scale)[..., :head_width]
     return F.scaled_dot_product_attention(q, k, v, attn_mask=prepared_mask if prepared_mask is not None else plan.attention_mask(q.device, window),
                                          scale=scale, enable_gqa=True)[..., :head_width]
 

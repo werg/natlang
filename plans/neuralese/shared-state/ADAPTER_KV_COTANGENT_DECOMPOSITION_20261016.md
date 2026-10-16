@@ -85,3 +85,29 @@ recording and complete remote-eviction restoration. Its adjacent ledger log
 records the final quick check. Prior initial client fixtures omitted the required
 .nz dialect and failed only during serialization; those runs are not claimed
 as passing. The corrected fixture asserts portable source and target actors.
+
+Independent root integration exposed a host-only case: its device setting did
+not set the adapter fixture's `NATLANG_NATIVE_ADAPTER_TEST_DEVICE`, so the model
+ran CPU BF16 and correctly failed the newly unconditional strict parity gate.
+The root rerun with the actual CUDA setting passed all28 cases in105.79s.
+The CPU defect is retained as a real defect rather than waived.
+
+Host correction keeps the actual CPU Flash forward output/LSE and obtains dQ
+from its native backward. Its dK/dV use the same saved LSE/output, BF16-rounded
+probability and score-cotangent operands, with F32 accumulation before shared
+fan-in. This follows the installed PyTorch source revision
+`70d99e998b4955e0049d13a98d77ae1b14db1f45`,
+[CPU Flash backward](https://github.com/pytorch/pytorch/blob/70d99e998b4955e0049d13a98d77ae1b14db1f45/aten/src/ATen/native/cpu/FlashAttentionKernel.cpp).
+The CPU kernel rounds its accumulating grouped-query dK/dV after each head;
+the oracle reconstructs those stores exactly and independently checks that
+removing them gives the FP64 sum of per-head/per-query unrounded cotangents.
+A rejected first prototype recomputed ordinary F32 SDPA derivatives, changing
+dQ despite passing the model test; its failed primitive oracle prevented that
+shortcut from being published. The actual native dQ is now bitwise preserved.
+No GPU fallback or GPU arithmetic is changed by the host correction.
+
+`native-adapter-state-cpu-integration-final-20261016` is terminal PASS:
+29 cases in84.62s across the original three integration files, including the
+CPU model fixtures, CPU exact native derivative/store oracle and unchanged CUDA
+primitive. Its final quick check passed all source/ratchet/type checks. This
+closes the independently found host failure without changing any gate.
