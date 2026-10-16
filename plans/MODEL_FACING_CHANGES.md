@@ -814,3 +814,11 @@ No new prompt policy and no production controller adoption are introduced.
   Literal raw strings stay exact; no payload decoding or prompt is added.
   Live48-sample feedback qualification on admitted TRAIN tasks is pending before
   production adoption; protected evaluation cases are not training inputs.
+
+- 2026-10-16: The acquired D12 feature-status view asks a model to read a full
+  failed-session transcript and copy only the exact source-reported feature
+  statuses and recorded status fields. The desired behavior is faithful
+  extraction without causal diagnosis or repair claims; the full transcript is
+  tool context and failed actions are never positive targets. This new instruction
+  has not yet had the required live 48-sample self-hosted teacher measurement;
+  record fidelity and any misleading wording as debt before production adoption.
