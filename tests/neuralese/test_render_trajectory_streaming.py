@@ -275,3 +275,128 @@ def test_streamed_trajectory_binding_rejects_changed_source(tmp_path, monkeypatc
             stream.write(renderer.canonical(row) + '\n')
     with __import__('pytest').raises(ValueError, match='committed trajectory binding changed'):
         renderer.render_shard(job)
+
+
+def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_ids(tmp_path):
+    from scripts.neuralese_data.strip_generic_system_prompt import strip_row
+    tokenizer = _CharacterChatTokenizer()
+    renderer._G.clear()
+    renderer._G.update({'tok': {'lfm25': tokenizer}, 'pieces': {},
+                        'strip_row': strip_row, 'cross_trajectory_writer_sources': {}})
+    selected = tmp_path / 'selected.jsonl'
+    rows = _trajectory_rows()
+    with write_jsonl_text(selected) as stream:
+        for row in rows:
+            stream.write(renderer.canonical(row) + '\n')
+    out = tmp_path / 'work'
+    renderings = ('whole-trajectory',)
+    job = (str(selected), str(out), 'lfm25', {}, 'fixture', set(), set(), False,
+           None, renderings, False, set())
+    renderer.render_shard(job)
+
+    source_digest = renderer.file_sha(selected)
+    old_renderer_sha = 'a' * 64
+    code_binding = {
+        str(Path(renderer.__file__).resolve()): old_renderer_sha,
+        str(renderer.ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py'):
+            renderer.file_sha(renderer.ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py'),
+        str(renderer.ROOT / 'scripts/neuralese_data/strip_generic_system_prompt.py'):
+            renderer.file_sha(renderer.ROOT / 'scripts/neuralese_data/strip_generic_system_prompt.py'),
+    }
+    old_binding = renderer._render_job_binding(source_digest, 'lfm25', {}, 'fixture', set(), set(), set(),
+                                               False, None, renderings, False, code_binding)
+    trajectory_id = 'trajectory-a'
+    group_id = renderer.sha(trajectory_id.encode())
+    receipt_path = out / 'trajectory-stream' / 'lfm25' / 'selected' / 'receipts' / f'{group_id}.json'
+    old_receipt = json.loads(receipt_path.read_text())
+    old_receipt['binding'] = old_binding
+    old_receipt.pop('renderer_code_sha256')
+    receipt_path.write_text(json.dumps(old_receipt, sort_keys=True) + '\n')
+
+    original_output = _read(out / 'whole-trajectory' / 'lfm25' / 'selected.jsonl')
+    result = renderer.render_shard((*job, old_renderer_sha))
+    assert json.loads(receipt_path.read_text())['binding'] == old_binding
+    assert 'renderer_code_sha256' not in json.loads(receipt_path.read_text())
+    assert result['source_sha256'] == source_digest
+    assert result['group_renderer_code_sha256s'] == sorted({
+        old_renderer_sha, renderer.file_sha(Path(renderer.__file__).resolve())})
+    assert _read(out / 'whole-trajectory' / 'lfm25' / 'selected.jsonl') == original_output
+
+
+def test_old_done_marker_requires_matching_source_and_all_group_bindings(tmp_path):
+    from scripts.neuralese_data.strip_generic_system_prompt import strip_row
+    renderer._G.clear()
+    renderer._G.update({'tok': {'lfm25': _CharacterChatTokenizer()}, 'pieces': {},
+                        'strip_row': strip_row, 'cross_trajectory_writer_sources': {}})
+    selected = tmp_path / 'selected.jsonl'
+    with write_jsonl_text(selected) as stream:
+        for row in _trajectory_rows():
+            stream.write(renderer.canonical(row) + '\n')
+    out = tmp_path / 'work'
+    job = (str(selected), str(out), 'lfm25', {}, 'fixture', set(), set(), False,
+           None, ('whole-trajectory',), False, set())
+    result = renderer.render_shard(job)
+    old_sha = 'b' * 64
+    expected = renderer._legacy_render_job_binding(job, renderer.file_sha(selected), old_sha)
+    receipts_root = out / 'trajectory-stream' / 'lfm25' / 'selected' / 'receipts'
+    for path in receipts_root.glob('*.json'):
+        receipt = json.loads(path.read_text())
+        receipt['binding'] = expected
+        receipt.pop('renderer_code_sha256')
+        path.write_text(json.dumps(receipt, sort_keys=True) + '\n')
+    old_done = {key: value for key, value in result.items()
+                if key not in {'source_sha256', 'renderer_code_sha256', 'group_renderer_code_sha256s'}}
+    renderer._verify_legacy_done_binding(job, old_done, old_sha, renderer.file_sha(selected))
+    with __import__('pytest').raises(ValueError, match='legacy trajectory source/code binding mismatch'):
+        renderer._verify_legacy_done_binding(job, old_done, 'c' * 64, renderer.file_sha(selected))
+
+
+def test_render_subset_selects_only_named_shards():
+    jobs = [
+        ('/selected/0000.jsonl.zst', '/work', 'lfm25'),
+        ('/selected/0001.jsonl.zst', '/work', 'lfm25'),
+        ('/selected/0001.jsonl.zst', '/work', 'mellum21'),
+    ]
+    assert renderer._filter_render_jobs(jobs, ['0001']) == jobs[1:]
+    assert renderer._filter_render_jobs(jobs, None) == jobs
+    with __import__('pytest').raises(ValueError, match='unknown selected shard stems'):
+        renderer._filter_render_jobs(jobs, ['0002'])
+
+
+def test_legacy_done_receipts_are_verified_without_rewriting_them(tmp_path):
+    from scripts.neuralese_data.strip_generic_system_prompt import strip_row
+    renderer._G.clear()
+    renderer._G.update({'tok': {'lfm25': _CharacterChatTokenizer()}, 'pieces': {},
+                        'strip_row': strip_row, 'cross_trajectory_writer_sources': {}})
+    selected = tmp_path / 'selected.jsonl'
+    with write_jsonl_text(selected) as stream:
+        for row in _trajectory_rows():
+            stream.write(renderer.canonical(row) + '\n')
+    out = tmp_path / 'work'
+    job = (str(selected), str(out), 'lfm25', {}, 'fixture', set(), set(), False,
+           None, ('whole-trajectory',), False, set())
+    result = renderer.render_shard(job)
+    source_digest = renderer.file_sha(selected)
+    old_sha = 'c' * 64
+    old_binding = renderer._legacy_render_job_binding(job, source_digest, old_sha)
+    receipts_root = out / 'trajectory-stream' / 'lfm25' / 'selected' / 'receipts'
+    for path in receipts_root.glob('*.json'):
+        receipt = json.loads(path.read_text())
+        receipt['binding'] = old_binding
+        receipt.pop('renderer_code_sha256')
+        path.write_text(json.dumps(receipt, sort_keys=True) + '\n')
+    old_done = {key: value for key, value in result.items()
+                if key not in {'source_sha256', 'renderer_code_sha256', 'group_renderer_code_sha256s'}}
+    before = {path.name: path.read_bytes() for path in receipts_root.glob('*.json')}
+    renderer._verify_legacy_done_binding(job, old_done, old_sha, source_digest)
+    assert {path.name: path.read_bytes() for path in receipts_root.glob('*.json')} == before
+    with __import__('pytest').raises(ValueError, match='legacy trajectory source/code binding mismatch'):
+        renderer._verify_legacy_done_binding(job, old_done, 'd' * 64, source_digest)
+    receipt_path = next(receipts_root.glob('*.json'))
+    receipt = json.loads(receipt_path.read_text())
+    relative = next(iter(receipt['outputs']))
+    output_path = out / 'trajectory-stream' / 'lfm25' / 'selected' / 'groups' / receipt_path.stem / relative
+    original = output_path.read_bytes()
+    output_path.write_bytes(original + b'corrupt')
+    with __import__('pytest').raises(ValueError, match='legacy trajectory output checksum mismatch'):
+        renderer._verify_legacy_done_binding(job, old_done, old_sha, source_digest)

@@ -1236,6 +1236,83 @@ def _trajectory_key(record):
     return str(trajectory) if trajectory is not None else chain_key(record)
 
 
+def _render_job_binding(source_sha, tok_name, blocked, corpus, held_groups, decision_exclude,
+                        target_exclude, header_as_full, full_programs, renderings,
+                        compress_text, code_binding):
+    return sha(canonical({
+        'source_sha256': source_sha, 'tokenizer': tok_name, 'corpus': corpus,
+        'blocked': blocked, 'held_groups': sorted(held_groups),
+        'decision_exclude': sorted(decision_exclude), 'target_exclude': sorted(target_exclude),
+        'header_as_full': header_as_full,
+        'full_programs': None if full_programs is None else sorted(full_programs),
+        'renderings': list(renderings), 'compress_text': compress_text, 'code': code_binding,
+    }).encode())
+
+
+def _render_code_binding(renderer_sha=None):
+    renderer_path = str(Path(__file__).resolve())
+    binding = {
+        renderer_path: file_sha(Path(__file__).resolve()),
+        str(ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py'):
+            file_sha(ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py'),
+        str(ROOT / 'scripts/neuralese_data/strip_generic_system_prompt.py'):
+            file_sha(ROOT / 'scripts/neuralese_data/strip_generic_system_prompt.py'),
+    }
+    if renderer_sha is not None:
+        binding[renderer_path] = renderer_sha
+    return binding
+
+
+def _legacy_render_job_binding(job, source_sha, renderer_sha):
+    (_shard_path, _out_dir, tok_name, blocked, corpus, held_groups, decision_exclude,
+     header_as_full, full_programs, renderings, compress_text, target_exclude, *_rest) = job
+    return _render_job_binding(source_sha, tok_name, blocked, corpus, held_groups,
+                               decision_exclude, target_exclude, header_as_full,
+                               full_programs, renderings, compress_text,
+                               _render_code_binding(renderer_sha))
+
+
+def _verify_legacy_done_binding(job, done_result, renderer_sha, source_digest):
+    shard_path, out_dir, tok_name = Path(job[0]), Path(job[1]), job[2]
+    stem = shard_path.name.removesuffix('.zst').removesuffix('.jsonl')
+    expected = _legacy_render_job_binding(job, source_digest, renderer_sha)
+    receipts_root = out_dir / 'trajectory-stream' / tok_name / stem / 'receipts'
+    receipts = sorted(receipts_root.glob('*.json'))
+    expected_count = done_result.get('trajectories_committed')
+    if not isinstance(expected_count, int) or len(receipts) != expected_count:
+        raise ValueError(f'legacy done marker/trajectory receipt count mismatch: {stem}/{tok_name}')
+    for path in receipts:
+        receipt = json.loads(path.read_text())
+        if receipt.get('binding') != expected:
+            raise ValueError(f'legacy trajectory source/code binding mismatch: {path}')
+        if receipt.get('trajectory_sha256') != path.stem:
+            raise ValueError(f'legacy trajectory identity mismatch: {path}')
+        if receipt.get('renderer_code_sha256') not in (None, renderer_sha):
+            raise ValueError(f'legacy trajectory renderer identity mismatch: {path}')
+        group_dir = path.parent.parent / 'groups' / path.stem
+        outputs = receipt.get('outputs')
+        if not isinstance(outputs, dict) or not outputs:
+            raise ValueError(f'legacy trajectory receipt has no output checksums: {path}')
+        for relative, digest in outputs.items():
+            output_path = group_dir / relative
+            if not output_path.is_file():
+                raise ValueError(f'legacy trajectory output missing: {output_path}')
+            if file_sha(output_path) != digest:
+                raise ValueError(f'legacy trajectory output checksum mismatch: {output_path}')
+
+
+def _filter_render_jobs(jobs, selected_shards):
+    if selected_shards is None:
+        return list(jobs)
+    requested = set(selected_shards)
+    available = {Path(job[0]).name.removesuffix('.zst').removesuffix('.jsonl') for job in jobs}
+    unknown = sorted(requested - available)
+    if unknown:
+        raise ValueError(f'unknown selected shard stems: {unknown[:8]}')
+    return [job for job in jobs
+            if Path(job[0]).name.removesuffix('.zst').removesuffix('.jsonl') in requested]
+
+
 def render_shard(job):
     """Render one selected shard with bounded, trajectory-scoped memory.
 
@@ -1256,21 +1333,16 @@ def render_shard(job):
     groups_root, receipts_root = outer / 'groups', outer / 'receipts'
     groups_root.mkdir(parents=True, exist_ok=True)
     receipts_root.mkdir(parents=True, exist_ok=True)
-    source_sha = file_sha(shard_path)
-    code_binding = {
-        str(Path(__file__).resolve()): file_sha(Path(__file__).resolve()),
-        str(ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py'):
-            file_sha(ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py'),
-        str(ROOT / 'scripts/neuralese_data/strip_generic_system_prompt.py'):
-            file_sha(ROOT / 'scripts/neuralese_data/strip_generic_system_prompt.py'),
-    }
-    job_binding = sha(canonical({
-        'source_sha256': source_sha, 'tokenizer': tok_name, 'corpus': corpus,
-        'blocked': blocked, 'held_groups': sorted(held_groups),
-        'decision_exclude': sorted(decision_exclude), 'target_exclude': sorted(target_exclude),
-        'header_as_full': header_as_full, 'full_programs': None if full_programs is None else sorted(full_programs),
-        'renderings': list(renderings), 'compress_text': compress_text, 'code': code_binding,
-    }).encode())
+    source_file_sha = file_sha(shard_path)
+    code_binding = _render_code_binding()
+    renderer_code_sha = code_binding[str(Path(__file__).resolve())]
+    job_binding = _render_job_binding(source_file_sha, tok_name, blocked, corpus, held_groups, decision_exclude,
+                                      target_exclude, header_as_full, full_programs, renderings,
+                                      compress_text, code_binding)
+    legacy_renderer_sha = storage_options[2] if len(storage_options) > 2 else None
+    legacy_job_binding = None
+    if legacy_renderer_sha:
+        legacy_job_binding = _legacy_render_job_binding(job, source_file_sha, legacy_renderer_sha)
 
     with tempfile.TemporaryDirectory(prefix=f'natlang-{stem}-', dir=outer) as temporary:
         db = sqlite3.connect(str(Path(temporary) / 'rows.sqlite'))
@@ -1336,7 +1408,9 @@ def render_shard(job):
         _G['cross_trajectory_writer_sources'] = cross_writers
         trajectory_count = db.execute('SELECT COUNT(*) FROM (SELECT trajectory FROM rows GROUP BY trajectory)').fetchone()[0]
         aggregate = {'shard': stem, 'tokenizer': tok_name, 'records': total,
-                     'trajectory_groups': trajectory_count, 'streaming': True}
+                     'trajectory_groups': trajectory_count, 'streaming': True,
+                     'source_sha256': source_file_sha, 'renderer_code_sha256': renderer_code_sha}
+        group_renderer_shas = set()
 
         def accumulate(result):
             for key, value in result.items():
@@ -1375,7 +1449,16 @@ def render_shard(job):
             expected_receipt = None
             if receipt_path.is_file():
                 expected_receipt = json.loads(receipt_path.read_text())
-                if expected_receipt.get('binding') != binding:
+                receipt_binding = expected_receipt.get('binding')
+                if receipt_binding == binding:
+                    receipt_renderer_sha = expected_receipt.get('renderer_code_sha256', renderer_code_sha)
+                    if receipt_renderer_sha != renderer_code_sha:
+                        raise ValueError(f'trajectory receipt renderer identity changed: {trajectory}')
+                elif legacy_job_binding is not None and receipt_binding == legacy_job_binding:
+                    receipt_renderer_sha = expected_receipt.get('renderer_code_sha256', legacy_renderer_sha)
+                    if receipt_renderer_sha != legacy_renderer_sha:
+                        raise ValueError(f'legacy trajectory receipt renderer identity changed: {trajectory}')
+                else:
                     raise ValueError(f'committed trajectory binding changed: {trajectory}')
                 valid = True
                 for relative, digest in expected_receipt.get('outputs', {}).items():
@@ -1387,6 +1470,7 @@ def render_shard(job):
                     raise ValueError(f'committed trajectory output checksum mismatch: {trajectory}')
             if expected_receipt is not None:
                 accumulate(expected_receipt['result'])
+                group_renderer_shas.add(receipt_renderer_sha)
                 del group_rows
                 continue
             if group_dir.exists():
@@ -1431,8 +1515,10 @@ def render_shard(job):
                     outputs[str(path.relative_to(group_dir))] = file_sha(path)
             group_receipt = {'schema': 'natlang.native-turn-trajectory-render/1',
                              'binding': binding, 'trajectory_sha256': sha(trajectory.encode()),
+                             'renderer_code_sha256': renderer_code_sha,
                              'source_record_ids': source_ids, 'outputs': outputs, 'result': result}
             write_json_durable(receipt_path, group_receipt)
+            group_renderer_shas.add(renderer_code_sha)
             accumulate(result)
 
         # Sort the materialized trajectory outputs back into exact selected
@@ -1504,6 +1590,7 @@ def render_shard(job):
         os.replace(omission_tmp, omission_path)
         db.close()
         aggregate['trajectories_committed'] = trajectory_count
+        aggregate['group_renderer_code_sha256s'] = sorted(group_renderer_shas)
         write_done(out_dir, tok_name, stem, aggregate)
         return aggregate
 
@@ -1689,7 +1776,24 @@ def main(argv=None):
     p.add_argument('--full-sample', type=float, default=0.05,
                    help='fraction of programs (stratified by family) that also get the full rendering, the warm-up '
                         'share; 1.0 renders full for every program (the old behaviour)')
+    p.add_argument('--render-shards', nargs='*', default=None,
+                   help='render only these existing selected shard stems; requires --render-only')
+    p.add_argument('--render-only', action='store_true',
+                   help='render the selected shard subset and leave merge/final publication for a later pass')
+    p.add_argument('--finalize-only', action='store_true',
+                   help='merge already completed shard outputs; fail unless every shard/tokenizer pair is done')
+    p.add_argument('--legacy-renderer-sha256',
+                   help='explicit prior renderer identity whose exact trajectory receipts may be reused on resume; '
+                        'the final receipt preserves it separately from this renderer')
     a = p.parse_args(argv)
+    if a.render_only != (a.render_shards is not None):
+        p.error('--render-only and --render-shards must be supplied together')
+    if a.render_only and not a.render_shards:
+        p.error('--render-only requires at least one --render-shards stem')
+    if a.finalize_only and a.render_only:
+        p.error('--finalize-only cannot be combined with --render-only')
+    if a.legacy_renderer_sha256 is not None and not re.fullmatch(r'[0-9a-f]{64}', a.legacy_renderer_sha256):
+        p.error('--legacy-renderer-sha256 must be a lowercase SHA-256 digest')
     if a.verify_admission_only:
         verified = registered_candidate_selection_admission(a.corpus_id, a.source)
         if verified is None:
@@ -1762,19 +1866,47 @@ def main(argv=None):
     for path in a.target_exclude_ids:
         target_exclude.update(json.loads(line)['id'] for line in jsonl_lines(path) if line.strip())
     full_set = None if full_programs is None else set(full_programs)
-    jobs = [(str(shard_paths[s]), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
-             a.program_header_as_full, full_set, tuple(a.renderings), a.compress_text, target_exclude)
+    all_jobs = [(str(shard_paths[s]), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
+                 a.program_header_as_full, full_set, tuple(a.renderings), a.compress_text, target_exclude,
+                 a.legacy_renderer_sha256)
             for s in shards for name in tokenizers]
+    if a.render_shards is not None:
+        if len(a.render_shards) != len(set(a.render_shards)):
+            p.error('--render-shards contains duplicate stems')
+        try:
+            jobs = _filter_render_jobs(all_jobs, a.render_shards)
+        except ValueError as exc:
+            p.error(str(exc))
+    else:
+        jobs = all_jobs
     results = []
     pending = []
     for job in jobs:
         done = out / 'work' / 'done' / job[2] / f"{Path(job[0]).name.removesuffix('.zst').removesuffix('.jsonl')}.json"
         if done.exists():
-            results.append(json.loads(done.read_text()))
+            result = json.loads(done.read_text())
+            source_path = Path(job[0])
+            source_digest = file_sha(source_path)
+            if result.get('source_sha256') is not None and result['source_sha256'] != source_digest:
+                raise ValueError(f'completed shard source changed: {source_path}')
+            if result.get('renderer_code_sha256') is None:
+                if a.legacy_renderer_sha256 is None:
+                    raise ValueError(f'completed shard lacks renderer identity; supply the exact legacy SHA: {done}')
+                _verify_legacy_done_binding(job, result, a.legacy_renderer_sha256, source_digest)
+                result['renderer_code_sha256'] = a.legacy_renderer_sha256
+                result['group_renderer_code_sha256s'] = [a.legacy_renderer_sha256]
+            elif result['renderer_code_sha256'] != file_sha(Path(__file__).resolve()):
+                raise ValueError(f'completed shard renderer identity is neither current nor explicitly legacy: {done}')
+            elif result.get('source_sha256') is None:
+                raise ValueError(f'completed shard lacks its source identity: {done}')
+            result.setdefault('source_sha256', source_digest)
+            results.append(result)
         else:
             pending.append(job)
+    if a.finalize_only and pending:
+        raise ValueError(f'cannot finalize: {len(pending)} shard/tokenizer outputs lack durable done receipts')
     print(json.dumps({'jobs': len(jobs), 'already_done': len(results)}), flush=True)
-    jobs = pending
+    jobs = [] if a.finalize_only else pending
     # ProcessPoolExecutor, not multiprocessing.Pool: a worker killed by the container's OOM killer makes the pool
     # raise BrokenProcessPool (the unit fails visibly and a relaunch resumes the finished shards) instead of
     # waiting forever for the lost shard (view-ask render, 2026-10-12).
@@ -1786,6 +1918,14 @@ def main(argv=None):
             if i % 8 == 0:
                 print(json.dumps({'done': i + 1, 'of': len(jobs), 'last': res.get('shard'),
                                   'seconds': round(time.time() - t0)}), flush=True)
+    if a.render_only:
+        print(json.dumps({'render_only_complete': True, 'shards': sorted(set(a.render_shards)),
+                          'outputs': len(results)}), flush=True)
+        return
+    if not a.finalize_only and a.render_shards is not None:
+        p.error('subset rendering requires --render-only')
+    if len(results) != len(all_jobs):
+        raise ValueError(f'finalization requires all {len(all_jobs)} shard/tokenizer receipts; found {len(results)}')
     _init(tokenizers, pieces)
     renders = {}
     for mode in a.renderings:
@@ -1841,6 +1981,14 @@ def main(argv=None):
             ROOT / 'training/neuralese/natlang_neuralese/data/prompt_rendering.py',
             ROOT / 'training/prompt-pieces/pieces.json',
             ROOT / 'training/neuralese/natlang_neuralese/serve/chat.py')},
+        'renderer_code_scope': 'finalizer code plus per-shard worker identities below',
+        'shard_renderers': sorted(
+            ({'shard': res['shard'], 'tokenizer': res['tokenizer'],
+              'source_sha256': res['source_sha256'],
+              'renderer_code_sha256': res['renderer_code_sha256'],
+              'group_renderer_code_sha256s': res.get('group_renderer_code_sha256s',
+                                                     [res['renderer_code_sha256']])}
+             for res in results), key=lambda item: (item['shard'], item['tokenizer'])),
         'selection': dict(counts),
         'renderings': list(a.renderings),
         'full_sample': {'fraction': a.full_sample, 'programs': None if full_programs is None else len(full_programs),

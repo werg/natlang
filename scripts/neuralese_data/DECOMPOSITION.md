@@ -231,3 +231,12 @@ renderer first inserts source rows into the unindexed spool, then builds the
 same two indexes and runs the existing queries. A per-worker 64 MiB SQLite
 page cache bounds page retention while indexes are built and queried. The
 reference materialized renderer remains the behavioral oracle for output bytes.
+
+Cutover plumbing can render an explicit set of already-selected shard stems and
+return without merging. Finalization is a separate exact pass which requires a
+durable completion receipt for every shard/tokenizer pair. A legacy trajectory
+receipt is reused only when its existing binding recomputes exactly from the
+source SHA, render parameters, dependency SHAs, and an explicitly supplied old
+renderer SHA; the receipt itself is never rewritten. The final corpus receipt
+lists source and actual renderer SHA per shard, including mixed old/new
+shards, while its top-level renderer identity names the finalizer.
