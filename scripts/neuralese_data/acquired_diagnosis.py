@@ -136,6 +136,9 @@ def d12_feature_status_diagnoses(limit=None):
             original_note=original.lineage.get('notes',{}).get('original_cooperation_context',{})
             if not isinstance(original_note,dict):
                 raise Reject('D12 status view lacks original source binding')
+            if (original_note.get('context')!='final'
+                    and original_note.get('final_duplicate_of')!=original_note.get('context')):
+                raise Reject('D12 status view requires the complete final transcript, not a partial segment')
             source_binding={'original_id':source_id,
                 'source_path':original_note.get('path'),
                 'source_context':original_note.get('context'),

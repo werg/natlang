@@ -124,3 +124,13 @@ def test_d12_status_rejects_inconsistent_or_unstructured_reports(monkeypatch):
             lambda evaluation=evaluation:iter([('source-id',d12_session(evaluation))]))
         _,result=next(diagnosis.d12_feature_status_diagnoses())
         assert isinstance(result,Reject)
+
+
+def test_d12_status_requires_complete_final_context(monkeypatch):
+    evaluation={'both_passed':False,'feature1':{'passed':True},'feature2':{'passed':False}}
+    session=d12_session(evaluation)
+    session.lineage['notes']['original_cooperation_context'].update(context='segment:0',final_duplicate_of=None)
+    monkeypatch.setattr('neuralese_data.acquired_archives.cooper_archive_acquired',
+        lambda:iter([('source-id',session)]))
+    _,result=next(diagnosis.d12_feature_status_diagnoses())
+    assert isinstance(result,Reject) and 'complete final transcript' in str(result)
