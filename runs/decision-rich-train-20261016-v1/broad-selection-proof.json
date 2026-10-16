@@ -1,0 +1,210 @@
+{
+  "scope": "existing admitted native source programs for stronger teacher collection; outputs require separate actual oracle/quality admission",
+  "cases": 56,
+  "cases_sha256": "5f67f3f9f9c6327b026df74188b5fe379b90a2ceaa61cd006630a9f615b2da5c",
+  "family_counts": {
+    "('port-record-calls-s3-20261011-v1', 'port_record_calls')": 4,
+    "('external-expansion-first-wave-20261014-v1', 'port_record_calls')": 4,
+    "('external-expansion-codeagent-native-20261014-v1', 'port_record_calls')": 4,
+    "('external-expansion-gatc-native-20261014-v1', 'port_record_calls')": 4,
+    "('external-expansion-agentic-coding-repeated-id-repair-20261014-v1', 'port_record_calls')": 1,
+    "('external-expansion-agentic-coding-native-20261014-v2', 'port_record_calls')": 4,
+    "('external-expansion-evidence-terminal-native-20261015-v2', 'port_record_calls')": 4,
+    "('static-s7k-curated-native-20261015-v1', 'decision_skill_catalog')": 4,
+    "('external-expansion-agentsynth-native-20261015-v1', 'port_record_calls')": 4,
+    "('external-expansion-deepnlp-native-20261015-v1', 'port_record_calls')": 3,
+    "('external-expansion-rightfit-native-20261015-v2', 'port_record_calls')": 4,
+    "('external-expansion-rightfit-native-long-20261015-v1', 'port_record_calls')": 4,
+    "('external-expansion-deepdive-native-20261015-v1', 'port_record_calls')": 4,
+    "('external-expansion-deepdive-native-long-20261015-v1', 'port_record_calls')": 4,
+    "('external-expansion-search-owl-native-20261015-v1', 'port_record_calls')": 4
+  },
+  "omissions": {
+    "nontrain": 6
+  },
+  "source_files": {
+    "/home/werg/natlang/data/neuralese/corpora/port-record-calls-s3-20261011-v1/turns/agent_continuation_household/00000.turns.jsonl.zst": {
+      "corpus_id": "port-record-calls-s3-20261011-v1",
+      "sha256": "401c0a9e3b4e2951b4a450843959fd54093038a8f7959b909bd2782b9a2b589d",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:agent_continuation_household-2069bf75b7c49bc6146b:iterate-records/1",
+        "inline-curriculum:port_record_calls:agent_continuation_household-6403da2541bcb9cb0425:iterate-records/1",
+        "inline-curriculum:port_record_calls:agent_continuation_household-02cb3cb0d2e5b833931a:iterate-records/1",
+        "inline-curriculum:port_record_calls:agent_continuation_household-19b86ccb7291dfe912d5:iterate-records/1"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/external-expansion-first-wave-20261014-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst": {
+      "corpus_id": "external-expansion-first-wave-20261014-v1",
+      "sha256": "3756a14ee0d516e940088099298a8019e323c13034b2b455633968039896894e",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-c82bff68ccb533bad69e:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-d65d69a4e6b26a25fbe6:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-2ad92d316bd45c6c0120:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-5ba10200abbae57d211a:iterate-records/1"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/external-expansion-codeagent-native-20261014-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst": {
+      "corpus_id": "external-expansion-codeagent-native-20261014-v1",
+      "sha256": "2863eb9a4df678aac1b891e35c73e3bc0a8f595c765d1c0715ffd59a368843e8",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-8a7b4c147c014aab4b53:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-181f70875ae5f0460536:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-87eb595f0d68ed665c2a:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-53bc040522fb903c489f:iterate-records/1"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/external-expansion-gatc-native-20261014-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst": {
+      "corpus_id": "external-expansion-gatc-native-20261014-v1",
+      "sha256": "913f480adf6586ee26eb8a26c351f76bf7d03e1edc3a9f5b005b9dc1bf06c220",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-cb5cca379f2cb6fce441:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-65422a63e48c9548273b:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-a4a1328fa34d711d1a18:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-1882bcb1f76ab9a62be1:iterate-records/1"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/external-expansion-agentic-coding-repeated-id-repair-20261014-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst": {
+      "corpus_id": "external-expansion-agentic-coding-repeated-id-repair-20261014-v1",
+      "sha256": "03dca5e512ffeec9564b44715574db97469a961d9ff9e7dcf2455b7b7365399d",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-1cea310e6c3bd88296d6:iterate-records/1"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/external-expansion-agentic-coding-native-20261014-v2/identity-repair/turns/trajectory_continuation_coding/00000.turns.jsonl.zst": {
+      "corpus_id": "external-expansion-agentic-coding-native-20261014-v2",
+      "sha256": "0203b55497ca45f1904dbae72a996e8d139313b784b30dbd6599b098de76a141",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-19d97f94298786aa062a:iterate-records/1:content:2d681ad83f7e742ef6ae",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-70f7b8f6dd6d3bf632bc:iterate-records/1:content:71eb8b305f46e604a27d",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-9b4e8c44bbfcf3f6e2ff:iterate-records/1:content:0af40a6e926a04dfa902",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-4f813cbdffeb40583439:iterate-records/1:content:9608374f840b218f2364"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/external-expansion-evidence-terminal-native-20261015-v2/turns/trajectory_continuation_coding/00000.turns.jsonl.zst": {
+      "corpus_id": "external-expansion-evidence-terminal-native-20261015-v2",
+      "sha256": "378e10c49c4e3787899e557e796e202e378425713a127a9f3279d289e7435c04",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-86d4b9920b7591ce0735:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-39185cd5b20e4243808c:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-4e2875dc588f2e36f718:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-ab0b915da5ff6ae0e9fc:iterate-records/1"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/static-s7k-curated-native-20261015-v1/turns/static_reference/00000.turns.jsonl.zst": {
+      "corpus_id": "static-s7k-curated-native-20261015-v1",
+      "sha256": "a3983a952c893dcd9b8da958dac29ef39c17b9c3c82efbc9bf1a149e74904922",
+      "program_ids": [
+        "inline-curriculum:authored-bounded-decisions-v1:decision_skill_catalog:s7001-0:catalog",
+        "inline-curriculum:authored-bounded-decisions-v1:decision_skill_catalog:s7001-1:catalog",
+        "inline-curriculum:authored-bounded-decisions-v1:decision_skill_catalog:s7001-2:catalog",
+        "inline-curriculum:authored-bounded-decisions-v1:decision_skill_catalog:s7001-3:catalog"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/external-expansion-agentsynth-native-20261015-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst": {
+      "corpus_id": "external-expansion-agentsynth-native-20261015-v1",
+      "sha256": "cce097a4580e2f8ad6e804b62ca28435204197e84919d661ba3e03c6718d1072",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-925453f2c3c7269c2ace:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-9e225901076762838742:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-95a3d659e0b89d7455b5:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-af8b5579b957a4a50969:iterate-records/1"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/external-expansion-deepnlp-native-20261015-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst": {
+      "corpus_id": "external-expansion-deepnlp-native-20261015-v1",
+      "sha256": "347081a223532059bdd572c0edb5faa9cd4d28d8a9832e26581a5a9d4ecb72cf",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-1c022bdcadf9fec98d87:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-b546399e287fc6f73a64:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-0cd27e45f4d4c0fd4e88:iterate-records/1"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/external-expansion-rightfit-native-20261015-v2/turns/trajectory_continuation_coding/00000.turns.jsonl.zst": {
+      "corpus_id": "external-expansion-rightfit-native-20261015-v2",
+      "sha256": "7aac1817aada5c24ce7fd371fc1e80764cadc84f7adafa450740e3013bf22be7",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-73929a98e60e3456299b:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-f9fdfe243f44510196f6:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-fad46c1ae3437c64c4bc:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-8cd4f8a5a860de885ca4:iterate-records/1"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/external-expansion-rightfit-native-long-20261015-v1/turns/trajectory_continuation_coding/00000.turns.jsonl.zst": {
+      "corpus_id": "external-expansion-rightfit-native-long-20261015-v1",
+      "sha256": "2d54b035487d6fab2cf5c5ee8143c0b2b31f297c7f954531b6351a78c4a33b73",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-a200353b9248c54eeac7:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-8dc678c5f1e7463b663e:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-4e3d920afc01e871dea8:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_coding-4c5d87886d7bebdf6ff2:iterate-records/1"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/external-expansion-deepdive-native-20261015-v1/turns/trajectory_continuation_research/00000.turns.jsonl.zst": {
+      "corpus_id": "external-expansion-deepdive-native-20261015-v1",
+      "sha256": "74f6bc53f2edd6e2d01559a02296aba103617ee99f3267f951be00798d7c9b0f",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:trajectory_continuation_research-a90fdb301a74cbe5bc0f:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_research-4964f044d01ce8aefd32:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_research-44c82420a33186831623:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_research-6d138acad0ed5d233670:iterate-records/1"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/external-expansion-deepdive-native-long-20261015-v1/turns/trajectory_continuation_research/00000.turns.jsonl.zst": {
+      "corpus_id": "external-expansion-deepdive-native-long-20261015-v1",
+      "sha256": "2b7fd69f748ec984939346b78969bcf62b85e0e62401474c1dcba4b389839243",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:trajectory_continuation_research-8472c675b149b593f2e9:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_research-1a5a62c380d7ae7a17e6:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_research-b877f79d0ce4393f8d25:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_research-d95d1403b45a64c4dc86:iterate-records/1"
+      ]
+    },
+    "/home/werg/natlang/data/neuralese/corpora/external-expansion-search-owl-native-20261015-v1/search-owl-native-20261015/turns/trajectory_continuation_research/00000.turns.jsonl.zst": {
+      "corpus_id": "external-expansion-search-owl-native-20261015-v1",
+      "sha256": "434c72b7fb09b474c12e163dba252d572b3afa10c857a33d0ddfcfd1c2a45d09",
+      "program_ids": [
+        "inline-curriculum:port_record_calls:trajectory_continuation_research-4732d8b5c4e89f4d582b:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_research-32226730bdc8c047ed80:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_research-b7fb28cb00f03ad46a97:iterate-records/1",
+        "inline-curriculum:port_record_calls:trajectory_continuation_research-34b659dbe37d44b76963:iterate-records/1"
+      ]
+    }
+  },
+  "corpus_registry_sha256": "5b8af89a121e0accce4b87070e5f7df65809c37faa02367d2c9da1dc9f651197",
+  "source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+  "protection_files": [
+    {
+      "path": "/home/werg/data/e2e-current-protection-bundle-20261015-v1/held-union/full/source-groups/text-data.jsonl",
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac"
+    },
+    {
+      "path": "/home/werg/data/e2e-current-protection-bundle-20261015-v1/held-union/program-header/source-groups/text-data.jsonl",
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac"
+    },
+    {
+      "path": "/home/werg/data/e2e-current-protection-bundle-20261015-v1/held-union/whole-trajectory/source-groups/text-data.jsonl",
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac"
+    },
+    {
+      "path": "/home/werg/data/e2e-current-protection-bundle-20261015-v1/quality-groups.jsonl",
+      "sha256": "8138b7bb7315b4c04d7ead764fbc041cd90bea7d5502deb47732e9167d942dae"
+    }
+  ],
+  "decision_hold_bindings": [
+    {
+      "kind": "decision-hold",
+      "path": "/home/werg/natlang/training/decision-holds/native-non-success-20261015-v1.jsonl",
+      "sha256": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177",
+      "bytes": 2569
+    },
+    {
+      "kind": "decision-hold",
+      "path": "/home/werg/natlang/training/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+      "sha256": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9",
+      "bytes": 2047232
+    }
+  ],
+  "held_quality_groups": 70983,
+  "pending_review_groups": 398,
+  "held_and_pending_intersections": 0
+}

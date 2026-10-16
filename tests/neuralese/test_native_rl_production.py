@@ -191,6 +191,7 @@ def test_native_factory_retains_full_recipe_budget_and_uses_headless_actor(tmp_p
 
 
 def test_bootstrap_binds_actual_export_and_train_files_then_preserves_hot_configs(tmp_path, monkeypatch):
+    import shutil
     from natlang_neuralese.train import native_readiness, recipe
     parent = tmp_path/'joint.pt'; parent.write_bytes(b'fixture-parent')
     def artifact(name, value):
@@ -218,13 +219,25 @@ def test_bootstrap_binds_actual_export_and_train_files_then_preserves_hot_config
     monkeypatch.setattr(recipe, 'resolve_recipe_data', production_recipe)
     runtime = tmp_path/'runtime/dist/teacher'; runtime.mkdir(parents=True)
     (runtime/'cli.js').write_text('// fixture build')
+    source_dir = tmp_path/'published-rl-task-source'
+    source_dir.mkdir()
+    published = Path(__file__).resolve().parents[2] / 'runs/decision-rich-train-20261016-v1'
+    for name in ('cases.jsonl', 'union-audit.json', 'broad-selection-proof.json', 'task-source-manifest.json'):
+        shutil.copyfile(published/name, source_dir/name)
+    from natlang_neuralese.rl.task_source import resolve_task_source
+    task_source = resolve_task_source(source_dir/'task-source-manifest.json')
+    task_source_binding = {'manifest': str(task_source['manifest']),
+        'manifest_sha256': task_source['manifest_sha256'], 'cases_sha256': task_source['cases_sha256'],
+        'rows': task_source['rows'], 'audit_sha256': task_source['audit_sha256'],
+        'selection_proof_sha256': task_source['selection_proof_sha256']}
     models = []
     for model in ('lfm', 'mellum'):
         models.append({'model': model, 'production_recipe': artifact(model+'-recipe.json', {}),
             'production_stage': 'native_full_sft', 'base': str(tmp_path/'base'),
             'seed_native_graphs': artifact(model+'-train.jsonl', {'fixture': 'train'}),
             'held_native_graphs': artifact(model+'-held.jsonl', {'fixture': 'held'}),
-            'cases': artifact(model+'-cases.jsonl', {'id': model, 'split': 'train'}),
+            'cases': {'path': str(task_source['cases']), 'sha256': task_source['cases_sha256']},
+            'task_source': task_source_binding,
             'runtime': str(runtime.parent.parent), 'port': 8097 if model == 'lfm' else 8098})
     plan = tmp_path/'bootstrap-plan.json'
     plan.write_text(json.dumps({'schema': 'natlang.native-rl-bootstrap/1', 'models': models}))
@@ -234,12 +247,14 @@ def test_bootstrap_binds_actual_export_and_train_files_then_preserves_hot_config
     assert first['native_participant'] == 'actual-lfm-id'
     assert first['checkpoint'] == str(parent)
     assert first['bootstrap_binding']['adapter_sha256'] == adapter['sha256']
+    assert first['task_source'] == task_source_binding
+    assert all(json.loads(path.read_text())['cases'] == models[0]['cases']['path'] for path in configs)
     first['workers'] = 7; configs[0].write_text(json.dumps(first))
     native_rounds.bootstrap_configs(plan, completion, tmp_path/'rl')
     assert json.loads(configs[0].read_text())['workers'] == 7
     Path(models[0]['cases']['path']).write_text('{}')
     # Even an unchanged plan rechecks admitted artifacts before reuse.
-    with pytest.raises(ValueError, match='artifact changed'):
+    with pytest.raises(ValueError, match='changed from its manifest binding'):
         native_rounds.bootstrap_configs(plan, completion, tmp_path/'rl')
 
 

@@ -121,13 +121,16 @@ computes real learner configs from the completed export, not future checkpoint
 hashes. Restart verifies the declared artifacts and preserves useful edits to
 already generated controller configs.
 
-The existing admitted S7 task source is
-`/home/werg/natlang/runs/decision-rich-train-20261005-v2/cases.jsonl`, SHA-256
-`6f2a470a8de79d4fb9966fc5a5157ebdf16d3c58a02ae034322a2bdfcde20dca`
-(72 train rows, registered source `clef-rich-source-20261005-v1`). Its actual
-sandbox mirror must be staged and verified before use; declaring a remote path
-is not a transfer. Native graph and full-pair curriculum bindings come from
-the admitted production conversion manifests. With no useful selected tasks,
+The current RL task source is the integrity-bound
+`runs/decision-rich-train-20261016-v1/task-source-manifest.json`: 128 train
+tasks, SHA-256 `d99a1c0fca902a811fa95a9107345875d2f7e504bda9221dfc49cbc8a2026e9a`.
+It retains all 72 registered S7 tasks and adds 56 admitted broad tasks. Its
+manifest binds the exact union audit and broad-selection proof, and the same
+case SHA is placed into both model bootstrap entries. The separately pending
+12-task executor qualification is not included. Stage and verify the manifest
+and its declared files on the sandbox before use; declaring a remote path is
+not a transfer. Native graph and full-pair curriculum bindings come from the
+admitted production conversion manifests. With no useful selected tasks,
 the continuous controller closes actor leases and checks for new work every
 minute. This wait does not count as production completion.
 
@@ -200,7 +203,7 @@ python -m natlang_neuralese.train.native_deployment \
   --release /work/native-production/shared/deployment/live-release.json \
   --curriculum /work/native-production/runtime/training/neuralese/recipes/native-state-semantic-curriculum-rest27-foundation-20261015-v1.json \
   --out /work/native-production/shared/deployment \
-  --cases /work/native-production/data/decision-rich-train-20261005-v2/cases.jsonl \
+  --task-source-manifest /work/native-production/data/decision-rich-train-20261016-v1/task-source-manifest.json \
   --runtime /work/native-runtime/e4dd6aabd3b0 \
   --participant lfm=lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6 \
   --participant mellum=mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f

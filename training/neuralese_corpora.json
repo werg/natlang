@@ -1342,6 +1342,39 @@
       "notes": "130structural programs,20distinct authored fixtures; source permutations are not independent facts."
     },
     {
+      "id": "decision-rich-train-20261016-v1",
+      "owner": "dgx",
+      "path": "runs/decision-rich-train-20261016-v1",
+      "admission": "verified-train-only-RL-task-source-128-rows-preserves72-base-adds56-current-protection-audited; not-neuralese-SFT-graphs",
+      "training_admission": true,
+      "training_admission_reason": "admitted-for-native-RL-task-selection-only; train-split-inputs-and-oracles-not-neuralese-SFT-graphs",
+      "include": [
+        "cases.jsonl",
+        "union-audit.json",
+        "broad-selection-proof.json",
+        "task-source-manifest.json"
+      ],
+      "derived_from": [
+        "clef-rich-source-20261005-v1",
+        "external-expansion-agentic-coding-native-20261014-v2",
+        "external-expansion-agentic-coding-repeated-id-repair-20261014-v1",
+        "external-expansion-agentsynth-native-20261015-v1",
+        "external-expansion-codeagent-native-20261014-v1",
+        "external-expansion-deepdive-native-20261015-v1",
+        "external-expansion-deepdive-native-long-20261015-v1",
+        "external-expansion-deepnlp-native-20261015-v1",
+        "external-expansion-evidence-terminal-native-20261015-v2",
+        "external-expansion-first-wave-20261014-v1",
+        "external-expansion-gatc-native-20261014-v1",
+        "external-expansion-rightfit-native-20261015-v2",
+        "external-expansion-rightfit-native-long-20261015-v1",
+        "external-expansion-search-owl-native-20261015-v1",
+        "port-record-calls-s3-20261011-v1",
+        "static-s7k-curated-native-20261015-v1"
+      ],
+      "notes": "Shared RL bootstrap input for both students: 72 preserved S7 tasks plus56 admitted broad tasks. The pending12-task executor qualification is excluded. This task-source packet contains natlang task inputs/oracles, not native SFT graph rows."
+    },
+    {
       "id": "clef-rich-teacher-evidence-20261005-v1",
       "owner": "pop",
       "path": "runs",

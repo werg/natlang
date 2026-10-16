@@ -97,6 +97,13 @@ an explicit admitted full packet with the measurement binding and preserved base
 rows before changing production cases. Until then, existing train tasks remain
 usable with the corrected selector. Do not claim that pending rows were trained.
 
+The production RL bootstrap now defaults to the published 128-row train-only
+union at `runs/decision-rich-train-20261016-v1/`. Its manifest binds the 72-row
+S7 base, 56 admitted broad tasks, and their exact audit and selection proof;
+both model entries share the same case SHA. The pending 12-task executor
+qualification remains excluded and can be appended through a separately
+verified task-source update.
+
 New successful teacher trajectories must come from the substantially stronger
 self-hosted CoreWeave Qwen teacher. Student measurement outputs remain diagnostic.
 Queue these task inputs for the next teacher window after live qualification;

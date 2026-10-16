@@ -1,0 +1,29 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "decision-rich-train-20261016-v1",
+  "owner": "dgx",
+  "path": "runs/decision-rich-train-20261016-v1",
+  "files": [
+    {
+      "path": "cases.jsonl",
+      "bytes": 13971105,
+      "sha256": "d99a1c0fca902a811fa95a9107345875d2f7e504bda9221dfc49cbc8a2026e9a"
+    },
+    {
+      "path": "union-audit.json",
+      "bytes": 13575,
+      "sha256": "a1a8e7dd1cf13e569ec20c8468948d837d0fab0e0938a2cc8c746875fc86d67b"
+    },
+    {
+      "path": "broad-selection-proof.json",
+      "bytes": 15186,
+      "sha256": "64159bebab0fe0ce493e9a8b401641a5af29085d9a672d0441c9281f35ffa54d"
+    },
+    {
+      "path": "task-source-manifest.json",
+      "bytes": 804,
+      "sha256": "81bde773eecef1cad54b06719b22461a451af7d0112b999b9e96e6354a336f34"
+    }
+  ],
+  "bytes": 14000670
+}

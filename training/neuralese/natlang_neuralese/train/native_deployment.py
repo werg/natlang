@@ -20,7 +20,8 @@ def binding(path):
     return {'path': str(path), 'sha256': sha256_file_hex_cached(path)}
 
 
-def prepare(release_path, curriculum_path, out, *, participants, cases, runtime, namespace='/work/native-production',
+def prepare(release_path, curriculum_path, out, *, participants, cases=None, task_source_manifest=None,
+            runtime, namespace='/work/native-production',
             refresh_curriculum_path=None):
     """Create runnable configuration without inventing future trained identities."""
     release_path, curriculum_path, out = map(Path, (release_path, curriculum_path, out))
@@ -32,6 +33,17 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
     runtime = Path(runtime).resolve(strict=True)
     if not (runtime/'ts-host/dist/teacher/cli.js').is_file():
         raise ValueError('native deployment requires the actual built runtime')
+    task_source = None
+    if task_source_manifest is None and cases is None:
+        task_source_manifest = Path(__file__).resolve().parents[4] / 'runs/decision-rich-train-20261016-v1/task-source-manifest.json'
+    if task_source_manifest is not None:
+        from ..rl.task_source import resolve_task_source
+        task_source = resolve_task_source(task_source_manifest)
+        if cases is not None and Path(cases).resolve(strict=True) != task_source['cases']:
+            raise ValueError('explicit RL cases differ from the selected admitted task-source manifest')
+        cases = task_source['cases']
+    if cases is None:
+        raise ValueError('native deployment requires an admitted RL task source')
     cases_binding = binding(cases)
     case_rows = [row for _, row in iter_jsonl_rows(cases)]
     if not case_rows or any(row.get('split') != 'train' for row in case_rows):
@@ -95,6 +107,10 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
             'production_recipe': binding(recipe_path), 'production_stage': stage['id'],
             'seed_native_graphs': inputs['native_graphs'], 'held_native_graphs': inputs['held_native_graphs'],
             'cases': cases_binding, 'runtime': str(runtime/'ts-host'), 'base': base,
+            **({'task_source': {'manifest': str(task_source['manifest']),
+                'manifest_sha256': task_source['manifest_sha256'], 'cases_sha256': task_source['cases_sha256'],
+                'rows': task_source['rows'], 'audit_sha256': task_source['audit_sha256'],
+                'selection_proof_sha256': task_source['selection_proof_sha256']}} if task_source else {}),
             'base_inventory_sha256': inventory_sha,
             'port': 8097 if role == 'lfm' else 8098, 'provider_queue': queue,
             'provider': {'sandbox_id': record['sandbox_id']}})
@@ -132,8 +148,11 @@ def prepare(release_path, curriculum_path, out, *, participants, cases, runtime,
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    for flag in ('release', 'curriculum', 'out', 'cases', 'runtime'):
+    for flag in ('release', 'curriculum', 'out', 'runtime'):
         parser.add_argument('--'+flag, type=Path, required=True)
+    parser.add_argument('--cases', type=Path, help='explicit admitted train task packet; defaults to the bound 128-row RL source')
+    parser.add_argument('--task-source-manifest', type=Path,
+                        help='integrity-bound admitted RL task source; defaults to decision-rich-train-20261016-v1')
     parser.add_argument('--participant', action='append', required=True, help='role=exact architecture:base-inventory identity')
     parser.add_argument('--namespace', default='/work/native-production')
     parser.add_argument('--refresh-curriculum', type=Path,
@@ -141,6 +160,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     participants = dict(item.split('=', 1) for item in args.participant)
     print(prepare(args.release, args.curriculum, args.out, participants=participants, cases=args.cases,
+        task_source_manifest=args.task_source_manifest,
         runtime=args.runtime, namespace=args.namespace, refresh_curriculum_path=args.refresh_curriculum))
 
 

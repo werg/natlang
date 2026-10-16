@@ -44,6 +44,19 @@ def bootstrap_configs(plan_path, completion_path, out):
         if prior['binding'] == binding and all(Path(path).is_file() for path in prior['configs']):
             reuse_configs = True  # retain useful live operator tweaks after artifact verification
     refresh_config = _bound(plan.get('semantic_refresh_config') or proof['curriculum'])
+    task_sources = [declaration.get('task_source') for declaration in plan['models']]
+    if any(task_sources):
+        if any(source is None for source in task_sources) or any(source != task_sources[0] for source in task_sources[1:]):
+            raise ValueError('both native RL learners must bind the same admitted task-source manifest')
+        from .task_source import resolve_task_source
+        source = task_sources[0]
+        resolved_source = resolve_task_source(source['manifest'])
+        if (resolved_source['manifest_sha256'] != source['manifest_sha256']
+                or resolved_source['cases_sha256'] != source['cases_sha256']
+                or resolved_source['rows'] != source['rows']
+                or resolved_source['audit_sha256'] != source['audit_sha256']
+                or resolved_source['selection_proof_sha256'] != source['selection_proof_sha256']):
+            raise ValueError('native RL bootstrap task-source manifest binding changed')
     results, participants = [], set()
     for declaration in plan['models']:
         model = declaration['model']
@@ -60,6 +73,9 @@ def bootstrap_configs(plan_path, completion_path, out):
         participants.add(participant)
         inputs = {name: _bound(declaration[name]) for name in
                   ('cases', 'production_recipe', 'seed_native_graphs', 'held_native_graphs')}
+        if task_sources[0] is not None and (inputs['cases'] != resolved_source['cases']
+                or sha256_file_hex_cached(inputs['cases']) != resolved_source['cases_sha256']):
+            raise ValueError('native RL cases differ from the exact shared task-source manifest')
         from ..common.jsonio import iter_jsonl_rows
         cases = [row for _, row in iter_jsonl_rows(inputs['cases'])]
         if not cases or any(row.get('split') != 'train' for row in cases):
@@ -104,6 +120,8 @@ def bootstrap_configs(plan_path, completion_path, out):
             config['refresh_provider'] = plan['refresh_provider']
         config['bootstrap_binding'] = binding
         config['source_admission'] = declaration.get('source_admission')
+        if declaration.get('task_source'):
+            config['task_source'] = declaration['task_source']
         write_json_durable(config_path, config)
         results.append(config_path)
     write_json_durable(receipt, {'schema': 'natlang.native-rl-bootstrap-receipt/1',

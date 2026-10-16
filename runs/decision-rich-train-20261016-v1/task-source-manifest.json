@@ -1,0 +1,20 @@
+{
+  "schema": "natlang.rl-task-source/1",
+  "id": "decision-rich-train-20261016-v1",
+  "cases": "cases.jsonl",
+  "cases_sha256": "d99a1c0fca902a811fa95a9107345875d2f7e504bda9221dfc49cbc8a2026e9a",
+  "rows": 128,
+  "split": "train",
+  "source_audit": "union-audit.json",
+  "source_audit_sha256": "a1a8e7dd1cf13e569ec20c8468948d837d0fab0e0938a2cc8c746875fc86d67b",
+  "broad_selection_proof": "broad-selection-proof.json",
+  "broad_selection_proof_sha256": "64159bebab0fe0ce493e9a8b401641a5af29085d9a672d0441c9281f35ffa54d",
+  "preserved_base": {
+    "id": "decision-rich-train-20261005-v2",
+    "rows": 72,
+    "sha256": "6f2a470a8de79d4fb9966fc5a5157ebdf16d3c58a02ae034322a2bdfcde20dca"
+  },
+  "added_admitted_train_rows": 56,
+  "broad_nontrain_omissions": 6,
+  "pending_qualification_rows_included": 0
+}

@@ -77,6 +77,18 @@ def test_prepare_actual_file_bound_two_sandbox_controller_before_foundation_fini
     assert {item['provider']['sandbox_id'] for item in bootstrap['models']}=={'lfm-existing','mellum-existing'}
     assert bootstrap['refresh_provider']['sandbox_id']=='mellum-existing'
     assert all(item['production_stage']=='native_full_sft' for item in bootstrap['models'])
+    # Production auto-bootstrap defaults to the integrity-bound 128-task union
+    # for both participants; the older explicit fixture above remains supported.
+    admitted_manifest = (Path(__file__).resolve().parents[2]
+        / 'runs/decision-rich-train-20261016-v1/task-source-manifest.json')
+    admitted = prepare(release, curriculum, tmp_path/'deployment-admitted',
+        participants=participants, runtime=runtime, namespace=str(tmp_path))
+    admitted_bootstrap = json.loads(Path(json.loads(admitted.read_text())['rl_bootstrap']['path']).read_text())
+    assert len(admitted_bootstrap['models']) == 2
+    assert {row['cases']['sha256'] for row in admitted_bootstrap['models']} == {
+        'd99a1c0fca902a811fa95a9107345875d2f7e504bda9221dfc49cbc8a2026e9a'}
+    assert all(row['task_source']['manifest'] == str(admitted_manifest.resolve())
+        and row['task_source']['rows'] == 128 for row in admitted_bootstrap['models'])
     first = json.loads(Path(config['curriculum']).read_text())
     refresh = json.loads(Path(bootstrap['semantic_refresh_config']['path']).read_text())
     assert first['pairs'] == binding(train)
