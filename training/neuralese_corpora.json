@@ -110694,6 +110694,81 @@
       "split": "original source split and complete cross-source global held-group closure; no truncation",
       "training_admission": true,
       "training_admission_reason": "Source-curated third-party SFT, not oracle or native-execution verified. Exact complete source sessions, full reasoning views and both pinned tokenizer variants preserve current global held/quality/pending and exact decision holds. Eligibility is not training exposure."
+    },
+    {
+      "build": {
+        "audit": "admission-acquired-d18-full-session-native-20261016-v2/audit.json",
+        "audit_sha256": "7333da7a902962682917d8a6eb4c42b8c379d824d83180c5c3969c6bb6be3b02",
+        "source_render_samples": {
+          "path": "admission-acquired-d18-full-session-native-20261016-v2/source-render-samples.json",
+          "sha256": "6e913e31a2e3f18f3ce9c4a3bd463b78bc4e217abc73faab57d7c6f9e1de3c13"
+        }
+      },
+      "documents": {
+        "lfm25": {
+          "graphs:test": 125,
+          "graphs:train": 2095,
+          "max_row_tokens": 551668,
+          "positive_sessions": 2220,
+          "tokens:test": 8048175,
+          "tokens:train": 30984125
+        },
+        "mellum21": {
+          "graphs:test": 125,
+          "graphs:train": 2095,
+          "max_row_tokens": 596354,
+          "positive_sessions": 2220,
+          "tokens:test": 8386768,
+          "tokens:train": 32011188
+        }
+      },
+      "id": "acquired-d18-full-session-native-20261016-v2",
+      "include": [
+        "1461862b6d748c3cf85856c99a44c7920fe3c92d165270584f4816a3424d73f6/lfm25/omissions.jsonl",
+        "1461862b6d748c3cf85856c99a44c7920fe3c92d165270584f4816a3424d73f6/lfm25/receipt.json",
+        "1461862b6d748c3cf85856c99a44c7920fe3c92d165270584f4816a3424d73f6/lfm25/resume-state.json",
+        "1461862b6d748c3cf85856c99a44c7920fe3c92d165270584f4816a3424d73f6/lfm25/test/native-graphs.jsonl.zst",
+        "1461862b6d748c3cf85856c99a44c7920fe3c92d165270584f4816a3424d73f6/lfm25/train/native-graphs.jsonl.zst",
+        "1461862b6d748c3cf85856c99a44c7920fe3c92d165270584f4816a3424d73f6/mellum21/omissions.jsonl",
+        "1461862b6d748c3cf85856c99a44c7920fe3c92d165270584f4816a3424d73f6/mellum21/receipt.json",
+        "1461862b6d748c3cf85856c99a44c7920fe3c92d165270584f4816a3424d73f6/mellum21/resume-state.json",
+        "1461862b6d748c3cf85856c99a44c7920fe3c92d165270584f4816a3424d73f6/mellum21/test/native-graphs.jsonl.zst",
+        "1461862b6d748c3cf85856c99a44c7920fe3c92d165270584f4816a3424d73f6/mellum21/train/native-graphs.jsonl.zst",
+        "admission-acquired-d18-full-session-native-20261016-v2/audit.json",
+        "admission-acquired-d18-full-session-native-20261016-v2/lfm25-test-sources.json",
+        "admission-acquired-d18-full-session-native-20261016-v2/lfm25-train-sources.json",
+        "admission-acquired-d18-full-session-native-20261016-v2/mellum21-test-sources.json",
+        "admission-acquired-d18-full-session-native-20261016-v2/mellum21-train-sources.json",
+        "admission-acquired-d18-full-session-native-20261016-v2/row-proof.jsonl",
+        "admission-acquired-d18-full-session-native-20261016-v2/source-render-samples.json",
+        "b68ed72ebcd97c04163eb22cba11bae80beaff71c9889e074027f6c98d4ced62/lfm25/omissions.jsonl",
+        "b68ed72ebcd97c04163eb22cba11bae80beaff71c9889e074027f6c98d4ced62/lfm25/receipt.json",
+        "b68ed72ebcd97c04163eb22cba11bae80beaff71c9889e074027f6c98d4ced62/lfm25/resume-state.json",
+        "b68ed72ebcd97c04163eb22cba11bae80beaff71c9889e074027f6c98d4ced62/lfm25/test/native-graphs.jsonl.zst",
+        "b68ed72ebcd97c04163eb22cba11bae80beaff71c9889e074027f6c98d4ced62/lfm25/train/native-graphs.jsonl.zst",
+        "b68ed72ebcd97c04163eb22cba11bae80beaff71c9889e074027f6c98d4ced62/mellum21/omissions.jsonl",
+        "b68ed72ebcd97c04163eb22cba11bae80beaff71c9889e074027f6c98d4ced62/mellum21/receipt.json",
+        "b68ed72ebcd97c04163eb22cba11bae80beaff71c9889e074027f6c98d4ced62/mellum21/resume-state.json",
+        "b68ed72ebcd97c04163eb22cba11bae80beaff71c9889e074027f6c98d4ced62/mellum21/test/native-graphs.jsonl.zst",
+        "b68ed72ebcd97c04163eb22cba11bae80beaff71c9889e074027f6c98d4ced62/mellum21/train/native-graphs.jsonl.zst",
+        "f37483b77f17b4979d33a5b3713feb7e6df26a2e33b6e49fc9bb98fbd1be4fd1/lfm25/omissions.jsonl",
+        "f37483b77f17b4979d33a5b3713feb7e6df26a2e33b6e49fc9bb98fbd1be4fd1/lfm25/receipt.json",
+        "f37483b77f17b4979d33a5b3713feb7e6df26a2e33b6e49fc9bb98fbd1be4fd1/lfm25/resume-state.json",
+        "f37483b77f17b4979d33a5b3713feb7e6df26a2e33b6e49fc9bb98fbd1be4fd1/lfm25/test/native-graphs.jsonl.zst",
+        "f37483b77f17b4979d33a5b3713feb7e6df26a2e33b6e49fc9bb98fbd1be4fd1/lfm25/train/native-graphs.jsonl.zst",
+        "f37483b77f17b4979d33a5b3713feb7e6df26a2e33b6e49fc9bb98fbd1be4fd1/mellum21/omissions.jsonl",
+        "f37483b77f17b4979d33a5b3713feb7e6df26a2e33b6e49fc9bb98fbd1be4fd1/mellum21/receipt.json",
+        "f37483b77f17b4979d33a5b3713feb7e6df26a2e33b6e49fc9bb98fbd1be4fd1/mellum21/resume-state.json",
+        "f37483b77f17b4979d33a5b3713feb7e6df26a2e33b6e49fc9bb98fbd1be4fd1/mellum21/test/native-graphs.jsonl.zst",
+        "f37483b77f17b4979d33a5b3713feb7e6df26a2e33b6e49fc9bb98fbd1be4fd1/mellum21/train/native-graphs.jsonl.zst"
+      ],
+      "license": "exact source license facts retained in each graph acquired_session provenance",
+      "owner": "dgx",
+      "path": "runs/acquired-connected-native-graphs-20261016-v2/D18",
+      "source_class": "source-curated-complete-acquired-agent-native-session-graphs",
+      "split": "original source split and complete cross-source global held-group closure; no truncation",
+      "training_admission": true,
+      "training_admission_reason": "Source-curated third-party SFT, not oracle or native-execution verified. Exact complete source sessions, full reasoning views and both pinned tokenizer variants preserve current global held/quality/pending and exact decision holds. Eligibility is not training exposure."
     }
   ],
   "coverage_backlog": [
