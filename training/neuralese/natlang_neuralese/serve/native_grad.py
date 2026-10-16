@@ -96,6 +96,19 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
         effective = execution_identity(engine)
         if body.get('native_identity') not in (None, expected):
             raise ValueError('gradient request is bound to another exact live checkpoint')
+        objective = None
+        if isinstance(objective_request, dict):
+            if objective_request.get('kind') != 'native-policy':
+                raise ValueError('only the registered native-policy objective is supported')
+            spec_path = objective_request.get('path')
+            if not isinstance(spec_path, str):
+                raise ValueError('native-policy objective needs its admitted spec path')
+            if sha256_file_hex_cached(spec_path) != objective_request.get('sha256'):
+                raise ValueError('native-policy objective bytes differ from the admitted SHA-256')
+            from ..rl.native_replay import NativePolicyObjective
+            objective = NativePolicyObjective(spec_path)
+            objective.bind_actor(engine)
+        observation_identity = objective.identity if objective is not None else effective
         imported, leaf_map, state_overrides = {}, {}, {}
         for name, binding in example.external_states.items():
             record = engine.store.get_native_state(binding['id'])
@@ -106,7 +119,7 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
             block = record.block
             if len(block.token_ids) != binding['token_count']:
                 raise ValueError(f'external state token count changed for {name}')
-            block.require_native(**effective)
+            block.require_native(**observation_identity)
             copied, leaves = _leaf_block(block)
             leaf_map.update({f'external.{name}.{key}': value for key, value in leaves.items()})
             if isinstance(objective_request, dict):
@@ -159,24 +172,8 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
             raise ValueError('target.kind must be model-parameters, native-state or adapter')
         if not target_tensors:
             raise ValueError('gradient target has no tensors')
-        if isinstance(objective_request, dict):
-            if objective_request.get('kind') != 'native-policy':
-                raise ValueError('only the registered native-policy objective is supported')
-            spec_path = objective_request.get('path')
-            if not isinstance(spec_path, str):
-                raise ValueError('native-policy objective needs its admitted spec path')
-            if sha256_file_hex_cached(spec_path) != objective_request.get('sha256'):
-                raise ValueError('native-policy objective bytes differ from the admitted SHA-256')
-            from ..rl.native_replay import NativePolicyObjective
+        if objective is not None:
             from ..train.native_state_sft import packed_graph_loss
-            objective = NativePolicyObjective(spec_path)
-            if objective.identity != effective:
-                raise ValueError('native-policy objective is bound to another exact actor checkpoint')
-            from ..model.native_adapters import execution_binding, SCHEMA
-            active = execution_binding(engine)
-            binding = ({'schema': SCHEMA, 'base_native_identity': expected, 'adapters': active} if active else None)
-            if objective.adapter_binding != binding:
-                raise ValueError('native-policy objective adapter binding differs from the exact active actor')
             objective.external_state_overrides = state_overrides
             loss, stats = packed_graph_loss(engine.shared_model, [example], objective=objective)
         else:
@@ -198,7 +195,9 @@ def _native_graph_gradient_impl(engine, body, owner, adapter_leaves):
                  'adapters': execution_binding(engine)}}
                 if body.get('adapters') else {}),
              'loss': float(loss.detach()), 'stats': stats,
-             **({'objective_spec_sha256': objective_request['sha256']} if isinstance(objective_request, dict) else {})}).validate()
+             **({'objective_spec_sha256': objective_request['sha256'],
+                 'behavior_native_identity': objective.identity,
+                 'behavior_adapter_binding': objective.adapter_binding} if objective is not None else {})}).validate()
         stored = engine.store.put_native_tensor_artifact(artifact, owner)
         return {'loss': float(loss.detach()), 'stats': stats, 'gradient': stored.meta(),
                 'native_identity': expected, 'effective_native_identity': effective, 'objective': artifact.provenance['objective']}

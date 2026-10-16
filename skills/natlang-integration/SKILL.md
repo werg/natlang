@@ -378,3 +378,19 @@ same coefficient/basis/optimizer closure across continuations. Invalid values
 require selecting `storage` or `fp32`, rather than dropping requested adapters.
 This setting does not advertise mixed per-invocation actors or changed-base
 adapter rebinding.
+
+Native adapter GRPO/RFT separates captured behavior from the current evaluated
+coefficients. Continue the same admitted objective with updated coefficient IDs
+while preserving its exact base, ordered scales and frozen bases. Gradients
+record both identities; external observations retain behavior identity and
+internal producers replay under current coefficients. Preserve original bundle
+bytes and pass the current optimizer-state parent for each update. A behavior
+scope/basis error requires restoring the original scope or explicitly collecting
+new behavior, never relabelling old actor receipts. Changed-backbone rebinding
+and heterogeneous invocation policies remain separate unsupported contracts.
+
+Under default strict transport, changing coefficients while reusing genuine
+external behavior KV requires a fresh rollout. Internal producer state is
+replayed under current coefficients; external KV cannot be silently relabelled.
+An explicitly supported/requested same-base adapter-state mode is required to
+retain external KV across actor changes.

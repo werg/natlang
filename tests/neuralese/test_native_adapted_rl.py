@@ -133,7 +133,8 @@ def test_fp32_actual_adapted_actor_capture_replay_and_consumer_producer_coeffici
 
 
 @pytest.mark.parametrize('family',['lfm','mellum'])
-def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,monkeypatch,family):
+@pytest.mark.parametrize('external_observation',[False,True])
+def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,monkeypatch,family,external_observation):
     torch.manual_seed(1701)
     engine=engine_fixture(tmp_path,family,service_template=True)
     adapter,name=nonzero_adapter(engine)
@@ -141,8 +142,9 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
     entries=[{'id':adapter.id,'scale':.75},{'id':peer.id,'scale':-.25},{'id':adapter.id,'scale':.1}]
     identity=effective_identity(engine,resolve_adapters(engine,entries))
     block_id,turns=capture_actor(engine,entries,monkeypatch)
+    selected=turns[1:] if external_observation else turns
     rows=[{'messages':[],'target':{},'invocation_id':turn['graph_turn'],
-           'sampling':turn['sampling'],'replay':{'raw_calls_retained':True}} for turn in turns]
+           'sampling':turn['sampling'],'replay':{'raw_calls_retained':True}} for turn in selected]
     episodes=[{'task_id':'train-adapter-task','split':'train','sample':sample,'group':'group',
         'reward':{'quality':reward},'policy':{'checkpoint_sha256':identity['checkpoint_sha256']},
         'turns':copy.deepcopy(rows)} for sample,reward in enumerate((1,0))]
@@ -166,21 +168,66 @@ def test_adapted_policy_bundle_restart_gradient_service_and_optimizer(tmp_path,m
           'adapters':entries,'native_identity':engine.native_identity,
           'objective':{'kind':'native-policy','path':str(spec_path),'sha256':sha256_file_hex_cached(spec_path)},
           'target':{'kind':'adapter','id':adapter.id,'names':[name]}}
+    reference=torch.nn.Parameter(adapter.artifact.tensors[name].clone())
+    reference_optimizer=torch.optim.Adam([reference],lr=.01)
+    original_spec=spec_path.read_bytes()
     reply=post_service(engine,'/v1/neuralese/grad',body)
     artifact=engine.store.get_native_tensor_artifact(reply['gradient']['id']).artifact
     assert artifact.kind=='adapter-gradient' and artifact.tensors[name].norm()>0
     assert artifact.provenance['effective_native_identity']==identity
-    from natlang_neuralese.serve.native_optim import native_optimizer_step
+    reference.grad=artifact.tensors[name].clone();reference_optimizer.step()
     updated=post_service(engine,'/v1/neuralese/optim',{'schema':'natlang.native-optimizer-request/1',
         'native_identity':engine.native_identity,'gradient_id':reply['gradient']['id'],'optimizer':{'name':'adam','learning_rate':.01}})
     assert updated['adapter']['id']!=adapter.id
+    assert torch.equal(engine.store.get_native_tensor_artifact(updated['adapter']['id']).artifact.tensors[name],reference)
     expected_binding=copy.deepcopy(spec['adapter_binding'])
     for entry in expected_binding['adapters']:
         if entry['id']==adapter.id:entry['id']=updated['adapter']['id']
     assert updated['adapter_binding']==expected_binding
     assert updated['effective_native_identity']['checkpoint_sha256']!=identity['checkpoint_sha256']
-    wrong=copy.deepcopy(body);wrong['adapters']=[{'id':adapter.id,'scale':.5}]
-    with pytest.raises(Exception,match='another exact actor'):
+    # Continue on the SAME admitted behavior after an immutable coefficient
+    # update and another durable restart. Current policy/logps may change;
+    # behavior bytes, sampled logps and reward remain exact and unchanged.
+    current_id=updated['adapter']['id']
+    current_entries=[{**entry,'id':current_id if entry['id']==adapter.id else entry['id']} for entry in entries]
+    next_body={**body,'adapters':current_entries,'target':{'kind':'adapter','id':current_id,'names':[name]}}
+    engine.store.close();engine.store=TensorStore(directory=tmp_path/'restored')
+    if external_observation:
+        from urllib.error import HTTPError
+        with pytest.raises(HTTPError) as error:
+            post_service(engine,'/v1/neuralese/grad',next_body)
+        assert b'requires a fresh rollout under strict transport' in error.value.read()
+        assert spec_path.read_bytes()==original_spec
+        engine.store.close()
+        return
+    second=post_service(engine,'/v1/neuralese/grad',next_body)
+    second_gradient=engine.store.get_native_tensor_artifact(second['gradient']['id']).artifact
+    assert second_gradient.provenance['behavior_native_identity']==identity
+    assert second_gradient.provenance['behavior_adapter_binding']==spec['adapter_binding']
+    assert second_gradient.provenance['effective_native_identity']==updated['effective_native_identity']
+    assert second_gradient.provenance['effective_native_identity']!=identity
+    assert not torch.equal(second_gradient.tensors[name],artifact.tensors[name])
+    reference_optimizer.zero_grad(set_to_none=True)
+    reference.grad=second_gradient.tensors[name].clone();reference_optimizer.step()
+    continued=post_service(engine,'/v1/neuralese/optim',{'schema':'natlang.native-optimizer-request/1',
+        'native_identity':engine.native_identity,'gradient_id':second['gradient']['id'],
+        'optimizer_state_id':updated['optimizer_state_id'],'optimizer':{'name':'adam','learning_rate':.01}})
+    assert continued['step']==2
+    actual=engine.store.get_native_tensor_artifact(continued['adapter']['id']).artifact.tensors[name]
+    assert torch.equal(actual,reference)
+    assert spec_path.read_bytes()==original_spec
+    state=engine.store.get_native_tensor_artifact(continued['optimizer_state_id']).artifact.tensors
+    assert torch.equal(state['m.'+name],reference_optimizer.state[reference]['exp_avg'])
+    assert torch.equal(state['v.'+name],reference_optimizer.state[reference]['exp_avg_sq'])
+    wrong=copy.deepcopy(body);wrong['adapters'][0]['scale']=.5
+    with pytest.raises(Exception,match='ordered behavior adapter scale'):
+        native_graph_gradient(engine,wrong,'test-owner')
+    from natlang_neuralese.model.native_adapters import create_adapter
+    unrelated=create_adapter(engine,{'kind':'xs','rank':2,'seed':1,'parameter_names':[name]})
+    wrong=copy.deepcopy(body)
+    wrong['adapters']=[{**entry,'id':unrelated.id if entry['id']==adapter.id else entry['id']} for entry in entries]
+    wrong['target']['id']=unrelated.id
+    with pytest.raises(Exception,match='exact frozen basis or matrix specification'):
         native_graph_gradient(engine,wrong,'test-owner')
     entry=manifest['blocks'][basis];path=bundle.parent/entry['path'];path.write_bytes(path.read_bytes()+b'x')
     with pytest.raises(ValueError,match='bytes changed'):

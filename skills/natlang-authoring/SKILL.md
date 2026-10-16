@@ -369,3 +369,18 @@ FP32 through selected native Linear and dense-expert matrices. The default is
 optimizer moments. For an invalid precision error, select one of those two
 advertised values. It does not enable heterogeneous adapter-policy graphs or
 higher-order objectives.
+
+An admitted native adapter-policy objective retains its original behavior
+coefficients, sampled log-probabilities and observations. You may continue
+coefficient updates against that objective with current coefficients on the
+same exact base and ordered scales/frozen bases. Pass the current coefficient
+IDs and exact-parent optimizer state; retain the original behavior bundle.
+For a behavior scope/basis mismatch, restore those bases/scales or collect a
+new admitted objective for the deliberately changed scope. Do not rewrite old
+sampling receipts to the current actor identity.
+
+Under default strict transport, changing coefficients while reusing genuine
+external behavior KV requires a fresh rollout. Internal producer state is
+replayed under current coefficients; external KV cannot be silently relabelled.
+An explicitly supported/requested same-base adapter-state mode is required to
+retain external KV across actor changes.

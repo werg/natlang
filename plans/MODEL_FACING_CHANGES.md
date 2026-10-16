@@ -748,3 +748,12 @@ Skills explain preservation of forward weights and optimizer state. Measure
 approximately48 live executor samples per variant in the next own-model teacher
 window; capability/production recipe adoption remains separate. No new prompt
 instruction or external generation is introduced.
+
+### 2026-10-16: evolving native adapter policy versus retained behavior
+
+Unmeasured debt: native-policy gradient errors distinguish behavior base,
+ordered scale and frozen-basis mismatches, and teach restoring the original
+scope/bundle or collecting new admitted behavior. Skills explain continuing
+coefficient updates without rewriting old logps/receipts. Measure approximately
+48 live executor samples per variant in the next own-model teacher window.
+No new prompt policy and no production controller adoption are introduced.

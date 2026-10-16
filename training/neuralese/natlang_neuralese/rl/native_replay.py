@@ -336,6 +336,8 @@ class NativePolicyObjective:
             from types import SimpleNamespace
             from ..model.native_adapters import validate_state_binding
             validate_state_binding(self.adapter_binding, SimpleNamespace(**self.identity))
+        self.evaluation_identity = self.identity
+        self.evaluation_adapter_binding = self.adapter_binding
         self.bundle = None
         self.external_state_overrides = {}
         if self.spec.get('block_bundle'):
@@ -345,6 +347,55 @@ class NativePolicyObjective:
                     or self.bundle[1].get('policy_id') != self.identity['checkpoint_sha256']):
                 raise ValueError('native objective archive belongs to a different actor policy')
 
+    def bind_actor(self, engine):
+        """Separate immutable sampled behavior from current same-basis coefficients."""
+        from ..model.native_adapters import execution_identity, execution_binding, SCHEMA
+        current = execution_identity(engine)
+        active = execution_binding(engine)
+        if self.adapter_binding is None:
+            if current != self.identity or active:
+                raise ValueError('native-policy objective is bound to another exact actor checkpoint')
+            self.evaluation_identity, self.evaluation_adapter_binding = current, None
+            return
+        if (self.adapter_binding['base_native_identity'] != engine.native_identity or not active
+                or len(active) != len(self.adapter_binding['adapters'])):
+            raise ValueError('native-policy evaluation changed the exact behavior base or adapter scope')
+        if self.bundle is None:
+            raise ValueError('adapted native policy evaluation requires its original behavior artifact bundle')
+        from .graph_replay import verified_bundle_bytes
+        from ..model.native_artifact import decode_native_tensor_artifact
+        checked = {}
+        def archived(ident):
+            if ident not in checked:
+                raw = verified_bundle_bytes(self.bundle[0], ident, policy_id=self.identity['checkpoint_sha256'])
+                if raw is None:
+                    raise ValueError('native-policy archive is missing exact behavior adapter dependencies')
+                artifact, actual = decode_native_tensor_artifact(raw)
+                if actual != ident or artifact.native_identity != engine.native_identity:
+                    raise ValueError('native-policy behavior adapter archive changed identity')
+                checked[ident] = artifact
+            return checked[ident]
+        for before, after in zip(self.adapter_binding['adapters'], active):
+            if before['scale_hex'] != after['scale_hex']:
+                raise ValueError('native-policy evaluation changed an ordered behavior adapter scale')
+            behavior = archived(before['id'])
+            record = engine.store.get_native_tensor_artifact(after['id'])
+            if record is None:
+                raise ValueError('native-policy current adapter coefficients are unavailable')
+            current_adapter = record.artifact
+            if (behavior.kind != 'adapter-coefficients' or current_adapter.kind != 'adapter-coefficients'
+                    or behavior.source_artifact_id != current_adapter.source_artifact_id
+                    or (behavior.provenance or {}).get('adapter_spec') !=
+                       (current_adapter.provenance or {}).get('adapter_spec')):
+                raise ValueError('native-policy evaluation changed the exact frozen basis or matrix specification')
+            basis = archived(behavior.source_artifact_id)
+            if (basis.kind != 'adapter-basis' or (basis.provenance or {}).get('adapter_spec') !=
+                    (behavior.provenance or {}).get('adapter_spec')):
+                raise ValueError('native-policy behavior archive does not bind its actual frozen basis')
+        self.evaluation_identity = current
+        self.evaluation_adapter_binding = {'schema': SCHEMA, 'base_native_identity': dict(engine.native_identity),
+                                          'adapters': active}
+
     def forward_inputs(self, context):
         from pathlib import Path
         from ..common.hashing import sha256_file_hex_cached
@@ -353,6 +404,8 @@ class NativePolicyObjective:
         for example in context['examples']:
             if example.id not in self.rows:
                 raise ValueError('native objective has no captured policy row for this graph')
+            if example.external_states and self.evaluation_identity != self.identity:
+                raise ValueError('changed adapter policy with external behavior KV requires a fresh rollout under strict transport; same-base adapter-state transport must be explicitly supported and requested')
             for name, binding in example.external_states.items():
                 if self.bundle is None:
                     raise ValueError('native RL external observations require their durable state bundle')
@@ -380,7 +433,7 @@ class NativePolicyObjective:
     def __call__(self, model, result, context):
         from .full_policy import clipped_token_loss
         from ..model.native_adapters import require_model_execution_actor
-        require_model_execution_actor(model, self.identity, self.adapter_binding)
+        require_model_execution_actor(model, self.evaluation_identity, self.evaluation_adapter_binding)
         hidden = result['h_final'][0]
         losses, count = [], 0
         for example in context['examples']:
