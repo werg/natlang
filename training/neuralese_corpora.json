@@ -108887,6 +108887,67 @@
           "mellum21": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f"
         }
       }
+    },
+    {
+      "id": "native-luna-held-seeds-52113-52118-all-views-graphs-20261016-v1",
+      "owner": "dgx",
+      "path": "runs/luna-seeds-52113-52118-native-20261016-v1",
+      "include": [
+        "composition.json",
+        "validation-proof.json",
+        "graphs/program-header/lfm25/receipt.json",
+        "graphs/program-header/lfm25/test/native-graphs.jsonl.zst",
+        "graphs/program-header/lfm25/train/native-graphs.jsonl.zst",
+        "source/program-header/lfm25/text-data.jsonl.zst",
+        "graphs/program-header/mellum21/receipt.json",
+        "graphs/program-header/mellum21/test/native-graphs.jsonl.zst",
+        "graphs/program-header/mellum21/train/native-graphs.jsonl.zst",
+        "source/program-header/mellum21/text-data.jsonl.zst",
+        "graphs/whole-trajectory/lfm25/receipt.json",
+        "graphs/whole-trajectory/lfm25/test/native-graphs.jsonl.zst",
+        "graphs/whole-trajectory/lfm25/train/native-graphs.jsonl.zst",
+        "source/whole-trajectory/lfm25/text-data.jsonl.zst",
+        "graphs/whole-trajectory/mellum21/receipt.json",
+        "graphs/whole-trajectory/mellum21/test/native-graphs.jsonl.zst",
+        "graphs/whole-trajectory/mellum21/train/native-graphs.jsonl.zst",
+        "source/whole-trajectory/mellum21/text-data.jsonl.zst"
+      ],
+      "source_class": "view-qualified-static-native-graphs-from-admitted-seed-teacher-turns",
+      "split": "Train-only incremental views from admitted seeds 52113–52118. Program-header and complete whole-trajectory views are separately qualified; neither creates native producer/consumer edges.",
+      "admission": "3,019 program-header rows and 3,019 whole-trajectory rows per model. Exact source manifests, current protections, tokenizer-specific parsing, train-only splits, twins, source groups, and compressed output SHA/size are verified in validation-proof.json. Whole trajectories retain complete contexts, weight role/tool/context spans, and mask failed assistant actions.",
+      "license_provenance": "Inherited from the registered source render corpora; owner accepts all licenses.",
+      "derived_from": [
+        "luna-held-shapes-s52113-render-20261015-v1",
+        "luna-held-shapes-s52114-render-20261015-v1",
+        "luna-held-shapes-s52115-render-20261015-v1",
+        "luna-held-shapes-s52116-render-20261015-v1",
+        "luna-held-shapes-s52117-render-20261015-v1",
+        "luna-held-shapes-s52118-render-20261015-v1"
+      ],
+      "candidate_selection_admission": null,
+      "source_bindings": {
+        "composition_sha256": "51f8c3bc7119d54bd2701ed0a41312b419383c73455d756b24a7505fc0fa29f3",
+        "validation_proof_sha256": "8d3f0eee1447a964b18fe180f278837c7b0a5b736a97d7dd9e256d06be7ab4e1",
+        "current_protection_manifest_sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+        "current_source_review_registry_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+        "source_text_manifests": {
+          "luna-held-shapes-s52113-render-20261015-v1": "50b9219aad1ef25df7a60797b59153e01ee6fd5d5532774288fb90726351c281",
+          "luna-held-shapes-s52114-render-20261015-v1": "86fdaa023de0946fc3e681f89b2a6f99d38da219b5239c94d39b0a3eb9d4696a",
+          "luna-held-shapes-s52115-render-20261015-v1": "135ee06fcc8f2061b73cc5b3c4885d360f82226dacf240a3229c66b380d6379c",
+          "luna-held-shapes-s52116-render-20261015-v1": "dc3e1336fc5b04829273deea2cf4b24cab9565940e5df867773e86def61b5411",
+          "luna-held-shapes-s52117-render-20261015-v1": "ee9c963b5521e97308c04f04a94701386ecbfdd73998c0d382a5dd26979e7107",
+          "luna-held-shapes-s52118-render-20261015-v1": "786d79a7dccb0cfbe3e80a4c9c77d8a4b73c90b508babfed3c8651cd4f018895"
+        },
+        "train_rows_per_model": {
+          "program-header": 1921,
+          "whole-trajectory": 1098
+        },
+        "held_rows_per_model": 0,
+        "model_ids": {
+          "lfm25": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+          "mellum21": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f"
+        }
+      }
     }
   ],
   "coverage_backlog": [
