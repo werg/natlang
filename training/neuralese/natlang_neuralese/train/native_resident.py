@@ -202,14 +202,13 @@ def new_geometry(source, first):
 
 
 
-def geometry_from_evidence(source, first, evidence, *, package):
+def geometry_from_evidence(source, first, evidence, *, package, source_preparation=None):
     """Reuse a bound completed CPU parse, conservatively covering a new suffix.
 
     Legacy tiered prewarm receipts parsed TRAIN only. Their held indexes are
     admission evidence, never held geometry. A prepared resident request covers
     both splits, but its union maximum is deliberately retained for each split.
     """
-    from ..data.native_sources import NativeGraphSource
     report = json.loads(bound(evidence).read_text())
     split = source.required_split
     if report.get('schema') == SCHEMA:
@@ -231,10 +230,12 @@ def geometry_from_evidence(source, first, evidence, *, package):
         expected_rows = start + report['new_train_rows']
         expected_entries = None
         maximum = {key: report['maxima'][key][key] for key in ('forward_tokens', 'kv_slots')}
-    covered = NativeGraphSource(bound(source_binding), source.tokenizer_fingerprint,
-        required_split=split, role_ids=source.role_ids)
-    prior_source = NativeGraphSource(bound(prior_binding), source.tokenizer_fingerprint,
-        required_split=split, role_ids=source.role_ids)
+    if source_preparation is None:
+        from .native_source_preparation import NativeSourcePreparation
+        source_preparation = NativeSourcePreparation(source.tokenizer_fingerprint, source.role_ids)
+        source_preparation._remember(source)
+    covered = source_preparation.load(source_binding, split=split)
+    prior_source = source_preparation.load(prior_binding, split=split)
     if start is None:
         start = len(prior_source)
     if (type(start) is not int or start != len(prior_source) or len(covered) != expected_rows
@@ -335,7 +336,6 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
             runtime_package=None, geometry_evidence=None):
     """CPU preparation; callers decide admission and provide an immutable recipe."""
     from .recipe import load_recipe, resolve_stage_inputs, _binding_files, native_recipe_binding
-    from ..data.native_sources import NativeGraphSource
     from .native_state_sft import append_only_rows
     directory = Path(directory).resolve()
     with locked(directory):
@@ -362,15 +362,13 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
     old_paths = {dep['path'] for roles in plan['stage_inputs'].values() for value in roles.values()
                  for dep in _binding_files(value)}
     proposed['inputs'] = {**{p: h for p, h in plan['inputs'].items() if p not in old_paths}, **inputs}
-    old = NativeGraphSource(plan['stage_inputs'][stage_id]['native_graphs']['path'],
-                            tokenizer_fingerprint, required_split='train', role_ids=role_ids)
-    train_binding = proposed['stage_inputs'][stage_id]['native_graphs']
-    train = NativeGraphSource(train_binding['path'], tokenizer_fingerprint,
-                              required_split='train', role_ids=role_ids)
-    held = NativeGraphSource(proposed['stage_inputs'][stage_id]['held_native_graphs']['path'],
-                             tokenizer_fingerprint, required_split='test', role_ids=role_ids)
-    old_held = NativeGraphSource(plan['stage_inputs'][stage_id]['held_native_graphs']['path'],
-        tokenizer_fingerprint, required_split='test', role_ids=role_ids)
+    from .native_source_preparation import NativeSourcePreparation
+    source_preparation = NativeSourcePreparation(tokenizer_fingerprint, role_ids)
+    # New manifests expose already validated old subtrees; load those roots once.
+    train = source_preparation.load(proposed['stage_inputs'][stage_id]['native_graphs'], split='train')
+    held = source_preparation.load(proposed['stage_inputs'][stage_id]['held_native_graphs'], split='test')
+    old = source_preparation.load(plan['stage_inputs'][stage_id]['native_graphs'], split='train')
+    old_held = source_preparation.load(plan['stage_inputs'][stage_id]['held_native_graphs'], split='test')
     append_only_rows(old.bindings, train.bindings, label='resident training-source')
     append_only_rows(old_held.bindings, held.bindings, label='resident held-source')
     if (train.entries[:len(old.entries)] != old.entries or held.entries[:len(old_held.entries)] != old_held.entries
@@ -397,7 +395,7 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
         if len(source) == first:
             return {'forward_tokens': 0, 'kv_slots': 0}
         evidence = geometry_evidence.get(source.required_split)
-        return (geometry_from_evidence(source, first, evidence, package=package) if evidence
+        return (geometry_from_evidence(source, first, evidence, package=package, source_preparation=source_preparation) if evidence
                 else new_geometry(source, first))
     train_geometry = measured(train, len(old))
     held_geometry = measured(held, len(old_held))

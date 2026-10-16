@@ -33,3 +33,16 @@ lock, only when the content-verified request has this exact generation and
 payload. A newer request remains pending. A corrupt request fails before
 retiring current authority. This closes the stale retired-pointer handoff
 blocker observed on the LFM sandbox on October16.
+
+
+Within one CPU preparation, construct the proposed train and held trees first.
+Reuse their already validated exact descendant source objects for old inputs and
+geometry evidence when path, content, tokenizer, split, model view and roles all
+match. Recheck every reused file's content and stat binding, including manifest
+dependencies. For a source absent from those trees, use the existing complete
+NativeGraphSource loader. No global monkeypatch, alternate row parser, changed
+index policy or row/priority mutation is involved. Canonical append manifests
+can name the old root as their first child to expose this sharing. All existing
+prefix, scheduling, held separation, source-obligation and geometry checks still
+run against the resulting objects. This avoids duplicate million-row metadata
+constructions while preserving the admission decision.
