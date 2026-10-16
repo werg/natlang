@@ -109504,7 +109504,7 @@
       "split": "Train-only. 7,790 unique graphs per model; empty test files; no held evaluation rows are claimed.",
       "admission": "463 verified Qwen3.8-Flash-Next trajectories yielded 7,811 eligible assistant turns. Twenty-one exact token/weight duplicates per model were omitted after comparison with V1–V7 and clean-action V1–V4, leaving 7,790 new train graphs per model. 884 turns per model remain explicit action omissions for failed/unexecuted proposals. Full captured prompts and trajectories remain bound; text emulation is ordinary one-node SFT, not an authentic Neuralese edge capture.",
       "training_admission": true,
-      "training_admission_reason": "Independent terminal validation recomputed source and decision-admission bindings, parsed all graphs under both expanded tokenizer fingerprints, verified identical model graph IDs, exact train-only split and source-group closure, and found zero intersections with current held, quality, and pending-review group closures.",
+      "training_admission_reason": "Independent terminal validation parsed both model views, verified identical train-only graph IDs and source-group closure against current held, quality and pending-review protection sources, and found zero intersections. A separate explicit decision-hold pass joined all 7,790 positive target decision IDs per model against the exact current sorted decision-hold files and found zero intersections.",
       "derived_from": [
         "qwen-verified-positive-native-graphs-20261015-v1-v2",
         "qwen-verified-positive-native-graphs-20261015-v3",
@@ -109558,6 +109558,11 @@
             "tokens": 83224118,
             "expanded_tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f"
           }
+        },
+        "decision_hold_closure": {
+          "path": "runs/qwen-verified-positive-native-graphs-20261015-v8/decision-hold-closure-proof.json",
+          "sha256": "e5270600ef45289e349e74367617d76aea6a928f83d51dcf66d5b1f963b538aa",
+          "scope": "All 7,790 positive target decision IDs per model checked against current sorted training/decision-holds/*.jsonl; 0 intersections; model graph-ID sets equal."
         }
       }
     }
