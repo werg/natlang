@@ -965,9 +965,10 @@ CORPORA.update({'qwen-cooperation-acquired':(qwen_cooperation_acquired,4),
 from .acquired_agents import team_cooperation_acquired
 CORPORA['team-cooperation-acquired']=(team_cooperation_acquired,4)
 
-from .acquired_diagnosis import mast_diagnosis_acquired,mascope_diagnosis_acquired
+from .acquired_diagnosis import mast_diagnosis_acquired,mascope_diagnosis_acquired,d12_feature_status_diagnoses
 CORPORA.update({'mast-diagnosis-acquired':(mast_diagnosis_acquired,4),
-                'mascope-diagnosis-acquired':(mascope_diagnosis_acquired,4)})
+                'mascope-diagnosis-acquired':(mascope_diagnosis_acquired,4),
+                'd12-feature-status-diagnoses-acquired':(d12_feature_status_diagnoses,4)})
 
 from .acquired_archives import cooper_archive_acquired
 CORPORA['cooper-archive-acquired']=(cooper_archive_acquired,4)

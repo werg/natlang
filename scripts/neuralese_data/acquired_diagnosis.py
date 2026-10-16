@@ -79,3 +79,99 @@ def mast_diagnosis_acquired(limit=None):
 
 def mascope_diagnosis_acquired(limit=None):
     yield from source_diagnoses('D18',limit)
+
+
+def d12_feature_status_diagnoses(limit=None):
+    """Derive only explicit D12 evaluator statuses from failed sessions.
+
+    Failed assistant turns remain serialized as tool context, never targets.
+    This is source-curated status supervision, not a cause/fix diagnosis.
+    """
+    from copy import deepcopy
+    from .acquired_archives import cooper_archive_acquired
+
+    emitted=0
+    for source_id,original in cooper_archive_acquired():
+        if limit is not None and emitted>=limit:
+            return
+        if isinstance(original,Reject):
+            continue
+        try:
+            if original.outcome.get('label')!='failed':
+                raise Reject('D12 status view requires an originally failed session')
+            details=original.outcome.get('details')
+            evaluation=details.get('reported_evaluation') if isinstance(details,dict) else None
+            if not isinstance(evaluation,dict):
+                raise Reject('D12 source lacks structured reported evaluation')
+            features=[]
+            for key in ('feature1','feature2'):
+                feature=evaluation.get(key)
+                if not isinstance(feature,dict) or type(feature.get('passed')) is not bool:
+                    raise Reject('D12 source feature status is missing an exact boolean')
+                features.append({'feature':key,'passed':feature['passed']})
+            both=evaluation.get('both_passed')
+            if type(both) is not bool or both != all(row['passed'] for row in features):
+                raise Reject('D12 aggregate status does not agree with feature statuses')
+            if both:
+                raise Reject('D12 source is successful, not a failed-status example')
+
+            reported={'schema':'natlang.d12-reported-feature-status/1',
+                      'features':features,'both_passed':both}
+            if 'apply_status' in evaluation:
+                if not isinstance(evaluation['apply_status'],str):
+                    raise Reject('D12 apply status is not structured text')
+                reported['apply_status']=evaluation['apply_status']
+            merge=evaluation.get('merge')
+            if isinstance(merge,dict) and 'status' in merge:
+                if not isinstance(merge['status'],str):
+                    raise Reject('D12 merge status is not structured text')
+                reported['merge_status']=merge['status']
+            for key in ('feature1','feature2'):
+                code=(evaluation.get(key) or {}).get('exit_code')
+                if code is not None:
+                    if type(code) is not int:
+                        raise Reject('D12 feature exit code is not an integer')
+                    reported.setdefault('exit_codes',{})[key]=code
+
+            original_note=original.lineage.get('notes',{}).get('original_cooperation_context',{})
+            if not isinstance(original_note,dict):
+                raise Reject('D12 status view lacks original source binding')
+            source_binding={'original_id':source_id,
+                'source_path':original_note.get('path'),
+                'source_context':original_note.get('context'),
+                'neighbor_bindings':original_note.get('neighbor_bindings'),
+                'evaluation_sha256':hashlib.sha256(json.dumps(evaluation,ensure_ascii=False,
+                    sort_keys=True,separators=(',',':')).encode()).hexdigest()}
+            if not source_binding['source_path'] or not source_binding['neighbor_bindings']:
+                raise Reject('D12 status view lacks exact archive/evaluation member receipts')
+            context=json.dumps({'complete_failed_transcript':original.messages,
+                'reported_evaluator_status':reported},ensure_ascii=False,separators=(',',':'))
+            # Keep literal model control spellings as data inside the tool body.
+            context=context.replace('<','\\u003c')
+            target=json.dumps(reported,ensure_ascii=False,separators=(',',':'))
+            derived=deepcopy(original)
+            view_digest=hashlib.sha256((source_id+'\0'+source_binding['evaluation_sha256']).encode()).hexdigest()
+            derived.id=f'{source_id}:d12-feature-status:{view_digest[:20]}'
+            derived.family='source_reported_feature_status'
+            derived.noun='source-reported feature status'
+            derived.messages=[
+                {'role':'user','content':'Read the complete failed execution transcript and its source-reported evaluator status record. Copy only the exact structured feature statuses and recorded status fields from that record; do not infer a cause or repair.'},
+                {'role':'tool','content':context},
+                {'role':'assistant','content':target}]
+            derived.split_groups=list(dict.fromkeys([*derived.split_groups,
+                group_key('d12-feature-status-view',view_digest)]))
+            note=derived.lineage.setdefault('notes',{})
+            note['source_reported_feature_status']={**source_binding,
+                'view_id_sha256':view_digest,'review_kind':'source-curated-reported-status',
+                'complete_failed_transcript_is_context':True,'failed_actions_positive_targets':False,
+                'causal_claims':False,'repair_claims':False,'source_judge_is_local_oracle':False,
+                'native_execution_verified':False,'executed_locally':False,
+                'target_fields':sorted(reported.keys())}
+            derived.outcome=dict(original.outcome)
+            derived.outcome['details']=dict(details)
+            derived.outcome['details'].update(supervised_task='exact source-reported D12 feature status',
+                source_curated=True,executed_locally=False,source_execution_outcome='failed')
+            emitted+=1
+            yield derived.id,derived
+        except (Reject,ValueError,TypeError,KeyError) as error:
+            yield source_id,Reject(str(error))

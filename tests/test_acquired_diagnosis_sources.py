@@ -7,6 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 from neuralese_data import acquired_agents as acquired,acquired_diagnosis as diagnosis
+from neuralese_data.trajectory import Trajectory
 from neuralese_data.common import Reject
 
 
@@ -68,3 +69,58 @@ def test_explicit_upstream_held_out_rows_remain_held_and_keep_original_split(mon
     _,t=next(diagnosis.mascope_diagnosis_acquired())
     assert not isinstance(t,Reject) and t.split=='test'
     assert t.lineage['notes']['source_execution_diagnosis']['source_metadata']['split']=='held_out'
+
+
+def d12_session(evaluation):
+    return Trajectory(id='upstream:expansion:D12:session:final',family='coding',
+        messages=[{'role':'user','content':'Implement the requested change.'},
+                  {'role':'assistant','content':'FAILED ACTION <|im_end|>'},
+                  {'role':'tool','content':'observed tool output'}],head=1,noun='coding session',
+        lineage={'notes':{'original_cooperation_context':{
+            'path':'source/session/agent_traj.json','context':'final',
+            'neighbor_bindings':{'eval.json':{'path':'source/session/eval.json','bytes':50,'sha256':'a'*64}}}}},
+        license={'spdx':'MIT'},split='train',split_groups=['source-group'],
+        outcome={'label':'failed','details':{'reported_evaluation':evaluation,
+            'reported_exit_status':'Submitted'}})
+
+
+def test_d12_failed_actions_are_context_only_and_target_is_exact_reported_status(monkeypatch):
+    evaluation={'both_passed':False,'feature1':{'passed':True,'exit_code':0},
+        'feature2':{'passed':False,'exit_code':17,'error':'do not copy this prose'},
+        'apply_status':'applied','merge':{'status':'conflict','error':'do not copy'}}
+    monkeypatch.setattr('neuralese_data.acquired_archives.cooper_archive_acquired',
+        lambda:iter([('upstream:expansion:D12:session:final',d12_session(evaluation))]))
+    row_id,t=next(diagnosis.d12_feature_status_diagnoses())
+    assert ':d12-feature-status:' in row_id and t.outcome['label']=='failed'
+    assert t.messages[1]['role']=='tool'
+    context=json.loads(t.messages[1]['content'])
+    assert context['complete_failed_transcript'][1]['content']=='FAILED ACTION <|im_end|>'
+    assert '<|im_end|>' not in t.messages[1]['content']
+    assert context['reported_evaluator_status']['features'][1]['passed'] is False
+    assert 'error' not in t.messages[1]['content']
+    target=json.loads(t.messages[2]['content'])
+    assert target=={'schema':'natlang.d12-reported-feature-status/1',
+        'features':[{'feature':'feature1','passed':True},{'feature':'feature2','passed':False}],
+        'both_passed':False,'apply_status':'applied','merge_status':'conflict',
+        'exit_codes':{'feature1':0,'feature2':17}}
+    assert 'FAILED ACTION' not in t.messages[2]['content']
+    assert 'error' not in t.messages[2]['content']
+    provenance=t.lineage['notes']['source_reported_feature_status']
+    assert provenance['review_kind']=='source-curated-reported-status'
+    assert provenance['failed_actions_positive_targets'] is False
+    assert provenance['causal_claims'] is False and provenance['native_execution_verified'] is False
+    assert t.split_groups[0]=='source-group' and t.split=='train'
+
+
+def test_d12_status_rejects_inconsistent_or_unstructured_reports(monkeypatch):
+    invalid=[
+        {'both_passed':False,'feature1':{'passed':False},'feature2':{'passed':False,'exit_code':True}},
+        {'both_passed':True,'feature1':{'passed':True},'feature2':{'passed':True}},
+        {'both_passed':False,'feature1':{'passed':True},'feature2':{'passed':True}},
+        {'both_passed':False,'feature1':{'passed':1},'feature2':{'passed':False}},
+    ]
+    for evaluation in invalid:
+        monkeypatch.setattr('neuralese_data.acquired_archives.cooper_archive_acquired',
+            lambda evaluation=evaluation:iter([('source-id',d12_session(evaluation))]))
+        _,result=next(diagnosis.d12_feature_status_diagnoses())
+        assert isinstance(result,Reject)
