@@ -204,6 +204,27 @@ def test_verified_model_view_cache_skips_rerender_only_for_same_exact_inputs(tmp
     assert not calls and repaired['source_units']==first['source_units']
 
 
+def test_conversion_runtime_drift_requires_the_exact_named_full_rerender_transition():
+    from copy import deepcopy
+    from scripts.neuralese_data import prepare_acquired_preference_admission as admission
+    from scripts.neuralese_data import build_acquired_preference_graphs as source_builder
+    current=source_builder._runtime()
+    transition=admission._D24_RENDER_REQUALIFICATION
+    assert current['fingerprint']==transition['to_fingerprint']
+    old=deepcopy(current)
+    for key,(before,after) in transition['changed_files'].items():
+        assert old['files'][key]['sha256']==after
+        old['files'][key]['sha256']=before
+    old['fingerprint']=transition['from_fingerprint']
+    proof=admission._conversion_runtime_transition(old,current)
+    assert proof['kind']=='exact-all-pair-rerender-continuation'
+    assert set(proof['changed_files'])==set(transition['changed_files'])
+    mutated=deepcopy(old);mutated['files']['graph_writer']['sha256']='0'*64
+    mutated['fingerprint']=transition['from_fingerprint']
+    with pytest.raises(ValueError,match='exact all-pair rerender continuation'):
+        admission._conversion_runtime_transition(mutated,current)
+
+
 def test_admission_cli_preserves_existing_held_prefix_and_emits_executable_shared_stage_inputs(tmp_path,monkeypatch):
     from scripts.neuralese_data import prepare_acquired_preference_admission as admission
     args,_,values=setup_conversion(tmp_path,monkeypatch)

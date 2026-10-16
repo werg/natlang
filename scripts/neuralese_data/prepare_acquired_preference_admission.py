@@ -25,6 +25,50 @@ from scripts.neuralese_data.prepare_acquired_session_admission import bound,veri
 
 CODE_ROOT=Path(__file__).resolve().parents[2]
 
+# D24's durable six-view conversion was produced before three shared helpers
+# changed. Those views are reusable only through the full source/eligibility
+# and per-pair current-tokenizer rerender below; every other runtime byte must
+# still match. The transition is exact and cannot authorize a future version.
+_D24_RENDER_REQUALIFICATION={
+    'from_fingerprint':'469eec820c8947e9302a25f861435d7e22ec0372b642815f6b758142ed62484a',
+    'to_fingerprint':'45902d4663905c5d0d261cabd90b0ba126272e9b4cb94aeb34976128d35e7e8a',
+    'changed_files':{
+        'preference_builder':('99641ba3ae8e3887e63a4ea69f8cd304d86a39ba06208fa4fd918119714ec2e5',
+                              'd8f120e0ad0d00e11fd277812ef0556fdb438f50de141f798c9a62100ad15810'),
+        'serve_chat':('436ad40940e17a6c79c7a898bdcd89e069271164dc019ae77f68b443f9f2f5c8',
+                      '12e9dfca075a1159b72fc5f2be1b7b376c65e5e8780a766adc62ad78a4ceea36'),
+        'source_admission':('221c77789a01cc2c8588e406cac7e30eb0a69bc2c05429689e1b2c28768d83e6',
+                            '618beef2bacb26995cdf391ce07e621f6ab43ab146ca91fa5f6033625d8fcda9'),
+    }}
+
+
+def _conversion_runtime_transition(conversion_runtime,verification_runtime=None):
+    verification_runtime=_runtime() if verification_runtime is None else verification_runtime
+    if conversion_runtime==verification_runtime:
+        return {'kind':'identical-runtime','conversion_fingerprint':conversion_runtime.get('fingerprint'),
+                'verification_fingerprint':verification_runtime.get('fingerprint'),'changed_files':{}}
+    expected=_D24_RENDER_REQUALIFICATION
+    old_files=conversion_runtime.get('files') or {};new_files=verification_runtime.get('files') or {}
+    differences={key:(old_files.get(key) or {}).get('sha256') for key in sorted(set(old_files)|set(new_files))
+        if (old_files.get(key) or {}).get('sha256')!=(new_files.get(key) or {}).get('sha256')}
+    named={key:pair[0] for key,pair in expected['changed_files'].items()}
+    if (conversion_runtime.get('fingerprint')!=expected['from_fingerprint']
+            or verification_runtime.get('fingerprint')!=expected['to_fingerprint']
+            or conversion_runtime.get('fingerprint')!=canonical_json_sha256_hex(old_files)
+            or verification_runtime.get('fingerprint')!=canonical_json_sha256_hex(new_files)
+            or differences!=named
+            or set(old_files)!=set(new_files)
+            or any((new_files.get(key) or {}).get('sha256')!=pair[1]
+                   for key,pair in expected['changed_files'].items())):
+        raise ValueError('offline conversion runtime differs outside its exact all-pair rerender continuation')
+    return {'kind':'exact-all-pair-rerender-continuation',
+        'conversion_fingerprint':conversion_runtime['fingerprint'],
+        'verification_fingerprint':verification_runtime['fingerprint'],
+        'changed_files':{key:{'conversion_sha256':pair[0],'verification_sha256':pair[1]}
+                         for key,pair in expected['changed_files'].items()},
+        'required_requalification':['full-current-source-eligibility','all-current-tokenizer-pair-renders',
+                                    'exact-graph-and-objective-hashes','global-split-and-held-joins']}
+
 
 def _verification_dependencies():
     """Code that can change the meaning of a cached source/render verification."""
@@ -88,9 +132,9 @@ def verify_conversion(directory,*,protection_path,base,prepared=None,
     directory=Path(directory);receipt_path=directory/'receipt.json'
     receipt=json.loads(receipt_path.read_text());binding=receipt.get('binding') or {}
     if (receipt.get('schema')!='natlang.acquired-offline-preference-graphs/1'
-            or receipt.get('training_admission') is not False or receipt.get('capacity_qualified') is not False
-            or binding.get('runtime')!=_runtime()):
+            or receipt.get('training_admission') is not False or receipt.get('capacity_qualified') is not False):
         raise ValueError('offline admission requires its exact qualified renderer and complete conversion receipt')
+    runtime_transition=_conversion_runtime_transition(binding.get('runtime') or {})
     protection=current_protection(protection_path)
     closure_binding=binding.get('source_closure_receipt')
     closure_path=bound(closure_binding['path'],closure_binding) if closure_binding else None
@@ -145,7 +189,8 @@ def verify_conversion(directory,*,protection_path,base,prepared=None,
     identity={'conversion_receipt':{'path':str(receipt_path.resolve()),'bytes':receipt_path.stat().st_size,
                                     'sha256':sha256_file_hex(receipt_path)},
         'conversion_binding':binding,'verified_shards':shards,
-        'runtime':_runtime(),'verifier_dependencies':_verification_dependencies(),
+        'runtime':_runtime(),'conversion_runtime_transition':runtime_transition,
+        'verifier_dependencies':_verification_dependencies(),
         'protection':protection['proof'],'decision_holds':decision_contract(decision_bindings),
         'tokenizer_base':tokenizer_inventory(base),'prepared_tokenizer':prepared.binding,
         'source_artifacts':[{'path':str(Path(item['path']).resolve()),'bytes':item.get('bytes',Path(item['path']).stat().st_size),
@@ -283,6 +328,7 @@ def verify_conversion(directory,*,protection_path,base,prepared=None,
     for item in [binding['export_receipt'],binding['source'],*receipt['outputs'],receipt['objective'],receipt['row_proof'],receipt['omissions']]:
         bound(item['path'],item)
     result={'receipt':_bound(receipt_path),'objective':receipt['objective'],'source':binding['source'],
+        'conversion_runtime_transition':runtime_transition,
         'outputs':outputs,'counts':dict(counts),'groups':{key:sorted(value) for key,value in groups.items()},
         'proofs':proofs,'source_membership':sorted(expected),'source_units':units,'normalized_sessions':frontier,
         'exact_original_alternative_renders':len(checked),'source_render_verified':True}
