@@ -13,8 +13,22 @@ def decision_loss(scores, *, rule, probabilities=None, rewards=None):
             type(value) not in (int, float) or not math.isfinite(value) or value < 0 for value in probabilities
             ) or sum(probabilities) <= 0:
         raise ValueError('decision needs nonnegative finite target probabilities with positive total mass')
+    return _proper_decision_score(scores, scores.new_tensor(probabilities), rule)
+
+
+def decision_loss_to_goal(scores, goal, *, rule):
+    """Same proper score with an already computed, stopped teacher target."""
+    import torch
+    if (not torch.is_tensor(goal) or goal.shape != scores.shape or not torch.isfinite(goal).all()
+            or (goal < 0).any() or not (goal.sum() > 0)):
+        raise ValueError('decision teacher needs finite nonnegative aligned probabilities with positive mass')
+    return _proper_decision_score(scores,goal,rule)
+
+
+def _proper_decision_score(scores,goal,rule):
+    # Static public probabilities are already validated on CPU; do not add GPU
+    # synchronization to that existing path for the dynamic-teacher mechanism.
     logp = scores.log_softmax(0)
-    goal = scores.new_tensor(probabilities)
     goal = goal / goal.sum()
     if rule == 'logLoss':
         return -(goal * logp).sum()

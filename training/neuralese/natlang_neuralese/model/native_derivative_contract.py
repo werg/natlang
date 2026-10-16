@@ -395,8 +395,9 @@ def query_readout_dependencies(spec):
     result=set()
     for term in terms:
         declared=term.get('readouts',[])
-        if not isinstance(declared,list):raise ValueError('native query readouts must be an ordered list')
-        for ident in [term.get('readout'),term.get('teacher_readout'),*declared]:
+        teachers=term.get('teacher_readouts',[])
+        if not isinstance(declared,list) or not isinstance(teachers,list):raise ValueError('native query readouts must be an ordered list')
+        for ident in [term.get('readout'),term.get('teacher_readout'),*declared,*teachers]:
             if ident is None:continue
             if not native_id(ident,'nnt1_'):raise ValueError('native query readout needs its exact native tensor artifact ID')
             result.add(ident)

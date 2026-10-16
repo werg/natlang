@@ -411,3 +411,16 @@ producer gradient. Option expansion also expands exact external-consumer and
 actor inventories. Decoded semantic/reencoded imports and forced writes without
 an actual matching capture remain blocked until their differentiable lowering
 is implemented; this compiler does not silently flatten or externalize them.
+
+The next lowering unit authenticates each recorded request by rerendering its
+actual messages/tools through the current shared renderer, comparing exact
+token/import/role sequences with its capture, and resolving its declared adapter
+actor against the capture identity. Expected-output and distillation branches
+reuse that authenticated prompt and its actual source edges in the same plan.
+Ordinary CE scores expected continuation tokens; a typed native expected value
+supervises a producer span from its retained token sequence (or explicitly
+retokenized text for a foreign tokenizer), not equality to a detached KV vector.
+Likelihood scores only actual sampled actions; forced context has no invented
+density. A policy-law request on greedy recording must fail before forward.
+Teacher branches use the exact teacher receipt and a stopped immutable readout;
+both teacher option scores and teacher token distributions are stopped targets.

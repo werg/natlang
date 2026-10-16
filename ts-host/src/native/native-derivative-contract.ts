@@ -209,8 +209,9 @@ export function nativeQueryReadoutDependencies(value:unknown):string[]{
   if(!Array.isArray(value.terms))return fail();
   const deps=new Set<string>();
   for(const term of value.terms){
-    if(!object(term)||(term.readouts!==undefined&&!Array.isArray(term.readouts)))return fail();
-    for(const id of [term.readout,term.teacher_readout,...((term.readouts??[]) as unknown[])]){
+    if(!object(term)||(term.readouts!==undefined&&!Array.isArray(term.readouts))||
+        (term.teacher_readouts!==undefined&&!Array.isArray(term.teacher_readouts)))return fail();
+    for(const id of [term.readout,term.teacher_readout,...((term.readouts??[]) as unknown[]),...((term.teacher_readouts??[]) as unknown[])]){
       if(id===undefined||id===null)continue;
       if(typeof id!=='string'||!TENSOR.test(id))return fail();deps.add(id);
     }

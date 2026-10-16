@@ -184,7 +184,7 @@ export const objectives = {
     const total = probabilities.reduce((sum, value) => sum + value, 0);
     if (!(total > 0) || probabilities.some(value => !(value >= 0)))
       throw new LearningError('learning-decision-target', `objectives.decision: expected must put mass on the options ${options.join(', ')}`);
-    return new Loss([{ kind: 'decision', messages: turn.messages, options: [...options], rule,
+    return new Loss([{ kind: 'decision', messages: turn.messages, tools: turn.tools, options: [...options], rule,
       target: { probabilities: probabilities.map(value => value / total) }, ...adapted(turn) }]);
   },
   /** KL from the same model given the full source to the output's final turn. */
@@ -223,7 +223,7 @@ export const objectives = {
     if (own.decision) {
       if (!privileged.decision || JSON.stringify(privileged.decision.options) !== JSON.stringify(own.decision.options))
         throw new LearningError('learning-teacher-mismatch', 'conditionedDistill: the teacher must make the same decision readout (same options) as the student');
-      return new Loss([{ kind: 'decision', messages: own.messages, options: [...own.decision.options], rule: options.rule ?? 'logLoss',
+      return new Loss([{ kind: 'decision', messages: own.messages, tools: own.tools, options: [...own.decision.options], rule: options.rule ?? 'logLoss',
         teacher: teacherSide, ...adapted(own) }]);
     }
     if (privileged.decision) throw new LearningError('learning-teacher-mismatch', 'conditionedDistill: the student generated a reply but the teacher made a decision readout');
@@ -248,7 +248,7 @@ export const objectives = {
     const rewards = await Promise.all(values.map(async value => Number(await reward(value))));
     if (rewards.some(value => !Number.isFinite(value))) throw new LearningError('learning-reward', 'objectives.expectedReward: rewards must be finite numbers');
     const mean = rewards.reduce((sum, value) => sum + value, 0) / rewards.length;
-    return new Loss([{ kind: 'decision', messages: turn.messages, options: [...options], rule: 'expectedReward',
+    return new Loss([{ kind: 'decision', messages: turn.messages, tools: turn.tools, options: [...options], rule: 'expectedReward',
       target: { rewards: rewards.map(value => value - mean) }, ...adapted(turn) }]);
   },
   /**

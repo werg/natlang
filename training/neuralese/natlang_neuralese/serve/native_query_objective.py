@@ -10,7 +10,7 @@ import torch
 from ..common.hashing import canonical_json_sha256_hex
 from ..common.sampling import token_mask
 from ..rl.native_replay import token_action_logps
-from ..common.decision_objective import decision_loss
+from ..common.decision_objective import decision_loss, decision_loss_to_goal
 
 SCHEMA = 'natlang.native-query-objective/1'
 
@@ -92,6 +92,22 @@ class NativeQueryObjective:
                     raise ValueError('native distillation requires aligned ordinary conditional token distributions')
                 readout(term.get('readout'));readout(term.get('teacher_readout'))
                 prepared = {**term,'actions':student,'teacher_actions':teacher}
+            elif kind == 'decision-distill' and not set(term)-{'kind','options','teacher_options','rule','weight','readouts','teacher_readouts'}:
+                options, teacher = term.get('options'),term.get('teacher_options')
+                if not isinstance(options,list) or not options or not isinstance(teacher,list) or len(teacher)!=len(options):
+                    raise ValueError('native decision teacher must have the same finite options')
+                selected=[]
+                for key in ('readouts','teacher_readouts'):
+                    declared=term.get(key,[None]*len(options))
+                    if not isinstance(declared,list) or len(declared)!=len(options):
+                        raise ValueError('native decision teacher needs one exact readout per option')
+                    for ident in declared:readout(ident)
+                    selected.append(declared)
+                if term.get('rule') not in ('logLoss','brier','rps'):
+                    raise ValueError('native decision distillation requires a proper scoring rule')
+                prepared={**term,'options':[actions(option) for option in options],
+                    'teacher_options':[actions(option) for option in teacher],
+                    'readouts':selected[0],'teacher_readouts':selected[1]}
             else:
                 raise ValueError('native query kind or fields are unsupported')
             self.terms.append(prepared)
@@ -110,6 +126,13 @@ class NativeQueryObjective:
                 scores = torch.stack([token_action_logps(model,hidden,option,readout=self.readouts.get(ident)).sum()
                     for option,ident in zip(term['options'],term['readouts'])])
                 value = decision_loss(scores,rule=term['rule'],probabilities=term.get('probabilities'),rewards=term.get('rewards'))
+            elif kind=='decision-distill':
+                scores=torch.stack([token_action_logps(model,hidden,option,readout=self.readouts.get(ident)).sum()
+                    for option,ident in zip(term['options'],term['readouts'])])
+                with torch.no_grad():
+                    teacher=torch.stack([token_action_logps(model,hidden.detach(),option,readout=self.readouts.get(ident)).sum()
+                        for option,ident in zip(term['teacher_options'],term['teacher_readouts'])]).softmax(0)
+                value=decision_loss_to_goal(scores,teacher,rule=term['rule'])
             else:
                 from torch.utils.checkpoint import checkpoint
                 student_read=self.readouts.get(term.get('readout'),model.logits)

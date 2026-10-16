@@ -4,6 +4,7 @@ Token selection and typed tool readout are deterministic fixture controls;
 this checks real runtime state transport, not learned task performance.
 """
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -37,6 +38,9 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
     if node is None:
         pytest.fail('Node is required for the actual TypeScript native harness')
     port = tiny(family)
+    device=os.environ.get('NATLANG_NATIVE_RECORDED_TEST_DEVICE','cpu') if mode=='recorded' else 'cpu'
+    if device!='cpu':
+        port.hf.to(device=device,dtype=torch.bfloat16 if family=='mellum' else torch.float32)
     model = SharedStateModel(port, (60, 61, 62, 63), rank=4).eval()
     torch.nn.init.normal_(model.adapter.up.weight, std=.02)
     for parameter in model.parameters():
@@ -85,7 +89,7 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
     identity = native_identity(model, config, checkpoint_sha256=sha256_file_hex(weights))
     engine = Engine(port, None, tokenizer, TensorStore(), f"native-state/{config['architecture']}",
         shared_model=model, role_tokens=RoleTokens(*model.marker_ids), model_config=config,
-        checkpoint_sha256=identity['checkpoint_sha256'], embedding_weight_sha256=identity['embedding_weight_sha256'])
+        checkpoint_sha256=identity['checkpoint_sha256'], embedding_weight_sha256=identity['embedding_weight_sha256'],device=device)
     engine.native_identity = identity
     if mode=='recorded':
         engine.context=8192
@@ -209,6 +213,59 @@ def test_real_native_state_typed_child_archive_parent_import(tmp_path, monkeypat
                 with pytest.raises(ValueError,match='repeats an occurrence'):
                     compile_recorded_graph(recorded,events+[events[0]],identity=identity,
                         roles=engine.role_tokens,fetch_block=fetch)
+                from natlang_neuralese.serve.native_recorded_objective import lower_recorded_objective
+                from natlang_neuralese.serve.native_grad import native_graph_gradient
+                generations=[turn for turn in recorded if turn['native']['kind']=='generation']
+                decisions=[turn for turn in recorded if turn['native']['kind']=='decision']
+                student,teacher=generations[-1],generations[0]
+                def side(turn):
+                    return {key:turn[key] for key in ('messages','tools','adapters','native_state_modes') if key in turn}
+                terms=[{'kind':'crossEntropy',**side(student),'target':student['reply'],
+                        'native_turn_id':student['native']['id']},
+                    {'kind':'selfDistill',**side(student),'target':student['reply'],
+                        'native_turn_id':student['native']['id'],'teacher_native_turn_id':teacher['native']['id'],
+                        'teacher_messages':teacher['messages'],
+                        **({'teacher_adapters':teacher['adapters']} if 'adapters' in teacher else {})},
+                    {'kind':'logLikelihood',**side(teacher),'target':teacher['reply'],
+                        'native_turn_id':teacher['native']['id'],'likelihood_law':'model-conditional','weight':.2},
+                    {'kind':'decision',**side(decisions[0]),'native_turn_id':decisions[0]['native']['id'],
+                        'options':decisions[0]['decision']['options'],'rule':'logLoss',
+                        'target':{'probabilities':[.2,.8]}},
+                    {'kind':'decision',**side(decisions[0]),'native_turn_id':decisions[0]['native']['id'],
+                        'options':decisions[0]['decision']['options'],'rule':'brier',
+                        'teacher':{**side(decisions[1]),'native_turn_id':decisions[1]['native']['id']}},
+                    {'kind':'crossEntropy',**side(student),'native_turn_id':student['native']['id'],
+                        'target':{'role':'assistant','content':[{'type':'native_state','id':receipt['state_id']}]}}]
+                request=lower_recorded_objective(engine,recorded,events,terms)
+                assert request['graph']['target_native_values']==[{'id':receipt['state_id'],
+                    'tokenizer_fingerprint':identity['tokenizer_fingerprint'],'mode':'retained-source-token-ids'}]
+                target_node=request['graph']['nodes'][-1]
+                assert any(target_node['token_ids'][start:stop]==[5] for start,stop in target_node['producing'])
+                request['target']={'kind':'model-parameters','names':['adapter.up.weight']}
+                forwards=[]
+                original_forward=model.forward
+                def counted(*args,**kwargs):
+                    forwards.append(True)
+                    return original_forward(*args,**kwargs)
+                monkeypatch.setattr(model,'forward',counted)
+                gradient=native_graph_gradient(engine,request,None)
+                assert len(forwards)==1, 'all actual producers, expected outputs and teachers use one graph forward'
+                assert torch.isfinite(torch.tensor(gradient['loss']))
+                artifact=engine.store.get_native_tensor_artifact(gradient['gradient']['id']).artifact
+                assert artifact.tensors['adapter.up.weight'].norm()>0
+                bad=copy.deepcopy(terms)
+                bad[2]['likelihood_law']='sampled-policy'
+                with pytest.raises(ValueError,match='positive-temperature'):
+                    lower_recorded_objective(engine,recorded,events,bad)
+                bad=copy.deepcopy(terms)
+                bad[0]['messages']=[{'role':'user','content':'forged prompt'}]
+                with pytest.raises(ValueError,match='changes its recorded'):
+                    lower_recorded_objective(engine,recorded,events,bad)
+                bad_turns=copy.deepcopy(recorded)
+                first=next(segment for segment in bad_turns[0]['native']['sampling']['prompt'] if segment['kind']=='tokens')
+                first['token_ids'][0]=(first['token_ids'][0]+1)%len(vocabulary)
+                with pytest.raises(ValueError,match='exact rendered'):
+                    lower_recorded_objective(engine,bad_turns,events,terms)
             block = engine.store.get_native_state(receipt['state_id']).block
             assert block.token_ids.tolist() == [5]
             assert any(layer['kind'] == 'attention' for layer in block.layers)

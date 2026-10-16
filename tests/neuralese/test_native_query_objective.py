@@ -137,6 +137,48 @@ def test_query_masks_and_graph_binding_fail_before_forward():
     with pytest.raises(ValueError,match='exact graph'):NativeQueryObjective(spec,graph,example,vocabulary=4)
 
 
+@pytest.mark.parametrize('rule',['logLoss','brier','rps'])
+def test_decision_teacher_exact_manual_gradient_stops_its_distinct_hidden_and_head(rule):
+    from natlang_neuralese.common.decision_objective import decision_loss
+    graph={'schema':'natlang.neuralese-native-graph/1','id':'decision-teacher','split':'train',
+        'source_groups':['explicit-train'],'tokenizer_fingerprint':'f'*64,
+        'nodes':[{'name':str(i),'token_ids':[0,1],'target_weights':[0,0]} for i in range(4)]}
+    example=parse_graph(graph,tokenizer_fingerprint='f'*64)
+    teacher_id='nnt1_'+'a'*52
+    spec=query_spec(graph,[{'kind':'decision-distill','rule':rule,
+        'options':[[{'query':0,'token_id':1}],[{'query':2,'token_id':1}]],
+        'teacher_options':[[{'query':4,'token_id':1}],[{'query':6,'token_id':1}]],
+        'teacher_readouts':[teacher_id,teacher_id]}])
+    torch.manual_seed(581)
+    hidden=torch.randn(8,3,requires_grad=True)
+    student=torch.randn(3,4,requires_grad=True)
+    teacher=torch.randn(3,4,requires_grad=True)
+    model=SimpleNamespace(logits=lambda value:value@student)
+    objective=NativeQueryObjective(spec,graph,example,vocabulary=4,
+        resolve_readout=lambda ident:lambda value:value@teacher)
+    loss,_=objective(model,example,{'plan':example.plan,'h_final':hidden[None]})
+    scores=(hidden[[0,2]]@student).log_softmax(-1)[:,1]
+    with torch.no_grad():goal=(hidden[[4,6]]@teacher).log_softmax(-1)[:,1].softmax(0)
+    expected=decision_loss(scores,rule=rule,probabilities=goal.tolist())
+    actual_grad=torch.autograd.grad(loss,(hidden,student,teacher),retain_graph=True,allow_unused=True)
+    expected_grad=torch.autograd.grad(expected,(hidden,student))
+    torch.testing.assert_close(loss,expected,rtol=2e-6,atol=2e-7)
+    for actual,wanted in zip(actual_grad[:2],expected_grad):
+        torch.testing.assert_close(actual,wanted,rtol=2e-6,atol=2e-7)
+    assert actual_grad[0][:4].norm()>0
+    assert torch.count_nonzero(actual_grad[0][4:])==0
+    assert actual_grad[2] is None
+
+
+def test_decision_teacher_dependency_inventory_retains_every_exact_readout():
+    from natlang_neuralese.model.native_derivative_contract import query_readout_dependencies
+    a,b='nnt1_'+'a'*52,'nnt1_'+'b'*52
+    assert query_readout_dependencies({'kind':'native-query','terms':[{
+        'kind':'decision-distill','readouts':[a,None],'teacher_readouts':[b,b]}]})==[a,b]
+    with pytest.raises(ValueError,match='ordered list'):
+        query_readout_dependencies({'kind':'native-query','terms':[{'teacher_readouts':'not-an-array'}]})
+
+
 def test_distinct_teacher_readout_has_exact_analytic_student_adjoint_and_no_teacher_adjoint():
     graph={'schema':'natlang.neuralese-native-graph/1','id':'different-heads','split':'train','source_groups':['train'],
         'tokenizer_fingerprint':'f'*64,'nodes':[

@@ -25,6 +25,7 @@ async function requestTerms(build) {
 function output(id, { decision = false, modes = undefined } = {}) {
   return async () => {
     activeRecorder().record({ messages: [{ role: 'user', content: id }],
+      tools: [{ type: 'function', function: { name: 'tool-' + id, parameters: { type: 'object' } } }],
       reply: { role: 'assistant', content: 'answer' }, blocks: [],
       adapters: [{ id: 'adapter-' + id, scale: 0.25 }],
       ...(modes ? { native_state_modes: modes } : {}),
@@ -59,6 +60,8 @@ test('decision distillation binds its actual teacher query without borrowing stu
   assert.equal(term.teacher.native_turn_id, 'teacher');
   assert.deepEqual(term.teacher.native_state_modes, { source: 'same-base-adapter-state' });
   assert.deepEqual(term.teacher.adapters, [{ id: 'adapter-teacher', scale: 0.25 }]);
+  assert.equal(term.tools[0].function.name, 'tool-student');
+  assert.equal(term.teacher.tools[0].function.name, 'tool-teacher');
   assert.equal(term.native_state_modes, undefined);
 });
 
