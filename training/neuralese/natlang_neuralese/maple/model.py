@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import contextlib
+from contextvars import ContextVar
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -110,7 +111,8 @@ class RMSNorm(nn.Module):
             # One Triton kernel each way (maple/norm_kernels.py), same rule; NATLANG_MAPLE_FUSED_NORM=0: eager/compiled.
             from .norm_kernels import fused_rms_norm
             return fused_rms_norm(x, weight, self.eps)
-        if x.is_cuda and not _eager_depth and os.environ.get("NATLANG_MAPLE_COMPILE", "1") != "0":
+        if (x.is_cuda and not _eager_depth and not _compiled_eager_depth.get()
+                and os.environ.get("NATLANG_MAPLE_COMPILE", "1") != "0"):
             global _rms_norm_compiled
             if _rms_norm_compiled is None:
                 _rms_norm_compiled = torch.compile(_rms_norm, dynamic=True)
@@ -120,13 +122,23 @@ class RMSNorm(nn.Module):
 
 _rms_norm_compiled = None
 _eager_depth = 0
+_compiled_eager_depth = ContextVar("maple_compiled_norm_eager_depth",default=0)
 
 
 @contextlib.contextmanager
-def eager_rms_norm():
+def eager_rms_norm(*, compiled_only=False):
     """Run RMSNorm eagerly inside this block. A checkpointed region must recompute exactly the graph it saved:
     the dynamic-shape compiled norm can select a different graph on recompute for an odd chunk length (seen: a
     39-position readout chunk saved bf16 inputs but recomputed float32 ones), which breaks the saved-tensor match."""
+    if compiled_only:
+        # Keep the already stable custom BF16/FP16 fused kernel; bypass only
+        # dynamic compile dispatch, whose fallback changes saved-tensor graphs.
+        token=_compiled_eager_depth.set(_compiled_eager_depth.get()+1)
+        try:
+            yield
+        finally:
+            _compiled_eager_depth.reset(token)
+        return
     global _eager_depth
     _eager_depth += 1
     try:

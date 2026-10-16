@@ -217,6 +217,14 @@ def forward_graph(port, plan: GraphPlan, adapter: LowRankTokenEmbedding | None =
             return (updated, *captured) if retain_states else (updated,)
 
         if checkpointed:
+            # Dynamic torch.compile fallback must not change saved tensors
+            # between forward and recompute. Preserve stable fused norm kernels.
+            function=run_layer
+            def stable_norm_layer(*args, function=function):
+                from ..maple.model import eager_rms_norm
+                with eager_rms_norm(compiled_only=True):
+                    return function(*args)
+            run_layer=stable_norm_layer
             from .native_adapters import capture_native_execution
             from ..common.native_higher_order import capture_reference_execution
             run_layer = capture_reference_execution(capture_native_execution(run_layer))
