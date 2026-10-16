@@ -26,3 +26,10 @@ The supervisor's decision from actual held4500 evidence is to raise Mellum's fou
 ## Reuse completed source geometry
 
 The supervisor may reuse an existing complete CPU geometry pass instead of parsing the same admitted rows again. This is an exact verifier and outside-world preparation service, not a new admission or memory policy. Match the immutable prewarm receipt, all source/index/metadata bindings, tokenizer, roles, split and seven-file parser policy. Every newly appended row must be identical to a row in the receipt's covered suffix; conservative maxima from that superset are retained. Existing current-model capacity limits remain mandatory. A bound external CPU preparer may operate against the exact running package inventory, so preparation improvements do not require reloading a resident model. The learner's request and atomic adoption protocol remain unchanged.
+
+
+Retirement also removes the adopted request pointer, under the same writer
+lock, only when the content-verified request has this exact generation and
+payload. A newer request remains pending. A corrupt request fails before
+retiring current authority. This closes the stale retired-pointer handoff
+blocker observed on the LFM sandbox on October16.

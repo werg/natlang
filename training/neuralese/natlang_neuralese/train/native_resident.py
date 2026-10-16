@@ -310,8 +310,21 @@ def retire(directory, checkpoint, terminal):
         if ((training.get('options', {}).get('resident_adoption') or {}).get('generation') != state['generation']
                 or (training.get('source_receipts') or [{}])[0].get('sha256') != state['payload']['train']['sha256']):
             raise ValueError('resident retirement requires a checkpoint of the adopted generation')
+        # The published request remains after adoption. Clear only this exact
+        # retired generation under the same writer lock; preserve a newer request.
+        pointer = directory/'pending.json'
+        clear_pending = False
+        if pointer.exists():
+            request = json.loads(pointer.read_text())
+            pending = json.loads(bound(request).read_text())
+            if pending.get('schema') != SCHEMA or digest(pending.get('payload')) != pending.get('generation'):
+                raise ValueError('resident pending request is corrupt before retirement')
+            clear_pending = (pending['generation'] == state['generation']
+                             and pending['payload'] == state['payload'])
         history = directory/'retired'; history.mkdir(exist_ok=True)
         write_json(history/(state['generation']+'.json'), {**state, 'checkpoint': checkpoint, 'terminal': terminal})
+        if clear_pending:
+            pointer.unlink()
         (directory/'current.json').unlink()
         descriptor = os.open(directory, os.O_DIRECTORY)
         try: os.fsync(descriptor)

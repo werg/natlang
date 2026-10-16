@@ -259,7 +259,8 @@ def test_new_geometry_exceeding_bound_runtime_memory_policy_is_pending_not_commi
     assert resident.current(directory) is None and manager.train.ordered_ids()==['a','b']
 
 
-def test_retirement_needs_actual_adopted_checkpoint_and_drained_owner(tmp_path,monkeypatch):
+@pytest.mark.parametrize('pending_kind',['adopted','newer','corrupt'])
+def test_retirement_needs_actual_adopted_checkpoint_and_drained_owner(tmp_path,monkeypatch,pending_kind):
     import torch,time
     monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE',str(tmp_path/'cache'))
     paths,directory,manager,recipe=setup(tmp_path)
@@ -282,7 +283,21 @@ def test_retirement_needs_actual_adopted_checkpoint_and_drained_owner(tmp_path,m
     with pytest.raises(ValueError,match='drained optimizer'):
         resident.retire(directory,resident.binding(checkpoint),resident.binding(terminal))
     write_json(terminal,{'at':time.time(),'returncode':0})
+    pointer=directory/'pending.json'
+    if pending_kind=='newer':
+        next_payload={**state['payload'],'stage_id':'another-stage'}
+        request=directory/'next-request.json'
+        write_json(request,{'schema':resident.SCHEMA,'payload':next_payload,'generation':resident.digest(next_payload)})
+        write_json(pointer,resident.binding(request))
+    elif pending_kind=='corrupt':
+        value=json.loads(pointer.read_text());value['sha256']='0'*64;write_json(pointer,value)
+        with pytest.raises(ValueError,match='resident artifact changed'):
+            resident.retire(directory,resident.binding(checkpoint),resident.binding(terminal))
+        assert resident.current(directory)==state
+        assert not (directory/'retired'/(state['generation']+'.json')).exists()
+        return
     resident.retire(directory,resident.binding(checkpoint),resident.binding(terminal))
+    assert pointer.exists()==(pending_kind=='newer')
     assert resident.current(directory) is None
     assert json.loads((directory.parent/'recipe-plan.json').read_text())==state['payload']['plan']
     assert (directory/'retired'/(state['generation']+'.json')).exists()
