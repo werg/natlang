@@ -109066,6 +109066,224 @@
           }
         }
       }
+    },
+    {
+      "id": "external-expansion-search-owl-overcap-port-record-native-graphs-20261016-v1",
+      "owner": "dgx",
+      "path": "runs/searchowl-overcap-port-record-native-20261016-v2",
+      "include": [
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "lfm25/receipt.json",
+        "lfm25/omissions.jsonl",
+        "mellum21/train/native-graphs.jsonl.zst",
+        "mellum21/test/native-graphs.jsonl.zst",
+        "mellum21/receipt.json",
+        "mellum21/omissions.jsonl",
+        "provenance/*"
+      ],
+      "source_class": "source-curated-static-role-aware-port-record-native-state-graph-views",
+      "split": "7,027 curated train source records per tokenizer view; no held/test rows in this over-cap tranche. Current global held, quality, pending-unpinned and explicit decision-hold closures were applied and independently verified with zero train intersections.",
+      "training_admission": true,
+      "training_admission_reason": "This is an explicitly source-curated third-party SFT continuation, not oracle-verified, native-execution-verified, or an observed actor state exchange. The full original producer/consumer contexts and tool-call structure are retained; each source payload is represented as an assistant producer span, and the complete consumer continuations carry positive target masks. Both pinned model/tokenizer views independently parse as native graphs, exact source row/membership and reviewed target closures match, all 7,027 targets per view are positive, current held/quality/pending protection and exact decision-hold files have zero intersections, and the actual full-length consumer-only gradient matches explicit cached execution. Graphs are kept intact with no token truncation. Registration records eligibility only, not student exposure.",
+      "derived_from": [
+        "external-expansion-search-owl-native-20261015-v1"
+      ],
+      "license_provenance": "Inherited from admitted Search/OWL source; owner accepts all licenses.",
+      "source_bindings": {
+        "admission_class": "source-curated-third-party-SFT",
+        "review_kind": "source-curated-third-party-SFT",
+        "oracle_verified": false,
+        "native_execution_verified": false,
+        "observed_actor_state_exchange": false,
+        "source_corpus_id": "external-expansion-search-owl-native-20261015-v1",
+        "source_archive": {
+          "parent_archive_path": "/work/private-source-spool/search-owl/search-owl-closed-20261015.tar.zst",
+          "parent_archive_sha256": "fd18bf20e583145844370033faa9c88c7f765cf97382d79b6fd299e82b8e5403",
+          "parent_source_sha256": "8a3322fd20f0bec73080ebb3af8bf25f2b60890512bdf492dc3dc44e7bd0c989",
+          "selected_records": {
+            "path": "/mnt/external/natlang-development-data/search-owl-overcap-source-candidate-20261016-v1/port-records.jsonl",
+            "bytes": 1247914937,
+            "sha256": "d86b9ad53a8ab5913f14e648dcee4ad768f3f1ecca546d14f85ae54767f1c091"
+          }
+        },
+        "membership": {
+          "path": "/mnt/external/natlang-development-data/search-owl-overcap-source-candidate-20261016-v1/membership.jsonl",
+          "sha256": "d50574bbd21945197f890ee32f8d00edd738a94d8289d54331db397f35db16dc",
+          "rows": 7027,
+          "unique_ids": 7001,
+          "duplicate_id_occurrences": 26
+        },
+        "original_overcap_omissions": {
+          "path": "/mnt/external/natlang-development-data/search-owl-overcap-source-candidate-20261016-v1/omissions.jsonl",
+          "sha256": "1db3ee180810a4a66e02d3d163f4bcecea58601edc044f80f91e8aa3ee7986b5",
+          "rows": 7002,
+          "unique_ids": 7001
+        },
+        "curation_review": {
+          "path": "/home/werg/data/dgxops/searchowl-overcap-source-curation-review-20261016/review.json",
+          "sha256": "7099178a657fdc13b0367913fecd002b224477ba241d40cea2b2c1ec4c6559a6",
+          "reviewed_targets_sha256": "f4ebdb5ee12ce148ee63fa265d1fe8cd782c604995f5d279b385a87f0eb32d2a",
+          "rows": 7027,
+          "decision_id": "root-searchswarm-source-curated-sft-20261016",
+          "revision": "4bad3397be6144a0fbbaac3121929e082f32865e"
+        },
+        "current_protection": {
+          "path": "/home/werg/data/e2e-current-protection-bundle-20261015-v2/protection-manifest.json",
+          "sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563",
+          "source_review_sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593"
+        },
+        "decision_hold_files": [
+          {
+            "path": "training/decision-holds/native-non-success-20261015-v1.jsonl",
+            "sha256": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177",
+            "bytes": 2569
+          },
+          {
+            "path": "training/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+            "sha256": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9",
+            "bytes": 2047232
+          }
+        ],
+        "source_rows": 7027,
+        "unique_source_ids": 7001,
+        "source_groups_per_model": 8771,
+        "positive_targets_per_model": 7027,
+        "held_rows": 0,
+        "current_decision_hold_intersections": 0,
+        "current_protection_intersections": 0,
+        "tokenizer_models": {
+          "lfm25": {
+            "model_id": "lfm2:f40d7a5bf651a03618ae8c06bda24a180e22fa79de964e55862c2c4984249da6",
+            "source_tokenizer_fingerprint": "e52de346c5a9d6fe666b5a412be077525daee0ee40f81a91c36728cfb4cbf008",
+            "expanded_tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105"
+          },
+          "mellum21": {
+            "model_id": "mellum:bc700045baee1c7ea1869675c38efedd59d9db09975ea0b38cff8db152d6148f",
+            "source_tokenizer_fingerprint": "1abe5e6333be0157f76f5484b389e5586b0e6dbb9bc776f54ca9fd62fce6cb56",
+            "expanded_tokenizer_fingerprint": "fbf22d8773d09be802cb9977895067db36cdfba747fcb24b02ddbf1312d3778f"
+          }
+        },
+        "independent_full_length_gradient_proof": {
+          "path": "provenance/consumer-gradient-proof.json",
+          "sha256": "325bb00d4292521fd73891177cc772bb0f0d8c52544288aa0fb9031f7185d993",
+          "scope": "Actual full-length graphs, tiny FP32 CUDA production native architecture, one flat graph forward compared to explicit cached invocations; not a production-weight task-quality claim."
+        },
+        "geometry_summary": {
+          "path": "provenance/geometry-summary.json",
+          "sha256": "4ace45fbbc7136614f6e7825de2c6b8f8e017332570155628c6a934dc4fcc656"
+        },
+        "outputs": {
+          "lfm25_train": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/lfm25/train/native-graphs.jsonl.zst",
+            "bytes": 539819510,
+            "sha256": "a70589b38628ee9414bb883679e721f10c61b2b25de7b58a849bf92133358553"
+          },
+          "lfm25_test": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/lfm25/test/native-graphs.jsonl.zst",
+            "bytes": 13,
+            "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+          },
+          "mellum21_train": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/mellum21/train/native-graphs.jsonl.zst",
+            "bytes": 528317612,
+            "sha256": "2d33a50666493a5e74923d1d1b89d33b3bfa6245401244bc78b2e3b65d368cf3"
+          },
+          "mellum21_test": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/mellum21/test/native-graphs.jsonl.zst",
+            "bytes": 13,
+            "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+          },
+          "lfm25_receipt": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/lfm25/receipt.json",
+            "bytes": 114379,
+            "sha256": "e1995aa7b51b20fae801ca7582cf39bb7bbea6c7ea7a7f37d0042d41437f8bee"
+          },
+          "lfm25_omissions": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/lfm25/omissions.jsonl",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "mellum21_receipt": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/mellum21/receipt.json",
+            "bytes": 114390,
+            "sha256": "0cd2940ba9957545b9e199f55fb42ebb1ae5befaf34f9dd2449d17a999199977"
+          },
+          "mellum21_omissions": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/mellum21/omissions.jsonl",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        "provenance_files": {
+          "source-review.json": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/provenance/source-review.json",
+            "bytes": 1390,
+            "sha256": "7099178a657fdc13b0367913fecd002b224477ba241d40cea2b2c1ec4c6559a6"
+          },
+          "reviewed-targets.jsonl": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/provenance/reviewed-targets.jsonl",
+            "bytes": 3992149,
+            "sha256": "f4ebdb5ee12ce148ee63fa265d1fe8cd782c604995f5d279b385a87f0eb32d2a"
+          },
+          "membership.jsonl": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/provenance/membership.jsonl",
+            "bytes": 3636105,
+            "sha256": "d50574bbd21945197f890ee32f8d00edd738a94d8289d54331db397f35db16dc"
+          },
+          "original-over-cap-omissions.jsonl": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/provenance/original-over-cap-omissions.jsonl",
+            "bytes": 799066,
+            "sha256": "1db3ee180810a4a66e02d3d163f4bcecea58601edc044f80f91e8aa3ee7986b5"
+          },
+          "source-selection-result.json": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/provenance/source-selection-result.json",
+            "bytes": 3465,
+            "sha256": "771fe02ff66a2e8bf2bc1bee3ff89723dfff755f37d00608e131e9f3f710e790"
+          },
+          "parent-source-archive-receipt.json": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/provenance/parent-source-archive-receipt.json",
+            "bytes": 1152,
+            "sha256": "0edc7612045a31784767e5bd923feff08ebbb4e31cde0221e3899e442fa967f1"
+          },
+          "current-protection-manifest.json": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/provenance/current-protection-manifest.json",
+            "bytes": 101288,
+            "sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563"
+          },
+          "decision-hold-native-non-success.jsonl": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/provenance/decision-hold-native-non-success.jsonl",
+            "bytes": 2569,
+            "sha256": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177"
+          },
+          "decision-hold-semantic-ticket-crisp-bypass.jsonl": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/provenance/decision-hold-semantic-ticket-crisp-bypass.jsonl",
+            "bytes": 2047232,
+            "sha256": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9"
+          },
+          "validation-lfm.json": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/provenance/validation-lfm.json",
+            "bytes": 2321,
+            "sha256": "129d54da1f856937ff4b59b147677a4966fa745ac6bbf3b920a71e44d9fc4758"
+          },
+          "validation-mellum.json": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/provenance/validation-mellum.json",
+            "bytes": 2332,
+            "sha256": "906c93fe9c3ce330e1f129d253718a6156aae71079bcb7da60b37f31f8e0771a"
+          },
+          "geometry-summary.json": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/provenance/geometry-summary.json",
+            "bytes": 1780,
+            "sha256": "4ace45fbbc7136614f6e7825de2c6b8f8e017332570155628c6a934dc4fcc656"
+          },
+          "consumer-gradient-proof.json": {
+            "path": "/home/werg/natlang/runs/searchowl-overcap-port-record-native-20261016-v2/provenance/consumer-gradient-proof.json",
+            "bytes": 1039,
+            "sha256": "325bb00d4292521fd73891177cc772bb0f0d8c52544288aa0fb9031f7185d993"
+          }
+        }
+      },
+      "note": "All full graphs are retained intact; no arbitrary token or row cap was applied. Independent geometry reports max total physical forward graph length of 87,996 LFM tokens / 96,447 Mellum tokens and max logical import spans of 70,667 / 78,534. This dataset requires whole-graph handling at those sizes. Original 7,002 over-cap omission entries (7,001 unique IDs) matched 7,027 selected source rows (7,001 unique IDs); all exact row occurrences are preserved and qualified by source row hash."
     }
   ],
   "coverage_backlog": [

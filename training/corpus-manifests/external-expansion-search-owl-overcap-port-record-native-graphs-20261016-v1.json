@@ -1,0 +1,121 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "external-expansion-search-owl-overcap-port-record-native-graphs-20261016-v1",
+  "owner": "dgx",
+  "path": "runs/searchowl-overcap-port-record-native-20261016-v2",
+  "files": [
+    {
+      "path": "lfm25/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "lfm25/receipt.json",
+      "bytes": 114379,
+      "sha256": "e1995aa7b51b20fae801ca7582cf39bb7bbea6c7ea7a7f37d0042d41437f8bee"
+    },
+    {
+      "path": "lfm25/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "lfm25/train/native-graphs.jsonl.zst",
+      "bytes": 539819510,
+      "sha256": "a70589b38628ee9414bb883679e721f10c61b2b25de7b58a849bf92133358553"
+    },
+    {
+      "path": "mellum21/omissions.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "lines": 0
+    },
+    {
+      "path": "mellum21/receipt.json",
+      "bytes": 114390,
+      "sha256": "0cd2940ba9957545b9e199f55fb42ebb1ae5befaf34f9dd2449d17a999199977"
+    },
+    {
+      "path": "mellum21/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "mellum21/train/native-graphs.jsonl.zst",
+      "bytes": 528317612,
+      "sha256": "2d33a50666493a5e74923d1d1b89d33b3bfa6245401244bc78b2e3b65d368cf3"
+    },
+    {
+      "path": "provenance/consumer-gradient-proof.json",
+      "bytes": 1039,
+      "sha256": "325bb00d4292521fd73891177cc772bb0f0d8c52544288aa0fb9031f7185d993"
+    },
+    {
+      "path": "provenance/current-protection-manifest.json",
+      "bytes": 101288,
+      "sha256": "9f962ae8bf8b2afd0cb9f26a67e437dd449e79c990323d7b090738b6bbf87563"
+    },
+    {
+      "path": "provenance/decision-hold-native-non-success.jsonl",
+      "bytes": 2569,
+      "sha256": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177",
+      "lines": 7
+    },
+    {
+      "path": "provenance/decision-hold-semantic-ticket-crisp-bypass.jsonl",
+      "bytes": 2047232,
+      "sha256": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9",
+      "lines": 4589
+    },
+    {
+      "path": "provenance/geometry-summary.json",
+      "bytes": 1780,
+      "sha256": "4ace45fbbc7136614f6e7825de2c6b8f8e017332570155628c6a934dc4fcc656"
+    },
+    {
+      "path": "provenance/membership.jsonl",
+      "bytes": 3636105,
+      "sha256": "d50574bbd21945197f890ee32f8d00edd738a94d8289d54331db397f35db16dc",
+      "lines": 7027
+    },
+    {
+      "path": "provenance/original-over-cap-omissions.jsonl",
+      "bytes": 799066,
+      "sha256": "1db3ee180810a4a66e02d3d163f4bcecea58601edc044f80f91e8aa3ee7986b5",
+      "lines": 7002
+    },
+    {
+      "path": "provenance/parent-source-archive-receipt.json",
+      "bytes": 1152,
+      "sha256": "0edc7612045a31784767e5bd923feff08ebbb4e31cde0221e3899e442fa967f1"
+    },
+    {
+      "path": "provenance/reviewed-targets.jsonl",
+      "bytes": 3992149,
+      "sha256": "f4ebdb5ee12ce148ee63fa265d1fe8cd782c604995f5d279b385a87f0eb32d2a",
+      "lines": 7027
+    },
+    {
+      "path": "provenance/source-review.json",
+      "bytes": 1390,
+      "sha256": "7099178a657fdc13b0367913fecd002b224477ba241d40cea2b2c1ec4c6559a6"
+    },
+    {
+      "path": "provenance/source-selection-result.json",
+      "bytes": 3465,
+      "sha256": "771fe02ff66a2e8bf2bc1bee3ff89723dfff755f37d00608e131e9f3f710e790"
+    },
+    {
+      "path": "provenance/validation-lfm.json",
+      "bytes": 2321,
+      "sha256": "129d54da1f856937ff4b59b147677a4966fa745ac6bbf3b920a71e44d9fc4758"
+    },
+    {
+      "path": "provenance/validation-mellum.json",
+      "bytes": 2332,
+      "sha256": "906c93fe9c3ce330e1f129d253718a6156aae71079bcb7da60b37f31f8e0771a"
+    }
+  ],
+  "bytes": 1078957805
+}
