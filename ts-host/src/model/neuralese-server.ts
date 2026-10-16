@@ -30,7 +30,7 @@ import { activeAdapters, activeRecorder, type AdapterBinding, type TurnRecorder 
 import { serves } from './neuralese-info.js';
 import {validateCoefficientRuntime,requireCoefficientAttestation,coefficientBindings,coefficientStateModes} from './native-coefficient-policy.js';
 import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
-  isNativeStateId, partsToText, runtimePartsToText, runtimeTextToParts, type ContentPart, type RuntimeContentPart } from '../native/neuralese.js';
+  isNativeStateId, runtimeTextToParts, type RuntimeContentPart } from '../native/neuralese.js';
 import { constantBlock, decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
   decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId, nativeTensorArtifactDependencies, nativeStateArtifactDependencies, archiveNativeArtifactFrom, archiveNativeTensorFrom,
   nativeTensorArtifactBlockMeta, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
@@ -377,25 +377,12 @@ async function withRestoredNativeStates<T>(remote: HttpNeuraleseStore, archive: 
   }
 }
 
-/** A reply's part arrays (message content, strings inside tool-call arguments) as conversation text. */
-function partsAsText(value: unknown): unknown {
-  if (Array.isArray(value) && value.length && value.every(part => part && typeof part === 'object' &&
-      (part.type === 'text' && typeof part.text === 'string' ||
-       part.type === 'neuralese' && typeof part.id === 'string' ||
-       part.type === 'native_state' && typeof part.id === 'string'))
-      && value.some(part => (part as { type?: unknown }).type !== 'text'))
-    return runtimePartsToText(value as RuntimeContentPart[]);
-  if (isContentParts(value)) return partsToText(value as ContentPart[]);
-  if (Array.isArray(value)) return value.map(partsAsText);
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, partsAsText(item)]));
-  return value;
-}
-
 function normalizeReply(body: Json): Json {
   const choice = (body.choices as Json[] | undefined)?.[0];
   const message = choice?.message as Json | undefined;
   if (!message) return body;
-  message.content = partsAsText(message.content);
+  // The shared chat adapter derives conversation text. Keep actual wire parts
+  // here so an assistant-only return retains its typed transport provenance.
   for (const call of (message.tool_calls ?? []) as Array<{ function?: { arguments?: unknown } }>) {
     const fn = call.function;
     if (!fn) continue;

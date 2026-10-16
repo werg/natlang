@@ -136,6 +136,8 @@ test('a Neuralese server that declares streaming streams: a written block is one
     assert.equal(whole.bodies[0].stream, undefined);
     assert.deepEqual(content(streamed), content(unstreamed));
     assert.deepEqual(streamed.raw_response.neuralese, neuraleseReply.whole.neuralese);
+    assert.deepEqual(streamed.raw_response.choices[0].message.content, neuraleseMessage.content);
+    assert.deepEqual(unstreamed.raw_response.choices[0].message.content, neuraleseMessage.content);
   } finally { await model.close(); await whole.close(); }
 });
 

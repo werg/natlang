@@ -34,3 +34,15 @@ child-to-parent tests cover Neuralese results but omit ordinary-string rejection
 
 These are exact parsing, type verification and transport mechanisms. The policy
 is the language's existing typed result contract, not a new prompt or heuristic.
+
+LF6620 follow-up: the same defect remained for assistant-only producer replies.
+The server adapter flattened their actual content parts before the agent could
+apply the return type. Preserve the original wire content in `raw_response`;
+the shared chat adapter already derives conversation text from those parts.
+For a complete assistant-only reply containing genuine structured block parts,
+pass those parts through the existing typed `return_result` path. Ordinary text,
+including literal sentinel-looking strings, keeps its existing handling. Mixed
+text and block parts receive the same existing type checks as tool returns.
+Tests cover both formats, whole and streamed responses, typed Neuralese returns,
+ordinary-string recovery, mixed parts, truncation and literal text. This repairs
+transport provenance, with no payload decoding or new model-facing error.

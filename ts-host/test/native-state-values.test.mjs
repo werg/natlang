@@ -266,13 +266,14 @@ test('declared union discriminants preserve the selected nested literal/Neurales
 });
 
 
-for (const format of ['native_state', 'neuralese']) {
-  test(`${format} real HTTP normalization preserves producer provenance through agent rejection`, async () => {
+for (const format of ['native_state', 'neuralese']) for (const channel of ['tool', 'assistant']) {
+  test(`${format} ${channel} real HTTP normalization preserves producer provenance through agent rejection`, async () => {
     const store = new MemoryNeuraleseStore();
     const port = format === 'neuralese' ? new StandInNeuralesePort(store, hashingEmbedder(8), 8) : undefined;
     const artifact = port ? await port.write('opaque transport payload') : await store.putNativeState(nativeStateFixture());
     const neuralese = port ? { store, port, dialect: port.dialect } : runtimeFor(store);
     const requests = [];
+    let replyMode = 'block';
     const server = createServer(async (request, response) => {
       if (request.url === '/v1/neuralese/info') {
         response.setHeader('content-type', 'application/json');
@@ -290,11 +291,13 @@ for (const format of ['native_state', 'neuralese']) {
       let body = ''; for await (const chunk of request) body += chunk;
       requests.push(JSON.parse(body));
       response.setHeader('content-type', 'application/json');
-      response.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '', tool_calls: [{
-        id: 'reply-' + requests.length, type: 'function', function: { name: 'return_result',
-          arguments: JSON.stringify({ status: 'success', value: requests.length === 1 ?
-            [{ type: format, id: artifact.id }] : 'actual HTTP answer' }) },
-      }] } }], ...(requests.length !== 1 ? {} : format === 'native_state' ?
+      const parts = [{ type: format, id: artifact.id }];
+      const value = requests.length !== 1 ? 'actual HTTP answer' : replyMode === 'literal' ?
+        neuraleseSentinel(artifact.id) : replyMode === 'mixed' ? [{ type: 'text', text: 'prefix ' }, ...parts] : parts;
+      const message = channel === 'assistant' ? { role: 'assistant', content: value } :
+        { role: 'assistant', content: '', tool_calls: [{ id: 'reply-' + requests.length, type: 'function',
+          function: { name: 'return_result', arguments: JSON.stringify({ status: 'success', value }) } }] };
+      response.end(JSON.stringify({ choices: [{ message, finish_reason: requests.length === 1 && replyMode === 'truncated' ? 'length' : 'stop' }], ...(requests.length !== 1 ? {} : format === 'native_state' ?
         { native_state: { blocks: [{ ...artifact.metadata, id: artifact.id }] } } : { neuralese: { blocks: [artifact] } }) }));
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -309,6 +312,16 @@ for (const format of ['native_state', 'neuralese']) {
       requests.length = 0;
       await new NativeToolAgent(driver, { maxTurns: 1, neuralese }).run(child);
       assert.equal(child.lam.return.$neuralese.id, artifact.id);
+      if (channel === 'assistant') {
+        for (replyMode of ['mixed', 'truncated', 'literal']) {
+          requests.length = 0;
+          const target = open({ type: '() => string', instructions: 'Return actual answer text.' }, { neuralese }).session;
+          await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(target);
+          assert.equal(target.lam.return, replyMode === 'literal' ? neuraleseSentinel(artifact.id) : 'actual HTTP answer');
+          assert.equal(requests.length, replyMode === 'literal' ? 1 : 2);
+          if (replyMode === 'mixed') assert.match(JSON.stringify(requests[1].messages), /type-mismatch/);
+        }
+      }
     } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   });
 }

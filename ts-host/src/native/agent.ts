@@ -19,7 +19,7 @@ const scopeValueChars = (session: NativeSession) => Math.max(SCOPE_VALUE_CHARS, 
 import { listingViewInstructions, viewNote } from './prompt.js';
 import { untrustedBlock, type UntrustedRegistry } from './untrusted.js';
 import { writtenReturnResult } from './pseudo-call.js';
-import { decodeTurnValue, encodeMessages, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
+import { decodeTurnValue, encodeMessages, isContentParts, isNeuraleseRef, neuraleseSentinel, NeuraleseUnsupportedError, supportsNeuralese,
   sentinelIds, nativeStateSentinelIds, type NeuraleseRuntimeOptions } from './neuralese.js';
 import { resolveNeuralesePreviews } from './neuralese-preview.js';
 import { blockInput, graphNode, invocationNodeId } from './graph.js';
@@ -524,7 +524,9 @@ export class NativeToolAgent {
           Object.values(value).some(carries));
     const serverBlocks = (response.raw_response?.neuralese as { blocks?: NeuraleseBlockMeta[] } | undefined)?.blocks ?? [];
     const nativeBlocks = (response.raw_response?.native_state as { blocks?: Record<string, unknown>[] } | undefined)?.blocks ?? [];
-    if (!carries(response.text) && !carries(response.calls) && !serverBlocks.length && !nativeBlocks.length) return response;
+    const rawChoices = response.raw_response?.choices as Array<{ message?: { content?: unknown } }> | undefined;
+    const content = rawChoices?.[0]?.message?.content;
+    if (!carries(response.text) && !carries(response.calls) && !carries(content) && !serverBlocks.length && !nativeBlocks.length) return response;
     const returnType = session.lam.type.kind === 'lambda' ? formatType(session.lam.type.returns) : undefined;
     const producer = { call_id: session.runtime.currentCallId ?? null, turn,
       ...(returnType ? { result_type: returnType } : {}) };
@@ -547,6 +549,13 @@ export class NativeToolAgent {
       ...(response.text === undefined ? {} : { text: await decodeTurnValue(response.text, port,
         { ...producer, marker_context: 'assistant-text' }, written) as string }),
       ...(response.calls === undefined ? {} : { calls: await Promise.all(response.calls.map(decodeCall)) as ModelTurn['calls'] }) };
+    if (!response.calls?.length && !response.truncated && isContentParts(content) &&
+        content.some(part => part.type !== 'text')) {
+      // Actual producer parts are a typed return, not an opaque-ID string.
+      // Literal strings never enter this branch, even if they spell a marker.
+      decoded.text = '';
+      decoded.calls = [await decodeCall(['return_result', { status: 'success', value: content }])];
+    }
     // Each block the turn wrote is a node. Stop decisions and distribution parameters come from a writer that reports
     // them (a Neuralese server); the stand-in writer has none.
     for (const block of new Map(written.map(block => [block.id, block])).values()) {

@@ -1,5 +1,15 @@
 # Model-facing changes and their measurement
 
+### 2026-10-16 — assistant producer returns preserve typed transport
+
+LF6620 exposed four opaque native-ID string returns despite the tool-return
+transport repair. Assistant-only wire parts were still flattened before the
+result boundary. Preserve them and reuse the existing typed return check; no
+new prompt or error text and no implicit payload decoding. Both skills explain
+recovery. Measurement debt: include assistant-only producer returns in the next
+48 live own-model TRAIN turns before adopting this runtime in production.
+Protected held-task failures remain evaluation-only.
+
 ### 2026-10-16 — native task evaluations use the native state client
 
 Actual LFM5000 responses contained shared-state multipart values while the
