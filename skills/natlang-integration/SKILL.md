@@ -503,3 +503,9 @@ Recorded native decisions need the exact rendered option receipt and native
 input archive. For a missing decision receipt or archive error, use the matching
 native scoring service and restore its original/decoded state dependencies;
 never substitute a sampled text reply or infer producer links from equal IDs.
+
+For a serving error `System message must be at the beginning`, preserve the
+ordered system/recovery messages and use a qualified compatible server template.
+Do not move recovery instructions into the initial prompt or change their roles.
+The pinned Qwen compatibility renderer preserves originally valid renderings;
+its changed recovery path needs live executor qualification before adoption.

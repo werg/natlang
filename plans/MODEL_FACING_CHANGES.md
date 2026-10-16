@@ -918,3 +918,16 @@ transport preserves each coalesced caller's recorder and adapter scope. No
 decision prompt, option text, ordinary sampling behavior or public order-2
 capability changes. Error recovery details remain unmeasured until the next
 live window; runtime receipt tests do not claim task improvement.
+
+## 2026-10-16: ordered system messages in the NVIDIA teacher template
+
+The pinned Qwen template rejected later system messages in actual natlang
+recovery conversations. A SHA-bound derived template preserves those roles and
+positions using the existing system renderer. The original accepted renderings
+are byte-identical across twelve text/tool/thinking variants; later messages
+retain their original position and system-content validation. This helper is
+prepared, not deployed. **Measurement debt:** qualify about48 live teacher
+interactions including actual recovery/system-message paths before adopting the
+derived template. Existing 41/48 NVIDIA diagnostics include the strict-template
+failure and do not qualify this change. Continue qualified broad generation
+while preparing the fix; do not infer task lift from static rendering tests.

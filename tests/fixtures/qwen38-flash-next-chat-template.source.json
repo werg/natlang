@@ -1,0 +1,8 @@
+{
+  "source": "https://huggingface.co/nvidia/Qwen3.8-Flash-Next-FP4-Local/blob/b9ce18a6887e18c089fdea8509a33e63429a3300/chat_template.jinja",
+  "sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+  "provenance": "Exact model-local template ferried from the pinned NVIDIA generation actor; source revision is preserved in the actor/source receipt, not inferred from this URL.",
+  "license": "nvidia-open-model-agreement (model card license_name)",
+  "actor_source_sha256": "fecd6cea8ca3199d74073330a3cea7b13be6ac4defc07b6eac01779b4aec1d6b",
+  "revision": "b9ce18a6887e18c089fdea8509a33e63429a3300"
+}
