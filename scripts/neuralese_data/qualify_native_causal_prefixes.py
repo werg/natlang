@@ -21,13 +21,12 @@ from natlang_neuralese.common.hashing import canonical_json_sha256_hex,sha256_fi
 from natlang_neuralese.common.jsonio import open_jsonl_text,write_json_durable
 from natlang_neuralese.data.native_graph import parse_graph
 from natlang_neuralese.model.native_model import load_native_model,load_native_checkpoint
-from natlang_neuralese.train.native_prefix_packing import pack_causal_prefixes
-from natlang_neuralese.train.native_state_sft import pack_native_graphs,packed_graph_loss
 from natlang_neuralese.train.fp8_backend import make_backend
 
 
 def select_adjacent(path, *, count=2, scan=128, max_tokens=32768):
     """Choose complete adjacent train rows, preferring the smallest useful batch."""
+    from natlang_neuralese.train.native_prefix_packing import pack_causal_prefixes
     pending=[];best=None
     with open_jsonl_text(path) as stream:
         for index,line in enumerate(stream):
@@ -88,6 +87,7 @@ def restore_rng(state):torch.set_rng_state(state[0]);torch.cuda.set_rng_state_al
 
 
 def qualify_case(model,examples,shared_plan,maps,backend,*,atol,rtol,chunk_tokens):
+    from natlang_neuralese.train.native_state_sft import pack_native_graphs,packed_graph_loss
     backend_state=copy.deepcopy(backend.extra_state()) if backend else None
     rng=snapshot_rng();runs={}
     try:

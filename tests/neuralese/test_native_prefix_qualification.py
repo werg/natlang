@@ -127,3 +127,26 @@ def test_staged_runtime_code_identity_does_not_require_git_checkout(monkeypatch)
     monkeypatch.setattr(qualifier.subprocess,'run',absent)
     assert qualifier.code_revision('exact-staged-commit')=='exact-staged-commit'
     assert qualifier.code_revision(None) is None
+
+
+def test_shared_parent_and_attention_helpers_import_without_optional_prefix_runtime():
+    import subprocess
+    import sys
+    code = """
+import importlib.abc, sys
+class MissingPrefix(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == 'natlang_neuralese.train.native_prefix_packing':
+            raise ModuleNotFoundError('legacy runtime has no native_prefix_packing', name=fullname)
+sys.meta_path.insert(0, MissingPrefix())
+from scripts.neuralese_data.qualify_native_causal_prefixes import load_qualification_model, select_adjacent
+from scripts.neuralese_data.qualify_native_attention_index import diagnostic_optimizer, tensor_digest
+assert callable(load_qualification_model) and callable(diagnostic_optimizer) and callable(tensor_digest)
+try:
+    select_adjacent('never-read.jsonl')
+except ModuleNotFoundError as error:
+    assert error.name == 'natlang_neuralese.train.native_prefix_packing'
+else:
+    raise AssertionError('actual prefix operation silently bypassed missing runtime support')
+"""
+    subprocess.run([sys.executable, '-c', code], check=True)

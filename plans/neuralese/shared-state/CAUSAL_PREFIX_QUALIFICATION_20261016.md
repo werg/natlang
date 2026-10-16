@@ -192,3 +192,10 @@ are preserved. New source bytes remain cache misses. Fourteen focused tests
 include real old/new loaders, a cache hit without source parsing, and changed
 source rejection; independent review is complete. Frozen3042→8fc policy proof
 passed. This is neither new data admission nor numerical/capacity qualification.
+
+Shared qualification loading must remain usable with the exact older runtime
+being compared. Prefix packing and its loss helpers are imported only when
+that prefix qualification is actually selected; loading an unchanged parent or
+computing attention diagnostics cannot require a newer optional prefix module.
+This is dependency plumbing, not a compatibility substitute for model code.
+Missing required prefix support still fails when that operation is requested.
