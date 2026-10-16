@@ -1,0 +1,402 @@
+{
+  "schema": "natlang.corpus-snapshot/1",
+  "id": "acquired-d12-feature-status-capacity-native-20261016-v1",
+  "owner": "dgx",
+  "path": "runs/acquired-d12-feature-status-native-20261016-v1",
+  "files": [
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/audit.json",
+      "bytes": 34718,
+      "sha256": "3c2dbe99f1cdc903bd219b9a06553aea3f148746257512e917fde64ec2636741"
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/lfm25-train-sources.json",
+      "bytes": 1795,
+      "sha256": "dbc2321996ab558bc0bd3134a2a57db0588b153410754f1ec80bab9b145274dc"
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/mellum21-train-sources.json",
+      "bytes": 1813,
+      "sha256": "fc905f6b49e2ae703e781fad51d47ad6ec72ad1a077eb123254642be7f38c192"
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/decision-holds/native-non-success-20261015-v1.jsonl",
+      "bytes": 2569,
+      "sha256": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177",
+      "lines": 7
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+      "bytes": 2047232,
+      "sha256": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9",
+      "lines": 4589
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/acquired-connected-source-groups.jsonl",
+      "bytes": 914296,
+      "sha256": "1fea2eb0b4b30008d014025542aaef68d24be36af4804008133a29a9849eec34",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/acquired-remaining-complete-source/source-groups.jsonl",
+      "bytes": 16694,
+      "sha256": "913d2335bcd3f158fe3059c80232313209ae639ad93384092abb33f9afe52c4b",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/full/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/program-header/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/whole-trajectory/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/protection-manifest.json",
+      "bytes": 364774,
+      "sha256": "1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704"
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/quality-groups.jsonl",
+      "bytes": 3613577,
+      "sha256": "1fe15465ccae78e771e0e898e71745aaa5cd5fbae6cef16616ed6dc550de8ca9",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-group-components.jsonl",
+      "bytes": 1068933,
+      "sha256": "02656380514f5b46c8237f0c3e32f651a1adf6eae9163e167749b2215040d0fe",
+      "lines": 1804
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-reviews/datasets.json",
+      "bytes": 435,
+      "sha256": "b597f17436c7848ac693070d72d080036f57187cd764185e13738dd7783a901a"
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-reviews/family-holds.json",
+      "bytes": 2106,
+      "sha256": "ae38254aa59a9422f7d5793427d44c1898adfc2268bfd9652865d8d653cfc8f0"
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-reviews/holds.jsonl",
+      "bytes": 167126,
+      "sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+      "lines": 279
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/decision-holds/native-non-success-20261015-v1.jsonl",
+      "bytes": 2569,
+      "sha256": "56d841c7223daddad9768ff271b83bd22e803d486603a70139e2395892990177",
+      "lines": 7
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+      "bytes": 2047232,
+      "sha256": "cdbe9673c9d702eb63eea54c4465a7089d996cc4eb7b79c2a8e8942d5c0410c9",
+      "lines": 4589
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/held-union/acquired-connected-source-groups.jsonl",
+      "bytes": 914296,
+      "sha256": "1fea2eb0b4b30008d014025542aaef68d24be36af4804008133a29a9849eec34",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/held-union/acquired-remaining-complete-source/source-groups.jsonl",
+      "bytes": 16694,
+      "sha256": "913d2335bcd3f158fe3059c80232313209ae639ad93384092abb33f9afe52c4b",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/held-union/full/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/held-union/program-header/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/held-union/whole-trajectory/source-groups/text-data.jsonl",
+      "bytes": 866188,
+      "sha256": "84330b32a180aa8166e805a6bed434276c6e21f37cca779b42eef479701fb8ac",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/inherited-components.jsonl",
+      "bytes": 1068933,
+      "sha256": "02656380514f5b46c8237f0c3e32f651a1adf6eae9163e167749b2215040d0fe",
+      "lines": 1804
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/inherited-projection.json",
+      "bytes": 364774,
+      "sha256": "1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704"
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/protection-manifest.json",
+      "bytes": 112126,
+      "sha256": "7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe"
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/quality-groups.jsonl",
+      "bytes": 3613577,
+      "sha256": "1fe15465ccae78e771e0e898e71745aaa5cd5fbae6cef16616ed6dc550de8ca9",
+      "lines": 1
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/source-group-components.jsonl",
+      "bytes": 1252289,
+      "sha256": "0f7e10209258ceb2ba79ac085e7615c233d7546de8806be81116a614b3de933d",
+      "lines": 1804
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/source-reviews/datasets.json",
+      "bytes": 435,
+      "sha256": "b597f17436c7848ac693070d72d080036f57187cd764185e13738dd7783a901a"
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/source-reviews/family-holds.json",
+      "bytes": 2106,
+      "sha256": "ae38254aa59a9422f7d5793427d44c1898adfc2268bfd9652865d8d653cfc8f0"
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/protection-continuation-evidence/7ec929595dbd2e1090f5686a5720a2b18c3e8fc7d447afc88c062f6c18fecfbe/source-reviews/holds.jsonl",
+      "bytes": 167126,
+      "sha256": "27b31f38b8d3b6108ea25eebb1cf1f614e204707a36b28b660b5484d9c2d9593",
+      "lines": 279
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/row-proof.jsonl",
+      "bytes": 5606812,
+      "sha256": "558585b08f99888063b125e4c25d3c06d50a32621cc1301f1f70b550de2b1279",
+      "lines": 3986
+    },
+    {
+      "path": "admission-acquired-d12-feature-status-native-20261016-v1/source-render-samples-torch20-20261016.json",
+      "bytes": 15314,
+      "sha256": "1cdc073f79adbb5e29b0eee54cbbbcf0154010aa16b593ec267d6ad7194037ae"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/coverage.jsonl",
+      "bytes": 3240208,
+      "sha256": "e4f8485f7fa36d8a2a1e967ca38f45294c775a6f636542cb3c68dc1883fa0737",
+      "lines": 3986
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/lfm25/test/fit.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/lfm25/test/remaining-long.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/lfm25/train/fit-sources.json",
+      "bytes": 265,
+      "sha256": "1214a56e0f2fde5bd787396387602a88b472fbc10b19545d2925400dfa879eb2"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/lfm25/train/fit.jsonl.zst",
+      "bytes": 14652074,
+      "sha256": "6b3da96039b4a1746bcebae1ba3ba46f573c3b174908cb8ee6db48860b1393db"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/lfm25/train/remaining-long-sources.json",
+      "bytes": 276,
+      "sha256": "2689abd235bea26504d2fa3f7e3abff84012c4ecf0616f5516a0e61150400d97"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/lfm25/train/remaining-long.jsonl.zst",
+      "bytes": 9146107,
+      "sha256": "fd73e3d2119bd6308b7913739142f2f93e4b586092373aa09c096be671916895"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/mellum21/test/fit.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/mellum21/test/remaining-long.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/mellum21/train/fit-sources.json",
+      "bytes": 265,
+      "sha256": "44d9f078fb276a1d1a4a09bfa59c4743e56a56ec737662cc42e24e2d9b4a79d1"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/mellum21/train/fit.jsonl.zst",
+      "bytes": 15225166,
+      "sha256": "f39cc5fd4ee2e15b5d63e482d17c65ad2cfaa91a6f25fe0639e9ac71aa650bbb"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/mellum21/train/remaining-long-sources.json",
+      "bytes": 276,
+      "sha256": "8c4a46dfad02a430f2cacff3d20c67bac635df9246e3f0dcb2a97e2659b53b5a"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/mellum21/train/remaining-long.jsonl.zst",
+      "bytes": 7060650,
+      "sha256": "095cbf4ed099f29b440a7f99388118340ce421bd4c3481dbd2d902e07df1a7c5"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/files/pending-sources.json",
+      "bytes": 376008,
+      "sha256": "7b71e22dab6fe6d6ef2993d96611f6847525d5e34aba632a6c44954db8d5e1ba"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/lfm25-pending-native-sources.json",
+      "bytes": 164180,
+      "sha256": "260706aa24da9ecc381520fbab73901454bd71cddcce217bd6219e2f0dc2bed8"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/mellum21-pending-native-sources.json",
+      "bytes": 123804,
+      "sha256": "2489a6c60d91a28ed3264235ad3662e0bed169b64a029d2cba3b3916eaf20323"
+    },
+    {
+      "path": "capacity-partition-torch20-20261016-v1/receipt.json",
+      "bytes": 14742,
+      "sha256": "726c29e9a548e32a392ab352b9dcb2f1ce1f3bdd9b7d9fc159b1e1dcedf12a93"
+    },
+    {
+      "path": "lfm25/01e8f36edd701d6a03c50acdd591f7ccf69a92e71404d334a49d6f430dc491f8/test/native-graphs.jsonl.zst",
+      "bytes": 260,
+      "sha256": "87ed823d4f81451be29edb4d5798478a1f121d43a192948e1daeedf32de5bea3"
+    },
+    {
+      "path": "lfm25/01e8f36edd701d6a03c50acdd591f7ccf69a92e71404d334a49d6f430dc491f8/train/native-graphs.jsonl.zst",
+      "bytes": 10332868,
+      "sha256": "ab4d76e8ddf3aee27da623d5d22ffabb37a02601303065fa1e3eef73107231e8"
+    },
+    {
+      "path": "lfm25/4ef3764f70a49767673855f9189098355a069daed0526cc0ffd54904ff4394df/test/native-graphs.jsonl.zst",
+      "bytes": 260,
+      "sha256": "87ed823d4f81451be29edb4d5798478a1f121d43a192948e1daeedf32de5bea3"
+    },
+    {
+      "path": "lfm25/4ef3764f70a49767673855f9189098355a069daed0526cc0ffd54904ff4394df/train/native-graphs.jsonl.zst",
+      "bytes": 10653630,
+      "sha256": "85e1a2bf726cb5d1c526cb8e66cc0e3ed60cf8ed21307c021831b24f0af6c442"
+    },
+    {
+      "path": "lfm25/8634ce8dc556b113eefa81fad774bc3fc68c10e71d0197a30769e2b37d7d282c/test/native-graphs.jsonl.zst",
+      "bytes": 52,
+      "sha256": "7d204dc5abdc212bcce517e0e3906f3ea65cf4de4142000b4587432028b96efd"
+    },
+    {
+      "path": "lfm25/8634ce8dc556b113eefa81fad774bc3fc68c10e71d0197a30769e2b37d7d282c/train/native-graphs.jsonl.zst",
+      "bytes": 1293509,
+      "sha256": "ef335ecbf6a70a84f20c4ed44d438c53b41b68c8930339c569201513e1f709ac"
+    },
+    {
+      "path": "lfm25/cbbfa8975b3b98e552270805b56ee71c77c9ef7a301a33e818d82d7141156e9b/test/native-graphs.jsonl.zst",
+      "bytes": 156,
+      "sha256": "74b3a84265b5ad9375bc16514c136e6131496b049bf7d23bdfdc8366d77c049e"
+    },
+    {
+      "path": "lfm25/cbbfa8975b3b98e552270805b56ee71c77c9ef7a301a33e818d82d7141156e9b/train/native-graphs.jsonl.zst",
+      "bytes": 5225878,
+      "sha256": "cb1774823c7ec9505244b96e9c4b2351c511508de61c440b0a46ce5d0dce563c"
+    },
+    {
+      "path": "lfm25/d373c4ce75b389bf3211d2a8bb51bd26fb55ca9b51e63ec9c53914d91bf4ee66/test/native-graphs.jsonl.zst",
+      "bytes": 325,
+      "sha256": "d6747a445405f66d248f4ba9feb4e2c0fac327a8500018cea78d03d482a338d8"
+    },
+    {
+      "path": "lfm25/d373c4ce75b389bf3211d2a8bb51bd26fb55ca9b51e63ec9c53914d91bf4ee66/train/native-graphs.jsonl.zst",
+      "bytes": 12581837,
+      "sha256": "2d06cdf283ce15dda5ae9031ff9d4aff005a1c460ac908b941d9518d0ae293ae"
+    },
+    {
+      "path": "lfm25/f5d2d3dd5b53f693b7e74eb694ff613bc13833d295a1fd39b8b0a9c2daa2142a/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "lfm25/f5d2d3dd5b53f693b7e74eb694ff613bc13833d295a1fd39b8b0a9c2daa2142a/train/native-graphs.jsonl.zst",
+      "bytes": 423680,
+      "sha256": "a58bef642033dcd49d34490feb9c89ea7fd35cf008249ee4c4b7f65f14af3cc9"
+    },
+    {
+      "path": "mellum21/01e8f36edd701d6a03c50acdd591f7ccf69a92e71404d334a49d6f430dc491f8/test/native-graphs.jsonl.zst",
+      "bytes": 260,
+      "sha256": "87ed823d4f81451be29edb4d5798478a1f121d43a192948e1daeedf32de5bea3"
+    },
+    {
+      "path": "mellum21/01e8f36edd701d6a03c50acdd591f7ccf69a92e71404d334a49d6f430dc491f8/train/native-graphs.jsonl.zst",
+      "bytes": 9606379,
+      "sha256": "85291f137a94292610a6bc1f725dc18ec7bc10ef4cbb759b312902ef7e7a0c2e"
+    },
+    {
+      "path": "mellum21/4ef3764f70a49767673855f9189098355a069daed0526cc0ffd54904ff4394df/test/native-graphs.jsonl.zst",
+      "bytes": 260,
+      "sha256": "87ed823d4f81451be29edb4d5798478a1f121d43a192948e1daeedf32de5bea3"
+    },
+    {
+      "path": "mellum21/4ef3764f70a49767673855f9189098355a069daed0526cc0ffd54904ff4394df/train/native-graphs.jsonl.zst",
+      "bytes": 9932385,
+      "sha256": "c0c8a946d6a4689e063c06dfc435312c6df2d4d59e980351830dddd45d54d87a"
+    },
+    {
+      "path": "mellum21/8634ce8dc556b113eefa81fad774bc3fc68c10e71d0197a30769e2b37d7d282c/test/native-graphs.jsonl.zst",
+      "bytes": 52,
+      "sha256": "7d204dc5abdc212bcce517e0e3906f3ea65cf4de4142000b4587432028b96efd"
+    },
+    {
+      "path": "mellum21/8634ce8dc556b113eefa81fad774bc3fc68c10e71d0197a30769e2b37d7d282c/train/native-graphs.jsonl.zst",
+      "bytes": 1249783,
+      "sha256": "b0f6407bd01df69df24c630063fec2dbdd5c9dc74354a102e917fa33f1eaabc8"
+    },
+    {
+      "path": "mellum21/cbbfa8975b3b98e552270805b56ee71c77c9ef7a301a33e818d82d7141156e9b/test/native-graphs.jsonl.zst",
+      "bytes": 156,
+      "sha256": "74b3a84265b5ad9375bc16514c136e6131496b049bf7d23bdfdc8366d77c049e"
+    },
+    {
+      "path": "mellum21/cbbfa8975b3b98e552270805b56ee71c77c9ef7a301a33e818d82d7141156e9b/train/native-graphs.jsonl.zst",
+      "bytes": 4911817,
+      "sha256": "dfc427731ec0f7be8b5fbe29a2f2a4cf935418176b93367244f48ecfdb043116"
+    },
+    {
+      "path": "mellum21/d373c4ce75b389bf3211d2a8bb51bd26fb55ca9b51e63ec9c53914d91bf4ee66/test/native-graphs.jsonl.zst",
+      "bytes": 325,
+      "sha256": "d6747a445405f66d248f4ba9feb4e2c0fac327a8500018cea78d03d482a338d8"
+    },
+    {
+      "path": "mellum21/d373c4ce75b389bf3211d2a8bb51bd26fb55ca9b51e63ec9c53914d91bf4ee66/train/native-graphs.jsonl.zst",
+      "bytes": 11795258,
+      "sha256": "c7a6bf2495843fd3abc627970d183c6a157ed9e44981b5336198ea358170b750"
+    },
+    {
+      "path": "mellum21/f5d2d3dd5b53f693b7e74eb694ff613bc13833d295a1fd39b8b0a9c2daa2142a/test/native-graphs.jsonl.zst",
+      "bytes": 13,
+      "sha256": "f96deff1816083fdff8bc3e46c3fe6ca46a6bb49f4d5a00627616c13237a512c"
+    },
+    {
+      "path": "mellum21/f5d2d3dd5b53f693b7e74eb694ff613bc13833d295a1fd39b8b0a9c2daa2142a/train/native-graphs.jsonl.zst",
+      "bytes": 395893,
+      "sha256": "6ba305973769e6ace378bafb0634066d974e7f25ab00e238e9f9d9fbd575e852"
+    }
+  ],
+  "bytes": 157026601
+}
