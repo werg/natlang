@@ -89,9 +89,11 @@ def test_harmony_messages():
         {"role": "assistant", "channel": "final", "content": [{"text": "Exact Answer: X"}]},
     ]
     msgs, tools = agents.harmony_messages(raw)
-    assert [m["role"] for m in msgs] == ["system", "user", "assistant", "tool", "assistant"]
-    assert msgs[2]["reasoning"] == "I should search." and msgs[2]["tool_calls"][0]["function"]["name"] == "browser.search"
-    assert msgs[4] == {"role": "assistant", "content": "Exact Answer: X", "reasoning": "Found it."}
+    assert [m["role"] for m in msgs] == ["system","system","user","assistant","assistant","tool","assistant","assistant"]
+    assert msgs[3]["reasoning"] == "I should search." and msgs[4]["tool_calls"][0]["function"]["name"] == "browser.search"
+    assert msgs[6] == {"role":"assistant","content":None,"reasoning":"Found it."}
+    assert msgs[7] == {"role":"assistant","content":"Exact Answer: X"}
+    assert msgs[5]["tool_call_id"] == msgs[4]["tool_calls"][0]["id"]
     assert tools[0]["function"]["name"] == "browser.search"
 
 

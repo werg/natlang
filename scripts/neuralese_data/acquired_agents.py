@@ -237,3 +237,195 @@ def coderforge_acquired(limit=None):
 
 def orchard_acquired(limit=None):
     yield from general_agent_acquired('D37', limit)
+
+
+def qwen_cooperation_acquired(limit=None):
+    """Every actual solver/compactor context, with one shared original task."""
+    for receipt,rid,row in acquired_rows('D14',limit):
+        path=rid.rsplit(':',1)[0]
+        if not path.endswith('_full_traj.json'):
+            yield rid,Reject('non-session or duplicate summary; original agent full trajectory is the consumer')
+            continue
+        try:
+            if not isinstance(row,dict):raise Reject('cooperation source is not an original trajectory object')
+            info=row.get('info') or {}
+            if not isinstance(info,dict):raise Reject('cooperation source metadata is not an object')
+            config=info.get('config') or {}
+            if not isinstance(config,dict) or not isinstance(config.get('model') or {},dict):
+                raise Reject('cooperation source model configuration is not an object')
+            teacher=(config.get('model') or {}).get('model_name')
+            task=str(Path(path).parent)
+            contexts=[]
+            for index,segment in enumerate(row.get('segments') or []):
+                contexts.append((f'segment:{index}',segment.get('kind') if isinstance(segment,dict) else None,
+                                 segment.get('messages') if isinstance(segment,dict) else None))
+            final=row.get('messages')
+            duplicate=next((name for name,_,messages in contexts if messages==final and isinstance(final,list)),None)
+            if duplicate is None:contexts.append(('final','final',final))
+            if not contexts:raise Reject('cooperation source contains no original context')
+            for name,kind,messages in contexts:
+                child=rid+':'+name
+                try:
+                    if not isinstance(messages,list) or any(not isinstance(item,dict) for item in messages):
+                        raise Reject('missing original cooperation context messages')
+                    terminal=[{'index':index,'event':item} for index,item in enumerate(messages) if item.get('role')=='exit']
+                    context=[item for item in messages if item.get('role')!='exit']
+                    if any(item.get('role') not in ('system','developer','user','assistant','tool','function') for item in context):
+                        raise Reject('unsupported original cooperation role; context retained in pinned source')
+                    t=_reported_session('D14',receipt,child,row,context,
+                        task_id=task,session_id=child,teacher=teacher)
+                    t.lineage['notes']['original_cooperation_context']={'path':path,'context':name,'kind':kind,
+                        'info':info,'trajectory_format':row.get('trajectory_format'),
+                        'final_duplicate_of':duplicate,'original_segment_count':len(row.get('segments') or []),
+                        'original_message_count':len(messages),'model_message_count':len(context),'terminal_events':terminal}
+                    t.split_groups.append(group_key('cooper-task',task))
+                    status=info.get('exit_status')
+                    if status and status not in ('Submitted','Completed','success'):
+                        t.outcome['label']='failed'
+                    t.outcome['details']['reported_exit_status']=status
+                    yield child,t
+                except (Reject,ValueError,TypeError,KeyError) as error:yield child,Reject(str(error))
+        except (Reject,ValueError,TypeError,KeyError) as error:yield rid,Reject(str(error))
+
+
+def openresearcher_structured_acquired(limit=None):
+    """Retain research channels and actual recipient dispatch/observation order."""
+    from . import agents
+    from .trajectory import tool_call
+    for receipt,rid,row in acquired_rows('D32',limit):
+        try:
+            if not isinstance(row,dict) or not isinstance(row.get('messages'),list):
+                raise Reject('structured research session has no original messages')
+            messages,tools=agents.harmony_messages(row['messages'])
+            metadata=[{key:item.get(key) for key in ('role','channel','recipient','content_type','name')}
+                      for item in row['messages']]
+            task=row.get('qid')
+            if task is None:raise Reject('research session lacks original question identity')
+            session=f'{rid}:chunk:{row.get("chunk_idx")}'
+            t=_reported_session('D32',receipt,rid,row,messages,task_id=str(task),session_id=session,
+                teacher=row.get('model') or row.get('teacher_model'),tools=tools)
+            t.family='trajectory_continuation_research';t.noun='research session'
+            t.lineage['notes']['original_research_channels']={'messages':metadata,'question':row.get('question'),
+                'answer':row.get('answer'),'chunk_idx':row.get('chunk_idx'),'num_chunks':row.get('num_chunks'),
+                'status':row.get('status'),'error':row.get('error')}
+            if row.get('status') not in (None,'success','completed') or row.get('error'):
+                t.outcome['label']='failed'
+            t.outcome['details'].update(reported_status=row.get('status'),reported_error=row.get('error'))
+            yield rid,t
+        except (Reject,ValueError,TypeError,KeyError) as error:yield rid,Reject(str(error))
+
+
+def _collusion_messages(episode,actor,agent):
+    """Restore reasoning only through accepted call/shape/ordinal evidence.
+
+    Raw schema1.0.0 records usage rounds/attempts one-based and reasoning trace
+    rounds/attempts zero-based. The original full context and exact current task
+    prompt delimit this episode; rejected API responses are never attached.
+    """
+    import copy
+    messages=copy.deepcopy(agent.get('messages'))
+    if not isinstance(messages,list) or not messages or any(not isinstance(item,dict) for item in messages):
+        raise Reject('raw collusion agent has no original messages')
+    traces=[(i,t) for i,t in enumerate(episode.get('llm_reasoning_traces') or []) if t.get('agent_id')==actor]
+    alignment=[]
+    try:
+        starts=[i for i,m in enumerate(messages) if m.get('role')=='user' and m.get('content')==agent.get('own_task_prompt')]
+        if len(starts)!=1:raise Reject('reasoning lacks one exact original current-episode task boundary')
+        positions=[i for i,m in enumerate(messages) if i>starts[0] and m.get('role')=='assistant']
+        usage=[(i,u) for i,u in enumerate(episode.get('llm_usage') or [])
+               if u.get('actor')==actor and u.get('response_status')=='accepted']
+        if len(positions)!=len(usage):raise Reject('accepted usage does not cover original current-episode assistant inventory')
+        bindings={}
+        for position,(usage_index,u) in zip(positions,usage):
+            m=messages[position]
+            if (u.get('visible_content_chars')!=len(m.get('content') or '')
+                    or u.get('tool_call_count')!=len(m.get('tool_calls') or [])):
+                raise Reject('accepted usage differs from exact original assistant response shape')
+            values=[]
+            for key in ('round','agent_attempt'):
+                value=u.get(key)
+                if value is not None and (type(value) is not int or value<1):raise Reject('invalid one-based raw call coordinate')
+                values.append(None if value is None else value-1)
+            key=(u.get('phase'),*values)
+            if key in bindings:raise Reject('ambiguous accepted raw call identity')
+            bindings[key]=(position,usage_index)
+        seen=set()
+        for trace_index,trace in traces:
+            key=(trace.get('phase'),trace.get('round'),trace.get('attempt'))
+            if key in seen or key not in bindings:raise Reject('reasoning trace does not uniquely bind an accepted original call')
+            seen.add(key);position,usage_index=bindings[key]
+            raw=trace.get('reasoning_trace')
+            values=list(raw.values()) if isinstance(raw,dict) else [raw]
+            text=[]
+            for value in values:
+                if value is None or value=='':continue
+                value=value if isinstance(value,str) else json.dumps(value,ensure_ascii=False)
+                if value not in text:text.append(value)
+            reasoning='\n'.join(text)
+            if messages[position].get('reasoning_content') not in (None,'',reasoning):
+                raise Reject('bound reasoning conflicts with original assistant reasoning')
+            if reasoning:messages[position]['reasoning_content']=reasoning
+            alignment.append({'trace_index':trace_index,'usage_index':usage_index,'message_index':position,
+                              'coordinate_policy':'raw-schema-1.0.0-one-based-usage/zero-based-trace'})
+        return messages,{'complete':True,'bindings':alignment}
+    except Reject as error:
+        # The source session is still usable; separate reasoning cannot be
+        # silently attached to a guessed target. Retain every trace for repair.
+        return copy.deepcopy(agent['messages']),{'complete':False,'reason':str(error),'bindings':[]}
+
+
+def agent_collusion_raw_acquired(limit=None):
+    """Original full per-agent histories; Parquet reordered summaries are duplicates."""
+    for receipt,rid,row in acquired_rows('D19',limit):
+        path=rid.rsplit(':',1)[0]
+        if not path.startswith('traces/') or not path.endswith('.json.gz'):
+            yield rid,Reject('duplicate summary or non-session; original complete raw traces are the consumer')
+            continue
+        try:
+            if not isinstance(row,dict) or not isinstance(row.get('results'),list):
+                raise Reject('raw collusion trace has no original episode inventory')
+            run=row.get('run_id')
+            if not run:raise Reject('raw collusion trace lacks exact original run identity')
+            config=row.get('run_config') or {}
+            task_groups=sorted({str(task) for episode in row['results'] if isinstance(episode,dict) for task in episode.get('task_ids') or []})
+            for episode_index,episode in enumerate(row['results']):
+                if not isinstance(episode,dict):
+                    yield rid+f':episode:{episode_index}',Reject('raw episode is not an original object')
+                    continue
+                agents=episode.get('agents')
+                if not isinstance(agents,dict):
+                    yield rid+f':episode:{episode_index}',Reject('raw episode lacks its actual agent sessions')
+                    continue
+                for actor,agent in agents.items():
+                    child=rid+f':episode:{episode_index}:agent:{actor}'
+                    try:
+                        if not isinstance(agent,dict):raise Reject('raw episode agent is not an original session object')
+                        if row.get('schema_version')=='1.0.0':messages,alignment=_collusion_messages(episode,actor,agent)
+                        else:
+                            messages=agent.get('messages');alignment={'complete':False,'reason':'unqualified raw reasoning coordinate schema','bindings':[]}
+                        t=_reported_session('D19',receipt,child,{},messages,task_id=run,session_id=child,
+                            teacher=(config.get('models') or {}).get(actor))
+                        t.split_groups.extend(group_key('agent-collusion-task',task) for task in task_groups)
+                        t.split_groups.append(group_key('agent-collusion-run',run))
+                        facts={key:value for key,value in agent.items() if key!='messages'}
+                        t.lineage['notes']['original_collusion_session']={'path':path,'run_id':run,
+                            'condition_id':row.get('condition_id'),'sequence_id':row.get('sequence_id'),
+                            'schema_version':row.get('schema_version'),'run_config':config,
+                            'episode_index':episode_index,'episode_id':episode.get('episode_id'),'actor':actor,
+                            'agent':facts,'events':episode.get('events'),'channel_transcript':episode.get('channel_transcript'),
+                            'analysis_metadata':episode.get('analysis_metadata'),
+                            'llm_reasoning_traces':[trace for trace in episode.get('llm_reasoning_traces') or [] if trace.get('agent_id')==actor],
+                            'llm_usage':[usage for usage in episode.get('llm_usage') or [] if usage.get('actor')==actor],
+                            'reasoning_alignment':alignment}
+                        checks=[agent.get(key) for key in ('extraction_eval','data_search_eval','code_eval','code_assessment')]
+                        failed=agent.get('verdict_correct') is False or agent.get('true_expected_verdict')=='fail'
+                        failed=failed or any(isinstance(check,dict) and (check.get('quality_verdict')=='fail'
+                            or check.get('passed') is False or check.get('correct') is False) for check in checks)
+                        if agent.get('reward') is not None and float(agent['reward'])<=0:failed=True
+                        if failed:t.outcome['label']='failed'
+                        t.outcome['details'].update(reported_reward=agent.get('reward'),
+                            reported_verdict_correct=agent.get('verdict_correct'),reported_true_expected_verdict=agent.get('true_expected_verdict'),
+                            reported_task_checks=checks,reasoning_alignment_complete=alignment['complete'])
+                        yield child,t
+                    except (Reject,ValueError,TypeError,KeyError) as error:yield child,Reject(str(error))
+        except (Reject,ValueError,TypeError,KeyError) as error:yield rid,Reject(str(error))

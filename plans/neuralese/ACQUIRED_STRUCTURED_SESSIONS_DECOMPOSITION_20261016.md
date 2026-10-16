@@ -39,3 +39,40 @@ conversion does not invent an execution oracle or grant training admission.
 
 Every crisp component here preserves exact source facts or verifies transport;
 none chooses training targets, teacher quality, promotion or a model policy.
+
+The existing `agents.harmony_messages` is the sole structured research parser.
+It now retains the original system content and each reasoning message, rather
+than dropping the system block and folding reasoning turns into later calls.
+`_harmony_text` keeps typed observations and non-text system configuration as
+JSON when no verbatim text representation exists. Tool calls use original
+recipient/argument bytes with deterministic position-derived plumbing IDs;
+observations bind the preceding dispatch. The old OpenResearcher adapter reuses
+this same complete mechanism. Generic OpenAI normalization also retains
+structured content instead of turning it into an empty message.
+
+D19 raw schema1.0.0 includes complete per-agent contexts and accepted usage
+records. Sparse reasoning is assigned only when the exact current task prompt,
+accepted response inventory and content/tool-call shapes agree. Usage
+round/attempt coordinates are one-based; raw trace coordinates are zero-based.
+Every assigned trace records its original usage/trace/message indices. Conflicting,
+ambiguous or unsupported joins retain the unchanged session and original traces
+with an explicit incomplete-alignment receipt, never a guessed target.
+
+Local qualification, 2026-10-16:
+- Shared reader: 25 tests passed; structured/trajectory regression suite:
+  39 tests passed, with malformed-context continuation, exact failure labels,
+  forged reasoning-shape rejection and structured observation preservation.
+- Actual pinned samples verified against remote receipt file size/SHA: D14 four
+  solver/summarizer/final contexts (47/46/10/11 original entries, including one
+  terminal exit event retained separately); D32 332 messages, 110 reasoning spans,
+  109 calls and 109 observations; D19 20 original agent histories, 129 exact
+  reasoning joins, eight teacher candidates and 12 explicit failures.
+- Both actual pinned tokenizers rendered the complete selected positive sessions
+  through the shared full-session native converter: 24/111/13 graphs per port
+  for D14/D32/D19, no truncation and unchanged source-group sets. Final ledger
+  unit `acquired-structured-real-tokenizers-final-20261016` passed in 34.8 CPU s,
+  577 MB peak host memory. Detailed source/tokenizer bindings are in
+  `/home/werg/data/dgxops/acquired-structured-formats-proof-20261016.json`.
+- Tracked-file quick check passed. Admission, complete source conversion,
+  protected split closure and actual training exposure remain separate steps;
+  this format proof does not claim task success or locally verified source quality.

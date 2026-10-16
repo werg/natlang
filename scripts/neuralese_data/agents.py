@@ -51,6 +51,13 @@ def _openai_messages(raw: list, *, reasoning_key="reasoning_content", parse_call
         reasoning = m.get(reasoning_key)
         if role == "assistant" and reasoning is None:
             reasoning, content = split_think(content)
+        # Retain structured source observations instead of turning them into
+        # empty messages. Source-specific adapters can interpret known channels;
+        # unrecognized blocks remain exact JSON text, never fabricated calls.
+        if content is not None and not isinstance(content,str):
+            content=json.dumps(content,ensure_ascii=False)
+        if reasoning is not None and not isinstance(reasoning,str):
+            reasoning=json.dumps(reasoning,ensure_ascii=False)
         calls = m.get("tool_calls")
         if isinstance(calls, str) and parse_calls:
             calls = parse_calls(calls)
@@ -141,22 +148,26 @@ def agenttrove(limit=None):
 
 # --- OpenResearcher (harmony format, all seeds) ---------------------------------------------------
 
-def _harmony_text(content) -> str:
-    parts = []
-    for c in content or []:
-        if c.get("text"):
-            parts.append(c["text"])
-    return "\n".join(parts)
+def _harmony_text(content) -> str | None:
+    """Known source text stays verbatim; other observed structure stays JSON."""
+    if content is None or isinstance(content,str):return content
+    if isinstance(content,list):return "\n".join(_harmony_text(part) or '' for part in content)
+    if isinstance(content,dict):
+        present={key:value for key,value in content.items() if value is not None}
+        if set(present)<={'type','text'} and present.get('type') in (None,'text','input_text','output_text'):
+            if not isinstance(present.get('text'),str):raise Reject('structured text block has no original string text')
+            return present['text']
+    return json.dumps(content,ensure_ascii=False)
 
 
 def _harmony_tools(system_content) -> list:
-    tools = []
-    for c in system_content or []:
-        browser = (c.get("tools") or {}).get("browser") or {}
-        for t in browser.get("tools") or []:
-            params = _prune(t.get("parameters") or {})
-            tools.append({"type": "function", "function": {"name": f"browser.{t.get('name')}",
-                                                           "description": t.get("description") or "", "parameters": params}})
+    tools=[]
+    for block in system_content if isinstance(system_content,list) else []:
+        if not isinstance(block,dict) or not isinstance(block.get('tools'),dict):continue
+        for namespace,declaration in block['tools'].items():
+            for fn in declaration.get('tools') or []:
+                fn=_prune(fn)
+                tools.append({'type':'function','function':{**fn,'name':namespace+'.'+fn['name']}})
     return tools
 
 
@@ -168,34 +179,32 @@ def _prune(value):
     return value
 
 
-def harmony_messages(raw: list) -> tuple[list, list]:
-    """Harmony (system/developer/user/assistant channels/tool) → messages and tool schemas."""
-    out, tools, pending_reasoning = [], [], []
-    for m in raw:
-        role, channel, recipient = m.get("role"), m.get("channel"), m.get("recipient")
-        text = _harmony_text(m.get("content"))
-        if role == "system":
-            tools = _harmony_tools(m.get("content"))
-            continue
-        if role == "developer":
-            out.append(message("system", text))
-        elif role == "user":
-            out.append(message("user", text))
-        elif role == "assistant":
-            if recipient and recipient != "assistant":
-                out.append(message("assistant", None, reasoning="\n\n".join(pending_reasoning) or None,
-                                   tool_calls=[tool_call(recipient, text)]))
-                pending_reasoning = []
-            elif channel == "final":
-                out.append(message("assistant", text, reasoning="\n\n".join(pending_reasoning) or None))
-                pending_reasoning = []
-            else:
-                pending_reasoning.append(text)
-        elif role == "tool":
-            out.append(message("tool", text, name=m.get("name")))
-    if pending_reasoning:
-        out.append(message("assistant", None, reasoning="\n\n".join(pending_reasoning)))
-    return out, tools
+def harmony_messages(raw: list) -> tuple[list,list]:
+    """Preserve each original Harmony context/channel/dispatch/observation."""
+    prepared=[];tools=[];pending=[]
+    for index,original in enumerate(raw):
+        item=dict(original);role=item.get('role');content=_harmony_text(item.get('content'))
+        tools.extend(_harmony_tools(item.get('content')))
+        item['content']=content
+        if role=='assistant' and item.get('recipient') and item['recipient']!='assistant':
+            if item.get('tool_calls'):raise Reject('research dispatch has two conflicting call representations')
+            if not isinstance(content,str):raise Reject('research dispatch lacks original arguments')
+            ident=f'original-call-{index}'
+            item['tool_calls']=[tool_call(item['recipient'],content,ident)]
+            item['content']=None;pending.append((ident,item['recipient']))
+        elif role=='assistant' and item.get('channel')=='analysis':
+            if item.get('reasoning_content') not in (None,content):raise Reject('research analysis conflicts with original reasoning')
+            item['reasoning_content']=content;item['content']=None
+        elif role=='tool':
+            if not pending:raise Reject('research tool observation has no original preceding dispatch')
+            ident,name=pending.pop(0)
+            if item.get('tool_call_id') not in (None,ident) or item.get('name') not in (None,name):
+                raise Reject('research tool observation conflicts with its original preceding dispatch')
+            item['tool_call_id']=ident;item['name']=name
+        elif role not in ('system','developer','user','assistant'):
+            raise Reject('unsupported research role retained in original source')
+        prepared.append(item)
+    return _openai_messages(prepared),tools
 
 
 def openresearcher(limit=None):
@@ -938,3 +947,8 @@ CORPORA.update({'toucan-acquired': (toucan_acquired, 4),
                 'swe-zero-acquired': (swe_zero_acquired, 4),
                 'coderforge-acquired': (coderforge_acquired, 4),
                 'orchard-acquired': (orchard_acquired, 4)})
+
+from .acquired_agents import qwen_cooperation_acquired, openresearcher_structured_acquired, agent_collusion_raw_acquired
+CORPORA.update({'qwen-cooperation-acquired':(qwen_cooperation_acquired,4),
+                'openresearcher-structured-acquired':(openresearcher_structured_acquired,4),
+                'agent-collusion-raw-acquired':(agent_collusion_raw_acquired,4)})
