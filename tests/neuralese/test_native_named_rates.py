@@ -198,3 +198,55 @@ def test_rate_declarations_reject_invalid_native_recipe_and_phase_values(tmp_pat
     _,_,config,_=_fixture(tmp_path,monkeypatch)
     config['phases'][1]['options']={'learned_row_learning_rate':rate}
     with pytest.raises(ValueError,match='learned_row_learning_rate'):stage.validate_config(config)
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_role_only_rate_override_preserves_reasoning_moments_rng_and_semantic_resume(family):
+    from test_shared_state import tiny
+    from test_native_optimizer_checkpointing import examples,assert_exact
+    from test_native_reasoning_rows import training_examples
+    from natlang_neuralese.model.shared_state import SharedStateModel
+    from natlang_neuralese.train.native_state_sft import make_native_optimizer,native_training_update
+    from natlang_neuralese.train.native_learning_rates import apply_native_learning_rates,INTERFACE_ROWS,LEARNED_ROWS
+    from natlang_neuralese.train.native_semantic_stage import _adjust_lr
+    def build():
+        model=SharedStateModel(tiny(family),(58,59,60,61),rank=4,token_override_ids=(54,55),
+            sparse_row_dtype=torch.float32,token_override_dtype=torch.float32)
+        if family=='mellum':model.port.hf.natlang_precision='bf16'
+        return model
+    model=build();optimizer,_=make_native_optimizer(model,lr=3e-6,learned_row_lr=3e-6,in_backward=True)
+    batch=examples()+training_examples()
+    native_training_update(model,optimizer,batch,checkpoint_layers=True,chunk_tokens=3)
+    prior={name:copy.deepcopy(history) for name,(_,history) in named_history(optimizer).items()}
+    weights={key:value.detach().clone() for key,value in model.state_dict().items()}
+    rng=torch.get_rng_state().clone()
+    apply_native_learning_rates(optimizer,backbone_lr=3e-6,interface_row_lr=.003)
+    assert torch.equal(rng,torch.get_rng_state())
+    for key,value in model.state_dict().items():assert torch.equal(weights[key],value)
+    for name,(group,history) in named_history(optimizer).items():
+        assert group['lr']==(.003 if name in INTERFACE_ROWS else 3e-6),name
+        assert_exact(prior[name],history,name)
+    assert any(name in LEARNED_ROWS-INTERFACE_ROWS for name in prior)
+    saved=copy.deepcopy(optimizer.state_dict())
+    resumed=build();resumed.load_state_dict(model.state_dict());resumed.port.hf.load_state_dict(model.port.hf.state_dict())
+    target,_=make_native_optimizer(resumed,lr=3e-6,in_backward=True);target.load_state_dict(saved)
+    _adjust_lr(target,3e-6)  # Subsequent shared phases inherit the actual two row rates.
+    for name,(group,history) in named_history(target).items():
+        assert group['lr']==(.003 if name in INTERFACE_ROWS else 3e-6),name
+        assert_exact(prior[name],history,name)
+    before=model.input_rows.detach().clone()
+    rng=torch.get_rng_state().clone()
+    reference,_=native_training_update(model,optimizer,batch,checkpoint_layers=True,chunk_tokens=3)
+    torch.set_rng_state(rng)
+    actual,_=native_training_update(resumed,target,batch,checkpoint_layers=True,chunk_tokens=3)
+    assert torch.equal(reference,actual)
+    assert (before!=model.input_rows).any()
+    for key,value in model.state_dict().items():assert torch.equal(value,resumed.state_dict()[key]),key
+    for key,value in model.port.hf.state_dict().items():assert torch.equal(value,resumed.port.hf.state_dict()[key]),key
+
+
+@pytest.mark.parametrize('value',[0,-.001,float('inf'),float('nan'),True,'0.003'])
+def test_declared_role_only_rate_requires_finite_positive_number(value):
+    from natlang_neuralese.train.recipe import validate_stage_parameters
+    with pytest.raises(ValueError,match='interface_row_learning_rate'):
+        validate_stage_parameters('native_state_sft',{'interface_row_learning_rate':value})
