@@ -11,6 +11,34 @@ from .records import group_key
 ACQUIRED_FILES = None  # Optional exact receipt-file shard, never an implicit row limit.
 
 
+def supported_acquired_file(name):
+    """One shared pinned-file predicate for conversion and export inventories."""
+    return str(name).endswith(('.parquet','.jsonl','.jsonl.gz','.jsonl.zst','.json','.json.gz'))
+
+
+def iter_acquired_file_rows(path):
+    """Yield original integer rows; blank JSONL lines keep their positions."""
+    path=Path(path)
+    if path.suffix=='.parquet':
+        from . import agents
+        yield from agents._parquet_groups(path)
+    elif str(path).endswith(('.json','.json.gz')):
+        opener=gzip.open if str(path).endswith('.gz') else open
+        with opener(path,'rt',encoding='utf-8') as stream:
+            value=json.load(stream)
+        if isinstance(value,list):yield from enumerate(value)
+        else:yield 0,value
+    elif supported_acquired_file(path):
+        from natlang_neuralese.common.jsonio import open_jsonl_text
+        opener=gzip.open if str(path).endswith('.gz') else open_jsonl_text
+        options={'mode':'rt','encoding':'utf-8'} if str(path).endswith('.gz') else {}
+        with opener(path,**options) as stream:
+            for number,line in enumerate(stream):
+                if line.strip():yield number,json.loads(line)
+    else:
+        raise Reject('unsupported acquired source file: '+path.name)
+
+
 def acquired_rows(ref, limit=None):
     from . import agents
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
@@ -18,15 +46,13 @@ def acquired_rows(ref, limit=None):
     receipt = json.loads((root / 'acquisition.json').read_text())
     if receipt.get('status') != 'acquired' or not receipt.get('revision'):
         raise Reject('source snapshot is not completely acquired and pinned: '+ref)
-    def supported(name):
-        return name.endswith(('.parquet', '.jsonl', '.jsonl.gz', '.jsonl.zst'))
-    known = {entry['path'] for entry in receipt['files'] if supported(entry['path'])}
+    known = {entry['path'] for entry in receipt['files'] if supported_acquired_file(entry['path'])}
     if ACQUIRED_FILES is not None and not ACQUIRED_FILES <= known:
         raise Reject('requested file is not a bound source in this receipt')
     index = 0
     for entry in receipt['files']:
         relative = Path(entry['path'])
-        if not supported(str(relative)):
+        if not supported_acquired_file(relative):
             continue
         if ACQUIRED_FILES is not None and str(relative) not in ACQUIRED_FILES:
             continue
@@ -35,18 +61,7 @@ def acquired_rows(ref, limit=None):
             raise Reject('acquired source file differs: '+str(relative))
         if sha256_file_hex_cached(path) != entry['sha256']:
             raise Reject('acquired source digest differs: '+str(relative))
-        if relative.suffix == '.parquet':
-            rows = agents._parquet_groups(path)
-        else:
-            def json_rows():
-                from natlang_neuralese.common.jsonio import open_jsonl_text
-                opener = gzip.open if str(path).endswith('.gz') else open_jsonl_text
-                options = {'mode': 'rt', 'encoding': 'utf-8'} if str(path).endswith('.gz') else {}
-                with opener(path, **options) as stream:
-                    for number, line in enumerate(stream):
-                        if line.strip():
-                            yield number, json.loads(line)
-            rows = json_rows()
+        rows=iter_acquired_file_rows(path)
         for row_index, row in rows:
             if limit is not None and index >= limit:
                 return

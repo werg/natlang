@@ -162,3 +162,34 @@ def test_bound_jsonl_is_streamed_and_images_remain_explicit_omissions(tmp_path,m
     assert len(result)==2 and result[0][0]=='agent.jsonl.gz:0'
     assert not isinstance(result[0][1],Reject)
     assert isinstance(result[1][1],Reject) and 'multimodal' in str(result[1][1])
+
+
+@pytest.mark.parametrize('suffix',['.json','.json.gz'])
+@pytest.mark.parametrize('array',[False,True])
+def test_whole_json_reader_preserves_original_integer_rows(tmp_path,suffix,array):
+    import gzip
+    value=[{'id':'first','messages':messages()},{'id':'second','content':'entire original text'}]
+    source=value if array else value[0]
+    path=tmp_path/('sessions'+suffix);raw=json.dumps(source,ensure_ascii=False).encode()
+    path.write_bytes(gzip.compress(raw) if suffix.endswith('.gz') else raw)
+    assert acquired.supported_acquired_file(path.name)
+    assert list(acquired.iter_acquired_file_rows(path))==list(enumerate(value if array else [value[0]]))
+
+
+@pytest.mark.parametrize('suffix',['.jsonl','.jsonl.gz','.jsonl.zst'])
+def test_shared_line_reader_retains_blank_line_indices_and_all_content(tmp_path,suffix):
+    import gzip
+    source='\n'+json.dumps({'id':'first','text':'α\nfull'})+'\n\n'+json.dumps({'id':'last'})+'\n'
+    path=tmp_path/('sessions'+suffix)
+    if suffix.endswith('.gz'):path.write_bytes(gzip.compress(source.encode()))
+    elif suffix.endswith('.zst'):
+        import zstandard
+        path.write_bytes(zstandard.ZstdCompressor().compress(source.encode()))
+    else:path.write_text(source)
+    assert list(acquired.iter_acquired_file_rows(path))==[(1,{'id':'first','text':'α\nfull'}),(3,{'id':'last'})]
+
+
+def test_shared_reader_rejects_unsupported_files(tmp_path):
+    path=tmp_path/'README.md';path.write_text('source card')
+    assert not acquired.supported_acquired_file(path)
+    with pytest.raises(Reject,match='unsupported acquired'):list(acquired.iter_acquired_file_rows(path))
