@@ -25,6 +25,24 @@ def compare_views(expected, stored):
         for identifier in sorted(actual)]
 
 
+def proposal_with_samples(audit_path, sample_path):
+    """Prepare a final review-only proposal; never modify the live registry."""
+    audit_path, sample_path = Path(audit_path), Path(sample_path)
+    proposal_path = audit_path.parent / 'registry-proposal.json'
+    proposal = json.loads(proposal_path.read_text()); root = audit_path.parent.parent
+    sample = json.loads(sample_path.read_text())
+    audit_binding = {'path': str(audit_path), 'sha256': sha256_file_hex(audit_path)}
+    if (sample.get('passed') is not True or sample.get('cohort_audit') != audit_binding
+            or proposal['build']['audit_sha256'] != audit_binding['sha256']):
+        raise ValueError('source sample proof differs from its reviewed cohort proposal')
+    relative = str(sample_path.resolve().relative_to(root.resolve()))
+    proposal['include'] = sorted(set(proposal['include']) | {relative})
+    proposal['build']['source_render_samples'] = {'path': relative, 'sha256': sha256_file_hex(sample_path)}
+    target = audit_path.parent / 'registry-proposal-with-render-samples.json'
+    write_json_durable(target, proposal)
+    return target
+
+
 def qualify(audit_path, models, out):
     audit_path = Path(audit_path); before = sha256_file_hex(audit_path)
     audit = json.loads(audit_path.read_text())
@@ -87,7 +105,9 @@ def qualify(audit_path, models, out):
                  'not a full-cohort rerender, task oracle, native execution or student exposure qualification',
         'verifier_sha256': sha256_file_hex(__file__)}
     write_json_durable(out, result)
-    print(json.dumps({'passed': True, 'samples': len(reports), 'path': str(out), 'sha256': sha256_file_hex(out)}))
+    proposal = proposal_with_samples(audit_path, out)
+    print(json.dumps({'passed': True, 'samples': len(reports), 'path': str(out),
+                     'sha256': sha256_file_hex(out), 'registry_proposal': str(proposal), 'registry_written': False}))
     return result
 
 
