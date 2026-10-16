@@ -73,6 +73,26 @@ def actual_examples(monkeypatch):
             adapted={'ref':'D20','catalog_file':{'path':record['file']},'source_sha256':record['sha256'],
                      'source_bytes':record['bytes'],'revision':extra['revision']}
             examples.append((adapted,rid,t))
+    variants=INSPECTION.parent/'midtool-complete-native-variants.json'
+    if variants.exists():
+        encoded=variants.read_bytes()
+        assert hashlib.sha256(encoded).hexdigest()=='bcafcb6a42afd606ccc8f9e9960e1adef89e44f38f5af31ac4f61d05884288bb'
+        full=json.loads(encoded)
+        assert set(full['examples'])=={'awm-rollout','nemetron-agentic','skill-traj','api-traj'}
+        for name,item in full['examples'].items():
+            raw=item['record'];path='native-agent-traj/'+Path(item['path']).name
+            source={'repo':full['repo'],'revision':full['revision'],'card':{'license':'source-pinned'}}
+            rid=path+':'+str(item['row_index'])
+            monkeypatch.setattr(acquired_agents,'acquired_rows',lambda ref,limit=None,s=source,r=rid,v=raw:iter([(s,r,v)]))
+            _,trajectory=next(granted.midtool_acquired())
+            assert not isinstance(trajectory,Reject),str(trajectory)
+            decoded,recovery=granted.midtool_native_extra(raw['extra'])
+            assert trajectory.messages==granted.complete_messages(decoded['messages'])
+            assert bool(recovery)==(name=='awm-rollout')
+            record={'ref':'D39','catalog_file':{'path':path},'source_sha256':item['sha256'],
+                    'source_bytes':next(file['bytes'] for file in full['files'] if Path(file['path']).name==Path(path).name),
+                    'revision':full['revision']}
+            examples.append((record,rid,trajectory))
     assert {record['ref'] for record,_,_ in examples}=={'D20','D24','D39'}
     assert {record['catalog_file']['path'].split('/')[0] for record,_,_ in examples if record['ref']=='D39'}=={'code','pdf','web','native-agent-traj'}
     return examples

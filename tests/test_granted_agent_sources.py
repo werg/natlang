@@ -266,3 +266,17 @@ def test_standalone_preference_record_retains_both_histories_once_and_hash_binds
         assert 'original_messages' not in alternative['lineage']['notes']['granted_source']
         assert 'original_pair' not in alternative['lineage']['notes']['source_preference']
     assert not record['training_admission'] and not record['native_on_policy']
+
+
+
+def test_midtool_exact_missing_tools_value_preserves_original_messages_and_rejects_other_corruption():
+    from scripts.neuralese_data.acquired_granted import midtool_native_extra
+    original=[{'role':'system','content':'Exact original tool instructions'},
+              {'role':'user','content':'Exact task'},
+              {'role':'assistant','content':'<tool_call>original dispatch text</tool_call>'}]
+    malformed='{"messages":'+json.dumps(original)+', "tools": }'
+    value,evidence=midtool_native_extra(malformed)
+    assert value=={'messages':original} and evidence['original_tools_field_missing_value']
+    assert 'tools' not in value
+    for suffix in [', "tools": invalid}',', "other": }',', "tools": , "reward":1}',', "tools": } trailing']:
+        with pytest.raises(ValueError):midtool_native_extra('{"messages":'+json.dumps(original)+suffix)

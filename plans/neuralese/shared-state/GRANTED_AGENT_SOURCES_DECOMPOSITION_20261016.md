@@ -123,3 +123,18 @@ row, field and canonical pair hashes. It requires the native offline pairwise
 objective and grants no positive-SFT credit to a rejected alternative. The
 executable loss/stage is subsequent work on the same native trainer, not implied
 by this source record API.
+
+
+## Complete MidTool native-agent variants
+
+Actual byte-bound representatives now cover `api-traj`, `nemetron-agentic`,
+`skill-traj` and `awm-rollout`. All use the same original `extra.messages`
+normalizer and preserve serialized source text as a hash-bound alternate view,
+not a second training trajectory. One released `awm-rollout` extra value is
+malformed JSON: its complete original messages array is followed by a tools
+field with no value. The exact parser authenticates only this complete known
+field and exact missing-value suffix; it retains original bytes/hash and an
+explicit schema-unavailable fact. It invents no tool schema, observation,
+answer, reward or communication edge. Other malformed records remain explicit
+conversion obligations. Embedded original tool instructions/dispatch text stay
+verbatim. This static source recovery adds no executing-model prompt/feedback.

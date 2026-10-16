@@ -203,6 +203,24 @@ def miroverse_acquired(limit=None):
             yield rid, Reject(str(error))
 
 
+
+def midtool_native_extra(raw):
+    """Decode exact original messages; authenticate the observed missing-tools defect."""
+    if not isinstance(raw,str):return raw,{}
+    try:return json.loads(raw),{}
+    except json.JSONDecodeError:
+        # A released awm-rollout record has a complete valid messages array and
+        # an absent tools VALUE. Decode only that authentic complete field;
+        # neither repair arbitrary JSON nor invent a schema/tool observation.
+        import re
+        opening=re.match(r'\s*\{\s*"messages"\s*:\s*',raw)
+        if opening is None:raise
+        messages,end=json.JSONDecoder().raw_decode(raw,opening.end())
+        if not isinstance(messages,list) or re.fullmatch(r'\s*,\s*"tools"\s*:\s*\}\s*',raw[end:]) is None:
+            raise ValueError('native-agent extra is not the exact released missing-tools-value shape')
+        return {'messages':messages},{'original_tools_field_missing_value':True,
+            'schema_recovery':'complete-original-messages-only; no tool schemas fabricated'}
+
 def midtool_acquired(limit=None):
     """Complete native-agent messages plus unabridged web/PDF/code text SFT."""
     from .acquired_agents import acquired_rows
@@ -215,12 +233,12 @@ def midtool_acquired(limit=None):
             if not isinstance(text, str) or not text:
                 raise Reject('MidTool source lacks complete original text')
             if subset == 'native-agent-traj':
-                extra = row.get('extra')
-                extra = json.loads(extra) if isinstance(extra, str) else extra
+                extra,recovery = midtool_native_extra(row.get('extra'))
                 if not isinstance(extra, dict) or not isinstance(extra.get('messages'), list):
                     raise Reject('native-agent source lacks original structured messages; serialized text is not reparsed')
                 t = _session('D39', receipt, rid, row, extra['messages'], tools=extra.get('tools'))
-                t.lineage['notes']['granted_source'].update(original_extra_sha256=_digest(extra),
+                t.lineage['notes']['granted_source'].update(original_extra_sha256=_digest(row.get('extra')),
+                    **recovery,
                     original_serialized_text_sha256=_digest(text),
                     original_source_fields=['extra','text'], duplicate_serialized_view_not_trained=True)
             elif subset in ('web', 'pdf', 'code'):
