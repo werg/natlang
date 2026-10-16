@@ -334,6 +334,45 @@ def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoi
     return result
 
 
+def combine_capacity_proofs(out, proofs, *, identity, code_sha, checkpoint_sha256):
+    """Join actual case evidence from one unchanged restored parent, never add sizes."""
+    from ..train.native_resident import binding, bound
+    from ..common.hashing import canonical_json_sha256_hex
+    from ..common.jsonio import write_json_durable
+    evidence=[];cases=[]
+    for proof in proofs:
+        value=json.loads(bound(proof).read_text())
+        if (value.get('passed') is not True or value.get('identity')!=identity
+                or value.get('runtime_code_sha256')!=code_sha
+                or value.get('parent_checkpoint_sha256')!=checkpoint_sha256
+                or value.get('optimizer_updates')!=0
+                or (value.get('numerical_reference') or {}).get('passed') is not True
+                or (value.get('capacity') or {}).get('passed') is not True):
+            raise ValueError('combined capacity requires successful unchanged-parent runtime proofs')
+        rows=(value.get('capacity') or {}).get('cases') or []
+        if not rows or any(row.get('status')!='passed' or any(type(row.get(key)) is not int or row[key]<1
+                for key in ('forward_tokens','kv_slots')) for row in rows):
+            raise ValueError('combined capacity requires actual successful whole-graph cases')
+        evidence.append(proof);cases.extend(rows)
+    if not cases:raise ValueError('combined capacity requires actual cases')
+    result={'schema':'natlang.native-memory-combined-capacity/1','passed':True,
+        'identity':identity,'runtime_code_sha256':code_sha,'parent_checkpoint_sha256':checkpoint_sha256,
+        'optimizer_updates':0,'proofs':evidence,'capacity':{'cases':cases}}
+    directory=Path(out)/'memory-qualifications'/'combined'/canonical_json_sha256_hex(evidence)/checkpoint_sha256
+    directory.mkdir(parents=True,exist_ok=True)
+    path=directory/'proof.json';certificate=directory/'capacity.json'
+    def immutable(target,value):
+        if target.exists():
+            if json.loads(target.read_text())!=value:raise ValueError('immutable combined capacity changed')
+        else:write_json_durable(target,value)
+    immutable(path,result)
+    immutable(certificate,{'schema':'natlang.native-resident-geometry-qualification/1','passed':True,
+        'identity':identity,'runtime_code_sha256':code_sha,
+        'limits':{key:max(row[key] for row in cases) for key in ('forward_tokens','kv_slots')},
+        'evidence':binding(path),'scope':'union of actually successful whole-graph cases from unchanged parent/runtime; no summed geometry'})
+    return certificate
+
+
 def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256):
     """Independent source cohorts share one restored parent and retain each pass.
 
@@ -357,6 +396,14 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
                 break  # small numerical failure restored the qualified arithmetic path
     finally:
         args.memory_qualification=original
+    passed=[check for check in checks if check['passed']]
+    if len(passed)>1 and args.checkpoint_input_offload:
+        from ..train.native_resident import binding
+        proofs=[binding(args.out/'memory-qualifications'/check['request']['sha256']/checkpoint_sha256/'proof.json')
+                for check in passed]
+        args.resident_geometry_qualification=combine_capacity_proofs(args.out,proofs,
+            identity=passed[0]['identity'],code_sha=passed[0]['runtime_code_sha256'],
+            checkpoint_sha256=checkpoint_sha256)
     result={'schema':'natlang.native-memory-cohort-qualification/1',
         'passed':len(checks)==len(requests) and all(check['passed'] for check in checks),
         'request':requests,'parent_checkpoint_sha256':checkpoint_sha256,'checks':checks,
