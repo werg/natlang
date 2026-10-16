@@ -2416,7 +2416,13 @@ def main(argv=None):
     parser.add_argument('--plan-only', action='store_true',
                         help='resolve and hash every stage input and validate the resume (or --handoff) against the '
                              'existing recipe-plan.json, print the resulting plan, and exit without writing or launching')
+    parser.add_argument('--recover-native-checkpoint',type=Path,
+                        help='install a missing native recipe plan from its exact full checkpoint and saved recipe authority')
+    parser.add_argument('--recover-native-checkpoint-sha256',
+                        help='independently verified full parent SHA required for missing-plan recovery')
     args = parser.parse_args(argv)
+    if (args.recover_native_checkpoint is None)!=(args.recover_native_checkpoint_sha256 is None):
+        parser.error('native checkpoint recovery needs both its path and independently verified SHA')
     from .native_resident import recover as recover_resident
     resident_state = recover_resident(args.out / 'resident-data') if (args.out / 'resident-data/current.json').exists() else None
     if resident_state and args.handoff:
@@ -2429,6 +2435,8 @@ def main(argv=None):
         args.recipe = Path(resident_state['payload']['recipe']['path'])
     recipe = load_recipe(args.recipe)
     if recipe.get('schema') == DIRECT_STAGE_SCHEMA:
+        if args.recover_native_checkpoint is not None:
+            parser.error('native checkpoint plan recovery requires a declared native recipe')
         if args.inspect:
             print(json.dumps(recipe, indent=2))
             return 0
@@ -2484,6 +2492,14 @@ def main(argv=None):
     plan_path = args.out / 'recipe-plan.json'
     plan = {'schema': 'natlang.neuralese-recipe-plan/1', 'recipe': recipe,
             'recipe_sha256': recipe_identity_sha256(args.recipe), 'inputs': inputs, 'device': args.device}
+    if args.recover_native_checkpoint is not None:
+        if args.handoff or resident_state or plan_path.exists():
+            raise ValueError('checkpoint plan recovery requires a missing plan and no resident generation or handoff')
+        from .native_plan_recovery import checkpoint_plan_recovery
+        recovery=checkpoint_plan_recovery(args.recover_native_checkpoint,args.recipe,recipe,stage_inputs,
+            expected_sha256=args.recover_native_checkpoint_sha256)
+        plan['checkpoint_recovery']=recovery
+        plan['recipe_sha256']=recovery['lineage_sha256']
     if resident_state and not args.handoff:
         plan['recipe_sha256'] = resident_state['payload']['plan']['recipe_sha256']
     declared_environment = declared_runtime_environment(recipe)
@@ -2496,6 +2512,15 @@ def main(argv=None):
         if args.handoff:
             plan = lineage_handoff(existing, plan, frozen, package, plan_path, args.out, dry_run=args.plan_only)
         else:
+            if existing.get('checkpoint_recovery') and not existing.get('handoffs') and not resident_state:
+                from .native_plan_recovery import checkpoint_plan_recovery
+                recovery=checkpoint_plan_recovery(existing['checkpoint_recovery']['checkpoint']['path'],
+                    args.recipe,recipe,stage_inputs,
+                    expected_sha256=existing['checkpoint_recovery']['checkpoint']['sha256'])
+                if recovery!=existing['checkpoint_recovery']:
+                    raise ValueError('installed checkpoint recovery authority changed')
+                plan['checkpoint_recovery']=recovery
+                plan['recipe_sha256']=recovery['lineage_sha256']
             approved_current = (existing.get('handoffs') or [{}])[-1].get('recipe_sha256')
             if (existing.get('recipe') == plan['recipe'] and existing.get('recipe_sha256') != plan['recipe_sha256'] and
                     ('extends' in json.loads(args.recipe.read_text()) or approved_current == plan['recipe_sha256'])):
@@ -2517,6 +2542,7 @@ def main(argv=None):
     if args.plan_only:
         print(json.dumps({'event': 'plan_only', 'fresh': not plan_path.exists(), 'handoff': args.handoff,
                           'recipe_sha256': plan['recipe_sha256'], 'stage_inputs': plan.get('stage_inputs'),
+                          'checkpoint_recovery': plan.get('checkpoint_recovery'),
                           'stages_started': [stage['id'] for stage in recipe['stages']
                                              if stage_started(args.out, stage['id'])],
                           'handoff_record': ({k: v for k, v in plan['handoffs'][-1].items() if k != 'previous_inputs'}
@@ -2646,6 +2672,11 @@ def main(argv=None):
                     command += ['--continue-from', predecessor['artifact']]
                 if continuation_checkpoint:
                     command += ['--continue-from', continuation_checkpoint]
+                recovery=plan.get('checkpoint_recovery')
+                if recovery and stage['id']==recovery['stage_id']:
+                    if '--continue-from' in command:
+                        raise ValueError('checkpoint recovery conflicts with another stage continuation')
+                    command += ['--continue-from',recovery['checkpoint']['path']]
                 if kind == 'raw_runtime_qualification':
                     command += ['--checkpoint', feedback_checkpoint, '--certificate', str(args.out / 'foundation-certificate.json')]
                 if kind == 'view_operator_gate':
