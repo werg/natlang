@@ -114,9 +114,10 @@ normalized source memberships, omissions, row bindings, exact objective masks,
 protected splits, both model views and current ordinary held prefix. It emits
 bound shared-trainer entrypoints and a source-curated eligibility audit.
 
-These exact verifiers do not independently re-render every stored token, run
-models or grant memory capacity. Actual complete Miro source samples are
-rendered through both production tokenizers in focused tests; actual target
+These exact verifiers independently re-render every stored pair token and
+suffix mask from its original normalized alternatives. They do not run models
+or grant memory capacity. Actual complete Miro source samples exercise both
+production tokenizers in focused tests; actual target
 capacity and production registration remain separate explicit prerequisites.
 Use `--export-receipt`, `--base-tokenizer`, `--protection`, the complete repeated
 `--decision-hold` set and `--output` for conversion. The admission command takes
@@ -127,3 +128,14 @@ After source registration and whole-pair capacity qualification, declare kind
 `objective_spec` and the actual prior participant checkpoint. Existing recipe
 and mandatory interleave consume its remaining pair visits through later
 semantic/RL/SFT cycles; no separate preference trainer or frozen model is used.
+
+Independent admission hardening: the verifier prepares each model's actual
+bound tokenizer and streams the original normalized preferences a second time.
+It re-renders both complete alternatives with the shared pair renderer, then
+compares exact graph and objective hashes (including all token IDs and suffix
+masks) with the stored rows. Only compact per-source hashes persist between
+passes; no collection of full alternative histories is retained in RAM. This
+is a crisp source-correspondence verifier, not a model policy or an execution,
+capacity, numeric-gradient or task-quality qualification. Coordinated changes
+to tokens, graph IDs, suffix masks, row proofs and their receipts must fail even
+when those altered files remain internally self-consistent.

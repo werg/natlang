@@ -12,10 +12,11 @@ import torch
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex,sha256_file_hex
 from natlang_neuralese.common.jsonio import write_json_durable
 from natlang_neuralese.data.native_graph_schema import parse_graph
+from natlang_neuralese.data.native_preference import pair_graph
 from natlang_neuralese.model.native_model import tokenizer_inventory
 from natlang_neuralese.train.native_preference import NativePreferenceObjective,SCHEMA,KIND
 from scripts.neuralese_data.acquired_preferences import normalized_preference_records
-from scripts.neuralese_data.build_acquired_full_session_graphs import sessions,completed_shards
+from scripts.neuralese_data.build_acquired_full_session_graphs import sessions,completed_shards,prepare_tokenizer
 from scripts.neuralese_data.build_acquired_preference_graphs import (
     SHARD_SCHEMA,ADDITIONAL,protected_pair,_runtime,_bound,ROOT)
 from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
@@ -23,7 +24,7 @@ from scripts.neuralese_data.decision_holds import load_decision_holds
 from scripts.neuralese_data.prepare_acquired_session_admission import bound,verify_global_source_closure,decision_contract
 
 
-def verify_conversion(directory,*,protection_path,base):
+def verify_conversion(directory,*,protection_path,base,prepared=None):
     directory=Path(directory);receipt_path=directory/'receipt.json'
     receipt=json.loads(receipt_path.read_text());binding=receipt.get('binding') or {}
     if (receipt.get('schema')!='natlang.acquired-offline-preference-graphs/1'
@@ -40,6 +41,10 @@ def verify_conversion(directory,*,protection_path,base):
         raise ValueError('offline preference conversion uses different decision holds')
     if binding['prepared_tokenizer']['base_files']!=tokenizer_inventory(base):
         raise ValueError('offline model selector differs from its exact tokenizer base inventory')
+    prepared=prepare_tokenizer(base) if prepared is None else prepared
+    prepared.validate(base)
+    if prepared.binding!=binding['prepared_tokenizer']:
+        raise ValueError('offline admission tokenizer rendering contract differs from conversion')
     export_path=bound(binding['export_receipt']['path'],binding['export_receipt'])
     export=json.loads(export_path.read_text())
     source=bound(binding['source']['path'],binding['source'])
@@ -77,7 +82,7 @@ def verify_conversion(directory,*,protection_path,base):
     objective=NativePreferenceObjective(receipt['objective']['path'])
     if {'kind':objective.kind,'beta':objective.beta,'margin':objective.margin}!=binding['objective']:
         raise ValueError('offline objective differs from declared conversion objective')
-    proofs={};groups={'train':set(),'test':set()};counts=Counter();seen_source=set();seen_ids=set();outputs=[]
+    rendered={};proofs={};groups={'train':set(),'test':set()};counts=Counter();seen_source=set();seen_ids=set();outputs=[]
     for output in receipt['outputs']:
         path=Path(output['path']);split=path.parent.name
         if split not in groups or path.resolve()!=(directory/split/'native-graphs.jsonl.zst').resolve():
@@ -97,6 +102,8 @@ def verify_conversion(directory,*,protection_path,base):
             spec=objective.rows[example.id]
             if spec['source_record_sha256']!=source_sha or spec['source_preference']!=original['source']:
                 raise ValueError('offline objective changed original preference provenance')
+            rendered[source_sha]={'id':example.id,'graph_sha256':canonical_json_sha256_hex(row),
+                'objective_sha256':canonical_json_sha256_hex(spec)}
             seen_source.add(source_sha);seen_ids.add(example.id);groups[split].update(example.source_groups)
             proofs[example.id]={'id':example.id,'graph_sha256':canonical_json_sha256_hex(row),
                 'source_groups':list(example.source_groups),'split':split,
@@ -107,6 +114,25 @@ def verify_conversion(directory,*,protection_path,base):
         outputs.append({**output,'split':split,'tokens':tokens,'max_tokens':maximum})
     if seen_source!=set(expected) or seen_ids!=set(objective.rows):
         raise ValueError('offline admission lost or added jointly bound source preferences')
+    # Independently derive BOTH alternatives from the immutable normalized source.
+    # Keep only compact hashes between passes; full histories exist for one pair
+    # at a time. Self-consistent forged graph/objective/proof files are not a
+    # substitute for this exact token and suffix-mask correspondence.
+    checked=set()
+    for indices,record,error in normalized_preference_records(source):
+        record,reason=(None,str(error)) if error else protected_pair(record,protection,decision_ids)
+        if reason:continue
+        source_sha=canonical_json_sha256_hex(record)
+        graph,spec=pair_graph(record,prepared.tokenizer,
+            tokenizer_fingerprint=prepared.expanded_fingerprint)
+        expected_render={'id':graph['id'],'graph_sha256':canonical_json_sha256_hex(graph),
+            'objective_sha256':canonical_json_sha256_hex(spec)}
+        if source_sha in checked or rendered.get(source_sha)!=expected_render:
+            raise ValueError('offline stored graph/objective differs from exact original-alternative tokenizer rendering')
+        checked.add(source_sha)
+    if checked!=seen_source:
+        raise ValueError('offline original-alternative rendering inventory differs from admitted graphs')
+    prepared.validate(base)
     row_proofs=list(sessions(receipt['row_proof']['path']))
     if len(row_proofs)!=len(proofs) or {p['id'] for p in row_proofs}!=set(proofs) or any(proofs[p['id']]!=p for p in row_proofs):
         raise ValueError('offline row proof inventory differs from complete exact graph/source joins')
@@ -117,7 +143,8 @@ def verify_conversion(directory,*,protection_path,base):
         bound(item['path'],item)
     return {'receipt':_bound(receipt_path),'objective':receipt['objective'],'source':binding['source'],
         'outputs':outputs,'counts':dict(counts),'groups':{key:sorted(value) for key,value in groups.items()},
-        'proofs':proofs,'source_membership':sorted(expected),'source_units':units,'normalized_sessions':frontier}
+        'proofs':proofs,'source_membership':sorted(expected),'source_units':units,'normalized_sessions':frontier,
+        'exact_original_alternative_renders':len(checked),'source_render_verified':True}
 
 
 def main(argv=None):
@@ -139,7 +166,9 @@ def prepare(args):
         raise ValueError('offline admission output must be a new immutable proposal directory')
     verified={};reference=None;all_groups={'train':set(),'test':set()}
     for name,declaration in models.items():
-        views=[verify_conversion(path,protection_path=args.protection,base=declaration['base']) for path in declaration['conversions']]
+        prepared=prepare_tokenizer(declaration['base'])
+        views=[verify_conversion(path,protection_path=args.protection,base=declaration['base'],prepared=prepared)
+               for path in declaration['conversions']]
         membership=[source for view in views for source in view['source_membership']]
         if len(set(membership))!=len(membership):raise ValueError('offline admission repeats source pairs across conversions')
         if reference is not None and set(membership)!=reference:raise ValueError('offline model views differ in exact source pair membership')
@@ -182,8 +211,9 @@ def prepare(args):
             'requires_current_shared_participant_and_capacity_qualification':True,'earned_pair_visits':0}
     result={'schema':'natlang.acquired-offline-preference-admission/1','status':'passed','training_admission':False,
         'admission_class':'source-curated-offline-pairwise-preferences','oracle_verified':False,
-        'numerical_rerender_claimed':False,'native_execution_verified':False,'capacity_qualified':False,
-        'source_eligibility_scope':'byte-bound qualified conversion plus all-row exact source/split/objective joins; separate actual-tokenizer samples',
+        'numerical_rerender_claimed':False,'all_pair_token_render_verified':True,
+        'native_execution_verified':False,'capacity_qualified':False,
+        'source_eligibility_scope':'byte-bound qualified conversion plus all-row original-alternative tokenizer re-render, exact graph/suffix masks and source/split joins',
         'protection':current_protection(args.protection)['proof'],'models':verified,'training_entrypoints':entrypoints,
         'training_sources':'aggregate graph outputs only; durability shards and original chosen SFT are not extra preference visits'}
     write_json_durable(args.output/'audit.json',result)

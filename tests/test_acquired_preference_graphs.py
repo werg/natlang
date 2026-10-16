@@ -235,3 +235,66 @@ def test_actual_miro_full_pair_durable_conversion_both_production_tokenizers(tmp
     objective=json.loads(Path(report['objective']['path']).read_text())
     assert objective['rows'][expected['id']]==spec
     assert spec['token_counts']['chosen']>0 and spec['token_counts']['rejected']>0
+    from scripts.neuralese_data import prepare_acquired_preference_admission as admission
+    for name in ('ROOT','current_protection','verify_global_source_closure','load_decision_holds','_runtime'):
+        monkeypatch.setattr(admission,name,getattr(builder,name))
+    verified=admission.verify_conversion(tmp_path/'native',protection_path=protection,base=base)
+    assert verified['source_render_verified'] and verified['exact_original_alternative_renders']==1
+
+
+def test_admission_rejects_coordinated_token_objective_and_row_proof_forgery(tmp_path,monkeypatch):
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest
+    from natlang_neuralese.data.native_graph_schema import parse_graph
+    from natlang_neuralese.rl.native_replay import graph_identity
+    from natlang_neuralese.train.native_preference import NativePreferenceObjective
+    from scripts.neuralese_data import prepare_acquired_preference_admission as admission
+    args,_,_=setup_conversion(tmp_path,monkeypatch)
+    result=builder.main(args)
+    for name in ('ROOT','current_protection','verify_global_source_closure','load_decision_holds','_runtime'):
+        monkeypatch.setattr(admission,name,getattr(builder,name))
+    directory=tmp_path/'output'
+    source_sha=sha256_file_hex(tmp_path/'full-trajectories.jsonl.zst')
+    graph=next(sessions(directory/'train/native-graphs.jsonl.zst'))
+    old_id=graph['id']
+    objective=json.loads((directory/'objective.json').read_text())
+    spec=objective['rows'][old_id]
+    node=graph['nodes'][0]
+    node['token_ids'][-1]=1 if node['token_ids'][-1]!=1 else 2
+    spec['suffixes'][node['name']]['token_ids_sha256']=digest(node['token_ids'])
+    graph['id']='offline-preference:'+digest({'source_record_sha256':spec['source_record_sha256'],
+        'suffixes':spec['suffixes'],'token_counts':spec['token_counts']})
+    spec['graph_sha256']=digest(graph_identity(parse_graph(graph,tokenizer_fingerprint=graph['tokenizer_fingerprint'])))
+    def rewrite(directory):
+        graphs=directory/'train/native-graphs.jsonl.zst'
+        rows=list(sessions(graphs))
+        if not any(row['id']==old_id for row in rows):return
+        with write_jsonl_text(graphs) as stream:
+            for row in rows:stream.write(json.dumps(graph if row['id']==old_id else row)+'\n')
+        path=directory/'objective.json';value=json.loads(path.read_text())
+        del value['rows'][old_id];value['rows'][graph['id']]=spec;write_json_durable(path,value)
+        path=directory/'row-proof.jsonl';proofs=list(sessions(path))
+        for proof in proofs:
+            if proof['id']==old_id:proof.update(id=graph['id'],graph_sha256=digest(graph))
+        path.write_text(''.join(json.dumps(proof)+'\n' for proof in proofs))
+    rewrite(directory)
+    for shard in result['shards']:
+        path=Path(shard['path']);rewrite(path.parent)
+        value=json.loads(path.read_text())
+        for output in value['outputs']:
+            bound=builder._bound(path.parent/output['path'])
+            output.update({key:bound[key] for key in ('sha256','bytes')})
+        write_json_durable(path,value)
+        shard['sha256']=sha256_file_hex(path)
+    for output in result['outputs']:
+        bound=builder._bound(output['path']);output.update({key:bound[key] for key in ('sha256','bytes')})
+    for key in ('objective','row_proof'):result[key]=builder._bound(result[key]['path'])
+    write_json_durable(directory/'receipt.json',result)
+    # All altered files, immutable IDs, suffix token hashes and internal masks
+    # agree; only the original source still establishes that these are false.
+    import torch
+    with torch.no_grad():
+        NativePreferenceObjective(directory/'objective.json').forward_inputs({'examples':[
+            parse_graph(graph,tokenizer_fingerprint=graph['tokenizer_fingerprint'])]})
+    assert sha256_file_hex(tmp_path/'full-trajectories.jsonl.zst')==source_sha
+    with pytest.raises(ValueError,match='exact original-alternative tokenizer rendering'):
+        admission.verify_conversion(directory,protection_path=tmp_path/'protection.json',base=tmp_path/'base')
