@@ -303,6 +303,14 @@ def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_
         '/home/werg/natlang/scripts/neuralese_data/render_native_turn_corpus.py',
         '/home/werg/natlang/training/neuralese/natlang_neuralese/data/text_corpus.py',
         '/home/werg/natlang/scripts/neuralese_data/strip_generic_system_prompt.py'}
+    current_code_binding = renderer._render_code_binding()
+    lease_path = '/home/werg/natlang/scripts/neuralese_data/conversion_output_lease.py'
+    assert current_code_binding[lease_path] == renderer.file_sha(Path(lease_path))
+    assert current_code_binding[lease_path] != code_binding.get(lease_path)
+    current_code_binding = renderer._render_code_binding()
+    lease_path = '/home/werg/natlang/scripts/neuralese_data/conversion_output_lease.py'
+    assert current_code_binding[lease_path] == renderer.file_sha(Path(lease_path))
+    assert current_code_binding[lease_path] != code_binding.get(lease_path)
     trajectory_id = 'trajectory-a'
     group_id = renderer.sha(trajectory_id.encode())
     receipt_path = out / 'trajectory-stream' / 'lfm25' / 'selected' / 'receipts' / f'{group_id}.json'

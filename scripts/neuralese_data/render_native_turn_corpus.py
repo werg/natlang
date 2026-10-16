@@ -1276,6 +1276,8 @@ def _render_code_binding():
             file_sha(ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py'),
         str(ROOT / 'scripts/neuralese_data/strip_generic_system_prompt.py'):
             file_sha(ROOT / 'scripts/neuralese_data/strip_generic_system_prompt.py'),
+        str(ROOT / 'scripts/neuralese_data/conversion_output_lease.py'):
+            file_sha(ROOT / 'scripts/neuralese_data/conversion_output_lease.py'),
     }
     return binding
 
