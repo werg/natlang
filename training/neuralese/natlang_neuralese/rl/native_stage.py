@@ -16,7 +16,6 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
     from transformers import AutoTokenizer
     from ..model.shared_state import RoleTokens, ROLE_MARKERS
     from ..data.text_corpus import tokenizer_fingerprint
-    from ..serve.store import decode_native_state
     from .native_replay import prepare_objective
     tokenizer = AutoTokenizer.from_pretrained(tokenizer, local_files_only=True)
     fingerprint = tokenizer_fingerprint(tokenizer)
@@ -30,19 +29,15 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
         if len(set(marker_ids))!=4 or any(value==tokenizer.unk_token_id for value in marker_ids):
             raise ValueError('native RL tokenizer lacks its four distinct role markers')
         if bundle is None:raise ValueError('coefficient-policy admission requires its actual collector bundle')
-        from .graph_replay import verified_bundle_bytes
+        from .graph_replay import verified_bundle_bytes,NativeBundleStore
         from .native_replay import invocation_behavior_policy
         from ..common.hashing import canonical_json_sha256_hex
         source=Path(bundle).resolve(strict=True)
         original=json.loads(source.read_text())
         if original.get('schema')!='natlang.rl-block-bundle/1' or original.get('policy_id')!=identity['checkpoint_sha256']:
             raise ValueError('coefficient-policy collector bundle changed its actual base-runtime owner')
-        def fetch(block_id):
-            raw=verified_bundle_bytes(source,block_id,policy_id=identity['checkpoint_sha256'])
-            if raw is None:raise ValueError('coefficient-policy collector bundle omitted an actual raw observation')
-            block,actual=decode_native_state(raw)
-            if actual!=block_id:raise ValueError('coefficient-policy collector archive changed native content identity')
-            return block
+        reader=NativeBundleStore(source,policy_id=identity['checkpoint_sha256'],manifest=original)
+        fetch=reader.state
         scored=[row for row in rollouts if row.get('reward') is not None]
         behavior=invocation_behavior_policy(scored,identity=identity,roles=RoleTokens(*marker_ids),fetch_block=fetch)
         owner=canonical_json_sha256_hex(behavior)
@@ -76,19 +71,11 @@ def prepare(rollouts, *, checkpoint, tokenizer, bundle=None, mode='grpo', coeffi
     if archive and (archive.get('schema') != 'natlang.rl-block-bundle/1' or
                     archive.get('policy_id') != identity['checkpoint_sha256']):
         raise ValueError('native RL archive does not bind the sampled policy')
+    from .graph_replay import NativeBundleStore
+    reader=NativeBundleStore(bundle,policy_id=identity['checkpoint_sha256'],manifest=archive) if bundle else None
     def fetch(block_id):
-        if archive is None:
-            raise ValueError('native RL state requires its durable actor bundle')
-        entry = archive['blocks'][block_id]
-        root = Path(bundle).resolve().parent
-        path = (root / entry['path']).resolve(strict=True)
-        if (path.parent != root or path.stat().st_size != entry['bytes']
-                or sha256_file_hex_cached(path) != entry['sha256']):
-            raise ValueError('native RL archive path/size/hash changed')
-        block, actual = decode_native_state(path.read_bytes())
-        if actual != block_id:
-            raise ValueError('native RL archive content identity changed')
-        return block
+        if reader is None:raise ValueError('native RL state requires its durable actor bundle')
+        return reader.state(block_id)
     return prepare_objective(rollouts, identity=identity, roles=roles, fetch_block=fetch,
         block_bundle=Path(bundle).resolve() if bundle else None, mode=mode)
 

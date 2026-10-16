@@ -155,10 +155,13 @@ def compile_replay(turns, *, identity, roles, fetch_block, invocation_actors=Non
                     raise ValueError('native RL prompt requires exact per-token embedding roles')
                 own.extend(ids); mask.extend(flags)
             elif segment.get('kind') == 'native_state':
+                observed=fetch_block(segment['id'])
+                if segment.get('state_derivation')!=observed.derivation:
+                    raise ValueError('native RL input changed its actual state derivation receipt')
                 receipt = segment.get('adapter_state_consumption')
                 if receipt is not None:
                     from ..model.native_adapters import validate_adapter_state_receipt
-                    block = fetch_block(segment['id'])
+                    block = observed
                     validate_adapter_state_receipt(block, receipt, target_identity=actor_identity, target_binding=binding)
                     if segment.get('native_identity') != receipt['source_native_identity']:
                         raise ValueError('native RL input source identity differs from its consumption receipt')
@@ -446,6 +449,7 @@ class NativePolicyObjective:
         self.evaluation_identity = self.identity
         self.evaluation_adapter_binding = self.adapter_binding
         self.bundle = None
+        self.native_bundle_store = None
         self.external_state_overrides = {}
         self.engine = None
         self.native_state_modes = {}
@@ -456,6 +460,8 @@ class NativePolicyObjective:
             if (self.bundle[1].get('schema') != 'natlang.rl-block-bundle/1'
                     or self.bundle[1].get('policy_id') != self.archive_owner):
                 raise ValueError('native objective archive belongs to a different actor policy')
+            from .graph_replay import NativeBundleStore
+            self.native_bundle_store=NativeBundleStore(bundle_path,policy_id=self.archive_owner,manifest=self.bundle[1])
         if self.behavior_policy is not None and self.bundle is None:
             raise ValueError('native invocation policy requires its immutable actor bundle')
 
@@ -548,9 +554,6 @@ class NativePolicyObjective:
                     raise ValueError('native invocation strict current observation changed its adapter binding')
 
     def forward_inputs(self, context):
-        from pathlib import Path
-        from ..common.hashing import sha256_file_hex_cached
-        from ..serve.store import decode_native_state
         blocks, identities = {}, {}
         self.evaluation_external_contracts = {}
         for example in context['examples']:
@@ -559,14 +562,8 @@ class NativePolicyObjective:
             for name, binding in example.external_states.items():
                 if self.bundle is None:
                     raise ValueError('native RL external observations require their durable state bundle')
-                path, manifest = self.bundle
-                entry = manifest['blocks'][binding['id']]
-                artifact = (path.parent / entry['path']).resolve()
-                if artifact.parent != path.parent or artifact.stat().st_size != entry['bytes']:
-                    raise ValueError('native RL external artifact escapes archive or changed size')
-                if sha256_file_hex_cached(artifact) != entry['sha256']:
-                    raise ValueError('native RL external artifact bytes changed')
-                block, block_id = decode_native_state(artifact.read_bytes())
+                block=self.native_bundle_store.state(binding['id'])
+                block_id=binding['id']
                 receipts = self.rows[example.id].get('external_consumption_receipts', {}).get(name)
                 mode = self.native_state_modes.get(binding['id'])
                 if self.behavior_policy is not None:

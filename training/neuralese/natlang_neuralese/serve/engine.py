@@ -705,7 +705,8 @@ class Engine:
                 adapted_record = self.store.put_native_state(adapted)
                 observed_id = adapted_record.id
                 seq.native_rl_prompt.append({'kind': 'native_state', 'id': adapted_record.id,
-                    'native_identity': self._native_block_identity(adapted)})
+                    'native_identity': self._native_block_identity(adapted),
+                    **({'state_derivation':adapted.derivation} if adapted.derivation is not None else {})})
         else:
             # Until joint semantic adaptation is trained, foreign state is
             # best-effort only: discard its tensors and rebuild target KV from text.

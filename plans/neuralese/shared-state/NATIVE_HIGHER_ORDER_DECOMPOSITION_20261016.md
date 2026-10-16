@@ -217,3 +217,31 @@ storage cotangents against explicitly requested FP32 cotangents; the oracle
 now binds identical arithmetic, with unchanged elementwise and relative-L2
 gates. Live optimized state returns to the actor device once before graph use;
 only the scalar optimizer's calculation is CPU-bound.
+
+### RL archive continuation
+
+An optimized state used by an RL actor is an explicit derived observation,
+not a fresh producer capture or a new stochastic action. The exact bundle must
+retain the same mixed state/tensor/program ancestry as the serving archive.
+Crisp admission and objective plumbing reuse the shared dependency inventory
+and numeric state verifier. Restore follows dependency order; captured external
+states are checked from the immutable bundle before the shared packed forward.
+Producer spans still use the existing one-pass replay mechanism, with no
+recursive invocation rerun and no invented producer edge for an optimized ID.
+
+`native_state_dependencies` is the shared inventory for store retention and RL
+bundles. `NativeBundleStore` exposes verified immutable bundle bytes to the
+existing state-derivation verifier. Both uniform and coefficient-policy
+admission and actual policy-objective external-input loading use it; restored
+mixed bundles load dependencies before state/gradient artifacts. Sampling
+receipts must retain the actual derived input provenance, including learned
+semantic decode observations.
+
+Actual both-port tests capture two real sampled replies consuming a twice
+optimized state, admit through production `native_stage.prepare`, obtain a
+nonzero native model gradient from the registered RL objective, reverse bundle
+entry order, restore an empty actor store, and reproduce the exact objective.
+Missing history and altered capture provenance reject. Focused regression passed
+20 cases, production coefficient/stage/policy integration passed 16 cases, and
+the new two-model archive/objective test passed on actual CUDA. These are runtime
+mechanism checks; fixture rewards do not claim a task oracle or model improvement.

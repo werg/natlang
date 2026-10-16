@@ -17,6 +17,15 @@ SCHEMA = 'neuralese.native-state/1'
 FLOAT_DTYPES = (torch.float16, torch.bfloat16, torch.float32, torch.float64)
 
 
+def native_state_dependencies(block):
+    """One immutable input inventory for storage, transport and RL archives."""
+    from .native_derivative_contract import derivation_dependencies
+    binding=block.adapter_binding
+    dependencies=derivation_dependencies(block.derivation)
+    if binding:dependencies.extend(entry['id'] for entry in binding['adapters'])
+    return sorted(set(dependencies))
+
+
 @dataclass
 class NativeStateBlock:
     text: str

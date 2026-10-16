@@ -34,13 +34,13 @@ def block_ids(value):
             yield from block_ids(item)
 
 
-def verified_bundle_bytes(manifest_path, block_id, *, policy_id):
+def verified_bundle_bytes(manifest_path, block_id, *, policy_id, manifest=None):
     """Reuse exact durable bytes when an interrupted actor lease is restarted."""
     from ..common.hashing import sha256_file_hex_cached
     manifest_path = Path(manifest_path)
     if not manifest_path.exists():
         return None
-    manifest = json.loads(manifest_path.read_text())
+    manifest = json.loads(manifest_path.read_text()) if manifest is None else manifest
     if manifest.get('schema') != 'natlang.rl-block-bundle/1' or manifest.get('policy_id') != policy_id:
         raise ValueError('RL archive belongs to a different policy')
     entry = manifest['blocks'].get(block_id)
@@ -53,10 +53,64 @@ def verified_bundle_bytes(manifest_path, block_id, *, policy_id):
     return path.read_bytes()
 
 
+class NativeBundleStore:
+    """Read-only exact artifact view for the shared native provenance verifier."""
+    def __init__(self,path,*,policy_id,manifest=None):
+        import copy,contextvars
+        self.path=Path(path).resolve(strict=True);self.policy_id=policy_id
+        self.manifest=copy.deepcopy(json.loads(self.path.read_text()) if manifest is None else manifest)
+        if self.manifest.get('schema')!='natlang.rl-block-bundle/1' or self.manifest.get('policy_id')!=policy_id:
+            raise ValueError('native archive belongs to a different exact actor policy')
+        self._records=contextvars.ContextVar('native_bundle_records',default=None)
+
+    def _record(self,ident):
+        records=self._records.get()
+        if records is not None and ident in records:return records[ident]
+        from types import SimpleNamespace
+        raw=verified_bundle_bytes(self.path,ident,policy_id=self.policy_id,manifest=self.manifest)
+        if raw is None:return None
+        if ident.startswith('nzs1_'):
+            from ..serve.store import decode_native_state
+            block,actual=decode_native_state(raw)
+            identity={key:getattr(block,key) for key in ('checkpoint_sha256','tokenizer_fingerprint','embedding_weight_sha256','architecture')}
+            record=SimpleNamespace(id=actual,block=block)
+        elif ident.startswith('nnt1_'):
+            from ..model.native_artifact import decode_native_tensor_artifact
+            artifact,actual=decode_native_tensor_artifact(raw)
+            identity=artifact.native_identity;record=SimpleNamespace(id=actual,artifact=artifact)
+        else:raise ValueError('native archive verifier requires native state or named tensor artifacts')
+        if actual!=ident or self.manifest['blocks'][ident].get('native_identity')!=identity:
+            raise ValueError('native archive content identity differs from its exact receipt')
+        if records is not None:records[ident]=record
+        return record
+
+    def get_native_state(self,ident):
+        if not ident.startswith('nzs1_'):raise ValueError('native state archive ID has the wrong kind')
+        return self._record(ident)
+
+    def get_native_tensor_artifact(self,ident):
+        if not ident.startswith('nnt1_'):raise ValueError('named native archive ID has the wrong kind')
+        return self._record(ident)
+
+    def state(self,ident):
+        # Share decoded ancestors within this verification, never retain every
+        # episode's potentially huge KV payload across a production epoch.
+        token=self._records.set({}) if self._records.get() is None else None
+        try:
+            record=self.get_native_state(ident)
+            if record is None:raise ValueError('native archive omitted its exact state observation')
+            from ..model.native_state_derivation import verify_state_derivation
+            verify_state_derivation(self,record.block)
+            return record.block
+        finally:
+            if token is not None:self._records.reset(token)
+
+
 def save_bundle(rollouts, out, *, policy_id, fetch):
     """Fetch recursively referenced blocks with Server.get_bytes or a local store."""
     from ..serve.store import decode_block, decode_native_state
     from ..model.native_artifact import decode_native_tensor_artifact, native_tensor_dependencies
+    from ..model.state_block import native_state_dependencies
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     pending = set(block_ids(rollouts))
@@ -91,24 +145,27 @@ def save_bundle(rollouts, out, *, policy_id, fetch):
         if native:
             entries[block_id]['native_identity'] = {name: getattr(block, name) for name in (
                 'checkpoint_sha256', 'tokenizer_fingerprint', 'embedding_weight_sha256', 'architecture')}
-            binding = getattr(block, 'adapter_binding', None)
-            if binding:
-                pending.update({entry['id'] for entry in binding['adapters']} - entries.keys())
+            pending.update(set(native_state_dependencies(block))-entries.keys())
         elif not tensor:
             pending.update(set(block_ids(block.producer)) - entries.keys())
     manifest = {'schema': 'natlang.rl-block-bundle/1', 'policy_id': policy_id, 'blocks': entries}
     destination = out / 'manifest.json'
     write_json_durable(destination, manifest)
+    reader=NativeBundleStore(destination,policy_id=policy_id,manifest=manifest)
+    for ident,record in entries.items():
+        if record['format']=='native-state':reader.state(ident)
     return manifest
 
 
 def restore_bundle(engine, manifest_path, *, policy_id):
     from ..serve.store import decode_block, decode_native_state
     from ..model.native_artifact import decode_native_tensor_artifact, native_tensor_dependencies
+    from ..model.state_block import native_state_dependencies
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text())
     if manifest.get('schema') != 'natlang.rl-block-bundle/1' or manifest.get('policy_id') != policy_id:
         raise ValueError('RL block bundle belongs to a different policy')
+    native={}
     for block_id, entry in manifest['blocks'].items():
         path = manifest_path.parent / entry['path']
         if path.resolve().parent != manifest_path.parent.resolve():
@@ -122,9 +179,10 @@ def restore_bundle(engine, manifest_path, *, policy_id):
             artifact, actual = decode_native_tensor_artifact(raw)
             if actual != block_id or entry.get('native_identity') != artifact.native_identity:
                 raise ValueError('native RL tensor identity differs from its archive receipt')
-            if any(dependency not in manifest['blocks'] for dependency in native_tensor_dependencies(artifact)):
+            dependencies=native_tensor_dependencies(artifact)
+            if any(dependency not in manifest['blocks'] for dependency in dependencies):
                 raise ValueError('native RL tensor bundle is missing required adapter dependencies')
-            engine.store.put_native_tensor_artifact(artifact)
+            native[block_id]=dependencies
         elif block_id.startswith('nzs1_'):
             if not getattr(engine, 'native_state_enabled', False):
                 raise ValueError('native RL state bundle requires a native-state learner')
@@ -136,15 +194,24 @@ def restore_bundle(engine, manifest_path, *, policy_id):
             # Foreign source blocks can be present in a real multi-model graph.
             # Store exact bytes; the graph/runtime must select explicit native,
             # learned-adaptation or text-reencoding consumption, never width-cast.
-            binding = getattr(block, 'adapter_binding', None)
-            if binding and any(item['id'] not in manifest['blocks'] for item in binding['adapters']):
-                raise ValueError('native RL state bundle is missing required adapter coefficients')
-            engine.store.put_native_state(block)
+            dependencies=native_state_dependencies(block)
+            if any(ident not in manifest['blocks'] for ident in dependencies):
+                raise ValueError('native RL state bundle is missing required state/adapter derivation dependencies')
+            native[block_id]=dependencies
         else:
             block = decode_block(raw)
             if block.id != block_id or block.width != engine.width:
                 raise ValueError('RL block bundle identity/width differs from learner')
             engine.store.put(block)
+    reader=NativeBundleStore(manifest_path,policy_id=policy_id,manifest=manifest)
+    while native:
+        ready=[ident for ident,dependencies in native.items() if not any(key in native for key in dependencies)]
+        if not ready:raise ValueError('native RL archive has cyclic artifact dependencies')
+        for ident in ready:
+            native.pop(ident)
+            record=reader._record(ident)
+            if ident.startswith('nzs1_'):engine.store.put_native_state(record.block)
+            else:engine.store.put_native_tensor_artifact(record.artifact)
     return manifest
 
 

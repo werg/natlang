@@ -535,10 +535,8 @@ class TensorStore:
                 from ..model.native_artifact import native_tensor_dependencies
                 dependencies = native_tensor_dependencies(record.artifact)
             elif isinstance(record, NativeStateRecord):
-                binding = getattr(record.block, 'adapter_binding', None)
-                dependencies = [entry['id'] for entry in binding['adapters']] if binding else []
-                from ..model.native_derivative_contract import derivation_dependencies
-                dependencies += derivation_dependencies(record.block.derivation)
+                from ..model.state_block import native_state_dependencies
+                dependencies=native_state_dependencies(record.block)
             for dependency in dependencies:
                 if dependency not in keep:
                     keep.add(dependency)
