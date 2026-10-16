@@ -1,5 +1,18 @@
 # Model-facing changes and their measurement
 
+### 2026-10-16 — native task evaluations use the native state client
+
+Actual LFM5000 responses contained shared-state multipart values while the
+collector was configured with `neuralese_server=false`, omitting its native
+store and value runtime. Native production recipes and new evaluator requests
+now require the existing native-aware transport. Historical plain-client scores
+keep their original protocol and do not establish native task quality.
+Measurement debt: inspect at least 48 live model turns in the next corrected
+held-task evaluation for each student, including actual block storage/imports
+and task outcomes. Existing both-architecture HTTP/Node state transport tests
+establish mechanism correctness, not learned task quality. No new prompt text
+or tool protocol is invented by this correction.
+
 ### 2026-10-15 — shared semantic adapter recovery
 
 Native foreign-state consumption can use an explicitly configured, trained,

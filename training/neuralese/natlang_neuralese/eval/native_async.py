@@ -53,8 +53,8 @@ def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=No
     """Seal verified export bytes; keep a derived view's original parent separate."""
     from ..train.checkpoint_policy import CheckpointPolicy
     from ..model.native_model import CHECKPOINT_SCHEMA,base_inventory
-    from .task_cadence import ASYNC_SCHEMA,TaskEval,parse_task_eval
-    checkpoint=Path(checkpoint).resolve(strict=True);spec=parse_task_eval(spec)
+    from .task_cadence import ASYNC_SCHEMA,TaskEval,parse_task_eval,require_native_transport
+    checkpoint=Path(checkpoint).resolve(strict=True);spec=require_native_transport(parse_task_eval(spec))
     if file_binding(checkpoint)['sha256']!=identity['sha256'] or checkpoint.stat().st_size!=identity['bytes']:
         raise ValueError('native eval checkpoint differs from independently verified export')
     state=CheckpointPolicy.load(checkpoint)

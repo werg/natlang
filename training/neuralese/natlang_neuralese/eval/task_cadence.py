@@ -133,6 +133,13 @@ def _git_head() -> str | None:
         return None
 
 
+def require_native_transport(spec):
+    """Native values require the collector's state store and native client."""
+    if spec.get('neuralese_server') is not True:
+        raise ValueError('native task evaluation requires neuralese_server=true for state transport')
+    return spec
+
+
 class TaskEval:
     """Serve ``engine`` on loopback and execute the fixed held subset against it."""
 
@@ -140,6 +147,8 @@ class TaskEval:
         from ..common.hashing import sha256_file_hex
         from .task_packet import read_jsonl
 
+        if getattr(engine, 'native_state_enabled', False):
+            require_native_transport(spec)
         self.spec, self.out, self.engine = spec, Path(out), engine
         self.prompt_rendering = spec.get('prompt_rendering') or prompt_rendering or 'full'
         from ..common.paths import root as logical_root

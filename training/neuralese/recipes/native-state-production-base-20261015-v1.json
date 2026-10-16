@@ -66,6 +66,7 @@
           "min_successes": 0,
           "noise_successes": 1,
           "noise_repeats": 1,
+          "neuralese_server": true,
           "reference_successes": null,
           "prompt_rendering": "full",
           "runtime_failure_policy": "report"

@@ -20,6 +20,17 @@ current training weights. Both cloud trainers retain resource ownership.
    running artifact references until a report/drain; observe later exports after
    it finishes. Trainer final exact-weight qualification remains independent.
 
+2026-10-16 correction: both students use this mechanism. Mellum uses an exact
+verified weights-only serving view with its original full training-parent hash
+recorded separately; full resumable exports remain unchanged. A derived view is
+never a training continuation parent. New native requests and live native
+evaluators require `neuralese_server=true`: the plain OpenAI collector has no
+native store/value runtime and cannot transport emitted shared-state values.
+Historical false-mode results retain their original protocol and are diagnostic,
+not evidence of working native transport. Interrupt an affected diagnostic when
+the mismatch is established and restart useful evaluation with explicit corrected
+provenance. Existing request and sampler bindings must never be edited in place.
+
 All steps above are crisp transfer/identity/durability/process plumbing. This
 extends existing task_cadence and task_eval_dispatch, not another eval queue,
 trainer, collector, provider account or task-selection policy.

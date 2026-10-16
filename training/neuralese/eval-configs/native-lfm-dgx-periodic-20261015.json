@@ -9,5 +9,5 @@
   "temperature": 0,
   "noise_repeats": 1,
   "workers": 8,
-  "neuralese_server": false
+  "neuralese_server": true
 }

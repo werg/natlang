@@ -24,7 +24,7 @@ def fixture(tmp_path,step=7):
         path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('{}')
     packet=tmp_path/'cases.jsonl';packet.write_text(json.dumps({'id':'held','split':'test'})+'\n')
     spec={'packet':{'path':str(packet),'sha256':sha256_file_hex_cached(packet)},'cases':[0],
-          'runtime':str(runtime),'noise_repeats':1,'workers':1,'temperature':.7}
+          'runtime':str(runtime),'noise_repeats':1,'workers':1,'temperature':.7,'neuralese_server':True}
     identity=file_binding(checkpoint)
     export={'last_verified_step':step,'receipt':{'role':'lfm','private':True,'identity':identity,
         'independent_verification':identity,'run':'fixture/run','name':'fixture.pt'}}
@@ -120,6 +120,25 @@ def test_sampler_tamper_is_unscored(tmp_path):
 def test_native_protocol_mode_requires_boolean():
     with pytest.raises(ValueError,match='neuralese_server'):
         task_cadence.parse_task_eval({'packet':{'path':'x','sha256':'a'*64},'neuralese_server':'false'})
+
+
+@pytest.mark.parametrize('mode',[False,None])
+def test_native_async_rejects_plain_transport_before_creating_a_request(tmp_path,mode):
+    base,_,checkpoint,spec,export=fixture(tmp_path)
+    if mode is None:spec.pop('neuralese_server')
+    else:spec['neuralese_server']=mode
+    with pytest.raises(ValueError,match='native task evaluation requires'):
+        seal_request(checkpoint,identity=export['receipt']['identity'],step=7,spec=spec,
+                     out=tmp_path/'eval',base=base,queue=tmp_path/'queue')
+    assert not (tmp_path/'queue').exists()
+
+
+def test_live_native_evaluator_rejects_plain_client_but_legacy_parser_keeps_it(tmp_path):
+    from types import SimpleNamespace
+    spec=task_cadence.parse_task_eval({'packet':{'path':'x','sha256':'a'*64}})
+    assert spec['neuralese_server'] is False
+    with pytest.raises(ValueError,match='native task evaluation requires'):
+        task_cadence.TaskEval(spec,tmp_path,SimpleNamespace(native_state_enabled=True),prompt_rendering='full')
 
 
 @pytest.mark.parametrize('role',['lfm','mellum'])
