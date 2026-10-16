@@ -527,6 +527,46 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
             'parent_weights_sha256': checkpoint_sha256, 'runtime_reference': report}
 
 
+def continuation_predecessors(training, declarations, *, stage_id):
+    """Verify current or exactly witnessed historical append predecessors."""
+    from .native_resident import bound
+    from .recipe import load_recipe, recipe_identity_sha256, resolve_stage_inputs
+    prior = dict((training.get('options') or {}).get('source_predecessors') or {})
+    receipts = training.get('source_receipts') or []
+    history = ((training.get('options') or {}).get('resident_adoption') or {}).get('history') or []
+    for role, position in (('continued_native_graphs', 0), ('continued_held_native_graphs', 1)):
+        path = declarations.get(role)
+        if path is None:
+            continue
+        value = sha256_file_hex_cached(path)
+        witnessed = False
+        if prior.get(role) != value and (len(receipts) <= position or receipts[position]['sha256'] != value):
+            for frame in reversed(history):
+                if (len(receipts) < 2 or any((frame.get(key) or {}).get('sha256') != receipts[index]['sha256']
+                        for index, key in enumerate(('train', 'held')))):
+                    continue
+                declared = frame['recipe']
+                recipe_path = bound({'path': declared['path'],
+                    'sha256': declared.get('file_sha256', declared['sha256'])})
+                if recipe_identity_sha256(recipe_path) != declared['sha256']:
+                    raise ValueError('resident predecessor recipe identity changed')
+                recipe = load_recipe(recipe_path)
+                stages = [stage for stage in recipe['stages'] if stage['id'] == stage_id
+                          and stage['kind'] == 'native_state_sft']
+                if len(stages) != 1:
+                    continue
+                inputs = resolve_stage_inputs(recipe, stages[0], {})
+                witnessed = (all(inputs[key]['sha256'] == receipts[index]['sha256']
+                    for index, key in enumerate(('native_graphs', 'held_native_graphs')))
+                    and (inputs.get(role) or {}).get('sha256') == value)
+                if witnessed:
+                    break
+            if not witnessed:
+                raise ValueError('native data continuation predecessor differs from the actual checkpoint: ' + role)
+        prior[role] = value
+    return prior
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--native-graphs', type=Path, required=True)
@@ -784,21 +824,9 @@ def main(argv=None):
             'optimizer': shared_resume['optimizer'], 'rng': shared_resume['rng'],
             'fp8': shared_resume.get('fp8'), 'step': 0, 'global_step': shared_resume['step']}
     if resume is not None:
-        predecessors = dict((resume.get('options') or {}).get('source_predecessors') or {})
-        for role, position in (('continued_native_graphs', 0), ('continued_held_native_graphs', 1)):
-            predecessor = getattr(args, role)
-            if predecessor is not None:
-                prior_receipts = resume.get('source_receipts') or []
-                digest = sha256_file_hex_cached(predecessor)
-                # Once adopted, the original predecessor stays valid across
-                # later append/priority manifests. Exact immutable row bindings
-                # and the prior physical prefix are verified below.
-                adopted = predecessors.get(role) == digest
-                if (not adopted and (len(prior_receipts) <= position
-                        or digest != prior_receipts[position]['sha256'])):
-                    raise ValueError('native data continuation predecessor differs from the actual checkpoint: ' + role)
-                predecessors[role] = digest
-        checkpoint_options['source_predecessors'] = predecessors
+        checkpoint_options['source_predecessors'] = continuation_predecessors(resume,
+            {role: getattr(args, role) for role in ('continued_native_graphs', 'continued_held_native_graphs')},
+            stage_id=args.stage_id or 'native-graph-ce')
         previous = resume.get('identity') or {}
         stable = ('schema', 'optimizer', 'seed', 'rank', 'fp8', 'objective')
         from .fp8_backend import expert_precision_transition
@@ -1005,6 +1033,9 @@ def main(argv=None):
         if resident.state:
             checkpoint_options['resident_adoption'] = {'generation': resident.generation,
                 'history': resident.state['history']}
+            checkpoint_options['source_predecessors'] = {
+                'continued_native_graphs': resident.state['payload']['prior_train']['sha256'],
+                'continued_held_native_graphs': resident.state['payload']['prior_held']['sha256']}
     # A no-update continuation still needs its own durable checkpoint, and an
     # explicitly changed optimizer algorithm must be saved even at a completed
     # exposure boundary. Neither operation earns another graph visit.
@@ -1029,6 +1060,9 @@ def main(argv=None):
                 if expanded is not None:
                     schedule.close()
                     metadata_dirty = True
+                    checkpoint_options['source_predecessors'] = {
+                        'continued_native_graphs': source_receipts[0]['sha256'],
+                        'continued_held_native_graphs': source_receipts[1]['sha256']}
                     train, held = expanded
                     args.held_native_graphs = held.path
                     held_row_bindings = held.bindings
