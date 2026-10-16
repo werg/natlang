@@ -81,7 +81,8 @@ def test_durable_source_closure_receipt_reuses_only_exact_current_inputs(tmp_pat
     first=project(original,tmp_path/'closed')
     protected=teacher.current_protection(first)
     receipt=tmp_path/'closure-receipt.json'
-    expected=verify_global_source_closure(first,protected,write_receipt_path=receipt)
+    expected=verify_global_source_closure(first,protected,receipt_path=receipt)
+    assert receipt.exists()
     assert verify_global_source_closure(first,protected,receipt_path=receipt)==expected
     source=tmp_path/'sources'/'D16'/'one'/'full-trajectories.jsonl.zst'
     with source.open('ab') as stream:stream.write(b'changed')

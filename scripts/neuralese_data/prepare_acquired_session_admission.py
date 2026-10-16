@@ -9,6 +9,7 @@ from pathlib import Path
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
 from natlang_neuralese.common.jsonio import write_json_durable
+from scripts.neuralese_data.conversion_output_lease import acquire_output_lease
 from natlang_neuralese.data.native_graph import parse_graph
 from natlang_neuralese.model.native_model import tokenizer_inventory
 from scripts.neuralese_data.build_acquired_full_session_graphs import (
@@ -106,6 +107,7 @@ def _source_closure_implementation_bindings():
         'connected_group_closure': root / 'scripts/neuralese_data/splits.py',
         'current_protection': root / 'scripts/neuralese_data/build_verified_teacher_trajectory_graphs.py',
         'source_review_policy': root / 'scripts/source_review.py',
+        'receipt_lease': root / 'scripts/neuralese_data/conversion_output_lease.py',
         'jsonl_io': root / 'training/neuralese/natlang_neuralese/common/jsonio.py',
         'hashing': root / 'training/neuralese/natlang_neuralese/common/hashing.py',
     }
@@ -168,6 +170,12 @@ def _source_closure_artifacts(path, manifest):
 
 def verify_global_source_closure(path, protection, *, receipt_path=None, write_receipt_path=None):
     """Reject direct-key protection that misses a transitive source sibling."""
+    if receipt_path is not None and not Path(receipt_path).exists():
+        receipt_path = Path(receipt_path)
+        with acquire_output_lease(receipt_path.parent):
+            if receipt_path.exists():
+                return verify_global_source_closure(path, protection, receipt_path=receipt_path)
+            return verify_global_source_closure(path, protection, write_receipt_path=receipt_path)
     manifest_path = Path(path).resolve(strict=True)
     manifest = json.loads(manifest_path.read_text())
     if receipt_path is not None and Path(receipt_path).exists():

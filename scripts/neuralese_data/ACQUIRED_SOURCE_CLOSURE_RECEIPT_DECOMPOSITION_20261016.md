@@ -16,7 +16,9 @@ that shared closure.
    resulting accounting/component digest. It also records exact code-file
    bindings for the closure verifier, session parser, connected-group closure,
    current-protection/source-review policy, JSONL I/O, and hashing.
-3. A later model/view process may reuse the receipt only when it revalidates
+3. The first builder given that receipt path acquires the existing output
+   lease, performs the full pass, and atomically publishes the receipt before
+   rendering. Later model/view processes reuse it only when they revalidate
    the current protection sets and hashes every bound input. It checks the
    exact input set, source/export relationships, closure accounting, and
    stored component projection. Any changed/missing/new input rejects reuse.

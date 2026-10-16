@@ -18,7 +18,7 @@ def main(argv=None):
         raise ValueError('source closure receipts are immutable; choose a new output path')
     protection = current_protection(args.protection)
     accounting = verify_global_source_closure(args.protection, protection,
-                                              write_receipt_path=args.output)
+                                              receipt_path=args.output)
     print(f'{args.output} {sha256_file_hex(args.output)} {accounting["normalized_sessions"]}')
 
 
