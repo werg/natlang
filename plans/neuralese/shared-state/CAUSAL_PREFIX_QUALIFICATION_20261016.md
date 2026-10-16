@@ -150,3 +150,20 @@ select the production precision. Neither this optional recipe nor accounted
 BF16 arithmetic silently converts the failed strict Mellum prefix gate into a
 pass. LFM's separately qualified shared implementation may proceed to its own
 actual H100/restored-parent handoff independently.
+
+## Actual trained-parent qualification support
+
+The shared qualifier now accepts an exact `--checkpoint` and optional native
+participant. It preserves every learned row, adapter and backbone tensor;
+trained parents are never overwritten with a random diagnostic adapter.
+It checks the declared native arithmetic against the saved configuration and
+inherits the saved FP8 recipe/history and actual backend state. Base-only
+qualification remains explicitly separate. Staged runtimes can supply their
+exact `--code-revision` without requiring a mounted Git checkout. The timing
+note describes concurrent diagnostic scope rather than asserting that an old
+collector still exists.
+
+Both-model exact trained-parent restore/config/source checks plus existing
+prefix objective and CUDA mask regression tests passed22 cases in6.68s.
+The frozen production prefix package and actual H100 trained-parent test remain
+in progress; prefix reuse is still disabled in production.

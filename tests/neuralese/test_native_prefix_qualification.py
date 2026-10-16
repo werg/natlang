@@ -89,3 +89,41 @@ def test_native_attention_prefix_cut_keeps_outputs_and_consumer_source_adjoint()
         summed=torch.zeros_like(actual_gradient,dtype=torch.float32)
         summed.index_add_(2,flat,original_gradient.float())
         assert gradient_metrics(actual_gradient,summed,atol=1e-7,rtol=1e-4)['passed']
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+def test_actual_parent_qualification_preserves_all_learned_rows_and_saved_arithmetic(tmp_path,family):
+    from types import SimpleNamespace
+    from test_native_full_updates import source
+    from test_native_optimizer_checkpointing import assert_exact
+    from natlang_neuralese.model.native_model import load_native_model,model_state,CHECKPOINT_SCHEMA
+    from scripts.neuralese_data.qualify_native_causal_prefixes import load_qualification_model
+    base=tmp_path/'base';dtype=source(base,family)
+    model,_,_,config=load_native_model(base,dtype=dtype,rank=4,native_linear_precision='ieee')
+    with torch.no_grad():
+        model.input_rows.add_(.125);model.adapter.up.weight.add_(.25)
+        next(model.port.hf.model.layers[0].parameters()).add_(.03125)
+    saved=model_state(model);checkpoint=tmp_path/'trained.pt'
+    torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':config,**saved,
+        'training':{'options':{'fp8_recipe':'current-bf16-dx','fp8_amax_history_len':7},
+                    'fp8':{'actual_saved_state':'bound'}}},checkpoint)
+    original=checkpoint.read_bytes()
+    args=SimpleNamespace(base=base,model=family,checkpoint=checkpoint,native_participant=None,linear_precision='ieee')
+    restored,_,_,actual,parent,backend=load_qualification_model(args,device='cpu')
+    assert actual==config and parent['learned_parameters_preserved']
+    assert parent['sha256']==__import__('hashlib').sha256(original).hexdigest()
+    assert_exact(saved,model_state(restored));assert checkpoint.read_bytes()==original
+    assert all(not value.requires_grad for value in restored.parameters())
+    assert backend=={'fp8_recipe':'current-bf16-dx','fp8_amax_history_len':7,'extra_state':{'actual_saved_state':'bound'}}
+    args.linear_precision='bf16x6'
+    with pytest.raises(ValueError,match='arithmetic differs'):load_qualification_model(args,device='cpu')
+    args.linear_precision='ieee';args.model='mellum' if family=='lfm' else 'lfm'
+    with pytest.raises(ValueError,match='model family differs'):load_qualification_model(args,device='cpu')
+
+
+def test_staged_runtime_code_identity_does_not_require_git_checkout(monkeypatch):
+    from scripts.neuralese_data import qualify_native_causal_prefixes as qualifier
+    def absent(*args,**kwargs):raise FileNotFoundError('no git in staged runtime')
+    monkeypatch.setattr(qualifier.subprocess,'run',absent)
+    assert qualifier.code_revision('exact-staged-commit')=='exact-staged-commit'
+    assert qualifier.code_revision(None) is None

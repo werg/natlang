@@ -20,7 +20,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex,sha256_file_hex_cached
 from natlang_neuralese.common.jsonio import open_jsonl_text,write_json_durable
 from natlang_neuralese.data.native_graph import parse_graph
-from natlang_neuralese.model.native_model import load_native_model
+from natlang_neuralese.model.native_model import load_native_model,load_native_checkpoint
 from natlang_neuralese.train.native_prefix_packing import pack_causal_prefixes
 from natlang_neuralese.train.native_state_sft import pack_native_graphs,packed_graph_loss
 from natlang_neuralese.train.fp8_backend import make_backend
@@ -153,17 +153,60 @@ def qualify_case(model,examples,shared_plan,maps,backend,*,atol,rtol,chunk_token
         if backend:backend.restore_extra_state(backend_state)
 
 
+
+def load_qualification_model(args, *, device='cuda'):
+    """Load a real parent without randomizing its learned channel or arithmetic."""
+    checkpoint=getattr(args,'checkpoint',None)
+    parent=None;backend_options={}
+    if checkpoint is None:
+        model,tokenizer,roles,config=load_native_model(args.base,device=device,
+            dtype=torch.float32 if args.model=='lfm' else torch.bfloat16,
+            native_linear_precision=args.linear_precision)
+        with torch.no_grad():model.adapter.up.weight.normal_(std=.1)
+    else:
+        model,tokenizer,roles,config,state=load_native_checkpoint(checkpoint,device=device,base=args.base,
+            participant=getattr(args,'native_participant',None))
+        training=state.get('training') or state.get('shared_training') or {}
+        options=training.get('options') or {}
+        backend_options={key:options[key] for key in ('fp8_recipe','fp8_amax_history_len') if key in options}
+        backend_options['extra_state']=training.get('fp8')
+        parent={'path':str(checkpoint),'sha256':sha256_file_hex_cached(checkpoint),
+            'bytes':Path(checkpoint).stat().st_size,'participant':getattr(args,'native_participant',None),
+            'learned_parameters_preserved':True}
+        del state,training,options
+        if config.get('native_linear_precision','ieee')!=args.linear_precision:
+            raise ValueError('qualification arithmetic differs from the exact trained parent')
+    allowed={'lfm':{'lfm2','lfm2_moe'},'mellum':{'mellum','maple'}}
+    if config['architecture'] not in allowed[args.model]:
+        raise ValueError('qualification model family differs from the actual loaded checkpoint')
+    for parameter in model.parameters():parameter.requires_grad_(False)
+    model.train()
+    return model,tokenizer,roles,config,parent,backend_options
+
+
+def code_revision(explicit):
+    if explicit:return explicit
+    try:
+        result=subprocess.run(['git','rev-parse','HEAD'],capture_output=True,text=True,check=False)
+        return result.stdout.strip() if result.returncode==0 else None
+    except FileNotFoundError:
+        return None
+
+
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--model',choices=['lfm','mellum'],required=True);p.add_argument('--base',type=Path,required=True)
+    p.add_argument('--checkpoint',type=Path);p.add_argument('--native-participant')
+    p.add_argument('--code-revision',help='exact staged runtime commit when no Git checkout is mounted')
+    p.add_argument('--fp8-recipe',choices=['delayed','current','current-bf16-dx'])
     p.add_argument('--source',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
     p.add_argument('--examples',type=int,choices=[2,3],default=2);p.add_argument('--scan',type=int,default=128)
     p.add_argument('--max-tokens',type=int,default=32768);p.add_argument('--chunk-tokens',type=int,default=128)
     p.add_argument('--linear-precision',choices=['ieee','bf16x6'],default='bf16x6')
     p.add_argument('--atol',type=float,default=1e-5);p.add_argument('--rtol',type=float,default=1e-4)
     args=p.parse_args(argv);report={'schema':'natlang.native-causal-prefix-qualification/1','passed':False,
-        'timing_note':'Concurrent historical LFM held collector remains active; timings are not isolated throughput evidence.',
-        'code_revision':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+        'timing_note':'Paired diagnostic timings on a potentially shared GPU are not isolated throughput evidence.',
+        'code_revision':code_revision(args.code_revision),
         'entrypoint_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'cases':[]};started=time.monotonic()
     try:
         if not torch.cuda.is_available():raise RuntimeError('full-size prefix qualification requires actual CUDA')
@@ -172,19 +215,22 @@ def main(argv=None):
         report['source']={'path':str(args.source),'sha256':sha256_file_hex_cached(args.source),
             'rows':[{'id':item[1].id,'index':item[2],'line_sha256':item[3],
                 'canonical_sha256':canonical_json_sha256_hex(item[0]),'tokens':item[1].plan.token_count} for item in items]}
-        model,tokenizer,roles,config=load_native_model(args.base,device='cuda',
-            dtype=torch.float32 if args.model=='lfm' else torch.bfloat16,native_linear_precision=args.linear_precision)
-        report['model']=config
+        model,tokenizer,roles,config,parent,backend_options=load_qualification_model(args)
+        report['model']=config;report['parent_checkpoint']=parent
         if any(item[0]['tokenizer_fingerprint']!=config['tokenizer_fingerprint'] for item in items):
             raise ValueError('actual admitted graph tokenizer differs from loaded pinned model')
-        for parameter in model.parameters():parameter.requires_grad_(False)
-        with torch.no_grad():model.adapter.up.weight.normal_(std=.1)
-        if not model.adapter.up.weight.count_nonzero():raise AssertionError('diagnostic requires a nonzero producer adapter')
-        model.train();report['adapter_up_norm']=float(model.adapter.up.weight.norm())
+        report['adapter_up_norm']=float(model.adapter.up.weight.norm())
         report['cuda']={'device':torch.cuda.get_device_name(),'capability':list(torch.cuda.get_device_capability())}
         examples=[item[1] for item in items]
-        backend=make_backend('triton-experts',model.port.hf,device='cuda') if args.model=='mellum' else None
-        if backend:model.port.activation_checkpoint=backend.checkpoint
+        recipe=args.fp8_recipe or backend_options.get('fp8_recipe','delayed')
+        if parent and args.fp8_recipe and backend_options.get('fp8_recipe',args.fp8_recipe)!=args.fp8_recipe:
+            raise ValueError('qualification FP8 recipe differs from the trained parent')
+        backend=make_backend('triton-experts',model.port.hf,device='cuda',recipe=recipe,
+            amax_history_len=backend_options.get('fp8_amax_history_len',16)) if args.model=='mellum' else None
+        if backend:
+            if backend_options.get('extra_state') is not None:backend.restore_extra_state(backend_options['extra_state'])
+            model.port.activation_checkpoint=backend.checkpoint
+        report['fp8_recipe']=recipe if backend else None
         # Native BF16 expert execution and production FP8 execution are distinct
         # numerical contracts, both qualified on the same complete examples.
         modes=['native','triton-experts'] if backend else ['native']
