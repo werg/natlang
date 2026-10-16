@@ -18,6 +18,7 @@ def continuation_config(config,stage,*,checkpoint,adapter,out):
     parameters=effective_stage_parameters(stage,[],recipe)
     parameters={key:value for key,value in parameters.items() if value is not None}
     parameters.pop('communication_foundation',None)
+    parameters.pop('memory_qualification',None)  # one restored-parent capacity check, not every CE quantum
     parameters['refresh_at_checkpoint']=True
     parameters['stage_id']=stage['id']
     parameters['recipe_binding']=native_recipe_binding(Path(config['production_recipe']),recipe_identity_sha256(config['production_recipe']))
