@@ -26,6 +26,16 @@ generation sandbox supplied with useful tasks and admit verified results into
 the evolving training recipe. Measure actual CPU/RAM need on the allocated
 machine rather than delaying useful generation to test smaller allocations.
 
+Owner clarification (2026-10-16): replace a persistently unreachable Mellum
+sandbox rather than waiting indefinitely; adjust the resource request if
+capacity is exhausted. Restore the newest independently verified full state,
+including optimizer/RNG/exposure, and preserve necessary data from the old box
+until recovery dependencies are secured. This replacement is authorized despite
+the earlier no-further-allocation plan. Other owner workloads, including
+hindsight-kb training, have separate sandboxes: identify their ownership and
+preserve them. A control-plane `Running` label alone does not establish a healthy
+learner; monitor actual logs, progress and command responsiveness.
+
 ## Neuralese architecture replacement (owner, 2026-10-15)
 
 The destination is shared positional KV and hybrid-state spans, replacing the
@@ -246,6 +256,15 @@ differences from a known-good path. Record what was ruled out and how.
   fact, but never omit or hold data for license review, and do not ask the owner.
 
 # Storage hygiene and discarded work (standing owner order, 2026-10-11)
+
+Owner clarification (2026-10-16): delete pretty much everything except what is
+necessary to carry on. This includes remote W&B transfer/export storage. Keep
+the latest independently verified recovery state, explicitly active diagnostic
+or handoff parents, useful source/training data and protected held data. Prune
+superseded checkpoint exports continuously after replacement durability is
+verified; do not accumulate every periodic full checkpoint. Write the exact
+deletion list first and verify removal. Never delete an entire mixed data and
+checkpoint run merely because most of its bytes are obsolete checkpoints.
 
 Amendment (owner, 2026-10-13): make deletions less eager. With the external disk
 available for space, lean towards moving data to `/mnt/external` rather than
