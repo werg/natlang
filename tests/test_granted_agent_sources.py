@@ -66,7 +66,7 @@ def injected(monkeypatch,ref,path,row):
 
 
 def test_miro_all_preference_alternatives_keep_complete_context_and_nonpositive_fact(monkeypatch):
-    from scripts.neuralese_data.acquired_granted import miroverse_acquired
+    from scripts.neuralese_data.acquired_granted import miroverse_acquired,_digest
     common=[{'role':'system','content':'Original complete tool rules'}, {'role':'user','content':'Exact task'}]
     row={'chosen':common+[{'role':'assistant','content':'Chosen original'}],
          'rejected':common+[{'role':'assistant','content':'Rejected original'}]}
@@ -78,7 +78,9 @@ def test_miro_all_preference_alternatives_keep_complete_context_and_nonpositive_
     assert chosen.outcome['label']==rejected.outcome['label']=='teacher'
     assert 'source_quality_flags' not in chosen.lineage['notes']
     assert rejected.lineage['notes']['source_quality_flags']==['source-rejected-preference-alternative']
-    assert chosen.lineage['notes']['source_preference']['original_pair']==row
+    assert chosen.lineage['notes']['source_preference']['pair_sha256']==_digest(row)
+    assert 'original_pair' not in chosen.lineage['notes']['source_preference']
+    assert 'original_messages' not in chosen.lineage['notes']['granted_source']
     assert all(t.outcome['checked'] is None for t in (chosen,rejected))
     row['rejected'][1]={'role':'user','content':'Another task'}
     injected(monkeypatch,'D24','dpo/original.json',row)
@@ -98,7 +100,8 @@ def test_midtool_full_breadth_and_structured_native_view(monkeypatch,subset):
     assert t.outcome['checked'] is None
     if subset=='native-agent-traj':
         assert t.messages==raw and t.tools==[{'name':'original'}]
-        assert t.lineage['notes']['granted_source']['original_serialized_text']==row['text']
+        assert 'original_serialized_text' not in t.lineage['notes']['granted_source']
+        assert t.lineage['notes']['granted_source']['original_source_fields']==['extra','text']
     else:
         assert t.messages==[{'role':'assistant','content':row['text']}]
         assert t.family=='source_document_completion'
@@ -198,6 +201,7 @@ def test_codex_original_instructions_tool_code_results_and_redacted_input_retain
 
 def test_swe_real_reader_index_join_all_events_accounted_and_no_inferred_edges(tmp_path,monkeypatch):
     import hashlib
+    from datetime import datetime,timezone
     import pyarrow as pa
     import pyarrow.parquet as pq
     from scripts.neuralese_data import agents,acquired_agents
@@ -209,9 +213,13 @@ def test_swe_real_reader_index_join_all_events_accounted_and_no_inferred_edges(t
           event('a','aux','assistant','Original complete final')]
     raw.write_text('\n'.join(json.dumps(row) for row in rows)+'\n')
     sidecars={
-        'sessions.parquet':[{'transcript_path':relative,'session_id':'original-session','repo_id':'org/repo','session_success':'50'}],
+        'sessions.parquet':[{'transcript_path':relative,'session_id':'original-session','repo_id':'opaque-repository-17','session_success':'50',
+                             'split':'validation','created_at':datetime(2026,10,16,tzinfo=timezone.utc)}],
         'session_logs.parquet':[{'transcript_path':relative,'session_id':'original-session','context_md':'Original addressable context'}],
-        'subagent_tasks.parquet':[{'transcript_path':'transcripts_subagent/another.jsonl','task_pk':'checkpoint#call'}]}
+        'subagent_tasks.parquet':[{'transcript_path':'transcripts_subagent/another.jsonl','task_pk':'checkpoint#call'}],
+        'repositories.parquet':[{'repo_id':'opaque-repository-17','owner_id':'org','name':'repo',
+                                  'last_scraped_at':datetime(2026,10,16,tzinfo=timezone.utc)},
+                                 {'repo_id':'unrelated-malformed','owner_id':None,'name':'unknown'}]}
     for name,values in sidecars.items():pq.write_table(pa.Table.from_pylist(values),root/name)
     files=[{'path':str(path.relative_to(root)),'bytes':path.stat().st_size,
             'sha256':hashlib.sha256(path.read_bytes()).hexdigest()} for path in root.rglob('*') if path.is_file()]
@@ -225,7 +233,9 @@ def test_swe_real_reader_index_join_all_events_accounted_and_no_inferred_edges(t
     trajectory=result[2][1];assert not isinstance(trajectory,Reject)
     assert [message['content'] for message in trajectory.messages]==['Whole original task','Original complete final']
     evidence=trajectory.lineage['notes']['original_swe_context']
-    assert evidence['original_session_records'][0]['value']==sidecars['sessions.parquet'][0]
+    assert evidence['original_session_records'][0]['value']==acquired_agents.source_json_value(sidecars['sessions.parquet'][0])
+    assert trajectory.split=='test'
+    json.dumps(__import__('dataclasses').asdict(trajectory),allow_nan=False)
     assert evidence['original_subagent_task_aliases']==[] and evidence['fabricated_communication_edges']==0
     assert 'repo:org/repo' in trajectory.split_groups
     assert 'swe-chat-source-session:original-session' in trajectory.split_groups
@@ -233,3 +243,26 @@ def test_swe_real_reader_index_join_all_events_accounted_and_no_inferred_edges(t
     # Cached indexes must still verify immutable actual sidecar bytes on reuse.
     (root/'session_logs.parquet').write_bytes(b'forged')
     changed=list(swe_chat_acquired());assert all(isinstance(value,Reject) for _,value in changed)
+
+
+def test_standalone_preference_record_retains_both_histories_once_and_hash_binds_pair(monkeypatch):
+    from scripts.neuralese_data import acquired_agents
+    from scripts.neuralese_data.acquired_preferences import miroverse_preference_records
+    from scripts.neuralese_data.acquired_granted import _digest
+    prompt=[{'role':'system','content':'Original rules'}, {'role':'user','content':'Exact task'},
+            {'role':'assistant','content':'Exact shared earlier answer'}, {'role':'user','content':'Original continuation'}]
+    row={'chosen':prompt+[{'role':'assistant','content':'Preferred'}],
+         'rejected':prompt+[{'role':'assistant','content':'Other'}]}
+    receipt={**RECEIPT,'files':[{'path':'dpo/file.json','bytes':999,'sha256':'a'*64}]}
+    monkeypatch.setattr(acquired_agents,'acquired_rows',lambda ref,limit=None:iter([(receipt,'dpo/file.json:7',row)]))
+    _,record=next(miroverse_preference_records())
+    assert record['schema']=='natlang.offline-native-preference/1'
+    assert record['common_message_count']==4 and record['required_objective']=='native-offline-pairwise'
+    assert record['source']['pair_sha256']==_digest(row) and record['source']['source_row']==7
+    assert record['source']['source_file']==receipt['files'][0]
+    for name in ('chosen','rejected'):
+        alternative=record['alternatives'][name]
+        assert alternative['messages']==row[name]
+        assert 'original_messages' not in alternative['lineage']['notes']['granted_source']
+        assert 'original_pair' not in alternative['lineage']['notes']['source_preference']
+    assert not record['training_admission'] and not record['native_on_policy']

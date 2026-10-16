@@ -111,6 +111,28 @@ def complete_messages(raw):
     return out
 
 
+def _digest(value):
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    from .acquired_agents import source_json_value
+    return canonical_json_sha256_hex(source_json_value(value))
+
+
+def _metadata(value):
+    from .acquired_agents import source_json_value
+    return source_json_value(value)
+
+
+def preference_binding(receipt, rid, row):
+    """Small exact references; full alternatives occur once in offline records."""
+    path,index=rid.rsplit(':',1)
+    source=next((entry for entry in receipt.get('files',[]) if entry['path']==path),None)
+    return {'schema':'natlang.offline-preference-source-binding/1',
+        'source_revision':receipt['revision'],'source_file':source,'source_row':int(index),
+        'pair_sha256':_digest(row),
+        'alternatives':{name:{'field':name,'original_messages_sha256':_digest(row[name]),
+                              'original_message_count':len(row[name])} for name in ('chosen','rejected')}}
+
+
 def _session(ref, receipt, rid, row, raw, *, task=None, suffix='', tools=None):
     from .acquired_agents import _reported_session
     messages = complete_messages(raw)
@@ -125,10 +147,38 @@ def _session(ref, receipt, rid, row, raw, *, task=None, suffix='', tools=None):
     # prose dispatch tags or delete literal control spellings in source files.
     trajectory.messages = messages
     trajectory.lineage['notes']['granted_source'] = {
-        'original_messages': raw, 'original_metadata': {k: v for k, v in row.items()
-            if k not in ('messages', 'chosen', 'rejected', 'text', 'extra')},
+        'original_messages_sha256': _digest(raw), 'original_message_count': len(raw),
+        'original_metadata': _metadata({k: v for k, v in row.items()
+            if k not in ('messages', 'chosen', 'rejected', 'text', 'extra')}),
         'whole_context': True, 'executed_locally': False}
     return trajectory
+
+
+def miro_pair_trajectories(receipt, rid, row):
+    from .records import group_key
+    from .trajectory import task_hash
+    chosen, rejected = row['chosen'], row['rejected']
+    if not isinstance(chosen, list) or not isinstance(rejected, list) or not chosen or not rejected:
+        raise Reject('DPO source lacks both complete original alternatives')
+    # Source question, not row address, joins SFT and DPO variants.
+    prompt = next((m.get('content') for m in chosen if m.get('role') == 'user'), None)
+    other = next((m.get('content') for m in rejected if m.get('role') == 'user'), None)
+    if prompt is None or prompt != other:
+        raise Reject('DPO alternatives do not share the exact original request')
+    for name, raw in (('chosen', chosen), ('rejected', rejected)):
+        child = rid + ':' + name
+        t = _session('D24', receipt, rid, row, raw, suffix=':'+name,
+                     task='request:'+task_hash(_json(prompt)))
+        t.family = 'trajectory_continuation_research'; t.noun = 'research session'
+        t.split_groups.append(group_key('miroverse-preference-row', rid))
+        t.lineage['notes']['source_preference'] = {
+            **preference_binding(receipt, rid, row), 'alternative': name,
+            'preference': 'chosen-over-rejected', 'source_row': rid,
+            'local_correctness_verified': False}
+        if name == 'rejected':
+            # Rejection is a preference fact, not proof of task failure.
+            t.lineage['notes']['source_quality_flags'] = ['source-rejected-preference-alternative']
+        yield child, t
 
 
 def miroverse_acquired(limit=None):
@@ -146,28 +196,7 @@ def miroverse_acquired(limit=None):
                 t.family = 'trajectory_continuation_research'; t.noun = 'research session'
                 yield rid, t
             elif path.startswith('dpo/'):
-                chosen, rejected = row['chosen'], row['rejected']
-                if not isinstance(chosen, list) or not isinstance(rejected, list) or not chosen or not rejected:
-                    raise Reject('DPO source lacks both complete original alternatives')
-                # Source question, not row address, joins SFT and DPO variants.
-                prompt = next((m.get('content') for m in chosen if m.get('role') == 'user'), None)
-                other = next((m.get('content') for m in rejected if m.get('role') == 'user'), None)
-                if prompt is None or prompt != other:
-                    raise Reject('DPO alternatives do not share the exact original request')
-                for name, raw in (('chosen', chosen), ('rejected', rejected)):
-                    child = rid + ':' + name
-                    t = _session('D24', receipt, rid, row, raw, suffix=':'+name,
-                                 task='request:'+task_hash(_json(prompt)))
-                    t.family = 'trajectory_continuation_research'; t.noun = 'research session'
-                    t.split_groups.append(group_key('miroverse-preference-row', rid))
-                    t.lineage['notes']['source_preference'] = {
-                        'original_pair': row, 'alternative': name,
-                        'preference': 'chosen-over-rejected', 'source_row': rid,
-                        'local_correctness_verified': False}
-                    if name == 'rejected':
-                        # Rejection is a preference fact, not proof of task failure.
-                        t.lineage['notes']['source_quality_flags'] = ['source-rejected-preference-alternative']
-                    yield child, t
+                yield from miro_pair_trajectories(receipt, rid, row)
             else:
                 raise Reject('alternate representation or source metadata; complete SFT/DPO files are consumers')
         except (Reject, ValueError, TypeError, KeyError) as error:
@@ -191,16 +220,17 @@ def midtool_acquired(limit=None):
                 if not isinstance(extra, dict) or not isinstance(extra.get('messages'), list):
                     raise Reject('native-agent source lacks original structured messages; serialized text is not reparsed')
                 t = _session('D39', receipt, rid, row, extra['messages'], tools=extra.get('tools'))
-                t.lineage['notes']['granted_source'].update(original_extra=extra,
-                    original_serialized_text=text, duplicate_serialized_view_not_trained=True)
+                t.lineage['notes']['granted_source'].update(original_extra_sha256=_digest(extra),
+                    original_serialized_text_sha256=_digest(text),
+                    original_source_fields=['extra','text'], duplicate_serialized_view_not_trained=True)
             elif subset in ('web', 'pdf', 'code'):
                 # Document completion uses exactly the source text as the target;
                 # no teacher answer or synthetic tool trajectory is invented.
                 t = _session('D39', receipt, rid, row, [{'role':'assistant','content':text}],
                              task='document:'+task_hash(text))
                 t.family = 'source_document_completion'; t.noun = 'original source document'
-                t.lineage['notes']['granted_source'].update(original_document=text,
-                    supervision='source-text-completion', correctness_asserted=False)
+                t.lineage['notes']['granted_source'].update(original_document_sha256=_digest(text),
+                    original_source_fields=['text'], supervision='source-text-completion', correctness_asserted=False)
                 if subset == 'code':
                     owner, repo = row.get('owner'), row.get('repo')
                     if not owner or not repo or not row.get('commit_sha') or not row.get('relpath'):
@@ -329,6 +359,10 @@ def swe_chat_acquired(limit=None):
             original_sessions = source_index['sessions'].get(path, [])
             original_logs = source_index['logs'].get(path, [])
             original_tasks = source_index['tasks'].get(path, [])
+            original_sessions = list(original_sessions)
+            for item in original_logs + original_tasks:
+                for session in source_index['session_ids'].get(item['value'].get('session_id'), []):
+                    if session not in original_sessions:original_sessions.append(session)
             if not original_sessions and not original_logs and not original_tasks:
                 raise Reject('SWE raw file lacks its exact original relational transcript-path binding')
             for index, messages, evidence in swe_raw_contexts(records,source_id=path):
@@ -338,27 +372,35 @@ def swe_chat_acquired(limit=None):
                     teacher=evidence['original_models'][0] if len(evidence['original_models'])==1 else None)
                 t.messages = messages
                 evidence.update(original_session_records=original_sessions, original_session_logs=original_logs,
-                    original_subagent_task_aliases=original_tasks, relational_index_bindings=source_index['bindings'],
+                    original_subagent_task_aliases=original_tasks, relational_index_bindings=source_index['bindings'], source_metadata_encoding=source_index['metadata_encoding'],
                     communication_join_status='pending-exact-parent-spawn-and-observed-return-proof' if original_tasks else 'not-asserted',
                     fabricated_communication_edges=0)
                 for item in original_sessions + original_tasks:
                     original = item['value']
                     if original.get('repo_id'):
-                        t.split_groups.append(group_key('repo', original['repo_id']))
+                        repository = source_index['repositories'].get(original['repo_id'])
+                        if repository is None or repository.get('error'):raise Reject('SWE context lacks unique exact canonical repository join')
+                        t.split_groups.append(group_key('repo', repository['canonical']))
+                        t.split_groups.append(group_key('swe-chat-repository-id', original['repo_id']))
+                        evidence.setdefault('canonical_repository_bindings', {})[original['repo_id']] = repository
+                    if original.get('split') in ('test','validation','eval','held_out') or original.get('held_out') is True or original.get('is_heldout') is True:
+                        t.split = 'test'
                     if original.get('session_id'):
                         t.split_groups.append(group_key('swe-chat-source-session', original['session_id']))
                 t.split_groups.append(group_key('swe-chat-session', evidence['session_id']))
                 t.lineage['notes']['original_swe_context'] = evidence
+                missing_repo = not evidence.get('canonical_repository_bindings')
                 source_zero_score = any(str(item['value'].get('session_success')).strip() in ('0','0.0')
                                         for item in original_sessions)
                 api_errors = [index for index, event in records if event.get('isApiErrorMessage') is True
                               and index in evidence['original_message_rows']]
-                if evidence['missing_ancestry'] or evidence.get('redacted_context_rows') or source_zero_score or api_errors:
+                if evidence['missing_ancestry'] or evidence.get('redacted_context_rows') or source_zero_score or api_errors or missing_repo:
                     t.lineage['notes']['source_quality_flags'] = [
                         *(['incomplete-original-causal-ancestry'] if evidence['missing_ancestry'] else []),
                         *(['upstream-redacted-original-context'] if evidence.get('redacted_context_rows') else []),
                         *(['upstream-zero-session-success-annotation'] if source_zero_score else []),
-                        *(['upstream-api-error-response-context'] if api_errors else [])]
+                        *(['upstream-api-error-response-context'] if api_errors else []),
+                        *(['missing-source-canonical-repository-binding'] if missing_repo else [])]
                 evidence['original_api_error_rows'] = api_errors
                 produced[index] = t
         except (Reject, ValueError, TypeError, KeyError) as error:
@@ -391,25 +433,41 @@ def swe_source_index(receipt):
     from .acquired_agents import _bound_acquired_path, iter_acquired_file_rows
     from natlang_neuralese.common.hashing import canonical_json_sha256_hex
     root = agents.EXPANSION_ROOT/'D20'
-    names = ('sessions.parquet', 'session_logs.parquet', 'subagent_tasks.parquet')
+    names = ('sessions.parquet', 'session_logs.parquet', 'subagent_tasks.parquet', 'repositories.parquet')
     entries = {entry['path']: entry for entry in receipt['files'] if entry['path'] in names}
     if set(entries) != set(names):
-        raise Reject('SWE raw source requires bound sessions, session_logs and subagent_tasks indexes')
+        raise Reject('SWE raw source requires bound sessions, session_logs, subagent_tasks and repositories indexes')
     # Verification remains on each invocation, including reuse; digest cache
     # identity includes stat information in the shared hashing implementation.
     paths = {name: _bound_acquired_path(root, entry) for name, entry in entries.items()}
     key = (str(root.resolve()), receipt['revision'], canonical_json_sha256_hex(entries))
     if key not in _SWE_INDEX:
-        sessions = {}; logs = {}; tasks = {}
+        sessions = {}; logs = {}; tasks = {}; session_ids = {}; repositories = {}
+        for row_index, row in iter_acquired_file_rows(paths['repositories.parquet']):
+            identity = row.get('repo_id'); owner = row.get('owner_id'); name = row.get('name')
+            if not isinstance(identity,str) or not identity or not isinstance(owner,str) or not owner or not isinstance(name,str) or not name or '/' in owner or '/' in name:
+                repositories[str(identity)] = {'error':'SWE repository index lacks exact canonical owner/name identity','row':row_index}
+                continue
+            canonical = owner+'/'+name
+            if identity in repositories and repositories[identity].get('canonical') != canonical:
+                repositories[identity] = {'error':'SWE repository index ambiguously maps one source ID','row':row_index}
+                continue
+            repositories[identity] = {'row':row_index,'canonical':canonical,'source_row_sha256':_digest(row)}
         for row_index, row in iter_acquired_file_rows(paths['sessions.parquet']):
+            row = _metadata(row)
+            if row.get('session_id'):
+                session_ids.setdefault(row['session_id'], []).append({'row':row_index,'value':row})
             path = row.get('transcript_path')
             if path:
                 sessions.setdefault(path, []).append({'row':row_index,'value':row})
         for row_index, row in iter_acquired_file_rows(paths['session_logs.parquet']):
+            row = _metadata(row)
             for field in ('transcript_path', 'compact_transcript_path'):
                 if row.get(field):logs.setdefault(row[field], []).append({'row':row_index,'value':row})
         for row_index, row in iter_acquired_file_rows(paths['subagent_tasks.parquet']):
+            row = _metadata(row)
             if row.get('transcript_path'):
                 tasks.setdefault(row['transcript_path'], []).append({'row':row_index,'value':row})
-        _SWE_INDEX[key] = {'bindings':entries,'sessions':sessions,'logs':logs,'tasks':tasks}
+        _SWE_INDEX[key] = {'bindings':entries,'sessions':sessions,'logs':logs,'tasks':tasks,
+                           'session_ids':session_ids,'repositories':repositories,'metadata_encoding':'typed-arrow-json-v1'}
     return _SWE_INDEX[key]

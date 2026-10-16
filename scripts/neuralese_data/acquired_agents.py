@@ -62,6 +62,22 @@ def cooperation_trajectory_file(ref,name,known_files):
     return ref in ('D13','D14')
 
 
+def source_json_value(value):
+    """Addressable Arrow metadata without dropping dates, bytes or NaN fields."""
+    from datetime import date,datetime
+    import base64
+    import math
+    if isinstance(value,dict):return {key:source_json_value(item) for key,item in value.items()}
+    if isinstance(value,(list,tuple)):return [source_json_value(item) for item in value]
+    if isinstance(value,(date,datetime)):
+        return {'$source_type':type(value).__name__,'iso8601':value.isoformat()}
+    if isinstance(value,bytes):return {'$source_type':'bytes','base64':base64.b64encode(value).decode('ascii')}
+    if isinstance(value,float) and not math.isfinite(value):
+        return {'$source_type':'float','hex':value.hex()}
+    if value is None or isinstance(value,(str,int,float,bool)):return value
+    raise Reject('unsupported original Arrow metadata type: '+type(value).__name__)
+
+
 def load_acquisition(ref):
     """Verify complete acquisitions or explicit byte-bound catalogue subsets."""
     from . import agents

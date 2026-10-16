@@ -97,3 +97,29 @@ Qualification: 49 focused format/reader tests passed; actual full-content source
 examples from all three datasets passed both production HF tokenizers (19
 focused cases, 6.23s, no GPU). These are numeric rendering/format evidence, not a
 full-source audit, held closure, capacity qualification or exposure claim.
+
+Graph metadata contains canonical hashes and exact source row/alternative fields,
+not repeated copies of both DPO histories or serialized MidTool documents. Full
+histories belong once in the standalone offline preference records (bound back
+to the pinned original pair); ordinary SFT graph lineage keeps immutable compact
+references. Source file bytes remain the authoritative original representation.
+No new natural-language executor prompts or error templates were introduced by
+these adapters: source prompts and contents remain original, and the existing
+shared native chat renderer is reused. Format-ingestion rejection receipts are
+not model-facing feedback.
+
+Repository identity is now authenticated through bound `repositories.parquet`:
+opaque `repo_id` values join the original owner/name to produce the canonical
+protected `repo:owner/name` group. Exact source IDs remain additional provenance
+groups; source explicit held indicators are retained. Ambiguous/missing canonical
+joins cannot produce positive contexts, and an unrelated malformed repository
+row does not suppress other correctly joined sessions. Arrow dates/bytes and
+nonfinite metadata use an explicit local typed JSON encoding; corpus/checkpoint
+canonical hashing formats remain unchanged.
+
+A standalone `natlang.offline-native-preference/1` record retains each chosen and
+rejected full history once, its complete common-message prefix, original file,
+row, field and canonical pair hashes. It requires the native offline pairwise
+objective and grants no positive-SFT credit to a rejected alternative. The
+executable loss/stage is subsequent work on the same native trainer, not implied
+by this source record API.
