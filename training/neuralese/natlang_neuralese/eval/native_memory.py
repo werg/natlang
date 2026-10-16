@@ -231,7 +231,7 @@ def capacity_identity(config,args,backend):
                'input_gradient_precision':getattr(backend,'input_gradient_precision',None)}}
 
 
-def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256):
+def _run_one_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256):
     """Called once at the normal restore boundary, before any new optimizer step.
 
     Failed novel source checks cannot stop useful SGD on the existing source.
@@ -328,4 +328,37 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
             raise ValueError('active source failed whole-graph memory qualification; exact-state fallback required')
         return result
     publish_capacity(result)
+    return result
+
+
+def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256):
+    """Independent source cohorts share one restored parent and retain each pass.
+
+    A novel larger cohort failing must not discard capacity already established
+    for a smaller independently usable cohort. The supervisor can adopt each
+    qualified source through the same resident transaction.
+    """
+    requests=json.loads(args.memory_qualification)
+    if isinstance(requests,dict):
+        return _run_one_prepared(model,optimizer,train,roles,config,args,
+            backend=backend,checkpoint_sha256=checkpoint_sha256)
+    if not isinstance(requests,list) or not requests:
+        raise ValueError('memory qualification needs a binding or nonempty ordered bindings')
+    original=args.memory_qualification;checks=[]
+    try:
+        for request in requests:
+            args.memory_qualification=json.dumps(request)
+            checks.append(_run_one_prepared(model,optimizer,train,roles,config,args,
+                backend=backend,checkpoint_sha256=checkpoint_sha256))
+            if not args.checkpoint_input_offload:
+                break  # small numerical failure restored the qualified arithmetic path
+    finally:
+        args.memory_qualification=original
+    result={'schema':'natlang.native-memory-cohort-qualification/1',
+        'passed':len(checks)==len(requests) and all(check['passed'] for check in checks),
+        'request':requests,'parent_checkpoint_sha256':checkpoint_sha256,'checks':checks,
+        'optimizer_updates':0,'retained_capacity':str(args.resident_geometry_qualification)
+            if args.resident_geometry_qualification else None}
+    from ..common.jsonio import write_json_durable
+    write_json_durable(args.out/'memory-qualification.json',result)
     return result
