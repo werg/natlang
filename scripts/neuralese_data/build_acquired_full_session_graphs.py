@@ -74,6 +74,7 @@ def runtime_bindings(root=None):
         'tokenizer_provision': root / 'scripts' / 'neuralese_data' / 'build_native_semantic_pairs_e2e.py',
         'tokenizer_inventory': package / 'model' / 'native_model.py',
         'conversion_output_lease': root / 'scripts' / 'neuralese_data' / 'conversion_output_lease.py',
+        'split_group_closure': root / 'scripts' / 'neuralese_data' / 'splits.py',
     }
     # Identity follows the logical runtime files and their bytes, not checkout
     # location. Keep observed paths as receipt metadata outside the fingerprint.
@@ -364,10 +365,12 @@ def _convert(args, prepared):
     # Complete source-file held-group closure before writing any shard. Final
     # corpus admission also closes groups across all source files and views.
     held = set(protection['held'])
+    source_groups = []
     source_rows = 0
     for value in sessions(source):
         source_rows += 1
         trajectory = value['trajectory']
+        source_groups.append(trajectory['split_groups'])
         if trajectory['split'] not in ('train', 'test', 'validation'):
             raise ValueError('unknown source session split must not become train')
         if (value['source_file'] != export['contract']['source']
@@ -375,6 +378,11 @@ def _convert(args, prepared):
             raise ValueError('normalized session differs from original export source binding')
         if trajectory['split'] in ('test', 'validation'):
             held.update(trajectory['split_groups'])
+    from scripts.neuralese_data.splits import close_group_sets
+    closed, _ = close_group_sets(source_groups, {**{key: protection[key]
+        for key in ('quality', 'pending')}, 'held': held})
+    protection = {**protection, **closed}
+    held = closed['held']
     if source_rows != export.get('complete_sessions'):
         raise ValueError('normalized source row count differs from its complete export receipt')
     if (args.output / 'receipt.json').exists():

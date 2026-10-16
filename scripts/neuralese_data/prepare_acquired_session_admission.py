@@ -36,12 +36,28 @@ def source_occurrence(value):
         [value['source_file']['sha256'], value['source_row']])
 
 
-def verify_global_source_closure(path, protection):
-    """Bind all acquired source inventories, including not-yet-converted held siblings."""
+def acquired_source_closure(path, protection):
+    """Reconstruct all source components, including not-yet-converted siblings."""
     manifest = json.loads(Path(path).read_text()); bindings = manifest.get('normalized_export_bindings')
     if not isinstance(bindings, list) or not bindings:
         raise ValueError('acquired admission needs the declared complete cross-source held closure')
-    held = set(); counts = Counter(); seen = set()
+    held = set(); counts = Counter(); seen = set(); group_rows = []
+    inherited = manifest.get('inherited_source_components')
+    if inherited:
+        parent = Path(path).parent
+        component_path = bound(parent / inherited['components']['path'], inherited['components'])
+        projection_path = bound(parent / inherited['projection']['path'], inherited['projection'])
+        projection = json.loads(projection_path.read_text())
+        proof = projection.get('acquired_source_group_closure') or {}
+        original = next((item for item in projection['files']
+            if item['path'] == projection.get('source_group_components')), None)
+        inherited_rows = [row['source_groups'] for row in sessions(component_path)]
+        if (proof.get('passed') is not True or original is None
+                or original['sha256'] != inherited['components']['sha256']
+                or canonical_json_sha256_hex(inherited_rows) !=
+                   (proof.get('accounting') or {}).get('source_group_components_sha256')):
+            raise ValueError('inherited acquired components differ from their qualified parent projection')
+        group_rows.extend(inherited_rows)
     for binding in bindings:
         export_path = bound(binding['path'], binding)
         if export_path in seen: raise ValueError('global source closure repeats an export receipt')
@@ -56,21 +72,40 @@ def verify_global_source_closure(path, protection):
             if trajectory['split'] not in {'train', 'test', 'validation'}:
                 raise ValueError('global source closure contains an undeclared split')
             if trajectory['split'] != 'train': held.update(trajectory['split_groups'])
+            group_rows.append(trajectory['split_groups'])
         if rows != export['complete_sessions']: raise ValueError('global source closure lost session accounting')
         counts[export_path.parent.parent.name] += rows
     declared = set()
     for directory in {export_path.parent.parent for export_path in seen}:
         complete_path = directory / 'complete.json'
         complete = json.loads(complete_path.read_text())
-        declared.update(Path(item['receipt']) for item in complete['files'] if item['status'] == 'exported')
+        declared.update(Path(item['receipt']) for item in complete['files'] if item['status'] in {'exported', 'reused'})
     if declared != seen:
         raise ValueError('global held closure omits a declared normalized source-file inventory')
-    if held - protection['held']:
-        raise ValueError('global source-declared held groups are absent from admission protection')
-    return {'normalized_sessions': sum(counts.values()), 'by_source': dict(counts),
+    from scripts.neuralese_data.splits import close_group_sets
+    closed, components = close_group_sets(group_rows,
+        {**{key: protection[key] for key in ('held', 'quality', 'pending')},
+         'held': protection['held'] | held})
+    accounting = {'normalized_sessions': sum(counts.values()), 'by_source': dict(counts),
         'export_receipts': len(bindings), 'declared_held_groups': len(held),
         'declared_held_groups_sha256': canonical_json_sha256_hex(sorted(held)),
-        'normalized_export_bindings_sha256': canonical_json_sha256_hex(bindings)}
+        'normalized_export_bindings_sha256': canonical_json_sha256_hex(bindings),
+        'source_group_components_sha256': canonical_json_sha256_hex(components),
+        'closed_group_counts': {key: len(value) for key, value in closed.items()}}
+    return accounting, closed, components
+
+
+def verify_global_source_closure(path, protection):
+    """Reject direct-key protection that misses a transitive source sibling."""
+    accounting, closed, components = acquired_source_closure(path, protection)
+    if any(closed[key] != protection[key] for key in closed):
+        raise ValueError('global acquired source protection lacks complete connected-group closure')
+    manifest = json.loads(Path(path).read_text())
+    if manifest.get('source_group_components'):
+        stored = [row['source_groups'] for row in sessions(Path(path).parent / manifest['source_group_components'])]
+        if stored != components:
+            raise ValueError('protected source component inventory differs from complete normalized sources')
+    return accounting
 
 
 def verify_graph_source(graph, value, *, protection, held_sources, fingerprint):
@@ -226,7 +261,7 @@ def main(argv=None):
     args.native_root = args.native_root.resolve(strict=True)
     complete = json.loads((args.exports / 'complete.json').read_text())
     paths = sorted(args.exports.glob('*/export.json'))
-    if {str(path) for path in paths} != {row['receipt'] for row in complete['files'] if row['status'] == 'exported'}:
+    if {str(path) for path in paths} != {row['receipt'] for row in complete['files'] if row['status'] in {'exported', 'reused'}}:
         raise ValueError('declared cohort must cover its complete normalized source file inventory')
     protection = current_protection(args.protection)
     global_accounting = verify_global_source_closure(args.protection, protection)

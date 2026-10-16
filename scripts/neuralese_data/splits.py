@@ -39,6 +39,27 @@ class UnionFind:
             self.parent[max(ra, rb)] = min(ra, rb)
 
 
+def close_group_sets(group_rows, protected):
+    """Exact connected components and closure of each supplied protected set."""
+    groups = UnionFind()
+    for row in group_rows:
+        keys = list(row)
+        if not keys or any(not isinstance(key, str) or not key for key in keys):
+            raise ValueError('source components need nonempty string split-group keys')
+        for key in keys:
+            groups.union(keys[0], key)
+    components = defaultdict(set)
+    for key in list(groups.parent):
+        components[groups.find(key)].add(key)
+    closed = {}
+    for kind, seeds in protected.items():
+        seeds = set(seeds)
+        roots = {groups.find(key) for key in seeds}
+        closed[kind] = seeds | {key for root, members in components.items()
+                               if root in roots for key in members}
+    return closed, sorted(sorted(members) for members in components.values())
+
+
 def _rows_from_file(path: Path):
     if path.suffix == ".jsonl":
         with open(path, encoding="utf-8") as stream:

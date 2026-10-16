@@ -23,6 +23,20 @@ exact counts, native schema validation and immutable manifest writing are crisp
 verifiers. Existing converters, source-group/decision-hold mechanisms and corpus
 registration remain the sole implementations of their concepts.
 
+## Connected source protection
+
+Join all split-group keys of every normalized source occurrence, including failed
+and omitted occurrences, with the existing split union-find. Propagate source
+evaluation and current held, quality and pending protection through complete
+connected components. A direct held-key union is insufficient: a row pulled into
+held can connect further tasks through its other keys. Publish a new immutable
+projection with the source component inventory; pending protection is closed
+against the current review state whenever that projection is read. Admission
+independently reconstructs the components from all bound normalized exports and
+rejects an incomplete projection. Preserve original source splits and receipts.
+Rebuild affected conversions; reuse unaffected numeric renderings only through
+an explicit, checked protection continuation, never by changing their provenance.
+
 The all-row audit authenticates source occurrence, provenance, target identities,
 view completeness and native schema; it is not an independent token re-render.
 A separate small qualification selects the first positive and largest complete

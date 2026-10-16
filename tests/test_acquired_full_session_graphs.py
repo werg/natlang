@@ -127,6 +127,7 @@ def test_runtime_resume_fingerprint_is_independent_of_checkout_path(tmp_path):
         'scripts/neuralese_data/build_acquired_full_session_graphs.py',
         'scripts/neuralese_data/build_native_semantic_pairs_e2e.py',
         'scripts/neuralese_data/conversion_output_lease.py',
+        'scripts/neuralese_data/splits.py',
         'training/neuralese/natlang_neuralese/model/native_model.py']
     for root in (first,second):
         for name in names:
@@ -165,7 +166,8 @@ def test_unreceipted_shard_cleanup_is_durably_listed_first(tmp_path):
         'sha256':__import__('hashlib').sha256(b'partial output').hexdigest()}]
 
 
-def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch):
+@pytest.mark.parametrize('transitive',[False,True])
+def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch,transitive):
     import json,sys
     from scripts.neuralese_data import build_acquired_full_session_graphs as builder
     from natlang_neuralese.common.jsonio import write_jsonl_text,open_jsonl_text
@@ -176,6 +178,10 @@ def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch)
                              ('e','train','group-e')]:
         row=value();row['trajectory'].update(id=name,split=split,split_groups=[group]);rows.append(row)
     rows[3]['positive_candidate']=False
+    if transitive:
+        # The late bridge must protect the earlier row before any shard writes.
+        rows[1]['trajectory']['split_groups']=['group-b']
+        rows[4]['trajectory']['split_groups']=['group-a','group-b']
     source=tmp_path/'full-trajectories.jsonl.zst'
     with write_jsonl_text(source) as stream:
         for row in rows:stream.write(json.dumps(row)+'\n')
@@ -221,7 +227,7 @@ def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch)
     builder.main()
     assert leases[-1].closed,'successful callable conversion must explicitly release its output lease'
     with open_jsonl_text(output/'test/native-graphs.jsonl.zst') as stream:
-        assert [json.loads(line)['id'] for line in stream]==['a','b']
+        assert [json.loads(line)['id'] for line in stream]==(['a','b','e'] if transitive else ['a','b'])
     omissions=[json.loads(line) for line in (output/'omissions.jsonl').read_text().splitlines()]
     assert [(r['id'],r['reason']) for r in omissions]==[
         ('c','current-decision-hold'),('d','source-reported-non-positive')]

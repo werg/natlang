@@ -75,12 +75,21 @@ def current_protection(path, *, verify_current=True):
             target = held if group_kind == 'held' else quality
             for _, row in file_rows(file):
                 target.update(row.get('source_groups', []))
-    if len(held) != manifest['held_groups'] or len(quality) != manifest['quality_groups']:
-        raise ValueError('current protection group projection is incomplete')
     live_review = source_review.REGISTRY / 'holds.jsonl'
     if verify_current and sha256_file(live_review) != manifest['source_review_sha256']:
         raise ValueError('protection projection differs from current source reviews')
     pending = source_review.pending_unpinned_source_groups()
+    component_file = manifest.get('source_group_components')
+    if component_file is not None:
+        if component_file not in {item['path'] for item in manifest['files']}:
+            raise ValueError('source component projection lacks its immutable file binding')
+        from scripts.neuralese_data.splits import close_group_sets
+        closed, _ = close_group_sets(
+            (row['source_groups'] for _, row in file_rows(path.parent / component_file)),
+            {'held': held, 'quality': quality, 'pending': pending})
+        held, quality, pending = (closed[key] for key in ('held', 'quality', 'pending'))
+    if len(held) != manifest['held_groups'] or len(quality) != manifest['quality_groups']:
+        raise ValueError('current protection group projection is incomplete')
     return {'held': held, 'quality': quality, 'pending': pending,
             'proof': {'path': str(path), 'sha256': sha256_file(path),
                 'held_groups': len(held), 'quality_groups': len(quality),
