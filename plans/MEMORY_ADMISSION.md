@@ -1,5 +1,29 @@
 # Memory admission on the DGX
 
+## Admission transaction and reclaim bounds (2026-10-16)
+
+A rejected immediate request must disappear within its admission transaction,
+before releasing the ledger lock. Otherwise the guard can observe that request
+and preempt useful work before the caller's second cleanup transaction. This
+occurred when a duplicate local diagnostic request preempted Search/OWL before
+its first selection checkpoint; production cloud learners were unaffected.
+
+The cache-release child inherits its caller's cgroup even when detached into a
+new session. Its temporary balloon must obey the tightest memory.max minus
+memory.current across that cgroup and all ancestors, retaining 256 MiB of room.
+Unknown limits disable the balloon; ordinary file-cache advice still works.
+Allocate complete GiB chunks only, rechecking room before each one. A fraction
+of a GiB must never round up to a whole GiB: that killed the 1 GiB baseline
+launcher after its independent training child had already started successfully.
+These are exact resource and transaction verifiers; priorities and training
+admission policy are unchanged.
+
+Selection is not resumable merely because final rendering can resume. Search
+selection needs durable intermediate frontiers before its ledger unit can be
+advertised as resumable. Its next release must verify interrupted continuation,
+source/protection binding and exact accounting, then restart on the integrated
+whole-trajectory integrity/reasoning-mask implementation.
+
 ## Pop discrete GPU
 
 On Pop, the RTX 4060's VRAM is separate from host RAM. Launch GPU jobs with `memory_ledger.py run --budget-gb HOST --cuda-budget-gb VRAM`: host and CUDA headroom are both admission conditions. CUDA headroom is driver-reported free VRAM minus the unspent CUDA budgets of running ledger claims, so a second large job cannot start during a low-memory phase of the first. The CUDA budget is also sent to the trainer and returned by `claimed_budget` for its activation planner. Omit `--cuda-budget-gb` on the DGX Spark, where CUDA allocations consume unified host memory and must remain part of the single claim. This keeps Pop's CPU generation lanes supplied while its GPU trains.

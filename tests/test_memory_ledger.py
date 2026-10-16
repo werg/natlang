@@ -5,6 +5,7 @@ SPEC = importlib.util.spec_from_file_location('memory_ledger', Path(__file__).re
 ledger = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(ledger)
 GIB = 2**30
+REAL_BALLOON_RECLAIM = ledger.balloon_reclaim
 
 
 import pytest  # noqa: E402
@@ -933,3 +934,53 @@ def test_detached_waiter_runs_as_its_own_unit_without_the_detach_flag():
     assert command[5] == 'job-1-waiter'
     inner = command[command.index('--working-directory') + 2:]
     assert inner[2:] == ['run', '--unit', 'job-1', '--budget-gb', '8', '--wait', '3600', '--', 'sh', '-c', 'echo --detach']
+
+
+def test_cgroup_balloon_room_honors_parent_limit_and_unknown_membership(tmp_path):
+    root=tmp_path/'cgroups'; child=root/'app'/'job'; child.mkdir(parents=True)
+    for path,maximum,used in [(root,'max',0),(root/'app',2*GIB,GIB),(child,8*GIB,GIB)]:
+        (path/'memory.max').write_text(str(maximum));(path/'memory.current').write_text(str(used))
+    membership=tmp_path/'membership';membership.write_text('0::/app/job\n')
+    assert ledger.cgroup_balloon_headroom(str(root),str(membership))==3*GIB//4
+    assert ledger.cgroup_balloon_headroom(str(root),str(tmp_path/'missing'))==0
+
+
+@pytest.mark.parametrize('room,expected',[(GIB//2,0),(5*GIB//2,2),([3*GIB,3*GIB,GIB//4],1)])
+def test_cache_balloon_never_rounds_small_cgroup_room_up_to_a_gib(monkeypatch,room,expected):
+    from types import SimpleNamespace
+    monkeypatch.setattr(ledger,'inactive_file',lambda:64*GIB)
+    monkeypatch.setattr(ledger,'mem_available',lambda:100*GIB)
+    remaining=iter(room) if isinstance(room,list) else None
+    monkeypatch.setattr(ledger,'cgroup_balloon_headroom',lambda:next(remaining) if remaining else room)
+    allocated=[]
+    class Chunk:
+        def __init__(self):self.closed=False
+        def __setitem__(self,key,value):pass
+        def close(self):self.closed=True
+    def allocate(*args):
+        chunk=Chunk();allocated.append(chunk);return chunk
+    monkeypatch.setattr(ledger,'mmap',SimpleNamespace(mmap=allocate,PAGESIZE=GIB))
+    assert REAL_BALLOON_RECLAIM()==expected
+    assert len(allocated)==expected and all(chunk.closed for chunk in allocated)
+
+
+def test_immediate_rejected_request_is_never_published_to_preemption_guard(monkeypatch):
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+    import copy
+    state={'claims':{},'events':[]};committed=[]
+    @contextmanager
+    def transaction():
+        yield state
+        committed.append(copy.deepcopy(state.get('waiting',{})))
+    monkeypatch.setattr(ledger,'ledger',transaction)
+    monkeypatch.setattr(ledger,'mem_free',lambda:100*GIB)
+    monkeypatch.setattr(ledger,'mem_total',lambda:128*GIB)
+    monkeypatch.setattr(ledger,'reclaimable',lambda:0)
+    monkeypatch.setattr(ledger,'gpu_usage',lambda:{})
+    monkeypatch.setattr(ledger,'headroom',lambda *_:(0,{}))
+    args=SimpleNamespace(cuda_budget_gb=None,budget_gb=24,reserve_gb=6,unit='rejected',priority='high',
+                         cls='experiment',wait=0,resumable=True)
+    with pytest.raises(SystemExit,match='not admitted'):
+        ledger.run(args)
+    assert committed==[{}]

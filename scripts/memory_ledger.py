@@ -196,15 +196,41 @@ def inactive_file():
     return 0
 
 
+def cgroup_balloon_headroom(root='/sys/fs/cgroup', membership='/proc/self/cgroup', reserve=256 << 20):
+    """Hard allocation room in this cgroup AND its ancestors; unknown means no balloon."""
+    try:
+        with open(membership) as stream:
+            relative = next(line.strip().split(':', 2)[2] for line in stream if line.startswith('0::'))
+        root = os.path.abspath(root)
+        current = os.path.abspath(os.path.join(root, relative.lstrip('/')))
+        if os.path.commonpath((root, current)) != root:
+            return 0
+        available = float('inf')
+        while True:
+            with open(os.path.join(current, 'memory.max')) as stream:
+                maximum = stream.read().strip()
+            if maximum != 'max':
+                with open(os.path.join(current, 'memory.current')) as stream:
+                    used = int(stream.read())
+                available = min(available, max(0, int(maximum) - used - reserve))
+            if current == root:
+                return available
+            current = os.path.dirname(current)
+    except (OSError, ValueError, StopIteration):
+        return 0
+
+
 def balloon_reclaim(keep_available=16 * GIB, limit=24 * GIB):
     """Evict page cache the walk cannot reach (files outside the roots, container layers): touch anonymous memory
     one GiB at a time, which makes the kernel reclaim inactive file pages, then free it. CUDA on the GB10 never
     triggers that reclaim itself. Bounded by the inactive file cache, and stops while MemAvailable stays above
     ``keep_available`` (twice the guard's default floor). Returns the GiB touched."""
-    size = min(limit, inactive_file() - 2 * GIB, mem_available() - keep_available)
+    size = min(limit, inactive_file() - 2 * GIB, mem_available() - keep_available,
+               cgroup_balloon_headroom())
     chunks = []
     try:
-        while len(chunks) * GIB < size and mem_available() > keep_available:
+        while ((len(chunks) + 1) * GIB <= size and mem_available() > keep_available
+               and cgroup_balloon_headroom() >= GIB):
             chunk = mmap.mmap(-1, GIB)
             for offset in range(0, GIB, mmap.PAGESIZE):
                 chunk[offset] = 1
@@ -747,9 +773,12 @@ def run(args):
                                         'free': free, 'priority': priority})
                 break
             blockers = blocked_by(live, {'priority': priority}) + ('' if head == unit else f' (queue head: {head})')
-        if time.time() >= deadline:
-            with ledger() as state:
-                state.get('waiting', {}).pop(unit, None)
+            # A rejected immediate request must never be visible to the guard:
+            # it could preempt useful work between this transaction and cleanup.
+            expired = time.time() >= deadline
+            if expired:
+                waiting.pop(unit, None)
+        if expired:
             cuda_detail = (f', {cuda_free / GIB:.1f} GiB CUDA headroom for {args.cuda_budget_gb} GiB requested'
                            if cuda_budget is not None and cuda_free is not None else
                            ', CUDA headroom unavailable' if cuda_budget is not None else '')
