@@ -101,14 +101,16 @@ Independent-review repair: original readiness policy on legacy backfill
 The initial legacy metadata recovery constructed an incomplete readiness
 requirement. It omitted `stage_ids` and numerical/source policy fields required
 by the shared verifier; that route could not complete. The verified participant
-record now carries the supervisor's original stable `readiness_requirement`:
-model/current recipe identities, optional preserved lineage, required stages,
-forward/gradient tolerances, and the declared foundation source/epochs/boundary.
+record now carries a deep JSON copy of the supervisor's FULL original
+`readiness_requirement`: model/current recipe identities, optional preserved
+lineage, required stages, numerical tolerances, foundation source/epochs/boundary,
+trainer exit/launch/recipe/resident-adoption requirements and future fields.
 Only the shared readiness verifier creates this record. Legacy backfill requires
 that manifest-bound policy and reruns the same verifier; it cannot select a
 stage, foundation cohort or tolerance from the receipt it is authenticating.
-Owner-process paths are not copied into this historical policy, because original
-ownership was checked before manifest publication and may legitimately move.
+Original owner and resident-adoption guards are rerun as supplied; historical
+authority must refer to its exact retained evidence, not silently discard those
+guards when ownership legitimately moves.
 An old manifest without the declared recovery policy must be regenerated from
 its original valid readiness requirement before recovering absent metadata.
 
@@ -122,3 +124,11 @@ source to a helper that requires nonempty files; the fixture was corrected to
 include an actual ordinary context row. Protocol receipt fields in this test
 are synthetic evidence fixtures, not claims of production numerical/task or
 source-exposure qualification. No model arithmetic is changed.
+
+Independent second review rejected handpicked requirement fields because they
+omitted original owner guards. The implementation now preserves the complete
+requirement with independent nested storage. Actual child-process launch/drain
+regressions cover live/no-exit, missing exit, failed exit and changed bound launch
+evidence; none may backfill. Successful actual exit0 plus the full original
+policy permits the same verified checkpoint recovery. No guard is inferred or
+relaxed.

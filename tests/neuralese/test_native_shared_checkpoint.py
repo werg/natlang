@@ -379,6 +379,40 @@ def test_legacy_recipe_backfill_uses_real_readiness_and_original_stage_source_po
         else:forged['readiness_requirement']['stage_ids']=['full']
         with pytest.raises(ValueError,match='original readiness policy|declared required native stage'):
             load_participant('lfm',forged,config,'cpu')
+    import subprocess,sys,time
+    launch_path=tmp_path/'trainer-launch.json';exit_path=tmp_path/'trainer-exit.json'
+    argv=[sys.executable,'-c','import sys;sys.stdin.read()',receipt['recipe']['path']]
+    started=time.time()
+    owner=subprocess.Popen(argv,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    launch_path.write_text(json.dumps({'at':started,'pid':owner.pid,'argv':argv}))
+    requirement.update(trainer_exit=str(exit_path),trainer_recipe=receipt['recipe']['path'],
+        trainer_launch={'path':str(launch_path),'sha256':sha256_file_hex_cached(launch_path)},
+        future_guard={'nested':['preserve-complete-original-policy']})
+    try:
+        assert owner.poll() is None and validate_ready(path,requirement) is None
+        awaiting=copy.deepcopy(selected);awaiting['readiness_requirement']=copy.deepcopy(requirement)
+        with pytest.raises(ValueError,match='qualified original readiness'):
+            load_participant('lfm',awaiting,config,'cpu')
+    finally:
+        owner.stdin.close();owner.wait(timeout=10)
+    assert owner.returncode==0
+    exited={'at':time.time(),'returncode':owner.returncode}
+    exit_path.write_text(json.dumps(exited))
+    selected=validate_ready(path,requirement)
+    assert selected['readiness_requirement']==requirement
+    assert selected['readiness_requirement']['future_guard'] is not requirement['future_guard']
+    assert load_participant('lfm',selected,config,'cpu').recipe_binding==receipt['recipe']
+    exit_path.unlink()
+    with pytest.raises(ValueError,match='qualified original readiness'):
+        load_participant('lfm',selected,config,'cpu')
+    exit_path.write_text(json.dumps({**exited,'returncode':1}))
+    with pytest.raises(ValueError,match='did not drain successfully'):
+        load_participant('lfm',selected,config,'cpu')
+    exit_path.write_text(json.dumps(exited))
+    original_launch=launch_path.read_bytes();launch_path.write_text('{}')
+    with pytest.raises(ValueError,match='artifact changed'):
+        load_participant('lfm',selected,config,'cpu')
+    launch_path.write_bytes(original_launch)
     if boundary=='communication-foundation':
         assert selected['readiness_requirement']['foundation_sources']==requirement['foundation_sources']
         # A replaced protected/source projection cannot inherit the old source
