@@ -114,8 +114,8 @@ def _check_indexes(witnesses):
 
 
 def _contract(plan, proposed, stage_id):
-    """Narrower than general handoff: only one stage's training input may change."""
-    from .recipe import _data_continuation
+    """One stage may append active data and/or mandatory pending declarations."""
+    from .recipe import _data_continuation, _pending_source_continuation
     old_inputs, new_inputs = plan['stage_inputs'], proposed['stage_inputs']
     if plan['code'] != proposed['code'] or plan.get('device') != proposed.get('device'):
         raise ValueError('resident append cannot change runtime or device')
@@ -129,8 +129,17 @@ def _contract(plan, proposed, stage_id):
         raise ValueError('resident append cannot change fixed foundation')
     if old.get('withdrawn_native_graphs') != new.get('withdrawn_native_graphs'):
         raise ValueError('resident append cannot withdraw graphs')
-    if not _data_continuation(old, new):
+    pending_role = 'pending_native_sources'
+    pending_changed = old.get(pending_role) != new.get(pending_role)
+    if pending_changed and (not isinstance(new.get(pending_role), dict) or
+            not _pending_source_continuation(old, {**old, pending_role: new[pending_role]})):
+        raise ValueError('resident pending declarations must preserve all prior rows, quotas and dependencies')
+    without_pending = lambda values: {k:v for k,v in values.items() if k != pending_role}
+    active_changed = without_pending(old) != without_pending(new)
+    if active_changed and not _data_continuation(without_pending(old), without_pending(new)):
         raise ValueError('resident append requires the exact training-source predecessor')
+    if not active_changed and not pending_changed:
+        raise ValueError('resident request must add active data or mandatory pending work')
     recipes = []
     for recipe in (plan['recipe'], proposed['recipe']):
         value = copy.deepcopy(recipe)
@@ -139,11 +148,19 @@ def _contract(plan, proposed, stage_id):
             if stage['id'] == stage_id:
                 if stage['kind'] != 'native_state_sft':
                     raise ValueError('resident append supports supervised native graphs only')
-                for key in ('native_graphs', 'continued_native_graphs', 'held_native_graphs', 'continued_held_native_graphs'):
+                for key in ('native_graphs', 'continued_native_graphs', 'held_native_graphs', 'continued_held_native_graphs', pending_role):
                     stage.get('inputs', {}).pop(key, None)
         recipes.append(value)
     if recipes[0] != recipes[1]:
         raise ValueError('resident append cannot change parameters, runtime, objective or policy')
+
+
+def pending_declarations(plan, stage_id, tokenizer_fingerprint):
+    """Authenticate the same declaration consumed by checkpoint progress/readiness."""
+    from .native_pending_sources import load_pending_sources
+    reference = plan['stage_inputs'][stage_id].get('pending_native_sources')
+    return ([load_pending_sources(bound(reference), tokenizer_fingerprint=tokenizer_fingerprint)]
+            if reference else [])
 
 
 def geometry_capacity(value, *, identity, code):
@@ -328,10 +345,18 @@ def prepare(directory, recipe_path, stage_id, *, tokenizer_fingerprint, role_ids
     append_only_rows(old_held.bindings, held.bindings, label='resident held-source')
     if (train.entries[:len(old.entries)] != old.entries or held.entries[:len(old_held.entries)] != old_held.entries
             or len(train) < len(old) or len(held) < len(old_held)
-            or (len(train) == len(old) and len(held) == len(old_held))):
+            or (len(train) == len(old) and len(held) == len(old_held)
+                and plan['stage_inputs'][stage_id].get('pending_native_sources') ==
+                    proposed['stage_inputs'][stage_id].get('pending_native_sources'))):
         raise ValueError('resident append must preserve every prior row, order and scheduling priority')
     if train.groups & held.groups:
         raise ValueError('resident train/held groups overlap')
+    declarations = pending_declarations(proposed, stage_id, tokenizer_fingerprint)
+    from .native_continuation import _retain_pending_sources
+    # Reject conflicts before publishing, with no earned visits or model action.
+    _retain_pending_sources({'source_row_bindings':train.bindings,
+        'source_row_order':train.ordered_ids(), 'exposure_counts':{},
+        'options':{'_pending_native_source_declarations':declarations}}, {})
     initial = json.loads((directory/'initial.json').read_text())
     capacity_binding = initial.get('geometry_qualification')
     if not capacity_binding:
@@ -412,6 +437,7 @@ class ResidentAdoption:
         if (actual['native_graphs']['sha256'] != train.file_sha256
                 or actual['held_native_graphs']['sha256'] != held.file_sha256):
             raise ValueError('resident plan differs from actual loaded sources')
+        self.pending_declarations = pending_declarations(self.plan, stage_id, train.tokenizer_fingerprint)
 
     def poll(self, global_step):
         """Return validated new data or None. Rejections do not stop SGD."""
@@ -477,9 +503,16 @@ class ResidentAdoption:
                     or train.role_ids != self.train.role_ids
                     or train.entries[:len(self.train.entries)] != self.train.entries
                     or len(train) < len(self.train) or train.groups & held.groups
-                    or (len(train) == len(self.train) and len(held) == len(self.held))
+                    or (len(train) == len(self.train) and len(held) == len(self.held)
+                        and self.plan['stage_inputs'][self.stage_id].get('pending_native_sources') ==
+                            payload['plan']['stage_inputs'][self.stage_id].get('pending_native_sources'))
                     or len(train) != payload['rows'] or digest(train.entries) != payload['entries_sha256']):
                 raise ValueError('resident rows are not an exact protected append')
+            declarations = pending_declarations(payload['plan'], self.stage_id, train.tokenizer_fingerprint)
+            from .native_continuation import _retain_pending_sources
+            _retain_pending_sources({'source_row_bindings':train.bindings,
+                'source_row_order':train.ordered_ids(), 'exposure_counts':{},
+                'options':{'_pending_native_source_declarations':declarations}}, {})
             with locked(self.directory):
                 actual = current(self.directory)
                 generation = actual['generation'] if actual else digest(json.loads(
@@ -495,6 +528,7 @@ class ResidentAdoption:
                 repair(self.directory, committed)
                 self.state, self.plan, self.generation = committed, payload['plan'], value['generation']
                 self.train, self.held, self.recipe_binding = train, held, recipe
+                self.pending_declarations = declarations
                 return train, held
         except (ValueError, KeyError, TypeError, OSError) as error:
             # A post-commit projection error is fatal/recoverable, never continue

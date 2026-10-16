@@ -153,7 +153,8 @@ def test_same_forward_class_metrics_are_exact_weighted_graph_aggregates(monkeypa
 
 @pytest.mark.parametrize('crash_after_commit',[False,True])
 @pytest.mark.parametrize('held_append',[False,True])
-def test_real_resident_sgd_matches_all_data_run_and_recovers_old_checkpoint(tmp_path,monkeypatch,crash_after_commit,held_append):
+@pytest.mark.parametrize('pending_append',[False,True])
+def test_real_resident_sgd_matches_all_data_run_and_recovers_old_checkpoint(tmp_path,monkeypatch,crash_after_commit,held_append,pending_append):
     import torch
     from test_native_model import tiny_source
     from natlang_neuralese.model.native_model import load_native_model
@@ -164,6 +165,15 @@ def test_real_resident_sgd_matches_all_data_run_and_recovers_old_checkpoint(tmp_
     identity={'model_config':config,'batch_graphs':1,'batch_tokens':0,'checkpoint_layers':True,'chunk_tokens':128,'checkpoint_input_offload':False,
         'fp8':{'kind':'off','recipe':'delayed','amax_history_len':16,'input_gradient_precision':None},'runtime':{'torch':torch.__version__,'cuda':torch.version.cuda,'device':'cpu'}}
     paths,directory,manager,recipe=setup(tmp_path,config['tokenizer_fingerprint'],roles.ids,identity)
+    pending_path = None
+    if pending_append:
+        from natlang_neuralese.train.native_pending_sources import declaration
+        row=graph('long');row.update(split='train',tokenizer_fingerprint=config['tokenizer_fingerprint'])
+        long=tmp_path/'long.jsonl';long.write_text(json.dumps(row)+'\n')
+        pending_path=tmp_path/'pending.json';write_json(pending_path,declaration(long,long,
+            tokenizer_fingerprint=config['tokenizer_fingerprint'],role_ids=roles.ids))
+        value=json.loads(recipe.read_text());value['input_bindings']['pending']=resident.binding(pending_path)
+        value['stages'][0]['inputs']['pending_native_sources']='pending';write_json(recipe,value)
     held_path=paths['held']
     if held_append:
         row=graph('held-extra');row.update(split='test',tokenizer_fingerprint=config['tokenizer_fingerprint'])
@@ -204,6 +214,11 @@ def test_real_resident_sgd_matches_all_data_run_and_recovers_old_checkpoint(tmp_
     actual=torch.load(out/'checkpoint.pt',weights_only=False)
     assert actual['training']['exposure_counts']=={'a':1,'b':1,'c':1}
     assert actual['training']['global_step']==3
+    if pending_append:
+        frame=actual['training']['sft_progress']['sft']
+        assert frame['pending_source_rows']['long']['required_visits']==1
+        assert frame['exposure_counts']['long']==0
+        assert frame['required_visits']['long']==1
     assert actual['training']['options']['source_predecessors']=={
         'continued_native_graphs':resident.sha(paths['old']),
         'continued_held_native_graphs':resident.sha(paths['held'])}
@@ -215,6 +230,7 @@ def test_real_resident_sgd_matches_all_data_run_and_recovers_old_checkpoint(tmp_
     clean[clean.index('--native-graphs')+1]=str(paths['new'])
     clean[clean.index('--out')+1]=str(baseline)
     clean[clean.index('--held-native-graphs')+1]=str(held_path)
+    if pending_path is not None:clean += ['--pending-native-sources',str(pending_path)]
     assert trainer.main(clean)==0
     expected=torch.load(baseline/'checkpoint.pt',weights_only=False)
     def exact(a,b):

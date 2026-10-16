@@ -77,7 +77,7 @@ def batch_boundaries(entries, *, batch_graphs=1, batch_tokens=0):
 
 
 def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1, batch_tokens=0,
-                             foundation_ids=None, foundation_communication_batches=1):
+                             foundation_ids=None, foundation_communication_batches=1, minimum_visits=None):
     """Schedule only missing row visits, including rows appended after completion.
 
     Communication starts first and alternates with explicitly prioritized
@@ -97,10 +97,14 @@ def pending_exposure_batches(entries, exposure_counts, *, epochs, batch_graphs=1
     fractional = math.ceil((epochs - whole) * len(entries))
     quotas = {entry['id']: max(int(bool(entry.get('communication'))), whole + (index < fractional))
               for index, entry in enumerate(entries)}
+    for key, value in (minimum_visits or {}).items():
+        if type(value) is not int or value < 0:
+            raise ValueError('preserved row quotas must be nonnegative integers')
+        if key in quotas:quotas[key] = max(quotas[key], value)
     batches = []
     pending = {visit: [index for index, entry in enumerate(entries)
                        if exposure_counts.get(entry['id'], 0) <= visit < quotas[entry['id']]]
-               for visit in range(math.ceil(epochs))}
+               for visit in range(max(quotas.values(), default=0))}
     for rank in sorted({scheduling_rank(entry) for entry in entries}):
         for visit, remaining in pending.items():
             indices = [index for index in remaining if scheduling_rank(entries[index]) == rank]
@@ -777,6 +781,9 @@ def main(argv=None):
     if fingerprint != config['tokenizer_fingerprint']:
         raise ValueError('loaded tokenizer differs from native model configuration')
     if resident_state and resume and resident_state['payload']['stage_id'] == args.stage_id:
+        pending_reference = resident_state['payload']['plan']['stage_inputs'][args.stage_id].get('pending_native_sources')
+        args.pending_native_sources = [Path(pending_reference['path'])] if pending_reference else []
+        checkpoint_options['pending_native_sources'] = [str(path) for path in args.pending_native_sources]
         prior = (resume.get('source_receipts') or [{}])[0]
         if prior.get('sha256') != resident_state['payload']['train']['sha256']:
             args.continued_native_graphs = Path(prior['path'])
@@ -1057,10 +1064,16 @@ def main(argv=None):
         step = 0
     foundation_priority_ids = ({entry['id'] for entry in foundation_source.entries if entry.get('communication')}
                                if args.foundation_communication_batches is not None else None)
+    from .native_continuation import _retain_pending_sources
+    pending_frame = _retain_pending_sources({
+        'source_row_bindings': source_row_bindings, 'source_row_order': source_order,
+        'exposure_counts': dict(exposure_counts), 'options': checkpoint_options},
+        carried_progress.get(args.stage_id or 'native-graph-ce') or {})
     required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
         epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens,
         foundation_ids=foundation_priority_ids,
-        foundation_communication_batches=args.foundation_communication_batches or 1)
+        foundation_communication_batches=args.foundation_communication_batches or 1,
+        minimum_visits=pending_frame.get('required_visits'))
     target_rows = sum(required_visits.values())
     total_end = step + len(pending_batches)
     if step > total_end:
@@ -1089,11 +1102,6 @@ def main(argv=None):
     # explicitly changed optimizer algorithm must be saved even at a completed
     # exposure boundary. Neither operation earns another graph visit.
     # Validate new declarations against carried/active exact row identities BEFORE updates.
-    from .native_continuation import _retain_pending_sources
-    pending_frame = _retain_pending_sources({
-        'source_row_bindings': source_row_bindings, 'source_row_order': source_order,
-        'exposure_counts': dict(exposure_counts), 'options': checkpoint_options},
-        carried_progress.get(args.stage_id or 'native-graph-ce') or {})
     pending_sources_changed = (pending_frame.get('pending_source_declarations') !=
         (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('pending_source_declarations'))
     pending_parent_sha = (sha256_file_hex_cached(policy.slot) if policy.slot.is_file() else
@@ -1153,10 +1161,17 @@ def main(argv=None):
                     checkpoint_options.update(native_graphs=str(train.path), held_native_graphs=str(held.path), recipe_binding=args.recipe_binding,
                         resident_adoption={'generation': resident.generation, 'history': resident.state['history']})
                     checkpoint_options['_communication_ids'] = [entry['id'] for entry in train.entries if entry.get('communication')]
+                    checkpoint_options['_pending_native_source_declarations'] = resident.pending_declarations
+                    args.pending_native_sources = [Path(item['binding']['path']) for item in resident.pending_declarations]
+                    checkpoint_options['pending_native_sources'] = [str(path) for path in args.pending_native_sources]
+                    pending_frame = _retain_pending_sources({
+                        'source_row_bindings': source_row_bindings, 'source_row_order': source_order,
+                        'exposure_counts': dict(exposure_counts), 'options': checkpoint_options}, pending_frame)
                     required_visits, pending_batches = pending_exposure_batches(train.entries, exposure_counts,
                         epochs=args.epochs, batch_graphs=args.batch_graphs, batch_tokens=args.batch_tokens,
                         foundation_ids=foundation_priority_ids,
-                        foundation_communication_batches=args.foundation_communication_batches or 1)
+                        foundation_communication_batches=args.foundation_communication_batches or 1,
+                        minimum_visits=pending_frame.get('required_visits'))
                     total_end = step + len(pending_batches)
                     target_rows = sum(required_visits.values())
                     schedule = stream_pending_batches(train, pending_batches, priority_ids=foundation_priority_ids)
