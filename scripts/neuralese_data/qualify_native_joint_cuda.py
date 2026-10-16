@@ -78,8 +78,8 @@ def backend_execution(participants):
         if participant.backend is None:
             continue
         counts = participant.backend.collect_row_counts()
-        if counts.get('calls', 0) <= 0 or counts.get('rows', 0) <= 0:
-            raise ValueError('selected FP8 backend executed no projections: ' + name)
+        from natlang_neuralese.train.fp8_backend import require_fp8_projection_execution
+        require_fp8_projection_execution(counts, context=name)
         result[name] = {'configuration': participant.backend.configuration(), 'row_counts': counts}
     return result
 

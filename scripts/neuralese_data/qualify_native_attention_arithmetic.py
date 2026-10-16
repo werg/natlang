@@ -46,6 +46,12 @@ def paired_arithmetic_case(model, optimizer, example, *, candidate='tf32x3', ato
     comparisons={};reference={};seen=set();outputs={};geometries={};runs={}
     kwargs=dict(backend=backend,checkpoint_layers=checkpoint_layers,chunk_tokens=chunk_tokens,
                 checkpoint_sha256=checkpoint_sha256,source_binding=source_binding)
+    def execute(label,**extra):
+        proof=qualify_capacity(model,optimizer,[example],**kwargs,**extra)
+        if proof['passed'] and backend is not None:
+            from natlang_neuralese.train.fp8_backend import require_fp8_projection_execution
+            require_fp8_projection_execution(proof['executed_projections'],context='attention '+label)
+        return proof
     try:
         with tempfile.TemporaryDirectory(prefix='native-attention-adjoints-',dir=temporary_directory) as directory:
             directory=Path(directory)
@@ -74,7 +80,7 @@ def paired_arithmetic_case(model, optimizer, example, *, candidate='tf32x3', ato
                     geometries[label]={'forward_tokens':plan.token_count,'kv_slots':len(plan.slot_sources)}
                 hook=model.register_forward_hook(output)
                 try:
-                    runs[label]=qualify_capacity(model,optimizer,[example],gradient_observer=observer,**kwargs)
+                    runs[label]=execute(label,gradient_observer=observer)
                 finally:hook.remove()
                 if not runs[label]['passed']:
                     return {'passed':False,'from':previous,'to':candidate,'capacity':runs,
@@ -91,7 +97,7 @@ def paired_arithmetic_case(model, optimizer, example, *, candidate='tf32x3', ato
                 # Keep serialization and FP64 comparison outside measured runs.
                 for label,mode in [('reference',previous),('candidate',candidate)]:
                     set_native_attention_precision(model,mode)
-                    proof=qualify_capacity(model,optimizer,[example],**kwargs)
+                    proof=execute('timed '+label)
                     if not proof['passed']:raise ValueError('timed attention execution failed capacity checks')
                     timings[label]=proof['cases'][0]['seconds']
             return {'schema':'natlang.native-attention-arithmetic-paired/1','passed':passed,
@@ -102,6 +108,7 @@ def paired_arithmetic_case(model, optimizer, example, *, candidate='tf32x3', ato
                 'production_trainable_inventory':inventory,
                 'reference_gradient_digest':canonical_json_sha256_hex({name:row['digest'] for name,row in reference.items()}),
                 'geometry':geometries,'seconds':timings,'capacity':runs,
+                'retained_hidden_bytes':sum(value.numel()*value.element_size() for value in outputs.values()),
                 'optimizer_updates':0,'task_quality_qualified':False,
                 'timing_scope':'single warmed whole-graph forward/backward per mode; no serialization/comparison or SGD',
                 'parent_checkpoint_sha256':checkpoint_sha256,'source':source_binding}

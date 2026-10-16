@@ -54,3 +54,23 @@ def test_real_candidate_gradient_mismatch_rejects_and_restores(tmp_path):
     assert model.native_attention_precision==model.port.native_attention_precision=='ieee'
     assert all(value.grad is None for value in model.parameters())
     assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize('bad_run',[1,2,3,4])
+def test_every_pass_requires_actual_enabled_fp8_execution(tmp_path,monkeypatch,bad_run):
+    import scripts.neuralese_data.qualify_native_attention_arithmetic as qualifier
+    original=qualifier.qualify_capacity;calls=[]
+    def observed(*args,**kwargs):
+        kwargs.pop('backend')
+        value=original(*args,**kwargs);calls.append(1)
+        return {**value,'executed_projections':{'calls':0 if len(calls)==bad_run else 1,'rows':8}}
+    monkeypatch.setattr(qualifier,'qualify_capacity',observed)
+    model=shared_state.SharedStateModel(tiny('lfm'),(58,59,60,61),rank=4)
+    set_native_attention_precision(model,'ieee');optimizer=diagnostic_optimizer(model)
+    with pytest.raises(ValueError,match='FP8 backend executed no projections'):
+        paired_arithmetic_case(model,optimizer,examples()[0],atol=1e-6,rtol=1e-5,
+            checkpoint_sha256='a'*64,source_binding={},chunk_tokens=3,temporary_directory=tmp_path,backend=object())
+    assert len(calls)==bad_run
+    assert model.native_attention_precision==model.port.native_attention_precision=='ieee'
+    assert all(value.grad is None for value in model.parameters())
+    assert not list(tmp_path.iterdir())

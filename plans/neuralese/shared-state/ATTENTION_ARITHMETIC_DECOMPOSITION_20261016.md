@@ -102,3 +102,8 @@ The CLI binds the actual imported package, saved parent, source row and original
 capacity identity. This does not grant a new capacity certificate or task
 qualification. Run it on actual normal and long source geometry before cloud
 arithmetic adoption; graph/cached qualification remains separately required.
+Every observed and timed pass with an enabled FP8 backend requires actual
+positive projection-call and row counters, using the same verifier as joint
+CUDA qualification. A finite backward with an inactive backend is rejected.
+The report includes retained hidden-output bytes; long-geometry host admission
+must include both output tensors as well as the loaded parent and active graph.

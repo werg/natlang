@@ -398,6 +398,13 @@ class FP8ExpertAdapter:
                 'runtime': self.runtime, 'expert_modules': sorted(self.experts)}
 
 
+def require_fp8_projection_execution(counts, *, context):
+    """A selected FP8 backend needs actual projections, not configuration alone."""
+    if any(type(counts.get(key)) is not int or counts[key] <= 0 for key in ('calls', 'rows')):
+        raise ValueError('selected FP8 backend executed no projections: ' + context)
+    return counts
+
+
 def make_backend(kind: str, model: nn.Module, *, device, recipe: str = 'delayed', amax_history_len: int = 16):
     """The direct trainer's FP8 backend for ``--fp8-training``: ``te-fp8`` (TE dense linears, LFM) or
     ``triton-experts`` (Triton grouped FP8 expert GEMMs, Mellum)."""
