@@ -328,3 +328,31 @@ for (const format of ['native_state', 'neuralese']) for (const channel of ['tool
     } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   });
 }
+
+for (const format of ['native_state', 'neuralese']) {
+  test(`${format} assistant producer reply to compaction cannot finish the function`, async () => {
+    const store = new MemoryNeuraleseStore();
+    const port = format === 'neuralese' ? new StandInNeuralesePort(store, hashingEmbedder(8), 8) : undefined;
+    const note = port ? await port.write('compaction note') : await store.putNativeState(nativeStateFixture());
+    const fixture = nativeStateFixture();
+    const answer = port ? await port.write('actual answer') : await store.putNativeState({ ...fixture,
+      metadata: { ...fixture.metadata, text: 'actual answer' } });
+    const neuralese = port ? { store, port, dialect: port.dialect } : runtimeFor(store);
+    const invocation = open({ type: '() => Neuralese<string>', instructions: 'Return the actual answer.' }, { neuralese }).session;
+    let turns = 0, compactions = 0;
+    const driver = Object.assign(async request => {
+      turns++;
+      const prompt_tokens = Math.round((JSON.stringify(request.messages).length + JSON.stringify(request.tools).length) / 4);
+      if (request.tools.map(tool => tool.function.name).join() === 'compact_history') {
+        compactions++;
+        return { text: neuraleseSentinel(note.id), prompt_tokens,
+          raw_response: { choices: [{ message: { role: 'assistant', content: [{ type: format, id: note.id }] } }] } };
+      }
+      return turns < 10 ? { calls: [['eval', { code: `console.log('y'.repeat(2000)); ${turns}` }]], prompt_tokens } :
+        { calls: [['return_result', { status: 'success', value: [{ type: format, id: answer.id }] }]], prompt_tokens };
+    }, { neuralese: true });
+    await new NativeToolAgent(driver, { contextTokens: 4096, maxTurns: 30, neuralese }).run(invocation);
+    assert.ok(compactions > 0, 'the actual agent entered its compaction-only turn');
+    assert.equal(invocation.lam.return.$neuralese.id, answer.id);
+  });
+}

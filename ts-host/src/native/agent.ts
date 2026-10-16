@@ -516,7 +516,8 @@ export class NativeToolAgent {
    * Turn the Neuralese content of a reply into conversation text: blocks a backend wrote (content parts) and literals
    * written as marker text (stored through the write port) become block markers in the reply and call arguments.
    */
-  private async decodeNeuralese(response: ModelTurn, session: NativeSession, turn: number, turnNode?: string): Promise<ModelTurn> {
+  private async decodeNeuralese(response: ModelTurn, session: NativeSession, turn: number, turnNode?: string,
+      allowAssistantResult = true): Promise<ModelTurn> {
     const carries = (value: unknown): boolean => typeof value === 'string' ?
       value.includes('<|neuralese|>') || nativeStateSentinelIds(value).length > 0 :
       Array.isArray(value) ? value.some(carries) : !!value && typeof value === 'object' &&
@@ -545,7 +546,7 @@ export class NativeToolAgent {
       }
       return [name, decodedArgs];
     };
-    const structuredResult = !response.calls?.length && !response.truncated && isContentParts(content) &&
+    const structuredResult = allowAssistantResult && !response.calls?.length && !response.truncated && isContentParts(content) &&
       content.some(part => part.type !== 'text');
     const decoded = { ...response,
       ...(structuredResult ? { text: '' } : response.text === undefined ? {} : { text: await decodeTurnValue(response.text, port,
@@ -1216,7 +1217,7 @@ export class NativeToolAgent {
       if (response.prompt_tokens !== undefined && sentChars > 0) tokensPerChar = response.prompt_tokens / sentChars;
       turns++;
       session.runtime.checkInterruption();
-      response = await this.decodeNeuralese(response, session, turns, turnNode);
+      response = await this.decodeNeuralese(response, session, turns, turnNode, availableTools === allTools || lastTurn);
       // A reply that only writes out return_result({...}) is the tool's request; it is carried out as one.
       const written = !response.calls?.length && !response.truncated ? writtenReturnResult(response.text ?? '') : undefined;
       if (written) response = { ...response, text: '', calls: [['return_result', written]] };
