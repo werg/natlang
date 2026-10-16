@@ -32,7 +32,7 @@ import {validateCoefficientRuntime,requireCoefficientAttestation,coefficientBind
 import { isContentParts, nativeStateSentinel, nativeStateSentinelIds,
   isNativeStateId, partsToText, runtimePartsToText, runtimeTextToParts, type ContentPart, type RuntimeContentPart } from '../native/neuralese.js';
 import { constantBlock, decodeNativeState, encodeNativeState, nativeStateContentId, nativeStateBlockMeta,
-  decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId, nativeTensorArtifactDependencies, nativeStateArtifactDependencies, archiveNativeTensorFrom,
+  decodeNativeTensorArtifact, encodeNativeTensorArtifact, nativeTensorArtifactContentId, nativeTensorArtifactDependencies, nativeStateArtifactDependencies, archiveNativeArtifactFrom, archiveNativeTensorFrom,
   nativeTensorArtifactBlockMeta, neuraleseContentId, type NeuraleseBlock, type NeuraleseBlockMeta, type NeuraleseBlockInput,
   type NativeStateArtifact, type NativeTensorArtifact, type NeuraleseDtype, type NeuraleseStore } from '../native/neuralese-store.js';
 
@@ -518,12 +518,7 @@ export function neuraleseServerModelTurn(options: NeuraleseServerOptions):
       if (!meta?.id || !store) continue;
       if (!store.putNativeState || !store.getNativeState)
         throw new Error('neuralese-native-archive-unavailable: configure a store that preserves native-state artifacts');
-      const artifact = await store.getNativeState(meta.id) ?? await remote.getNativeState(meta.id);
-      if (!artifact) throw new Error(`neuralese-unknown-native-state: server reported ${meta.id} but has no artifact`);
-      for (const binding of artifact.metadata.adapter_binding?.adapters ?? []) await archiveNativeTensorFrom(remote, store, binding.id);
-      const { id: _, ...input } = artifact;
-      const local = await store.putNativeState(input);
-      if (local.id !== meta.id) throw new Error(`native-state ${meta.id} arrived with identity ${local.id}`);
+      await archiveNativeArtifactFrom(remote,store,meta.id);
       nativeUploaded.add(meta.id);
     }
     return normalizeReply(reply);

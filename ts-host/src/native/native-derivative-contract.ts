@@ -7,7 +7,7 @@ const STATE=/^nzs1_[a-z2-7]{52}$/;
 const DERIVATION='natlang.native-state-derivation/1';
 export type NativeStateOptimizationDerivation={schema:typeof DERIVATION;kind:'optimizer';origin_state_ids:string[];
   parent_state_id:string;gradient_id:string;update_artifact_id:string;program_id:string|null;
-  optimizer_state_parent_id:string|null;step:number;optimizer:Record<string,string>;updated_tensor_names:string[]};
+  optimizer_state_parent_id:string|null;step:number;optimizer:Record<string,string>;updated_tensor_names:string[];arithmetic:Record<string,string>};
 export type NativeStateSemanticDerivation={schema:typeof DERIVATION;kind:'semantic-encode'|'semantic-adapt';origin_state_ids:string[];
   parent_state_id:string;adapter_sha256:string;source_native_identity:Record<string,string>;target_native_identity:Record<string,string>};
 export type NativeStateDerivation=NativeStateOptimizationDerivation|NativeStateSemanticDerivation;
@@ -44,13 +44,18 @@ export function validateNativeStateDerivation(value:NativeStateDerivation|undefi
       throw new RangeError('native semantic derivation needs exact source/target model identities');
     return;
   }
-  if(!value||value.kind!=='optimizer'||keys(value)!=='gradient_id,kind,optimizer,optimizer_state_parent_id,origin_state_ids,parent_state_id,program_id,schema,step,update_artifact_id,updated_tensor_names'||
+  if(!value||value.kind!=='optimizer'||keys(value)!=='arithmetic,gradient_id,kind,optimizer,optimizer_state_parent_id,origin_state_ids,parent_state_id,program_id,schema,step,update_artifact_id,updated_tensor_names'||
     value.schema!==DERIVATION||value.kind!=='optimizer'||!STATE.test(value.parent_state_id)||!TENSOR.test(value.gradient_id)||!TENSOR.test(value.update_artifact_id)||
     value.program_id!==null&&!TENSOR.test(value.program_id)||value.optimizer_state_parent_id!==null&&!TENSOR.test(value.optimizer_state_parent_id)||
     !Number.isSafeInteger(value.step)||value.step<1||!sortedUnique(value.origin_state_ids,STATE)||!value.origin_state_ids.length||
     !sortedUnique(value.updated_tensor_names,/^layers\.[0-9]+\.(?:raw_k|v|gated_inputs)$/)||!value.updated_tensor_names.length)
     throw new RangeError('native optimized state needs its exact origin/update/history contract');
   validateNativeOptimizerBinding(value.optimizer);
+  const arithmetic=value.arithmetic;
+  if(!arithmetic||keys(arithmetic)!=='cpu_capability,float32_subnormal_hex,implementation_sha256,libc_version,machine,python_version,schema,torch_build_sha256,torch_git_version,torch_version'||
+    arithmetic.schema!=='natlang.native-state-optimizer-torch-cpu/1'||Object.values(arithmetic).some(value=>typeof value!=='string'||!value)||
+    ['implementation_sha256','torch_build_sha256'].some(key=>!/^[0-9a-f]{64}$/.test(arithmetic[key]!)))
+    throw new RangeError('native state optimizer needs its exact qualified CPU implementation/runtime binding');
 }
 export function nativeStateDerivationDependencies(value:NativeStateDerivation|undefined):string[] {
   validateNativeStateDerivation(value);

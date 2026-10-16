@@ -444,3 +444,8 @@ matching named optimizer history; explicitly omit history only for an intended
 new optimizer. Do not relabel an optimized state as a fresh producer capture or
 replace missing state with decoded text. Public automatic `grad(...,{order:2})`
 remains unavailable until its native recorded-turn/DAG path is qualified.
+
+Optimized KV/hybrid states bind their exact scalar optimizer arithmetic runtime.
+For a native optimizer arithmetic/runtime mismatch, restore the state with its
+bound CPU Torch/runtime; do not relabel it for another executor or discard its
+history. Archive byte integrity is distinct from numeric optimizer verification.

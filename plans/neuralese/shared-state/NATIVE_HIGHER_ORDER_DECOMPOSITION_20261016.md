@@ -179,3 +179,41 @@ and capability metadata remain guarded. Persisted parameter-set roots currently
 must match the actual live checkpoint; within-program changed parameter sets
 are supported and individually identified. Exporting a new serving checkpoint
 from an arbitrary changed parameter-set root is a separate operation.
+
+### Independent-review repair: numeric update versus immutable payload proof
+
+An immutable update artifact proves which bytes a state contains; it does not
+alone prove those bytes followed the declared optimizer. Python now reexecutes
+the existing `functional_named_service_step` on the selected small state tensors
+and rejects a jointly forged update artifact plus matching state. It also
+recomputes the preceding named moments/counters when following ancestry, so a
+forged history cannot produce a self-consistent next state. This performs no
+model or communication-graph replay.
+
+Explicit imported-state optimization uses the shared scalar Torch optimizer on
+CPU, with differentiable device copies for live derivative programs. The
+artifact binds its implementation SHA, Torch/git/build, CPU architecture and
+capability, Python/libc and subnormal behavior. A 4×2×8 probe found scalar Adam
+CPU/CUDA rounding differences up to 7.45e-9, including moments; they were not
+waived. CPU execution alone is not a universal ARM/x86 equivalence claim.
+Numerical acceptance requires the bound runtime; a changed runtime needs actual
+separate qualification before support. Training and adapter optimizer defaults
+are unchanged. TypeScript codecs verify immutable origin, selected payload and
+complete archive closure, not Torch arithmetic; the Python inference/gradient
+consumer rechecks numeric execution before using optimized state.
+
+Sampling-receipt-only artifacts use the same mixed native-artifact archive
+closure as explicit writes and optimizers. A fresh typed HTTP caller that knows
+only a server-side optimized input ID must archive its original producer,
+gradient/update/program and optimizer ancestry before releasing the reply.
+
+Repair qualification: 35 combined CPU cases and 14 Node store/archive cases
+passed; CUDA passed 22 program/state cases. An additional six actual CUDA
+two-update SGD/Adam attention/hybrid meta-gradient oracles passed against manual
+execution through the same declared FP32-KV-cotangent scope (two Mellum hybrid
+cases skip because that architecture has no convolution state). Its initial
+Mellum failure was localized before the first update to a fixture comparing
+storage cotangents against explicitly requested FP32 cotangents; the oracle
+now binds identical arithmetic, with unchanged elementwise and relative-L2
+gates. Live optimized state returns to the actor device once before graph use;
+only the scalar optimizer's calculation is CPU-bound.

@@ -9,9 +9,34 @@ import re
 PROGRAM='natlang.native-derivative-program/1'
 EXECUTION='natlang.native-derivative-execution/1'
 DERIVATION='natlang.native-state-derivation/1'
+STATE_OPT_ARITHMETIC='natlang.native-state-optimizer-torch-cpu/1'
 _ID=re.compile(r'^(nzs1_|nnt1_)[a-z2-7]{52}$')
 _SHA=re.compile(r'^[0-9a-f]{64}$')
 _OPT_KEYS=('learning_rate','weight_decay','beta1','beta2','eps','momentum')
+
+
+def state_optimizer_arithmetic():
+    """Exact supported CPU executor, not a universal cross-CPU bitwise claim."""
+    import inspect,platform,torch
+    from ..train.optim import named_service_optimizer,functional_named_service_step
+    from ..common.native_higher_order import adam_zero_moment_root
+    implementation='\n'.join(inspect.getsource(value) for value in
+        (named_service_optimizer,functional_named_service_step,adam_zero_moment_root))
+    return {'schema':STATE_OPT_ARITHMETIC,'implementation_sha256':hashlib.sha256(implementation.encode()).hexdigest(),
+        'torch_version':str(torch.__version__),'torch_git_version':str(torch.version.git_version),
+        'torch_build_sha256':hashlib.sha256(torch.__config__.show().encode()).hexdigest(),
+        'machine':platform.machine(),'cpu_capability':torch.backends.cpu.get_cpu_capability(),
+        'python_version':platform.python_version(),'libc_version':'/'.join(platform.libc_ver()),
+        'float32_subnormal_hex':torch.tensor([float.fromhex('0x1p-149')],dtype=torch.float32).item().hex()}
+
+
+def validate_state_optimizer_arithmetic(value):
+    required={'schema','implementation_sha256','torch_version','torch_git_version','torch_build_sha256',
+        'machine','cpu_capability','python_version','libc_version','float32_subnormal_hex'}
+    if (not isinstance(value,dict) or set(value)!=required or value['schema']!=STATE_OPT_ARITHMETIC
+            or any(not isinstance(item,str) or not item for item in value.values())
+            or any(_SHA.fullmatch(value[key]) is None for key in ('implementation_sha256','torch_build_sha256'))):
+        raise ValueError('native state optimizer arithmetic needs its exact qualified CPU implementation/runtime binding')
 
 
 def native_id(value,prefix=None):
@@ -19,7 +44,7 @@ def native_id(value,prefix=None):
 
 
 def optimizer_binding(options):
-    if (not isinstance(options,dict) or set(options)-{'name',*_OPT_KEYS}
+    if (not isinstance(options,dict) or options.get('name') not in ('sgd','adam') or set(options)-{'name',*_OPT_KEYS}
             or any(type(value) not in (int,float) for key,value in options.items() if key!='name')):
         raise ValueError('native optimizer options require finite numeric settings')
     defaults={'learning_rate':1e-3,'weight_decay':0.,'beta1':.9,'beta2':.999,'eps':1e-8,'momentum':0.}
@@ -52,7 +77,7 @@ def validate_derivation(value):
     kind=value.get('kind')
     if kind=='optimizer':
         required={'schema','kind','origin_state_ids','parent_state_id','gradient_id','update_artifact_id',
-                  'program_id','optimizer_state_parent_id','step','optimizer','updated_tensor_names'}
+                  'program_id','optimizer_state_parent_id','step','optimizer','updated_tensor_names','arithmetic'}
         if (set(value)!=required or not native_id(value['parent_state_id'],'nzs1_')
                 or not isinstance(value['origin_state_ids'],list) or not value['origin_state_ids']
                 or any(not native_id(ident,'nzs1_') for ident in value['origin_state_ids'])
@@ -66,6 +91,7 @@ def validate_derivation(value):
                 or value['updated_tensor_names']!=sorted(set(value['updated_tensor_names']))):
             raise ValueError('native optimized state has invalid exact origin, update or history bindings')
         optimizer_options(value['optimizer'])
+        validate_state_optimizer_arithmetic(value['arithmetic'])
     elif kind in ('semantic-encode','semantic-adapt'):
         required={'schema','kind','origin_state_ids','parent_state_id','adapter_sha256','source_native_identity','target_native_identity'}
         if (set(value)!=required or not native_id(value['parent_state_id'],'nzs1_')

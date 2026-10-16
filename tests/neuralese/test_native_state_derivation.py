@@ -62,7 +62,30 @@ def test_actual_state_updates_restore_immutable_origin_and_named_moments(tmp_pat
         tensors=state_values(saved);tensors[name]=tensors[name]+1
         from natlang_neuralese.model.native_state_derivation import replace_state_values
         with pytest.raises(ValueError,match='numeric update'):engine.store.put_native_state(replace_state_values(saved,tensors))
+        # Matching hashes/provenance are insufficient: forge BOTH the numeric
+        # update and selected state, keeping their bytes self-consistent.
+        actual_update=engine.store.get_native_tensor_artifact(saved.derivation['update_artifact_id']).artifact
+        forged_update=engine.store.put_native_tensor_artifact(replace(actual_update,
+            tensors={key:value+1 for key,value in actual_update.tensors.items()}))
+        forged_derivation={**saved.derivation,'update_artifact_id':forged_update.id}
+        with pytest.raises(ValueError,match='exact shared optimizer arithmetic'):
+            engine.store.put_native_state(replace_state_values(saved,forged_update.artifact.tensors,derivation=forged_derivation))
+        prior=engine.store.get_native_tensor_artifact(saved.derivation['optimizer_state_parent_id'])
+        if algorithm=='adam':
+            forged_moments={**prior.artifact.tensors,'m.'+name:prior.artifact.tensors['m.'+name]+.25}
+        else:
+            forged_moments={**prior.artifact.tensors,'momentum.'+name:prior.artifact.tensors['momentum.'+name]+.25}
+        forged_history=engine.store.put_native_tensor_artifact(replace(prior.artifact,tensors=forged_moments))
+        with pytest.raises(ValueError,match='history differs from the exact shared optimizer'):
+            optimize_state(engine,gradient,options,forged_history.id)
+        wrong_runtime={**saved.derivation['arithmetic'],'machine':'unqualified-other-cpu'}
+        runtime_update=engine.store.put_native_tensor_artifact(replace(actual_update,
+            provenance={**actual_update.provenance,'arithmetic':wrong_runtime}))
+        with pytest.raises(ValueError,match='bound CPU runtime'):
+            engine.store.put_native_state(replace(saved,derivation={**saved.derivation,
+                'arithmetic':wrong_runtime,'update_artifact_id':runtime_update.id}))
         with pytest.raises(ValueError,match='prior state'):optimize_state(engine,gradient,options,'nnt1_'+'a'*52)
+        with pytest.raises(ValueError,match='finite numeric settings'):optimize_state(engine,gradient,{},None)
     finally:engine.store.close()
 
 

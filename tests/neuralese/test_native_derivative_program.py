@@ -208,3 +208,48 @@ def test_heterogeneous_meta_gradient_distinguishes_original_from_updated_actors(
         with pytest.raises(ValueError,match='actual execution'):
             engine.store.put_native_tensor_artifact(replace(gradients['a'],provenance=forged))
     finally:engine.store.close()
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('algorithm',['sgd','adam'])
+@pytest.mark.parametrize('state_kind',['attention','hybrid'])
+def test_state_optimizer_cpu_transfer_retains_exact_outer_derivative(tmp_path,family,algorithm,state_kind):
+    from natlang_neuralese.common.native_higher_order import reference_arithmetic
+    from natlang_neuralese.model.native_adapters import run_native
+    from natlang_neuralese.model.native_state_derivation import state_values,replace_state_values
+    from natlang_neuralese.data.native_graph import parse_graph,graph_loss
+    from natlang_neuralese.train.optim import functional_named_service_step
+    engine=engine_fixture(tmp_path,family,service_template=True)
+    adapter,_=nonzero_adapter(engine)
+    ident=engine.native_write_text('t5 t6')['id'];block=engine.store.get_native_state(ident).block
+    candidates=[name for name in state_values(block) if name.endswith('.v' if state_kind=='attention' else '.gated_inputs')]
+    if not candidates:engine.store.close();pytest.skip('this backbone has no hybrid convolution state')
+    name=candidates[0];source=program(engine,adapter,algorithm)
+    source['inputs']={'a':{'kind':'native-state','id':ident,'names':[name]}}
+    for objective in [source['outer'],*(node for node in source['nodes'] if node['kind']=='gradient')]:
+        objective['request']=copy.deepcopy(objective['request']);objective['request'].pop('adapters')
+        graph=objective['request']['graph'];graph['nodes']=graph['nodes'][1:]
+        graph['external_states']={'prior':{'id':ident,'token_count':2}}
+        graph['nodes'][0]['imports']=[{'source':'prior','start':0,'stop':2,'at':2}]
+    example=parse_graph(source['outer']['request']['graph'],tokenizer_fingerprint=engine.native_identity['tokenizer_fingerprint'])
+    root=state_values(block)[name].to(engine.device).clone().requires_grad_(True);current=root;moments={}
+    def evaluate(value):
+        return run_native(engine,lambda:graph_loss(engine.shared_model,example,
+            external_blocks={'prior':replace_state_values(block,{name:value})},
+            external_identity={'prior':engine.native_identity})[0],gradient_precision='fp32')
+    try:
+        with reference_arithmetic(engine.shared_model,query_chunk_tokens=2):
+            for _ in range(2):
+                gradient=torch.autograd.grad(evaluate(current),current,create_graph=True)[0]
+                work=current.to(device='cpu',dtype=torch.float32)
+                updated,moments=functional_named_service_step({name:work},{name:gradient.to(work)},moments,
+                    **source['nodes'][1]['optimizer'])
+                current=updated[name].to(root)
+            expected_loss=evaluate(current);expected=torch.autograd.grad(expected_loss,root)[0]
+        result=execute_derivative_program(engine,source)
+        actual=engine.store.get_native_tensor_artifact(result['gradients']['a']['id']).artifact.tensors[name].to(engine.device)
+        assert expected.double().norm()>0
+        assert result['loss']==float(expected_loss.detach())
+        torch.testing.assert_close(actual,expected,rtol=2e-5,atol=3e-6)
+        assert (actual-expected).double().norm()/expected.double().norm()<2e-5
+    finally:engine.store.close()

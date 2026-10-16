@@ -5,7 +5,7 @@ producer identity describes the original basis; derivation names changed state.
 """
 from __future__ import annotations
 import torch
-from .native_derivative_contract import DERIVATION,optimizer_binding
+from .native_derivative_contract import DERIVATION,optimizer_binding,optimizer_options,state_optimizer_arithmetic
 from .native_artifact import NativeTensorArtifact
 
 
@@ -33,13 +33,23 @@ def origins(store,ident):
 def verify_state_derivation(store,block,seen=None):
     """Verify full immutable ancestry iteratively, with no Python recursion cap."""
     visited=set() if seen is None else set(seen)
-    current=block
+    current=block;expected_history=None
     while current.derivation is not None:
         ident=current.derivation.get('parent_state_id')
         if ident in visited:raise ValueError('native derivation ancestry is cyclic')
         visited.add(ident)
-        current=(_verify_optimizer_derivation(store,current) if current.derivation['kind']=='optimizer'
-                 else _verify_semantic_derivation(store,current))
+        if current.derivation['kind']=='optimizer':
+            parent,moments,prior=_verify_optimizer_derivation(store,current)
+            if expected_history is not None and (set(expected_history)!=set(moments) or any(
+                    expected_history[key].dtype!=item.dtype or expected_history[key].shape!=item.shape
+                    or not torch.equal(expected_history[key].cpu(),item.cpu()) for key,item in moments.items())):
+                raise ValueError('optimized native state history differs from the exact shared optimizer result')
+            expected_history=prior.artifact.tensors if prior else None
+            current=parent
+        else:
+            if expected_history is not None:raise ValueError('native optimizer history lacks an actual optimizer parent')
+            current=_verify_semantic_derivation(store,current)
+    if expected_history is not None:raise ValueError('native optimizer history cannot originate from an uncaptured update')
 
 
 def _verify_optimizer_derivation(store,block):
@@ -69,7 +79,7 @@ def _verify_optimizer_derivation(store,block):
             or sorted(gradient.tensors)!=names or sorted(update.tensors)!=names
             or update.native_identity!=gradient.native_identity
             or provenance!={'schema':DERIVATION,'parent_state_id':parent_id,'optimizer':value['optimizer'],
-                'step':value['step'],'optimizer_state_parent_id':value['optimizer_state_parent_id'],
+                'step':value['step'],'optimizer_state_parent_id':value['optimizer_state_parent_id'],'arithmetic':value['arithmetic'],
                 'derivative_program_id':value['program_id']}):
         raise ValueError('optimized native state update, gradient, optimizer or program binding differs')
     if (gradient.provenance or {}).get('derivative_program_id')!=value['program_id']:
@@ -80,6 +90,7 @@ def _verify_optimizer_derivation(store,block):
             for name in before):
         raise ValueError('optimized native state changed an unselected tensor or differs from its numeric update')
     prior_id=value['optimizer_state_parent_id']
+    prior=None
     if prior_id is None:
         if value['step']!=1:raise ValueError('new optimized native state history must begin at step one')
     else:
@@ -94,7 +105,21 @@ def _verify_optimizer_derivation(store,block):
         program=store.get_native_tensor_artifact(value['program_id'])
         if program is None or program.artifact.kind!='derivative-program':
             raise ValueError('optimized native state lacks its executable derivative program')
-    return parent.block
+    # Canonical CPU execution uses the existing scalar service optimizer. It is
+    # deliberately independent of the consumer device and has no model replay.
+    # CUDA's scalar Adam can differ in its fused elementwise rounding; merely
+    # checking the update artifact's hash would not prove declared arithmetic.
+    from ..train.optim import functional_named_service_step
+    if value['arithmetic']!=state_optimizer_arithmetic():
+        raise ValueError('optimized native state arithmetic requires its bound CPU runtime or an independently qualified continuation')
+    work={name:before[name].detach().cpu().to(torch.float32 if before[name].dtype in (torch.float16,torch.bfloat16) else before[name].dtype)
+        for name in names}
+    grads={name:gradient.tensors[name].detach().cpu().to(work[name]) for name in names}
+    with torch.enable_grad():
+        expected,moments=functional_named_service_step(work,grads,prior.artifact.tensors if prior else {},**optimizer_options(value['optimizer']))
+    if any(not torch.equal(update.tensors[name].cpu(),expected[name].to(before[name].dtype)) for name in names):
+        raise ValueError('optimized native state differs from exact shared optimizer arithmetic')
+    return parent.block,moments,prior
 
 
 def semantic_derivation(block,parent_id,adapter_sha256,source_identity,target_identity,kind):
@@ -144,7 +169,7 @@ def optimize_state(engine,gradient_record,options,state_id,owner=None,*,values=N
     if not gradient.tensors or not set(gradient.tensors)<=available.keys():raise ValueError('native state gradient selects unknown state tensors')
     for name,value in gradient.tensors.items():
         if value.shape!=available[name].shape:raise ValueError('native state gradient geometry differs')
-    binding=optimizer_binding(options)
+    binding=optimizer_binding(options);arithmetic=state_optimizer_arithmetic()
     prior=engine.store.get_native_tensor_artifact(state_id) if state_id else None
     if state_id and (prior is None or prior.artifact.kind!='optimizer-state' or prior.artifact.source_artifact_id!=parent_id
             or prior.artifact.native_identity!=engine.native_identity or (prior.artifact.provenance or {}).get('scope')!=DERIVATION
@@ -159,9 +184,9 @@ def optimize_state(engine,gradient_record,options,state_id,owner=None,*,values=N
     if prior and ('optimizer.step' not in stored_moments or stored_moments['optimizer.step'].item()!=old_step):
         raise ValueError('native state optimizer counter differs from its exact history')
     source_values=available if values is None else values
-    live_values={name:value.to(device=engine.device,dtype=torch.float32 if value.dtype in (torch.float16,torch.bfloat16) else value.dtype).clone() for name,value in source_values.items()}
+    live_values={name:value.to(device='cpu',dtype=torch.float32 if value.dtype in (torch.float16,torch.bfloat16) else value.dtype).clone() for name,value in source_values.items()}
     source_gradients=gradient.tensors if gradients is None else gradients
-    live_gradients={name:value.to(device=engine.device,dtype=live_values[name].dtype) for name,value in source_gradients.items()}
+    live_gradients={name:value.to(device='cpu',dtype=live_values[name].dtype) for name,value in source_gradients.items()}
     if set(live_values)!=set(available) or set(live_gradients)!=set(gradient.tensors):raise ValueError('native state live update tensor inventory differs')
     selected_values={name:live_values[name] for name in live_gradients}
     updated,next_moments=functional_named_service_step(selected_values,live_gradients,
@@ -171,15 +196,18 @@ def optimize_state(engine,gradient_record,options,state_id,owner=None,*,values=N
     step=old_step+1
     update=engine.store.put_native_tensor_artifact(NativeTensorArtifact('parameter-update',engine.native_identity,
         selected,gradient_record.id,{'schema':DERIVATION,'parent_state_id':parent_id,'optimizer':binding,'step':step,
-            'optimizer_state_parent_id':state_id,'derivative_program_id':program_id}),owner)
+            'optimizer_state_parent_id':state_id,'derivative_program_id':program_id,'arithmetic':arithmetic}),owner)
     derivation={'schema':DERIVATION,'kind':'optimizer','origin_state_ids':sorted(origins(engine.store,parent_id)),
         'parent_state_id':parent_id,'gradient_id':gradient_record.id,'update_artifact_id':update.id,'program_id':program_id,
-        'optimizer_state_parent_id':state_id,'step':step,'optimizer':binding,'updated_tensor_names':sorted(selected)}
+        'optimizer_state_parent_id':state_id,'step':step,'optimizer':binding,'updated_tensor_names':sorted(selected),'arithmetic':arithmetic}
     block=replace_state_values(parent,selected,derivation=derivation)
     verify_state_derivation(engine.store,block)
     result=engine.store.put_native_state(block,owner)
     history=engine.store.put_native_tensor_artifact(NativeTensorArtifact('optimizer-state',engine.native_identity,
         next_moments,result.id,{'scope':DERIVATION,'optimizer':options['name'],'step':step,
             'gradient_id':gradient_record.id,'parent_state_id':parent_id,'derivative_program_id':program_id}),owner)
-    live_block=replace_state_values(block,{name:updated[name].to(available[name].dtype) for name in available})
+    # The optimizer's arithmetic is CPU-bound; graph evaluation remains on its
+    # actual actor device. Move once before graph reuse, rather than introducing
+    # separate CPU BF16 cotangent fan-in through every imported-state use.
+    live_block=replace_state_values(block,{name:updated[name].to(device=engine.device,dtype=available[name].dtype) for name in available})
     return {'native_state_id':result.id,'optimizer_state_id':history.id,'update_artifact_id':update.id,'step':step},live_block,next_moments

@@ -862,3 +862,7 @@ separate from model behavior. If this operation or its new error detail is
 exposed to an executing model, run the standing roughly48-sample live executor
 window before adopting that model-facing surface. This entry is unmeasured;
 there is no downstream task-lift claim.
+
+The same state-optimizer debt includes arithmetic/runtime mismatch recovery:
+restore the bound CPU Torch executor and full ancestry. This detail is not yet
+measured on a live model and does not broaden public order-2 capabilities.

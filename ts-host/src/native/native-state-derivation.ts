@@ -1,4 +1,6 @@
-/** Exact optimized-state payload verifier; producer identity remains origin. */
+/** Immutable optimized-state payload/origin verifier. Numeric optimizer
+ * execution is reverified by the Python consumer under its bound Torch CPU
+ * runtime; this codec does not claim to implement Torch's Adam arithmetic. */
 import {nativeCanonicalJson,type NativeStateArtifact,type NativeTensorArtifact,type NeuraleseStore,type NativeStateTensor} from './neuralese-store.js';
 import {validateNativeStateDerivation} from './native-derivative-contract.js';
 const equalTensor=(a:NativeStateTensor|undefined,b:NativeStateTensor|undefined)=>!!a&&!!b&&a.dtype===b.dtype&&
@@ -54,7 +56,7 @@ export function verifyNativeStateDerivationRecords(artifact:Omit<NativeStateArti
     nativeCanonicalJson(Object.keys(update.tensors).sort())!==nativeCanonicalJson(value.updated_tensor_names)||
     (gradient.metadata.provenance.derivative_program_id??null)!==value.program_id||
     nativeCanonicalJson(update.metadata.provenance)!==nativeCanonicalJson({schema:value.schema,parent_state_id:parent.id,
-      optimizer:value.optimizer,step:value.step,optimizer_state_parent_id:value.optimizer_state_parent_id,derivative_program_id:value.program_id}))
+      optimizer:value.optimizer,step:value.step,optimizer_state_parent_id:value.optimizer_state_parent_id,derivative_program_id:value.program_id,arithmetic:value.arithmetic}))
     throw new RangeError('optimized native state update, gradient, optimizer or program binding differs');
   if(nativeCanonicalJson(Object.keys(parent.tensors).sort())!==nativeCanonicalJson(Object.keys(artifact.tensors).sort())||
     Object.entries(parent.tensors).some(([name,tensor])=>!equalTensor(artifact.tensors[name],value.updated_tensor_names.includes(name)?update.tensors[name]:tensor)))
