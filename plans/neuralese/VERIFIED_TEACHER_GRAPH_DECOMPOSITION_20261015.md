@@ -24,3 +24,12 @@ intersections, and the independent current protection join. Do not rewrite its
 receipt into the older selection schema. Multi-packet exports obtain the exact
 uniform stronger-teacher identity from their immutable collection receipts;
 legacy mutable future-queue metadata is optional and never an admission witness.
+
+
+A transferred response may declare its exact remote `collection_source` path
+inside the immutable transfer receipt. Join that path to an already verified
+collection and its complete selection/protection packet; never infer another
+collection or relabel the raw source. Existing canonical layouts keep their
+parent-directory lookup. Validation and emitted graph provenance use the same
+join. Malformed, missing and cross-packet bindings fail explicitly. This admits
+verified continuation layouts without moving their original response files.

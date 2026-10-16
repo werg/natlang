@@ -274,6 +274,19 @@ def source_binding(args):
             'packets': packets, 'current': current_protection(args.protection_manifest)}
 
 
+def teacher_collection_source(file_receipt, binding):
+    """Join an exact transferred response to its verified collection receipt."""
+    if 'collection_source' in file_receipt:
+        source = file_receipt['collection_source']
+        if not isinstance(source, str) or not source:
+            raise ValueError('teacher response collection_source must be an exact source path')
+    else:
+        source = str(Path(file_receipt['source']).parents[2] / 'teacher-source.json')
+    if source not in binding['collections'] or source not in binding['packets']:
+        raise ValueError('teacher response is not bound to its immutable collection batch')
+    return source
+
+
 def validate_teacher_row(row, binding):
     program = (row.get("task") or {}).get("program_ir") or {}
     outcome = row.get("outcome") or {}
@@ -299,9 +312,7 @@ def validate_teacher_row(row, binding):
     file_receipt = binding["source_files"].get(row.get("id"))
     if not isinstance(file_receipt, dict):
         raise ValueError(f"teacher trajectory lacks its source response-file binding: {row.get('id')}")
-    batch_source = str(Path(file_receipt['source']).parents[2] / 'teacher-source.json')
-    if batch_source not in binding['collections']:
-        raise ValueError('teacher response is not bound to its immutable collection batch')
+    batch_source = teacher_collection_source(file_receipt, binding)
     packet = binding['packets'][batch_source]
     if (program['id'] not in packet['selected_ids']
             or canonical_json_sha256_hex(program) != packet['program_sha256'][program['id']]
@@ -604,6 +615,7 @@ def main():
             program, original = validate_teacher_row(row, binding)
             source_row_sha = hashlib.sha256(raw.rstrip(b"\r\n")).hexdigest()
             original_path = verify_original_row(row, original)
+            collection_source = teacher_collection_source(original, binding)
             row_hashes.append({"id": row["id"], "sha256": source_row_sha,
                                "program_id": program["id"], "source_groups": sorted(set(program["source_groups"])),
                                "original_response_path": str(original_path),
@@ -655,9 +667,9 @@ def main():
                     "source_record_sha256": (row.get("provenance") or {}).get("program_ir_sha256"),
                     "teacher_response_artifact": str(original_path),
                     "teacher_response_sha256": original["sha256"],
-                    "collection_receipt": binding['collections'][str(Path(original['source']).parents[2] / 'teacher-source.json')],
-                    "selection_proof_sha256": binding['packets'][str(Path(original['source']).parents[2] / 'teacher-source.json')]['proofs']['selection']['sha256'],
-                    "global_protection_join_sha256": binding['packets'][str(Path(original['source']).parents[2] / 'teacher-source.json')]['proofs']['global_protection_join']['sha256'],
+                    "collection_receipt": binding['collections'][collection_source],
+                    "selection_proof_sha256": binding['packets'][collection_source]['proofs']['selection']['sha256'],
+                    "global_protection_join_sha256": binding['packets'][collection_source]['proofs']['global_protection_join']['sha256'],
                     "transfer_receipt_sha256": binding["proof_sha256"]["transfer"],
                     "teacher_model": (binding["teacher"].get("source") or {}).get("model_repo"),
                     "teacher_revision": (binding["teacher"].get("source") or {}).get("model_revision"),

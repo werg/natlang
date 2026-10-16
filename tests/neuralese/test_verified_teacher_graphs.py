@@ -294,7 +294,8 @@ def test_authenticated_text_emulation_preserves_renderer_omitted_null_type():
 
 
 @pytest.mark.parametrize('code_selection', [False, 'list', 'count'])
-def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypatch, code_selection):
+@pytest.mark.parametrize('explicit_collection', [False, True])
+def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypatch, code_selection, explicit_collection):
     from types import SimpleNamespace
     monkeypatch.setattr(converter, 'current_protection', lambda _: {
         'held': set(), 'quality': set(), 'pending': set(), 'proof': {}})
@@ -341,6 +342,11 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
         files.append({'row_id': row['id'], 'path': str(response),
             'source': f'/work/generation/batch-{index:04d}/results/program/response.jsonl',
             'bytes': response.stat().st_size, 'sha256': converter.sha256_file(response)})
+        if explicit_collection:
+            # A continuation has a different physical layout. Its immutable
+            # transfer receipt names the actual collection, never an alias.
+            files[-1]['source'] = f'/work/generation/continuation-{index}/outputs/response.jsonl'
+            files[-1]['collection_source'] = collection_source
         batches.append({'collection_source': collection_source, **{name: {
             'path': str(path.relative_to(tmp_path)), 'sha256': converter.sha256_file(path)}
             for name, path in [('selection', selected), ('selected_cases', cases),
@@ -370,6 +376,17 @@ def test_each_teacher_batch_uses_its_own_exact_program_packet(tmp_path, monkeypa
     changed['task']['program_ir']['semantics'] = {'rewritten': True}
     with pytest.raises(ValueError, match='actual batch selected packet'):
         converter.validate_teacher_row(changed, binding)
+    first = binding['source_files'][rows[0]['id']]
+    original_collection = dict(first)
+    for invalid in (None, '', 7, '/work/unbound/teacher-source.json'):
+        first['collection_source'] = invalid
+        with pytest.raises(ValueError, match='collection_source|immutable collection'):
+            converter.validate_teacher_row(rows[0], binding)
+    first.clear(); first.update(original_collection)
+    first['collection_source'] = batches[1]['collection_source']
+    with pytest.raises(ValueError, match='actual batch selected packet'):
+        converter.validate_teacher_row(rows[0], binding)
+    first.clear(); first.update(original_collection)
     batches[0]['selected_cases'] = batches[1]['selected_cases']
     put('batch-source-bindings.json', mapping)
     with pytest.raises(ValueError, match='selected task packet differs'):
