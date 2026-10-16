@@ -157,7 +157,8 @@ def d12_feature_status_diagnoses(limit=None):
             target=json.dumps(reported,ensure_ascii=False,separators=(',',':'))
             instruction=('Read the complete failed execution transcript and its source-reported '
                 'evaluator status record. Copy only the exact structured feature statuses and '
-                'recorded status fields from that record; do not infer a cause or repair.')
+                'recorded status fields from that record. Return only one JSON object preserving '
+                'the same schema, keys and values; do not infer a cause or repair.')
             derived=copy(original)
             derived.lineage=deepcopy(original.lineage)
             view_digest=hashlib.sha256((source_id+'\0'+source_binding['evaluation_sha256']).encode()).hexdigest()

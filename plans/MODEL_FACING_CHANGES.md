@@ -820,6 +820,8 @@ No new prompt policy and no production controller adoption are introduced.
   statuses and recorded status fields. The desired behavior is faithful
   extraction without causal diagnosis or repair claims; the full transcript is
   included after the instruction in the same user message, and failed actions
-  are never positive targets. This new instruction
-  has not yet had the required live 48-sample self-hosted teacher measurement;
-  record fidelity and any misleading wording as debt before production adoption.
+  are never positive targets. The original wording did not specify JSON, and a
+  live sample returned YAML-like output. The instruction now explicitly asks
+  for one JSON object preserving the same schema, keys and values. Preserve the
+  original wording observations as their own variant; the corrected wording
+  still needs a live 48-sample self-hosted teacher measurement before adoption.

@@ -96,6 +96,7 @@ def test_d12_failed_actions_are_context_only_and_target_is_exact_reported_status
     assert [message['role'] for message in t.messages]==['user','assistant']
     instruction,separator,context_text=t.messages[0]['content'].partition('\n\n')
     assert separator and instruction.startswith('Read the complete failed execution transcript')
+    assert 'Return only one JSON object preserving the same schema, keys and values' in instruction
     context=json.loads(context_text)
     assert context['complete_failed_transcript'][1]['content']=='FAILED ACTION <|im_end|>'
     assert '<|im_end|>' not in t.messages[0]['content']

@@ -12,7 +12,7 @@ is the exact structured status already reported by the source evaluator.
    transcript/evaluator context in one user message. This avoids an orphan tool
    response in serving APIs. Do not promote any assistant message from the
    failed transcript.
-4. Emit only the exact feature identifiers and pass booleans, plus structured
+4. Return only one JSON object. Emit only the exact feature identifiers and pass booleans, plus structured
    `apply_status`, merge status and integer feature exit codes when present.
    Do not copy error prose or claim a cause, fix, local execution or oracle
    verification.
@@ -28,3 +28,6 @@ hashes and split/protection verification are crisp shared adapter plumbing.
 The live-sample request uses the same single-user-message rendering as the
 derived training view. Its full transcript is input context at the existing
 context weight; the assistant target remains the exact structured status.
+The original live wording did not explicitly require JSON; a 48-row measurement
+is being preserved as that wording variant, and the corrected explicit-JSON
+instruction requires its own live measurement before adopting the new wording.
