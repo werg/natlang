@@ -19,7 +19,13 @@ const neuralese = { store, dialect: info.dialects[0], nativeStateConsumer: nativ
 const server = neuraleseServerModelTurn({ endpoint, model: 'native-fixture', store });
 const driver = Object.assign(async request => {
   const raw = await server({ ...request, max_tokens: 8 });
-  return { ...raw, text: undefined, calls: [['return_result', { status: 'success', value: raw.text || 'consumed' }]] };
+  // raw.text is a convenience marker string. Preserve actual produced wire
+  // parts through this deterministic tool readout so the runtime can bind the
+  // exact producer occurrence instead of trusting an arbitrary plain string.
+  const content = raw.raw_response?.choices?.[0]?.message?.content;
+  const produced = Array.isArray(content) && content.some(part => part.type === 'native_state');
+  if (raw.raw_response?.native_state?.blocks?.length) assert.ok(produced, 'native output retains its actual wire parts');
+  return { ...raw, text: undefined, calls: [['return_result', { status: 'success', value: produced ? content : raw.text || 'consumed' }]] };
 }, { neuralese: true, decide: server.decide });
 const child = open({ type: '() => Neuralese<string>', instructions: 'Produce a useful memo.' }, { neuralese }).session;
 await new NativeToolAgent(driver, { maxTurns: 2, neuralese }).run(child);
