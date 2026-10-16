@@ -61,10 +61,25 @@ def test_native_runtime_change_is_unscored_and_never_falls_back_to_heads(tmp_pat
     base,_,checkpoint,spec,export=fixture(tmp_path)
     active=seal_request(checkpoint,identity=export['receipt']['identity'],step=7,spec=spec,
         out=tmp_path/'eval',base=base,queue=tmp_path/'queue',device='cpu')
-    (Path(spec['runtime'])/'prelude.js').write_text('changed runtime')
+    (Path(active['spec']['runtime'])/'prelude.js').write_text('changed runtime')
     result=task_cadence.run_request(Path(active['request']))
     assert result['eligible'] is False and result['task_successes'] is None
     assert result['model_outcome']=='unscored' and 'closure changed' in result['error']
+
+
+def test_live_rebuild_does_not_mutate_sealed_async_runtime(tmp_path):
+    from natlang_neuralese.eval.native_async import verify_request
+    base,_,checkpoint,spec,export=fixture(tmp_path)
+    source=Path(spec['runtime'])
+    active=seal_request(checkpoint,identity=export['receipt']['identity'],step=7,spec=spec,
+        out=tmp_path/'eval',base=base,queue=tmp_path/'queue',device='cpu')
+    request=json.loads((Path(active['request'])/'request.json').read_text())
+    prepared=Path(request['spec']['runtime'])
+    assert prepared!=source and (prepared/'prelude.js').stat().st_ino!=(source/'prelude.js').stat().st_ino
+    (source/'prelude.js').write_text('live rebuild')
+    (source.parent/'training/source-reviews/holds.jsonl').write_text('new live hold')
+    verify_request(request)
+    assert (prepared/'prelude.js').read_text()=='{}'
 
 
 def test_latest_export_coalesces_without_changing_running_request(tmp_path,monkeypatch):

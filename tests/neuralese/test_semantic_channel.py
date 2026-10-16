@@ -7,7 +7,7 @@ import torch
 
 from natlang_neuralese.model.semantic_channel import SemanticChannel
 from natlang_neuralese.model.shared_state import RoleTokens, native_step, splice_block
-from natlang_neuralese.serve.engine import Engine
+from natlang_neuralese.serve.engine import Engine, GenerationRequest
 from natlang_neuralese.serve.store import TensorStore
 from natlang_neuralese.train.native_semantic import parse_pair, producer
 from test_native_semantic import setup_pair
@@ -37,7 +37,7 @@ def test_semantic_cross_model_import_uses_learned_native_delta_and_archives_rl_o
     engine.semantic_channel, engine.semantic_participant = channel, 'mellum'
     engine.store = TensorStore()
     record = engine.store.put_native_state(channel.message(source) if compact else source)
-    seq = SimpleNamespace(cache=None, request=SimpleNamespace(rl_capture=True, adapters=[]), native_rl_prompt=[],
+    seq = SimpleNamespace(cache=None, request=GenerationRequest(messages=[], rl_capture=True, adapters=[]), native_rl_prompt=[],
                           native_own_position=0, native_imports=[])
     with torch.no_grad():
         engine._native_consume(seq, record.id)

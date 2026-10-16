@@ -9,7 +9,7 @@ import sys
 import time
 from ..common.hashing import canonical_json_sha256_hex,sha256_file_hex_cached
 from ..common.jsonio import write_json_durable
-from ..common.runtime_inventory import task_runtime_inventory
+from ..common.runtime_inventory import task_runtime_inventory, snapshot_task_runtime
 
 
 def file_binding(path):
@@ -67,6 +67,7 @@ def seal_request(checkpoint,*,identity,step,spec,out,base,queue,source_export=No
     if actual_base!=config['base_inventory']:
         raise ValueError('native eval relocated base differs from actual pinned inventory')
     runtime=Path(spec.get('runtime') or Path(__file__).resolve().parents[4]/'ts-host').resolve(strict=True)
+    runtime=snapshot_task_runtime(runtime,Path(out).resolve()/'task-runtimes')
     spec['runtime']=str(runtime)
     stage=Path(out).resolve()/'checkpoints'/identity['sha256']
     evaluator=TaskEval(spec,stage,None,prompt_rendering=spec['prompt_rendering'])

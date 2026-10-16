@@ -239,6 +239,8 @@ class TaskEval:
             threading.Thread(target=server.serve_forever, name='task-eval-http', daemon=True).start()
             url = f'http://127.0.0.1:{server.server_address[1]}'
             env = node_path_env()
+            runtime = Path(self.spec.get('runtime') or self.repo / 'ts-host')
+            env['NATLANG_SOURCE_REVIEWS'] = str(runtime.parent / 'training' / 'source-reviews')
             children = []
             queues = self._queues(run, repeat)
             for queue, journal, _ in queues:
