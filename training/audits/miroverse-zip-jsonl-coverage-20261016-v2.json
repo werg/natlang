@@ -1,0 +1,293 @@
+{
+  "acquisition_receipt": {
+    "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/acquisition.json",
+    "repo": "miromind-ai/MiroVerse-v0.1",
+    "revision": "11fbf325f6eda37b34f519d1ba7268f40f469ac6",
+    "sha256": "1c6a6ec47447e4090f3b8e52f5f281bd84d609b39a322dd715daa5d54fe863ec"
+  },
+  "all_archive_payloads_accounted_for": true,
+  "all_paired_rows_exact": false,
+  "archive": "zip_sft/MiroVerse-v0_1-SFT.zip",
+  "archive_json_array_member_count": 15,
+  "archive_json_array_members": [
+    {
+      "compressed_bytes": 136989826,
+      "member_sha256": "5ab60a0f86df2ce6365f46ff3b677dc96da5676fbee03604bf8a0545ec676a26",
+      "path": "MiroVerse-v0_1/split_100000_110000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 550902401
+    },
+    {
+      "compressed_bytes": 139795935,
+      "member_sha256": "5789b35f1586836ce9a1c9f22e52c3e6e7736843e6beabb791b0f16534602e8e",
+      "path": "MiroVerse-v0_1/split_130000_140000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 553870622
+    },
+    {
+      "compressed_bytes": 137115072,
+      "member_sha256": "db1a581360e9ab2ebfa1e1016e2d955521d0bd9c3a522339167409291c62e7c5",
+      "path": "MiroVerse-v0_1/split_30000_40000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 547555574
+    },
+    {
+      "compressed_bytes": 139226324,
+      "member_sha256": "91dd8bbde0da82a7596ad4ea145bc5aa4168dc1ed9821c413e288cd3996535d7",
+      "path": "MiroVerse-v0_1/split_80000_90000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 555486999
+    },
+    {
+      "compressed_bytes": 109956289,
+      "member_sha256": "3b23226b29c0430b93340dee63febf7ded04f2d8bae7abf26f93e75b8a1302bf",
+      "path": "MiroVerse-v0_1/split_140000_147985.json",
+      "rows": 7985,
+      "uncompressed_bytes": 440141233
+    },
+    {
+      "compressed_bytes": 136068470,
+      "member_sha256": "d5f218b1cfe638644d1b590e696e2d98bde8a4ba958c66d2839eed37ca732dde",
+      "path": "MiroVerse-v0_1/split_50000_60000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 545886834
+    },
+    {
+      "compressed_bytes": 136338194,
+      "member_sha256": "8ab99a6f5818adcc8d5df426ab53abd53c100d5dc5415635f1efb16ef762bb7c",
+      "path": "MiroVerse-v0_1/split_90000_100000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 546781629
+    },
+    {
+      "compressed_bytes": 139845036,
+      "member_sha256": "6940e5dfe507b87514082e101d93bb0a15abb994a5fb0f0df426f83b78995905",
+      "path": "MiroVerse-v0_1/split_0_10000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 557733384
+    },
+    {
+      "compressed_bytes": 137695433,
+      "member_sha256": "9a548f46e858a720374d2130787d3bd55d92d73338f751ef804b299331993421",
+      "path": "MiroVerse-v0_1/split_10000_20000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 549804747
+    },
+    {
+      "compressed_bytes": 139542595,
+      "member_sha256": "4e3703b403c1b38f783bedefa2edb0dc0d0fa8e1fc94b305a3a4c8dee5edad38",
+      "path": "MiroVerse-v0_1/split_120000_130000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 555973027
+    },
+    {
+      "compressed_bytes": 139603768,
+      "member_sha256": "df1b6df7c587d48fb4170bf536b59a6269c473a87127dab056ef8e33a0115fce",
+      "path": "MiroVerse-v0_1/split_70000_80000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 557175857
+    },
+    {
+      "compressed_bytes": 139026951,
+      "member_sha256": "376c724cadeecfa3652e75910d1c2ebee714a4c62f632ee0b49385b8a4ae0785",
+      "path": "MiroVerse-v0_1/split_60000_70000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 554501705
+    },
+    {
+      "compressed_bytes": 138752145,
+      "member_sha256": "cb278702511cc54d1380d03ae7c172a962e9348904eadf56e918e3eac48ed44e",
+      "path": "MiroVerse-v0_1/split_40000_50000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 553678034
+    },
+    {
+      "compressed_bytes": 140350682,
+      "member_sha256": "7b3e08fcf899fc768b27faa2da81ac2364a2a52be4bbfb86e986f2c50dfa9a46",
+      "path": "MiroVerse-v0_1/split_110000_120000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 558477781
+    },
+    {
+      "compressed_bytes": 138692507,
+      "member_sha256": "34de4eb2399479219b219e761b7394812a087b2626acd0b2e836df10e19034a1",
+      "path": "MiroVerse-v0_1/split_20000_30000.json",
+      "rows": 10000,
+      "uncompressed_bytes": 553616332
+    }
+  ],
+  "archive_jsonl_member_count": 0,
+  "complete_jsonl_coverage": true,
+  "global_archive_vs_jsonl_source": {
+    "archive_row_multiset_sha256": "a7c266b56b611461cbc4d030bf434595e5256cad486166dfcb80e05f0e3bbc1e",
+    "archive_rows": 147985,
+    "exact_row_multiset_match": true,
+    "row_differences_sample": [],
+    "same_identity_different_payload_sample": [],
+    "source_row_multiset_sha256": "a7c266b56b611461cbc4d030bf434595e5256cad486166dfcb80e05f0e3bbc1e",
+    "source_rows": 147985
+  },
+  "jsonl_sources_without_unique_archive_pair": [
+    "jsonl_sft/MiroVerse-2WikiMultihopQA.jsonl",
+    "jsonl_sft/MiroVerse-HotpotQA.jsonl",
+    "jsonl_sft/MiroVerse-MegaScience.jsonl",
+    "jsonl_sft/MiroVerse-MuSiQue.jsonl",
+    "jsonl_sft/MiroVerse-OneGen-TrainDataset-MultiHopQA.jsonl",
+    "jsonl_sft/MiroVerse-QA-Expert-Multi-Hop-V1.0.jsonl",
+    "jsonl_sft/MiroVerse-TaskCraft.jsonl",
+    "jsonl_sft/MiroVerse-Voyager1.0.jsonl",
+    "jsonl_sft/MiroVerse-WebDancer.jsonl",
+    "jsonl_sft/MiroVerse-WebShaper.jsonl",
+    "jsonl_sft/MiroVerse-WebWalkerQA-Silver.jsonl",
+    "jsonl_sft/MiroVerse-WikiTables.jsonl"
+  ],
+  "pairs": [],
+  "schema": "natlang.miroverse-zip-jsonl-coverage/2",
+  "source_root": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24",
+  "unhandled_archive_payloads": [],
+  "unmatched_archive_members": [],
+  "verified_acquired_files": {
+    "jsonl_sft/MiroVerse-2WikiMultihopQA.jsonl": {
+      "bytes": 113631035,
+      "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/jsonl_sft/MiroVerse-2WikiMultihopQA.jsonl",
+      "sha256": "c848ca3dad5ecf19c6a09bfb674b88131a365f3d4f179c1ef3a01a5c69d5eca0"
+    },
+    "jsonl_sft/MiroVerse-HotpotQA.jsonl": {
+      "bytes": 287485646,
+      "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/jsonl_sft/MiroVerse-HotpotQA.jsonl",
+      "sha256": "3e4ae772bfe812dfb0c817d538aa3085f2c7a946e3656129f36a02303e46a8bb"
+    },
+    "jsonl_sft/MiroVerse-MegaScience.jsonl": {
+      "bytes": 451376782,
+      "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/jsonl_sft/MiroVerse-MegaScience.jsonl",
+      "sha256": "db132761a36e96bb08abea3fd0f06d9170795249c44f8729285520147251e6a9"
+    },
+    "jsonl_sft/MiroVerse-MuSiQue.jsonl": {
+      "bytes": 1218631666,
+      "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/jsonl_sft/MiroVerse-MuSiQue.jsonl",
+      "sha256": "c0ddc4ea28e237c3531be7cbec78d7b20b999a0a218b2f58a2f9fda34cc763f6"
+    },
+    "jsonl_sft/MiroVerse-OneGen-TrainDataset-MultiHopQA.jsonl": {
+      "bytes": 133847450,
+      "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/jsonl_sft/MiroVerse-OneGen-TrainDataset-MultiHopQA.jsonl",
+      "sha256": "02dbf30e5d28c01d4e76f9d2e393c6509418520e343e24ffc14c4aa884121d89"
+    },
+    "jsonl_sft/MiroVerse-QA-Expert-Multi-Hop-V1.0.jsonl": {
+      "bytes": 263999614,
+      "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/jsonl_sft/MiroVerse-QA-Expert-Multi-Hop-V1.0.jsonl",
+      "sha256": "ce60ee386166f5f8f0bf81f1b85690e83087948189c013e7af62de3d7e66cbfd"
+    },
+    "jsonl_sft/MiroVerse-TaskCraft.jsonl": {
+      "bytes": 420470596,
+      "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/jsonl_sft/MiroVerse-TaskCraft.jsonl",
+      "sha256": "c8c1039ca7eccf8012fbae68f414d08731c2705295319ff89fa303c922df03e1"
+    },
+    "jsonl_sft/MiroVerse-Voyager1.0.jsonl": {
+      "bytes": 4609825024,
+      "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/jsonl_sft/MiroVerse-Voyager1.0.jsonl",
+      "sha256": "e93b1d200b81608265d0e1e3da4a42d8e8e4b9b678aa1371363ec964653c2522"
+    },
+    "jsonl_sft/MiroVerse-WebDancer.jsonl": {
+      "bytes": 31927594,
+      "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/jsonl_sft/MiroVerse-WebDancer.jsonl",
+      "sha256": "3f841fbc2c8bec82e0e297730b5b8b24234446ef4ff46e5dfe490a65acdbaf0f"
+    },
+    "jsonl_sft/MiroVerse-WebShaper.jsonl": {
+      "bytes": 125932293,
+      "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/jsonl_sft/MiroVerse-WebShaper.jsonl",
+      "sha256": "e1c7ec1fe9d16a4f57f4bb8e628b8bb389e0802d1fa94c91c79ff79fde660f07"
+    },
+    "jsonl_sft/MiroVerse-WebWalkerQA-Silver.jsonl": {
+      "bytes": 460324783,
+      "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/jsonl_sft/MiroVerse-WebWalkerQA-Silver.jsonl",
+      "sha256": "e1e153774dcebf7dcaf0c4b157220110a9d9c6b6cca117230491be528f38bb28"
+    },
+    "jsonl_sft/MiroVerse-WikiTables.jsonl": {
+      "bytes": 63985691,
+      "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/jsonl_sft/MiroVerse-WikiTables.jsonl",
+      "sha256": "c2e101dd1b7a0cc0286377ff8ac9df2db74daa291a71699c4562e683dbc341c0"
+    },
+    "zip_sft/MiroVerse-v0_1-SFT.zip": {
+      "bytes": 2049002451,
+      "path": "/work/mirror/mnt/external/natlang-development-data/external-expansion-20261014/D24/zip_sft/MiroVerse-v0_1-SFT.zip",
+      "sha256": "164a8c05f1a3779b221ab775185054419426d8ea724356bc2a51102bc45db9d7"
+    }
+  },
+  "zip_non_jsonl_members": [
+    {
+      "bytes": 550902401,
+      "compressed_bytes": 136989826,
+      "path": "MiroVerse-v0_1/split_100000_110000.json"
+    },
+    {
+      "bytes": 553870622,
+      "compressed_bytes": 139795935,
+      "path": "MiroVerse-v0_1/split_130000_140000.json"
+    },
+    {
+      "bytes": 547555574,
+      "compressed_bytes": 137115072,
+      "path": "MiroVerse-v0_1/split_30000_40000.json"
+    },
+    {
+      "bytes": 555486999,
+      "compressed_bytes": 139226324,
+      "path": "MiroVerse-v0_1/split_80000_90000.json"
+    },
+    {
+      "bytes": 440141233,
+      "compressed_bytes": 109956289,
+      "path": "MiroVerse-v0_1/split_140000_147985.json"
+    },
+    {
+      "bytes": 545886834,
+      "compressed_bytes": 136068470,
+      "path": "MiroVerse-v0_1/split_50000_60000.json"
+    },
+    {
+      "bytes": 546781629,
+      "compressed_bytes": 136338194,
+      "path": "MiroVerse-v0_1/split_90000_100000.json"
+    },
+    {
+      "bytes": 557733384,
+      "compressed_bytes": 139845036,
+      "path": "MiroVerse-v0_1/split_0_10000.json"
+    },
+    {
+      "bytes": 549804747,
+      "compressed_bytes": 137695433,
+      "path": "MiroVerse-v0_1/split_10000_20000.json"
+    },
+    {
+      "bytes": 555973027,
+      "compressed_bytes": 139542595,
+      "path": "MiroVerse-v0_1/split_120000_130000.json"
+    },
+    {
+      "bytes": 557175857,
+      "compressed_bytes": 139603768,
+      "path": "MiroVerse-v0_1/split_70000_80000.json"
+    },
+    {
+      "bytes": 554501705,
+      "compressed_bytes": 139026951,
+      "path": "MiroVerse-v0_1/split_60000_70000.json"
+    },
+    {
+      "bytes": 553678034,
+      "compressed_bytes": 138752145,
+      "path": "MiroVerse-v0_1/split_40000_50000.json"
+    },
+    {
+      "bytes": 558477781,
+      "compressed_bytes": 140350682,
+      "path": "MiroVerse-v0_1/split_110000_120000.json"
+    },
+    {
+      "bytes": 553616332,
+      "compressed_bytes": 138692507,
+      "path": "MiroVerse-v0_1/split_20000_30000.json"
+    }
+  ]
+}
