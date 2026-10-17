@@ -56,6 +56,29 @@ def test_actual_tree_must_drain_and_independent_pin_retains_complete_state(actua
     assert all(value is None or value['state'] in ('Z','X') for value in record['observations'])
 
 
+def test_historical_controls_survive_pruned_payload_but_full_verifiers_stay_strict(actual_drain):
+    from natlang_neuralese.rl.native_raw_handoff import verify_handoff_controls,verify_handoff_metadata
+    reference=drained(actual_drain);expected=verify_handoff_metadata(reference)
+    Path(expected['checkpoint']['path']).unlink()
+    assert verify_handoff_controls(reference)==expected
+    for verifier in (verify_handoff_metadata,verify_handoff):
+        with pytest.raises((ValueError,FileNotFoundError)):verifier(reference)
+
+
+@pytest.mark.parametrize('field',['sha','bytes','inodes','terminal','tree'])
+def test_historical_controls_never_accept_changed_pin_or_owner_evidence(actual_drain,field):
+    from natlang_neuralese.rl.native_raw_handoff import verify_handoff_controls
+    reference=drained(actual_drain);p=Path(reference['path']);record=json.loads(p.read_text())
+    if field=='sha':record['checkpoint']['sha256']='not-a-sha'
+    elif field=='bytes':record['checkpoint_pin']['bytes']=0
+    elif field=='inodes':record['checkpoint_pin']['pin_inode']=record['checkpoint_pin']['original_inode']
+    elif field=='tree':record['observations']=[]
+    else:
+        terminal=Path(record['terminal']['path']);write_json_durable(terminal,{'at':record['at'],'returncode':1});record['terminal']=binding(terminal)
+    write_json_durable(p,record)
+    with pytest.raises(ValueError):verify_handoff_controls(binding(p))
+
+
 @pytest.mark.parametrize('tamper',['alive','missing-child','returncode','clock','pin','checkpoint','rng','progress','launch'])
 def test_drain_rejects_incomplete_or_changed_evidence(actual_drain,tamper):
     reference=drained(actual_drain);record=json.loads(Path(reference['path']).read_text())

@@ -206,8 +206,8 @@ def complete_drain(intent, terminal, checkpoint, out, *, original_slot, resident
     return binding(out)
 
 
-def verify_handoff_metadata(reference, *, requirement=None):
-    """Verify bound trusted supervisor evidence, not a generated model assertion."""
+def verify_handoff_controls(reference, *, requirement=None):
+    """Authenticate historical owner/drain controls without obsolete payloads."""
     record=json.loads(_bound(reference).read_text())
     if record.get('schema')!=SCHEMA:raise ValueError('raw bootstrap needs an exact original-owner handoff receipt')
     intent=json.loads(_bound(record['intent']).read_text())
@@ -246,13 +246,27 @@ def verify_handoff_metadata(reference, *, requirement=None):
             raise ValueError('raw handoff belongs to another declared original trainer launch')
         if Path(requirement['trainer_exit']).resolve()!=Path(record.get('source_terminal',record['terminal'])['path']).resolve():
             raise ValueError('raw handoff terminal belongs to another original optimizer owner')
-    checkpoint=_bound(record['checkpoint'])
     pin=record.get('checkpoint_pin') or {}
-    if (pin.get('original_slot',{}).get('sha256')!=record['checkpoint']['sha256']
-            or type(pin.get('bytes')) is not int or pin['bytes']!=checkpoint.stat().st_size
+    checkpoint=record.get('checkpoint')or{}
+    if (not isinstance(checkpoint.get('path'),str)or not Path(checkpoint['path']).is_absolute()
+            or not isinstance(checkpoint.get('sha256'),str)or len(checkpoint['sha256'])!=64
+            or any(char not in '0123456789abcdef'for char in checkpoint['sha256'])
+            or pin.get('original_slot',{}).get('sha256')!=checkpoint['sha256']
+            or not isinstance(pin.get('original_slot',{}).get('path'),str)
+            or not Path(pin['original_slot']['path']).is_absolute()
+            or type(pin.get('bytes')) is not int or pin['bytes']<=0
             or any(not isinstance(pin.get(key),list) or len(pin[key])!=2
                    or any(type(item) is not int or item<0 for item in pin[key]) for key in ('original_inode','pin_inode'))
             or pin['original_inode']==pin['pin_inode']):
+        raise ValueError('raw handoff lost its exact independently pinned checkpoint evidence')
+    return record
+
+
+def verify_handoff_metadata(reference, *, requirement=None):
+    """Verify all owner evidence and the actual complete byte-bound checkpoint."""
+    record=verify_handoff_controls(reference,requirement=requirement)
+    checkpoint=_bound(record['checkpoint'])
+    if record['checkpoint_pin']['bytes']!=checkpoint.stat().st_size:
         raise ValueError('raw handoff lost its exact independently pinned checkpoint evidence')
     return record
 

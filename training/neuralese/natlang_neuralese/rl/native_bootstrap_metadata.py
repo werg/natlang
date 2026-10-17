@@ -53,13 +53,29 @@ def evidence(plan_path,declaration,handoff,config):
             for key in ('request','result','state'):add(value['operation'][key])
         bare=value.get('bare_direct_owner')
         if bare:
-            add(bare['recipe']);add(bare['qualification'])
+            add(bare['recipe'])
+            if bool(bare.get('qualification'))==bool(bare.get('ordinary_capacity')):
+                raise ValueError('bare bootstrap metadata needs exactly one capacity authority')
+            if bare.get('qualification'):add(bare['qualification'])
+            else:
+                for reference in bare['launch_control'].values():add(reference)
+                continuation=json.loads(add(bare['launch_control']['continuation']).read_text())
+                certificate=json.loads(add(bare['ordinary_capacity']).read_text())
+                from ..train.native_capacity_continuation import capacity_certificate_dependencies
+                dependencies=capacity_certificate_dependencies(bare['ordinary_capacity'],
+                    identity=certificate['identity'],code=bare['code'],parent=continuation['parent']['sha256'])
+                for reference in dependencies.values():add(reference)
             packages['later_bare_package']=code_inventory(Path(bare['package']))
             if packages['later_bare_package']!=bare['code']:
                 raise ValueError('bare runtime proof package identity changed')
             transition=None
         else:
             transition=json.loads(add(value['recipe_handoff']).read_text())
+        if value.get('owned_operations'):
+            owned=json.loads(add(value['owned_operations']).read_text())
+            owned_intent=json.loads(add(owned['intent']).read_text())
+            for reference in owned_intent['candidates'].values():add(reference)
+            for reference in owned_intent['snapshots'].values():add(reference)
         for handoff_ref in [value['handoff']]+([transition['handoff']] if transition else []):
             current_record=json.loads(add(handoff_ref).read_text())
             intent=json.loads(add(current_record['intent']).read_text())

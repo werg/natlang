@@ -17,6 +17,23 @@ from natlang_neuralese.train.recipe import native_recipe_binding
 from natlang_neuralese.common.jsonio import write_json_durable as write
 
 
+def test_real_bootstrap_evidence_covers_ordinary_launch_and_recursive_capacity(ordinary,monkeypatch):
+    from natlang_neuralese.rl import native_bootstrap_metadata as metadata,native_raw_rounds as raw
+    from natlang_neuralese.common import runtime_inventory
+    monkeypatch.setattr(runtime_inventory,'task_runtime_inventory',lambda path:{'fixture':'complete collector inventory'})
+    monkeypatch.setattr(raw,'_inputs',lambda declaration:{'cases':Path(declaration['cases']['path'])})
+    x=ordinary;raw.configure_model(x['plan'],x['declaration'],x['bootstrap'],x['root'])
+    config=json.loads(x['config'].read_text());value=metadata.evidence(x['plan'],x['declaration'],x['bootstrap'],config)
+    proof=json.loads(Path(x['proof']['path']).read_text());authority=proof['bare_direct_owner']
+    assert authority['ordinary_capacity']['path']in value['files']
+    assert str(x['capacity_proof'])in value['files']
+    assert all(reference['path']in value['files']for reference in authority['launch_control'].values())
+    # The top certificate is unchanged; changing a nested measured proof still
+    # invalidates cache evidence through the same complete capacity verifier.
+    x['capacity_proof'].write_text('{}')
+    with pytest.raises(ValueError):metadata.evidence(x['plan'],x['declaration'],x['bootstrap'],config)
+
+
 @pytest.fixture
 def ordinary(bare,tmp_path):
     x=bare;root=tmp_path/'ordinary-owner';root.mkdir()

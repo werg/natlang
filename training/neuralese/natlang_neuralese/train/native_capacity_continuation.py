@@ -7,13 +7,23 @@ The independently approved review is policy; this tool verifies its exact bounds
 from __future__ import annotations
 
 import argparse
+from contextvars import ContextVar
 import json
 import math
 from pathlib import Path
 
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest
 from natlang_neuralese.common.jsonio import write_json_durable
-from natlang_neuralese.train.native_resident import binding, bound, code_inventory
+from natlang_neuralese.train.native_resident import binding, bound as _resident_bound, code_inventory
+
+_DEPENDENCY_SINK=ContextVar('native_capacity_dependencies',default=None)
+
+
+def bound(reference):
+    path=_resident_bound(reference)
+    sink=_DEPENDENCY_SINK.get()
+    if sink is not None:sink[str(path)]=binding(path)
+    return path
 
 ALLOWED_CHANGES = {
     'train/native_optimizer_migration.py', 'train/native_semantic_stage.py',
@@ -333,6 +343,14 @@ def verify_capacity_certificate(reference, *, identity, code, parent):
     if {key: max(case[key] for case in cases) for key in ('forward_tokens', 'kv_slots')} != limits:
         raise ValueError('capacity certificate limits differ from its complete measured cases')
     return limits
+
+
+def capacity_certificate_dependencies(reference, *, identity, code, parent):
+    """Record exactly the metadata consumed by the existing strict verifier."""
+    files={};token=_DEPENDENCY_SINK.set(files)
+    try:verify_capacity_certificate(reference,identity=identity,code=code,parent=parent)
+    finally:_DEPENDENCY_SINK.reset(token)
+    return files
 
 
 def continue_capacity(review_binding, *, old_package, new_package, out):

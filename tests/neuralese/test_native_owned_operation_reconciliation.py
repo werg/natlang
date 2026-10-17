@@ -32,12 +32,19 @@ def restore_observer(tmp_path,monkeypatch):
 
 def test_exact_read_only_restore_observer_resolves_bound_trainer_command(restore_observer):
     argv,parent,command,observer,original=restore_observer
-    result,evidence=raw._owned_training_invocation(argv,parent)
+    result,evidence=raw._owned_training_invocation(argv,parent,parent_bytes=json.loads(argv[6])['bytes'])
     assert result==command
     assert evidence['observer']==resident.binding(observer)
     assert evidence['original_argv']==resident.binding(original)
     direct=['python','-u','-m','natlang_neuralese.train.native_state_sft','--out','literal']
     assert raw._owned_training_invocation(direct,parent)==(direct,None)
+
+
+def test_restore_observer_uses_trusted_prior_pin_size_without_historical_stat(restore_observer):
+    argv,parent,command,observer,original=restore_observer
+    size=json.loads(argv[6])['bytes'];Path(parent['path']).unlink()
+    assert raw._owned_training_invocation(argv,parent,parent_bytes=size)[0]==command
+    with pytest.raises(ValueError):raw._owned_training_invocation(argv,parent,parent_bytes=size+1)
 
 
 @pytest.mark.parametrize('tamper',['source','original','parent','size','duplicate','reordered','module','restore-path'])
@@ -54,7 +61,7 @@ def test_restore_observer_cannot_borrow_another_invocation(restore_observer,tamp
         else:command[command.index('--continue-from')+1]=str(original)
         write(original,command);argv[4]=json.dumps(resident.binding(original))
     with pytest.raises((ValueError,AssertionError)):
-        raw._owned_training_invocation(argv,parent)
+        raw._owned_training_invocation(argv,parent,parent_bytes=Path(parent['path']).stat().st_size)
 
 
 @pytest.fixture

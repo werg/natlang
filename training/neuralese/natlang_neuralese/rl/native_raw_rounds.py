@@ -253,7 +253,7 @@ def _supervised_stage_inventory(recipe,foundation_id):
 _OWNED_RESTORE_OBSERVER_SHA256='7b1f69d53cd7a8690e3d32940337c6c56f040fca8c0ad2b2dfee93d431c63e9e'
 
 
-def _owned_training_invocation(argv,parent):
+def _owned_training_invocation(argv,parent,*,parent_bytes=None):
     """Resolve only the exact reviewed read-only historical restore observer."""
     if '--argv-binding' not in argv:return argv,None
     flags=['--argv-binding','--parent','--runtime-root','--out']
@@ -263,7 +263,7 @@ def _owned_training_invocation(argv,parent):
     reference=json.loads(argv[4]);original=_bound(reference);restored=json.loads(argv[6])
     if (restored.get('sha256')!=parent['sha256']
             or Path(restored['path']).resolve()!=Path(parent['path']).resolve()
-            or (restored.get('bytes') is not None and Path(restored['path']).stat().st_size!=restored['bytes'])):
+            or (restored.get('bytes') is not None and restored['bytes']!=parent_bytes)):
         raise ValueError('owned restore observer changed its actual preceding parent')
     command=json.loads(original.read_text())
     if (not isinstance(command,list) or any(not isinstance(item,str)for item in command)
@@ -280,11 +280,11 @@ def _owned_training_invocation(argv,parent):
 
 def _owned_operation_chain(operations,published,model_id,lineage):
     """Authenticate completed finite work without decoding historical optimizers."""
-    from .native_raw_handoff import verify_handoff_metadata
+    from .native_raw_handoff import verify_handoff_controls
     from ..train.recipe import native_recipe_binding,resolve_recipe_data
-    prior=published;result=[]
+    prior=published;prior_bytes=published.get('bytes');result=[]
     for operation in operations:
-        record=verify_handoff_metadata(operation['handoff'])
+        record=verify_handoff_controls(operation['handoff'])
         receipt=json.loads(_bound(operation['receipt']).read_text())
         intent=json.loads(_bound(record['intent']).read_text())
         recipe_ref=receipt.get('recipe') or {}
@@ -307,7 +307,7 @@ def _owned_operation_chain(operations,published,model_id,lineage):
         matching=[]
         for child in intent['children']:
             argv=[part.decode()for part in bytes.fromhex(child['argv_hex']).split(b'\0')if part]
-            argv,observer=_owned_training_invocation(argv,prior)
+            argv,observer=_owned_training_invocation(argv,prior,parent_bytes=prior_bytes)
             def argument(flag):
                 if argv.count(flag)!=1 or argv.index(flag)+1>=len(argv):return None
                 return argv[argv.index(flag)+1]
@@ -322,6 +322,7 @@ def _owned_operation_chain(operations,published,model_id,lineage):
             'recipe':actual_recipe,'new_optimizer_updates':updates,
             **({'restore_observer':matching[0]['restore_observer']}if matching[0]['restore_observer']else{})})
         prior=checkpoint
+        prior_bytes=record['checkpoint_pin']['bytes']
     if not result:raise ValueError('owned reconciliation needs actual completed operations')
     return result
 
@@ -385,7 +386,7 @@ def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bar
             if (type(cursor.get('next_stage',0))is not int or not 0<=cursor.get('next_stage',0)<=len(old_stages)
                     or any(not any(stage['id']==old['id']and stage['kind']==old['kind']for stage in stages)for old in old_stages)):
                 raise ValueError('owned reconciliation changed or lost its old stage inventory')
-            published=binding(state['checkpoint'])
+            published={**binding(state['checkpoint']),'bytes':Path(state['checkpoint']).stat().st_size}
             chain=_owned_operation_chain(operations,published,config['raw_model_id'],config['recipe_lineage_sha256'])
             record,saved=_loaded_handoff(operations[-1]['handoff'],verified_handoff)
             from ..train.native_resident import code_inventory

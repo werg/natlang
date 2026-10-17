@@ -100,3 +100,17 @@ stage IDs acknowledged, and controller state is `collect`, configure the next
 actor and collector immediately. Otherwise the old pending-operation protection
 would freeze the old actor through the configuration fast path. Unfinished SFT,
 pending policy round zero or greater, and active learner state retain protection.
+
+Historical operation ancestry consumes exact owner/tree/terminal/pin metadata
+and readiness, not obsolete optimizer payloads. A separate control verifier
+retains every original process and successful-drain check; default handoff,
+bootstrap and the final saved-state verifier still require the actual full
+byte-bound checkpoint. Observer byte counts compare with the preceding trusted
+pin metadata, never a foreign historical file stat.
+
+The bootstrap cache must cover ordinary capacity as well as MAX authority.
+Collect its consumed small proof references by observing the existing capacity
+verifier in a scoped context; do not duplicate its recursive policy rules or
+walk unrelated requests/checkpoint payloads. Cache the exact launch snapshots,
+capacity evidence closure and owned publication/intent. Real collector evidence
+tests must reach this branch rather than return early for an incomplete fixture.
