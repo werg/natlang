@@ -1,6 +1,5 @@
 """Inherited memory evidence must not become a fictitious new qualification."""
 import copy
-import importlib.util
 import json
 from pathlib import Path
 
@@ -9,10 +8,7 @@ import pytest
 from natlang_neuralese.train.native_resident import binding, code_inventory, geometry_capacity
 from natlang_neuralese.common.hashing import canonical_json_sha256_hex as digest
 
-spec = importlib.util.spec_from_file_location('native_capacity_continuation',
-    Path(__file__).resolve().parents[2]/'scripts/neuralese_data/continue_native_capacity.py')
-mechanism = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mechanism)
+from natlang_neuralese.train import native_capacity_continuation as mechanism
 
 
 def fixture(tmp_path):
@@ -415,3 +411,22 @@ def test_writer_continuation_keeps_existing_measured_memory_and_identity_guards(
     else:review['identity']={**review['identity'],'checkpoint_input_offload':True}
     with pytest.raises(ValueError):invoke(tmp_path,old,new,review)
     assert not(tmp_path/'out').exists()
+
+
+def test_historical_cli_executes_the_shared_verifier(tmp_path):
+    import subprocess
+    import sys
+    old, new, review, _ = fixture(tmp_path)
+    review_path = tmp_path/'cli-review.json'
+    review_path.write_text(json.dumps(review))
+    script = Path(__file__).resolve().parents[2]/'scripts/neuralese_data/continue_native_capacity.py'
+    result = subprocess.run([sys.executable, str(script), '--review', json.dumps(binding(review_path)),
+        '--old-package', str(old), '--new-package', str(new), '--out', str(tmp_path/'cli-out')],
+        capture_output=True, text=True, check=True)
+    certificate = json.loads(result.stdout)
+    value = json.loads(Path(certificate['path']).read_text())
+    assert geometry_capacity(certificate, identity=review['identity'], code=code_inventory(new)) == value['limits']
+    evidence = json.loads(Path(value['evidence']['path']).read_text())
+    assert mechanism._proof_cases(value['evidence'], identity=review['identity'],
+        code_sha=digest(code_inventory(new)), parent=review['new_parent_checkpoint_sha256'])
+    assert evidence['new_parent_measured'] is False
