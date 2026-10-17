@@ -220,3 +220,13 @@ no inference objects. Existing full-checkpoint retention remains the default.
 ## Cohort exposure during existing checkpoint custody (2026-10-17)
 
 The owner declares immutable source cohorts. During the cursor exporter's existing safe full checkpoint decode, a read-only observer joins those exact row bindings against the matching ordinary stage's saved credits and quotas. It distinguishes unadmitted rows from admitted rows with zero visits, and records completed/required/remaining visits without constructing a model or decoding the checkpoint again. Source loading reuses the qualified runtime's unchanged graph/index verifier; only the small declared cohorts are loaded. Observation failures retain the full backup and an assigned diagnostic failure. This is exact reporting plumbing, not training/readiness policy.
+
+### Cursor observation RPC recovery (2026-10-17)
+
+A completed source-host checkpoint observation must survive loss of its RPC
+response. The crisp durability layer saves the exact completed result under a
+request-source digest, with the immutable pin's dev/inode/size/mtime/ctime identity. Empty observations are never cached; later checkpoints must still be discovered. A retry reads that
+result and verifies the unchanged pin before any checkpoint copy or model-state
+decode. Full private upload and independent GET remain the existing separate
+acknowledgement gate. Optional actor-view work gets a longer asynchronous RPC
+window; this change adds no tensor/model mutation or alternate reader.

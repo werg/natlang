@@ -102,3 +102,57 @@ def test_default_remote_code_is_byte_identical_when_sidecar_unused(tmp_path):
     assert module.remote_code(**options)==original.remote_code(**options)
     options.update(actor_view_directory='/views',actor_view_runtime='/runtime')
     assert module.remote_code(**options)==original.remote_code(**options)
+
+
+def test_completed_remote_observation_recovers_after_lost_rpc_without_decode(tmp_path):
+    root=tmp_path/'source';root.mkdir();pin=root/'pin.pt';pin.write_bytes(b'actual independently pinned full state')
+    marker="print(json.dumps({'at':time.time(),'observations':updates,'chosen':chosen,'cursor_binding_only':c}))"
+    counter=root/'calls';code="import time,pathlib,json\np=pathlib.Path("+repr(str(counter))+");p.write_text(str(int(p.read_text())+1)if p.exists()else'1')\nupdates={'source':{'step':42}};chosen={'pin':"+repr(str(pin))+",'step':42};c=None\n"+marker
+    wrapped=module.recoverable_remote_code(code,role='mellum',root=root)
+    first=subprocess.run([sys.executable,'-c',wrapped],text=True,capture_output=True,check=True)
+    second=subprocess.run([sys.executable,'-c',wrapped],text=True,capture_output=True,check=True)
+    assert json.loads(first.stdout)==json.loads(second.stdout)and counter.read_text()=='1'
+    report=next(root.glob('mellum-cursor-observation-*.json'));record=json.loads(report.read_text());record['request_sha256']='0'*64;report.write_text(json.dumps(record))
+    failed=subprocess.run([sys.executable,'-c',wrapped],text=True,capture_output=True)
+    assert failed.returncode!=0 and 'request differs'in failed.stderr and counter.read_text()=='1'
+
+
+def test_completed_remote_observation_rejects_pin_mutation_before_replay(tmp_path):
+    root=tmp_path/'source';root.mkdir();pin=root/'pin.pt';pin.write_bytes(b'original')
+    marker="print(json.dumps({'at':time.time(),'observations':updates,'chosen':chosen,'cursor_binding_only':c}))"
+    code="import time,json,pathlib\nupdates={};chosen={'pin':"+repr(str(pin))+",'step':1};c=None\n"+marker
+    wrapped=module.recoverable_remote_code(code,role='lfm',root=root)
+    subprocess.run([sys.executable,'-c',wrapped],check=True,capture_output=True)
+    import os
+    previous=pin.stat();pin.write_bytes(b'changed!');os.utime(pin,ns=(previous.st_atime_ns,previous.st_mtime_ns))
+    assert pin.stat().st_size==previous.st_size and pin.stat().st_mtime_ns==previous.st_mtime_ns
+    failed=subprocess.run([sys.executable,'-c',wrapped],text=True,capture_output=True)
+    assert failed.returncode!=0 and 'pin changed'in failed.stderr
+
+
+def test_actual_full_remote_observation_replay_keeps_pin_without_source_slot(tmp_path):
+    import torch
+    root=tmp_path/'source';slot=root/'rounds/lfm/production/round-1/learner/checkpoint.pt';slot.parent.mkdir(parents=True)
+    torch.save({'step':7,'training':{'optimizer':{'moment':torch.tensor([2.])},'rng':{'cpu':torch.get_rng_state()},'source_receipts':[{'actual':True}]}},slot)
+    pins=tmp_path/'pins';pins.mkdir()
+    raw=module.remote_code(role='lfm',root=root,known={},last=0,extra=None,pin_directory=pins,minimum_available_bytes=0)
+    wrapped=module.recoverable_remote_code(raw,role='lfm',root=root)
+    first=subprocess.run([sys.executable,'-c',wrapped],capture_output=True,text=True,check=True,timeout=30)
+    slot.unlink()
+    replay=subprocess.run([sys.executable,'-c',wrapped],capture_output=True,text=True,check=True,timeout=30)
+    assert json.loads(replay.stdout)==json.loads(first.stdout)
+    assert (pins/'lfm-native-checkpoint-step-7.pt').exists()
+
+
+def test_empty_remote_observation_does_not_hide_a_later_actual_checkpoint(tmp_path):
+    import torch
+    root=tmp_path/'source';root.mkdir();pins=tmp_path/'pins';pins.mkdir()
+    raw=module.remote_code(role='lfm',root=root,known={},last=0,extra=None,pin_directory=pins,minimum_available_bytes=0)
+    wrapped=module.recoverable_remote_code(raw,role='lfm',root=root)
+    empty=subprocess.run([sys.executable,'-c',wrapped],capture_output=True,text=True,check=True,timeout=30)
+    assert json.loads(empty.stdout)['chosen']is None
+    assert not list(root.glob('lfm-cursor-observation-*.json'))
+    slot=root/'rounds/lfm/production/round-1/learner/checkpoint.pt';slot.parent.mkdir(parents=True)
+    torch.save({'step':8,'training':{'optimizer':{'moment':torch.tensor([2.])},'rng':{'cpu':torch.get_rng_state()},'source_receipts':[{'actual':True}]}},slot)
+    found=subprocess.run([sys.executable,'-c',wrapped],capture_output=True,text=True,check=True,timeout=30)
+    assert json.loads(found.stdout)['chosen']['step']==8

@@ -187,6 +187,44 @@ def remote_code(*, role, root, known, last, extra, pin_directory, minimum_availa
             +'\nMIN_AVAILABLE_BYTES='+repr(minimum_available_bytes)+'\n'+source)
 
 
+def recoverable_remote_code(code, *, role, root):
+    """Durably replay an exact completed RPC observation without another decode."""
+    request = hashlib.sha256(code.encode()).hexdigest()
+    report = pathlib.Path(root)/f'{role}-cursor-observation-{request}.json'
+    prefix = 'import pathlib,json,os,sys\nREPORT='+repr(str(report))+'\nREQUEST='+repr(request)+'\n'
+    prefix += """def completed_result():
+ if not pathlib.Path(REPORT).exists():return None
+ record=json.loads(pathlib.Path(REPORT).read_text())
+ if record.get('request_sha256')!=REQUEST:raise ValueError('completed observation request differs')
+ result=record['result'];chosen=result.get('chosen')
+ if not chosen:return None
+ if chosen:
+  p=pathlib.Path(chosen['pin']);s=p.stat()
+  if [s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns]!=record['pin_stat']:raise ValueError('completed observation pin changed')
+ return result
+recovered=completed_result()
+if recovered is not None:print(json.dumps(recovered));raise SystemExit(0)
+"""
+    marker="print(json.dumps({'at':time.time(),'observations':updates,'chosen':chosen,'cursor_binding_only':c}))"
+    if code.count(marker)!=1:raise ValueError('remote observation completion marker differs')
+    final="""result={'at':time.time(),'observations':updates,'chosen':chosen,'cursor_binding_only':c}
+pin_stat=None
+if chosen:
+ s=pathlib.Path(chosen['pin']).stat();pin_stat=[s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns]
+if chosen:
+ record={'request_sha256':REQUEST,'result':result,'pin_stat':pin_stat}
+ p=pathlib.Path(REPORT);temporary=p.with_name(p.name+'.tmp-'+str(os.getpid()))
+ try:
+  with temporary.open('w')as stream:json.dump(record,stream);stream.flush();os.fsync(stream.fileno())
+  os.replace(temporary,p);fd=os.open(p.parent,os.O_DIRECTORY);os.fsync(fd);os.close(fd)
+ finally:temporary.unlink(missing_ok=True)
+print(json.dumps(result))"""
+    lock_marker='fcntl.flock(remote_lock,fcntl.LOCK_EX|fcntl.LOCK_NB);paths='
+    if lock_marker in code:
+        code=code.replace(lock_marker,'fcntl.flock(remote_lock,fcntl.LOCK_EX|fcntl.LOCK_NB)\nrecovered=completed_result()\nif recovered is not None:print(json.dumps(recovered));raise SystemExit(0)\npaths=',1)
+    return prefix+code.replace(marker,final)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--role', choices=('lfm', 'mellum'), required=True)
@@ -233,8 +271,9 @@ def main(argv=None):
                            actor_view_directory=args.actor_view_directory,actor_view_runtime=args.actor_view_runtime,
                            actor_view_sidecar=args.actor_view_sidecar,actor_view_sidecar_sha256=args.actor_view_sidecar_sha256,
                            training_summary_spec=summary,training_summary_runtime=args.training_summary_runtime,**kwargs)
+        code = recoverable_remote_code(code, role=args.role, root=args.root)
         result = cwctl.read_sandbox(args.sandbox_id, patience=60).exec(
-            ['python', '-c', code], timeout_seconds=600).result(timeout=690)
+            ['python', '-c', code], timeout_seconds=3600).result(timeout=3690)
         if result.returncode: raise RuntimeError('owned remote checkpoint observation failed: '+str(result.stderr)[-3000:])
         return json.loads(result.stdout)
     def export(chosen, receipt_path):
