@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import ast
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -18,12 +20,18 @@ from natlang_neuralese.data.native_graph_conversion import text_row_graph, whole
 from natlang_neuralese.data.text_corpus import (native_gold_document, native_gold_packet,
     native_gold_rendered_text, tokenizer_fingerprint)
 from natlang_neuralese.model.native_model import tokenizer_inventory
-from natlang_neuralese.serve.chat import bind_history_reasoning
+from natlang_neuralese.serve.chat import (RequestError, bind_history_reasoning,
+    normalize_tool_call_arguments)
 from scripts.neuralese_data.build_native_graph_text_corpus import GraphWriter, numerical_runtime
 from scripts.neuralese_data.build_native_semantic_pairs_e2e import provision
 from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
 from scripts.neuralese_data.decision_holds import load_decision_holds
 from scripts.neuralese_data.conversion_output_lease import acquire_output_lease
+
+_SESSION_GRAPH_RENDER_AST_SHA256 = '7b73bf21659f50fbee4c8b990b0ab0895c7d880d25a368b70986ba1d0c8a76bc'
+_SESSION_GRAPH_PREVALIDATION_PARENT_BUILDER_SHA256 = 'cf4346e17dcc2c9f4770e2d8fb142cf597563e6551b8d51329c5c224ba5aaf1b'
+_SESSION_GRAPH_CONTINUATION_PROOF = Path(__file__).resolve().with_name(
+    'acquired_session_render_pending_continuation_20261017.json')
 
 
 def sessions(path):
@@ -44,6 +52,23 @@ def held_session_targets(value, held_sources):
     trajectory = value['trajectory']
     identities = {trajectory['id'], *source_target_ids(value)}
     return sorted(identities & held_sources)
+
+
+def prevalidate_session_tool_arguments(value):
+    """Run the serving validator on original session messages without changing them."""
+    return normalize_tool_call_arguments(value['trajectory']['messages'])
+
+
+def source_render_pending_omission(value, error):
+    """Describe only a proven serving tool-argument parse failure for this source row."""
+    if not isinstance(error, RequestError) or error.code != 'tool-arguments':
+        raise error
+    return {'id': value['trajectory']['id'], 'source_row': value['source_row'],
+        'reason': 'source-render-pending:tool-arguments',
+        'pending_status': 'source-faithful-review-pending',
+        'normalized_source_sha256': canonical_json_sha256_hex(value),
+        'original_source_file': value['source_file'],
+        'original_target_ids': source_target_ids(value), 'error_code': error.code}
 
 
 def session_exclusion(value, protection, held_sources):
@@ -75,6 +100,8 @@ def runtime_bindings(root=None):
         'tokenizer_inventory': package / 'model' / 'native_model.py',
         'conversion_output_lease': root / 'scripts' / 'neuralese_data' / 'conversion_output_lease.py',
         'split_group_closure': root / 'scripts' / 'neuralese_data' / 'splits.py',
+        'render_pending_continuation': root / 'scripts' / 'neuralese_data' /
+            'acquired_session_render_pending_continuation_20261017.json',
     }
     # Identity follows the logical runtime files and their bytes, not checkout
     # location. Keep observed paths as receipt metadata outside the fingerprint.
@@ -82,6 +109,64 @@ def runtime_bindings(root=None):
     observed_paths = {name: str(path.resolve()) for name, path in paths.items()}
     return {'files': files, 'fingerprint': canonical_json_sha256_hex(files),
             'observed_paths': observed_paths, 'numerical_runtime': numerical_runtime()}
+
+
+def prove_render_pending_runtime_continuation(parent_binding, current_binding, parent_frontier):
+    """Prove the one reviewed builder-only change can resume prior render shards."""
+    if type(parent_frontier) is not int or parent_frontier < 0:
+        raise ValueError('runtime continuation has an invalid prior source frontier')
+    old_runtime = parent_binding.get('runtime', {})
+    new_runtime = current_binding.get('runtime', {})
+    old_files, new_files = old_runtime.get('files', {}), new_runtime.get('files', {})
+    if set(old_files) | {'render_pending_continuation'} != set(new_files) or 'builder' not in old_files:
+        raise ValueError('runtime continuation changes the declared dependency set')
+    if old_files['builder'].get('sha256') != _SESSION_GRAPH_PREVALIDATION_PARENT_BUILDER_SHA256:
+        raise ValueError('runtime continuation parent builder is not the reviewed renderer')
+    if any(old_files[name] != new_files[name] for name in old_files if name != 'builder'):
+        raise ValueError('runtime continuation changes a renderer dependency')
+    proof_path = _SESSION_GRAPH_CONTINUATION_PROOF
+    try:
+        proof_bytes = proof_path.read_bytes()
+        proof = json.loads(proof_bytes)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError('runtime continuation proof file is absent or invalid') from exc
+    if (new_files['render_pending_continuation'].get('sha256') != hashlib.sha256(proof_bytes).hexdigest()
+            or proof != {'schema': 'natlang.acquired-session-render-pending-runtime-continuation-proof/1',
+                'parent_builder_sha256': _SESSION_GRAPH_PREVALIDATION_PARENT_BUILDER_SHA256,
+                'current_builder_sha256': new_files['builder'].get('sha256'),
+                'unchanged_session_graph_renderer_ast_sha256': _SESSION_GRAPH_RENDER_AST_SHA256,
+                'allowed_delta': 'pre-render serving tool-argument validation and explicit pending-source accounting'}):
+        raise ValueError('runtime continuation proof does not bind the exact code transition')
+    if old_runtime.get('fingerprint') != canonical_json_sha256_hex(old_files):
+        raise ValueError('runtime continuation parent fingerprint is invalid')
+    if new_runtime.get('fingerprint') != canonical_json_sha256_hex(new_files):
+        raise ValueError('runtime continuation current fingerprint is invalid')
+    if current_binding.get('runtime') != {'files': new_files, 'fingerprint': new_runtime['fingerprint']}:
+        raise ValueError('runtime continuation current binding has unexpected runtime metadata')
+    for name in set(parent_binding) | set(current_binding):
+        if name != 'runtime' and parent_binding.get(name) != current_binding.get(name):
+            raise ValueError('runtime continuation changes source, protection, tokenizer or chunk policy')
+    try:
+        tree = ast.parse(Path(__file__).read_text(encoding='utf-8'))
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                        and node.name == 'session_graphs')
+    except (OSError, SyntaxError, StopIteration) as exc:
+        raise ValueError('runtime continuation cannot inspect the current renderer') from exc
+    function.body = [node for node in function.body if not (
+        isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+        and node.value.func.id == 'prevalidate_session_tool_arguments')]
+    render_ast_sha = hashlib.sha256(ast.dump(function, include_attributes=False).encode()).hexdigest()
+    if render_ast_sha != _SESSION_GRAPH_RENDER_AST_SHA256:
+        raise ValueError('runtime continuation changed the whole-session graph renderer')
+    return {'schema': 'natlang.acquired-session-render-pending-runtime-continuation/1',
+        'parent_binding_sha256': canonical_json_sha256_hex(parent_binding),
+        'current_binding_sha256': canonical_json_sha256_hex(current_binding),
+        'parent_frontier': parent_frontier,
+        'parent_builder_sha256': old_files['builder']['sha256'],
+        'current_builder_sha256': new_files['builder']['sha256'],
+        'unchanged_session_graph_renderer_ast_sha256': render_ast_sha,
+        'allowed_delta': 'pre-render serving tool-argument validation and explicit pending-source accounting'}
 
 
 def _record_uncommitted_cleanup(shard_root, directory):
@@ -126,7 +211,7 @@ def _stop_writer_without_deleting_temp(writer):
 
 def completed_shards(shard_root, binding, expected_sessions, *,
                      schema='natlang.acquired-full-session-shard/1',
-                     additional_outputs=()):
+                     additional_outputs=(), compatible_bindings=None):
     """Return a contiguous, content-verified session frontier; reject broken committed receipts."""
     binding_sha = canonical_json_sha256_hex(binding)
     frontier = 0
@@ -139,7 +224,12 @@ def completed_shards(shard_root, binding, expected_sessions, *,
             shutil.rmtree(directory)
             continue
         receipt = json.loads(receipt_path.read_text())
-        if receipt.get('schema') != schema or receipt.get('binding_sha256') != binding_sha:
+        receipt_binding = receipt.get('binding_sha256')
+        compatible_bindings = compatible_bindings or {}
+        compatible_frontier = compatible_bindings.get(receipt_binding)
+        if (receipt.get('schema') != schema or (receipt_binding != binding_sha
+                and (compatible_frontier is None or receipt.get('source_record_stop', expected_sessions + 1)
+                     > compatible_frontier))):
             raise ValueError(f'completed session shard has different source/policy/runtime binding: {directory}')
         start, stop = receipt.get('source_record_start'), receipt.get('source_record_stop')
         if (start != frontier or directory.name != f'shard-{start:08d}' or type(stop) is not int
@@ -198,6 +288,9 @@ def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint
     trajectory = value['trajectory']
     if value.get('positive_candidate') is not True or trajectory['outcome'].get('label') == 'failed':
         raise ValueError('non-positive source session is not positive SFT')
+    # Validate every tool call before the first graph can be yielded. This is
+    # the same exact validator used by serving; the returned copy is discarded.
+    prevalidate_session_tool_arguments(value)
     from natlang_neuralese.serve.chat import bind_history_reasoning
     bind_history_reasoning(tokenizer)
     history_policy = tokenizer.natlang_history_reasoning['policy']
@@ -402,16 +495,51 @@ def _convert(args, prepared):
     shard_root = args.output / 'session-shards'
     state_path = args.output / 'resume-state.json'
     previous_state_frontier = 0
+    runtime_continuation = None
+    compatible_bindings = {}
     if state_path.exists():
         state = json.loads(state_path.read_text())
         if state.get('binding') != binding:
-            raise ValueError('resume state is bound to different source, holds, renderer or runtime')
+            parent_binding = state.get('binding')
+            previous_state_frontier = state.get('completed_source_record_frontier', 0)
+            runtime_continuation = prove_render_pending_runtime_continuation(
+                parent_binding, binding, previous_state_frontier)
+            # Existing output receipts remain byte-exact and retain their old
+            # binding. Prove that this source prefix has no newly-classified
+            # malformed tool calls before allowing the reviewed continuation.
+            for index, value in enumerate(sessions(source)):
+                if index >= previous_state_frontier:
+                    break
+                if session_exclusion(value, protection, held_sources):
+                    continue
+                try:
+                    prevalidate_session_tool_arguments(value)
+                except RequestError as error:
+                    if error.code == 'tool-arguments':
+                        raise ValueError('prior committed source prefix contains a newly render-pending row') from error
+                    raise
+            compatible_bindings[canonical_json_sha256_hex(parent_binding)] = previous_state_frontier
+            state = {'schema': 'natlang.acquired-session-resume/1', 'binding': binding,
+                'binding_sha256': canonical_json_sha256_hex(binding),
+                'completed_source_record_frontier': previous_state_frontier,
+                'shards': state.get('shards', []), 'parent_binding': parent_binding,
+                'runtime_continuation': runtime_continuation}
+            write_json_durable(state_path, state)
         previous_state_frontier = state.get('completed_source_record_frontier', 0)
     else:
-        write_json_durable(state_path, {'schema': 'natlang.acquired-session-resume/1', 'binding': binding,
+        state = {'schema': 'natlang.acquired-session-resume/1', 'binding': binding,
                                         'binding_sha256': canonical_json_sha256_hex(binding),
-                                        'completed_source_record_frontier': 0})
-    frontier, shard_receipts = completed_shards(shard_root, binding, source_rows)
+                                        'completed_source_record_frontier': 0}
+        write_json_durable(state_path, state)
+    if state_path.exists() and state.get('runtime_continuation'):
+        runtime_continuation = state['runtime_continuation']
+        parent_binding = state.get('parent_binding')
+        if parent_binding is None or runtime_continuation != prove_render_pending_runtime_continuation(
+                parent_binding, binding, runtime_continuation.get('parent_frontier')):
+            raise ValueError('resume state runtime continuation witness is invalid')
+        compatible_bindings[canonical_json_sha256_hex(parent_binding)] = runtime_continuation['parent_frontier']
+    frontier, shard_receipts = completed_shards(shard_root, binding, source_rows,
+        compatible_bindings=compatible_bindings)
     if previous_state_frontier > frontier:
         raise ValueError('resume state claims a source frontier without matching committed shard receipts')
     counts = Counter()
@@ -420,7 +548,8 @@ def _convert(args, prepared):
     if frontier:
         write_json_durable(state_path, {'schema': 'natlang.acquired-session-resume/1', 'binding': binding,
             'binding_sha256': canonical_json_sha256_hex(binding), 'completed_source_record_frontier': frontier,
-            'shards': shard_receipts})
+            'shards': shard_receipts, **({'parent_binding': state['parent_binding'],
+                'runtime_continuation': runtime_continuation} if runtime_continuation else {})})
 
     def process(value, omissions, writers, shard_counts):
         trajectory = value['trajectory']; identifier = trajectory['id']; groups = set(trajectory['split_groups'])
@@ -432,6 +561,13 @@ def _convert(args, prepared):
                 'hold_matching_scope': 'conservative original source/target identity prefix; no claim of raw-row hash equality',
                 'sibling_targets_retained_in_bound_source': reason == 'current-decision-hold'})+'\n')
             shard_counts[reason] += 1
+            return
+        try:
+            prevalidate_session_tool_arguments(value)
+        except RequestError as error:
+            pending = source_render_pending_omission(value, error)
+            omissions.write(json.dumps(pending, ensure_ascii=False, sort_keys=True) + '\n')
+            shard_counts[pending['reason']] += 1
             return
         split = 'test' if groups & held else 'train'
         for graph in session_graphs(value, tokenizer, source_fingerprint=source_fp,
@@ -500,14 +636,15 @@ def _convert(args, prepared):
         counts.update(shard_counts)
         write_json_durable(state_path, {'schema': 'natlang.acquired-session-resume/1', 'binding': binding,
             'binding_sha256': canonical_json_sha256_hex(binding), 'completed_source_record_frontier': frontier,
-            'shards': shard_receipts})
+            'shards': shard_receipts, **({'parent_binding': state['parent_binding'],
+                'runtime_continuation': runtime_continuation} if runtime_continuation else {})})
         if frontier != record_index:
             raise AssertionError('durable shard frontier differs from processed input count')
     if frontier != source_rows:
         raise ValueError(f'conversion did not reach the complete source frontier: {frontier}/{source_rows}')
     if sum(counts[key] for key in ('positive_sessions', 'source-reported-non-positive',
             'current-source-quality-or-pending-protection', 'current-decision-hold',
-            'source-session-without-assistant-target')) != export['complete_sessions']:
+            'source-session-without-assistant-target', 'source-render-pending:tool-arguments')) != export['complete_sessions']:
         raise ValueError('complete normalized source session accounting differs')
     if sha256_file_hex(source) != digest:
         raise ValueError('source changed during rendering')
@@ -541,7 +678,8 @@ def _convert(args, prepared):
         'prepared_tokenizer': prepared.binding,
         'counts': dict(counts), 'outputs': outputs, 'training_admission': False,
         'source_record_count': source_rows, 'held_group_closure_sha256': binding['held_group_closure_sha256'],
-        'shards': shard_receipts, 'resume_state_sha256': sha256_file_hex(state_path),
+        'shards': shard_receipts, 'runtime_continuation': runtime_continuation,
+        'resume_state_sha256': sha256_file_hex(state_path),
         'omissions_sha256': sha256_file_hex(omissions_path)})
 
 

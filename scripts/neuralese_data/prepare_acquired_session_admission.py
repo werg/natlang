@@ -13,7 +13,9 @@ from scripts.neuralese_data.conversion_output_lease import acquire_output_lease
 from natlang_neuralese.data.native_graph import parse_graph
 from natlang_neuralese.model.native_model import tokenizer_inventory
 from scripts.neuralese_data.build_acquired_full_session_graphs import (
-    sessions, source_target_ids, completed_shards, session_exclusion)
+    sessions, source_target_ids, completed_shards, session_exclusion,
+    prevalidate_session_tool_arguments, prove_render_pending_runtime_continuation)
+from natlang_neuralese.serve.chat import RequestError
 from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import current_protection
 from scripts.neuralese_data.decision_holds import load_decision_holds
 
@@ -335,7 +337,20 @@ def verify_conversion(directory, export_path, *, protection, held_sources, decis
         raise ValueError('conversion source/runtime binding differs from its durable shard proof')
     for name, binding in receipt['runtime']['files'].items():
         bound(receipt['runtime']['observed_paths'][name], binding)
-    frontier, shards = completed_shards(directory / 'session-shards', state['binding'], len(source_rows))
+    compatible_bindings = {}
+    runtime_continuation = state.get('runtime_continuation')
+    if runtime_continuation is not None:
+        parent_binding = state.get('parent_binding')
+        if parent_binding is None or runtime_continuation != prove_render_pending_runtime_continuation(
+                parent_binding, state['binding'], runtime_continuation.get('parent_frontier')):
+            raise ValueError('native cohort runtime continuation witness is invalid')
+        if receipt.get('runtime_continuation') != runtime_continuation:
+            raise ValueError('native cohort receipt differs from its runtime continuation witness')
+        compatible_bindings[canonical_json_sha256_hex(parent_binding)] = runtime_continuation['parent_frontier']
+    elif receipt.get('runtime_continuation') is not None or 'parent_binding' in state:
+        raise ValueError('native cohort has an unbound runtime continuation')
+    frontier, shards = completed_shards(directory / 'session-shards', state['binding'], len(source_rows),
+        compatible_bindings=compatible_bindings)
     if frontier != len(source_rows) or shards != receipt['shards']:
         raise ValueError('native cohort conversion shard completion proof differs')
     if receipt['held_group_closure_sha256'] != canonical_json_sha256_hex(sorted(numeric_protection['held'])):
@@ -352,8 +367,23 @@ def verify_conversion(directory, export_path, *, protection, held_sources, decis
             expected_counts[reason] += 1
             key = canonical_json_sha256_hex([value['trajectory']['id'], value['source_row']])
             if key in expected_omissions: raise ValueError('normalized source repeats an omitted occurrence')
-            expected_omissions[key] = (reason, source_target_ids(value))
+            expected_omissions[key] = {'reason': reason, 'original_target_ids': source_target_ids(value)}
         else:
+            try:
+                prevalidate_session_tool_arguments(value)
+            except RequestError as error:
+                if error.code != 'tool-arguments':
+                    raise
+                reason = 'source-render-pending:tool-arguments'
+                expected_counts[reason] += 1
+                key = canonical_json_sha256_hex([value['trajectory']['id'], value['source_row']])
+                if key in expected_omissions: raise ValueError('normalized source repeats an omitted occurrence')
+                expected_omissions[key] = {'reason': reason,
+                    'pending_status': 'source-faithful-review-pending',
+                    'normalized_source_sha256': canonical_json_sha256_hex(value),
+                    'original_source_file': value['source_file'],
+                    'original_target_ids': source_target_ids(value), 'error_code': error.code}
+                continue
             expected_counts['positive_sessions'] += 1
             expected_sources[canonical_json_sha256_hex(value)] = value
     if len(expected_sources) != expected_counts['positive_sessions']:
@@ -361,7 +391,8 @@ def verify_conversion(directory, export_path, *, protection, held_sources, decis
     seen_omissions = set()
     for row in sessions(directory / 'omissions.jsonl'):
         key = canonical_json_sha256_hex([row['id'], row['source_row']])
-        if key in seen_omissions or expected_omissions.get(key) != (row['reason'], row['original_target_ids']):
+        expected = expected_omissions.get(key)
+        if key in seen_omissions or expected is None or any(row.get(name) != value for name, value in expected.items()):
             raise ValueError('native omission ledger differs from exact original excluded occurrences')
         seen_omissions.add(key)
     if seen_omissions != set(expected_omissions):

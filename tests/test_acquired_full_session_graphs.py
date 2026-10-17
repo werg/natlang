@@ -63,6 +63,28 @@ def test_both_real_templates_cover_full_context_and_every_reasoning_target(base)
         assert graph['conversion']['acquired_session']['truncated'] is False
 
 
+def test_invalid_original_tool_arguments_are_rejected_before_any_graph_can_be_yielded():
+    from natlang_neuralese.serve.chat import RequestError
+    from scripts.neuralese_data.build_acquired_full_session_graphs import (
+        session_graphs, source_render_pending_omission)
+    original=value(); original['trajectory']['messages'][1]['tool_calls'][0]['function']['arguments'] = (
+        '{"query": \\"City Reapers win OTE championship\\" 2023", "topn": 10}')
+    saved=copy.deepcopy(original)
+    with pytest.raises(RequestError) as error:
+        next(session_graphs(original, object(), source_fingerprint='a'*64,
+            expanded_fingerprint='a'*64, split='train'))
+    assert error.value.code=='tool-arguments'
+    assert original==saved
+    omission=source_render_pending_omission(original,error.value)
+    assert omission['reason']=='source-render-pending:tool-arguments'
+    assert omission['pending_status']=='source-faithful-review-pending'
+    assert omission['source_row']==original['source_row']
+    assert omission['original_target_ids']==['source-session:1','source-session:3']
+    assert omission['original_source_file']==original['source_file']
+    with pytest.raises(RequestError,match='different failure'):
+        source_render_pending_omission(original,RequestError('neuralese-template','different failure'))
+
+
 @pytest.mark.parametrize('base',BASES,ids=['lfm','mellum'])
 def test_reasoning_coverage_uses_actual_full_render_for_multiturn_and_trailing_messages(base):
     if not (base/'tokenizer.json').is_file():
@@ -128,6 +150,7 @@ def test_runtime_resume_fingerprint_is_independent_of_checkout_path(tmp_path):
         'scripts/neuralese_data/build_native_semantic_pairs_e2e.py',
         'scripts/neuralese_data/conversion_output_lease.py',
         'scripts/neuralese_data/splits.py',
+        'scripts/neuralese_data/acquired_session_render_pending_continuation_20261017.json',
         'training/neuralese/natlang_neuralese/model/native_model.py']
     for root in (first,second):
         for name in names:
@@ -136,6 +159,60 @@ def test_runtime_resume_fingerprint_is_independent_of_checkout_path(tmp_path):
     assert a['fingerprint']==b['fingerprint']
     assert a['files']==b['files']
     assert a['observed_paths']!=b['observed_paths']
+
+
+def test_render_pending_runtime_continuation_preserves_old_builder_only_prefix():
+    from scripts.neuralese_data.build_acquired_full_session_graphs import (
+        runtime_bindings, prove_render_pending_runtime_continuation)
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    current_runtime=runtime_bindings()
+    current={'source':{'sha256':'a'*64,'sessions':500},'chunk_sessions':50,
+        'runtime':{'files':current_runtime['files'],'fingerprint':current_runtime['fingerprint']}}
+    parent=copy.deepcopy(current)
+    del parent['runtime']['files']['render_pending_continuation']
+    parent['runtime']['files']['builder']['sha256']=(
+        'cf4346e17dcc2c9f4770e2d8fb142cf597563e6551b8d51329c5c224ba5aaf1b')
+    parent['runtime']['fingerprint']=canonical_json_sha256_hex(parent['runtime']['files'])
+    witness=prove_render_pending_runtime_continuation(parent,current,350)
+    assert witness['parent_frontier']==350
+    assert witness['parent_binding_sha256']==canonical_json_sha256_hex(parent)
+    changed=copy.deepcopy(parent);changed['runtime']['files']['text_corpus']['sha256']='b'*64
+    changed['runtime']['fingerprint']=canonical_json_sha256_hex(changed['runtime']['files'])
+    with pytest.raises(ValueError,match='renderer dependency'):
+        prove_render_pending_runtime_continuation(changed,current,350)
+
+
+def test_old_shard_binding_is_accepted_only_inside_its_proven_prefix(tmp_path):
+    import hashlib, json
+    from scripts.neuralese_data.build_acquired_full_session_graphs import completed_shards
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
+    root=tmp_path/'session-shards';shard=root/'shard-00000000';shard.mkdir(parents=True)
+    outputs=[]
+    for relative in ('train/native-graphs.jsonl.zst','test/native-graphs.jsonl.zst'):
+        path=shard/relative;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'')
+        outputs.append({'path':relative,'rows':0,'bytes':0,'sha256':sha256_file_hex(path)})
+    omissions=shard/'omissions.jsonl';omissions.write_text('')
+    old_binding={'source':'exact-old-prefix'};old_sha=canonical_json_sha256_hex(old_binding)
+    receipt={'schema':'natlang.acquired-full-session-shard/1','binding_sha256':old_sha,
+        'source_record_start':0,'source_record_stop':1,'source_record_count':1,
+        'counts':{'graphs:train':0,'graphs:test':0},'outputs':outputs,
+        'omissions_sha256':sha256_file_hex(omissions)}
+    (shard/'receipt.json').write_text(json.dumps(receipt))
+    assert completed_shards(root,{'source':'continued'},2,
+        compatible_bindings={old_sha:1})[0]==1
+    second=root/'shard-00000001';second.mkdir(parents=True)
+    for relative in ('train/native-graphs.jsonl.zst','test/native-graphs.jsonl.zst'):
+        path=second/relative;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'')
+    omissions2=second/'omissions.jsonl';omissions2.write_text('')
+    (second/'receipt.json').write_text(json.dumps({**receipt,'source_record_start':1,
+        'source_record_stop':2,'binding_sha256':old_sha,'omissions_sha256':sha256_file_hex(omissions2)}))
+    with pytest.raises(ValueError,match='different source/policy/runtime binding'):
+        completed_shards(root,{'source':'continued'},2)
+    with pytest.raises(ValueError,match='different source/policy/runtime binding'):
+        # A genuine resumed state keeps its reviewed parent limit at one even
+        # after the current renderer has advanced farther.  The second old
+        # shard must therefore remain outside the parent's immutable prefix.
+        completed_shards(root,{'source':'continued'},2,compatible_bindings={old_sha:1})
 
 
 def test_output_lease_rejects_second_writer_before_shard_cleanup(tmp_path):

@@ -128,3 +128,48 @@ def test_actual_completed_durable_conversion_rejoins_all_positive_and_failed_sou
     assert verify_conversion(alias,receipt,protection=protection,
         held_sources=ids|{v.split(':decision:',1)[0] for v in ids},decision_bindings=bindings,
         source_rows=rows)==(checked,outputs,proofs,groups)
+
+
+def test_invalid_original_tool_argument_is_explicit_pending_and_admission_rechecks_it(tmp_path,monkeypatch):
+    import json,sys
+    from pathlib import Path
+    from types import SimpleNamespace
+    from scripts.neuralese_data import build_acquired_full_session_graphs as builder
+    from scripts.neuralese_data.prepare_acquired_session_admission import verify_conversion
+    from scripts.neuralese_data.decision_holds import load_decision_holds
+    from natlang_neuralese.common.hashing import sha256_file_hex
+    from natlang_neuralese.common.jsonio import write_jsonl_text
+    row=value(); row['trajectory']['split']='train'
+    row['trajectory']['messages'][1]['tool_calls'][0]['function']['arguments']=(
+        '{"query": \\"City Reapers win OTE championship\\" 2023", "topn": 10}')
+    original=copy.deepcopy(row)
+    source=tmp_path/'full-trajectories.jsonl.zst'
+    with write_jsonl_text(source) as stream:stream.write(json.dumps(row)+'\n')
+    export=tmp_path/'export.json'
+    export.write_text(json.dumps({'schema':'natlang.normalized-agent-source-file/1',
+        'contract':{'source':row['source_file'],'revision':row['source_revision']},
+        'outputs':{source.name:sha256_file_hex(source)},'complete_sessions':1}))
+    prepared=SimpleNamespace(tokenizer=object(),source_fingerprint='a'*64,expanded_fingerprint='a'*64,
+        binding={'schema':'test-prepared-tokenizer'},validate=lambda base:None)
+    monkeypatch.setattr(builder,'prepare_tokenizer',lambda base:prepared)
+    monkeypatch.setattr(builder.AutoTokenizer,'from_pretrained',lambda *a,**k:object())
+    monkeypatch.setattr(builder,'tokenizer_fingerprint',lambda t:'a'*64)
+    monkeypatch.setattr(builder,'provision',lambda t:None)
+    protection={'held':set(),'quality':set(),'pending':set(),'proof':{}}
+    monkeypatch.setattr(builder,'current_protection',lambda p:protection)
+    holds=sorted((Path(builder.__file__).resolve().parents[2]/'training/decision-holds').glob('*.jsonl'))
+    monkeypatch.setattr(builder,'load_decision_holds',lambda paths:(set(),[]))
+    output=tmp_path/'graphs';argv=['builder','--export-receipt',str(export),'--base-tokenizer','fixture',
+        '--protection','fixture','--output',str(output)]
+    for hold in holds:argv+=['--decision-hold',str(hold)]
+    monkeypatch.setattr(sys,'argv',argv)
+    builder.main()
+    assert row==original
+    receipt=json.loads((output/'receipt.json').read_text())
+    assert receipt['counts']['source-render-pending:tool-arguments']==1
+    assert receipt['counts'].get('positive_sessions',0)==0
+    omissions=[json.loads(line) for line in (output/'omissions.jsonl').read_text().splitlines()]
+    assert len(omissions)==1 and omissions[0]['pending_status']=='source-faithful-review-pending'
+    checked,_,proofs,_=verify_conversion(output,export,protection=protection,held_sources=set(),
+        decision_bindings=[],source_rows=[row])
+    assert checked['counts']['source-render-pending:tool-arguments']==1 and not proofs
