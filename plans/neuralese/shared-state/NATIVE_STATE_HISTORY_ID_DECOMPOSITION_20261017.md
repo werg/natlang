@@ -10,6 +10,8 @@ existing restore and provenance requirements.
    predicate, in nested argument lists as well as standalone parts.
 2. Preserve malformed lookalikes without inventing a state or matching an ID
    prefix. Ordinary tool validation decides whether the value fits its type.
+   A content-part list containing a malformed native reference stays ordinary
+   as a whole, preserving its exact JSON value shape in both transports.
 3. Restore actual complete references through the existing store mechanism.
    Missing genuine artifacts still require recovery; never silently drop them.
 

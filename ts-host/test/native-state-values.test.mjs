@@ -30,10 +30,33 @@ test('short native ID in historical tool arguments stays ordinary data', () => {
   } }] }];
   assert.deepEqual(requestNativeStateIds(history([short])), []);
   assert.deepEqual(requestNativeStateIds(history([valid])), [full]);
-  assert.deepEqual(requestNativeStateIds(history([short, valid])), [full]);
+  assert.deepEqual(requestNativeStateIds(history([short, valid])), []);
+  assert.deepEqual(requestNativeStateIds(history([valid, valid])), [full]);
   assert.deepEqual(requestNativeStateIds(history({ nested: [short] })), []);
   assert.deepEqual(requestNativeStateIds(history({ nested: [valid] })), [full]);
   assert.equal(short.id, 'nzs1_w42ancp7k5');
+});
+
+for (const mixed of [false, true]) test(`malformed historical state arguments preserve the next transport request (mixed=${mixed})`, async t => {
+  const requests = [];
+  const parts = [{ type: 'native_state', id: 'nzs1_w42ancp7k5' }];
+  if (mixed) parts.push({ type: 'native_state', id: 'nzs1_' + 'a'.repeat(52) });
+  const original = JSON.stringify({ status: 'success', value: parts });
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (String(url).endsWith('/v1/neuralese/info'))
+      return new Response(JSON.stringify({ native_state: { enabled: true }, capabilities: ['chat'], stream: false }));
+    assert.ok(String(url).endsWith('/v1/chat/completions'), 'invalid history must not trigger artifact lookup');
+    requests.push(JSON.parse(options.body));
+    return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Recovered.' },
+      finish_reason: 'stop' }] }));
+  });
+  const driver = neuraleseServerModelTurn({ endpoint: 'http://native-fixture', model: 'fixture' });
+  const reply = await driver({ messages: [{ role: 'assistant', tool_calls: [{ id: 'prior', type: 'function',
+    function: { name: 'return_result', arguments: original } }] },
+    { role: 'tool', tool_call_id: 'prior', content: 'Return the required ordinary string array.' }], tools: [] });
+  assert.equal(reply.text, 'Recovered.');
+  assert.equal(requests.length, 1);
+  assert.deepEqual(JSON.parse(requests[0].messages[0].tool_calls[0].function.arguments), JSON.parse(original));
 });
 
 test('native state is the existing typed value through parts, nested values, eval and soft bodies', async () => {

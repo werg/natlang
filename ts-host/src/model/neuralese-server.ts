@@ -296,6 +296,12 @@ export function requestBlockIds(messages: readonly unknown[]): string[] {
   return [...ids];
 }
 
+function malformedNativePartList(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0 && value.every(part => part && typeof part === 'object' &&
+    ['text', 'neuralese', 'native_state'].includes(part.type)) &&
+    value.some(part => part.type === 'native_state' && !isNativeStateId(part.id));
+}
+
 /** Native artifacts carried by parts or the runtime's private-use transcript marker. */
 export function requestNativeStateIds(messages: readonly unknown[]): string[] {
   const ids = new Set<string>();
@@ -304,6 +310,7 @@ export function requestNativeStateIds(messages: readonly unknown[]): string[] {
       try { visit(JSON.parse(value)); } catch { /* the transport will report malformed arguments */ }
       return;
     }
+    if (malformedNativePartList(value)) return;
     if (Array.isArray(value) && value.length && value.every(part => part && typeof part === 'object' &&
         (part.type === 'text' && typeof part.text === 'string' ||
          part.type === 'neuralese' && typeof part.id === 'string' ||
@@ -328,6 +335,7 @@ function materializeNativeStateSentinels(value: unknown, key?: string): unknown 
     try { return JSON.stringify(materializeNativeStateSentinels(JSON.parse(value))); }
     catch { return value; } // preserve malformed input for the server's existing argument error path
   }
+  if (malformedNativePartList(value)) return value;
   if (typeof value === 'string') return nativeStateSentinelIds(value).length ? runtimeTextToParts(value) : value;
   if (Array.isArray(value) && value.length && value.every(part => part && typeof part === 'object' &&
       (part.type === 'text' && typeof part.text === 'string' ||
