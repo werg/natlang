@@ -122,6 +122,17 @@ def test_completed_failure_is_a_real_verdict(monkeypatch, tmp_path):
     assert state['history'][-1]['exit'] == 1
 
 
+def test_verbose_parameter_failure_text_is_not_a_failed_test(monkeypatch, tmp_path):
+    module = service(monkeypatch, tmp_path)
+    passed = ('tests/test_full_check_service.py::test_interrupted_check'
+              '[FAILED tests/test_something.py::test_partial\\n] PASSED [ 39%]\n')
+    assert module.failures(passed + '=== summary\npython-tests ok 3s\nexit=0\n')['failed_tests'] == []
+    actual = module.failures(passed + 'FAILED tests/test_actual.py::test_case - AssertionError\n'
+                            '=== summary\npython-tests FAILED (1) 3s\nexit=1\n')
+    assert actual['failed_tests'] == ['tests/test_actual.py']
+    assert actual['exit'] == 1
+
+
 @pytest.mark.parametrize('status', ['failed', 'timeout', 'killed (out of memory?)', 'signal SIGTERM'])
 def test_isolated_test_runner_terminal_file_is_routed(monkeypatch, tmp_path, status):
     module = service(monkeypatch, tmp_path)

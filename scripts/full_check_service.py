@@ -146,7 +146,7 @@ def clean_temporary(run: dict) -> None:
 def failures(text: str) -> dict:
     summary = text[text.rfind('=== summary'):] if '=== summary' in text else ''
     steps = [line.split()[0] for line in summary.splitlines()[1:] if 'FAILED' in line]
-    tests = sorted(set(re.findall(r'FAILED (tests/\S+?)(?:::| )', text)))           # pytest
+    tests = sorted(set(re.findall(r'^FAILED (tests/\S+?)(?:::| )', text, re.M)))  # pytest summary records
     tests += sorted(set(re.findall(r'^\s*(?:✖|not ok \d+ -) .*?(test/[\w./-]+\.test\.mjs)', text, re.M)))  # node --test
     tests += sorted(set(re.findall(r'^FAIL (test/[\w./-]+\.mjs)', text, re.M)))     # test-files.mjs
     tests += sorted(set(re.findall(

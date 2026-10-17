@@ -15,3 +15,8 @@ or compiler-pool cause remains under investigation.
 4. Existing step accounting still records every failure and runs all steps.
    Quick checks retain their compact output. No production kernel or numerical
    tolerance changes, and a passing isolated test does not qualify a full run.
+
+Verbose test names can themselves contain literal failure text as parameter
+values. Failure routing parses pytest's anchored `FAILED` records, rather than
+matching such text inside a passing test name. This is an exact log-parser
+correction; test selection, verdicts and routing policy remain unchanged.
