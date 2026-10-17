@@ -75,7 +75,9 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
     from ..train.native_state_sft import packed_graph_loss
     if not cases:
         raise ValueError('capacity qualification needs actual complete source graphs')
-    named = [(name,p) for name,p in model.named_parameters() if p.requires_grad]
+    # Use the actual optimizer inventory, including functional native HF
+    # parameters that a port facade may not register under model.modules().
+    named = [(name,p) for name,p in getattr(optimizer,'_native_named_parameters',model.named_parameters()) if p.requires_grad]
     if any(p.grad is not None for _,p in named):
         raise ValueError('capacity qualification requires an empty update boundary')
     for _,child in _children(optimizer):
@@ -87,7 +89,9 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
     training_modes = {module:module.training for module in model.modules()}
     had_layers = hasattr(model.port,'checkpoint_layers')
     layers = getattr(model.port,'checkpoint_layers',None)
-    parameter_versions = {name:p._version for name,p in model.named_parameters()}
+    parameters={id(p):p for p in model.parameters()}
+    parameters.update({id(p):p for _,p in named})
+    parameter_versions = {key:p._version for key,p in parameters.items()}
     optimizer_versions = _optimizer_versions(optimizer)
     extra = copy.deepcopy(backend.extra_state()) if backend is not None else None
     counts = backend.collect_row_counts() if backend is not None else None
@@ -111,8 +115,11 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
             restore_training_rng_state(rng,rng_device)
             observed={}
             loss=None
-            row={'id':example.id,'forward_tokens':example.plan.token_count,
-                 'kv_slots':len(example.plan.slot_sources),'status':'running'}
+            batch=list(example) if isinstance(example,(list,tuple)) else [example]
+            row={'id':batch[0].id if len(batch)==1 else 'batch:'+','.join(item.id for item in batch),
+                 'example_ids':[item.id for item in batch],
+                 'forward_tokens':sum(item.plan.token_count for item in batch),
+                 'kv_slots':sum(len(item.plan.slot_sources) for item in batch),'status':'running'}
             rows.append(row)
             started=time.monotonic()
             try:
@@ -121,7 +128,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
                         packing = ({'share_causal_prefixes':True}
                             if getattr(model,'share_causal_prefixes',False) else {})
                         if objective is not None:packing['objective']=objective
-                        loss,_=packed_graph_loss(model,[example],checkpoint_layers=checkpoint_layers,
+                        loss,_=packed_graph_loss(model,batch,checkpoint_layers=checkpoint_layers,
                             chunk_tokens=chunk_tokens,**packing)
                     loss.backward()
                     if device.type=='cuda':torch.cuda.synchronize(device)
@@ -179,7 +186,7 @@ def qualify_capacity(model, optimizer, cases, *, backend=None, checkpoint_layers
         if restore_error is not None:
             raise CapacityStateChangedError('capacity check could not restore backend/RNG state') from restore_error
         if device.type=='cuda':torch.cuda.empty_cache()
-        if parameter_versions!={name:p._version for name,p in model.named_parameters()}:
+        if parameter_versions!={key:p._version for key,p in parameters.items()}:
             raise CapacityStateChangedError('capacity check changed a model parameter')
         if optimizer_versions!=_optimizer_versions(optimizer):
             raise CapacityStateChangedError('capacity check changed optimizer state or rates')
@@ -236,8 +243,14 @@ def capacity_identity(config,args,backend):
     objective={}
     if getattr(args,'objective_spec',None):
         from ..train.native_preference import NativePreferenceObjective
-        objective={'objective':NativePreferenceObjective(args.objective_spec,
-            beta=getattr(args,'preference_beta',None),margin=getattr(args,'preference_margin',None)).binding()}
+        spec=json.loads(Path(args.objective_spec).read_text())
+        if spec.get('kind')=='native-policy':
+            from ..rl.native_replay import NativePolicyObjective
+            value=NativePolicyObjective(args.objective_spec)
+        else:
+            value=NativePreferenceObjective(args.objective_spec,
+                beta=getattr(args,'preference_beta',None),margin=getattr(args,'preference_margin',None))
+        objective={'objective':value.binding()}
     return {**objective,
         **({'checkpoint_input_offload_directory':args.checkpoint_input_offload_directory}
            if getattr(args,'checkpoint_input_offload_directory',None) else {}),'model_config':config,'batch_graphs':args.batch_graphs,'batch_tokens':args.batch_tokens,
@@ -441,3 +454,89 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
     from ..common.jsonio import write_json_durable
     write_json_durable(args.out/'memory-qualification.json',result)
     return result
+
+
+def policy_capacity_request(source,objective):
+    """Exact whole-example maxima; the source parser remains the authority."""
+    from ..train.native_resident import binding
+    entries=[]
+    for index,example in enumerate(source.iter_from(0)):
+        entries.append({'index':index,'id':example.id,'binding':source.bindings[example.id],
+            'forward_tokens':example.plan.token_count,'kv_slots':len(example.plan.slot_sources)})
+    if not entries or set(objective.rows)!={row['id']for row in entries}:
+        raise ValueError('policy capacity requires every admitted objective episode exactly once')
+    chosen=sorted({max(range(len(entries)),key=lambda i:entries[i][key]) for key in ('forward_tokens','kv_slots')})
+    return {'schema':'natlang.native-policy-capacity-request/1','source':binding(source.path),
+        'objective':objective.binding(),'entries':entries,'max_example_indices':chosen}
+
+
+def qualify_policy_objective(model,optimizer,train,objective,args,config,*,backend,checkpoint_sha256,
+                             pending_batches,prior_proof=None):
+    """The actual loaded learner runs its policy loss read-only before SGD."""
+    from ..common.jsonio import write_json_durable
+    from ..common.hashing import canonical_json_sha256_hex as digest
+    from ..train.native_resident import binding,bound,code_inventory
+    expected=policy_capacity_request(train,objective)
+    supplied=getattr(args,'policy_capacity_request',None)
+    path=bound(json.loads(supplied)) if supplied else args.out/'policy-capacity-request.json'
+    if path.exists():
+        if json.loads(path.read_text())!=expected:
+            raise ValueError('policy capacity request differs from actual admitted graph/objective source')
+    else:write_json_durable(path,expected)
+    identity=capacity_identity(config,args,backend)
+    code=digest(code_inventory(Path(__file__).resolve().parents[1]))
+    # Qualify maximum whole examples AND actual packed pending batches. Packing
+    # can use more memory than any individual episode; never split an episode.
+    groups=[(i,)for i in expected['max_example_indices']]
+    batches=sorted({tuple(batch[1])for batch in pending_batches})
+    if batches:
+        groups += [max(batches,key=lambda ids:sum(expected['entries'][i][key]for i in ids))
+                   for key in ('forward_tokens','kv_slots')]
+    groups=list(dict.fromkeys(groups))
+    limits={key:max(sum(expected['entries'][i][key]for i in group)for group in groups)
+            for key in ('forward_tokens','kv_slots')}
+    scope={'request':binding(path),'identity':identity,'runtime_code_sha256':code}
+    output=args.out/'policy-capacity'/digest({**scope,'packing_limits':limits})/'proof.json'
+    output.parent.mkdir(parents=True,exist_ok=True)
+    # A saved passed proof can cover smaller remaining batches after a stop.
+    # Larger/new packing receives its own actual check, never an inherited claim.
+    candidate=Path(prior_proof['path']) if prior_proof is not None else output
+    embedded=prior_proof.get('proof') if prior_proof is not None else None
+    if embedded is not None and digest(embedded)!=prior_proof.get('proof_sha256'):
+        raise ValueError('saved policy capacity proof payload changed')
+    if candidate.exists() or embedded is not None:
+        if candidate.exists():
+            if prior_proof is not None:bound(prior_proof)
+            previous=json.loads(candidate.read_text())
+            if embedded is not None and previous!=embedded:
+                raise ValueError('saved policy capacity proof differs from durable evidence')
+        else:previous=embedded
+        if any(previous.get(key)!=value for key,value in scope.items()):
+            if candidate==output:raise ValueError('policy capacity proof changed its restored objective identity')
+        elif all(previous.get('packing_limits',{}).get(key,-1)>=value for key,value in limits.items()):
+            if previous.get('passed') is not True:
+                raise ValueError('policy capacity has no passed proof for this exact restored objective')
+            if previous['parent_checkpoint_sha256']!=checkpoint_sha256 and prior_proof is None:
+                raise ValueError('policy capacity proof lacks its authenticated saved continuation')
+            return {**({'path':str(candidate.resolve()),'sha256':prior_proof['sha256']} if not candidate.exists() else binding(candidate)),
+                'proof':previous,'proof_sha256':digest(previous)}
+    examples=[list(train.iter_indices(list(indices)))for indices in groups]
+    result={'schema':'natlang.native-policy-capacity-proof/1',**scope,
+        'parent_checkpoint_sha256':checkpoint_sha256,'passed':False,'optimizer_updates':0,
+        'earned_exposure':0,'packing_limits':limits,'case_indices':[list(group)for group in groups],
+        'scope':'actual admitted whole policy examples and pending production packed-batch maxima; no task-quality claim'}
+    try:
+        result['capacity']=qualify_capacity(model,optimizer,examples,backend=backend,
+            checkpoint_layers=args.checkpoint_layers,chunk_tokens=args.chunk_tokens,
+            checkpoint_sha256=checkpoint_sha256,source_binding=expected['source'],objective=objective)
+        if not result['capacity']['passed']:
+            raise RuntimeError('actual policy objective exceeded its learner capacity')
+        if args.fp8_training!='off':
+            counts=result['capacity']['executed_projections']
+            if not (counts.get('calls',0)>0 and counts.get('rows',0)>0):
+                raise ValueError('policy capacity requires actual configured FP8 projection execution')
+        result['passed']=True
+    except BaseException as error:
+        result['error']=str(error);write_json_durable(output,result);raise
+    write_json_durable(output,result)
+    return {**binding(output),'proof':result,'proof_sha256':digest(result)}

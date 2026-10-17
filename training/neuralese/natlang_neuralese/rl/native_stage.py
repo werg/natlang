@@ -127,6 +127,16 @@ def _admit_and_train(args,trainer):
         return train_coefficients(['--coefficient-policy',str(args.coefficient_policy),'--graphs',str(graph_path),
             '--objective',str(objective_path),'--continue-from',str(args.continue_from),
             '--held-native-graphs',str(args.held_native_graphs),'--out',str(args.out),*trainer])
+    from ..data.native_sources import NativeGraphSource
+    from .native_replay import NativePolicyObjective
+    from ..eval.native_memory import policy_capacity_request
+    policy_objective=NativePolicyObjective(objective_path)
+    source=NativeGraphSource(graph_path,policy_objective.identity['tokenizer_fingerprint'],required_split='train')
+    request_path=args.out/'rl-policy-capacity-request.json'
+    request=policy_capacity_request(source,policy_objective)
+    write_json_durable(request_path,request)
+    from ..train.native_resident import binding
+    trainer += ['--policy-capacity-request',json.dumps(binding(request_path),sort_keys=True)]
     from ..train.native_state_sft import main as train
     return train(['--native-graphs', str(graph_path), '--held-native-graphs', str(args.held_native_graphs),
         '--objective-spec', str(objective_path), '--continue-from', str(args.continue_from),

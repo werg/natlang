@@ -605,6 +605,19 @@ class NativePolicyObjective:
         if self.behavior_policy is not None and self.bundle is None:
             raise ValueError('native invocation policy requires its immutable actor bundle')
 
+    def binding(self):
+        import json
+        from ..common.hashing import canonical_json_sha256_hex,sha256_file_hex_cached
+        if canonical_json_sha256_hex(json.loads(self.path.read_text()))!=canonical_json_sha256_hex(self.spec):
+            raise ValueError('native policy objective changed after admission')
+        result={'kind':'native-policy','sha256':sha256_file_hex_cached(self.path),'mode':self.spec['mode']}
+        if self.bundle is not None:
+            path,manifest=self.bundle
+            if canonical_json_sha256_hex(json.loads(path.read_text()))!=canonical_json_sha256_hex(manifest):
+                raise ValueError('native policy archive changed after admission')
+            result['block_bundle']={'path':str(path),'sha256':sha256_file_hex_cached(path)}
+        return result
+
     def bind_actor(self, engine, *, example=None):
         """Separate immutable sampled behavior from current same-basis coefficients."""
         from ..model.native_adapters import execution_identity, execution_binding, SCHEMA

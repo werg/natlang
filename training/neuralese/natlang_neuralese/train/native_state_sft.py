@@ -726,6 +726,8 @@ def build_parser():
         help='qualify actual enabled backend on restored live weights before useful updates; preserve RNG/state')
     parser.add_argument('--resident-data-directory', type=Path)
     parser.add_argument('--resident-geometry-qualification', type=Path)
+    parser.add_argument('--policy-capacity-request',default=None,
+        help='exact admitted whole-policy source/objective MAX request; policy SGD always qualifies before updates')
     parser.add_argument('--memory-qualification', default=None,
         help='bound prepared new-source capacity request JSON; checked read-only after exact restore')
     parser.add_argument('--recipe-binding', default=None)
@@ -1164,7 +1166,7 @@ def main(argv=None):
         write_json(args.out / 'training-backend-check.json', backend_check)
     if args.memory_qualification:
         from ..eval.native_memory import run_prepared
-        memory_check = run_prepared(model,optimizer,train,roles,config,args,backend=backend,objective=held_objective,
+        memory_check = run_prepared(model,optimizer,train,roles,config,args,backend=backend,objective=objective,
             checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
                 if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'])
         checkpoint_options['memory_qualification'] = {'passed':memory_check['passed'],
@@ -1194,6 +1196,11 @@ def main(argv=None):
         foundation_ids=foundation_priority_ids,
         foundation_communication_batches=args.foundation_communication_batches or 1,
         minimum_visits=pending_frame.get('required_visits'), schedule_offset=global_step)
+    if objective is not None and not mandatory_objective:
+        from ..eval.native_memory import qualify_policy_objective
+        checkpoint_options['policy_capacity']=qualify_policy_objective(model,optimizer,train,objective,args,config,
+            backend=backend,checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot),
+            pending_batches=pending_batches,prior_proof=((resume or {}).get('options') or {}).get('policy_capacity'))
     target_rows = sum(required_visits.values())
     total_end = step + len(pending_batches)
     if step > total_end:
