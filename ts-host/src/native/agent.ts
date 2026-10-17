@@ -656,9 +656,24 @@ export class NativeToolAgent {
     };
     for (const [index, message] of messages.entries()) {
       const record = message as { content?: unknown; tool_calls?: { function?: { arguments?: unknown } }[] };
-      const texts = [record.content, ...(record.tool_calls ?? []).map(call => call.function?.arguments)];
-      for (const [part, value] of texts.entries()) {
-        for (const use of findRefs(value)) {
+      // Match serving's recursive argument renderer: only recognized part LISTS
+      // import state. A singleton lookalike object is ordinary JSON data.
+      const argumentRefs = (value: unknown): Use[] => {
+        if (Array.isArray(value)) {
+          const parts = value.length > 0 && value.every(part => part && typeof part === 'object' &&
+            ['text','neuralese','native_state'].includes((part as {type:string}).type));
+          return parts ? findRefs(value) : value.flatMap(argumentRefs);
+        }
+        if (value && typeof value === 'object') return Object.values(value).flatMap(argumentRefs);
+        return [];
+      };
+      const texts = [record.content];
+      const argumentUses = (record.tool_calls ?? []).map(call => {
+        const value = call.function?.arguments;
+        return argumentRefs(typeof value === 'string' ? value.trim() ? JSON.parse(value) : {} : value);
+      });
+      for (const [part, uses] of [findRefs(texts[0]), ...argumentUses].entries()) {
+        for (const use of uses) {
           const block=use.block,isNative=use.native;
           const artifact = isNative ? await this.options.neuralese?.store.getNativeState?.(block) : undefined;
           if (isNative && !artifact) throw new Error(`native-state consumer artifact ${block} is unavailable for provenance`);
@@ -1029,7 +1044,7 @@ export class NativeToolAgent {
     if (scores.log_probs.length !== replies.length || scores.log_probs.some(value => !Number.isFinite(value)))
       throw new Error('decision readout returned no finite score for every option');
     if(scores.x_natlang_native_recorded_turn){
-      const turnNode=await this.modelTurnNode(session,messages,{},1,'decision');
+      const turnNode=await this.modelTurnNode(session,encoded.messages,{},1,'decision');
       if(turnNode)activeRecorder()?.linkNativeTurn?.(scores.x_natlang_native_recorded_turn,turnNode);
     }
     const probabilities = softmax(scores.log_probs);
@@ -1195,9 +1210,11 @@ export class NativeToolAgent {
         tool_schema_bytes: new TextEncoder().encode(JSON.stringify(this.options.promptRendering === 'program-header' ? [] : availableTools)).length,
         messages: messages.length });
       let response: ModelTurn;
+      let graphMessages: readonly unknown[] = messages;
       try {
         // Blocks in the conversation travel as content parts; a backend that cannot carry them fails the call.
         const encoded = encodeMessages(this.softened(renderPromptMessages(messages, this.options.promptRendering)));
+        graphMessages = encoded.messages;
         if (encoded.blocks && !supportsNeuralese(this.driver))
           throw new NeuraleseUnsupportedError('this model backend cannot carry Neuralese blocks');
         const adapters = adapterCells(session.lam);
@@ -1252,7 +1269,7 @@ export class NativeToolAgent {
         ...(response.scheduling ? { batch_id: response.scheduling.batch_id, batch_size: response.scheduling.batch_size,
           in_flight: response.scheduling.in_flight, queue_wait_ms: response.scheduling.queue_wait_ms,
           schedule_priority: response.scheduling.priority } : {}) });
-      const turnNode = await this.modelTurnNode(session, messages, response, turns + 1);
+      const turnNode = await this.modelTurnNode(session, graphMessages, response, turns + 1);
       if (response.prompt_tokens !== undefined && sentChars > 0) tokensPerChar = response.prompt_tokens / sentChars;
       turns++;
       session.runtime.checkInterruption();

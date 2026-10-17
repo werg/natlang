@@ -431,3 +431,25 @@ test('actual eval compiler preserves native constant and source metadata in a ty
   const result=await target.applyAsync('eval',{code:`const memo: Neuralese<string> = ${neuraleseRefSentinel(reference)}; memo;`,finish:true});
   assert.deepEqual(target.lam.return,reference,JSON.stringify(result));
 });
+
+test('tool JSON history records every actual native import with its writer and gradient use', async () => {
+  const store=new MemoryNeuraleseStore(),artifact=await store.putNativeState(nativeStateFixture());
+  const invocation=open({type:'() => boolean',instructions:'Return a boolean.'},{neuralese:runtimeFor(store)}).session;
+  const agent=new NativeToolAgent(Object.assign(async()=>({}),{neuralese:true}),{neuralese:runtimeFor(store)});
+  const part={type:'native_state',id:artifact.id,source_occurrence:'actual-writer#6',stop_gradient:true};
+  const messages=[{role:'assistant',tool_calls:[{function:{name:'return_result',arguments:JSON.stringify({value:[part],nested:{again:[part]}})}}]}];
+  const before=structuredClone(messages);
+  await agent.modelTurnNode(invocation,messages,{},2);
+  const reads=invocation.runtime.trace.events.filter(event=>event.kind==='block_read');
+  assert.equal(reads.length,2);
+  assert.ok(reads.every(event=>event.block===artifact.id&&event.stop_gradient===true&&event.inputs[0].node==='actual-writer#6'));
+  assert.deepEqual(messages,before);
+  const {nativeCaptureGraphBinding}=await import('../dist/native/model-recording.js');
+  const name=invocation.runtime.trace.events.find(event=>event.kind==='model_turn').node;
+  const nodes=new Map(invocation.runtime.trace.events.filter(event=>event.node).map(event=>[event.node,event]));
+  assert.equal(nativeCaptureGraphBinding(name,{prompt:[{kind:'native_state',id:artifact.id,source_occurrence:'actual-writer#6',stop_gradient:true},{kind:'native_state',id:artifact.id,source_occurrence:'actual-writer#6',stop_gradient:true}]},nodes).read_occurrences.length,2);
+  const prior=invocation.runtime.trace.events.filter(event=>event.kind==='block_read').length;
+  await agent.modelTurnNode(invocation,[{tool_calls:[{function:{arguments:JSON.stringify({singleton:part,text:JSON.stringify(part)})}}]}],{},3);
+  assert.equal(invocation.runtime.trace.events.filter(event=>event.kind==='block_read').length,prior);
+  await assert.rejects(()=>agent.modelTurnNode(invocation,[{tool_calls:[{function:{arguments:'not json'}}]}],{},4),SyntaxError);
+});
