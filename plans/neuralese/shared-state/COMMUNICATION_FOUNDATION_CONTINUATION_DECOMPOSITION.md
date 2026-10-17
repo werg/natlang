@@ -28,6 +28,10 @@ earlier shard cannot stand in for a larger currently declared foundation.
    the shared checkpoint. RL carries CE frames unchanged. Returning to a CE
    stage selects its frame, checks append-only bindings/order, and consumes
    remaining visits with the current optimizer/RNG instead of resetting credits.
+   Collect the independently owned metadata frames once per restore. Copy the
+   selected frame separately for current mutation and retain the original owned
+   collection as carried history; do not repeat a whole-history deep copy merely
+   to attach the same history. Optimizer/RNG/FP8 objects remain the current ones.
 4. **Publish foundation readiness** binds its exact checkpoint, cohort exposure,
    remaining mandatory deficits and actual checks. Formal `completed` remains
    false until every declared source quota is done. Rendezvous admits explicitly

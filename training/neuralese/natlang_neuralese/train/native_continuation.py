@@ -193,13 +193,14 @@ def sft_frame_complete(frame):
 
 def restore_sft_progress(current,stage):
     """Restore credits with the current participant optimizer/RNG, not old state."""
-    frame=collect_sft_progress(current).get(stage or 'native-graph-ce')
+    progress=collect_sft_progress(current)
+    frame=progress.get(stage or 'native-graph-ce')
     if frame is None:return None
     result=copy.deepcopy(frame)
     for key in ('optimizer','rng','fp8'):
         if key in current:result[key]=current[key]
     result['global_step']=int(current.get('global_step',current.get('step',0)))
-    result['sft_progress']=collect_sft_progress(current)
+    result['sft_progress']=progress
     return result
 
 
