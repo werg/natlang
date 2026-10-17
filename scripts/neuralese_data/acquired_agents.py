@@ -3,10 +3,16 @@ from __future__ import annotations
 
 import json
 import gzip
+import mmap
+import re
 from pathlib import Path
 
 from .common import Reject
 from .records import group_key
+
+_D14_JSON_STRUCTURE = re.compile(rb'["{}\[\]]')
+_D14_JSON_STRING_MARKER = re.compile(rb'["\\]')
+_D14_JSON_SCALAR_END = re.compile(rb'[,}\]]')
 
 ACQUIRED_FILES = None  # Optional exact receipt-file shard, never an implicit row limit.
 ACQUIRED_RECEIPTS = {}  # Explicit immutable selected-file snapshots; never the mutable download journal.
@@ -54,7 +60,202 @@ def supported_acquired_file(name):
     return str(name).endswith(('.parquet','.jsonl','.jsonl.gz','.jsonl.zst','.json','.json.gz','.tar.gz'))
 
 
-def iter_acquired_file_rows(path):
+def _d14_json_projection_value_end(buffer, start, size):
+    """Find a JSON value boundary without decoding strings that may be discarded."""
+    while start < size and buffer[start] in (9, 10, 13, 32):
+        start += 1
+    if start >= size:
+        raise Reject('truncated D14 JSON value')
+    token = buffer[start]
+    if token == 34:
+        return _d14_json_projection_string_end(buffer, start, size)
+    if token not in (123, 91):
+        match = _D14_JSON_SCALAR_END.search(buffer, start, size)
+        end = size if match is None else match.start()
+        while end > start and buffer[end - 1] in (9, 10, 13, 32):
+            end -= 1
+        if end == start:
+            raise Reject('empty D14 JSON scalar')
+        return end
+    stack = [125 if token == 123 else 93]
+    cursor = start + 1
+    while stack:
+        match = _D14_JSON_STRUCTURE.search(buffer, cursor, size)
+        if match is None:
+            raise Reject('unterminated D14 JSON container')
+        position = match.start()
+        byte = buffer[position]
+        if byte == 34:
+            cursor = _d14_json_projection_string_end(buffer, position, size)
+            continue
+        if byte in (123, 91):
+            stack.append(125 if byte == 123 else 93)
+        else:
+            if byte != stack[-1]:
+                raise Reject('mismatched D14 JSON container')
+            stack.pop()
+        cursor = position + 1
+    return cursor
+
+
+def _d14_json_projection_string_end(buffer, start, size):
+    if start >= size or buffer[start] != 34:
+        raise Reject('expected D14 JSON string')
+    cursor = start + 1
+    while cursor < size:
+        match = _D14_JSON_STRING_MARKER.search(buffer, cursor, size)
+        if match is None:
+            break
+        byte = buffer[match.start()]
+        if byte == 34:
+            return match.start() + 1
+        # In JSON every escape consumes exactly one following byte (including
+        # the first byte of a unicode escape); that byte cannot terminate the
+        # string. Searching again after it preserves linear progress without
+        # carrying escape state across ordinary bytes.
+        cursor = match.start() + 2
+    raise Reject('unterminated D14 JSON string')
+
+
+class _D14IgnoredToolExtraProjection:
+    """Materialize the exact D14 document while skipping unused tool `extra` values."""
+
+    def __init__(self, buffer):
+        self.buffer = buffer
+        self.size = len(buffer)
+        self.omitted_fields = 0
+        self.omitted_value_bytes = 0
+
+    def _space(self, position):
+        while position < self.size and self.buffer[position] in (9, 10, 13, 32):
+            position += 1
+        return position
+
+    def _string(self, position):
+        end = _d14_json_projection_string_end(self.buffer, position, self.size)
+        try:
+            return json.loads(self.buffer[position:end]), end
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise Reject('malformed D14 JSON string') from error
+
+    def _object_fields(self, position):
+        position = self._space(position + 1)
+        fields = []
+        if position < self.size and self.buffer[position] == 125:
+            return fields, position + 1
+        while position < self.size:
+            key, key_end = self._string(position)
+            position = self._space(key_end)
+            if position >= self.size or self.buffer[position] != 58:
+                raise Reject('malformed D14 JSON object field')
+            value_start = self._space(position + 1)
+            value_end = _d14_json_projection_value_end(self.buffer, value_start, self.size)
+            fields.append((key, value_start, value_end))
+            position = self._space(value_end)
+            if position < self.size and self.buffer[position] == 44:
+                position = self._space(position + 1)
+                continue
+            if position < self.size and self.buffer[position] == 125:
+                return fields, position + 1
+            raise Reject('malformed D14 JSON object delimiter')
+        raise Reject('unterminated D14 JSON object')
+
+    def value(self, position, context='ordinary'):
+        position = self._space(position)
+        if position >= self.size:
+            raise Reject('truncated D14 JSON document')
+        token = self.buffer[position]
+        if token == 34:
+            value, end = self._string(position)
+            return value, end
+        if token == 123:
+            fields, end = self._object_fields(position)
+            role = None
+            for key, start, stop in fields:
+                if key == 'role':
+                    try:
+                        role = json.loads(self.buffer[start:stop])
+                    except (UnicodeDecodeError, json.JSONDecodeError):
+                        role = None
+            result = {}
+            for key, start, stop in fields:
+                if key == 'extra' and context == 'message' and role == 'tool':
+                    self.omitted_fields += 1
+                    self.omitted_value_bytes += stop - start
+                    continue
+                child_context = 'ordinary'
+                if context in ('root', 'row') and key == 'messages':
+                    child_context = 'messages'
+                elif context in ('root', 'row') and key == 'segments':
+                    child_context = 'segments'
+                elif context == 'segment' and key == 'messages':
+                    child_context = 'messages'
+                result[key], _ = self.value(start, child_context)
+            return result, end
+        if token == 91:
+            result = []
+            cursor = self._space(position + 1)
+            if cursor < self.size and self.buffer[cursor] == 93:
+                return result, cursor + 1
+            while cursor < self.size:
+                child_context = 'ordinary'
+                if context == 'messages':
+                    child_context = 'message'
+                elif context == 'segments':
+                    child_context = 'segment'
+                elif context == 'root':
+                    child_context = 'row'
+                item, end = self.value(cursor, child_context)
+                result.append(item)
+                cursor = self._space(end)
+                if cursor < self.size and self.buffer[cursor] == 44:
+                    cursor = self._space(cursor + 1)
+                    continue
+                if cursor < self.size and self.buffer[cursor] == 93:
+                    return result, cursor + 1
+                raise Reject('malformed D14 JSON array delimiter')
+            raise Reject('unterminated D14 JSON array')
+        end = _d14_json_projection_value_end(self.buffer, position, self.size)
+        try:
+            return json.loads(self.buffer[position:end]), end
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise Reject('malformed D14 JSON scalar') from error
+
+
+def _iter_d14_full_trajectory_json(path, source_entry):
+    from natlang_neuralese.common.hashing import sha256_file_hex_cached
+    path = Path(path)
+    if (path.stat().st_size != source_entry.get('bytes')
+            or sha256_file_hex_cached(path) != source_entry.get('sha256')):
+        raise Reject('D14 projected source differs from its acquisition binding')
+    with path.open('rb') as stream:
+        with mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as buffer:
+            parser = _D14IgnoredToolExtraProjection(buffer)
+            value, end = parser.value(0, 'root')
+            if parser._space(end) != len(buffer):
+                raise Reject('trailing bytes in D14 full-trajectory JSON')
+            projection = {
+                'schema': 'natlang.d14-ignored-tool-extra-projection/1',
+                'parser': 'receipt-bound-mmap-json-projector-v1',
+                'source_file_sha256': source_entry['sha256'],
+                'source_file_bytes': source_entry['bytes'],
+                'omitted_message_extra_fields': parser.omitted_fields,
+                'omitted_raw_value_bytes': parser.omitted_value_bytes,
+                'discarded_value_validation': 'balanced JSON string/container boundaries; skipped contents are not independently decoded',
+                'training_admission': False,
+            }
+            if isinstance(value, list):
+                for index, row in enumerate(value):
+                    if isinstance(row, dict):
+                        row['_natlang_source_projection'] = projection
+                    yield index, row
+            else:
+                if isinstance(value, dict):
+                    value['_natlang_source_projection'] = projection
+                yield 0, value
+
+
+def iter_acquired_file_rows(path, *, d14_projection_entry=None):
     """Yield original integer rows; blank JSONL lines keep their positions."""
     path=Path(path)
     if str(path).endswith('.tar.gz'):
@@ -63,6 +264,10 @@ def iter_acquired_file_rows(path):
     elif path.suffix=='.parquet':
         from . import agents
         yield from agents._parquet_groups(path)
+    elif d14_projection_entry is not None:
+        if not path.name.endswith('_full_traj.json'):
+            raise Reject('D14 ignored-extra projection only supports full-trajectory JSON')
+        yield from _iter_d14_full_trajectory_json(path, d14_projection_entry)
     elif str(path).endswith(('.json','.json.gz')):
         opener=gzip.open if str(path).endswith('.gz') else open
         with opener(path,'rt',encoding='utf-8') as stream:
@@ -440,7 +645,8 @@ def acquired_rows(ref, limit=None, *, metadata_only_files=frozenset()):
         metadata_only = str(relative) in metadata_only_files
         if metadata_only and path.suffix!='.parquet':
             raise Reject('metadata-only acquired row accounting requires a Parquet source')
-        rows=((row_index,None) for row_index in iter_acquired_file_row_ids(path)) if metadata_only else iter_acquired_file_rows(path)
+        d14_projection_entry=(entry if ref=='D14' and entry['path'].endswith('_full_traj.json') else None)
+        rows=((row_index,None) for row_index in iter_acquired_file_row_ids(path)) if metadata_only else iter_acquired_file_rows(path,d14_projection_entry=d14_projection_entry)
         for row_index, row in rows:
             if limit is not None and index >= limit:
                 return
@@ -711,6 +917,8 @@ def _cooperation_acquired(ref,limit=None,*,rows=None):
                         'original_message_count':len(messages),'model_message_count':len(context),
                         'terminal_events':terminal,'observed_command_logs':observations,
                         'archive_context':row.get('_cooperation_archive_context')}
+                    if row.get('_natlang_source_projection') is not None:
+                        t.lineage['notes']['source_projection'] = row['_natlang_source_projection']
                     t.split_groups.extend([group_key('cooper-task',task),group_key('cooper-task',f'{repo}:{task_id}')])
                     if f'{repo}:{task_id}' in agents._bench_ids():t.split='test'
                     yield child,t

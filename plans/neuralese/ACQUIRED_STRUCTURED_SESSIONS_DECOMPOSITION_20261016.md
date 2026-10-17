@@ -77,6 +77,22 @@ Local qualification, 2026-10-16:
   protected split closure and actual training exposure remain separate steps;
   this format proof does not claim task success or locally verified source quality.
 
+6. **Oversized D14 ignored-field projection (bounded exact I/O).** For a
+   receipt-bound `_full_traj.json` document only, parse from a read-only mmap and
+   omit the exact `extra` member of original message objects whose role is
+   `tool`. The shared OpenAI message normalizer never reads that member. Keep
+   every other message field, all eleven original segments, the final message
+   list, and their order. Record the original acquisition file SHA/size, parser
+   version, number and byte length of omitted fields in trajectory provenance;
+   do not rewrite or re-identify the source file. The parser first locates each
+   object's field spans and role, then materializes retained values, so a large
+   ignored string is scanned but never copied into Python memory. This is a
+   storage/parser projection, not a new training target policy or data-quality
+   decision. Skipped values are checked for balanced quoted-string and
+   container boundaries, but their scalar/escape grammar is not independently
+   decoded; the receipt-bound raw file remains the exact source authority, and
+   this projection does not claim full semantic validation of that ignored field.
+
 Independent review correction: named legacy `function` feedback and assistant
 `function_call` use the shared OpenAI normalizer, preserving exact call arguments
 and observed response text. Named feedback cannot become a dispatch merely

@@ -1,5 +1,6 @@
 """Complete contexts and exact channel/call provenance, without success invention."""
 import copy
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -43,6 +44,59 @@ def test_cooperation_preserves_all_compaction_contexts_and_shared_task(monkeypat
     assert receipt['terminal_events'][0]['event']==row['messages'][-1]
     row['messages']=row['segments'][-1]['messages'];rows(monkeypatch,'D14',row,'coop/repo_task/17/pair/agent1_full_traj.json')
     assert len(list(acquired.qwen_cooperation_acquired()))==3,'only byte-equivalent final context is redundant'
+
+
+def test_d14_bounded_projection_preserves_all_contexts_and_binds_raw_source(monkeypatch,tmp_path):
+    segments=[]
+    total=0
+    escaped_content='line\nnext\ttab \\ slash \\" quoted {} braces ☃'
+    for segment_index in range(11):
+        messages=[{'role':'system','content':'Original instructions'},
+                  {'role':'user','content':f'Original task {segment_index}'}]
+        for message_index in range(6):
+            if segment_index==4 and message_index==2:
+                messages.append({'role':'tool','name':'inspect','content':'Exact complete observation',
+                                 'extra':'x'*(2*1024*1024)+escaped_content,
+                                 'content_parts':[{'role':'tool','extra':'semantic payload field',
+                                                   'content':'preserve nested tool payload'}]})
+            else:
+                content=(escaped_content if segment_index==0 and message_index==0
+                         else f'Original response {segment_index}-{message_index}')
+                messages.append({'role':'assistant','content':content,
+                                 'extra':{'ignored_by_normalizer':True}})
+        segments.append({'kind':f'context-{segment_index}','messages':messages})
+        total+=len(messages)
+    final=[{'role':'user','content':'Distinct original final task'},
+           {'role':'assistant','content':'Distinct original final response'}]
+    total+=len(final)
+    assert total==90
+    row={'info':{'config':{'model':{'model_name':'pinned-source-teacher'}},'exit_status':'Completed'},
+         'segments':segments,'messages':final}
+    raw=json.dumps(row,separators=(',',':'),ensure_ascii=False).encode()
+    source=tmp_path/'agent7_full_traj.json';source.write_bytes(raw)
+    entry={'path':source.name,'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()}
+    index,projected=next(acquired._iter_d14_full_trajectory_json(source,entry))
+    assert index==0 and len(projected['segments'])==11
+    assert sum(len(segment['messages']) for segment in projected['segments'])+len(projected['messages'])==90
+    tool=projected['segments'][4]['messages'][4]
+    assert tool=={'role':'tool','name':'inspect','content':'Exact complete observation',
+                  'content_parts':[{'role':'tool','extra':'semantic payload field',
+                                    'content':'preserve nested tool payload'}]}
+    assert projected['segments'][0]['messages'][2]['extra']=={'ignored_by_normalizer':True}
+    assert projected['segments'][0]['messages'][2]['content']==escaped_content
+    proof=projected['_natlang_source_projection']
+    assert proof['source_file_sha256']==entry['sha256'] and proof['source_file_bytes']==len(raw)
+    assert proof['omitted_message_extra_fields']==1 and proof['omitted_raw_value_bytes']>2*1024*1024
+    assert 'not independently decoded' in proof['discarded_value_validation']
+    with pytest.raises(Reject,match='acquisition binding'):
+        next(acquired._iter_d14_full_trajectory_json(source,{**entry,'sha256':'0'*64}))
+    rows(monkeypatch,'D14',projected,'coop/repo_task/17/pair/agent7_full_traj.json')
+    result=list(acquired.qwen_cooperation_acquired())
+    assert len(result)==12 and all(not isinstance(trajectory,Reject) for _,trajectory in result)
+    assert [trajectory.lineage['notes']['original_cooperation_context']['kind'] for _,trajectory in result[:11]]==[
+        f'context-{index}' for index in range(11)]
+    assert all(trajectory.lineage['notes']['source_projection']==proof for _,trajectory in result)
+    assert result[-1][1].messages[-1]['content']=='Distinct original final response'
 
 
 def block(text):return [{'type':'text','text':text,'tools':None}]
