@@ -770,3 +770,89 @@ def test_scaffold_source_stream_is_exact_and_immutable(tmp_path):
     with pytest.raises(ValueError, match='refusing to overwrite'):
         converter.prepare_scaffold_source(source, root)
     assert source.read_bytes() == before
+
+
+def _content_graph(identifier='first'):
+    from natlang_neuralese.data.native_graph import SCHEMA
+    return {'schema': SCHEMA, 'id': identifier, 'split': 'train',
+        'source_groups': ['train-g'], 'tokenizer_fingerprint': 'tokenizer-a',
+        'nodes': [{'name': 'text', 'token_ids': [1, 2], 'target_weights': [0., 1.]}]}
+
+
+def test_content_index_reuses_validated_result_preserving_first_row_and_input_order(tmp_path, monkeypatch):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path/'cache'))
+    first, second = tmp_path/'first.jsonl', tmp_path/'second.jsonl'
+    first.write_text(json.dumps(_content_graph('first'))+'\n'+json.dumps(_content_graph('later-same-file'))+'\n')
+    second.write_text(json.dumps(_content_graph('second-file'))+'\n')
+    before = converter.seed_content_fingerprints([first, second], 'tokenizer-a')
+    monkeypatch.setattr(converter, 'parse_graph', lambda *_a, **_k: pytest.fail('valid prior-file cache must avoid reparse'))
+    after = converter.seed_content_fingerprints([first, second], 'tokenizer-a')
+    assert after == before
+    assert next(iter(after[0].values())) == {'path':str(first), 'id':'first'}
+    reversed_ = converter.seed_content_fingerprints([second, first], 'tokenizer-a')
+    assert next(iter(reversed_[0].values())) == {'path':str(second), 'id':'second-file'}
+    assert [row['rows'] for row in after[1]] == [2, 1]
+
+
+@pytest.mark.parametrize('corruption', ['key','metadata','count','fingerprints'])
+def test_invalid_content_cache_revalidates_source(tmp_path, monkeypatch, corruption):
+    from natlang_neuralese.common import row_index
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path/'cache'))
+    path=tmp_path/'graph.jsonl';path.write_text(json.dumps(_content_graph())+'\n')
+    expected=converter.seed_content_fingerprints([path], 'tokenizer-a')
+    cache=next((tmp_path/'cache').glob('teacher-content-*.pkl'))
+    value=row_index.load(cache)
+    if corruption == 'key':value['key']['tokenizer_fingerprint']='different'
+    elif corruption == 'metadata':value['metadata_sha256']='0'*64
+    elif corruption == 'count':value['rows']=True
+    else:value['fingerprints']={'not-a-hash':'first'}
+    row_index.save(cache,value)
+    calls=[];original=converter.parse_graph
+    monkeypatch.setattr(converter,'parse_graph',lambda *a,**kw:calls.append(True)or original(*a,**kw))
+    assert converter.seed_content_fingerprints([path], 'tokenizer-a') == expected
+    assert calls == [True]
+
+
+def test_content_cache_cannot_hide_changed_source_tokenizer_policy_or_test_split(tmp_path, monkeypatch):
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path/'cache'))
+    path=tmp_path/'graph.jsonl';path.write_text(json.dumps(_content_graph())+'\n')
+    original=converter.seed_content_fingerprints([path], 'tokenizer-a')
+    calls=[];parse=converter.parse_graph
+    monkeypatch.setattr(converter,'parse_graph',lambda *a,**kw:calls.append(True)or parse(*a,**kw))
+    monkeypatch.setattr(converter,'_content_index_policy_sha256',lambda:'b'*64)
+    assert converter.seed_content_fingerprints([path], 'tokenizer-a') == original
+    assert len(calls)==1
+    with pytest.raises(ValueError,match='tokenizer differs'):
+        converter.seed_content_fingerprints([path], 'tokenizer-b')
+    graph=_content_graph();graph['nodes'][0]['token_ids'][1]=3
+    path.write_text(json.dumps(graph)+'\n')
+    changed=converter.seed_content_fingerprints([path], 'tokenizer-a')
+    assert set(changed[0]) != set(original[0])
+    graph['split']='test';path.write_text(json.dumps(graph)+'\n')
+    with pytest.raises(ValueError,match='train graphs'):
+        converter.seed_content_fingerprints([path], 'tokenizer-a')
+
+
+def test_content_cache_source_mutation_during_lookup_is_rejected(tmp_path, monkeypatch):
+    from natlang_neuralese.common import row_index
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(tmp_path/'cache'))
+    path=tmp_path/'graph.jsonl';path.write_text(json.dumps(_content_graph())+'\n')
+    converter.seed_content_fingerprints([path], 'tokenizer-a')
+    load=row_index.load
+    def mutate(cache_path):
+        value=load(cache_path)
+        changed=_content_graph();changed['nodes'][0]['token_ids'][1]=3
+        path.write_text(json.dumps(changed)+'\n')
+        return value
+    monkeypatch.setattr(row_index,'load',mutate)
+    with pytest.raises(ValueError,match='source changed during validation'):
+        converter.seed_content_fingerprints([path], 'tokenizer-a')
+
+
+def test_content_cache_write_failure_keeps_original_validation_result(tmp_path, monkeypatch):
+    unavailable=tmp_path/'cache-is-a-file';unavailable.write_text('not a directory')
+    monkeypatch.setenv('NATLANG_ROW_INDEX_CACHE', str(unavailable))
+    path=tmp_path/'graph.jsonl';path.write_text(json.dumps(_content_graph())+'\n')
+    seen,inputs=converter.seed_content_fingerprints([path], 'tokenizer-a')
+    assert next(iter(seen.values())) == {'path':str(path),'id':'first'}
+    assert inputs[0]['rows'] == 1

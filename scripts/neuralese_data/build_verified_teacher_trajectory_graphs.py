@@ -928,23 +928,56 @@ def render_teacher_packet(tokenizer, context, target, tools, turn=None):
                       'unresolved_scope': scope, 'unresolved_block_ids': block_ids}
 
 
+def _content_index_policy_sha256():
+    from scripts.neuralese_data.continue_native_source_indexes import POLICY_FILES
+    package = Path(__file__).resolve().parents[2] / 'training/neuralese/natlang_neuralese'
+    return canonical_json_sha256_hex({
+        'converter': sha256_file(Path(__file__)),
+        'parser': {name: sha256_file(package / name)
+                   for name in (*POLICY_FILES, 'data/native_graph.py')}})
+
+
 def seed_content_fingerprints(paths, fingerprint):
+    from natlang_neuralese.common import row_index
+    policy = _content_index_policy_sha256()
     seen, inputs = {}, []
     for path in paths:
         digest = sha256_file(path)
-        count = 0
-        with open_jsonl_text(path) as source:
-            for line in source:
-                if not line.strip():
-                    continue
-                graph = json.loads(line)
-                parsed = parse_graph(graph, tokenizer_fingerprint=fingerprint)
-                if parsed.split != 'train':
-                    raise ValueError('teacher deduplication references must be train graphs')
-                seen.setdefault(graph_content_sha256(graph), {'path': str(path), 'id': parsed.id})
-                count += 1
+        key = {'source_sha256': digest, 'tokenizer_fingerprint': fingerprint,
+               'policy_sha256': policy, 'kind': 'teacher-content-fingerprints-v1'}
+        cache_path = row_index.entry_path('teacher-content', canonical_json_sha256_hex(key))
+        cached = row_index.load(cache_path)
+        contents = cached.get('fingerprints') if isinstance(cached, dict) else None
+        count = cached.get('rows') if isinstance(cached, dict) else None
+        valid = (isinstance(cached, dict) and cached.get('key') == key
+            and type(count) is int and count >= 0 and isinstance(contents, dict)
+            and count >= len(contents)
+            and all(isinstance(content, str) and len(content) == 64
+                    and all(char in '0123456789abcdef' for char in content)
+                    and isinstance(identifier, str) and identifier
+                    for content, identifier in contents.items())
+            and cached.get('metadata_sha256') == canonical_json_sha256_hex(
+                {'rows': count, 'fingerprints': contents}))
+        if not valid:
+            contents, count = {}, 0
+            with open_jsonl_text(path) as source:
+                for line in source:
+                    if not line.strip():
+                        continue
+                    graph = json.loads(line)
+                    parsed = parse_graph(graph, tokenizer_fingerprint=fingerprint)
+                    if parsed.split != 'train':
+                        raise ValueError('teacher deduplication references must be train graphs')
+                    contents.setdefault(graph_content_sha256(graph), parsed.id)
+                    count += 1
         if sha256_file(path) != digest:
             raise ValueError('teacher deduplication source changed during validation')
+        if not valid:
+            metadata = {'rows': count, 'fingerprints': contents}
+            row_index.save(cache_path, {'key': key, **metadata,
+                'metadata_sha256': canonical_json_sha256_hex(metadata)})
+        for content, identifier in contents.items():
+            seen.setdefault(content, {'path': str(path), 'id': identifier})
         inputs.append({'path': str(path), 'sha256': digest, 'rows': count})
     return seen, inputs
 
