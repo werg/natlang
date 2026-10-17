@@ -301,6 +301,7 @@ def test_guardian_publisher_resumes_tuple_frontier_and_flushes_idle_partial(tmp_
     from types import SimpleNamespace
     import time
     import scripts.coreweave.teacher_incremental_export as module
+    _, queue, journal, _, _, _ = _fixture()
     publisher={'schema':'natlang.teacher-incremental-export-publisher/1',
         'sandbox_id':'sid','directory_root':str(tmp_path/'spool'),'role':'bulk','exporter_path':'/owner/export.py',
         'idle_flush_after_seconds':1,'chunk_size':32}
@@ -309,16 +310,16 @@ def test_guardian_publisher_resumes_tuple_frontier_and_flushes_idle_partial(tmp_
         'journal_path':'/batch/journal.jsonl','context_paths':{'teacher-source.json':'/batch/source.json',
         'source-cases.jsonl':'/batch/cases.jsonl'},'chunk_size':32,'role':'bulk','exporter_path':'/owner/export.py',
         'identity':{'sandbox_boot_id':'boot','teacher_source_sha256':'t'*64},
-        'queue_sha256':hashlib.sha256(b'queue').hexdigest(),'guardian_state_sha256':'g'*64,'source_sequence_started_sha256':None,
+        'queue_sha256':hashlib.sha256(queue).hexdigest(),'guardian_state_sha256':'g'*64,'source_sequence_started_sha256':None,
         'worker_queue_paths':[],'worker_journal_paths':{}}
-    sandbox=object();remote={'/batch/queue.jsonl':b'queue','/batch/journal.jsonl':b'journal'}
+    sandbox=object();remote={'/batch/queue.jsonl':queue,'/batch/journal.jsonl':journal}
     monkeypatch.setattr(module,'_cwctl_module',lambda:SimpleNamespace(load_env_file=lambda:None))
     monkeypatch.setattr(module,'scoped_sdk_session',lambda *_a,**_k:(sandbox,remote.__getitem__))
     monkeypatch.setattr(module,'discover_guardian_batch',lambda *_a:active)
     monkeypatch.setattr(module,'_validate_live_identity',lambda *_a:active['identity'])
     spool=tmp_path/'spool'/'batch-0021';spool.mkdir(parents=True)
     (tmp_path/'spool'/'publisher-state.json').write_text(json.dumps({'active_identity':['sid',21,'t'*64],
-        'journal_sha256':hashlib.sha256(b'journal').hexdigest(),'journal_changed_at':time.time()-10}))
+        'journal_sha256':hashlib.sha256(journal).hexdigest(),'journal_changed_at':time.time()-10}))
     flushes=[]
     monkeypatch.setattr(module,'export_finished_tranches',lambda **kw:flushes.append(kw['flush_partial']) or {
         'state':{'completed_keys':[],'tranches':[]},'queue_count':0,'new_tranches':0,
@@ -921,3 +922,46 @@ pathlib.Path(os.environ['CW_EXPORT_RECEIPT_FILE']).write_text(json.dumps({'priva
         'bytes':tranche['archive_receipt']['archive_bytes'],
         'sha256':tranche['archive_receipt']['archive_sha256']}
     assert receipt.with_suffix('.phase.json').is_file()
+
+
+@pytest.mark.parametrize('guardian', [False, True])
+@pytest.mark.parametrize('new_completion', [False, True])
+def test_partial_idle_tracks_completed_outputs_not_worker_activity(tmp_path, monkeypatch, guardian, new_completion):
+    from types import SimpleNamespace
+    import scripts.coreweave.teacher_incremental_export as module
+    entries, queue, journal, context, _, _ = _fixture()
+    clock = [0.0]
+    paths = {'teacher-source.json':'/batch/teacher-source.json',
+             'source-cases.jsonl':'/batch/source-cases.jsonl'}
+    config = {'sandbox_id':'sid','batch':19,'directory_root':str(tmp_path/'exports'),
+        'directory':str(tmp_path/'exports/batch-0019'),'role':'teacher','chunk_size':32,
+        'exporter_path':'/unused','identity':{},'queue_path':'/batch/queue.jsonl',
+        'journal_path':'/batch/journal.jsonl','context_paths':paths,
+        'idle_flush_after_seconds':60,'flush_partial':False}
+    def reader(path):
+        if path == '/batch/queue.jsonl':return queue
+        if path == '/batch/journal.jsonl':
+            events = [json.loads(line)for line in journal.split(b'\n')if line]
+            if new_completion and clock[0] == 0:
+                events = [e for e in events if e.get('key') == entries[0]['key']]
+            events.append({'event':'activity','key':entries[0]['key'],'at':clock[0]})
+            return b''.join(json.dumps(e).encode()+b'\n' for e in events)
+        return context[Path(path).name]
+    monkeypatch.setattr(module,'_cwctl_module',lambda:SimpleNamespace(load_env_file=lambda:None))
+    monkeypatch.setattr(module,'scoped_sdk_session',lambda *_a,**_k:(object(),reader))
+    monkeypatch.setattr(module,'_validate_live_identity',lambda *_a:{'teacher_source_sha256':'a'*64})
+    monkeypatch.setattr(module.time,'monotonic',lambda:clock[0])
+    monkeypatch.setattr(module.time,'time',lambda:clock[0])
+    monkeypatch.setattr(module.time,'sleep',lambda _seconds:clock.__setitem__(0,clock[0]+61))
+    flush=[]
+    monkeypatch.setattr(module,'export_finished_tranches',lambda **kw:flush.append(kw['flush_partial'])or{'state':{},'training_admission':False})
+    path=tmp_path/'publisher.json';path.write_text(json.dumps(config))
+    if guardian:
+        active={**config,'queue_sha256':hashlib.sha256(queue).hexdigest(),
+            'worker_queue_paths':None,'guardian_state_sha256':'b'*64,
+            'source_sequence_started_sha256':None,'guardian_state':{},'closed_boundaries':[]}
+        monkeypatch.setattr(module,'discover_guardian_batch',lambda *_a:active)
+        module.run_guardian_export_service(path,poll_seconds=0,max_polls=2,allowed_spool_root=tmp_path)
+    else:
+        module.run_incremental_service(path,poll_seconds=0,max_polls=2,allowed_spool_root=tmp_path)
+    assert flush == [False, not new_completion]

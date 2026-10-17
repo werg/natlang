@@ -126,6 +126,13 @@ def completed_entries(queue_raw: bytes, journal_raw: bytes, *, after: set[str] |
     return selected
 
 
+def _completed_outputs_sha256(queue_raw: bytes, journal_raw: bytes) -> str:
+    """Activity heartbeats cannot postpone custody of an already finished tail."""
+    completed = [{'key': row['key'], 'finish_event': row['finish_event']}
+                 for row in completed_entries(queue_raw, journal_raw)]
+    return _sha(json.dumps(completed, sort_keys=True, separators=(',', ':')).encode())
+
+
 def aggregate_worker_journals(queue_raw: bytes, worker_queues: list[tuple[str, bytes]],
                               worker_journals: list[tuple[str, bytes | None]]) -> bytes:
     """Join the real per-worker journals after proving their queue partition.
@@ -1244,8 +1251,8 @@ def run_incremental_service(config_path: Path, *, poll_seconds: float = 15,
     prior_config_sha = None
     completed_polls = 0
     last = None
-    last_journal_sha = None
-    last_journal_change = time.monotonic()
+    last_completed_sha = None
+    last_completed_change = time.monotonic()
     last_batch_identity = None
     while max_polls is None or completed_polls < max_polls:
         config_raw = config_path.read_bytes()
@@ -1270,14 +1277,15 @@ def run_incremental_service(config_path: Path, *, poll_seconds: float = 15,
             queue_snapshot = read_file(config['queue_path'])
             journal_snapshot = read_file(config['journal_path'])
             journal_sha = _sha(journal_snapshot)
+            completed_sha = _completed_outputs_sha256(queue_snapshot, journal_snapshot)
             now = time.monotonic()
-            if batch_identity != last_batch_identity or journal_sha != last_journal_sha:
-                last_journal_change = now
-            last_batch_identity, last_journal_sha = batch_identity, journal_sha
+            if batch_identity != last_batch_identity or completed_sha != last_completed_sha:
+                last_completed_change = now
+            last_batch_identity, last_completed_sha = batch_identity, completed_sha
             idle_after = float(config.get('idle_flush_after_seconds', 300))
             if idle_after < 0:
                 raise ValueError('idle flush interval must be nonnegative')
-            idle_flush = now - last_journal_change >= idle_after
+            idle_flush = now - last_completed_change >= idle_after
 
             def export_file(tranche: dict, receipt_path: Path) -> dict:
                 return export_private_tranche(tranche, exporter=Path(config['exporter_path']),
@@ -1293,6 +1301,8 @@ def run_incremental_service(config_path: Path, *, poll_seconds: float = 15,
             last = {'schema': 'natlang.teacher-incremental-owner-poller/1',
                     'at': time.time(), 'config_sha256': config_sha,
                     'config_changed': config_sha != prior_config_sha, 'identity': identity,
+                    'journal_sha256': journal_sha, 'completed_outputs_sha256': completed_sha,
+                    'completed_outputs_idle_seconds': now - last_completed_change,
                     'result': result, 'last_transport_error': None,
                     'training_admission': False, 'exposure': False}
         except (ValueError, KeyError, TypeError) as error:
@@ -1440,8 +1450,14 @@ def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 1
                     # Compatibility with the earlier tuple serialized by JSON.
                     prior_identity = {'sandbox_id': prior_identity[0], 'batch': prior_identity[1],
                                       'teacher_source_sha256': prior_identity[2]}
-                changed = active_identity != prior_identity or journal_sha != prior.get('journal_sha256')
-                changed_at = time.time() if changed else float(prior.get('journal_changed_at', time.time()))
+                completed_sha = _completed_outputs_sha256(queue_snapshot, journal_snapshot)
+                changed = active_identity != prior_identity or completed_sha != prior.get('completed_outputs_sha256')
+                changed_at = time.time() if changed else float(prior.get('completed_outputs_changed_at', time.time()))
+                if (active_identity == prior_identity and 'completed_outputs_sha256' not in prior
+                        and journal_sha == prior.get('journal_sha256')):
+                    changed_at = float(prior.get('journal_changed_at', time.time()))
+                journal_changed_at = (time.time() if journal_sha != prior.get('journal_sha256')
+                                      else float(prior.get('journal_changed_at', time.time())))
                 idle_flush = time.time() - changed_at >= float(publisher.get('idle_flush_after_seconds', 300))
 
                 def export_file(tranche: dict, receipt_path: Path) -> dict:
@@ -1462,7 +1478,8 @@ def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 1
                     'active': True, 'active_identity': active_identity,
                     'guardian_state_sha256': active['guardian_state_sha256'],
                     'source_sequence_started_sha256': active['source_sequence_started_sha256'],
-                    'journal_sha256': journal_sha, 'journal_changed_at': changed_at,
+                    'journal_sha256': journal_sha, 'journal_changed_at': journal_changed_at,
+                    'completed_outputs_sha256': completed_sha, 'completed_outputs_changed_at': changed_at,
                     'identity': identity, 'result': result,
                     'closed_exports_this_poll': closed,
                     'training_admission': False, 'exposure': False}

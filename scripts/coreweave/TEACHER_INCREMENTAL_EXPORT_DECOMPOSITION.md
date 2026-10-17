@@ -15,3 +15,5 @@ For every selected queue job, fetch its own generation-held sidecars before seal
 Closed boundaries apply the same exact raw-source/student-root preparation verifier as live tranches. Only its authenticated paired packet/preparation are canonical control files; arbitrary extras and missing repair sidecars still fail. Closing a batch never converts pending or held work into success.
 
 Create the owned private-receipt directory before invoking the existing exporter: its upload-phase and verification receipts are durable children of that directory. A successful PUT without the subsequent full GET never advances the frontier.
+
+Idle flushing measures absence of new eligible completed outputs, independently of activity heartbeats from still-running workers. Keep the complete journal SHA as telemetry. Both existing publisher loops use one exact completed-output identity helper; completion/accounting validation and every repeated queue job remain unchanged.
