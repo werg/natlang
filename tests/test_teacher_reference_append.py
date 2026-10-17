@@ -168,3 +168,49 @@ def test_eligibility_and_packet_ranking_do_not_scan_full_program_blob_table(tmp_
     monkeypatch.setattr(sqlite3,'connect',lambda *a,**kw:original(*a,factory=Observed,**kw))
     ref=prepare(root,source,prefix,tmp_path/'out',2)
     assert len(plans)==2 and json.loads(Path(ref['path']).read_text())['appended_cases']==2
+
+
+def test_compressed_candidate_inventory_preserves_original_program_hashes(tmp_path):
+    from natlang_neuralese.common.jsonio import write_jsonl_text
+    root,source,prefix,sha=corpus(tmp_path)
+    original=json.loads(Path(source['path']).read_text())['cases_binding']
+    compressed=root/'candidates.jsonl.zst'
+    with write_jsonl_text(compressed) as stream:stream.write(Path(original['path']).read_text())
+    assert list(teacher_reference_append.candidate_hashes(binding(compressed)))==sha
+    compressed.write_bytes(b'changed')
+    with pytest.raises(ValueError,match='input changed'):
+        list(teacher_reference_append.candidate_hashes({**original,'path':str(compressed)}))
+
+
+def test_adaptive_reference_provenance_excludes_withdrawn_positive_sources(tmp_path):
+    root,source,prefix,sha=corpus(tmp_path)
+    metadata=json.loads((root/'source-inventory.json').read_text())
+    authority=root/'authority.json';write(authority,dict(current={}))
+    population=root/'adaptive-population.json';write(population,{**metadata,'authority':binding(authority)})
+    summary=root/'summary.json';write(summary,dict(source_population=binding(population)))
+    body=json.loads(Path(source['path']).read_text());body.update(source_population=binding(population),catalog_summary=binding(summary))
+    current=root/'adaptive-source.json';write(current,body)
+    old=root/'aaa-withdrawn.jsonl';old.write_text('historical')
+    db=sqlite3.connect(root/'catalog.sqlite');oldref=binding(old)
+    db.execute('INSERT INTO files VALUES(?,?,?,1)',(str(old),oldref['sha256'],oldref['bytes']))
+    db.execute('INSERT INTO occurrences VALUES(?,1,?,?,NULL,?)',(str(old),'old-row',sha[2],'["old-group"]'))
+    db.commit();db.close()
+    result=prepare(root,binding(current),prefix,tmp_path/'out',1)
+    inventory=json.loads(Path(result['path']).read_text());assert inventory['appended_cases']==2
+    for packet in inventory['packets'][1:]:
+        proof=json.loads(Path(packet['path']).read_text())
+        origins=json.loads(Path(proof['source_provenance']['path']).read_text())['occurrences']
+        assert origins and all(r['source_file']['path']!=str(old) for r in origins)
+
+
+def test_withdrawing_source_never_unprotects_its_held_content(tmp_path):
+    root,source,prefix,sha=corpus(tmp_path)
+    old=root/'withdrawn-held.jsonl';old.write_text('held source')
+    db=sqlite3.connect(root/'catalog.sqlite');ref=binding(old)
+    db.execute('INSERT INTO files VALUES(?,?,?,1)',(str(old),ref['sha256'],ref['bytes']))
+    db.execute('INSERT INTO occurrences VALUES(?,1,?,?,?,?)',(str(old),'held-row',sha[2],'held_group','["held-group"]'))
+    db.commit();db.close()
+    result=prepare(root,source,prefix,tmp_path/'out',1)
+    inventory=json.loads(Path(result['path']).read_text());assert inventory['appended_cases']==1
+    unready=json.loads(Path(inventory['unready']['path']).read_text())
+    assert sha[2] in unready['program_sha256']

@@ -134,6 +134,13 @@ def floor(path):
 
 def candidate_hashes(reference):
     path=checked(reference)
+    if path.name.endswith('.jsonl.zst'):
+        from natlang_neuralese.common.jsonio import open_jsonl_text
+        with open_jsonl_text(path) as stream:
+            for line in stream:
+                if line.strip():yield hashlib.sha256(line.rstrip('\r\n').encode('utf-8')).hexdigest()
+        checked(reference)
+        return
     total=0;digest=hashlib.sha256()
     with path.open('rb')as stream:
         for raw in stream:
@@ -141,6 +148,15 @@ def candidate_hashes(reference):
             if raw.strip():yield hashlib.sha256(raw.rstrip(b'\r\n')).hexdigest()
     if total!=reference['bytes']or digest.hexdigest()!=reference['sha256']:
         raise ValueError('candidate bytes changed during streaming')
+
+
+def eligible_program_sql():
+    """One eligibility rule for current-population export and packet selection."""
+    return '''p.id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM programs q WHERE q.id=p.id AND q.sha!=p.sha)
+      AND EXISTS(SELECT 1 FROM occurrences o JOIN files f ON f.path=o.file JOIN active_sources a ON a.path=o.file
+          WHERE o.program_sha=p.sha AND o.reason IS NULL AND f.complete=1)
+      AND NOT EXISTS(SELECT 1 FROM occurrences o WHERE o.program_sha=p.sha AND o.reason IN
+          ('held_group','quality_group','pending_source_review','nontrain','exact_decision_program_hold'))'''
 
 
 def prepare(catalog,source_reference,prefix_reference,out,packet_rows=64):
@@ -170,18 +186,31 @@ def prepare(catalog,source_reference,prefix_reference,out,packet_rows=64):
     if len(selected)+excluded!=source['cases']:raise ValueError('source candidate count differs')
     if excluded!=len(prior):raise ValueError('candidate prefix is not an exact subset of source candidates')
     db.commit();db.execute('BEGIN')
-    population=Path(catalog)/'source-inventory-v3.json'
-    if not population.exists():population=Path(catalog)/'source-inventory.json'
-    metadata={f['path']:f for f in json.loads(population.read_text())['files']}
-    eligible='''p.id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM programs q WHERE q.id=p.id AND q.sha!=p.sha)
-      AND EXISTS(SELECT 1 FROM occurrences o JOIN files f ON f.path=o.file WHERE o.program_sha=p.sha AND o.reason IS NULL AND f.complete=1)
-      AND NOT EXISTS(SELECT 1 FROM occurrences o WHERE o.program_sha=p.sha AND o.reason IN('held_group','quality_group','pending_source_review','nontrain','exact_decision_program_hold'))'''
+    if source.get('source_population'):
+        population_data=read(source['source_population'])
+        if population_data.get('authority') is None:raise ValueError('adaptive population needs its exact authority')
+        authority=read(population_data['authority'])
+        summary=read(source['catalog_summary'])
+        if authority['current']!=source['inputs'] or summary.get('source_population')!=source['source_population']:
+            raise ValueError('adaptive population is not bound to candidate authority')
+    else:
+        population=Path(catalog)/'source-inventory-v3.json'
+        if not population.exists():population=Path(catalog)/'source-inventory.json'
+        population_data=json.loads(population.read_text())
+    metadata={f['path']:f for f in population_data['files']}
+    db.execute('CREATE TEMP TABLE active_sources(path TEXT PRIMARY KEY)')
+    db.executemany('INSERT INTO active_sources VALUES(?)',((path,)for path in metadata))
+    if source.get('source_population'):
+        for path,sha,size in db.execute('SELECT f.path,f.sha,f.bytes FROM files f JOIN active_sources a ON a.path=f.path'):
+            actual=binding(Path(path))
+            if actual['sha256']!=sha or actual['bytes']!=size:raise ValueError('adaptive source bytes changed: '+path)
+    eligible=eligible_program_sql()
     missing=db.execute('SELECT s.sha FROM selected s LEFT JOIN programs p ON p.sha=s.sha WHERE p.sha IS NULL').fetchall()
     if missing:raise ValueError('original candidate is absent from its source catalog')
     unready=[row[0]for row in db.execute('SELECT p.sha FROM selected s CROSS JOIN programs p ON p.sha=s.sha WHERE NOT('+eligible+') ORDER BY p.rowid')]
     immutable(out/'unready-programs.json',{'program_sha256':unready,'reason':'current catalog conflict or protected/incomplete occurrence; not omitted','training_admission':False})
     query='''WITH source AS(SELECT p.sha,p.family,p.rowid ordinal,
-      (SELECT min(o.file) FROM occurrences o JOIN files f ON f.path=o.file WHERE o.program_sha=p.sha AND o.reason IS NULL AND f.complete=1) file
+      (SELECT min(o.file) FROM occurrences o JOIN files f ON f.path=o.file JOIN active_sources a ON a.path=o.file WHERE o.program_sha=p.sha AND o.reason IS NULL AND f.complete=1) file
       FROM selected s CROSS JOIN programs p ON p.sha=s.sha WHERE '''+eligible+'''),
       ranked AS(SELECT *,row_number()OVER(PARTITION BY family,file ORDER BY ordinal) round FROM source)
       SELECT sha,family,file FROM ranked ORDER BY round,file,sha'''
@@ -198,7 +227,7 @@ def prepare(catalog,source_reference,prefix_reference,out,packet_rows=64):
             if hashlib.sha256(body.encode()).hexdigest()!=sha:raise ValueError('catalog program differs from original canonical bytes')
             families[family]+=1;sources[file]+=1
             for path,line,rowsha,groups,file_sha,file_bytes in db.execute('''SELECT o.file,o.line,o.row_sha,o.groups_json,f.sha,f.bytes
-              FROM occurrences o JOIN files f ON f.path=o.file WHERE o.program_sha=? AND f.complete=1 ORDER BY o.file,o.line''',(sha,)):
+              FROM occurrences o JOIN files f ON f.path=o.file JOIN active_sources a ON a.path=o.file WHERE o.program_sha=? AND f.complete=1 ORDER BY o.file,o.line''',(sha,)):
                 provenance.append({'program_sha256':sha,'source_file':{'path':path,'sha256':file_sha,'bytes':file_bytes},
                   'source_row_ordinal':line,'row_canonical_sha256':rowsha,'source_groups':json.loads(groups),'corpus_ids':metadata[path]['corpora']})
         origin=immutable(folder/'source-provenance.json',{'occurrences':provenance,'catalog_candidates_proof':source_reference})
