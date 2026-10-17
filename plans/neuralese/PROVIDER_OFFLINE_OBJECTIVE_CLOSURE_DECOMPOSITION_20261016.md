@@ -49,3 +49,16 @@ placeholders from the same config instead of treating them as JSON. Bind every
 referenced packet/runtime; reject malformed or missing values and changed packet
 bytes. Preserve the sealed request, source/profile/optimizer/RNG/cursor and all
 numerical worker files. Exercise actual disabled-parameter/literal-override shape.
+
+## Read-only declared input roots (2026-10-17)
+
+The saved incomplete D24 preference frame names immutable source/objective files
+outside native-production. Preserve those exact references. Trusted per-resource
+readonly_input_roots declare only the staged D24 trees. The dependency enumerator
+classifies their files as input-file assets, verifies full SHA/size in place on
+each target, and rejects resolved symlink escapes. Such assets never enter the
+ferry files list. Control/output/checkpoint namespaces remain unchanged. This is
+exact transport plumbing; source selection, scheduling, model arithmetic and
+sealed request/cursor history are unchanged. Reuse recursive input enumeration
+and existing asset verification; test actual carried DPO plus undeclared roots,
+missing targets, hash/size mismatches and symlink escape.

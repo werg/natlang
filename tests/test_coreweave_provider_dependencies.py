@@ -393,3 +393,58 @@ def test_actual_empty_trainer_task_spec_retains_explicit_protected_override(tmp_
 def test_task_command_missing_or_malformed_spec_rejected_before_launch(tmp_path,command):
     config=write(tmp_path/'config.json',{'seed_command':command})
     with pytest.raises(ValueError):deps.dependency_closure({'config':config},namespace=str(tmp_path))
+
+
+
+def test_carried_dpo_external_inputs_are_verified_in_place_not_ferried(tmp_path):
+    import torch
+    namespace=tmp_path/'production';namespace.mkdir()
+    readonly=tmp_path/'d24'
+    source=write(readonly/'paired-graphs.jsonl','complete chosen and rejected histories')
+    objective=write(readonly/'objective.json',{'rows':{}})
+    frame={'required_visits':{'pair':1},'exposure_counts':{},'source_receipts':[source],
+        'identity':{'objective_kind':'native-offline-pairwise','objective':objective}}
+    checkpoint=namespace/'state.pt';torch.save({'sft_progress':{'preference':frame}},checkpoint)
+    binding={'path':str(checkpoint),'sha256':deps.sha256_file_hex_cached(checkpoint)}
+    with pytest.raises(ValueError,match='escaped'):
+        deps.dependency_closure({'parent_checkpoint':binding},namespace=str(namespace))
+    closure=deps.dependency_closure({'parent_checkpoint':binding},namespace=str(namespace),readonly_input_roots=[str(readonly)])
+    assert [item['path'] for item in closure['files']]==[str(checkpoint)]
+    assert {item['path'] for item in closure['assets']}=={source['path'],objective['path']}
+    assert all(item['kind']=='input-file' for item in closure['assets'])
+    deps.verify_assets(closure['assets'],readonly_input_roots=[str(readonly)])
+    with pytest.raises(ValueError,match='checkpoint escaped'):
+        deps.dependency_closure({'parent_checkpoint':source},namespace=str(namespace),readonly_input_roots=[str(readonly)])
+
+
+@pytest.mark.parametrize('failure',['undeclared','escape','hash','size','missing','boolean-size'])
+def test_readonly_input_file_assets_fail_closed(tmp_path,failure):
+    root=tmp_path/'declared';item=write(root/'input.json','exact source bytes')
+    item['kind']='input-file'
+    roots=[str(root)]
+    if failure=='undeclared':roots=[]
+    elif failure=='escape':
+        outside=tmp_path/'outside';outside.write_text('exact source bytes')
+        Path(item['path']).unlink();Path(item['path']).symlink_to(outside)
+    elif failure=='hash':item['sha256']='0'*64
+    elif failure=='size':item['bytes']+=1
+    elif failure=='missing':Path(item['path']).unlink()
+    elif failure=='boolean-size':item['bytes']=True
+    with pytest.raises(ValueError):deps.verify_assets([item],readonly_input_roots=roots)
+
+
+def test_readonly_root_configuration_rejects_broad_relative_and_symlink_roots(tmp_path):
+    target=tmp_path/'actual';target.mkdir();alias=tmp_path/'alias';alias.symlink_to(target,target_is_directory=True)
+    for roots in ['not-list',['/'],['relative'],[str(alias)],[str(target),str(target)], [str(target)+'/../actual']]:
+        with pytest.raises(ValueError):deps.verify_assets([],readonly_input_roots=roots)
+
+
+
+def test_checkpoint_dependency_cannot_use_readonly_input_escape(tmp_path):
+    namespace=tmp_path/'production';readonly=tmp_path/'d24'
+    external=write(readonly/'checkpoint.pt','immutable binary checkpoint')
+    alias=namespace/'offloaded.pt';alias.parent.mkdir();alias.symlink_to(external['path'])
+    parent=write(namespace/'checkpoint.json',{'schema':'natlang.neuralese-native-composite-checkpoint/1',
+        'base_checkpoint':{**external,'path':str(alias)}})
+    with pytest.raises(ValueError,match='checkpoint dependency escaped'):
+        deps.dependency_closure({'parent_checkpoint':parent},namespace=str(namespace),readonly_input_roots=[str(readonly)])

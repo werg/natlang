@@ -1,8 +1,8 @@
 """Exact consumed-input closure for the external provider file bridge.
 
 This enumerates already-declared inputs, never chooses a training source. Public
-base directories and built task runtimes are verified in place; payload files
-stay in the unchanged native-production namespace for the existing ferry.
+base directories, built task runtimes and explicitly declared read-only inputs
+are verified in place; ferry files stay in the native-production namespace.
 """
 from __future__ import annotations
 import json
@@ -14,25 +14,57 @@ from natlang_neuralese.model.native_bundle import composite_dependencies, _seman
 from natlang_neuralese.train.recipe import native_source_dependencies
 
 
-def dependency_closure(request, *, namespace='/work/native-production'):
+def _readonly_roots(values):
+    if not isinstance(values, (list, tuple)):
+        raise ValueError('provider readonly input roots must be a list')
+    roots = []
+    for value in values:
+        if not isinstance(value, str):
+            raise ValueError('invalid provider readonly input root')
+        path = Path(value)
+        if (not path.is_absolute() or '..' in path.parts or str(path) != value
+                or path == Path('/') or path in roots or path.resolve() != path):
+            raise ValueError('invalid provider readonly input root')
+        roots.append(path)
+    return tuple(roots)
+
+
+def _readonly_file(path, roots):
+    path = Path(path)
+    if (not path.is_absolute() or '..' in path.parts or
+            not any(root in path.parents and root in path.resolve().parents for root in roots)):
+        raise ValueError('provider input file escaped its declared readonly roots: ' + str(path))
+    if not path.is_file():
+        raise ValueError('provider readonly input file is missing: ' + str(path))
+    return path
+
+
+def dependency_closure(request, *, namespace='/work/native-production', readonly_input_roots=()):
     files, assets, active_configs, relocations = {}, {}, set(), {}
     consumed_adapters = set()
     consumed_checkpoints=set()
     consumed_payloads=set()
     root = Path(namespace).absolute()
+    readonly_roots = _readonly_roots(readonly_input_roots)
 
     def add(path, expected=None):
         # Preserve the declared lexical namespace of valid offload symlinks.
         path = Path(path).absolute()
-        if '..' in path.parts or root not in path.parents:
+        external = root not in path.parents
+        if '..' in path.parts or (external and not readonly_roots):
             raise ValueError('provider consumed file escaped its declared namespace: ' + str(path))
+        if external:
+            _readonly_file(path, readonly_roots)
         digest = sha256_file_hex_cached(path)
         if expected is not None and digest != expected:
             raise ValueError('provider consumed dependency hash changed: ' + str(path))
         item = {'path': str(path), 'sha256': digest, 'bytes': path.stat().st_size}
-        if str(path) in files and files[str(path)] != item:
+        destination = assets if external else files
+        if external:
+            item['kind'] = 'input-file'
+        if str(path) in destination and destination[str(path)] != item:
             raise ValueError('provider consumed dependency changed while enumerating')
-        files[str(path)] = item
+        destination[str(path)] = item
         return path
 
     def bound(value):
@@ -67,6 +99,9 @@ def dependency_closure(request, *, namespace='/work/native-production'):
                 graphs(bound(source))
 
     def checkpoint(value, *, semantic_only=False):
+        declared = Path(value['path'] if isinstance(value, dict) else value).absolute()
+        if '..' in declared.parts or root not in declared.parents:
+            raise ValueError('provider checkpoint escaped its declared namespace')
         path = bound(value) if isinstance(value, dict) else add(value)
         selected=request.get('native_participant') if request.get('kind')=='round' else None
         if selected is None and isinstance(value,dict):selected=value.get('participant')
@@ -84,6 +119,8 @@ def dependency_closure(request, *, namespace='/work/native-production'):
                 semantic_only=semantic_only,checkpoint_loader=load_once).items():
             # Bundle resolver may resolve an offload symlink outside the root.
             # Such a dependency needs an explicit portable bundle before use.
+            if '..' in child.parts or root not in child.absolute().parents:
+                raise ValueError('provider checkpoint dependency escaped its declared namespace')
             add(child, digest)
             with child.open('rb') as stream:
                 binary = stream.read(2) == b'PK'
@@ -267,10 +304,18 @@ def dependency_closure(request, *, namespace='/work/native-production'):
     return {'files': list(files.values()), 'assets': list(assets.values())}
 
 
-def verify_assets(assets):
+def verify_assets(assets, *, readonly_input_roots=()):
     """Verify pre-staged external assets; this never accepts path existence alone."""
+    roots = _readonly_roots(readonly_input_roots)
     for item in assets:
         path = Path(item['path'])
+        if item['kind'] == 'input-file':
+            _readonly_file(path, roots)
+            if (type(item.get('bytes')) is not int or item['bytes'] < 0
+                    or path.stat().st_size != item['bytes']
+                    or sha256_file_hex_cached(path) != item['sha256']):
+                raise ValueError('provider pre-staged input file content differs: ' + str(path))
+            continue
         if item['kind'] == 'base':
             from natlang_neuralese.model.native_model import base_inventory
             actual = base_inventory(path)

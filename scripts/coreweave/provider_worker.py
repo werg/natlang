@@ -210,12 +210,16 @@ class SDKIO:
                      'namespace["load"]('+repr(modules)+');')
         return code+'exec(compile('+repr(source)+',"provider-dependencies","exec"));'
 
+    def _readonly_input_arguments(self, sid):
+        roots = self.config['sandboxes'][sid].get('readonly_input_roots', ())
+        return ',readonly_input_roots='+repr(roots) if roots else ''
+
     def dependency_closure(self, sid, request):
         return self.remote(sid, self.dependency_code(sid)+
-                           'print(json.dumps(dependency_closure('+repr(request)+')))', timeout=900)
+                           'print(json.dumps(dependency_closure('+repr(request)+self._readonly_input_arguments(sid)+')))', timeout=900)
 
     def verify_assets(self, sid, assets):
-        code = self.dependency_code(sid)+'verify_assets('+repr(assets)+');'
+        code = self.dependency_code(sid)+'verify_assets('+repr(assets)+self._readonly_input_arguments(sid)+');'
         code += 'import subprocess;'
         code += '\nfor asset in '+repr(assets)+':\n'
         code += (' if asset["kind"]=="task-runtime":\n'

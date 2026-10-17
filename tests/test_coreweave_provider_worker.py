@@ -354,3 +354,18 @@ def test_metadata_timing_failure_preserves_original_remote_error(tmp_path,monkey
 def test_metadata_environment_rejects_nonstring_configuration(tmp_path):
     client=worker.SDKIO({'receipts':str(tmp_path),'sandboxes':{'worker':{'runtime':'unused','env':{'NATLANG_HASH_CACHE':False}}}})
     with pytest.raises(ValueError,match='string names and values'):client.dependency_code('worker')
+
+
+
+def test_configured_readonly_roots_reach_both_remote_asset_operations(tmp_path):
+    class Capture(worker.SDKIO):
+        def dependency_code(self,sid):return ''
+        def remote(self,sid,code,**kwargs):self.code=code;return {}
+    client=Capture({'receipts':str(tmp_path),'sandboxes':{'worker':{'readonly_input_roots':['/exact/d24']}}})
+    client.dependency_closure('worker',{'kind':'round'})
+    assert "readonly_input_roots=['/exact/d24']" in client.code
+    client.verify_assets('worker',[])
+    assert "verify_assets([],readonly_input_roots=['/exact/d24'])" in client.code
+    client.config['sandboxes']['worker']={}
+    client.dependency_closure('worker',{})
+    assert 'readonly_input_roots' not in client.code
