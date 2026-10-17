@@ -235,6 +235,87 @@ def observe_source_sequence(folder, state, config):
     write(Path(folder)/'state.json',state)
 
 
+def _source_context_deferrals(declaration, entries, sequence):
+    # Debt survives changes to the current supervisor declaration. Authenticate
+    # every stored immutable receipt and its original proof even after its
+    # ordinal has passed; removing a current deferral cannot erase that history.
+    for key,stored in sequence.get('context_deferred',{}).items():
+        receipt=_json(stored,declaration)
+        if (not isinstance(key,str)or not key.isdecimal()or str(int(key))!=key
+                or type(receipt.get('ordinal'))is not int or receipt['ordinal']!=int(key)
+                or receipt['ordinal']>=sequence['next_ordinal']
+                or receipt.get('training_admission')is not False
+                or receipt.get('generation_admission')is not False):
+            raise ValueError('stored context deferral debt changed')
+        _json(receipt['context_exclusions'],declaration)
+    reference=declaration.get('context_deferrals')
+    if reference is None:return None,{},{}
+    proof=_json(reference,declaration)
+    if (proof.get('schema')!='natlang.teacher-source-context-exclusions/1'
+            or proof.get('training_admission')is not False or type(proof.get('model_calls'))is not int
+            or proof['model_calls']!=0):
+        raise ValueError('unknown teacher context deferral authority')
+    original=_json(proof['original_ready'],declaration)
+    exact=lambda value:json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'))
+    if len(entries)<len(original['entries'])or exact(original['entries'])!=exact(entries[:len(original['entries'])]):
+        raise ValueError('context deferrals differ from exact observed ready entries')
+    for name in ('source_context_audit','primary_source_audit','original_context_source'):
+        _json(proof[name],declaration)
+    programs={}
+    for item in proof['excluded_programs']:
+        ident=item.get('program_id');digest=item.get('program_sha256')
+        if (not isinstance(ident,str)or not ident or ident in programs or not isinstance(digest,str)
+                or len(digest)!=64 or any(c not in '0123456789abcdef'for c in digest)):
+            raise ValueError('invalid exact context exclusion program')
+        programs[ident]=item
+    deferred={}
+    started={_json(ref,declaration)['ordinal']for ref in sequence.get('started',{}).values()}
+    pending=sequence.get('pending')
+    for item in proof['deferred_packets']:
+        ordinal=item.get('ordinal')
+        if (type(ordinal)is not int or ordinal<0 or ordinal>=len(original['entries'])or ordinal in deferred
+                or ordinal in started or(pending and pending['ordinal']==ordinal)):
+            raise ValueError('context deferral must name unique unstarted packets only')
+        entry=entries[ordinal]
+        if any(exact(item[name])!=exact(entry[name])for name in ('candidate_packet','qualified_packet')):
+            raise ValueError('context deferral packet binding differs')
+        if ordinal<sequence['next_ordinal']and str(ordinal)not in sequence.get('context_deferred',{}):
+            raise ValueError('context deferral cannot reclassify past work')
+        deferred[ordinal]=item
+    return reference,deferred,programs
+
+
+def _defer_context_packet(folder,state,declaration,entry,item,reference,programs):
+    prepared=_json(entry['qualified_packet'],declaration)
+    if item['cases']!=prepared['cases']:raise ValueError('context deferral cases binding differs')
+    raw=_read(item['cases'],declaration)[1]
+    rows=[json.loads(line)for line in raw.splitlines()if line.strip()]
+    identifiers=[row['id']for row in rows]
+    excluded=item['excluded_program_ids']
+    if (not isinstance(excluded,list)or not excluded or len(set(excluded))!=len(excluded)
+            or any(ident not in identifiers or ident not in programs for ident in excluded)
+            or len(set(identifiers))!=len(identifiers)):
+        raise ValueError('context deferral excludes unknown or repeated task identities')
+    for row in rows:
+        if row['id']not in excluded:continue
+        digest=hashlib.sha256(json.dumps(row,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        if digest!=programs[row['id']]['program_sha256']:
+            raise ValueError('context deferral original program changed')
+    counts={'source_cases':len(rows),'excluded_cases':len(excluded),'retained_cases':len(rows)-len(excluded)}
+    if any(type(item.get(key))is not int or item[key]!=value for key,value in counts.items()):
+        raise ValueError('context deferral loses unaffected sibling obligations')
+    receipt=Path(folder)/'source-sequence/context-deferred'/f"ordinal-{entry['ordinal']:04d}.json"
+    _immutable(receipt,{'ordinal':entry['ordinal'],'candidate_packet':entry['candidate_packet'],
+        'qualified_packet':entry['qualified_packet'],'cases':item['cases'],'context_exclusions':reference,
+        'excluded_program_ids':excluded,**counts,'generation_admission':False,'training_admission':False,
+        'debt':'Unaffected sibling cases require fresh reference qualification and a new appended packet identity; original task context targets remain excluded.'})
+    sequence=state['source_sequence'];stored=sequence.setdefault('context_deferred',{});key=str(entry['ordinal'])
+    actual=binding(receipt)
+    if key in stored and stored[key]!=actual:raise ValueError('context deferral receipt changed')
+    stored[key]=actual;sequence['next_ordinal']=entry['ordinal']+1
+    write(Path(folder)/'state.json',state)
+
+
 def prepare_source_sequence(folder, state, config, batch):
     declaration=config.get('source_sequence')
     if declaration is None:return
@@ -269,6 +350,7 @@ def prepare_source_sequence(folder, state, config, batch):
             raise ValueError('ready sequence is not the declared candidate order')
     sequence['observed_entries']=entries
     ordinal=sequence['next_ordinal']
+    deferral_reference,deferrals,excluded_programs=_source_context_deferrals(declaration,entries,sequence)
     lock=(Path(config['root'])/'next-source-selection.lock').open('a')
     with lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
@@ -282,6 +364,9 @@ def prepare_source_sequence(folder, state, config, batch):
             _reconcile_publication(pending,declaration)
             sequence['configuration']=binding(declaration['source_configuration'])
             write(Path(folder)/'state.json',state);return
+        while ordinal in deferrals:
+            _defer_context_packet(folder,state,declaration,entries[ordinal],deferrals[ordinal],deferral_reference,excluded_programs)
+            ordinal=sequence['next_ordinal']
         if ordinal>=len(entries):
             if declaration.get('on_unready')!='retain-current':raise ValueError('next declared packet is not ready')
             write(Path(folder)/'state.json',state);return

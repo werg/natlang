@@ -48,3 +48,18 @@ bound. This is exact verifier plumbing, not a choice of task or admission:
 current protection, original program bytes, complete scripted verdicts and
 ordered lifecycle checks remain mandatory. Unknown or malformed runtime
 bindings fail closed. Existing declarations retain their single runtime law.
+
+## Exact future task-context deferral
+
+The supervisor may defer explicitly audited invalid-context future task packets.
+Keep the original observed entries and ordinals, current/started work, successful
+trajectories and original task facts unchanged. Preserve all unaffected sibling
+cases as queued, freshly reference-qualified subsets; append those new packet
+identities through the existing ready-sequence continuation when qualified.
+
+The crisp seam checks a SHA-bound supervisor exclusion proof against the exact
+observed ready declaration, candidate/prepared/cases bindings, canonical program
+IDs/hashes and conserved case counts. It may advance only over a declared packet
+with neither a pending selection nor a real started receipt. Each skipped ordinal
+gets an immutable pending-debt receipt before durable cursor advancement. It is
+not a completed batch, generation admission, training exposure or a family ban.

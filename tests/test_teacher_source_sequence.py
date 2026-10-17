@@ -351,3 +351,134 @@ def test_unassigned_global_accounting_error_cannot_be_called_drained_with_repair
     state['last_boundary']=put(folder/'boundaries/batch-0021.json',decision)
     with pytest.raises(ValueError,match='accounting changed'):
         sequence.prepare_source_sequence(folder,state,config,22)
+
+
+def context_deferrals(folder,state,config,ordinals):
+    declaration=config['source_sequence'];ready_path=Path(declaration['ready_manifest']);ready=json.loads(ready_path.read_text())
+    packets=[];programs=[]
+    for ordinal in ordinals:
+        entry=ready['entries'][ordinal];p=json.loads(Path(entry['qualified_packet']['path']).read_text())
+        rows=[json.loads(line)for line in Path(p['cases']['path']).read_bytes().splitlines()]
+        row=rows[0];digest=hashlib.sha256(json.dumps(row,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        programs.append(dict(program_id=row['id'],program_sha256=digest))
+        packets.append(dict(ordinal=ordinal,candidate_packet=entry['candidate_packet'],qualified_packet=entry['qualified_packet'],cases=p['cases'],excluded_program_ids=[row['id']],source_cases=len(rows),excluded_cases=1,retained_cases=len(rows)-1))
+    audit=put(folder/'context-audit.json',{'training_admission':False})
+    proof=dict(schema='natlang.teacher-source-context-exclusions/1',original_ready=guardian.binding(ready_path),source_context_audit=audit,primary_source_audit=audit,original_context_source=audit,excluded_programs=programs,deferred_packets=packets,training_admission=False,model_calls=0)
+    declaration['context_deferrals']=put(folder/'context-deferrals.json',proof)
+    return proof
+
+
+def test_exact_future_deferral_preserves_observed_prefix_and_records_debt(tmp_path):
+    folder,state,config=setup(tmp_path)
+    original=json.loads(Path(config['source_sequence']['ready_manifest']).read_text())['entries']
+    context_deferrals(folder,state,config,[0])
+    sequence.prepare_source_sequence(folder,state,config,22)
+    actual=state['source_sequence'];assert actual['observed_entries']==original
+    assert actual['pending']['ordinal']==1 and actual['next_ordinal']==1
+    assert not actual.get('closed') and not actual.get('started')
+    debt=json.loads(Path(actual['context_deferred']['0']['path']).read_text())
+    assert debt['excluded_program_ids']==['train-task-0']
+    assert debt['training_admission']is False and debt['generation_admission']is False
+    assert debt['source_cases']==debt['excluded_cases']+debt['retained_cases']==1
+    current=json.loads(Path(config['source_sequence']['source_configuration']).read_text())
+    assert json.loads(Path(current['cases']).read_text())['id']=='train-task-1'
+    # Repeated reconciliation does not consume another packet or invent closure.
+    before=copy.deepcopy(actual);sequence.prepare_source_sequence(folder,state,config,22)
+    assert state['source_sequence']==before
+
+
+def test_context_deferral_cannot_skip_pending_current_packet(tmp_path):
+    folder,state,config=setup(tmp_path)
+    sequence.prepare_source_sequence(folder,state,config,22)
+    current=Path(config['source_sequence']['source_configuration']);before=current.read_bytes()
+    context_deferrals(folder,state,config,[0])
+    with pytest.raises(ValueError,match='unstarted'):
+        sequence.prepare_source_sequence(folder,state,config,22)
+    assert current.read_bytes()==before and state['source_sequence']['pending']['ordinal']==0
+    assert not state['source_sequence'].get('context_deferred')
+
+
+@pytest.mark.parametrize('mutation',["unknown_id","wrong_program","lost_sibling","repeated_packet"])
+def test_invalid_context_deferral_cannot_advance_or_publish(tmp_path,mutation):
+    folder,state,config=setup(tmp_path);proof=context_deferrals(folder,state,config,[0])
+    if mutation=='unknown_id':proof['deferred_packets'][0]['excluded_program_ids']=['unknown']
+    elif mutation=='wrong_program':proof['excluded_programs'][0]['program_sha256']='0'*64
+    elif mutation=='lost_sibling':proof['deferred_packets'][0]['retained_cases']=1
+    else:proof['deferred_packets'].append(copy.deepcopy(proof['deferred_packets'][0]))
+    config['source_sequence']['context_deferrals']=put(folder/'context-deferrals.json',proof)
+    current=Path(config['source_sequence']['source_configuration']);before=current.read_bytes()
+    with pytest.raises(ValueError):sequence.prepare_source_sequence(folder,state,config,22)
+    assert current.read_bytes()==before and not state['source_sequence'].get('pending')
+    assert not state['source_sequence'].get('context_deferred')
+
+
+def test_context_debt_allows_fresh_qualified_packet_append_after_real_closure(tmp_path):
+    folder,state,config=setup(tmp_path,packet_count=3);decl=config['source_sequence']
+    ready_path=Path(decl['ready_manifest']);full=json.loads(ready_path.read_text());fresh=full['entries'][-1]
+    initial={**full,'entries':full['entries'][:2]};put(ready_path,initial)
+    context_deferrals(folder,state,config,[0]);sequence.prepare_source_sequence(folder,state,config,22)
+    sealed=seal(folder,state,config,22)
+    state['last_boundary']=put(folder/'boundary22.json',{'batch':22,'batch_complete':True,'bindings':{key:sealed[key]for key in('queue.jsonl','teacher-source.json')}})
+    sequence.observe_source_sequence(folder,state,config)
+    assert state['source_sequence']['next_ordinal']==2 and '22'in state['source_sequence']['closed']
+    appended=put(folder/'ready-appended.json',{**initial,'entries':[*initial['entries'],fresh]})
+    decl['ready_manifest']=appended['path'];sequence.prepare_source_sequence(folder,state,config,23)
+    assert state['source_sequence']['pending']['ordinal']==2
+    assert '0'in state['source_sequence']['context_deferred']
+    current=json.loads(Path(decl['source_configuration']).read_text())
+    assert json.loads(Path(current['cases']).read_text())['id']=='train-task-2'
+
+
+def test_context_deferral_cannot_reclassify_genuinely_started_closed_work(tmp_path):
+    folder,state,config=setup(tmp_path)
+    sequence.prepare_source_sequence(folder,state,config,22);sealed=seal(folder,state,config,22)
+    state['last_boundary']=put(folder/'boundary22.json',{'batch':22,'batch_complete':True,'bindings':{key:sealed[key]for key in('queue.jsonl','teacher-source.json')}})
+    sequence.observe_source_sequence(folder,state,config)
+    before=copy.deepcopy(state);context_deferrals(folder,state,config,[0])
+    with pytest.raises(ValueError,match='unstarted'):
+        sequence.prepare_source_sequence(folder,state,config,23)
+    assert state==before
+
+
+def test_context_deferral_reuses_durable_debt_after_cursor_write_interruption(tmp_path,monkeypatch):
+    folder,state,config=setup(tmp_path);context_deferrals(folder,state,config,[0])
+    original=sequence.write
+    def fail_state(path,value):
+        if Path(path)==folder/'state.json':raise OSError('assigned cursor interruption')
+        return original(path,value)
+    monkeypatch.setattr(sequence,'write',fail_state)
+    with pytest.raises(OSError,match='cursor interruption'):
+        sequence.prepare_source_sequence(folder,state,config,22)
+    debt=folder/'source-sequence/context-deferred/ordinal-0000.json'
+    before=debt.read_bytes();state=json.loads((folder/'state.json').read_text())
+    monkeypatch.setattr(sequence,'write',original)
+    sequence.prepare_source_sequence(folder,state,config,22)
+    assert debt.read_bytes()==before
+    assert state['source_sequence']['pending']['ordinal']==1
+    assert len(state['source_sequence']['context_deferred'])==1
+
+
+def test_past_context_debt_is_reauthenticated_and_cannot_be_silently_removed(tmp_path):
+    folder,state,config=setup(tmp_path);proof=context_deferrals(folder,state,config,[0])
+    sequence.prepare_source_sequence(folder,state,config,22)
+    stored=state['source_sequence']['context_deferred']['0'];path=Path(stored['path']);original=path.read_bytes()
+    # A new proof may stop deferring future packets; historical debt is retained
+    # and its exact original proof stays bound, rather than overwritten.
+    config['source_sequence']['context_deferrals']=put(folder/'deferrals-successor.json',{**proof,'deferred_packets':[]})
+    sequence.prepare_source_sequence(folder,state,config,22)
+    assert state['source_sequence']['context_deferred']['0']==stored
+    assert path.read_bytes()==original
+    path.write_bytes(original+b' ')
+    with pytest.raises(ValueError,match='binding changed'):
+        sequence.prepare_source_sequence(folder,state,config,22)
+
+
+def test_disabling_context_deferral_policy_does_not_drop_historical_proof_checks(tmp_path):
+    folder,state,config=setup(tmp_path);context_deferrals(folder,state,config,[0])
+    sequence.prepare_source_sequence(folder,state,config,22)
+    stored=state['source_sequence']['context_deferred']['0'];receipt=json.loads(Path(stored['path']).read_text())
+    config['source_sequence'].pop('context_deferrals')
+    sequence.prepare_source_sequence(folder,state,config,22)
+    proof=Path(receipt['context_exclusions']['path']);proof.write_bytes(proof.read_bytes()+b' ')
+    with pytest.raises(ValueError,match='binding changed'):
+        sequence.prepare_source_sequence(folder,state,config,22)
