@@ -131,13 +131,20 @@ empty values and hierarchical views remain integrated.
 Full-model raw-state references and fixed-delta tests established the deployed
 channel. Subsequent prefix-sharing investigation found and repaired a separate
 sparse-attention traversal-order defect in newer code. LFM prefix reuse passes
-local strict checks and the actual H100 trained6620-parent check (candidate
+local strict checks and the actual H100 trained 6620-parent check (candidate
 8fc03eb2c250):13,431→8,188 physical queries, bitwise hidden/logits/loss,
 input-adjoint relativeL2 4.14e-6 under unchanged gates. Concurrent timing is not
-isolated throughput evidence. Source-index continuation and actual production
-adoption remain separate obligations; Mellum's remaining adjoint differences are localized to
-BF16 fan-in rounding and nonlinear FP8 input-adjoint quantization. Prefix reuse
-remains off in current production. See
+isolated throughput evidence. Source-index continuation 399162917 was followed
+by actual LF production adoption: all three source-bound MAX cases passed,
+TRUE-mode certificate ff47a021…5daa binds 94,236 physical/157,075 KV, and the
+retained live proof records training 7058. The October 17 LF ordinary recipe
+and live command still enable prefix reuse; current certificate 596978b3…ed474
+also binds that mode. The packer and GraphPlan visibility/workspace methods
+remain unchanged through deployed 4ea and staged f8; f8 retains the existing
+provision under its separate source-v1 arithmetic witness. No duplicate LF
+flag or prefix qualification is pending. Mellum's remaining adjoint differences
+are localized to BF16 fan-in rounding and nonlinear FP8 input-adjoint
+quantization; its prefix reuse remains disabled. See
 `shared-state/CAUSAL_PREFIX_QUALIFICATION_20261016.md`; do not transfer a
 qualification between arithmetic modes. Mellum actual trained-parent3505
 qualification passed with392 executedFP8projections/67,200routed rows,

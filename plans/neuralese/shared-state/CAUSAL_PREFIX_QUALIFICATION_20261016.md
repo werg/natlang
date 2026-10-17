@@ -165,16 +165,17 @@ collector still exists.
 
 Both-model exact trained-parent restore/config/source checks plus existing
 prefix objective and CUDA mask regression tests passed22 cases in6.68s.
-The frozen production prefix package and actual H100 trained-parent test remain
-in progress; prefix reuse is still disabled in production.
+Those were preparatory checks. The subsequent H100 qualification and actual
+LF production adoption are recorded below. LF prefix reuse is active; Mellum
+remains disabled under its separate strict gradient gate.
 
 
 ## Actual trained-parent H100 qualification and source-index continuation
 
-On October16 the frozen3042af96a386 production runtime was extended only with
+On October 16 the frozen3042af96a386 production runtime was extended only with
 prefix packing, stable invocation serialization and the ordered sparse mask,
 then the exact-parent qualifier051b4cc88 (candidate8fc03eb2c250). The H100 run
-restored immutable trained6620 rather than starting from base. It passed:
+restored immutable trained 6620 rather than starting from base. It passed:
 13,431 original physical rows →8,188 (-39.04%), bitwise hidden/logits/loss,
 input-gradient maximum5.59e-8, relativeL2 4.14e-6, cosine.999999999991.
 Peak allocated CUDA was4.35GB. The concurrent28.39/7.24-second timings are
@@ -182,7 +183,7 @@ not isolated trainer throughput. Actual proof is
 `/home/werg/data/dgxops/lfm-trained-prefix-8fc-actual-parent-6620-proof-20261016.json`.
 No production prefix adoption is implied by this diagnostic.
 
-Source-index continuation399162917 avoids revalidating unchanged raw graphs
+Source-index continuation 399162917 avoids revalidating unchanged raw graphs
 for this exact extension. Six existing validation-policy files must be
 byte-identical; the entire compiler AST must equal the previous compiler after
 removing only the exact default-false field, serializer and three guards that
@@ -199,3 +200,47 @@ that prefix qualification is actually selected; loading an unchanged parent or
 computing attention diagnostics cannot require a newer optional prefix module.
 This is dependency plumbing, not a compatibility substitute for model code.
 Missing required prefix support still fails when that operation is requested.
+
+
+## Verified production adoption, October 17
+
+The earlier disabled-production status is superseded. LFM actually resumed
+training with prefix reuse on October 16: the retained live proof records
+step 7058 after all three source-bound MAX cases passed. The combined
+certificate `ff47a021e693c023c500730e5fa69f0462289d5f07a8fad6ad4b5bd6387e5daa`
+explicitly binds `share_causal_prefixes=true` and limits of 94,236 physical
+rows and 157,075 KV slots. This is distinct from the earlier trained 6620
+comparison; both are retained in the evidence below.
+
+The October 17 ordinary LF trainer 1191887 also has
+`--share-causal-prefixes` in its actual command. Its current recipe
+`e02076e4…08f00f` already declares the flag. The current ordinary capacity
+certificate `596978b3…ed474` and its authenticated source certificate
+`c4a9f4bc…aaafa` both bind the enabled mode, with the same limits. There is
+no missing enablement flag or deferred LF prefix feature to add. Batches
+without matching prefixes can correctly report zero reused tokens; reuse
+counts depend on their actual whole graphs.
+
+The prefix packer is byte-identical in qualified `8fc03eb2c250`, deployed
+`4ea5f59a371f`, and staged `f8fe2e0ac37c`. GraphPlan visibility, attention
+workspace and history methods are also unchanged. Later compiler and shared
+model files have other additions; the separate whole-HEAD arithmetic witness
+`b7e28c39…e5387` verifies the ordinary `source-v1`/IEEE path against 4ea,
+including packed loss and the explicit norm-profile dispatch. Thus the staged
+f8 runtime retains the existing LF provision. Its eventual deployment still
+requires the actual later-owner recipe/code/capacity handoff; staging alone
+is not adoption.
+
+No new GPU qualification or recipe flag is required for this unchanged LF
+optimization. Mellum remains excluded: neither LF's proof nor Mellum's
+separate non-prefix qualification changes its failed strict prefix-adjoint
+gate. The 39.04% query reduction belongs to the retained 6620 case, not every
+training batch, and concurrent diagnostic timings remain unsuitable for a
+whole-run throughput claim.
+
+Evidence: `/home/werg/data/dgxops/native-prefix-adoption-audit-20261017/audit.json`
+binds the original 6620 comparison, actual 7058 source/MAX reports, current
+seven-file capacity chain, exact recipe, immutable live-command snapshot and
+three-revision source comparison. Ledger
+`native-prefix-existing-adoption-audit-final-20261017` verifies those artifacts
+without constructing a model or loading a checkpoint.
