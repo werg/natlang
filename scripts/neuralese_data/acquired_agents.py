@@ -327,10 +327,29 @@ def iter_acquired_file_row_ids(path):
     raise Reject('metadata-only row accounting supports Parquet and JSONL files only')
 
 
-def _bound_acquired_path(root,entry):
+def _bound_acquired_path(root,entry,receipt=None):
     from natlang_neuralese.common.hashing import sha256_file_hex_cached
-    relative=Path(entry['path']);path=(root/relative).resolve(strict=True)
-    if not path.is_relative_to(root.resolve()) or path.stat().st_size!=entry['bytes']:
+    root=Path(root).resolve();relative=Path(entry['path'])
+    materialized_root=root
+    if receipt is not None:
+        labels=receipt.get('materialized_roots') or {}
+        locations=receipt.get('materialized_files') or {}
+        label=locations.get(entry['path'])
+        if label is not None:
+            candidate=labels.get(label)
+            if not isinstance(candidate,str) or not Path(candidate).is_absolute():
+                raise Reject('acquired source location lacks an exact absolute root: '+str(relative))
+            try:
+                materialized_root=Path(candidate).resolve(strict=True)
+            except OSError as error:
+                raise Reject('acquired source location root is unavailable: '+str(relative)) from error
+            if not materialized_root.is_dir():
+                raise Reject('acquired source location root is not a directory: '+str(relative))
+    try:
+        path=(materialized_root/relative).resolve(strict=True)
+    except OSError as error:
+        raise Reject('acquired source file differs: '+str(relative)) from error
+    if not path.is_relative_to(materialized_root) or path.stat().st_size!=entry['bytes']:
         raise Reject('acquired source file differs: '+str(relative))
     if sha256_file_hex_cached(path)!=entry['sha256']:
         raise Reject('acquired source digest differs: '+str(relative))
@@ -598,6 +617,28 @@ def validate_recovery_manifest(ref, receipt, receipt_path, *, root):
     files=receipt.get('files')
     if not isinstance(files,list) or not files:
         raise Reject('recovered source has no complete file inventory')
+    materialized_roots=receipt.get('materialized_roots') or {}
+    materialized_files=receipt.get('materialized_files') or {}
+    if not isinstance(materialized_roots,dict) or not isinstance(materialized_files,dict):
+        raise Reject('recovered source locations must be explicit root and file mappings')
+    resolved_roots={}
+    for label,location in materialized_roots.items():
+        if (not isinstance(label,str) or not label or not isinstance(location,str)
+                or not Path(location).is_absolute()):
+            raise Reject('recovered source location root binding is invalid')
+        try:
+            resolved=Path(location).resolve(strict=True)
+        except OSError as error:
+            raise Reject('recovered source location root is unavailable') from error
+        if not resolved.is_dir():
+            raise Reject('recovered source location root is not a directory')
+        resolved_roots[label]=str(resolved)
+    if (len(resolved_roots)!=len(materialized_roots)
+            or len(set(resolved_roots.values()))!=len(resolved_roots)
+            or any(not isinstance(name,str) or not isinstance(label,str)
+                   or label not in resolved_roots for name,label in materialized_files.items())
+            or set(resolved_roots)!=set(materialized_files.values())):
+        raise Reject('recovered source file locations are invalid or ambiguous')
     seen=set()
     for entry in files:
         if not isinstance(entry,dict):
@@ -609,12 +650,13 @@ def validate_recovery_manifest(ref, receipt, receipt_path, *, root):
                 or not isinstance(digest,str) or len(digest) != 64
                 or any(char not in '0123456789abcdef' for char in digest)):
             raise Reject('recovered source inventory contains an unsafe or duplicate entry')
-        materialized=(root / path).resolve(strict=True)
-        if not materialized.is_relative_to(root):
-            raise Reject('recovered source inventory escapes its source root')
-        if materialized.stat().st_size != size or sha256_file_hex_cached(materialized) != digest:
-            raise Reject('recovered source inventory file differs from its exact content binding')
+        try:
+            _bound_acquired_path(root,entry,receipt)
+        except Reject as error:
+            raise Reject('recovered source inventory file differs') from error
         seen.add(name)
+    if not set(materialized_files)<=seen:
+        raise Reject('recovered source locations name an unbound file')
     inventory_sha=hashlib.sha256(json.dumps(files,sort_keys=True,separators=(',',':')).encode()).hexdigest()
     expected=receipt.get('expected_source_inventory') or {}
     if (inventory_sha != receipt.get('file_inventory_sha256')
@@ -641,7 +683,7 @@ def acquired_rows(ref, limit=None, *, metadata_only_files=frozenset()):
     index = 0
     for entry in entries:
         relative = Path(entry['path'])
-        path=_bound_acquired_path(root,entry)
+        path=_bound_acquired_path(root,entry,receipt)
         metadata_only = str(relative) in metadata_only_files
         if metadata_only and path.suffix!='.parquet':
             raise Reject('metadata-only acquired row accounting requires a Parquet source')

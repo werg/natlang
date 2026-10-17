@@ -329,3 +329,70 @@ def test_recovered_acquisition_requires_exact_archive_and_complete_inventory(tmp
     verification_path.write_text(verification_raw.decode()+' ')
     with pytest.raises(Reject,match='sidecar differs'):
         validate_recovery_manifest('D13',receipt,manifest,root=root)
+
+
+def test_recovered_acquisition_reads_explicit_mixed_location_tree(tmp_path,monkeypatch):
+    import tarfile
+    from io import BytesIO
+    from neuralese_data import agents, acquired_agents as acquired
+    from neuralese_data.acquired_agents import validate_recovery_manifest
+
+    root=tmp_path/'D32';root.mkdir()
+    external=tmp_path/'external-D32';external.mkdir()
+    primary_raw=b'{"messages":[{"role":"user","content":"local"}]}\n'
+    external_raw=b'{"messages":[{"role":"assistant","content":"joined"}]}\n'
+    primary=root/'local.jsonl';primary.write_bytes(primary_raw)
+    remote=external/'remote.jsonl';remote.write_bytes(external_raw)
+    # An undeclared symlink is deliberately present to prove that the new
+    # location map, rather than filesystem escape, grants the external root.
+    (root/'remote.jsonl').symlink_to(remote)
+    files=[
+        {'path':'local.jsonl','bytes':len(primary_raw),'sha256':hashlib.sha256(primary_raw).hexdigest()},
+        {'path':'remote.jsonl','bytes':len(external_raw),'sha256':hashlib.sha256(external_raw).hexdigest()},
+    ]
+    inventory_sha=hashlib.sha256(json.dumps(files,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    embedded={'schema':'natlang.pinned-public-source-archive/1','acquisition':{
+        'schema':'natlang.external-source-acquisition/1','ref':'D32','repo':'OpenResearcher/OpenResearcher',
+        'revision':'a'*40,'files':files}}
+    embedded_raw=json.dumps(embedded,separators=(',',':')).encode()
+    archive=root/'pinned-source.tar'
+    with tarfile.open(archive,'w') as stream:
+        for name,raw in [('D32/local.jsonl',primary_raw),('D32/remote.jsonl',external_raw),
+                         ('D32/durability-manifest.json',embedded_raw)]:
+            info=tarfile.TarInfo(name);info.size=len(raw);stream.addfile(info,BytesIO(raw))
+    receipt={
+        'schema':'natlang.external-source-recovery/1','ref':'D32','repo':'OpenResearcher/OpenResearcher',
+        'revision':'a'*40,'status':'recovered','training_admission':False,'files':files,
+        'file_inventory_sha256':inventory_sha,
+        'expected_source_inventory':{'files':2,'bytes':len(primary_raw)+len(external_raw),'sha256':inventory_sha},
+        'historical_acquisition_receipt':{'available':False,'expected_sha256':'1'*64},
+        'source_archive':{'verified':True,'private':True,'path':str(archive),'bytes':archive.stat().st_size,
+            'sha256':hashlib.sha256(archive.read_bytes()).hexdigest(),'run':'werg/natlang/ywcj2mvb',
+            'name':'d32/example/D32-pinned-source.tar'},
+        'embedded_archive_manifest':{'path':'D32/durability-manifest.json','bytes':len(embedded_raw),
+            'sha256':hashlib.sha256(embedded_raw).hexdigest(),'schema':'natlang.pinned-public-source-archive/1'},
+        'materialized_roots':{'external':str(external)},
+        'materialized_files':{'remote.jsonl':'external'},
+    }
+    manifest=root/'recovery-manifest.json';manifest.write_text(json.dumps(receipt))
+    assert validate_recovery_manifest('D32',receipt,manifest,root=root)==receipt
+
+    # Without the exact root/file mapping, the same symlink must not escape.
+    receipt['materialized_roots']={};receipt['materialized_files']={}
+    with pytest.raises(Reject,match='recovered source inventory file differs'):
+        validate_recovery_manifest('D32',receipt,manifest,root=root)
+    receipt['materialized_roots']={'external':str(external)}
+    receipt['materialized_files']={'remote.jsonl':'external'}
+    monkeypatch.setattr(agents,'EXPANSION_ROOT',tmp_path)
+    prior_receipt=acquired.ACQUIRED_RECEIPTS.get('D32')
+    prior_files=acquired.ACQUIRED_FILES
+    acquired.ACQUIRED_RECEIPTS['D32']=manifest
+    acquired.ACQUIRED_FILES=None
+    try:
+        rows=list(acquired.acquired_rows('D32'))
+        assert [row['messages'][0]['content'] for _,_,row in rows]==['local','joined']
+        assert [rid for _,rid,_ in rows]==['local.jsonl:0','remote.jsonl:0']
+    finally:
+        if prior_receipt is None:acquired.ACQUIRED_RECEIPTS.pop('D32',None)
+        else:acquired.ACQUIRED_RECEIPTS['D32']=prior_receipt
+        acquired.ACQUIRED_FILES=prior_files
