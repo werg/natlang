@@ -25,6 +25,15 @@ def test_generative_eval_renders_the_full_system_prompt_unless_set_otherwise():
         parse_task_eval({'packet': packet, 'prompt_rendering': 'other'})
 
 
+def test_storage_floor_is_optional_nonnegative_integer_admission():
+    packet={'path':'p','sha256':'s'}
+    assert parse_task_eval({'packet':packet})['min_free_mib']==0
+    assert parse_task_eval({'packet':packet,'min_free_mib':20480})['min_free_mib']==20480
+    for invalid in (-1,True,1.5,'20480'):
+        with pytest.raises(ValueError,match='min_free_mib'):
+            parse_task_eval({'packet':packet,'min_free_mib':invalid})
+
+
 def test_task_gate_is_relative_to_the_base_and_the_previous_evaluation():
     spec = parse_task_eval({'packet': {'path': 'p', 'sha256': 's'}, 'reference_successes': 3, 'noise_successes': 2})
     final = lambda n, **k: {'eligible': True, 'task_successes': n, 'cases': 16, 'step': 9, **k}

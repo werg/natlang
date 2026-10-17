@@ -35,6 +35,18 @@ All steps above are crisp transfer/identity/durability/process plumbing. This
 extends existing task_cadence and task_eval_dispatch, not another eval queue,
 trainer, collector, provider account or task-selection policy.
 
+2026-10-17 storage recovery: actual LFM9088 asynchronous evaluation exhausted
+the local disk, truncating journals and then failing to write its failure row.
+The exporter also stopped on ENOSPC. Retain that evaluation as unscored; do not
+repair its score by ignoring malformed evidence. Restart the existing exporter
+and evaluate a newer verified checkpoint in a fresh request. Expose the existing
+collector `--min-free-mib` mechanism through the task-evaluation spec (default0,
+nonnegative integer). The DGX supervisor selects its existing20GiB free-space
+floor for future requests. Before each new case the existing collector records
+a storage pause and leaves unstarted cases unscored when below that floor.
+This changes only storage admission, not prompts or model outcomes; it cannot
+guarantee free space during a case or replace normal storage supervision.
+
 2026-10-16 memory scheduling correction: new native evaluator unit names include
 their declared backbone architecture, so the memory ledger learns separate job
 families for LFM and Mellum. A Mellum peak must not inflate every LFM request's

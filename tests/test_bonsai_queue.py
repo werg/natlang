@@ -82,6 +82,25 @@ def write_exact_export(command):
     Path(str(output) + '.manifest.json').write_text(json.dumps(manifest))
 
 
+def test_storage_floor_pauses_without_attempting_or_negatively_labelling_case(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    entry=queue_entry(tmp_path)
+    queue=tmp_path/'queue.jsonl';raw=json.dumps(entry)+'\n';queue.write_text(raw)
+    journal=tmp_path/'journal.jsonl'
+    monkeypatch.setattr(queue_module.shutil,'disk_usage',lambda _:SimpleNamespace(free=1024))
+    original_popen=queue_module.subprocess.Popen
+    def forbidden_launch(*args,**kwargs):
+        if '--input-type=module' in args[0]:
+            return original_popen(*args,**kwargs)  # exact source digest, no model
+        raise AssertionError('storage-paused case must not launch a collector')
+    monkeypatch.setattr(queue_module.subprocess,'Popen',forbidden_launch)
+    assert run_queue(queue,journal,TS_HOST,min_free_mib=20480)==75
+    rows=[json.loads(line)for line in journal.read_text().splitlines()]
+    assert [row['event']for row in rows]==['storage_pause']
+    assert rows[0]['key']==entry['key'] and 'restart same queue' in rows[0]['disposition']
+    assert queue.read_text()==raw and not Path(entry['output']).exists()
+
+
 def test_output_accounting_resolves_manifest_source_path_but_keeps_hash_checks(tmp_path):
     source = tmp_path / 'source.ir.jsonl'
     source_rows(source, 1)

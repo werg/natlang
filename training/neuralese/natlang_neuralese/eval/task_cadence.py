@@ -87,10 +87,11 @@ def parse_task_eval(value):
         raise ValueError('task_eval.cases must be distinct nonnegative row indices')
     for key, default in (('case_seconds', 7200), ('max_model_requests', 128), ('max_turns', 160), ('workers', 8),
                          ('min_successes', 0), ('noise_successes', 0), ('noise_repeats', 2),
-                         ('max_consecutive_failures', 3), ('max_pending', 2), ('identical_turn_limit', 0)):
+                         ('max_consecutive_failures', 3), ('max_pending', 2), ('identical_turn_limit', 0),
+                         ('min_free_mib', 0)):
         spec.setdefault(key, default)
         if isinstance(spec[key], bool) or not isinstance(spec[key], int) or spec[key] < (
-                0 if key in ('min_successes', 'noise_successes', 'identical_turn_limit') else 1):
+                0 if key in ('min_successes', 'noise_successes', 'identical_turn_limit', 'min_free_mib') else 1):
             raise ValueError(f'task_eval.{key} must be a positive integer')
     reference = spec.setdefault('reference_successes', None)
     if reference is not None and (isinstance(reference, bool) or not isinstance(reference, int) or reference < 0):
@@ -268,6 +269,7 @@ class TaskEval:
                      '--runtime', str(self.spec.get('runtime') or self.repo / 'ts-host'), '--server', url,
                      '--model-id', engine.model_name,
                      '--chat-completions-url', url + '/v1/chat/completions', '--model-concurrency', '2',
+                     '--min-free-mib', str(self.spec.get('min_free_mib', 0)),
                      '--identical-turn-limit', str(self.spec['identical_turn_limit']), *coefficient_args,
                      *(['--neuralese-server'] if self.spec.get('neuralese_server') else [])],
                     cwd=self.repo, env=env, stdout=log, stderr=subprocess.STDOUT), log))
