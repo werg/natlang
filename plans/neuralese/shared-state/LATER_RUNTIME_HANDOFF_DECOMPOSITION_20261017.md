@@ -158,3 +158,11 @@ update, genuine process drains, carried-stage authentication, false/profile/code
 qualification rejection, immutable qualification reuse and metadata closure.
 `native-bare-runtime-quick-3577`: 22 ratchets and TypeScript check passed.
 These checks are control/continuation evidence, not production capacity claims.
+
+A bare objective returning from an older resident SFT owner must detach the old
+resident invocation hooks from top-level and generated trainer settings. Keep
+its historical cursor/receipts and all row credits, but do not attach the old
+installed plan to a different current recipe. Literal stale resident CLI flags
+reject. `native-bare-resident-detach-final-3589`:20CPU PASS21.47s including
+former-resident→bare objective→actual ordinary argv and literal-hook rejection;
+quick22/TS GREEN. This is invocation metadata only, no model/source change.

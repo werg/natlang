@@ -312,6 +312,10 @@ def configure_runtime_handoff(plan_path,declaration,bootstrap,config_path):
         if key in continued:config[key]=continued[key]
         else:config.pop(key,None)
     config['seed_trainer_parameters']={**config['trainer_parameters'],'stage_id':stage_id,'refresh_at_checkpoint':True}
+    if bare:
+        config.pop('resident_data_directory',None)
+        for parameters in ('trainer_parameters','seed_trainer_parameters'):
+            config[parameters].pop('resident_data_directory',None)
     bind_recipe_lineage(config,proof['lineage'])
     from .native_raw_rounds import _scheduling_controls
     from .native_rounds import configure_provider
@@ -335,6 +339,8 @@ def configure_runtime_handoff(plan_path,declaration,bootstrap,config_path):
     # The existing command hook must select the reviewed numerical package;
     # keeping an old env prefix would execute the wrong trainer despite new proof.
     command=config.get('seed_command') or []
+    if bare and any(part=='--resident-data-directory' or part.startswith('--resident-data-directory=') for part in command):
+        raise ValueError('bare runtime handoff seed command retains a stale resident owner hook')
     paths=[part.split('=',1)[1] for part in command if part.startswith('PYTHONPATH=')]
     from ..train.native_resident import code_inventory
     selected=None

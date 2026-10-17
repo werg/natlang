@@ -22,7 +22,7 @@ def bare(later,tmp_path,request):
     qualification=tmp_path/'memory-qualification.json';summary={'passed':True,'request':resident.binding(capacity_request),'parent_checkpoint_sha256':'f'*64}
     write(qualification,{**summary,'checks':[{'passed':True,'runtime_code_sha256':resident.digest(resident.code_inventory(x['newpackage'])),'identity':{'model_config':saved['model_config']}}]})
     saved['training']['options']['memory_qualification']=summary
-    if getattr(request,'param',None)=='carried':
+    if getattr(request,'param',None)in('carried','former-resident'):
         from natlang_neuralese.train.native_continuation import _TRANSIENT
         saved['training']['sft_progress']['sft']={key:copy.deepcopy(value)for key,value in saved['training'].items()if key not in _TRANSIENT}
         saved['training']['options']={**saved['training']['options'],'stage_id':'raw_policy'}
@@ -32,6 +32,10 @@ def bare(later,tmp_path,request):
         torch.save(saved,slot);shutil.copyfile(slot,pin);reference=drained(values)
     finally:gen.close()
     state=json.loads((x['out']/'state.json').read_text());state['checkpoint']=str(pin);write(x['out']/'state.json',state)
+    if getattr(request,'param',None)=='former-resident':
+        prior=json.loads(x['config'].read_text());prior['resident_data_directory']=str(x['directory'])
+        for key in ('trainer_parameters','seed_trainer_parameters'):prior[key]['resident_data_directory']=str(x['directory'])
+        write(x['config'],prior)
     authority={'recipe':resident.binding(recipe_path),'package':str(x['newpackage']),'qualification':resident.binding(qualification)}
     proof=runtime.prepare_runtime_handoff(x['bootstrap'],reference,None,x['config'],tmp_path/'bare-runtime-proof.json',bare_direct_owner=authority)
     x.update(handoff=reference,pin=pin,saved=saved,proof=proof,bare=authority,slot=slot)
@@ -116,3 +120,28 @@ def test_bootstrap_metadata_tracks_bare_package_qualification_and_current_recipe
     assert proof['bare_direct_owner']['qualification']['path'] in value['files']
     assert value['packages']['later_bare_package']==resident.code_inventory(bare['newpackage'])
     assert value['current_recipe']['sha256']==bare['bare']['recipe']['sha256']
+
+
+@pytest.mark.parametrize('bare',['former-resident'],indirect=True)
+def test_former_resident_bare_objective_returns_to_ordinary_without_stale_owner_hooks(bare,monkeypatch):
+    from natlang_neuralese.rl import production
+    from natlang_neuralese.train.recipe import stage_parameter_args
+    from natlang_neuralese.train.native_state_sft import build_parser
+    x=bare;history=(x['root']/'cycle.json').read_bytes()
+    assert json.loads(x['config'].read_text())['resident_data_directory']
+    raw.configure_model(x['plan'],x['declaration'],x['bootstrap'],x['root'])
+    config=json.loads(x['config'].read_text());assert 'resident_data_directory'not in config
+    assert all('resident_data_directory'not in config[key]for key in ('trainer_parameters','seed_trainer_parameters'))
+    emitted=[];monkeypatch.setattr(production.subprocess,'run',lambda argv,**kw:emitted.append(argv))
+    template=config['seed_command']+['--native-graphs',config['seed_native_graphs'],'--held-native-graphs',config['held_native_graphs'],'--out',str(x['out'])]
+    production.run_command(template,{'seed_trainer_args':stage_parameter_args(config['seed_trainer_parameters'])})
+    argv=emitted[0];start=argv.index('natlang_neuralese.train.native_state_sft')+1
+    assert build_parser().parse_args(argv[start:]).resident_data_directory is None
+    assert (x['root']/'cycle.json').read_bytes()==history
+
+
+def test_bare_rejoin_rejects_literal_old_resident_command(bare):
+    x=bare;x['declaration']['commands']['seed_command'] += ['--resident-data-directory','/old/resident']
+    write(x['plan'],{'models':[x['declaration']]})
+    with pytest.raises(ValueError,match='stale resident owner hook'):
+        raw.configure_model(x['plan'],x['declaration'],x['bootstrap'],x['root'])
