@@ -303,11 +303,12 @@ def repair_outcomes(queue, journal):
     return entries, finishes
 
 
-def launch_repair(folder, state, config):
+def _launch_one_repair(folder, state, config, *, source_queue=None, per_batch_lock=False):
     """Recover one shared process-token protocol, then retry only unfinished keys."""
     active = state.get('repair_owner')
     if active and alive(active): return
-    for source_queue in sorted((folder/'repairs').glob('batch-*/queue.jsonl')):
+    queues = [source_queue] if source_queue is not None else sorted((folder/'repairs').glob('batch-*/queue.jsonl'))
+    for source_queue in queues:
         receipt_path = source_queue.parent/'launch.json'
         receipt = json.loads(receipt_path.read_text()) if receipt_path.exists() else {
             'schema': 'natlang.teacher-repair-attempts/1', 'source_queue': binding(source_queue),
@@ -361,7 +362,7 @@ def launch_repair(folder, state, config):
         if binding(queue) != attempt['queue_binding']: raise ValueError('prepared repair queue changed')
         env = {**os.environ, TOKEN:attempt['token'], 'PATH':attempt['node_bin']+':'+os.environ.get('PATH',''),
                'CUDA_VISIBLE_DEVICES':'','OMP_NUM_THREADS':'1'}
-        command=['flock','-n',str(folder/'repair-collector.lock'),'nice','-n','19','python','-u',attempt['queue_worker'],
+        command=['flock','-n',str(source_queue.parent/'collector.lock' if per_batch_lock else folder/'repair-collector.lock'),'nice','-n','19','python','-u',attempt['queue_worker'],
             str(queue),attempt['journal'],'--runtime',attempt['runtime'],'--server',attempt['server'],
             '--chat-completions-url',attempt['server']+'/v1/chat/completions','--model-id',attempt['model_id'],
             '--model-concurrency','1','--max-batch-cases','1','--case-seconds','7200','--identical-turn-limit','8']
@@ -377,6 +378,61 @@ def launch_repair(folder, state, config):
         if identity:
             attempt.update(state='launched',owner=public_identity(identity));state['repair_owner']=attempt['owner']
         write(receipt_path,receipt);write(folder/'state.json',state);return
+
+
+def launch_repair(folder, state, config):
+    """Fill explicit slots with disjoint batches; preserve all live trajectories."""
+    limit = config.get('repair_parallel_batches', 1)
+    if type(limit) is not int or limit < 1:
+        raise ValueError('repair_parallel_batches must be a positive integer')
+    if limit == 1 and not state.get('repair_batch_owners'):
+        return _launch_one_repair(folder, state, config)
+    queues = sorted((folder/'repairs').glob('batch-*/queue.jsonl'))
+    owners = {}
+    legacy = state.get('repair_owner')
+    for queue in queues:
+        receipt_path = queue.parent/'launch.json'
+        if not receipt_path.exists():
+            continue
+        receipt = json.loads(receipt_path.read_text())
+        if receipt['source_queue'] != binding(queue):
+            raise ValueError('repair source queue changed')
+        attempt = receipt.get('current')
+        if not attempt:
+            continue
+        recovered = recover_token(attempt['token'], script_prefix='run_bonsai_queue.py')
+        owner = public_identity(recovered) if recovered else attempt.get('owner')
+        if not alive(owner):
+            continue
+        if recovered and attempt.get('owner') != owner:
+            attempt.update(owner=owner, state='launched')
+            write(receipt_path, receipt)
+        owners[str(queue)] = owner
+    # A legacy owner without a matching published attempt is still a live
+    # obligation. Reserve its slot rather than guessing or killing its work.
+    if alive(legacy) and legacy not in owners.values():
+        owners['legacy-owner'] = legacy
+    def publish():
+        state['repair_batch_owners'] = dict(owners)
+        state['repair_owner'] = legacy if alive(legacy) else next(iter(owners.values()), None)
+        write(folder/'state.json', state)
+    publish()
+    for queue in queues:
+        if len(owners) >= limit:
+            break
+        if str(queue) in owners:
+            continue
+        # The old launcher owns the entire immutable batch attempt protocol.
+        # Its interim state publication is recovered from the same attempt
+        # tokens if the guardian dies before publishing the final owner map.
+        serial_state = dict(state)
+        serial_state['repair_owner'] = None
+        _launch_one_repair(folder, serial_state, config,
+                          source_queue=queue, per_batch_lock=True)
+        owner = serial_state.get('repair_owner')
+        if alive(owner):
+            owners[str(queue)] = owner
+        publish()
 
 
 def live_batch_workers(source):
@@ -395,7 +451,7 @@ def config_revision(folder, state, path, *, publish=True):
     raw=Path(path).read_bytes();config=json.loads(raw);current=binding(path)
     if state.get('config')==current: return config
     previous=state.get('config_value')
-    allowed={'task_runtime','server','model_id','feeder','queue_worker','node_bin','drain_file','teacher_identity','source_sequence'}
+    allowed={'task_runtime','server','model_id','feeder','queue_worker','node_bin','drain_file','teacher_identity','source_sequence','repair_parallel_batches'}
     changes={key for key in set(previous or {})|set(config) if (previous or {}).get(key)!=config.get(key)}
     if previous is not None and changes-allowed: raise ValueError('guardian root/ownership configuration changed; preserve and explicitly migrate this state')
     snapshot=folder/'config-history'/(current['sha256']+'.json');snapshot.parent.mkdir(parents=True,exist_ok=True)
