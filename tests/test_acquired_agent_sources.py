@@ -295,3 +295,28 @@ def test_recovered_acquisition_requires_exact_archive_and_complete_inventory(tmp
     receipt['files'][0]['bytes']+=1
     with pytest.raises(Reject,match='not bound to its retained archive proof'):
         validate_recovery_manifest('D13',receipt,manifest,root=root)
+    receipt['files'][0]['bytes']-=1
+    proof_dir=root/'.recovery-proof';proof_dir.mkdir()
+    proof_path=proof_dir/'durability-manifest.json';proof_path.write_bytes(embedded_bytes)
+    archive_verification={
+        'schema':'natlang.private-source-archive-local-verification/1',
+        'verified_private_object':True,'archive_retained':False,
+        'run':receipt['source_archive']['run'],'name':receipt['source_archive']['name'],
+        'bytes':receipt['source_archive']['bytes'],'sha256':receipt['source_archive']['sha256'],
+        'embedded_manifest':{'path':'D13/durability-manifest.json','bytes':len(embedded_bytes),
+            'sha256':hashlib.sha256(embedded_bytes).hexdigest(),
+            'schema':'natlang.pinned-public-source-archive/1'},
+    }
+    verification_path=proof_dir/'archive-verification.json'
+    verification_path.write_text(json.dumps(archive_verification,sort_keys=True,separators=(',',':')))
+    verification_raw=verification_path.read_bytes()
+    receipt['source_archive']['verified_local_archive']={
+        'verification_receipt_path':str(verification_path.relative_to(root)),
+        'verification_receipt_sha256':hashlib.sha256(verification_raw).hexdigest(),
+    }
+    receipt['embedded_archive_manifest']['local_path']=str(proof_path.relative_to(root))
+    archive.unlink()
+    assert validate_recovery_manifest('D13',receipt,manifest,root=root)==receipt
+    verification_path.write_text(verification_raw.decode()+' ')
+    with pytest.raises(Reject,match='sidecar differs'):
+        validate_recovery_manifest('D13',receipt,manifest,root=root)

@@ -301,9 +301,6 @@ def validate_recovery_manifest(ref, receipt, receipt_path, *, root):
             or not isinstance(archive.get('name'),str)
             or not isinstance(archive.get('path'),str)):
         raise Reject('recovered source lacks an exact archive and historical-receipt status')
-    archive_path=Path(archive.get('path','')).resolve(strict=True)
-    if archive_path.stat().st_size != archive['bytes'] or sha256_file_hex_cached(archive_path) != archive['sha256']:
-        raise Reject('recovered source archive differs from its private-object binding')
     if receipt_path.parent.resolve() != root:
         raise Reject('recovery manifest is outside its bound source root')
     embedded = receipt.get('embedded_archive_manifest') or {}
@@ -317,17 +314,62 @@ def validate_recovery_manifest(ref, receipt, receipt_path, *, root):
         raise Reject('recovery manifest lacks an exact embedded source-stage proof')
     if historical_sha is None and stage_proof_sha != embedded['sha256']:
         raise Reject('unavailable historical receipt must bind the exact retained source-stage proof')
+    archive_path=Path(archive.get('path','')).resolve()
+    proof_bytes=None
+    if archive_path.is_file():
+        if archive_path.stat().st_size != archive['bytes'] or sha256_file_hex_cached(archive_path) != archive['sha256']:
+            raise Reject('recovered source archive differs from its private-object binding')
+        try:
+            with tarfile.open(archive_path, 'r:*') as stream:
+                member = stream.getmember(embedded_name)
+                if not member.isfile() or member.size != embedded['bytes']:
+                    raise Reject('embedded source-stage proof differs from its archive binding')
+                proof_bytes = stream.extractfile(member).read()
+        except (KeyError, OSError, tarfile.TarError) as error:
+            raise Reject('recovered source archive lacks its bound source-stage proof') from error
+    else:
+        # A streamed private-object GET may be discarded after exact archive
+        # hashing and member extraction. Retain the verified object receipt and
+        # the archive's exact embedded inventory bytes beside the source; this
+        # avoids keeping a second multi-gigabyte copy of the source data.
+        local=archive.get('verified_local_archive') or {}
+        verification_path=Path(local.get('verification_receipt_path',''))
+        embedded_path=Path(embedded.get('local_path',''))
+        try:
+            verification_resolved=(root / verification_path).resolve(strict=True) if not verification_path.is_absolute() else verification_path.resolve(strict=True)
+            embedded_resolved=(root / embedded_path).resolve(strict=True) if not embedded_path.is_absolute() else embedded_path.resolve(strict=True)
+        except OSError as error:
+            raise Reject('recovered source lacks retained private-archive verification sidecars') from error
+        if (not verification_resolved.is_relative_to(root) or not embedded_resolved.is_relative_to(root)
+                or not verification_resolved.is_file() or not embedded_resolved.is_file()):
+            raise Reject('recovery sidecars escape the exact source root')
+        verification_bytes=verification_resolved.read_bytes()
+        if (hashlib.sha256(verification_bytes).hexdigest() != local.get('verification_receipt_sha256')
+                or embedded_resolved.stat().st_size != embedded['bytes']
+                or sha256_file_hex_cached(embedded_resolved) != embedded['sha256']):
+            raise Reject('retained private-archive sidecar differs from its exact binding')
+        try:
+            verification=json.loads(verification_bytes)
+            proof_bytes=embedded_resolved.read_bytes()
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise Reject('retained private-archive sidecar is malformed') from error
+        if (verification.get('schema') != 'natlang.private-source-archive-local-verification/1'
+                or verification.get('verified_private_object') is not True
+                or verification.get('archive_retained') is not False
+                or verification.get('run') != archive['run']
+                or verification.get('name') != archive['name']
+                or verification.get('bytes') != archive['bytes']
+                or verification.get('sha256') != archive['sha256']
+                or verification.get('embedded_manifest') != {
+                    'path': embedded_name, 'bytes': embedded['bytes'],
+                    'sha256': embedded['sha256'], 'schema': embedded.get('schema')}):
+            raise Reject('retained receipt does not prove the exact verified private archive and embedded manifest')
+    if hashlib.sha256(proof_bytes).hexdigest() != embedded['sha256']:
+        raise Reject('embedded source-stage proof digest differs')
     try:
-        with tarfile.open(archive_path, 'r:*') as stream:
-            member = stream.getmember(embedded_name)
-            if not member.isfile() or member.size != embedded['bytes']:
-                raise Reject('embedded source-stage proof differs from its archive binding')
-            proof_bytes = stream.extractfile(member).read()
-        if hashlib.sha256(proof_bytes).hexdigest() != embedded['sha256']:
-            raise Reject('embedded source-stage proof digest differs')
         proof = json.loads(proof_bytes)
-    except (KeyError, OSError, tarfile.TarError, json.JSONDecodeError) as error:
-        raise Reject('recovered source archive lacks its bound source-stage proof') from error
+    except json.JSONDecodeError as error:
+        raise Reject('recovered source archive embedded proof is malformed') from error
     source_receipt = proof.get('acquisition') or {}
     if (proof.get('schema') != embedded.get('schema')
             or proof.get('schema') != 'natlang.pinned-public-source-archive/1'
