@@ -176,6 +176,8 @@ def load_native_engine(checkpoint: str, *, base: str | None = None, device: str 
     engine.native_checkpoint = str(checkpoint)
     engine.native_training_state = (_state.get('training') or _state.get('shared_training') or {})
     engine.native_actor_view = _state.get('actor_view')
+    engine.native_inference_only = bool(engine.native_actor_view is not None
+        or _state.get('inference_only') or _state.get('optimizer_pruned'))
     engine.rl_policy_binding = {'schema': 'natlang.rl-policy-binding/2',
         'checkpoint_sha256': checkpoint_sha256, 'communication': 'native-state',
         'native_identity': dict(identity),

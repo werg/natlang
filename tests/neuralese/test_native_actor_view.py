@@ -248,3 +248,21 @@ def test_actual_cursor_bound_writer_sidecar_preserves_full_backup(source,tmp_pat
         receipt=json.loads(Path(chosen['actor_view']['path']).read_text())
         assert receipt['mechanism']['sha256']==sha and Path(receipt['mechanism']['path'])==sidecar
         assert load_actor_view(chosen['pin'],chosen['actor_view'])['step']==71
+
+
+def test_physical_inference_export_cannot_publish_optimizer_updates(source,tmp_path):
+    _,path,state,signature=source
+    before=sha256_file_hex_cached(path)
+    ref=write_actor_view(path,tmp_path/'physical-views',validated_state=state,decoded_source_stat=signature)
+    receipt=json.loads(Path(ref['path']).read_text())
+    view=Path(ref['path']).parent/receipt['view']['path']
+    restored=load_native_engine(str(view),device='cpu')
+    try:
+        assert restored.native_identity['checkpoint_sha256']==receipt['view']['sha256']
+        assert restored.rl_policy_binding['inference_source']['training_checkpoint_sha256']==before
+        assert restored.native_training_state=={}
+        with pytest.raises(Exception,match='complete parent checkpoint'):
+            _native_optimizer_step_impl(restored,{},'test')
+    finally:restored.store.close()
+    assert sha256_file_hex_cached(path)==before
+    assert state['training']['sft_progress']['native_full_sft']['exposure_counts']['row-9999']==1

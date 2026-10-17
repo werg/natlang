@@ -57,7 +57,8 @@ def native_optimizer_step(engine, body, owner):
 
 def _native_optimizer_step_impl(engine, body, owner):
     """Publish named backbone/interface updates without modifying the live actor."""
-    if getattr(engine,'native_actor_view',None) is not None:
+    if (getattr(engine,'native_actor_view',None) is not None
+            or getattr(engine,'native_inference_only',False)):
         raise RequestError('neuralese-native-optim-invalid',
                            'Restore the complete parent checkpoint before requesting optimizer updates.')
     if body.get('schema') != 'natlang.native-optimizer-request/1':

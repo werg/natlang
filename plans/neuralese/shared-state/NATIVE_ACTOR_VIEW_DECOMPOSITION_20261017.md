@@ -67,3 +67,22 @@ those same bytes in a private qualified namespace; verify the dependency
 package's origin. The default/runtime-module route is unchanged. Sidecar
 verification or extraction failure retains the same typed optional error and
 full-checkpoint private-backup path. This changes no model or training code.
+
+Read-only physical exports (2026-10-17)
+------------------------------------
+
+An optimizer-pruned physical checkpoint is the same read-only inference object
+whether loaded directly (the asynchronous evaluator route) or through an
+explicit actor-view receipt. Loading it directly must not bypass the existing
+requirement to restore the full parent before publishing optimizer updates.
+
+1. Preserve the checkpoint's inference-only/pruned status on the shared engine.
+2. Apply the existing optimizer refusal to either read-only loading route.
+3. Keep normal full-checkpoint updates available with their original optimizer,
+   RNG and data-exposure history; do not synthesize missing history from a view.
+
+These are exact loader/status and endpoint plumbing. Both model families use
+one implementation and the existing recovery error. Tests load real generated
+physical views for both ports and attempt the optimizer endpoint; they preserve
+the full parent's identity and history. No training recipe or active actor is
+changed by this guard.
