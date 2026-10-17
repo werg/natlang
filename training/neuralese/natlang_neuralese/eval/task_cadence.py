@@ -73,6 +73,40 @@ DEFAULT_CASES = tuple(range(0, 48, 3))
 SCHEMA = 'natlang.in-run-task-eval/1'
 
 
+def wait_collectors(children, queues, launch, *, min_free_mib):
+    """Resume only exact before-case disk pauses; keep the same actor/journals."""
+    snapshots = [queue.read_bytes() for queue, _, _ in queues]
+    codes = []
+    for child, log in children:
+        try:
+            codes.append(child.wait())
+        finally:
+            log.close()
+    for index, (queue, journal, entries) in enumerate(queues):
+        while codes[index] == 75 and min_free_mib:
+            events = [json.loads(line) for line in journal.read_text().split('\n') if line.strip()]
+            last = events[-1] if events else {}
+            if last.get('event') != 'storage_pause':
+                break  # An operator drain also returns 75; never undo it.
+            finished = {row['key'] for row in events if row.get('event') == 'finish'}
+            remaining = [row['key'] for row in entries if row['key'] not in finished]
+            if (queue.read_bytes() != snapshots[index]
+                    or last.get('minimum_free_mib') != min_free_mib
+                    or not remaining or last.get('key') != remaining[0]
+                    or any(row.get('event') == 'start' and row.get('key') == last['key'] for row in events)):
+                raise ValueError('task evaluation storage pause does not match its exact unstarted queue')
+            while shutil.disk_usage(journal.parent).free // (1024 * 1024) < min_free_mib:
+                time.sleep(30)
+            if queue.read_bytes() != snapshots[index]:
+                raise ValueError('task evaluation queue changed while waiting for disk headroom')
+            child, log = launch(queue, journal, entries)
+            try:
+                codes[index] = child.wait()
+            finally:
+                log.close()
+    return codes
+
+
 def parse_task_eval(value):
     """The ``--task-eval`` JSON (or None). Validates the declared shape; the packet hash is checked at first use."""
     if value in (None, '', 'null'):
@@ -260,11 +294,11 @@ class TaskEval:
                 from ..common.jsonio import write_json_durable
                 write_json_durable(config,{'x_natlang_native_coefficient_policy':coefficient_runtime})
                 coefficient_args=['--chat-request-config',str(config)]
-            for queue, journal, _ in queues:
-                log = (queue.parent / 'supervisor.log').open('w')
+            def launch(queue, journal, entries):
+                log = (queue.parent / 'supervisor.log').open('a')
                 # The collector's default model ID is the local Bonsai teacher. This endpoint serves the
                 # student engine; bind its identity in requests and trajectory provenance instead.
-                children.append((subprocess.Popen(
+                return (subprocess.Popen(
                     [sys.executable, str(self.repo / 'scripts' / 'run_bonsai_queue.py'), str(queue), str(journal),
                      '--runtime', str(self.spec.get('runtime') or self.repo / 'ts-host'), '--server', url,
                      '--model-id', engine.model_name,
@@ -272,11 +306,10 @@ class TaskEval:
                      '--min-free-mib', str(self.spec.get('min_free_mib', 0)),
                      '--identical-turn-limit', str(self.spec['identical_turn_limit']), *coefficient_args,
                      *(['--neuralese-server'] if self.spec.get('neuralese_server') else [])],
-                    cwd=self.repo, env=env, stdout=log, stderr=subprocess.STDOUT), log))
-            codes = []
-            for child, log in children:
-                codes.append(child.wait())
-                log.close()
+                    cwd=self.repo, env=env, stdout=log, stderr=subprocess.STDOUT), log)
+            children = [launch(*item) for item in queues]
+            codes = wait_collectors(children, queues, launch,
+                                    min_free_mib=self.spec.get('min_free_mib', 0))
         finally:
             if server is not None:
                 server.shutdown()

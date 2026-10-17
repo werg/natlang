@@ -84,3 +84,14 @@ built runtime. Mellum's future-ingest spec uses the same corrected runtime,
 while its old7750 historical reports remain unchanged. New requests seal new
 runtime inventories; never edit an existing request or turn interrupted unknown
 work into negative training data.
+
+## Storage pause continuation (2026-10-17)
+
+A collector's recorded `storage_pause` means its next case has not started.
+The evaluator must wait for the declared disk headroom and resume that exact
+queue and journal, preserving finished outcomes and the loaded model, rather
+than score an incomplete evaluation and delete its snapshot. This is exact
+resource plumbing: the existing collector already specifies that recovery.
+The helper verifies the unchanged queue, matching pause floor, and unstarted
+pause key. Operator drains and other exits retain their existing meaning.
+No task, prompt, sampler, model setting, result or scoring rule changes.

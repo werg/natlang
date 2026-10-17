@@ -385,3 +385,56 @@ def test_legacy_partial_policy_uses_observed_count_without_creating_score(tmp_pa
     assert partial_runtime_diagnostic(summary, spec)
     assert not task_gate(summary, spec)['passed']
     assert not partial_runtime_diagnostic(summary, {**spec, 'reference_successes': 2})
+
+
+def test_storage_pause_resumes_only_unstarted_cases_with_same_journal(tmp_path, monkeypatch):
+    import io
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.eval import task_cadence as module
+    queue, journal = tmp_path/'queue.jsonl', tmp_path/'journal.jsonl'
+    entries = [{'key':'done'}, {'key':'next'}]
+    queue.write_text(''.join(json.dumps(row)+'\n' for row in entries))
+    events = [{'event':'start','key':'done'}, {'event':'finish','key':'done'},
+              {'event':'storage_pause','key':'next','minimum_free_mib':20}]
+    journal.write_text(''.join(json.dumps(row)+'\n' for row in events))
+    sizes = iter([19, 21]); waits = []; launches = []
+    monkeypatch.setattr(module.shutil, 'disk_usage', lambda _:SimpleNamespace(free=next(sizes)*1024**2))
+    monkeypatch.setattr(module.time, 'sleep', waits.append)
+    class Child:
+        def __init__(self, code): self.code = code
+        def wait(self): return self.code
+    def launch(q,j,rows):
+        assert q==queue and j==journal and rows==entries
+        assert journal.read_text().count('"event": "finish"')==1
+        launches.append(q)
+        with journal.open('a') as stream:
+            stream.write(json.dumps({'event':'finish','key':'next'})+'\n')
+        return Child(0), io.StringIO()
+    assert module.wait_collectors([(Child(75),io.StringIO())],[(queue,journal,entries)],
+        launch,min_free_mib=20)==[0]
+    assert launches==[queue] and waits==[30]
+    assert journal.read_text().count('"event": "finish"')==2
+
+
+@pytest.mark.parametrize('event,started,floor,raises', [
+    ('operator_drain',False,20,False), ('storage_pause',True,20,True),
+    ('storage_pause',False,19,True)])
+def test_storage_resume_does_not_override_drains_or_started_cases(tmp_path,event,started,floor,raises):
+    import io
+    import json
+    from natlang_neuralese.eval.task_cadence import wait_collectors
+    queue,journal=tmp_path/'queue',tmp_path/'journal'
+    entries=[{'key':'next'}];queue.write_text(json.dumps(entries[0])+'\n')
+    events=([{'event':'start','key':'next'}] if started else [])
+    events.append({'event':event,'key':'next','minimum_free_mib':floor})
+    journal.write_text(''.join(json.dumps(row)+'\n' for row in events))
+    class Child:
+        def wait(self): return 75
+    def forbidden(*args): raise AssertionError('must not relaunch')
+    args=([(Child(),io.StringIO())],[(queue,journal,entries)],forbidden)
+    if raises:
+        with pytest.raises(ValueError,match='exact unstarted queue'):
+            wait_collectors(*args,min_free_mib=20)
+    else:
+        assert wait_collectors(*args,min_free_mib=20)==[75]
