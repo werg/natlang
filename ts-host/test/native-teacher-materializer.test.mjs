@@ -644,6 +644,47 @@ test('links a soft return marker only to its exact typed runtime block write and
   assert.equal(JSON.parse(result.turns[0].target.tool_calls[0].function.arguments).value, softMarker);
 });
 
+test('links a callable marker to its exact typed singleton return reference and rejects corrupted evidence', () => {
+  const sha = value => createHash('sha256').update(value).digest('hex');
+  const make = () => {
+    const row = softReturnRow('callable-soft-return');
+    const type = 'Neuralese<(text: string) => string>';
+    const event = row.outcome.action_ledger[0];
+    event.tool_call_id = 'sampled-callable-return';
+    event.arguments.value = [{ type: 'neuralese', id: softBlock }];
+    const step = row.trajectory[0];
+    step.model_response.raw_calls[0].id = event.tool_call_id;
+    const invocation = row.outcome.invocation_ledger[0];
+    invocation.inline_instruction_site.returns.natlang = type;
+    const host = invocation.host_result;
+    host.result_type = type; host.value.$neuralese.type = type;
+    host.value_sha256 = sha(JSON.stringify(host.value));
+    Object.assign(row.outcome.execution_graph[1], { result_type: type, truncated: false,
+      marker_context: 'return-result', text_body_sha256: sha(softMarker.slice('<|neuralese|>'.length, -'<|/neuralese|>'.length)) });
+    return row;
+  };
+  const row = make(), result = materializeNativeRows([row], { directAnswers: true });
+  assert.equal(result.acceptedRows, 1);
+  assert.deepEqual(result.unlinked, []);
+  assert.equal(JSON.parse(result.turns[0].target.tool_calls[0].function.arguments).value, softMarker);
+  const mutations = [
+    value => { value.outcome.execution_graph[1].text_body_sha256 = '0'.repeat(64); },
+    value => { value.outcome.execution_graph[1].truncated = true; },
+    value => { value.outcome.execution_graph[1].result_type = 'Neuralese<string>'; },
+    value => { value.outcome.execution_graph.push(structuredClone(value.outcome.execution_graph[1])); },
+    value => { value.trajectory[0].model_response.raw_calls[0].id = 'another-action'; },
+    value => { value.outcome.invocation_ledger[0].host_result.value_sha256 = '0'.repeat(64); },
+    value => { value.outcome.action_ledger[0].arguments.value.push({ type: 'text', text: 'extra' }); },
+    value => { value.outcome.action_ledger[0].arguments.value[0].id = `nz1_${'x'.repeat(32)}`; },
+  ];
+  for (const [index, mutate] of mutations.entries()) {
+    const invalid = make(); mutate(invalid);
+    const checked = materializeNativeRows([invalid], { directAnswers: true });
+    assert.equal(checked.acceptedRows, 0, `callable corruption ${index}`);
+    assert.equal(checked.turns.length, 0);
+  }
+});
+
 test('links nested Neuralese return slots recursively while preserving ordinary marker-like strings', () => {
   const row = nestedSoftReturnRow();
   const result = materializeNativeRows([row], { directAnswers: true });

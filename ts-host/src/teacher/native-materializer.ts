@@ -442,11 +442,16 @@ function softReturnResultActionMatches(modelArguments: unknown, actionArguments:
   const model = modelArguments && typeof modelArguments === 'object' && !Array.isArray(modelArguments) ? modelArguments as Dict : {};
   const action = actionArguments && typeof actionArguments === 'object' && !Array.isArray(actionArguments) ? actionArguments as Dict : {};
   if (model.status !== 'success' || action.status !== 'success') return false;
-  if (typeof model.value !== 'string' || typeof action.value !== 'string')
+  const parts = Array.isArray(action.value) ? action.value : undefined;
+  const callableTransport = parts?.length === 1 && parts[0] && typeof parts[0] === 'object' &&
+    Object.keys(parts[0]).sort().join(',') === 'id,type' && parts[0].type === 'neuralese' &&
+    typeof parts[0].id === 'string' && /^nz1_[a-z2-7]{20,}$/.test(parts[0].id);
+  if (typeof model.value !== 'string' || (typeof action.value !== 'string' && !callableTransport))
     return nestedNeuraleseReturnMatches(model, action, row, invocationId, actionEvent);
   const markers = [...model.value.matchAll(/^<\|neuralese\|>([\s\S]*)<\|\/neuralese\|>$/g)];
-  const sentinel = /^(nz1_[a-z2-7]{20,})$/.exec(action.value);
-  if (markers.length !== 1 || !sentinel || /<\|neuralese\|>|<\|\/neuralese\|>/.test(markers[0]![1]!)) return false;
+  const blockId = callableTransport ? parts![0].id as string :
+    /^(nz1_[a-z2-7]{20,})$/.exec(action.value as string)?.[1];
+  if (markers.length !== 1 || !blockId || /<\|neuralese\|>|<\|\/neuralese\|>/.test(markers[0]![1]!)) return false;
   const expectedAction: Dict = { ...model, value: action.value };
   if (canonical(expectedAction) !== canonical(action)) return false;
 
@@ -457,10 +462,39 @@ function softReturnResultActionMatches(modelArguments: unknown, actionArguments:
   const resultRef = resultValue?.$neuralese && typeof resultValue.$neuralese === 'object' ? resultValue.$neuralese as Dict : undefined;
   const declaredType = (invocation?.inline_instruction_site as Dict | undefined)?.returns;
   const runtimeType = declaredType && typeof declaredType === 'object' ? (declaredType as Dict).natlang : undefined;
+  if (callableTransport) {
+    if (typeof runtimeType !== 'string') return false;
+    try {
+      const type = parseType(runtimeType);
+      if (type.kind !== 'neuralese' || type.element.kind !== 'lambda') return false;
+    } catch { return false; }
+    if (hostResult?.value_sha256 !== hexDigest(JSON.stringify(hostResult?.value))) return false;
+    const steps = (row.trajectory as Dict[]).filter(step => step.invocation_id === invocationId);
+    const exactSteps = steps.filter(step => {
+      const response = step.model_response as Dict | undefined;
+      return Array.isArray(response?.raw_calls) && (response.raw_calls as Dict[]).some(raw => {
+        const fn = raw.function as Dict | undefined;
+        if (typeof actionEvent.tool_call_id !== 'string' || raw.id !== actionEvent.tool_call_id ||
+            fn?.name !== 'return_result' || typeof fn.arguments !== 'string') return false;
+        try { return canonical(JSON.parse(fn.arguments)) === canonical(model); } catch { return false; }
+      });
+    });
+    if (exactSteps.length !== 1) return false;
+    const graph = Array.isArray(row.outcome.execution_graph) ? row.outcome.execution_graph as Dict[] : [];
+    const exactTurns = graph.filter(event => event.kind === 'model_turn' && event.call_id === invocationId &&
+      event.turn === steps.indexOf(exactSteps[0]!) + 1 && Number(event.seq) < Number(actionEvent.seq));
+    if (exactTurns.length !== 1) return false;
+    const writes = graph.filter(event => event.kind === 'block_write' && event.call_id === invocationId &&
+      event.block === blockId && event.turn === exactTurns[0]!.node && event.truncated === false &&
+      event.result_type === runtimeType && event.marker_context === 'return-result' &&
+      event.text_body_sha256 === hexDigest(markers[0]![1]!) &&
+      Number(event.seq) > Number(exactTurns[0]!.seq) && Number(event.seq) < Number(actionEvent.seq));
+    if (writes.length !== 1) return false;
+  }
   if (hostResult?.kind !== 'host_capture' || hostResult.capture_kind !== 'invocation_output' ||
       hostResult.call_id !== invocationId || hostResult.complete !== true ||
-      hostResult.result_type !== 'Neuralese<string>' || runtimeType !== 'Neuralese<string>' ||
-      resultRef?.type !== 'Neuralese<string>' || resultRef.id !== sentinel[1]) return false;
+      hostResult.result_type !== runtimeType || (!callableTransport && runtimeType !== 'Neuralese<string>') ||
+      !resultRef || resultRef.type !== runtimeType || resultRef.id !== blockId) return false;
   const actionLedger = Array.isArray(row.outcome.action_ledger) ? row.outcome.action_ledger as Dict[] : [];
   const returnAction = actionLedger.find((event: Dict) =>
     (event as Dict).call_id === invocationId && (event as Dict).name === 'return_result' &&
@@ -473,7 +507,7 @@ function softReturnResultActionMatches(modelArguments: unknown, actionArguments:
     .sort((a: Dict, b: Dict) => Number(a.seq) - Number(b.seq)).at(-1);
   if (!currentTurn || typeof currentTurn.node !== 'string') return false;
   return executionGraph.some((writer: Dict) => {
-    return writer.kind === 'block_write' && writer.call_id === invocationId && writer.block === sentinel[1] &&
+    return writer.kind === 'block_write' && writer.call_id === invocationId && writer.block === blockId &&
       typeof writer.node === 'string' && writer.turn === currentTurn.node && Number.isSafeInteger(writer.seq) &&
       (writer.seq as number) > (currentTurn.seq as number) && (writer.seq as number) < (terminalSeq as number) &&
       Array.isArray(writer.inputs) && writer.inputs.some(input => input && typeof input === 'object' &&

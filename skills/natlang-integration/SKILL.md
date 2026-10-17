@@ -550,3 +550,10 @@ a cached state. Recover from the normal type error by returning the required
 ordinary value or by using the complete original state reference. Never guess
 a full ID from a prefix. Actual complete references keep artifact restoration
 and provenance checks.
+
+Recorded callable Neuralese returns retain the sampled instruction body and
+their typed runtime reference. If conversion reports an unlinked callable
+return, restore the complete original raw tool call, invocation output and
+block-write trace; do not replace the sampled body with an artifact ID or
+invent a successful outcome. The converter authenticates the exact declared
+callable type, body hash and producing turn before linking the return.
