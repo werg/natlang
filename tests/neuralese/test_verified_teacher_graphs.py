@@ -18,6 +18,20 @@ def _row():
         'trajectory': [{'phase': 'action', 'assistant': {'content': 'correct'}}]}
 
 
+def test_teacher_action_identity_is_bound_to_exact_source_trajectory():
+    # The same upstream program/action may appear in separate accepted teacher
+    # trajectories. Preserve both while keeping each tokenizer rendering tied
+    # to the same source identity.
+    source_a = 'a' * 64
+    source_b = 'b' * 64
+    first = converter.teacher_action_graph_id('teacher-program:shared', source_a, 0)
+    assert first == converter.teacher_action_graph_id('teacher-program:shared', source_a, 0)
+    assert first != converter.teacher_action_graph_id('teacher-program:shared', source_b, 0)
+    assert first != converter.teacher_action_graph_id('teacher-program:shared', source_a, 1)
+    with pytest.raises(ValueError, match='source record ID'):
+        converter.teacher_action_graph_id('teacher-program:shared', 'A' * 64, 0)
+
+
 def test_successful_parent_does_not_approve_rejected_or_seeded_turns():
     row = _row()
     turn = {'invocation_id': 'child-a', 'request_sha256': 'c' * 64, 'raw_response_sha256': 'a' * 64,

@@ -696,6 +696,23 @@ def graph_content_sha256(graph):
                                      'nodes': graph['nodes']})
 
 
+def teacher_action_graph_id(source_record_id: str, source_record_sha256: str, turn_index: int) -> str:
+    """Bind a rendered action to its exact trajectory, not only its reusable task ID.
+
+    Teacher batches can legitimately execute the same selected program more than
+    once with different captured contexts and answers.  The program/action key
+    alone therefore is not a graph identity.  The exact source-record digest is
+    stable across tokenizer views and conversions while distinguishing those
+    separate whole trajectories.
+    """
+    if (not isinstance(source_record_id, str) or not source_record_id
+            or not isinstance(source_record_sha256, str) or len(source_record_sha256) != 64
+            or any(char not in '0123456789abcdef' for char in source_record_sha256)
+            or type(turn_index) is not int or turn_index < 0):
+        raise ValueError('teacher action identity requires a source record ID, lowercase SHA-256, and nonnegative turn index')
+    return f'{source_record_id}:source-row:{source_record_sha256}:action:{turn_index:04d}'
+
+
 def unresolved_neuralese_references(value):
     """Return exact typed block IDs in a captured prompt/target, preserving nested content."""
     if isinstance(value, dict):
@@ -919,7 +936,7 @@ def main():
                         **omission, 'decision': decision})
                     continue
                 (text, token_ids, boundary), emulation_proof = packet
-                identifier = f"{row['id']}:action:{index:04d}"
+                identifier = teacher_action_graph_id(row['id'], source_row_sha, index)
                 if identifier in seen_ids:
                     raise ValueError(f"duplicate derived teacher turn identity: {identifier}")
                 seen_ids.add(identifier)
