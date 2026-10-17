@@ -371,7 +371,10 @@ def expected_native_actor(adapter_path, participant, policy_id):
             or model['checkpoint'].get('participant') != participant or model['checkpoint']['sha256'] != policy_id):
         raise ValueError('native RL actor adapter and participant differ from the current shared policy')
     return {'native_participant': participant, 'native_identity': model['native_identity'],
-            'semantic_adapter_sha256': sha256_file_hex_cached(adapter_path)}
+            'semantic_adapter_sha256': sha256_file_hex_cached(adapter_path),
+            'history_reasoning_policy': model.get('history_reasoning_policy'),
+            'history_reasoning_binding_sha256': export.get('tokenizers', {}).get(participant, {}).get(
+                'files', {}).get('natlang-history-reasoning.json')}
 
 
 def initial_controller_state(config):
@@ -487,6 +490,14 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 values['semantic_adapter_sha256'] = sha256_file_hex(Path(values['semantic_adapter']))
                 export = json.loads(Path(values['semantic_adapter']).read_text())
                 expected_native = expected_native_actor(values['semantic_adapter'], config['native_participant'], policy)
+                if expected_native.get('history_reasoning_policy') is not None:
+                    values['history_reasoning_policy'] = expected_native['history_reasoning_policy']
+                else:
+                    values.pop('history_reasoning_policy', None)
+                if expected_native.get('history_reasoning_binding_sha256') is not None:
+                    values['history_reasoning_binding_sha256'] = expected_native['history_reasoning_binding_sha256']
+                else:
+                    values.pop('history_reasoning_binding_sha256', None)
                 values['rl_tokenizer'] = str(Path(values['semantic_adapter']).parent /
                     export['tokenizers'][config['native_participant']]['path'])
             elif config.get('native_state'):
@@ -495,6 +506,14 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                     tokenizer_out=Path(config['out'])/'actor-tokenizers'/policy)
                 expected_native = raw
                 values['rl_tokenizer'] = raw['tokenizer']
+                if raw.get('history_reasoning') is not None:
+                    values['history_reasoning_policy'] = raw['history_reasoning']['policy']
+                else:
+                    values.pop('history_reasoning_policy', None)
+                if raw.get('history_reasoning_binding') is not None:
+                    values['history_reasoning_binding_sha256'] = raw['history_reasoning_binding']['sha256']
+                else:
+                    values.pop('history_reasoning_binding_sha256', None)
             values['trainer_args'] = stage_parameter_args(config.get('trainer_parameters', {}))
             values['seed_trainer_args']=stage_parameter_args(config.get('seed_trainer_parameters',config.get('trainer_parameters',{})))
             if config.get('coefficient_policy'):
@@ -774,6 +793,14 @@ def configure_native(args):
         raise ValueError('native production must retain real task evaluation and its cadence')
     repo, python = str(root('repo')), sys.executable
     endpoint = 'http://127.0.0.1:' + str(args.port)
+    if semantic:
+        actor_profile = expected_native_actor(args.semantic_adapter, args.native_participant,
+                                               sha256_file_hex(args.checkpoint))
+        history_policy = actor_profile['history_reasoning_policy']
+        history_binding_sha256 = actor_profile['history_reasoning_binding_sha256']
+    else:
+        history_policy = raw['history_reasoning']['policy']
+        history_binding_sha256 = raw['history_reasoning_binding']['sha256']
     common = ['--continue-from', '{checkpoint}',
               *(['--native-participant', '{native_participant}'] if semantic else []),
               '--held-native-graphs', '{held_native_graphs}', '--out', '{learner_out}', '{trainer_args}']
@@ -781,6 +808,9 @@ def configure_native(args):
         'native_state': True, 'model': args.model, 'out': str(args.out.resolve()),
         'checkpoint': str(args.checkpoint.resolve()),
         'native_actor_mode': 'shared-semantic' if semantic else 'raw-state',
+        **({'history_reasoning_policy': history_policy} if history_policy is not None else {}),
+        **({'history_reasoning_binding_sha256': history_binding_sha256}
+           if history_binding_sha256 is not None else {}),
         **({'native_participant': args.native_participant,
             'semantic_adapter': str(args.semantic_adapter.resolve()),
             'semantic_refresh_config': str(args.semantic_refresh_config.resolve())} if semantic else
@@ -804,6 +834,11 @@ def configure_native(args):
             '--rl-block-bundle', '{block_bundle}', *common],
         'seed_command': [python, '-m', 'natlang_neuralese.train.native_state_sft',
             '--native-graphs', '{seed_native_graphs}', '--objective-continuation', *common]}
+    if history_policy is not None:
+        config['learner_command'] += ['--history-reasoning-policy', '{history_reasoning_policy}']
+    if history_binding_sha256 is not None:
+        config['learner_command'] += ['--history-reasoning-binding-sha256',
+                                      '{history_reasoning_binding_sha256}']
     from ..train.recipe import resolve_stage_inputs
     pending_source = resolve_stage_inputs(recipe, stages[0], {}).get('pending_native_sources')
     if pending_source:

@@ -20,6 +20,10 @@ def tiny_source(path):
     tokenizer = PreTrainedTokenizerFast(tokenizer_object=Tokenizer(WordLevel(
         {f't{i}': i for i in range(64)}, unk_token='t0')), unk_token='t0',
         bos_token='t1', eos_token='t2', pad_token='t3')
+    tokenizer.chat_template = ("{% for m in messages %}{{ m['role'] }}:"
+        "{% if m['role'] == 'assistant' and m.get('reasoning_content') and "
+        "(preserve_thinking or loop.last) %}{{ m['reasoning_content'] }}{% endif %}"
+        "{{ m.get('content', '') }};{% endfor %}")
     tokenizer.save_pretrained(path)
 
 
@@ -56,6 +60,20 @@ def test_native_checkpoint_restores_role_rows_adapter_and_backbone_exactly(tmp_p
     assert not any('projection' in name or 'heads' in name for name in model_state(restored))
     with pytest.raises(ValueError, match='inventory'):
         load_native_model(base, dtype=torch.float32, inventory={'wrong': '0' * 64})
+
+
+def test_history_reasoning_keep_profile_survives_native_checkpoint_restore(tmp_path):
+    base=tmp_path/'base';tiny_source(base)
+    model,tokenizer,roles,config=load_native_model(base,dtype=torch.float32,rank=4,
+                                                   history_reasoning_policy='keep')
+    assert config['history_reasoning_policy']=='keep'
+    assert tokenizer.natlang_history_reasoning['policy']=='keep'
+    checkpoint=tmp_path/'keep-profile.pt'
+    torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':config,**model_state(model)},checkpoint)
+    _,tokenizer,_,restored,_=load_native_checkpoint(checkpoint)
+    assert restored==config
+    assert restored['history_reasoning_policy']=='keep'
+    assert tokenizer.natlang_history_reasoning['policy']=='keep'
 
 
 def test_native_loader_rejects_legacy_checkpoint(tmp_path):
@@ -123,7 +141,8 @@ def test_native_composite_checkpoint_applies_named_patch_and_has_restorable_effe
         model.adapter.up.weight.add_(0.025)
     expected_input = model.input_rows.detach().clone()
     expected_up = model.adapter.up.weight.detach().clone()
-    receipt = write_native_composite_checkpoint(base_checkpoint, tmp_path / 'composite', model, config,
+    profile_config={**config,'history_reasoning_policy':'keep'}
+    receipt = write_native_composite_checkpoint(base_checkpoint, tmp_path / 'composite', model, profile_config,
         base_identity=parent_identity, optimizer={'name': 'adam', 'step': 7, 'lr': 0.001},
         optimizer_tensors={'m.adapter.up.weight': torch.ones_like(model.adapter.up.weight),
                            'v.adapter.up.weight': torch.full_like(model.adapter.up.weight, 2.)},
@@ -132,6 +151,7 @@ def test_native_composite_checkpoint_applies_named_patch_and_has_restorable_effe
     # immutable native parent checkpoint named inside the composite manifest.
     restored, _, _, restored_config, state = load_native_checkpoint(receipt['path'], base=base, dtype=torch.float32)
     assert state['schema'] == 'natlang.neuralese-native-composite-checkpoint/1'
+    assert restored_config==profile_config
     assert state['optimizer'] == {'name': 'adam', 'step': 7, 'lr': 0.001}
     torch.testing.assert_close(state['optimizer_tensors']['m.adapter.up.weight'],
                                torch.ones_like(model.adapter.up.weight))

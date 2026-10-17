@@ -63,6 +63,31 @@ def test_both_real_templates_cover_full_context_and_every_reasoning_target(base)
         assert graph['conversion']['acquired_session']['truncated'] is False
 
 
+def test_explicit_keep_uses_distinct_ids_without_relabeling_default_rows():
+    from natlang_neuralese.serve.chat import bind_history_reasoning
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    base=BASES[0]
+    if not (base/'tokenizer.json').is_file():
+        pytest.skip('pinned production tokenizer unavailable on this machine')
+    def prepared(policy=None):
+        tokenizer=AutoTokenizer.from_pretrained(base,local_files_only=True,trust_remote_code=False)
+        source_fp=tokenizer_fingerprint(tokenizer);provision(tokenizer)
+        bind_history_reasoning(tokenizer,policy=policy,allow_transition=policy is not None)
+        return tokenizer,source_fp,tokenizer_fingerprint(tokenizer)
+    value_default=value(); value_keep=copy.deepcopy(value_default)
+    default_tokenizer,source_fp,expanded_fp=prepared()
+    keep_tokenizer,keep_source_fp,keep_expanded_fp=prepared('keep')
+    default_graphs=list(session_graphs(value_default,default_tokenizer,source_fingerprint=source_fp,
+        expanded_fingerprint=expanded_fp,split='train'))
+    keep_graphs=list(session_graphs(value_keep,keep_tokenizer,source_fingerprint=keep_source_fp,
+        expanded_fingerprint=keep_expanded_fp,split='train',explicit_history_reasoning_policy='keep'))
+    assert default_graphs[0]['id'].endswith(':source-occurrence:'+canonical_json_sha256_hex(
+        [value_default['source_file']['sha256'],value_default['source_row']]))
+    assert keep_graphs[0]['id']==default_graphs[0]['id']+':history-reasoning:keep'
+    assert default_graphs[0]['conversion']['acquired_session']['original_source_file']==keep_graphs[0]['conversion']['acquired_session']['original_source_file']
+    assert default_graphs[0]['conversion']['acquired_session']['original_target_ids']==keep_graphs[0]['conversion']['acquired_session']['original_target_ids']
+
+
 def test_invalid_original_tool_arguments_are_rejected_before_any_graph_can_be_yielded():
     from natlang_neuralese.serve.chat import RequestError
     from scripts.neuralese_data.build_acquired_full_session_graphs import (
@@ -271,7 +296,7 @@ def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch,
         rendering_configuration={'history_reasoning':{'backbone':'mellum'}},
         binding={'schema':'test-prepared-tokenizer','rendering_configuration':
             {'history_reasoning':{'backbone':'mellum'}}},validate=lambda base:None)
-    monkeypatch.setattr(builder,'prepare_tokenizer',lambda base:prepared)
+    monkeypatch.setattr(builder,'prepare_tokenizer',lambda base, **kwargs:prepared)
     leases=[];acquire=builder.acquire_output_lease
     def acquire_tracked(output):
         lease=acquire(output);leases.append(lease);return lease

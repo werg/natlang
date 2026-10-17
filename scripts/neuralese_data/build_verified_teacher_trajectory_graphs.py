@@ -782,7 +782,8 @@ def graph_content_sha256(graph):
                                      'nodes': graph['nodes']})
 
 
-def teacher_action_graph_id(source_record_id: str, source_record_sha256: str, turn_index: int) -> str:
+def teacher_action_graph_id(source_record_id: str, source_record_sha256: str, turn_index: int,
+                            rendering_profile: str | None = None) -> str:
     """Bind a rendered action to its exact trajectory, not only its reusable task ID.
 
     Teacher batches can legitimately execute the same selected program more than
@@ -794,9 +795,11 @@ def teacher_action_graph_id(source_record_id: str, source_record_sha256: str, tu
     if (not isinstance(source_record_id, str) or not source_record_id
             or not isinstance(source_record_sha256, str) or len(source_record_sha256) != 64
             or any(char not in '0123456789abcdef' for char in source_record_sha256)
-            or type(turn_index) is not int or turn_index < 0):
+            or type(turn_index) is not int or turn_index < 0
+            or rendering_profile not in (None, 'keep', 'last_turn_only')):
         raise ValueError('teacher action identity requires a source record ID, lowercase SHA-256, and nonnegative turn index')
-    return f'{source_record_id}:source-row:{source_record_sha256}:action:{turn_index:04d}'
+    identifier = f'{source_record_id}:source-row:{source_record_sha256}:action:{turn_index:04d}'
+    return identifier if rendering_profile is None else identifier + ':history-reasoning:' + rendering_profile
 
 
 def unresolved_neuralese_references(value):
@@ -994,6 +997,8 @@ def main():
                         help='authenticate a separately harvested scaffold batch; never treats it as a standard Qwen batch')
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--base-tokenizer", type=Path, required=True)
+    parser.add_argument('--history-reasoning-policy', choices=('keep', 'last_turn_only'),
+                        help='explicit rendering policy; omitted preserves the backbone default')
     parser.add_argument("--protection-manifest", type=Path, required=True)
     parser.add_argument('--deduplicate-against', type=Path, action='append', default=[])
     parser.add_argument("--model-key", choices=("lfm25", "mellum21"), required=True)
@@ -1006,6 +1011,9 @@ def main():
     decisions, decision_proof = teacher_decision_admissions(args.source, binding['source_sha256'])
     tokenizer = AutoTokenizer.from_pretrained(str(args.base_tokenizer), trust_remote_code=False,
                                                local_files_only=True)
+    from natlang_neuralese.serve.chat import bind_history_reasoning
+    bind_history_reasoning(tokenizer, policy=args.history_reasoning_policy, require_declared=True,
+                           allow_transition=args.history_reasoning_policy is not None)
     source_fingerprint = tokenizer_fingerprint(tokenizer)
     role_ids = provision(tokenizer)
     expanded_fingerprint = tokenizer_fingerprint(tokenizer)
@@ -1055,7 +1063,8 @@ def main():
                         **omission, 'decision': decision})
                     continue
                 (text, token_ids, boundary), emulation_proof = packet
-                identifier = teacher_action_graph_id(row['id'], source_row_sha, index)
+                identifier = teacher_action_graph_id(row['id'], source_row_sha, index,
+                    rendering_profile=getattr(args, 'history_reasoning_policy', None))
                 if identifier in seen_ids:
                     raise ValueError(f"duplicate derived teacher turn identity: {identifier}")
                 seen_ids.add(identifier)
@@ -1117,7 +1126,8 @@ def main():
         "proofs": {name: {"path": str(path), "sha256": binding["proof_sha256"][name]}
                    for name, path in binding["proof_paths"].items()},
         "tokenizer": {"source_fingerprint": source_fingerprint,
-                      "expanded_fingerprint": expanded_fingerprint, "role_token_ids": list(role_ids)},
+                      "expanded_fingerprint": expanded_fingerprint, "role_token_ids": list(role_ids),
+                      "history_reasoning": tokenizer.natlang_history_reasoning},
         "current_protection": binding["current"]["proof"],
         "turns": teacher_turns, "context_weight": .05,
         'decision_admission': decision_proof, 'action_omissions': action_omissions,

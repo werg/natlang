@@ -111,9 +111,10 @@ def native_identity(model, config, *, checkpoint_sha256):
         digest.update(canonical_json_bytes({'name': name, 'dtype': str(tensor.dtype), 'shape': list(tensor.shape)}))
         digest.update(b'\0')
         digest.update(tensor.view(torch.uint8).numpy().tobytes())
-    return {'checkpoint_sha256': checkpoint_sha256,
+    identity = {'checkpoint_sha256': checkpoint_sha256,
             'tokenizer_fingerprint': config['tokenizer_fingerprint'],
             'embedding_weight_sha256': digest.hexdigest(), 'architecture': config['architecture']}
+    return identity
 
 
 def _input_inventory(base, *, include_weights):
@@ -140,7 +141,7 @@ def base_inventory(base):
     """Pin actual model/tokenizer inputs, reusing the shared verified file cache."""
     return _input_inventory(base, include_weights=True)
 
-def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", native_attention_precision=None, token_override_ids=None, token_override_dtype=torch.float32, sparse_row_dtype=torch.float32, native_ordinary_precision=None, native_norm_execution='stable-v1'):
+def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inventory=None, native_linear_precision="ieee", native_attention_precision=None, token_override_ids=None, token_override_dtype=torch.float32, sparse_row_dtype=torch.float32, native_ordinary_precision=None, native_norm_execution='stable-v1', history_reasoning_policy=None):
     """Return (SharedStateModel, tokenizer, RoleTokens, model_config).
 
     No PortHeads or projected communication module is created. Provision the
@@ -153,6 +154,8 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
     if inventory is not None and actual != inventory:
         raise ValueError('native checkpoint base inventory differs from the pinned model inputs')
     architecture = json.loads((base / 'config.json').read_text())['model_type']
+    if history_reasoning_policy not in (None, 'keep'):
+        raise ValueError('native history_reasoning_policy must be omitted or explicitly keep')
     if architecture in {'mellum', 'maple'}:
         from ..maple.student import load_student
         from ..maple.maple_port import MaplePortBackbone
@@ -172,6 +175,8 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
         raise ValueError(f'unsupported native-state backbone architecture {architecture!r}')
     roles = provision_role_tokens(SimpleNamespace(hf=hf, config=hf.config,
                                   embedding_weight=hf.get_input_embeddings().weight), tokenizer)
+    from ..serve.chat import bind_history_reasoning
+    bind_history_reasoning(tokenizer, policy=history_reasoning_policy)
     from .lfm2_port import ControlTokens
     port = port_type(hf, ControlTokens(roles.produce_open, roles.produce_close), markers=False)
     if token_override_ids is None:
@@ -192,6 +197,8 @@ def load_native_model(base, *, rank=8, device='cpu', dtype=torch.bfloat16, inven
               'rank': rank, 'marker_ids': list(roles.ids), 'precision': precision,
               'native_linear_precision': native_linear_precision,
               'tokenizer_fingerprint': tokenizer_fingerprint(tokenizer), 'dtype': str(dtype)}
+    if history_reasoning_policy is not None:
+        config['history_reasoning_policy'] = history_reasoning_policy
     config['sparse_row_dtype'] = str(model.input_rows.dtype)
     if native_norm_execution is not None:
         config['native_norm_execution'] = native_norm_execution
@@ -293,7 +300,8 @@ def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, partici
         sparse_row_dtype={'torch.float32':torch.float32,'torch.bfloat16':torch.bfloat16,
             'torch.float16':torch.float16}[saved.get('sparse_row_dtype', saved['dtype'])],
         native_ordinary_precision=saved.get('native_ordinary_precision'),
-        native_norm_execution=saved.get('native_norm_execution'))
+        native_norm_execution=saved.get('native_norm_execution'),
+        history_reasoning_policy=saved.get('history_reasoning_policy'))
     if 'token_override_dtype' not in saved and str(requested_dtype) == saved['dtype']:
         config.pop('token_override_dtype', None)  # exact pre-master-row configuration contract
     if 'sparse_row_dtype' not in saved and str(requested_dtype) == saved['dtype']:

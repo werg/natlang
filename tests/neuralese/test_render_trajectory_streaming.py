@@ -210,6 +210,17 @@ def test_streamed_trajectory_groups_are_exact_and_resume_after_interruption(tmp_
     selected = tmp_path / 'selected.jsonl.zst'
     source_rows = _source(selected)
     calls = []
+    connections = []
+    sqlite_paths = []
+    real_connect = renderer.sqlite3.connect
+
+    def traced_connect(*args, **kwargs):
+        sqlite_paths.append(Path(args[0]))
+        connection = real_connect(*args, **kwargs)
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(renderer.sqlite3, 'connect', traced_connect)
 
     def materialized(job):
         shard_path, out_dir, tokenizer, _blocked, _corpus, _held, _decision, _header, _full, modes, compressed, *_storage = job
@@ -236,12 +247,16 @@ def test_streamed_trajectory_groups_are_exact_and_resume_after_interruption(tmp_
 
     monkeypatch.setattr(renderer, '_render_shard_materialized', materialized)
     work = tmp_path / 'work'
+    sqlite_scratch = tmp_path / 'sqlite-scratch'
     job = (str(selected), str(work), 'lfm25', {}, 'fixture', set(), set(), False, None,
-           ('whole-trajectory',), True, set())
+           ('whole-trajectory',), True, set(), None, None, sqlite_scratch)
     import pytest
     with pytest.raises(RuntimeError, match='simulated worker interruption'):
         renderer.render_shard(job)
     assert len(list((work / 'trajectory-stream' / 'lfm25' / 'selected').glob('receipts/*.json'))) == 1
+    assert sqlite_paths and not sqlite_paths[0].exists()
+    with pytest.raises(renderer.sqlite3.ProgrammingError, match='closed database'):
+        connections[0].execute('SELECT 1')
 
     calls.clear()
     result = renderer.render_shard(job)
@@ -311,6 +326,12 @@ def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_
     code_binding = renderer.LEGACY_SEARCH_CODE_BINDING
     old_binding = renderer._render_job_binding(source_digest, 'lfm25', {}, 'fixture', set(), set(), set(),
                                                False, None, renderings, False, code_binding)
+    # The one text-corpus dependency transition is allowed only for the
+    # unchanged default profile. A KEEP render must never reuse old default
+    # receipts even when the renderer bytes match this reviewed transition.
+    with __import__('pytest').raises(ValueError, match='dependency differs'):
+        renderer._legacy_render_job_binding(
+            (*job, {'history_reasoning_policies': {'lfm25': 'keep'}}), source_digest, old_renderer_sha)
     assert set(code_binding) == set(renderer.LEGACY_SEARCH_CODE_BINDING)
     current_code_binding = renderer._render_code_binding()
     lease_path = str(renderer.ROOT / 'scripts/neuralese_data/conversion_output_lease.py')
@@ -404,6 +425,51 @@ def test_render_subset_selects_only_named_shards():
         renderer._filter_render_jobs(jobs, ['0002'])
 
 
+def test_history_reasoning_opt_in_is_explicit_and_part_of_render_binding(tmp_path):
+    default = renderer._render_input_binding({'lfm25': tmp_path}, {})
+    keep = renderer._render_input_binding({'lfm25': tmp_path}, {}, {'lfm25': 'keep'})
+    assert set(default) == {'tokenizers', 'pieces_sha256'}
+    assert 'history_reasoning_policies' not in default
+    assert keep['history_reasoning_policies'] == {'lfm25': 'keep'}
+    assert default != keep
+    assert renderer._parse_history_reasoning_policies(['lfm25=keep'], {'lfm25'}) == {'lfm25': 'keep'}
+    for values, names in [(['lfm25=keep', 'lfm25=last_turn_only'], {'lfm25'}),
+                          (['other=keep'], {'lfm25'}), (['lfm25=unknown'], {'lfm25'}),
+                          (['keep'], {'lfm25'})]:
+        with __import__('pytest').raises(ValueError):
+            renderer._parse_history_reasoning_policies(values, names)
+
+
+def test_renderer_worker_binds_explicit_profile_and_keeps_default(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    (tmp_path / 'config.json').write_text('{"model_type":"lfm2"}')
+
+    class Switchable:
+        def __init__(self):
+            self.name_or_path = str(tmp_path)
+            self.chat_template = '{{ preserve_thinking }}'
+
+        def apply_chat_template(self, messages, **options):
+            assistants = [m.get('reasoning_content', '') for m in messages if m.get('role') == 'assistant']
+            if not options.get('preserve_thinking', False):
+                assistants = assistants[-1:]
+            return ' '.join(assistants)
+
+    gold = sys.modules.get('build_neuralese_gold_text_delta')
+    if gold is None:
+        import importlib
+        gold = importlib.import_module('build_neuralese_gold_text_delta')
+    monkeypatch.setattr(gold, 'load_pinned_tokenizer', lambda _path: Switchable())
+    renderer._G.clear()
+    renderer._init({'lfm25': str(tmp_path)}, {})
+    assert renderer._G['tok']['lfm25'].natlang_history_reasoning['policy'] == 'last_turn_only'
+    renderer._G.clear()
+    renderer._init({'lfm25': str(tmp_path)}, {}, {'lfm25': 'keep'})
+    assert renderer._G['tok']['lfm25'].natlang_history_reasoning['policy'] == 'keep'
+
+
 def test_done_receipts_verify_output_checksums_without_rewriting_them(tmp_path):
     from scripts.neuralese_data.strip_generic_system_prompt import strip_row
     renderer._G.clear()
@@ -452,3 +518,27 @@ def test_done_receipts_verify_output_checksums_without_rewriting_them(tmp_path):
     with __import__('pytest').raises(ValueError, match='trajectory output checksum mismatch'):
         renderer._verify_trajectory_receipts(job, result, {
             renderer.file_sha(Path(renderer.__file__).resolve()), old_sha})
+
+
+def test_bounded_render_jobs_cancel_outstanding_and_do_not_queue_entire_corpus():
+    from concurrent.futures import Future
+    import pytest
+
+    class ImmediateFailurePool:
+        def __init__(self):
+            self.futures = []
+            self.submitted_jobs = []
+
+        def submit(self, _function, job):
+            future = Future()
+            self.submitted_jobs.append(job)
+            self.futures.append(future)
+            if len(self.futures) == 1:
+                future.set_exception(RuntimeError('first shard failed'))
+            return future
+
+    pool = ImmediateFailurePool()
+    with pytest.raises(RuntimeError, match='first shard failed'):
+        renderer._run_bounded_render_jobs(pool, list(range(1000)), 4, lambda *_: None)
+    assert pool.submitted_jobs == [0, 1, 2, 3]
+    assert all(future.cancelled() for future in pool.futures[1:])

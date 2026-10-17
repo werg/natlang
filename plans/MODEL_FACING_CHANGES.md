@@ -1089,3 +1089,30 @@ generation. Exact source/reference evidence is under
 `/home/werg/data/dgxops/teacher-independent-authoring120-20261017`; actual queue,
 staging and handoff receipts are under
 `/home/werg/data/dgxops/teacher-authoring120-future-sequence-deployment-20261017`.
+## 2026-10-17 — Explicit history-reasoning keep profile candidate
+
+An opt-in rendering profile is being prepared to keep earlier assistant
+reasoning visible in complete LFM histories, matching Mellum's declared
+behavior. The intent is to retain each source target once in one whole
+trajectory rather than repeat long assistant prefixes in auxiliary graphs.
+This changes the conversation text seen by the model and its serving prompts.
+The profile remains opt-in and is not approved for live use. Debt: compare
+about 48 live-executor samples per variant, with prompt/runtime/task identities
+bound, before recipe or actor adoption. Existing `last_turn_only` checkpoints
+and graph receipts retain their current behavior and provenance.
+
+### Live comparison completed 2026-10-18
+
+At the same pinned LFM step-11502 weights, a 48-case TRAIN-only packet was
+scored under both `last_turn_only` and `keep`. Both variants used the same 5,834
+gold target tokens, with no target-tokenization differences. Mean case
+log-likelihood was -1.0143 for the default profile and -0.9839 for `keep`
+(paired mean delta +0.03037; 28 improved, 15 worsened, 5 equal). Prompt tokens
+rose from 379,716 to 400,494 (+5.47%). One genuine KEEP generation failure
+(`neuralese-native-state-open`, produce span stopped) is retained as a failure;
+it was not regenerated or treated as a success. The measurement makes no task
+success claim and does not grant training admission. Exact run, packet,
+checkpoint, protection and results bindings are recorded in
+`/home/werg/data/dgxops/history-reasoning-live-window-20261017/lfm-step11502-successor-keep-v3/summary.json`
+and `paired-metrics-root.json`. Adoption remains subject to independent review
+of the integrated training, serving, conversion and recipe wiring.

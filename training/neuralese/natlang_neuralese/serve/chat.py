@@ -294,12 +294,11 @@ HISTORY_REASONING_POLICIES = ("keep", "last_turn_only")
 BACKBONE_HISTORY_REASONING = {"lfm2": "last_turn_only", "mellum": "keep"}
 """Declared, backbone-inherent history-reasoning policy per backbone (`config.model_type`; owner 2026-10-10). The
 reasoning of the turn being trained or generated is rendered for every line; what differs is earlier assistant
-turns' reasoning in the history, which follows how each backbone was post-trained with its own template default:
-LFM2.5 drops it (`last_turn_only`: its template keeps only the last assistant turn's reasoning unless
-`preserve_thinking`/`keep_past_thinking` is set, which natlang never sets); Mellum2.1 keeps it (`keep`: its
-template renders every assistant turn's reasoning after the last user query, without a switch). Training text and
-serving prompts render through `bind_history_reasoning`, which pins the template switch to the declared policy and
-asserts with a rendering probe that the template behaves as declared."""
+turns' reasoning in the history. Legacy runs use each backbone's default: LFM2.5 drops earlier reasoning
+(`last_turn_only`) and Mellum2.1 keeps it (`keep`). A checkpoint or recipe may explicitly opt in to KEEP on a
+switch-capable template. Training text and serving prompts render through `bind_history_reasoning`, which pins the
+template switch to the checkpoint's declared policy and asserts with a rendering probe that the template behaves as
+declared."""
 _HISTORY_REASONING_SWITCHES = ("preserve_thinking", "keep_past_thinking")
 _PROBE_EARLIER, _PROBE_LATEST = "natlang-history-reasoning-probe-earlier", "natlang-history-reasoning-probe-latest"
 _PROBE_EXPECTED = {"keep": "keep", "last_turn_only": "drops-history"}
@@ -349,7 +348,7 @@ def probe_history_reasoning(render) -> str:
 
 
 def bind_history_reasoning(tokenizer, policy: str | None = None, *, model_type: str | None = None,
-                           require_declared: bool = False):
+                           require_declared: bool = False, allow_transition: bool = False):
     """Bind a backbone's declared history-reasoning policy to `tokenizer.apply_chat_template` (idempotent) and record
     it as `tokenizer.natlang_history_reasoning` ({"policy", "backbone", "template_kwargs", "probe"}).
 
@@ -362,14 +361,26 @@ def bind_history_reasoning(tokenizer, policy: str | None = None, *, model_type: 
     bound = getattr(tokenizer, "natlang_history_reasoning", None)
     if isinstance(bound, dict):
         if declared is not None and bound.get("policy") != declared:
-            raise ValueError(f"tokenizer is bound to history_reasoning={bound.get('policy')!r}, not {declared!r}")
-        if require_declared and bound.get("policy") == "undeclared":
+            if not allow_transition:
+                raise ValueError(f"tokenizer is bound to history_reasoning={bound.get('policy')!r}, not {declared!r}")
+            original = getattr(tokenizer, "_natlang_history_reasoning_original_apply_chat_template", None)
+            if original is None:
+                raise ValueError("tokenizer history_reasoning transition lacks its original renderer")
+            tokenizer.apply_chat_template = original
+            delattr(tokenizer, "natlang_history_reasoning")
+            bound = None
+        if bound is None:
+            pass
+        elif require_declared and bound.get("policy") == "undeclared":
             raise ValueError(f"backbone {model_type!r} declares no history_reasoning policy (chat.BACKBONE_HISTORY_REASONING)")
-        return tokenizer
+        else:
+            return tokenizer
     if declared is None and require_declared:
         raise ValueError(f"backbone {model_type!r} declares no history_reasoning policy (chat.BACKBONE_HISTORY_REASONING)")
     kwargs = {} if declared is None else history_reasoning_kwargs(getattr(tokenizer, "chat_template", None), declared)
     original = tokenizer.apply_chat_template
+    if not hasattr(tokenizer, "_natlang_history_reasoning_original_apply_chat_template"):
+        tokenizer._natlang_history_reasoning_original_apply_chat_template = original
 
     def apply_chat_template(conversation, *args, **options):
         for name, value in kwargs.items():

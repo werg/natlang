@@ -134,7 +134,8 @@ def validate_baseline_prefix(*, prefix_run_path: Path, prefix_results_path: Path
 def validate_candidate_prefix(*, prefix_run_path: Path, prefix_results_path: Path,
                               prefix_cases_path: Path, cases: list[dict],
                               checkpoint_sha256: str, candidate_profile: str,
-                              current_protection_sha256: str) -> tuple[list[dict], dict]:
+                              current_protection_sha256: str,
+                              expected_seed: int | None = None) -> tuple[list[dict], dict]:
     """Verify a durable candidate-profile prefix before resuming its remaining cases."""
     prefix_run_path = prefix_run_path.resolve(strict=True)
     prefix_results_path = prefix_results_path.resolve(strict=True)
@@ -171,6 +172,7 @@ def validate_candidate_prefix(*, prefix_run_path: Path, prefix_results_path: Pat
     required_case_keys = {"case_id", "task_id", "program_id", "source_row_id",
         "source_row_sha256", "trajectory_index", "raw_response_sha256",
         "validation_proof_path", "validation_proof_sha256"}
+    failures = []
     for index, record in enumerate(records):
         old_case, new_case = prefix_cases[index], cases[index]
         if (set(old_case) != required_case_keys
@@ -179,7 +181,8 @@ def validate_candidate_prefix(*, prefix_run_path: Path, prefix_results_path: Pat
         valid_generation = isinstance(record.get("generation"), dict) and not record.get("generation_error")
         valid_failure = (record.get("generation") is None
                          and isinstance(record.get("generation_error"), dict)
-                         and isinstance(record["generation_error"].get("code"), str)
+                         and record["generation_error"].get("code") in SAMPLED_OUTPUT_FAILURE_CODES
+                         and isinstance(record["generation_error"].get("type"), str)
                          and isinstance(record["generation_error"].get("message"), str))
         if (record.get("profile") != candidate_profile
                 or record.get("case_id") != old_case.get("case_id")
@@ -189,6 +192,47 @@ def validate_candidate_prefix(*, prefix_run_path: Path, prefix_results_path: Pat
                 or not (valid_generation or valid_failure)
                 or not isinstance(record.get("likelihood"), dict)):
             raise ValueError(f"candidate prefix result {index} does not bind its exact admitted case")
+        if valid_failure:
+            failures.append((index, old_case, record["generation_error"]))
+    if failures:
+        parent = run.get("prefix_parent")
+        seed = run.get("seed")
+        if (type(seed) is not int or (expected_seed is not None and seed != expected_seed)
+                or not isinstance(parent, dict)):
+            raise ValueError("sampled failure prefix lacks its exact parent run and seed binding")
+        parent_run = Path(parent.get("run_path", "")).resolve(strict=True)
+        parent_results = Path(parent.get("results_path", "")).resolve(strict=True)
+        if (_sha256(parent_run) != parent.get("run_sha256")
+                or _sha256(parent_results) != parent.get("results_sha256")):
+            raise ValueError("sampled failure prefix parent attempt changed")
+        evidence = run.get("sampled_output_failures")
+        if not isinstance(evidence, list) or len(evidence) != len(failures):
+            raise ValueError("sampled failure prefix lacks one immutable evidence binding per failure")
+        by_index = {entry.get("case_index"): entry for entry in evidence if isinstance(entry, dict)}
+        if len(by_index) != len(evidence):
+            raise ValueError("sampled failure prefix evidence has duplicate or malformed case indexes")
+        for index, case, error in failures:
+            proof = by_index.get(index)
+            if not isinstance(proof, dict):
+                raise ValueError(f"sampled failure prefix has no evidence for case {index}")
+            journal_path = Path(proof.get("journal_path", "")).resolve(strict=True)
+            journal_text = journal_path.read_text(encoding="utf-8")
+            if (proof.get("schema") != "natlang.history-reasoning-sampled-failure-evidence/1"
+                    or proof.get("parent_run_sha256") != parent["run_sha256"]
+                    or proof.get("parent_results_sha256") != parent["results_sha256"]
+                    or proof.get("case_packet_sha256") != packet_sha
+                    or proof.get("checkpoint_sha256") != checkpoint_sha256
+                    or proof.get("profile") != candidate_profile
+                    or proof.get("seed") != seed
+                    or proof.get("case_id") != case["case_id"]
+                    or proof.get("task_id") != case["task_id"]
+                    or proof.get("source_row_id") != case["source_row_id"]
+                    or proof.get("source_row_sha256") != case["source_row_sha256"]
+                    or proof.get("error") != error
+                    or _sha256(journal_path) != proof.get("journal_sha256")
+                    or error["code"] not in journal_text
+                    or error["message"] not in journal_text):
+                raise ValueError(f"sampled failure evidence does not authenticate candidate case {index}")
     binding = {"run_path": str(prefix_run_path), "run_sha256": hashlib.sha256(run_bytes).hexdigest(),
         "results_path": str(prefix_results_path), "results_sha256": _sha256(prefix_results_path),
         "case_packet_path": str(prefix_cases_path), "case_packet_sha256": packet_sha,
@@ -589,8 +633,6 @@ def run(args) -> dict:
             prefix_cases_path=Path(args.baseline_prefix_cases), cases=cases,
             checkpoint_sha256=checkpoint_sha, baseline_profile="last_turn_only",
             current_protection_sha256=args.current_protection_sha256)
-        if len(prefix_records) >= len(cases):
-            raise ValueError("baseline prefix must leave at least one baseline case to execute")
     candidate_prefix_args = (getattr(args, "candidate_prefix_run", None),
                              getattr(args, "candidate_prefix_results", None),
                              getattr(args, "candidate_prefix_cases", None))
@@ -604,7 +646,8 @@ def run(args) -> dict:
             prefix_results_path=Path(candidate_prefix_args[1]),
             prefix_cases_path=Path(candidate_prefix_args[2]), cases=cases,
             checkpoint_sha256=checkpoint_sha, candidate_profile="keep",
-            current_protection_sha256=args.current_protection_sha256)
+            current_protection_sha256=args.current_protection_sha256,
+            expected_seed=args.seed)
     engine = load_native_engine(str(checkpoint), base=args.base, device=args.device,
                                 prompt_rendering=args.prompt_rendering)
     baseline = engine.tokenizer.natlang_history_reasoning["policy"]
@@ -638,31 +681,24 @@ def run(args) -> dict:
     _atomic_json(output / "run.json", metadata)
     rows_path = output / "results.jsonl"
     with rows_path.open("x", encoding="utf-8") as results:
-        bind_history_reasoning(engine.tokenizer, policy=baseline, allow_transition=True)
-        for index, prior_record in enumerate(prefix_records):
-            # Reuse the exact prior generation, but recompute likelihood under
-            # this runner's serving-aligned target boundary for paired metrics.
-            record = dict(prior_record)
-            record["likelihood"] = target_log_likelihood(
-                engine, cases[index]["messages"], cases[index]["target"], cases[index].get("tools"))
-            results.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
-            results.flush()
-            os.fsync(results.fileno())
-        result_counts = {baseline: len(prefix_records), "keep": len(candidate_prefix_records)}
+        result_counts = {baseline: 0, "keep": 0}
         generation_errors = {baseline: 0, "keep": 0}
-        for index, prior_record in enumerate(candidate_prefix_records):
-            record = dict(prior_record)
-            record["likelihood"] = target_log_likelihood(
-                engine, cases[index]["messages"], cases[index]["target"], cases[index].get("tools"))
-            results.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
-            results.flush()
-            os.fsync(results.fileno())
-            if record.get("generation_error"):
-                generation_errors["keep"] += 1
         for profile in profiles:
             bind_history_reasoning(engine.tokenizer, policy=profile, allow_transition=True)
-            already_done = (len(prefix_records) if profile == baseline else
-                            len(candidate_prefix_records))
+            prior_records = prefix_records if profile == baseline else candidate_prefix_records
+            for index, prior_record in enumerate(prior_records):
+                # Reuse the exact prior generation, but recompute likelihood under
+                # the matching history profile and serving-aligned target boundary.
+                record = dict(prior_record)
+                record["likelihood"] = target_log_likelihood(
+                    engine, cases[index]["messages"], cases[index]["target"], cases[index].get("tools"))
+                results.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+                results.flush()
+                os.fsync(results.fileno())
+                result_counts[profile] += 1
+                if record.get("generation_error"):
+                    generation_errors[profile] += 1
+            already_done = len(prior_records)
             for row in cases[already_done:]:
                 context = row["messages"]
                 target = row["target"]

@@ -39,7 +39,13 @@ def test_raw_policy_identity_and_tokenizer_match_actual_loaded_model_without_con
     actual=prepare_raw_policy(checkpoint,base=base,tokenizer_out=tmp_path/'tokenizer')
     assert actual['native_identity']==expected
     assert actual['native_participant'] is None and actual['semantic_adapter_sha256'] is None
-    assert tokenizer_fingerprint(AutoTokenizer.from_pretrained(actual['tokenizer']))==config['tokenizer_fingerprint']
+    reloaded=AutoTokenizer.from_pretrained(actual['tokenizer'])
+    assert tokenizer_fingerprint(reloaded)==config['tokenizer_fingerprint']
+    from natlang_neuralese.rl.native_raw_policy import bind_saved_history_reasoning
+    rebound=bind_saved_history_reasoning(reloaded,tokenizer_path=actual['tokenizer'],
+        checkpoint_sha256=expected['checkpoint_sha256'],tokenizer_fingerprint=expected['tokenizer_fingerprint'])
+    assert rebound==actual['history_reasoning']
+    assert actual['history_reasoning_binding']['sha256']==sha256_file_hex(actual['history_reasoning_binding']['path'])
     assert torch.equal(before,torch.get_rng_state())
     from natlang_neuralese.train.checkpoint_policy import CheckpointPolicy
     saved=CheckpointPolicy.load(checkpoint)
@@ -50,6 +56,61 @@ def test_raw_policy_identity_and_tokenizer_match_actual_loaded_model_without_con
     with pytest.raises(ValueError,match='another exact parent'):
         prepare_raw_policy(checkpoint,base=base,tokenizer_out=tmp_path/'bad-tokenizer',
             verified_checkpoint=({'path':str(checkpoint),'sha256':'0'*64},saved))
+
+
+def test_raw_policy_persists_explicit_keep_profile_across_tokenizer_reload(tmp_path):
+    from test_native_serving_adapters import engine_fixture
+    from natlang_neuralese.rl.native_raw_policy import bind_saved_history_reasoning
+    from transformers import AutoTokenizer
+    from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
+    engine=engine_fixture(tmp_path,'lfm',service_template=True)
+    model,tokenizer,roles,config=engine.shared_model,engine.tokenizer,engine.role_tokens,engine.model_config
+    # Give this fixture a genuinely switch-capable LFM template: the default
+    # service fixture drops earlier reasoning by construction.
+    tokenizer.chat_template=tokenizer.chat_template.replace(' and loop.last', '')
+    tokenizer.save_pretrained(config['base'])
+    config['tokenizer_fingerprint']=tokenizer_fingerprint(tokenizer)
+    config['history_reasoning_policy']='keep'
+    checkpoint=tmp_path/'keep-parent.pt'
+    torch.save({'schema':CHECKPOINT_SCHEMA,'model_config':config,**model_state(model),
+                'training':parent_training()},checkpoint)
+    prepared=prepare_raw_policy(checkpoint,base=Path(config['base']),
+                                tokenizer_out=tmp_path/'keep-tokenizer',require_optimizer=False)
+    assert set(prepared['native_identity']) == {'checkpoint_sha256','tokenizer_fingerprint',
+        'embedding_weight_sha256','architecture'}
+    reloaded=AutoTokenizer.from_pretrained(prepared['tokenizer'])
+    history=bind_saved_history_reasoning(reloaded,tokenizer_path=prepared['tokenizer'],
+        checkpoint_sha256=prepared['native_identity']['checkpoint_sha256'],
+        tokenizer_fingerprint=prepared['native_identity']['tokenizer_fingerprint'],
+        expected_history_reasoning_policy=prepared['history_reasoning']['policy'],
+        expected_binding_sha256=prepared['history_reasoning_binding']['sha256'])
+    assert history['policy']=='keep'
+    assert tokenizer_fingerprint(reloaded)==prepared['native_identity']['tokenizer_fingerprint']
+    with pytest.raises(ValueError,match='not bound to this checkpoint/tokenizer'):
+        bind_saved_history_reasoning(reloaded,tokenizer_path=prepared['tokenizer'],
+            checkpoint_sha256='0'*64,tokenizer_fingerprint=prepared['native_identity']['tokenizer_fingerprint'])
+    sidecar=Path(prepared['tokenizer'])/'natlang-history-reasoning.json'
+    original=sidecar.read_text()
+    sidecar.unlink()
+    with pytest.raises(ValueError,match='requires its saved tokenizer sidecar'):
+        bind_saved_history_reasoning(reloaded,tokenizer_path=prepared['tokenizer'],
+            checkpoint_sha256=prepared['native_identity']['checkpoint_sha256'],
+            tokenizer_fingerprint=prepared['native_identity']['tokenizer_fingerprint'],
+            expected_history_reasoning_policy='keep')
+    import json
+    tampered=json.loads(original)
+    tampered['history_reasoning']['policy']='last_turn_only'
+    sidecar.write_text(json.dumps(tampered))
+    with pytest.raises(ValueError,match='differs from checkpoint profile'):
+        bind_saved_history_reasoning(reloaded,tokenizer_path=prepared['tokenizer'],
+            checkpoint_sha256=prepared['native_identity']['checkpoint_sha256'],
+            tokenizer_fingerprint=prepared['native_identity']['tokenizer_fingerprint'],
+            expected_history_reasoning_policy='keep')
+    with pytest.raises(ValueError,match='differs from the authenticated checkpoint control'):
+        bind_saved_history_reasoning(reloaded,tokenizer_path=prepared['tokenizer'],
+            checkpoint_sha256=prepared['native_identity']['checkpoint_sha256'],
+            tokenizer_fingerprint=prepared['native_identity']['tokenizer_fingerprint'],
+            expected_history_reasoning_policy='keep', expected_binding_sha256=prepared['history_reasoning_binding']['sha256'])
 
 
 @pytest.mark.parametrize('tamper',['weights-only','legacy','roles','tokenizer','rng','schedule'])
@@ -99,6 +160,11 @@ def test_bare_native_factory_keeps_actual_recipe_and_omits_shared_artifact_requi
     assert result['trainer_parameters']['epochs']==3 and result['trainer_parameters']['task_eval_every']==cadence
     assert result['foundation_native_graphs']==str(tmp_path/'foundation')
     assert '--foundation-native-graphs' in result['seed_command']
+    assert result['history_reasoning_policy']=='last_turn_only'
+    assert result['history_reasoning_binding_sha256']==sha256_file_hex(
+        Path(result['rl_tokenizer'])/'natlang-history-reasoning.json')
+    assert result['learner_command'][-4:] == ['--history-reasoning-policy','{history_reasoning_policy}',
+        '--history-reasoning-binding-sha256','{history_reasoning_binding_sha256}']
     bound=prepare_raw_policy(checkpoint,base=base,tokenizer_out=tmp_path/'second-tokenizer')
     receipt={'schema':'natlang.rl-policy-binding/2','communication':'native-state',
         'checkpoint_sha256':bound['native_identity']['checkpoint_sha256'],'native_identity':bound['native_identity']}

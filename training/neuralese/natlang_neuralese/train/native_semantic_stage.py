@@ -354,6 +354,18 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
             continue  # mechanism tests may use a small in-memory tokenizer
         directory = policy.out/'semantic-tokenizers'/canonical_json_sha256_hex(name)
         entry.tokenizer.save_pretrained(directory)
+        from ..data.text_corpus import tokenizer_fingerprint
+        history_profile = getattr(entry.tokenizer, 'natlang_history_reasoning', None)
+        declared_profile = entry.config.get('history_reasoning_policy')
+        if declared_profile is not None and (not isinstance(history_profile, dict)
+                or history_profile.get('policy') != declared_profile):
+            raise ValueError('semantic participant tokenizer profile differs from its checkpoint configuration')
+        if isinstance(history_profile, dict):
+            history_binding = {'schema': 'natlang.raw-native-tokenizer-history/1',
+                'checkpoint_sha256': checkpoint_sha,
+                'tokenizer_fingerprint': tokenizer_fingerprint(entry.tokenizer),
+                'history_reasoning': dict(history_profile)}
+            write_json_durable(directory/'natlang-history-reasoning.json', history_binding)
         tokenizers[name] = {'path': str(directory.relative_to(policy.out)),
             'files': {str(path.relative_to(directory)): sha256_file_hex_cached(path)
                       for path in directory.rglob('*') if path.is_file()}}
@@ -362,6 +374,8 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
         'checkpoint': {'path': str(policy.slot.resolve()), 'sha256': checkpoint_sha},
         'specification_sha256': canonical_json_sha256_hex(vae.specification()),
         'models': {name: {'native_identity': identity,
+                        **({'history_reasoning_policy': participants[name].tokenizer.natlang_history_reasoning['policy']}
+                           if isinstance(getattr(participants[name].tokenizer,'natlang_history_reasoning',None),dict) else {}),
                         'mandatory_sft':progress_obligations(participants[name].sft_progress),
                         'raw_communication_rows':raw_communication_rows(participants[name].sft_progress),
                         'marker_ids':list(participants[name].model.marker_ids),

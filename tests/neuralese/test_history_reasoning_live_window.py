@@ -111,9 +111,27 @@ def test_candidate_prefix_reuses_success_and_records_exact_request_failure(tmp_p
                       "code": "neuralese-native-state-open",
                       "message": "neuralese-native-state-open: generation stopped inside a produce span"}}
     results_path.write_text("".join(json.dumps(record, sort_keys=True) + "\n" for record in records))
+    parent_results_path = tmp_path / "original-results.jsonl"
+    parent_results_path.write_text("{}\n")
+    parent_run_path = tmp_path / "original-run.json"
+    _write_json(parent_run_path, {"schema": WINDOW.SCHEMA, "checkpoint_sha256": "a" * 64})
+    journal_path = tmp_path / "attempt-journal.txt"
+    journal_path.write_text("neuralese-native-state-open: generation stopped inside a produce span\n")
+    error = records[1]["generation_error"]
+    proof = {"schema": "natlang.history-reasoning-sampled-failure-evidence/1",
+        "parent_run_sha256": _sha(parent_run_path), "parent_results_sha256": _sha(parent_results_path),
+        "case_packet_sha256": _sha(cases_path), "checkpoint_sha256": "a" * 64,
+        "profile": "keep", "seed": 0, "case_index": 1,
+        "case_id": cases[1]["case_id"], "task_id": cases[1]["task_id"],
+        "source_row_id": cases[1]["source_row_id"], "source_row_sha256": cases[1]["source_row_sha256"],
+        "error": error, "journal_path": str(journal_path), "journal_sha256": _sha(journal_path)}
     run_path = tmp_path / "candidate-run.json"
     _write_json(run_path, {"schema": WINDOW.SCHEMA, "checkpoint_sha256": "a" * 64,
         "baseline_profile": "last_turn_only", "candidate_profile": "keep",
+        "seed": 0, "prefix_parent": {"run_path": str(parent_run_path),
+            "run_sha256": _sha(parent_run_path), "results_path": str(parent_results_path),
+            "results_sha256": _sha(parent_results_path)},
+        "sampled_output_failures": [proof],
         "weights_mutated": False, "training_admission": False,
         "cases": {"current_protection_sha256": "b" * 64,
                   "case_packet_path": str(cases_path.resolve()),
@@ -122,7 +140,7 @@ def test_candidate_prefix_reuses_success_and_records_exact_request_failure(tmp_p
     prefix, binding = WINDOW.validate_candidate_prefix(
         prefix_run_path=run_path, prefix_results_path=results_path,
         prefix_cases_path=cases_path, cases=enriched, checkpoint_sha256="a" * 64,
-        candidate_profile="keep", current_protection_sha256="b" * 64)
+        candidate_profile="keep", current_protection_sha256="b" * 64, expected_seed=0)
     assert len(prefix) == 2 and binding["rows"] == 2
     assert prefix[1]["generation"] is None
     assert prefix[1]["generation_error"]["code"] == "neuralese-native-state-open"
@@ -133,7 +151,7 @@ def test_candidate_prefix_reuses_success_and_records_exact_request_failure(tmp_p
         WINDOW.validate_candidate_prefix(
             prefix_run_path=run_path, prefix_results_path=results_path,
             prefix_cases_path=cases_path, cases=changed, checkpoint_sha256="a" * 64,
-            candidate_profile="keep", current_protection_sha256="b" * 64)
+            candidate_profile="keep", current_protection_sha256="b" * 64, expected_seed=0)
 
 
 def test_record_request_error_requires_and_preserves_exact_code():
@@ -150,7 +168,9 @@ def test_record_request_error_requires_and_preserves_exact_code():
         WINDOW.record_request_error(ValueError("uncoded infrastructure failure"))
 
 
-def test_compare_reuses_prefix_generations_and_runs_only_three_baseline_cases(tmp_path, monkeypatch):
+@pytest.mark.parametrize("baseline_prefix_count", [45, 48])
+def test_compare_reuses_prefix_generations_and_runs_only_missing_baseline_cases(
+        tmp_path, monkeypatch, baseline_prefix_count):
     checkpoint = tmp_path / "checkpoint.pt"
     checkpoint.write_bytes(b"checkpoint")
     checkpoint_sha = _sha(checkpoint)
@@ -165,7 +185,7 @@ def test_compare_reuses_prefix_generations_and_runs_only_three_baseline_cases(tm
         "source_row_sha256": case["source_row_sha256"],
         "generation": {"content": f"old-{index}"},
         "likelihood": {"target_token_count": 1, "target_log_likelihood": -1.0}}
-        for index, case in enumerate(cases[:45])]
+        for index, case in enumerate(cases[:baseline_prefix_count])]
     results_path.write_text("".join(json.dumps(record, sort_keys=True) + "\n" for record in prior_records))
     run_path = tmp_path / "old-run.json"
     _write_json(run_path, {"schema": WINDOW.SCHEMA, "checkpoint_sha256": checkpoint_sha,
@@ -174,6 +194,53 @@ def test_compare_reuses_prefix_generations_and_runs_only_three_baseline_cases(tm
         "cases": {"current_protection_sha256": "b" * 64,
                   "case_packet_path": str(old_cases_path.resolve()),
                   "case_packet_sha256": _sha(old_cases_path)}})
+
+    candidate_parent_results_path = tmp_path / "candidate-parent-results.jsonl"
+    candidate_parent_records = [{"case_id": case["case_id"], "task_id": case["task_id"],
+        "profile": "keep", "source_row_id": case["source_row_id"],
+        "source_row_sha256": case["source_row_sha256"], "generation": {"content": f"keep-{index}"},
+        "likelihood": {"target_token_count": 1, "target_log_likelihood": -1.0}}
+        for index, case in enumerate(cases[:10])]
+    candidate_parent_results_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n"
+        for row in candidate_parent_records))
+    candidate_parent_run_path = tmp_path / "candidate-parent-run.json"
+    _write_json(candidate_parent_run_path, {"schema": WINDOW.SCHEMA,
+        "checkpoint_sha256": checkpoint_sha, "candidate_profile": "keep"})
+    marker_error = {"type": "RequestError", "code": "neuralese-native-state-open",
+        "message": "neuralese-native-state-open: generation stopped inside a produce span"}
+    candidate_prefix_rows = [*candidate_parent_records,
+        {"case_id": cases[10]["case_id"], "task_id": cases[10]["task_id"],
+         "profile": "keep", "source_row_id": cases[10]["source_row_id"],
+         "source_row_sha256": cases[10]["source_row_sha256"], "generation": None,
+         "generation_error": marker_error,
+         "likelihood": {"target_token_count": 1, "target_log_likelihood": -1.0}}]
+    candidate_results_path = tmp_path / "candidate-prefix-results.jsonl"
+    candidate_results_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n"
+        for row in candidate_prefix_rows))
+    journal_path = tmp_path / "sampled-failure-journal.txt"
+    journal_path.write_text(marker_error["message"] + "\n")
+    candidate_proof = {"schema": "natlang.history-reasoning-sampled-failure-evidence/1",
+        "parent_run_sha256": _sha(candidate_parent_run_path),
+        "parent_results_sha256": _sha(candidate_parent_results_path),
+        "case_packet_sha256": _sha(old_cases_path), "checkpoint_sha256": checkpoint_sha,
+        "profile": "keep", "seed": 0, "case_index": 10,
+        "case_id": cases[10]["case_id"], "task_id": cases[10]["task_id"],
+        "source_row_id": cases[10]["source_row_id"],
+        "source_row_sha256": cases[10]["source_row_sha256"], "error": marker_error,
+        "journal_path": str(journal_path), "journal_sha256": _sha(journal_path)}
+    candidate_run_path = tmp_path / "candidate-prefix-run.json"
+    _write_json(candidate_run_path, {"schema": WINDOW.SCHEMA,
+        "checkpoint_sha256": checkpoint_sha, "baseline_profile": "last_turn_only",
+        "candidate_profile": "keep", "seed": 0,
+        "prefix_parent": {"run_path": str(candidate_parent_run_path),
+            "run_sha256": _sha(candidate_parent_run_path),
+            "results_path": str(candidate_parent_results_path),
+            "results_sha256": _sha(candidate_parent_results_path)},
+        "sampled_output_failures": [candidate_proof],
+        "weights_mutated": False, "training_admission": False,
+        "cases": {"current_protection_sha256": "b" * 64,
+            "case_packet_path": str(old_cases_path.resolve()),
+            "case_packet_sha256": _sha(old_cases_path)}})
 
     monkeypatch.setattr(WINDOW, "validate_case_packet",
         lambda *args, **kwargs: (cases, {"case_count": 48}))
@@ -215,11 +282,16 @@ def test_compare_reuses_prefix_generations_and_runs_only_three_baseline_cases(tm
         output=str(tmp_path / "successor"), baseline="last_turn_only", base=None, device="cpu",
         prompt_rendering="full", max_tokens=8, seed=0,
         baseline_prefix_run=str(run_path), baseline_prefix_results=str(results_path),
-        baseline_prefix_cases=str(old_cases_path))
+        baseline_prefix_cases=str(old_cases_path),
+        candidate_prefix_run=str(candidate_run_path),
+        candidate_prefix_results=str(candidate_results_path),
+        candidate_prefix_cases=str(old_cases_path))
     summary = WINDOW.run(args)
     output_rows = [json.loads(line) for line in (tmp_path / "successor" / "results.jsonl").open()]
     assert summary["result_counts"] == {"last_turn_only": 48, "keep": 48}
     assert len(output_rows) == 96
-    assert [row["generation"] for row in output_rows[:45]] == [record["generation"] for record in prior_records]
-    assert fake_engine.generated == ["last_turn_only"] * 3 + ["keep"] * 48
+    assert [row["generation"] for row in output_rows[:baseline_prefix_count]] == [
+        record["generation"] for record in prior_records]
+    assert fake_engine.generated == ["last_turn_only"] * (48 - baseline_prefix_count) + ["keep"] * 37
     assert likelihood_policies == ["last_turn_only"] * 48 + ["keep"] * 48
+    assert output_rows[48 + 10]["generation_error"] == marker_error

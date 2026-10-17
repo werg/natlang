@@ -541,3 +541,12 @@ return, restore the complete original raw tool call, invocation output and
 block-write trace; do not replace the sampled body with an artifact ID or
 invent a successful outcome. The converter authenticates the exact declared
 callable type, body hash and producing turn before linking the return.
+
+History reasoning follows the checkpoint's bound rendering profile. An
+explicit `history_reasoning_policy: keep` makes earlier assistant reasoning
+visible in complete conversation history; it does not change the original
+source targets or authorize rewriting old graph receipts. If a saved checkpoint
+or tokenizer reports a conflicting history policy, restore the matching
+checkpoint/tokenizer binding rather than forcing a different template switch.
+The opt-in profile remains unmeasured until its live executor comparison is
+recorded.

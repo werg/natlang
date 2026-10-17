@@ -295,7 +295,8 @@ def _sync_concat(destination, inputs):
         raise
 
 
-def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint, split):
+def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint, split,
+                   explicit_history_reasoning_policy=None):
     """Keep the full session and add packets only for reasoning hidden by serving."""
     if (value.get('schema') != 'natlang.normalized-agent-trajectory/1'
             or value.get('whole_trajectory') is not True or value.get('windowed') is not False):
@@ -308,7 +309,10 @@ def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint
     prevalidate_session_tool_arguments(value,
         template_backbone=getattr(tokenizer, 'natlang_history_reasoning', {}).get('backbone'))
     from natlang_neuralese.serve.chat import bind_history_reasoning
-    bind_history_reasoning(tokenizer)
+    # A prepared tokenizer can carry an explicit recipe override. Rebinding
+    # with the backbone default here would silently reject that profile.
+    bound_history = getattr(tokenizer, 'natlang_history_reasoning', {})
+    bind_history_reasoning(tokenizer, policy=bound_history.get('policy'))
     history_policy = tokenizer.natlang_history_reasoning['policy']
     messages = []
     for original in trajectory['messages']:
@@ -321,6 +325,10 @@ def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint
         raise ValueError('source session has no assistant targets')
     occurrence = canonical_json_sha256_hex([value['source_file']['sha256'], value['source_row']])
     identifier = trajectory['id'] + ':source-occurrence:' + occurrence
+    if explicit_history_reasoning_policy is not None:
+        if explicit_history_reasoning_policy != history_policy:
+            raise ValueError('explicit source rendering profile differs from its prepared tokenizer')
+        identifier += ':history-reasoning:' + explicit_history_reasoning_policy
     common = {'split': split, 'source_groups': trajectory['split_groups'],
               'tokenizer_sha256': source_fingerprint, 'source_record_ids': [trajectory['id']]}
     convert = {'source_tokenizer_fingerprint': source_fingerprint, 'tokenizer': tokenizer,
@@ -421,14 +429,14 @@ class PreparedTokenizer:
             raise ValueError('prepared tokenizer rendering configuration was mutated')
 
 
-def prepare_tokenizer(base):
+def prepare_tokenizer(base, *, history_reasoning_policy=None):
     base = Path(base).resolve(strict=True)
     files = tokenizer_inventory(base)
     tokenizer = AutoTokenizer.from_pretrained(base, local_files_only=True, trust_remote_code=False)
     source_fp = tokenizer_fingerprint(tokenizer)
     provision(tokenizer)
     expanded_fp = tokenizer_fingerprint(tokenizer)
-    bind_history_reasoning(tokenizer)
+    bind_history_reasoning(tokenizer, policy=history_reasoning_policy)
     configuration = json.loads(json.dumps(_tokenizer_rendering_configuration(tokenizer)))
     binding = {'schema': 'natlang.prepared-native-tokenizer/1', 'base_files': files,
         'source_fingerprint': source_fp, 'expanded_fingerprint': expanded_fp,
@@ -447,6 +455,8 @@ def main(argv=None, *, prepared=None):
     parser.add_argument('--decision-hold', type=Path, action='append', required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--chunk-sessions', type=int, default=100)
+    parser.add_argument('--history-reasoning-policy', choices=('keep',), default=None,
+        help='explicitly render prior assistant reasoning in the complete trajectory')
     args = parser.parse_args(argv)
     if args.chunk_sessions <= 0:
         raise ValueError('--chunk-sessions must be a positive integer')
@@ -469,9 +479,13 @@ def _convert(args, prepared):
         raise ValueError('decision hold bindings must include the complete current file set')
     decision_ids, decision_bindings = load_decision_holds(current_holds)
     held_sources = {identifier.split(':decision:', 1)[0] for identifier in decision_ids} | decision_ids
-    prepared = prepare_tokenizer(args.base_tokenizer) if prepared is None else prepared
+    prepared = prepare_tokenizer(args.base_tokenizer,
+        history_reasoning_policy=getattr(args, 'history_reasoning_policy', None)) if prepared is None else prepared
     prepared.validate(args.base_tokenizer)
     tokenizer = prepared.tokenizer
+    if (getattr(args, 'history_reasoning_policy', None) is not None
+            and tokenizer.natlang_history_reasoning.get('policy') != args.history_reasoning_policy):
+        raise ValueError('prepared tokenizer history-reasoning profile differs from requested source conversion')
     source_fp, expanded_fp = prepared.source_fingerprint, prepared.expanded_fingerprint
     template_backbone = prepared.rendering_configuration.get('history_reasoning', {}).get('backbone')
     if template_backbone not in ('lfm2', 'mellum'):
@@ -590,7 +604,8 @@ def _convert(args, prepared):
             return
         split = 'test' if groups & held else 'train'
         for graph in session_graphs(value, tokenizer, source_fingerprint=source_fp,
-                                    expanded_fingerprint=expanded_fp, split=split):
+                                    expanded_fingerprint=expanded_fp, split=split,
+                                    explicit_history_reasoning_policy=getattr(args, 'history_reasoning_policy', None)):
             writers[split].write(graph)
             shard_counts['graphs:'+split] += 1
             if graph.get('conversion', {}).get('acquired_session', {}).get('view') == 'full-prefix-reasoning-target':
