@@ -571,3 +571,32 @@ def test_geometry_identity_accepts_only_implicit_ieee_default(tmp_path,explicit_
     wrong=copy.deepcopy(actual);wrong['batch_tokens']+=1
     with pytest.raises(ValueError,match='differs'):
         resident.geometry_capacity(resident.binding(certificate),identity=wrong,code={'module':'bound'})
+
+
+@pytest.mark.parametrize('architecture,dtype',[('lfm2','torch.float32'),('mellum','torch.bfloat16')])
+@pytest.mark.parametrize('explicit_side',['certificate','actual'])
+def test_geometry_capacity_ignores_only_explicit_keep_rendering_metadata(tmp_path,architecture,dtype,explicit_side):
+    import copy
+    identity={'model_config':{'architecture':architecture,'dtype':dtype,'native_linear_precision':'bf16x6'},
+              'batch_tokens':65536,'checkpoint_input_offload':False}
+    keep=copy.deepcopy(identity);keep['model_config']['history_reasoning_policy']='keep'
+    evidence=tmp_path/'proof.json';write_json(evidence,{'passed':True})
+    certificate=tmp_path/'capacity.json';value={'schema':'natlang.native-resident-geometry-qualification/1',
+        'passed':True,'identity':keep if explicit_side=='certificate' else identity,
+        'runtime_code_sha256':resident.digest({'module':'same'}),'limits':{'forward_tokens':94236,'kv_slots':157075},
+        'evidence':resident.binding(evidence)}
+    write_json(certificate,value);original=certificate.read_bytes();actual=identity if explicit_side=='certificate' else keep
+    assert resident.geometry_capacity(resident.binding(certificate),identity=actual,code={'module':'same'})==value['limits']
+    assert certificate.read_bytes()==original
+    for field,bad in [('history_reasoning_policy',None),('history_reasoning_policy','last_turn_only'),
+                      ('history_reasoning_policy','invented'),('dtype','torch.float16'),
+                      ('native_linear_precision','ieee'),('native_attention_precision','tf32x3')]:
+        wrong=copy.deepcopy(actual);wrong['model_config'][field]=bad
+        with pytest.raises(ValueError,match='differs'):
+            resident.geometry_capacity(resident.binding(certificate),identity=wrong,code={'module':'same'})
+    for field,bad in [('batch_tokens',32768),('checkpoint_input_offload',True)]:
+        wrong=copy.deepcopy(actual);wrong[field]=bad
+        with pytest.raises(ValueError,match='differs'):
+            resident.geometry_capacity(resident.binding(certificate),identity=wrong,code={'module':'same'})
+    with pytest.raises(ValueError,match='differs'):
+        resident.geometry_capacity(resident.binding(certificate),identity=actual,code={'module':'unreviewed'})

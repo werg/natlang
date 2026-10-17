@@ -181,13 +181,24 @@ def validate_source_obligations(plan, stage_id, train, declarations, withdrawal_
 
 
 def same_geometry_identity(previous, current):
-    """An omitted attention mode means IEEE; all other identity fields stay exact."""
+    """Compare memory execution, preserving precision/packing and declared profiles.
+
+    KEEP changes history rendering, not tensor shapes or kernels. Its sole
+    optional config flag is omitted for this memory comparison; actual recipe,
+    saved profile history and actor attestation remain separately authenticated.
+    """
+    for value in (previous,current):
+        model=value.get('model_config') if isinstance(value,dict) else None
+        if (isinstance(model,dict) and 'history_reasoning_policy' in model
+                and model['history_reasoning_policy'] != 'keep'):
+            return False
     def explicit(value):
         if not isinstance(value,dict):return value
         result=dict(value)
         if isinstance(value.get('model_config'),dict):
             result['model_config']=dict(value['model_config'])
             result['model_config'].setdefault('native_attention_precision','ieee')
+            result['model_config'].pop('history_reasoning_policy',None)
         return result
     return explicit(previous)==explicit(current)
 

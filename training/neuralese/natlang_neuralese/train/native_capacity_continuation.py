@@ -154,8 +154,141 @@ ATTENTION_INDEX_COMPOSITIONS = {
 }
 
 
+HISTORY_PROFILE_POLICY = 'native-keep-history-profile-metadata-v1'
+# Exact independently reviewed e87 profile overlay on both qualified runtimes.
+# The shared capacity identity normalizer is the sole additional module.
+HISTORY_PROFILE_COMPOSITIONS = {
+    'lfm': {
+        'data/port_record_graph.py': (
+            'e756edd8c6b8b61f51da78527145ee69b680655d6ad067c03a696953967f6cef',
+            '51db892a7c43bcaef1661f856da4d61890324072c699560c37c26e4191bc5672'),
+        'data/text_corpus.py': (
+            '004659afb57d4c23dd64262ed49ca4b3964938b60e701789a61b63091464773a',
+            '622b4ad08257ed09d0dd10d52d97adfa1c45cc8b9c8c46bbeef57fae6caff63b'),
+        'model/native_bundle.py': (
+            '579e0e1010f5e5ba96950c03ab56c7abf5afe5bd93880bdab4608fcd0bcfb33d',
+            '64ac96039b8111c25909f86fe2f19692ed0bdb0288e84f0812b5f5193ab63773'),
+        'model/native_composite.py': (
+            '4bd042dc5d6572dabe76ff8022b98f4cf5e680aa1120251496292a9ad06d4c1c',
+            '59a5baa6eb56c5f79e77abfc7321b812c82ecfa855374fa030516944fc34554e'),
+        'model/native_model.py': (
+            'd9dedf39ca629c758c0351df73d5b6ad85bb868a5facff673f3cba7a09bfb4d4',
+            '4345f99f74d37d4a2b184a7df741b9e735b6d9e395786ee92a2970b09307f419'),
+        'model/semantic_channel.py': (
+            'a8c75246738cac7ce8b448743d7e43d64c05c2ed132c5c44d47aa0f8f267303b',
+            'fe501e9eb3580af4a8390e1a3b1dd826b101d9af9578f655a80cd6d2ce91211d'),
+        'rl/native_raw_policy.py': (
+            '77676a8adbb280e0c905912477479d0ec5d1211c12e8f072c1b5a9f405061668',
+            '585544d610fffa0e1dc275d1a56f9d331989a58383639835550055cbe77e2a32'),
+        'rl/native_stage.py': (
+            '9e8559a9e96c4ed94194a6b3bf0c9803b308d475380e0485f9b9c6e2c3997f8f',
+            '46c1e117ba73a86e9ad2e5fcfab306ba4ac3005945cf794a4304f5392ecf7c77'),
+        'rl/production.py': (
+            'd5e8a7b871f43d4e05282b9bdec399fbebde356d419b5066c82600c5ebec203b',
+            '2639c62caf1035a39b39c7081145a69e2152a90449b3246fa8023aadb5ab3acc'),
+        'serve/__init__.py': (
+            '5c32ecdf1bc053acbd99e8cd1409eff07ddc5b6fc4ca403a5f12f660fcda1571',
+            'bb1eda9824538f2037d2cdb23e162cc043bca70ed06dcb2a8e3ff80b74f0f10d'),
+        'serve/chat.py': (
+            '12e9dfca075a1159b72fc5f2be1b7b376c65e5e8780a766adc62ad78a4ceea36',
+            '5a7e076684f3a0b1f590fac2ee3b6df98facf9999af67b34ee09d3f6103c22a0'),
+        'serve/engine.py': (
+            'b359949d90172b40152cef668a9abc44ee20a53475d29a43c964e669f4aa1ef1',
+            '2dfc0c6070085e29a794ea4a82972a6978947b501555eacede13e33e79dce0cd'),
+        'train/native_continuation.py': (
+            'facd6a6f8f6e68799cd059d2b2ac96cc3679211b9d541fcfaa3274837f186f71',
+            '10335621edfd58fe400818daad221e1fca7dd2b843305cdb6c8ac4422e8f01c3'),
+        'train/native_semantic_stage.py': (
+            '66462611c9d41e39bf403802668efdf21a75c49953e143b6acdac5efbc44e986',
+            '8d456cc510b723aa1d940c285bd4b978415eff49096b9007759f3a4439e29801'),
+        'train/native_state_sft.py': (
+            '45c5c8da86060ddb431bdcb24de97daefcc19fecac9398fbff399399d8dd18ba',
+            '2380a03c921d1ef840f1ba80cffdd3af69b61237af9d5c912782495946943e71'),
+        'train/recipe.py': (
+            '32b3c41456a24683b1f4024eaefe4c59c2fd96d49e24d18615f1eb0a59fa62c8',
+            '9e1538a56d97c32c517a686ec81616a8acbae570d1825a1e66d6fbd671116e14'),
+        'train/native_resident.py': (
+            '32048a86963cc970a9a9c04b4292d33be4357810ce7f50dfc2191e17db9822dd',
+            '441bceb6c65f0654ab5bbc2c4f4b97f7d4ffbd404029488ff533c3b76b1442cb'),
+    },
+    'mellum': {
+        'data/port_record_graph.py': (
+            'e756edd8c6b8b61f51da78527145ee69b680655d6ad067c03a696953967f6cef',
+            '51db892a7c43bcaef1661f856da4d61890324072c699560c37c26e4191bc5672'),
+        'data/text_corpus.py': (
+            '004659afb57d4c23dd64262ed49ca4b3964938b60e701789a61b63091464773a',
+            '622b4ad08257ed09d0dd10d52d97adfa1c45cc8b9c8c46bbeef57fae6caff63b'),
+        'model/native_bundle.py': (
+            '579e0e1010f5e5ba96950c03ab56c7abf5afe5bd93880bdab4608fcd0bcfb33d',
+            '64ac96039b8111c25909f86fe2f19692ed0bdb0288e84f0812b5f5193ab63773'),
+        'model/native_composite.py': (
+            '4bd042dc5d6572dabe76ff8022b98f4cf5e680aa1120251496292a9ad06d4c1c',
+            '59a5baa6eb56c5f79e77abfc7321b812c82ecfa855374fa030516944fc34554e'),
+        'model/native_model.py': (
+            'd9dedf39ca629c758c0351df73d5b6ad85bb868a5facff673f3cba7a09bfb4d4',
+            '4345f99f74d37d4a2b184a7df741b9e735b6d9e395786ee92a2970b09307f419'),
+        'model/semantic_channel.py': (
+            'a8c75246738cac7ce8b448743d7e43d64c05c2ed132c5c44d47aa0f8f267303b',
+            'fe501e9eb3580af4a8390e1a3b1dd826b101d9af9578f655a80cd6d2ce91211d'),
+        'rl/native_raw_policy.py': (
+            '77676a8adbb280e0c905912477479d0ec5d1211c12e8f072c1b5a9f405061668',
+            '585544d610fffa0e1dc275d1a56f9d331989a58383639835550055cbe77e2a32'),
+        'rl/native_stage.py': (
+            '9e8559a9e96c4ed94194a6b3bf0c9803b308d475380e0485f9b9c6e2c3997f8f',
+            '46c1e117ba73a86e9ad2e5fcfab306ba4ac3005945cf794a4304f5392ecf7c77'),
+        'rl/production.py': (
+            'd5e8a7b871f43d4e05282b9bdec399fbebde356d419b5066c82600c5ebec203b',
+            '2639c62caf1035a39b39c7081145a69e2152a90449b3246fa8023aadb5ab3acc'),
+        'serve/__init__.py': (
+            '5c32ecdf1bc053acbd99e8cd1409eff07ddc5b6fc4ca403a5f12f660fcda1571',
+            'bb1eda9824538f2037d2cdb23e162cc043bca70ed06dcb2a8e3ff80b74f0f10d'),
+        'serve/chat.py': (
+            '12e9dfca075a1159b72fc5f2be1b7b376c65e5e8780a766adc62ad78a4ceea36',
+            '5a7e076684f3a0b1f590fac2ee3b6df98facf9999af67b34ee09d3f6103c22a0'),
+        'serve/engine.py': (
+            'b359949d90172b40152cef668a9abc44ee20a53475d29a43c964e669f4aa1ef1',
+            '2dfc0c6070085e29a794ea4a82972a6978947b501555eacede13e33e79dce0cd'),
+        'train/native_continuation.py': (
+            'facd6a6f8f6e68799cd059d2b2ac96cc3679211b9d541fcfaa3274837f186f71',
+            '10335621edfd58fe400818daad221e1fca7dd2b843305cdb6c8ac4422e8f01c3'),
+        'train/native_semantic_stage.py': (
+            '66462611c9d41e39bf403802668efdf21a75c49953e143b6acdac5efbc44e986',
+            '8d456cc510b723aa1d940c285bd4b978415eff49096b9007759f3a4439e29801'),
+        'train/native_state_sft.py': (
+            '77f51bb6de67f396a5e25f96a8ed9b4e7e4c9ea96ba3c04e7e6fb5492e4ae6fe',
+            '3b17ff15ee3f6a8ed67992fa4b090659208b59ce01eefaee426b6ea537a28c17'),
+        'train/recipe.py': (
+            '32b3c41456a24683b1f4024eaefe4c59c2fd96d49e24d18615f1eb0a59fa62c8',
+            '9e1538a56d97c32c517a686ec81616a8acbae570d1825a1e66d6fbd671116e14'),
+        'train/native_resident.py': (
+            '952926630260bb95187afaaf442292a216bf21089e379db28980a244723b14ff',
+            '441bceb6c65f0654ab5bbc2c4f4b97f7d4ffbd404029488ff533c3b76b1442cb'),
+    },
+}
+HISTORY_PROFILE_SOURCE_POLICY_FILES = ('data/native_sources.py', 'data/native_graph_schema.py', 'model/native_graph_plan.py', 'data/native_pair_schema.py', 'common/row_index.py', 'common/jsonio.py', 'common/hashing.py')
+
+
+def _history_profile_contract(review):
+    if review['optimizer_policy'] != HISTORY_PROFILE_POLICY:return
+    config=(review.get('identity') or {}).get('model_config') or {}
+    old,new=review['old_code'],review['new_code']
+    changes={name for name in old.keys() | new.keys() if old.get(name)!=new.get(name)}
+    if ((review.get('identity') or {}).get('objective') is not None
+            or config.get('history_reasoning_policy') != 'keep'
+            or review.get('fresh_policy_capacity_required') is not True
+            or not changes
+            or not any(changes <= set(composition) and all(
+                old.get(name) in pair and new.get(name)==pair[1]
+                for name,pair in composition.items())
+                for composition in HISTORY_PROFILE_COMPOSITIONS.values())
+            or any(not old.get(name) or old.get(name)!=new.get(name)
+                   for name in HISTORY_PROFILE_SOURCE_POLICY_FILES)):
+        raise ValueError('KEEP profile continuation needs exact reviewed module pairs and unchanged source parser; policy capacity stays fresh')
+
+
 def allowed_changes(policy):
     return {POLICY: ALLOWED_CHANGES, METADATA_POLICY: METADATA_CHANGES,
+            HISTORY_PROFILE_POLICY: set(next(iter(HISTORY_PROFILE_COMPOSITIONS.values()))),
             LOADER_IO_POLICY: LOADER_IO_CHANGES,
             LINEAGE_METADATA_POLICY: {LINEAGE_METADATA_FILE},
             POLICY_GATE_SFT_POLICY: set(POLICY_GATE_SFT_COMPOSITION),
@@ -250,7 +383,7 @@ def _memory_allowance(review):
         if (parameter.get('dtype') != 'torch.float32' or not parameter.get('shape')
                 or any(type(n) is not int or n < 1 for n in parameter['shape'])):
             raise ValueError('capacity continuation requires the unchanged FP32 ordinary layout')
-    if review['optimizer_policy'] in {METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY, POLICY_GATE_SFT_POLICY, ORDINARY_WRITER_POLICY, WHOLE_HEAD_SOURCE_POLICY}:
+    if review['optimizer_policy'] in {METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY, POLICY_GATE_SFT_POLICY, ORDINARY_WRITER_POLICY, WHOLE_HEAD_SOURCE_POLICY, HISTORY_PROFILE_POLICY}:
         extra = review.get('metadata_extra_bytes')
         if (review.get('optimizer_state_unchanged') is not True
                 or type(extra) is not int or extra < (64 << 20)):
@@ -306,6 +439,7 @@ def _proof_cases(reference, *, identity, code_sha, parent, seen=()):
         _policy_gate_sft_contract(review)
         _ordinary_writer_contract(review)
         _whole_head_source_contract(review)
+        _history_profile_contract(review)
         extra = value.get('extra_bytes_per_memory_domain')
         if type(extra) is not int or extra != _memory_allowance(review):
             raise ValueError('inherited capacity lost its additional memory allowance')
@@ -359,7 +493,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     if (review.get('schema') != 'natlang.native-capacity-continuation-review/1'
             or review.get('approved') is not True
             or review.get('parameter_layout_unchanged') is not True
-            or review.get('optimizer_policy') not in {POLICY, METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY, POLICY_GATE_SFT_POLICY, ORDINARY_WRITER_POLICY, WHOLE_HEAD_SOURCE_POLICY}):
+            or review.get('optimizer_policy') not in {POLICY, METADATA_POLICY, LOADER_IO_POLICY, ATTENTION_INDEX_POLICY, LINEAGE_METADATA_POLICY, POLICY_GATE_SFT_POLICY, ORDINARY_WRITER_POLICY, WHOLE_HEAD_SOURCE_POLICY, HISTORY_PROFILE_POLICY}):
         raise ValueError('capacity continuation requires an approved exact optimizer review')
     old, new = code_inventory(old_package), code_inventory(new_package)
     if old != review.get('old_code') or new != review.get('new_code'):
@@ -386,6 +520,7 @@ def continue_capacity(review_binding, *, old_package, new_package, out):
     _policy_gate_sft_contract(review)
     _ordinary_writer_contract(review)
     _whole_head_source_contract(review)
+    _history_profile_contract(review)
     # Adam first/second moments, retained old buffers, telemetry snapshots and
     # per-parameter update intermediates. No backbone-sized copy is authorized.
     extra = _memory_allowance(review)

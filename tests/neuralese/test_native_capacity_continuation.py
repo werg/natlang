@@ -446,3 +446,63 @@ def test_public_certificate_verifier_checks_measured_evidence_not_just_root(tmp_
     with pytest.raises(ValueError):
         mechanism.verify_capacity_certificate(binding(certificate_path),identity=review['identity'],
             code=code_inventory(old),parent='0'*64 if change=='wrong-parent' else review['old_parent_checkpoint_sha256'])
+
+
+@pytest.mark.parametrize('architecture,dtype',[('lfm2','torch.float32'),('mellum','torch.bfloat16')])
+def test_metadata_profile_continuation_reverifies_original_capacity_chain(tmp_path,architecture,dtype):
+    import shutil
+    old,adam,review,proof=fixture(tmp_path)
+    identity={**review['identity'],'model_config':{'architecture':architecture,'dtype':dtype,
+        'native_attention_precision':'ieee','native_linear_precision':'bf16x6'}}
+    value=json.loads(proof.read_text());value['identity']=copy.deepcopy(identity);proof.write_text(json.dumps(value))
+    original_path=Path(review['source_certificate']['path']);value=json.loads(original_path.read_text())
+    value.update(identity=copy.deepcopy(identity),evidence=binding(proof));original_path.write_text(json.dumps(value))
+    review.update(identity=identity,source_certificate=binding(original_path));first=tmp_path/'first';first.mkdir()
+    source=invoke(first,old,adam,review);source_bytes=source.read_bytes();proof_bytes=proof.read_bytes()
+    candidate=tmp_path/'candidate';shutil.copytree(adam,candidate)
+    (candidate/'train/native_resident.py').write_text('reviewed KEEP memory-identity normalizer\n')
+    current=copy.deepcopy(review);current['identity']['model_config']['history_reasoning_policy']='keep'
+    current.update(source_certificate=binding(source),old_code=code_inventory(adam),new_code=code_inventory(candidate),
+        old_parent_checkpoint_sha256='b'*64,new_parent_checkpoint_sha256='c'*64,
+        optimizer_policy=mechanism.METADATA_POLICY,optimizer_state_unchanged=True,metadata_extra_bytes=64<<20)
+    current['changes']={'train/native_resident.py':{'old':None,'new':current['new_code']['train/native_resident.py']}}
+    phase=tmp_path/'second';phase.mkdir();result=invoke(phase,adam,candidate,current)
+    mechanism.verify_capacity_certificate(binding(result),identity=current['identity'],code=code_inventory(candidate),parent='c'*64)
+    assert source.read_bytes()==source_bytes and proof.read_bytes()==proof_bytes
+    continued=json.loads(Path(json.loads(result.read_text())['evidence']['path']).read_text())
+    assert continued['new_parent_measured'] is False and continued['measured_parent_checkpoint_sha256']=='a'*64
+    # Inheritance still reaches the exact original measured proof; KEEP cannot
+    # conceal changed numerics, model shape, source bytes or parent ancestry.
+    value=json.loads(proof.read_text());value['numerical_reference']['passed']=False;proof.write_text(json.dumps(value))
+    with pytest.raises(ValueError):
+        mechanism.verify_capacity_certificate(binding(result),identity=current['identity'],code=code_inventory(candidate),parent='c'*64)
+
+
+@pytest.mark.parametrize('role',['lfm','mellum'])
+@pytest.mark.parametrize('mutation',[None,'old-module','new-module','missing-module','numerical-neighbor',
+    'source-parser','objective','missing-profile','missing-policy-gate'])
+def test_keep_profile_policy_binds_exact_reviewed_overlay_and_parser(role,mutation):
+    composition=mechanism.HISTORY_PROFILE_COMPOSITIONS[role]
+    old={name:pair[0]for name,pair in composition.items()};new={name:pair[1]for name,pair in composition.items()}
+    for name in mechanism.HISTORY_PROFILE_SOURCE_POLICY_FILES:old[name]=new[name]='f'*64
+    review={'optimizer_policy':mechanism.HISTORY_PROFILE_POLICY,'old_code':old,'new_code':new,
+        'identity':{'model_config':{'history_reasoning_policy':'keep'}},'fresh_policy_capacity_required':True,
+        'optimizer_state_unchanged':True,'metadata_extra_bytes':64<<20,
+        'ordinary_parameters':[{'name':'rows','shape':[4,1024],'dtype':'torch.float32'}]}
+    if mutation=='old-module':old['model/native_model.py']='0'*64
+    elif mutation=='new-module':new['model/native_model.py']='0'*64
+    elif mutation=='missing-module':new.pop('serve/engine.py')
+    elif mutation=='numerical-neighbor':new['model/shared_state.py']='0'*64
+    elif mutation=='source-parser':new[mechanism.HISTORY_PROFILE_SOURCE_POLICY_FILES[0]]='0'*64
+    elif mutation=='objective':review['identity']['objective']={'kind':'policy'}
+    elif mutation=='missing-profile':review['identity']['model_config'].clear()
+    elif mutation=='missing-policy-gate':review['fresh_policy_capacity_required']=False
+    if mutation:
+        with pytest.raises(ValueError):mechanism._history_profile_contract(review)
+    else:
+        mechanism._history_profile_contract(review)
+        assert mechanism._memory_allowance(review)==64<<20
+        assert mechanism.allowed_changes(mechanism.HISTORY_PROFILE_POLICY)==set(composition)
+        # Already adopted one-file progress-copy optimization is not reverted.
+        old['train/native_continuation.py']=new['train/native_continuation.py']
+        mechanism._history_profile_contract(review)
