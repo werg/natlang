@@ -415,6 +415,117 @@ def combine_capacity_proofs(out, proofs, *, identity, code_sha, checkpoint_sha25
     return certificate
 
 
+def _materialize_preference_capacity_request(source, objective, descriptor, *, identity,
+                                              runtime_code_sha256, request_path):
+    """Bind one prepared whole-pair capacity case to the already restored trainer.
+
+    The descriptor selects an exact source pair and records its measured whole
+    graph geometry. Runtime/checkpoint identity is deliberately supplied by the
+    live trainer, never copied from an earlier ordinary-SFT certificate.
+    """
+    from ..common.hashing import canonical_json_sha256_hex
+    from ..common.jsonio import write_json_durable
+    from ..train.native_resident import binding, _source_witness
+    reference = descriptor.get('source')
+    if not isinstance(reference, dict) or set(reference) != {'path', 'sha256'}:
+        raise ValueError('preference capacity descriptor needs an exact source-manifest binding')
+    if binding(source.path) != reference:
+        raise ValueError('preference capacity descriptor source differs from the restored stage input')
+    expected_objective = descriptor.get('objective')
+    if not isinstance(expected_objective, dict) or expected_objective != objective.binding():
+        raise ValueError('preference capacity descriptor objective differs from the restored stage objective')
+    case = descriptor.get('case')
+    if not isinstance(case, dict) or not isinstance(case.get('id'), str):
+        raise ValueError('preference capacity descriptor needs one exact pair id')
+    indices = [index for index, entry in enumerate(source.entries) if entry.get('id') == case['id']]
+    if len(indices) != 1:
+        raise ValueError('preference capacity pair id is absent or duplicated in the restored source')
+    index = indices[0]
+    entry = source.entries[index]
+    objective_row = objective.rows.get(case['id'])
+    if not isinstance(case.get('graph_sha256'), str) or not isinstance(objective_row, dict) or \
+            objective_row.get('graph_sha256') != case['graph_sha256']:
+        raise ValueError('preference capacity pair graph differs from the exact objective row')
+    example = next(source.iter_indices([index]))
+    actual_geometry = {'forward_tokens': example.plan.token_count,
+                       'kv_slots': len(example.plan.slot_sources)}
+    if case.get('geometry') != actual_geometry:
+        raise ValueError('preference capacity pair geometry differs from the parsed whole graph')
+    if example.split != 'train' or case.get('split') != 'train':
+        raise ValueError('preference capacity case must be a complete training pair')
+    objective.forward_inputs({'examples': [example]})
+    if case['id'] not in objective.rows:
+        raise ValueError('preference capacity case is absent from the exact objective rows')
+    reference_case = descriptor.get('numerical_reference')
+    if not isinstance(reference_case, dict) or not isinstance(reference_case.get('id'), str):
+        raise ValueError('preference capacity descriptor needs one exact numerical-reference pair')
+    reference_indices = [index for index, row in enumerate(source.entries)
+                         if row.get('id') == reference_case['id']]
+    if len(reference_indices) != 1:
+        raise ValueError('preference numerical-reference id is absent or duplicated in the restored source')
+    reference_index = reference_indices[0]
+    reference_entry = source.entries[reference_index]
+    reference_objective_row = objective.rows.get(reference_case['id'])
+    if (not isinstance(reference_case.get('graph_sha256'), str)
+            or not isinstance(reference_objective_row, dict)
+            or reference_objective_row.get('graph_sha256') != reference_case['graph_sha256']):
+        raise ValueError('preference numerical-reference graph differs from the exact objective row')
+    reference_example = next(source.iter_indices([reference_index]))
+    reference_geometry = {'forward_tokens': reference_example.plan.token_count,
+                          'kv_slots': len(reference_example.plan.slot_sources)}
+    if (reference_example.split != 'train' or reference_case.get('split') != 'train'
+            or reference_case.get('geometry') != reference_geometry):
+        raise ValueError('preference numerical reference must be an exact complete training pair')
+    objective.forward_inputs({'examples': [reference_example]})
+    if reference_case['id'] not in objective.rows:
+        raise ValueError('preference numerical reference is absent from the exact objective rows')
+    request = {
+        'schema': 'natlang.native-memory-qualification-request/1',
+        'identity': identity,
+        'runtime_code_sha256': runtime_code_sha256,
+        'objective': objective.binding(),
+        'source': binding(source.path),
+        'indexes': _source_witness(source),
+        'split': 'train',
+        'cases': [{'index': index, 'id': entry['id'], 'binding': entry['binding']}],
+        'reference': {'index': reference_index, 'id': reference_entry['id'],
+                      'binding': reference_entry['binding']},
+    }
+    request_path = Path(request_path)
+    request_path.parent.mkdir(parents=True, exist_ok=True)
+    if request_path.exists():
+        if json.loads(request_path.read_text()) != request:
+            raise ValueError('durable preference capacity request differs from this live restored stage')
+    else:
+        write_json_durable(request_path, request)
+    return binding(request_path)
+
+
+def _resolve_memory_qualification(reference, *, model, optimizer, train, roles, config, args,
+                                  backend, objective):
+    """Resolve an opt-in pair-case descriptor into the ordinary capacity request.
+
+    All existing prepared requests pass through unchanged. This descriptor
+    path only constructs request metadata after the actual objective, tokenizer,
+    source index, restored configuration and backend are live.
+    """
+    from ..train.native_resident import bound, binding, code_inventory
+    from ..common.hashing import canonical_json_sha256_hex
+    descriptor_path = bound(reference)
+    descriptor = json.loads(descriptor_path.read_text())
+    if descriptor.get('schema') != 'natlang.native-preference-capacity-case/1':
+        return reference
+    if objective is None or getattr(objective, 'kind', None) != 'native-offline-pairwise':
+        raise ValueError('preference capacity case requires the actual offline pairwise objective')
+    package = Path(__file__).resolve().parents[1]
+    runtime_code_sha = canonical_json_sha256_hex(code_inventory(package))
+    identity = capacity_identity(config, args, backend)
+    request_path = (Path(args.out) / 'memory-qualification-requests' /
+                    descriptor_path.stem / 'request.json')
+    return _materialize_preference_capacity_request(train, objective, descriptor,
+        identity=identity, runtime_code_sha256=runtime_code_sha, request_path=request_path)
+
+
 def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sha256,objective=None):
     """Independent source cohorts share one restored parent and retain each pass.
 
@@ -424,13 +535,24 @@ def run_prepared(model,optimizer,train,roles,config,args,*,backend,checkpoint_sh
     """
     requests=json.loads(args.memory_qualification)
     if isinstance(requests,dict):
-        return _run_one_prepared(model,optimizer,train,roles,config,args,
-            backend=backend,checkpoint_sha256=checkpoint_sha256,objective=objective)
+        original=args.memory_qualification
+        request=_resolve_memory_qualification(requests,model=model,optimizer=optimizer,train=train,
+            roles=roles,config=config,args=args,backend=backend,objective=objective)
+        try:
+            args.memory_qualification=json.dumps(request)
+            return _run_one_prepared(model,optimizer,train,roles,config,args,
+                backend=backend,checkpoint_sha256=checkpoint_sha256,objective=objective)
+        finally:
+            args.memory_qualification=original
     if not isinstance(requests,list) or not requests:
         raise ValueError('memory qualification needs a binding or nonempty ordered bindings')
     original=args.memory_qualification;checks=[]
     try:
+        resolved=[]
         for request in requests:
+            resolved.append(_resolve_memory_qualification(request,model=model,optimizer=optimizer,train=train,
+                roles=roles,config=config,args=args,backend=backend,objective=objective))
+        for request in resolved:
             args.memory_qualification=json.dumps(request)
             checks.append(_run_one_prepared(model,optimizer,train,roles,config,args,
                 backend=backend,checkpoint_sha256=checkpoint_sha256,objective=objective))

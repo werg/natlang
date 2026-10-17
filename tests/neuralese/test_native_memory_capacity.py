@@ -173,6 +173,101 @@ def test_memory_request_is_strict_bound_recipe_metadata():
             validate_stage_parameters('native_state_sft',{'memory_qualification':bad})
 
 
+def test_preference_capacity_descriptor_resolves_from_live_source_and_objective(tmp_path,monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.eval import native_memory as memory
+    from natlang_neuralese.train import native_resident as resident
+
+    manifest=tmp_path/'train-sources.json';manifest.write_text('{}\n')
+    source=SimpleNamespace(path=manifest,entries=[{'id':'pair-id','binding':{'sha256':'b'*64}},
+        {'id':'small-reference','binding':{'sha256':'e'*64}}])
+    examples_by_index={0:SimpleNamespace(id='pair-id',split='train',plan=SimpleNamespace(token_count=94071,slot_sources=(1,)*94071)),
+        1:SimpleNamespace(id='small-reference',split='train',plan=SimpleNamespace(token_count=12,slot_sources=(1,)*10))}
+    source.iter_indices=lambda indices: iter([examples_by_index[index] for index in indices])
+    monkeypatch.setattr(resident,'_source_witness',lambda current:{'source':resident.binding(manifest),'indexes':[]})
+
+    objective=SimpleNamespace(kind='native-offline-pairwise',rows={'pair-id':{'graph_sha256':'b'*64},
+        'small-reference':{'graph_sha256':'e'*64}},
+        binding=lambda:{'kind':'native-offline-pairwise','sha256':'c'*64,'beta':0.1,'margin':0.0},
+        forward_inputs=lambda context:{})
+    descriptor={'schema':'natlang.native-preference-capacity-case/1',
+        'source':resident.binding(manifest),'objective':objective.binding(),
+        'case':{'id':'pair-id','graph_sha256':'b'*64,'split':'train',
+                'geometry':{'forward_tokens':94071,'kv_slots':94071}},
+        'numerical_reference':{'id':'small-reference','graph_sha256':'e'*64,'split':'train',
+                'geometry':{'forward_tokens':12,'kv_slots':10}}}
+    request_path=tmp_path/'requests'/'request.json'
+    result=memory._materialize_preference_capacity_request(source,objective,descriptor,
+        identity={'checkpoint':'actual'},runtime_code_sha256='d'*64,request_path=request_path)
+    request=json.loads(request_path.read_text())
+    assert result==resident.binding(request_path)
+    assert request['identity']=={'checkpoint':'actual'}
+    assert request['runtime_code_sha256']=='d'*64
+    assert request['cases']==[{'index':0,'id':'pair-id','binding':source.entries[0]['binding']}]
+    assert request['reference']=={'index':1,'id':'small-reference','binding':source.entries[1]['binding']}
+    assert request['objective']==objective.binding()
+
+
+@pytest.mark.parametrize('change',[
+    {'source':{'path':'/elsewhere','sha256':'e'*64}},
+    {'objective':{'kind':'native-offline-pairwise','sha256':'f'*64,'beta':0.1,'margin':0.0}},
+    {'case':{'id':'missing-id','binding':{'sha256':'b'*64},'split':'train',
+             'geometry':{'forward_tokens':94071,'kv_slots':94071}}},
+    {'case':{'id':'pair-id','graph_sha256':'e'*64,'split':'train',
+             'geometry':{'forward_tokens':94071,'kv_slots':94071}}},
+    {'case':{'id':'pair-id','graph_sha256':'b'*64,'split':'train',
+             'geometry':{'forward_tokens':94070,'kv_slots':94071}}},
+    {'case':{'id':'pair-id','graph_sha256':'b'*64,'split':'test',
+             'geometry':{'forward_tokens':94071,'kv_slots':94071}}},
+    {'numerical_reference':{'id':'missing-id','graph_sha256':'b'*64,'split':'train',
+             'geometry':{'forward_tokens':94071,'kv_slots':94071}}},
+    {'numerical_reference':{'id':'pair-id','graph_sha256':'f'*64,'split':'train',
+             'geometry':{'forward_tokens':94071,'kv_slots':94071}}},
+])
+def test_preference_capacity_descriptor_fails_closed_on_changed_bindings(tmp_path,monkeypatch,change):
+    from types import SimpleNamespace
+    from natlang_neuralese.eval import native_memory as memory
+    from natlang_neuralese.train import native_resident as resident
+    manifest=tmp_path/'train-sources.json';manifest.write_text('{}\n')
+    source=SimpleNamespace(path=manifest,entries=[{'id':'pair-id','binding':{'sha256':'b'*64}}])
+    example=SimpleNamespace(id='pair-id',split='train',plan=SimpleNamespace(token_count=94071,slot_sources=(1,)*94071))
+    source.iter_indices=lambda indices: iter([example] if indices==[0] else [])
+    monkeypatch.setattr(resident,'_source_witness',lambda current:{'indexes':[]})
+    objective=SimpleNamespace(kind='native-offline-pairwise',rows={'pair-id':{'graph_sha256':'b'*64}},
+        binding=lambda:{'kind':'native-offline-pairwise','sha256':'c'*64,'beta':0.1,'margin':0.0},
+        forward_inputs=lambda context:{})
+    descriptor={'schema':'natlang.native-preference-capacity-case/1','source':resident.binding(manifest),
+        'objective':objective.binding(),'case':{'id':'pair-id','graph_sha256':'b'*64,
+        'split':'train','geometry':{'forward_tokens':94071,'kv_slots':94071}},
+        'numerical_reference':{'id':'pair-id','graph_sha256':'b'*64,
+        'split':'train','geometry':{'forward_tokens':94071,'kv_slots':94071}}}
+    descriptor.update(change)
+    with pytest.raises(ValueError):
+        memory._materialize_preference_capacity_request(source,objective,descriptor,
+            identity={},runtime_code_sha256='d'*64,request_path=tmp_path/'request.json')
+    assert not (tmp_path/'request.json').exists()
+
+
+def test_opt_in_preference_descriptor_uses_standard_runner_then_restores_argument(tmp_path,monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from natlang_neuralese.eval import native_memory as memory
+    descriptor={'schema':'natlang.native-preference-capacity-case/1','path':'descriptor'}
+    resolved={'path':'/prepared/request.json','sha256':'a'*64}
+    args=SimpleNamespace(memory_qualification=json.dumps(descriptor))
+    seen=[]
+    monkeypatch.setattr(memory,'_resolve_memory_qualification',lambda reference,**kwargs:resolved)
+    def run(*unused,**kwargs):
+        seen.append(json.loads(args.memory_qualification))
+        return {'passed':True}
+    monkeypatch.setattr(memory,'_run_one_prepared',run)
+    result=memory.run_prepared(None,None,None,None,{},args,backend=None,checkpoint_sha256='b'*64)
+    assert result=={'passed':True}
+    assert seen==[resolved]
+    assert json.loads(args.memory_qualification)==descriptor
+
+
 def test_default_capacity_check_retains_qualified_nonprefix_packer_signature(monkeypatch):
     from natlang_neuralese.train import native_state_sft
     original=native_state_sft.packed_graph_loss
@@ -188,9 +283,14 @@ def test_default_capacity_check_retains_qualified_nonprefix_packer_signature(mon
 
 def test_later_novel_oom_retains_independently_qualified_cohort_capacity(tmp_path,monkeypatch):
     import json
+    from pathlib import Path
     from natlang_neuralese.eval import native_memory as memory
+    from natlang_neuralese.train.native_resident import binding
     model,optimizer,train,roles,config,args=prepared_fixture(tmp_path,monkeypatch)
-    first=json.loads(args.memory_qualification);second={**first,'path':'/second-request.json'}
+    first=json.loads(args.memory_qualification);second_path=tmp_path/'second-request.json'
+    second_path.write_text(json.dumps({**json.loads(Path(first['path']).read_text()),
+        'cohort':'second exact source cohort'}))
+    second=binding(second_path)
     args.memory_qualification=json.dumps([first,second]);original=args.memory_qualification;seen=[]
     def cohort(*a,**kwargs):
         seen.append(json.loads(args.memory_qualification))
