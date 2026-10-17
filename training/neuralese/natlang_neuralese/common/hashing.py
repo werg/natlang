@@ -113,20 +113,49 @@ def _cached_file_digest(cache, key):
             return None
 
 
-def sha256_file_hex_cached(path: str | os.PathLike[str]) -> str:
-    """``sha256_file_hex`` without re-reading a file already hashed: verified digests are cached by (realpath, size,
-    mtime_ns) in ``~/.cache/natlang/sha256-cache.jsonl`` (NATLANG_HASH_CACHE), and a symlink left by the archive mover
-    takes the digest its receipt recorded. A resume must never re-read a 47 GB predecessor state from the HDD
-    (v4 resume 2026-10-12: a 2 h stall at 7 MB/s)."""
+def sha256_file_hex_cached(path: str | os.PathLike[str], *, trust_archive_receipt: bool = True) -> str:
+    """Return a cached digest, with an opt-in content-verified cache identity.
+
+    Existing callers retain the archive-receipt and legacy cache behavior. A
+    caller that sets ``trust_archive_receipt=False`` gets a cache keyed by the
+    exact device/inode/size/mtime/ctime tuple; cache misses hash the bytes through
+    one descriptor and reject changes observed during the read. This mode catches
+    same-size rewrites even when mtime is restored, without turning prior
+    checkpoint cache entries into expensive cache misses.
+    """
     import json
     real = os.path.realpath(path)
     status = os.stat(real)
-    key = f"{real}|{status.st_size}|{status.st_mtime_ns}"
+    signature = (status.st_dev, status.st_ino, status.st_size,
+                 status.st_mtime_ns, status.st_ctime_ns)
+    key = (f"content|{real}|{status.st_dev}|{status.st_ino}|{status.st_size}|{status.st_mtime_ns}|{status.st_ctime_ns}"
+           if not trust_archive_receipt else f"{real}|{status.st_size}|{status.st_mtime_ns}")
     cache = _hash_cache_path()
     cached = _cached_file_digest(cache, key)
+    if cached is not None and not trust_archive_receipt:
+        current = os.stat(real)
+        if (current.st_dev, current.st_ino, current.st_size,
+                current.st_mtime_ns, current.st_ctime_ns) != signature:
+            raise RuntimeError(f"file changed while reusing cached digest: {real}")
+        return cached
     if cached is not None:
         return cached
-    digest = _archive_receipt_digest(path, real, status.st_size) or sha256_file_hex(real)
+    digest = _archive_receipt_digest(path, real, status.st_size) if trust_archive_receipt else None
+    if digest is None:
+        hasher = hashlib.sha256()
+        with open(real, "rb") as stream:
+            before = os.fstat(stream.fileno())
+            if (before.st_dev, before.st_ino, before.st_size,
+                    before.st_mtime_ns, before.st_ctime_ns) != signature:
+                raise RuntimeError(f"file changed before hashing: {real}")
+            for chunk in iter(lambda: stream.read(FILE_CHUNK_BYTES), b""):
+                hasher.update(chunk)
+            after = os.fstat(stream.fileno())
+        current = os.stat(real)
+        if any((item.st_dev, item.st_ino, item.st_size, item.st_mtime_ns, item.st_ctime_ns) != signature
+               for item in (after, current)):
+            raise RuntimeError(f"file changed while hashing: {real}")
+        digest = hasher.hexdigest()
     try:
         cache.parent.mkdir(parents=True, exist_ok=True)
         with open(cache, "a") as handle:

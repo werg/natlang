@@ -3,6 +3,7 @@ comes from its archive receipt or the archive manifest (v4 resume 2026-10-12: a 
 import hashlib
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -28,6 +29,79 @@ def test_unchanged_files_hash_once_and_changes_rehash(tmp_path, monkeypatch, no_
     data.write_bytes(b'abcd')
     os.utime(data, ns=(1, 2))
     assert hashing.sha256_file_hex_cached(data) == hashlib.sha256(b'abcd').hexdigest()
+
+
+def test_same_size_rewrite_with_restored_mtime_invalidates_content_cache(tmp_path, monkeypatch):
+    monkeypatch.setenv('NATLANG_HASH_CACHE', str(tmp_path / 'cache.jsonl'))
+    data = tmp_path / 'source.zst'
+    data.write_bytes(b'original')
+    original = hashing.sha256_file_hex_cached(data, trust_archive_receipt=False)
+    status = data.stat()
+    data.write_bytes(b'modified')
+    os.utime(data, ns=(status.st_atime_ns, status.st_mtime_ns))
+    assert data.stat().st_ctime_ns != status.st_ctime_ns
+    assert hashing.sha256_file_hex_cached(data, trust_archive_receipt=False) == hashlib.sha256(b'modified').hexdigest()
+    assert hashing.sha256_file_hex_cached(data, trust_archive_receipt=False) != original
+
+
+def test_replacing_inode_with_identical_bytes_does_not_reuse_old_cache_identity(tmp_path, monkeypatch):
+    monkeypatch.setenv('NATLANG_HASH_CACHE', str(tmp_path / 'cache.jsonl'))
+    data = tmp_path / 'source'
+    data.write_bytes(b'same')
+    hashing.sha256_file_hex_cached(data, trust_archive_receipt=False)
+    original_inode = data.stat().st_ino
+    replacement = tmp_path / 'replacement'
+    replacement.write_bytes(b'same')
+    replacement.replace(data)
+    assert data.stat().st_ino != original_inode
+    # The exact new object is hashed, even though the resulting digest matches.
+    cache=tmp_path/'cache.jsonl'
+    before_keys={json.loads(line)['key'] for line in cache.read_text().splitlines()}
+    assert hashing.sha256_file_hex_cached(data, trust_archive_receipt=False) == hashlib.sha256(b'same').hexdigest()
+    after_keys={json.loads(line)['key'] for line in cache.read_text().splitlines()}
+    assert len(after_keys-before_keys)==1
+
+
+def test_cached_content_mode_does_not_accept_archive_sidecar_as_content_hash(tmp_path, monkeypatch):
+    monkeypatch.setenv('NATLANG_HASH_CACHE', str(tmp_path / 'cache.jsonl'))
+    data = tmp_path / 'source'
+    data.write_bytes(b'actual')
+    (tmp_path / 'source.archived.json').write_text(json.dumps({'dest':str(data),'bytes':6,'sha256':'f'*64}))
+    assert hashing.sha256_file_hex_cached(data, trust_archive_receipt=False) == hashlib.sha256(b'actual').hexdigest()
+
+
+def test_symlink_retarget_uses_new_content_object(tmp_path, monkeypatch):
+    monkeypatch.setenv('NATLANG_HASH_CACHE', str(tmp_path / 'cache.jsonl'))
+    first=tmp_path/'first';second=tmp_path/'second';link=tmp_path/'source'
+    first.write_bytes(b'one');second.write_bytes(b'two')
+    link.symlink_to(first)
+    assert hashing.sha256_file_hex_cached(link,trust_archive_receipt=False)==hashlib.sha256(b'one').hexdigest()
+    link.unlink();link.symlink_to(second)
+    assert hashing.sha256_file_hex_cached(link,trust_archive_receipt=False)==hashlib.sha256(b'two').hexdigest()
+
+
+def test_content_hash_rejects_mutation_during_read(tmp_path, monkeypatch):
+    monkeypatch.setenv('NATLANG_HASH_CACHE', str(tmp_path / 'cache.jsonl'))
+    data=tmp_path/'large';data.write_bytes(b'abcdefgh')
+    original_open=open
+    class RacingReader:
+        def __init__(self,stream):self.stream=stream;self.changed=False
+        def __enter__(self):return self
+        def __exit__(self,*args):return self.stream.__exit__(*args)
+        def fileno(self):return self.stream.fileno()
+        def read(self,count):
+            chunk=self.stream.read(count)
+            if not self.changed:
+                self.changed=True
+                data.write_bytes(b'ABCDEFGH')
+            return chunk
+    def racing_open(path,*args,**kwargs):
+        stream=original_open(path,*args,**kwargs)
+        return RacingReader(stream) if Path(path)==data else stream
+    monkeypatch.setattr(hashing,'open',racing_open,raising=False)
+    monkeypatch.setattr(hashing,'FILE_CHUNK_BYTES',2)
+    with pytest.raises(RuntimeError,match='changed while hashing'):
+        hashing.sha256_file_hex_cached(data,trust_archive_receipt=False)
 
 
 def test_archived_state_digest_comes_from_its_receipt_or_the_archive_manifest(tmp_path, monkeypatch, no_reads):

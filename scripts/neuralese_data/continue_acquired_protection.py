@@ -53,12 +53,14 @@ def verify_certificate(path, *, audit_sha256=None):
     return value
 
 
-def verify_protection_transition(old_path, new_path):
+def verify_protection_transition(old_path, new_path, *, closure_receipt_path=None,
+                                force_full_validation=False):
     """One exact eligibility transition for existing audits and first-time audits."""
     old_path, new_path = Path(old_path), Path(new_path)
     old, new = current_protection(old_path), current_protection(new_path)
     verify_protection_sets(old, new)
-    return old, new, verify_global_source_closure(new_path, new)
+    return old, new, verify_global_source_closure(new_path, new,
+        receipt_path=closure_receipt_path, force_full_validation=force_full_validation)
 
 
 def verify_protection_sets(old, new):

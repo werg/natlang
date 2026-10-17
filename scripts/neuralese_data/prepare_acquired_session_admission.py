@@ -7,7 +7,8 @@ import json
 import os
 from pathlib import Path
 
-from natlang_neuralese.common.hashing import canonical_json_sha256_hex, sha256_file_hex
+from natlang_neuralese.common.hashing import (
+    canonical_json_sha256_hex, sha256_file_hex, sha256_file_hex_cached)
 from natlang_neuralese.common.jsonio import write_json_durable
 from scripts.neuralese_data.conversion_output_lease import acquire_output_lease
 from natlang_neuralese.data.native_graph import parse_graph
@@ -29,6 +30,16 @@ def bound(path, binding):
     return path
 
 
+def _closure_artifact(path, binding):
+    """Content-hash a closure input through the race-checked shared cache."""
+    path = Path(path).resolve(strict=True)
+    digest = sha256_file_hex_cached(path, trust_archive_receipt=False)
+    size = path.stat().st_size
+    if digest != binding['sha256'] or ('bytes' in binding and size != binding['bytes']):
+        raise ValueError('immutable acquired closure artifact changed: ' + str(path))
+    return path, digest, size
+
+
 def decision_contract(bindings):
     """Checkout location is observed metadata; exact hold filenames/bytes bind policy."""
     return sorted((Path(item['path']).name, item['sha256'], item['bytes'], item['kind']) for item in bindings)
@@ -48,8 +59,8 @@ def acquired_source_closure(path, protection):
     inherited = manifest.get('inherited_source_components')
     if inherited:
         parent = Path(path).parent
-        component_path = bound(parent / inherited['components']['path'], inherited['components'])
-        projection_path = bound(parent / inherited['projection']['path'], inherited['projection'])
+        component_path, _, _ = _closure_artifact(parent / inherited['components']['path'], inherited['components'])
+        projection_path, _, _ = _closure_artifact(parent / inherited['projection']['path'], inherited['projection'])
         projection = json.loads(projection_path.read_text())
         proof = projection.get('acquired_source_group_closure') or {}
         original = next((item for item in projection['files']
@@ -62,10 +73,10 @@ def acquired_source_closure(path, protection):
             raise ValueError('inherited acquired components differ from their qualified parent projection')
         group_rows.extend(inherited_rows)
     for binding in bindings:
-        export_path = bound(binding['path'], binding)
+        export_path, _, _ = _closure_artifact(binding['path'], binding)
         if export_path in seen: raise ValueError('global source closure repeats an export receipt')
         seen.add(export_path); export = json.loads(export_path.read_text())
-        source = bound(export_path.parent / 'full-trajectories.jsonl.zst',
+        source, _, _ = _closure_artifact(export_path.parent / 'full-trajectories.jsonl.zst',
             {'sha256': binding['source_sha256']})
         if export['outputs'][source.name] != binding['source_sha256']:
             raise ValueError('global source export and closure disagree on immutable session bytes')
@@ -76,6 +87,9 @@ def acquired_source_closure(path, protection):
                 raise ValueError('global source closure contains an undeclared split')
             if trajectory['split'] != 'train': held.update(trajectory['split_groups'])
             group_rows.append(trajectory['split_groups'])
+        # Reject a source mutation that raced the streaming parse, even when it
+        # left the number of decoded sessions unchanged.
+        _closure_artifact(source, {'sha256': binding['source_sha256']})
         if rows != export['complete_sessions']: raise ValueError('global source closure lost session accounting')
         counts[export_path.parent.parent.name] += rows
     declared = set()
@@ -127,35 +141,47 @@ def _source_closure_artifacts(path, manifest):
     path = Path(path).resolve(strict=True)
     artifacts = {}
 
-    def add(candidate):
+    def checked_cached(candidate, binding=None):
         candidate = Path(candidate).resolve(strict=True)
-        artifacts[str(candidate)] = {'path': str(candidate), 'sha256': sha256_file_hex(candidate),
-                                     'bytes': candidate.stat().st_size}
+        digest = sha256_file_hex_cached(candidate, trust_archive_receipt=False)
+        size = candidate.stat().st_size
+        if binding is not None and (digest != binding['sha256']
+                                    or ('bytes' in binding and size != binding['bytes'])):
+            raise ValueError('acquired closure artifact changed: ' + str(candidate))
+        return candidate, digest, size
+
+    def add(candidate, *, digest=None, size=None, binding=None):
+        if digest is None or size is None:
+            candidate, digest, size = checked_cached(candidate, binding)
+        else:
+            candidate = Path(candidate).resolve(strict=True)
+        artifacts[str(candidate)] = {'path': str(candidate), 'sha256': digest, 'bytes': size}
 
     for item in manifest.get('files', []):
-        add(bound(path.parent / item['path'], item))
+        add(path.parent / item['path'], binding=item)
     component_name = manifest.get('source_group_components')
     if component_name is not None:
         component_binding = next((item for item in manifest.get('files', [])
                                   if item.get('path') == component_name), None)
         if component_binding is None:
             raise ValueError('source-group component inventory lacks an explicit manifest binding')
-        add(bound(path.parent / component_name, component_binding))
+        add(path.parent / component_name, binding=component_binding)
     inherited = manifest.get('inherited_source_components') or {}
     for item in inherited.values():
-        add(bound(path.parent / item['path'], item))
+        add(path.parent / item['path'], binding=item)
     bindings = manifest.get('normalized_export_bindings')
     if not isinstance(bindings, list) or not bindings:
         raise ValueError('acquired closure receipt needs the complete normalized export set')
     directories = set()
     for binding in bindings:
-        export_path = bound(binding['path'], binding)
+        export_path, export_digest, export_size = checked_cached(binding['path'], binding)
         export = json.loads(export_path.read_text())
-        source = bound(export_path.parent / 'full-trajectories.jsonl.zst',
-                       {'sha256': binding['source_sha256']})
+        source, source_digest, source_size = checked_cached(
+            export_path.parent / 'full-trajectories.jsonl.zst', {'sha256': binding['source_sha256']})
         if export.get('outputs', {}).get(source.name) != binding['source_sha256']:
             raise ValueError('closure receipt source/export binding differs')
-        add(export_path); add(source)
+        add(export_path, digest=export_digest, size=export_size)
+        add(source, digest=source_digest, size=source_size)
         directories.add(export_path.parent.parent.resolve(strict=True))
     declared = set()
     for directory in directories:
@@ -175,14 +201,19 @@ def _source_closure_artifacts(path, manifest):
     return [artifacts[key] for key in sorted(artifacts)]
 
 
-def verify_global_source_closure(path, protection, *, receipt_path=None, write_receipt_path=None):
+def verify_global_source_closure(path, protection, *, receipt_path=None, write_receipt_path=None,
+                                force_full_validation=False):
     """Reject direct-key protection that misses a transitive source sibling."""
+    if force_full_validation:
+        receipt_path = None
     if receipt_path is not None and not Path(receipt_path).exists():
         receipt_path = Path(receipt_path)
         with acquire_output_lease(receipt_path.parent):
             if receipt_path.exists():
-                return verify_global_source_closure(path, protection, receipt_path=receipt_path)
-            return verify_global_source_closure(path, protection, write_receipt_path=receipt_path)
+                return verify_global_source_closure(path, protection, receipt_path=receipt_path,
+                                                    force_full_validation=force_full_validation)
+            return verify_global_source_closure(path, protection, write_receipt_path=receipt_path,
+                                                force_full_validation=force_full_validation)
     manifest_path = Path(path).resolve(strict=True)
     manifest = json.loads(manifest_path.read_text())
     if receipt_path is not None and Path(receipt_path).exists():
@@ -539,6 +570,10 @@ def main(argv=None):
     parser.add_argument('--native-root', type=Path, required=True, help='same cohort conversion directory')
     parser.add_argument('--protection', type=Path, required=True)
     parser.add_argument('--conversion-protection', type=Path, help='exact prior projection bound by unchanged numeric conversion receipts; eligibility uses --protection')
+    parser.add_argument('--source-closure-receipt', type=Path,
+                        help='prior full global source-closure receipt; all exact inputs are rechecked through the common hash cache')
+    parser.add_argument('--force-full-source-closure', action='store_true',
+                        help='ignore a closure receipt and stream-verify the complete normalized global source set')
     parser.add_argument('--id', required=True)
     parser.add_argument('--registry-path', required=True)
     parser.add_argument('--incremental-member', action='store_true',
@@ -557,11 +592,15 @@ def main(argv=None):
     protection = current_protection(args.protection)
     conversion_protection = None
     if args.conversion_protection is None:
-        global_accounting = verify_global_source_closure(args.protection, protection)
+        global_accounting = verify_global_source_closure(args.protection, protection,
+            receipt_path=args.source_closure_receipt,
+            force_full_validation=args.force_full_source_closure)
     else:
         from scripts.neuralese_data.continue_acquired_protection import verify_protection_transition
         conversion_protection, current, global_accounting = verify_protection_transition(
-            args.conversion_protection, args.protection)
+            args.conversion_protection, args.protection,
+            closure_receipt_path=args.source_closure_receipt,
+            force_full_validation=args.force_full_source_closure)
         if current != protection:
             raise ValueError('current eligibility protection changed before cohort audit')
     member_scope = None

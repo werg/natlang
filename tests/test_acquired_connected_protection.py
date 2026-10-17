@@ -1,5 +1,6 @@
 """Transitive source siblings remain protected across exports and machines."""
 import json
+import os
 from pathlib import Path
 import shutil
 
@@ -9,6 +10,7 @@ from natlang_neuralese.common.hashing import sha256_file_hex
 from natlang_neuralese.common.jsonio import write_jsonl_text
 from scripts.neuralese_data import build_verified_teacher_trajectory_graphs as teacher
 from scripts.neuralese_data.close_acquired_source_protection import project
+from scripts.neuralese_data import prepare_acquired_session_admission as admission
 from scripts.neuralese_data.prepare_acquired_session_admission import verify_global_source_closure
 from scripts.neuralese_data.splits import close_group_sets
 
@@ -102,10 +104,38 @@ def test_durable_source_closure_receipt_reuses_only_exact_current_inputs(tmp_pat
     receipt=tmp_path/'closure-receipt.json'
     expected=verify_global_source_closure(first,protected,receipt_path=receipt)
     assert receipt.exists()
+    monkeypatch.setattr(admission,'sessions',lambda *_:pytest.fail('receipt hit must not reparse global sessions'))
     assert verify_global_source_closure(first,protected,receipt_path=receipt)==expected
     source=tmp_path/'sources'/'D16'/'one'/'full-trajectories.jsonl.zst'
     with source.open('ab') as stream:stream.write(b'changed')
-    with pytest.raises(ValueError,match='immutable|input inventory'):
+    with pytest.raises(ValueError,match='immutable|input inventory|acquired closure artifact changed'):
+        verify_global_source_closure(first,protected,receipt_path=receipt)
+
+
+def test_force_full_closure_validation_ignores_cached_receipt(tmp_path,monkeypatch):
+    original=base(tmp_path,monkeypatch)
+    first=project(original,tmp_path/'closed')
+    protected=teacher.current_protection(first)
+    receipt=tmp_path/'closure-receipt.json'
+    expected=verify_global_source_closure(first,protected,write_receipt_path=receipt)
+    value=json.loads(receipt.read_text());value['accounting']['normalized_sessions']=999
+    receipt.write_text(json.dumps(value))
+    assert verify_global_source_closure(first,protected,receipt_path=receipt,
+        force_full_validation=True)==expected
+
+
+def test_cached_closure_receipt_rejects_same_size_source_rewrite_with_restored_mtime(tmp_path,monkeypatch):
+    original=base(tmp_path,monkeypatch)
+    first=project(original,tmp_path/'closed')
+    protected=teacher.current_protection(first)
+    receipt=tmp_path/'closure-receipt.json'
+    verify_global_source_closure(first,protected,write_receipt_path=receipt)
+    source=tmp_path/'sources'/'D16'/'one'/'full-trajectories.jsonl.zst'
+    status=source.stat();data=source.read_bytes()
+    replacement=bytes([data[0]^1])+data[1:]
+    source.write_bytes(replacement)
+    os.utime(source,ns=(status.st_atime_ns,status.st_mtime_ns))
+    with pytest.raises(ValueError,match='acquired closure artifact changed|input inventory'):
         verify_global_source_closure(first,protected,receipt_path=receipt)
 
 

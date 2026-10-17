@@ -264,3 +264,33 @@ path fallback only when the source-SHA path is absent. If both distinct paths
 contain receipts, it rejects the ambiguous join and requires one exact binding.
 This is an extension of the existing exact verifier, not a new source parser or
 training policy.
+
+## Reuse a verified global acquired-source closure
+
+Policy remains the existing rule: every source sibling in the current
+projection must be covered by the complete connected held/quality/pending
+closure before a member can be admitted. The optimization reuses only the
+durable result of that exact global check; it does not make a new eligibility
+decision.
+
+1. On the first full pass, stream every normalized session, reconstruct
+   connected groups, compare all three current protected sets, and write the
+   existing source-closure receipt with exact projection, policy/code,
+   accounting and input-artifact bindings.
+2. On later passes, re-read the current projection and its policy inputs, then
+   compare the complete artifact inventory against the receipt. Artifact
+   digests use the common checked hash cache in content mode: keys include the
+   resolved file object's device, inode, size, mtime and ctime, misses hash
+   through one descriptor, and pre/post descriptor and path identities must
+   match. Archive sidecar digests are not accepted as source-content hashes in
+   this mode. Changed metadata causes a fresh content read and digest compare;
+   a mismatch rejects reuse.
+3. The member-specific admission still performs its existing full source,
+   export, native-graph, tokenizer, split and decision checks.
+   `--force-full-source-closure` bypasses the receipt and reruns the global streaming closure
+   for explicit fresh validation.
+
+The hash cache is a performance aid after an actual byte hash, not authority by
+itself. Its current threat model covers ordinary filesystem mutation and races;
+it does not claim to detect privileged forgery of kernel-maintained ctime or
+inode metadata.
