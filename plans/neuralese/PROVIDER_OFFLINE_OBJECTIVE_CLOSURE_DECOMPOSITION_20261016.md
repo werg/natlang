@@ -35,3 +35,17 @@ Validation: 24 provider tests pass, including actual saved checkpoint history,
 pending sources, changed recursive member rejection, None-participant relocation
 and partial checkpoint inputs, alias-before-source ordering, wrong member sizes
 and a guard against payload read_bytes during metadata closure.
+
+## Task-evaluation disabled values and explicit command overrides (2026-10-17)
+
+Actual LF cycle2 request797ee failed before model launch because its ordinary
+trainer parameters contain the valid disabled task-eval empty string. The seed
+command explicitly overrides that with the protected packet; the closure must
+represent both forms correctly. This is exact dependency transport, not task or
+training policy. Reuse eval.task_cadence.parse_task_eval for disabled forms and
+specification validation. Enumerate top-level, trainer and seed parameters, plus
+literal --task-eval command arguments (including equals syntax). Resolve named
+placeholders from the same config instead of treating them as JSON. Bind every
+referenced packet/runtime; reject malformed or missing values and changed packet
+bytes. Preserve the sealed request, source/profile/optimizer/RNG/cursor and all
+numerical worker files. Exercise actual disabled-parameter/literal-override shape.

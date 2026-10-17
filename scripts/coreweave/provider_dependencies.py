@@ -197,10 +197,24 @@ def dependency_closure(request, *, namespace='/work/native-production'):
             if not path.is_absolute():path=proof.parent/path
             path=path.resolve(strict=True)
             bound({**evidence,'path':str(path)})
-        specifications = [value.get('task_eval'), (value.get('trainer_parameters') or {}).get('task_eval')]
+        from natlang_neuralese.eval.task_cadence import parse_task_eval
+        specifications = [value.get('task_eval'), (value.get('trainer_parameters') or {}).get('task_eval'),
+                          (value.get('seed_trainer_parameters') or {}).get('task_eval')]
+        for command_name in ('seed_command','learner_command'):
+            command=value.get(command_name) or []
+            for index,argument in enumerate(command):
+                if argument=='--task-eval':
+                    if index+1>=len(command):raise ValueError('provider task-eval command omitted its value')
+                    specification=command[index+1]
+                elif argument.startswith('--task-eval='):specification=argument.split('=',1)[1]
+                else:continue
+                if specification.startswith('{') and specification.endswith('}') and specification[1:-1].isidentifier():
+                    name=specification[1:-1]
+                    if name not in value:raise ValueError('provider task-eval command has an unbound placeholder')
+                    specification=value[name]
+                specifications.append(specification)
         for specification in specifications:
-            if isinstance(specification, str):
-                specification = json.loads(specification)
+            specification=parse_task_eval(specification)
             if specification:
                 bound(specification['packet'])
                 if specification.get('runtime'):

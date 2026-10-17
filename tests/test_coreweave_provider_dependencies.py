@@ -355,3 +355,41 @@ def test_checkpoint_participant_context_is_not_coalesced(tmp_path,monkeypatch):
     monkeypatch.setattr(CheckpointPolicy,'load',load)
     deps.dependency_closure({'config':config,'parent_checkpoint':reference},namespace=str(tmp_path))
     assert len(calls)==2
+
+
+@pytest.mark.parametrize('disabled',[None,'','null'])
+@pytest.mark.parametrize('key',['task_eval','trainer_parameters','seed_trainer_parameters'])
+def test_disabled_task_specs_match_shared_trainer_parser(tmp_path,disabled,key):
+    value={key:disabled}if key=='task_eval'else{key:{'task_eval':disabled}}
+    config=write(tmp_path/'config.json',value)
+    assert [r['path']for r in deps.dependency_closure({'config':config},namespace=str(tmp_path))['files']]==[config['path']]
+
+
+@pytest.mark.parametrize('location',['seed','literal','equals','placeholder'])
+def test_actual_empty_trainer_task_spec_retains_explicit_protected_override(tmp_path,location):
+    packet=write(tmp_path/'held.jsonl','exact protected packet')
+    root=tmp_path/'runtime';host=root/'ts-host';(host/'dist/teacher').mkdir(parents=True)
+    (host/'dist/teacher/cli.js').write_text('// exact built collector')
+    for path in(host/'package.json',root/'package.json',root/'package-lock.json'):path.write_text('{}')
+    reviews=root/'training/source-reviews';reviews.mkdir(parents=True)
+    for name in('holds.jsonl','family-holds.json','datasets.json'):(reviews/name).write_text('{}')
+    (host/'prelude.js').write_text('// exact protected runtime prelude')
+    specification=json.dumps({'packet':packet,'runtime':str(host)})
+    value={'trainer_parameters':{'task_eval':''}}
+    if location=='seed':value['seed_trainer_parameters']={'task_eval':specification}
+    elif location=='literal':value['seed_command']=['python','-m','trainer','--task-eval',specification]
+    elif location=='equals':value['learner_command']=['python','-m','trainer','--task-eval='+specification]
+    else:value.update(task_eval=specification,seed_command=['trainer','--task-eval','{task_eval}'])
+    config=write(tmp_path/'config.json',value)
+    closure=deps.dependency_closure({'config':config},namespace=str(tmp_path))
+    assert {r['path']for r in closure['files']}=={config['path'],packet['path']}
+    assert [a['path']for a in closure['assets']]==[str(host)]
+    assert closure['assets'][0]['inventory']==deps.task_runtime_inventory(host)
+    Path(packet['path']).write_text('changed protected bytes')
+    with pytest.raises(ValueError,match='dependency hash changed'):deps.dependency_closure({'config':config},namespace=str(tmp_path))
+
+
+@pytest.mark.parametrize('command',[['trainer','--task-eval'],['trainer','--task-eval','{'],['trainer','--task-eval','{missing_spec}']])
+def test_task_command_missing_or_malformed_spec_rejected_before_launch(tmp_path,command):
+    config=write(tmp_path/'config.json',{'seed_command':command})
+    with pytest.raises(ValueError):deps.dependency_closure({'config':config},namespace=str(tmp_path))
