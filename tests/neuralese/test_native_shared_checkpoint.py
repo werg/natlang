@@ -347,7 +347,12 @@ def test_legacy_recipe_backfill_uses_real_readiness_and_original_stage_source_po
     requirement['recipe_lineage_sha256']='a'*64
     for role in ('runtime_certificate','task_execution_receipt'):
         proof_path=Path(receipt[role]['path']);proof=json.loads(proof_path.read_text())
-        proof['native_identity']=identity;proof_path.write_text(json.dumps(proof))
+        proof['native_identity']=identity
+        if role=='runtime_certificate':
+            # This fixture rebinds synthetic evidence to the actual saved parent;
+            # the complete derivative proof has its own exact identity binding.
+            proof['complete_gradient_qualification']['native_identity']=identity
+        proof_path.write_text(json.dumps(proof))
         receipt[role]['sha256']=sha256_file_hex_cached(proof_path)
     report_path=Path(receipt['training_receipt']['path']);report=json.loads(report_path.read_text())
     report['checkpoint_sha256']=identity['checkpoint_sha256']
