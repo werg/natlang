@@ -1,0 +1,11 @@
+# Owned student checkpoint durability
+
+The owner policy is to keep the latest verified full recovery checkpoint for each student while useful training continues. A save is recoverable only after an independent immutable local pin and authenticated private full-object readback. Registered data, stage completion and quality readiness are separate decisions. Existing optimizer/RNG/source credits must survive every objective transition.
+
+1. Read the actual per-role cursor and explicitly bound owner argv. Exact SHA, one `--out`, resolved role-scoped paths and configured control-root custody determine eligible checkpoint files. Runtime-tagged control names remain explicitly role scoped.
+2. Under the existing per-role remote lease, observe changed files, copy independently, fsync the copied file, and inspect the snapshot with the existing restricted Torch reader. Require full optimizer/RNG/source receipts and use the saved top-level global step.
+3. Keep the new global-step pin immutable. Same-step different bytes reject; atomic publication and directory fsync complete local durability. Preserve a pending export across retries instead of copying or uploading it again.
+4. Run the configured existing private exporter. Accept only exact source/byte identity and independent full-object SHA readback, then atomically advance the role state. Existing private content export deduplication remains authoritative.
+5. Record sanitized failure classes and retry. A guardian owns only its role lease, files and export subprocess; it never signals a learner or changes recipes/cursors. Old guardians must be quiescent before replacing the owner.
+
+Policy remains this declared owner instruction. Python implements exact file/path/hash verifiers, leases, restricted metadata inspection, durability, SDK/CLI plumbing and retry state. This folds the reviewed live guardian mechanism into one shared CLI for both current monolithic native student checkpoint formats. Existing `shared_export.py` continues to own complete shared-global manifest lifecycle exports; a role checkpoint file is never substituted for a shared-global checkpoint.

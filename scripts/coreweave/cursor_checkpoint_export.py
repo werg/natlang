@@ -1,0 +1,156 @@
+"""Export owned full native student checkpoints without pausing training."""
+from __future__ import annotations
+import argparse
+import fcntl
+import hashlib
+import inspect
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import time
+
+
+def bound_output_checkpoint(reference,role,*,production_root='/work/native-production',control_root='/work/native-production/control'):
+    """Resolve one byte-bound owner output within its configured role namespace."""
+    if role not in ('lfm','mellum'):raise ValueError('unknown checkpoint role')
+    raw=pathlib.Path(reference['path']).read_bytes()
+    if hashlib.sha256(raw).hexdigest()!=reference['sha256']:raise ValueError('owner argv changed')
+    argv=json.loads(raw)
+    if not isinstance(argv,list) or argv.count('--out')!=1:raise ValueError('owner needs exactly one output')
+    index=argv.index('--out')
+    if index+1>=len(argv) or not isinstance(argv[index+1],str):raise ValueError('owner output is missing')
+    output=pathlib.Path(argv[index+1]).resolve()
+    standard=pathlib.Path(production_root)/('mellum21'if role=='mellum'else'lfm25')
+    allowed=pathlib.Path(reference.get('allowed_output_root',str(standard))).resolve()
+    if allowed!=standard:
+        if (allowed.parent!=pathlib.Path(control_root).resolve()
+                or re.fullmatch(re.escape(role)+r'(?:[0-9a-f]{3,40})?-.+',allowed.name)is None):
+            raise ValueError('configured control output belongs to another role')
+    if not output.is_relative_to(allowed):raise ValueError('owner output escapes configured root')
+    return output/'checkpoint.pt'
+
+
+REMOTE_SOURCE = "import pathlib,json,os,time,torch,subprocess,gc\nimport fcntl,uuid\nroot=pathlib.Path(ROOT);remote_lock=(root/f'{ROLE}-cursor-durable-export.lock').open('a');fcntl.flock(remote_lock,fcntl.LOCK_EX|fcntl.LOCK_NB);paths=set(root.glob(f'rounds/{ROLE}/production/round-*/learner/checkpoint.pt'))|set(root.glob(f'rounds/{ROLE}/cycles/*/supervised/*/learner/checkpoint.pt'))\nfor candidate in paths:\n if not candidate.resolve().is_relative_to(root.resolve()/'rounds'/ROLE):raise ValueError('canonical checkpoint escaped its role namespace')\ncursor_path=root/f'rounds/{ROLE}/cycle.json';cursor=json.loads(cursor_path.read_text())if cursor_path.exists()else {};c=cursor.get('current_checkpoint');c=c.get('path')if isinstance(c,dict)else c\nif EXTRA is not None:paths.add(bound_output_checkpoint(EXTRA,ROLE))\nif isinstance(c,str):\n p=pathlib.Path(c).resolve()\n if p.is_relative_to(root/f'rounds/{ROLE}'):paths.add(p)\nchanged=[]\nfor p in paths:\n if not p.is_file():continue\n s=p.stat();identity=[s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns]\n if KNOWN.get(str(p),{}).get('stat')!=identity:changed.append((s.st_mtime_ns,p,identity))\nupdates={};chosen=None\nfor _,p,identity in sorted(changed,reverse=True):\n available=int(next(x.split()[1]for x in pathlib.Path('/proc/meminfo').read_text().splitlines()if x.startswith('MemAvailable:')))*1024\n if available<MIN_AVAILABLE_BYTES:break\n # Copy first: atomic slot replacement may race, but the snapshot's own saved step is decisive.\n temp=pathlib.Path(PIN_DIRECTORY)/('.'+ROLE+'-cursor-observation-'+uuid.uuid4().hex+'.pt');temp.parent.mkdir(parents=True,exist_ok=True)\n try:\n  subprocess.run(['cp','--reflink=auto','--preserve=mode,timestamps','--',str(p),str(temp)],check=True);assert temp.stat().st_ino!=p.stat().st_ino\n  with temp.open('rb')as snapshot:os.fsync(snapshot.fileno())\n  with torch.serialization.safe_globals([torch.torch_version.TorchVersion]):value=torch.load(temp,map_location='cpu',mmap=True,weights_only=True)\n  training=value['training'];assert training['optimizer']and training['rng']and training['source_receipts'];step=int(value['step']);del value,training;gc.collect();updates[str(p)]={'stat':identity,'step':step}\n  if step>LAST:\n   target=temp.with_name(f'{ROLE}-native-checkpoint-step-'+str(step)+'.pt')\n   if target.exists():\n    import hashlib\n    assert target.stat().st_size==temp.stat().st_size and hashlib.file_digest(target.open('rb'),'sha256').hexdigest()==hashlib.file_digest(temp.open('rb'),'sha256').hexdigest(),'existing immutable step pin differs'\n    temp.unlink()\n   else:os.replace(temp,target)\n   fd=os.open(target.parent,os.O_DIRECTORY);os.fsync(fd);os.close(fd);chosen={'source':str(p),'pin':str(target),'step':step,'bytes':target.stat().st_size};break\n  temp.unlink()\n finally:\n  if temp.exists():temp.unlink()\nprint(json.dumps({'at':time.time(),'observations':updates,'chosen':chosen,'cursor_binding_only':c}))"
+
+
+def save(path, value):
+    path = pathlib.Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name+'.tmp-'+str(os.getpid()))
+    with temporary.open('w') as stream:
+        json.dump(value, stream, indent=2)
+        stream.flush(); os.fsync(stream.fileno())
+    os.replace(temporary, path)
+    fd = os.open(path.parent, os.O_DIRECTORY)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+
+
+def paths_for(directory, role):
+    directory = pathlib.Path(directory)
+    if role not in ('lfm', 'mellum'): raise ValueError('unknown checkpoint role')
+    return {'state': directory/f'coreweave-native-{role}-periodic-export-state-20261015.json',
+            'cache': directory/f'{role}-cursor-export-source-observations-20261017.json',
+            'pending': directory/f'{role}-cursor-export-pending-20261017.json',
+            'receipt': directory/f'{role}-cursor-current-private-receipt-20261017.json',
+            'error': directory/f'{role}-cursor-periodic-export-last-error-20261017.json'}
+
+
+def run_once(directory, role, *, observe, export):
+    """Recover a pending operation first; acknowledge only independent full GET."""
+    paths = paths_for(directory, role)
+    state = json.loads(paths['state'].read_text()) if paths['state'].exists() else {'last_verified_step': -1}
+    observed = json.loads(paths['cache'].read_text()) if paths['cache'].exists() else {}
+    if paths['pending'].exists():
+        chosen = json.loads(paths['pending'].read_text())
+        if chosen['step'] <= state['last_verified_step']:
+            paths['pending'].unlink()
+            return None
+    else:
+        result = observe(known=observed, last=state['last_verified_step'])
+        chosen = result['chosen']
+        if chosen: save(paths['pending'], chosen)
+        observed.update(result['observations']); save(paths['cache'], observed)
+    if not chosen: return None
+    receipt = export(chosen, paths['receipt'])
+    identity = receipt['identity']; verification = receipt['independent_verification']
+    if (receipt['source'] != chosen['pin'] or identity['bytes'] != chosen['bytes']
+            or verification.get('sha256') != identity['sha256']
+            or verification.get('bytes') != identity['bytes']
+            or re.fullmatch('[0-9a-f]{64}', identity['sha256']) is None):
+        raise ValueError('checkpoint exporter lacks exact independent full readback')
+    result = {'last_verified_step': chosen['step'], 'receipt': receipt, 'at': time.time(),
+              'source_authority': f'actual full optimizer/RNG checkpoint in canonical {role} model worker/cursor namespace',
+              'source': chosen['source']}
+    save(paths['state'], result)
+    paths['pending'].unlink()
+    fd = os.open(paths['pending'].parent, os.O_DIRECTORY)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+    return {'verified_step': chosen['step'], 'sha256': identity['sha256'], 'source': chosen['source']}
+
+
+def remote_code(*, role, root, known, last, extra, pin_directory, minimum_available_bytes):
+    return ('import pathlib,json,hashlib,re\n'+inspect.getsource(bound_output_checkpoint)+'\n'
+            +'ROLE='+repr(role)+'\nROOT='+repr(str(root))+'\nKNOWN='+repr(known)
+            +'\nLAST='+repr(last)+'\nEXTRA='+repr(extra)+'\nPIN_DIRECTORY='+repr(str(pin_directory))
+            +'\nMIN_AVAILABLE_BYTES='+repr(minimum_available_bytes)+'\n'+REMOTE_SOURCE)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--role', choices=('lfm', 'mellum'), required=True)
+    parser.add_argument('--sandbox-id', required=True)
+    parser.add_argument('--root', type=pathlib.Path, required=True)
+    parser.add_argument('--state-dir', type=pathlib.Path, required=True)
+    parser.add_argument('--export-command', required=True, help='JSON argv with {role} and {pin}')
+    parser.add_argument('--bound-output', help='JSON immutable argv binding and allowed_output_root')
+    parser.add_argument('--pin-directory', default='/work/production/durable-exports')
+    parser.add_argument('--minimum-available-bytes', type=int, default=16*1024**3)
+    parser.add_argument('--interval', type=float, default=120)
+    parser.add_argument('--once', action='store_true')
+    args = parser.parse_args(argv)
+    command = json.loads(args.export_command)
+    if not isinstance(command, list) or not command or any(not isinstance(x, str) for x in command):
+        parser.error('export command must be an explicit nonempty JSON argv')
+    if args.interval <= 0 or args.minimum_available_bytes < 0: parser.error('invalid polling/reserve')
+    extra = json.loads(args.bound_output) if args.bound_output else None
+    args.state_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        from . import cwctl
+    except ImportError:
+        import cwctl
+    cwctl.load_env_file(); cwctl.require_key()
+    lease = (args.state_dir/f'{args.role}-cursor-periodic-export-owner.lock').open('a')
+    fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    def observe(**kwargs):
+        code = remote_code(role=args.role, root=args.root, extra=extra,
+                           pin_directory=args.pin_directory, minimum_available_bytes=args.minimum_available_bytes, **kwargs)
+        result = cwctl.read_sandbox(args.sandbox_id, patience=60).exec(
+            ['python', '-c', code], timeout_seconds=600).result(timeout=690)
+        if result.returncode: raise RuntimeError('owned remote checkpoint observation failed: '+str(result.stderr)[-3000:])
+        return json.loads(result.stdout)
+    def export(chosen, receipt_path):
+        actual = [item.replace('{role}', args.role).replace('{pin}', chosen['pin']) for item in command]
+        subprocess.run(actual, check=True, env={**os.environ, 'CW_EXPORT_RECEIPT_FILE': str(receipt_path),
+                       'CW_EXPORT_SANDBOX_ID': args.sandbox_id, 'CW_EXPORT_VERIFY_REMOTE': '1'})
+        return json.loads(receipt_path.read_text())
+    while True:
+        try:
+            result = run_once(args.state_dir, args.role, observe=observe, export=export)
+            if result: print(json.dumps({'at': time.time(), **result}), flush=True)
+            if args.once: return 0
+            time.sleep(args.interval)
+        except Exception as error:
+            save(paths_for(args.state_dir,args.role)['error'], {'at':time.time(),'type':type(error).__name__,
+                'error':'source export retry; inspect owned unit log','traceback_class_only':True})
+            print(json.dumps({'at':time.time(),'retry':type(error).__name__}),flush=True)
+            if args.once: raise
+            time.sleep(min(60,args.interval))
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
