@@ -73,9 +73,18 @@ def _seed_quantum(config,record):
     return config
 
 
+def _validate_stage_quanta(value):
+    if (not isinstance(value,dict) or any(not isinstance(name,str)or not name
+            or type(updates)is not int or updates<=0 for name,updates in value.items())):
+        raise ValueError('supervised stage quanta require stage IDs and positive integer update cadences')
+    return dict(value)
+
+
 def _supervised_quantum(config,parameters):
-    if 'supervised_quantum_updates' in config:
-        quantum=config['supervised_quantum_updates']
+    mapping=_validate_stage_quanta(config.get('supervised_stage_quantum_updates',{}))
+    stage=parameters.get('stage_id',config.get('production_stage'))
+    quantum=mapping.get(stage,config.get('supervised_quantum_updates'))
+    if quantum is not None:
         # Existing trainer requires checkpoint/eval alignment. At most one
         # held evaluation per short quantum when the old cadence is longer.
         from ..train.native_state_sft import build_parser
@@ -97,6 +106,13 @@ def _scheduling_controls(config,declaration,plan_path,record,*,pending=False):
         config['supervised_quantum_updates']=declaration['supervised_quantum_updates']
         config['supervised_quantum_control']={'plan':binding(plan_path),
             'updates':declaration['supervised_quantum_updates']}
+    if 'supervised_stage_quantum_updates' in declaration:
+        mapping=_validate_stage_quanta(declaration['supervised_stage_quantum_updates'])
+        from ..train.recipe import resolve_recipe_data
+        ids={stage['id']for stage in resolve_recipe_data(config['production_recipe'])['stages']}
+        if set(mapping)-ids:raise ValueError('supervised stage quantum names an undeclared recipe stage')
+        config['supervised_stage_quantum_updates']=mapping
+        config['supervised_stage_quantum_control']={'plan':binding(plan_path),'updates':mapping}
     _seed_quantum(config,record)
     return config
 
@@ -107,6 +123,7 @@ def configure_model(plan_path,declaration,handoff,out):
     for key in ('rows_per_round','supervised_quantum_updates'):
         if key in declaration and (type(declaration[key]) is not int or declaration[key]<=0):
             raise ValueError(key+' must be a positive integer')
+    if 'supervised_stage_quantum_updates' in declaration:_validate_stage_quanta(declaration['supervised_stage_quantum_updates'])
     _task_cases(declaration)
     plan_path=Path(plan_path);out=Path(out);out.mkdir(parents=True,exist_ok=True)
     path=out/'config.json';verification=out/'bootstrap-verification.json'
@@ -217,6 +234,182 @@ def configure_model(plan_path,declaration,handoff,out):
     return path
 
 
+def _published_checkpoint_state(state,checkpoint):
+    """One publication rule for ordinary bridge and owned-operation commits."""
+    return {**state,'checkpoint':str(_bound(checkpoint)),'phase':'collect',
+            'actor_policy_pending_load':checkpoint['sha256']}
+
+
+def _supervised_stage_inventory(recipe,foundation_id):
+    from .native_supervised import MANDATORY_STAGE_KINDS
+    stages=[stage for stage in recipe['stages']
+            if stage['kind'] in MANDATORY_STAGE_KINDS and stage.get('admitted') is not False]
+    foundation=[stage for stage in stages if stage['id']==foundation_id]
+    if len(foundation)!=1 or len({stage['id']for stage in stages})!=len(stages):
+        raise ValueError('raw continuation lost its unique actual foundation recipe stage')
+    return [stage for stage in stages if stage['id']!=foundation_id]+foundation
+
+
+def _owned_operation_chain(operations,published,model_id,lineage):
+    """Authenticate completed finite work without decoding historical optimizers."""
+    from .native_raw_handoff import verify_handoff_metadata
+    from ..train.recipe import native_recipe_binding,resolve_recipe_data
+    prior=published;result=[]
+    for operation in operations:
+        record=verify_handoff_metadata(operation['handoff'])
+        receipt=json.loads(_bound(operation['receipt']).read_text())
+        intent=json.loads(_bound(record['intent']).read_text())
+        recipe_ref=receipt.get('recipe') or {}
+        recipe_path=_bound({'path':recipe_ref['path'],'sha256':recipe_ref.get('file_sha256',recipe_ref['sha256'])})
+        actual_recipe=native_recipe_binding(recipe_path,lineage)
+        stage_id=receipt.get('stage_id');recipe=resolve_recipe_data(recipe_path)
+        stages=[stage for stage in recipe['stages'] if stage['id']==stage_id]
+        boundary=receipt.get('continuation_boundary') or {}
+        updates=boundary.get('new_optimizer_updates')
+        checkpoint=record['checkpoint'];slot=record['checkpoint_pin']['original_slot']
+        if (receipt.get('schema')!='natlang.native-training-readiness/1'
+                or receipt.get('model_id')!=model_id or recipe_ref!=actual_recipe or len(stages)!=1
+                or (receipt.get('checkpoint') or {}).get('sha256')!=checkpoint['sha256']
+                or str(Path(receipt['checkpoint']['path']).resolve())!=slot['path']
+                or (receipt.get('native_identity') or {}).get('checkpoint_sha256')!=checkpoint['sha256']
+                or (receipt.get('continuation') or {}).get('checkpoint_sha256')!=prior['sha256']
+                or boundary.get('checkpoint_sha256')!=checkpoint['sha256']
+                or type(updates)is not int or updates<=0):
+            raise ValueError('owned operation lost its real parent/recipe/model/update ancestry')
+        matching=[]
+        for child in intent['children']:
+            argv=[part.decode()for part in bytes.fromhex(child['argv_hex']).split(b'\0')if part]
+            def argument(flag):
+                if argv.count(flag)!=1 or argv.index(flag)+1>=len(argv):return None
+                return argv[argv.index(flag)+1]
+            out=argument('--out');binding_arg=argument('--recipe-binding')
+            if (out and Path(out).resolve()==Path(operation['receipt']['path']).resolve().parent
+                    and argument('--stage-id')==stage_id and binding_arg
+                    and json.loads(binding_arg)==actual_recipe):matching.append(child)
+        if len(matching)!=1:
+            raise ValueError('owned operation receipt lacks its exact captured trainer invocation')
+        result.append({'handoff':operation['handoff'],'receipt':operation['receipt'],
+            'parent':prior,'checkpoint':checkpoint,'stage_id':stage_id,'stage':stages[0],
+            'recipe':actual_recipe,'new_optimizer_updates':updates})
+        prior=checkpoint
+    if not result:raise ValueError('owned reconciliation needs actual completed operations')
+    return result
+
+
+def _acknowledged_owned_stage_ids(chain,stages):
+    ids=[stage['id']for stage in stages];earned=[]
+    for item in chain:
+        if not earned or earned[-1]!=item['stage_id']:earned.append(item['stage_id'])
+    if earned[-len(ids):]!=ids:
+        raise ValueError('owned reconciliation cannot acknowledge an unearned recipe stage')
+    for stage in stages:
+        latest=next(item for item in reversed(chain)if item['stage_id']==stage['id'])
+        if latest['stage']!=stage:raise ValueError('owned reconciliation changed an earned stage contract')
+    return ids
+
+
+def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bare_direct_owner,verified_handoff=None):
+    """Leased, durable acknowledgement of earned work, never stage completion."""
+    import contextlib
+    from ..common.hashing import canonical_json_sha256_hex as digest
+    from ..train.recipe import resolve_recipe_data
+    from .native_runtime_handoff import _bare_authority,_loaded_handoff
+    config_path=Path(config_path).resolve();out=Path(out).resolve()
+    config=json.loads(config_path.read_text());root=config_path.parent
+    if Path(config['out']).resolve().parent!=root:raise ValueError('owned reconciliation lost its controller namespace')
+    paths={'config':config_path,'cursor':root/'cycle.json','state':Path(config['out'])/'state.json'}
+    request={'config':str(config_path),'operations':operations,'recipe':recipe_reference,'authority':bare_direct_owner}
+    directory=out.parent/(out.stem+'-control');intent_path=directory/'intent.json'
+    with contextlib.ExitStack()as stack:
+        for path in sorted({root.parent/'controller.lock',Path(config['out'])/'controller.lock'}):
+            lease=stack.enter_context(path.open('a'));fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        if out.exists():
+            committed=json.loads(out.read_text())
+            if (committed.get('schema')!='natlang.native-owned-operation-reconciliation/1'
+                    or committed.get('request_sha256')!=digest(request)
+                    or committed.get('intent',{}).get('path')!=str(intent_path)):
+                raise ValueError('owned reconciliation retry changed its request')
+            completed_intent=json.loads(_bound(committed['intent']).read_text())
+            if (completed_intent.get('request')!=request
+                    or committed.get('published_checkpoint')!=completed_intent['operations'][-1]['checkpoint']
+                    or committed.get('global_step')!=completed_intent['global_step']
+                    or committed.get('acknowledged_finite_stages')!=completed_intent['new_stage_ids']
+                    or committed.get('whole_recipe_completed')is not False):
+                raise ValueError('owned reconciliation completed receipt changed its exact result')
+            for reference in completed_intent['candidates'].values():_bound(reference)
+            return binding(out)  # Historical success never rewinds subsequently earned work.
+        if intent_path.exists():
+            intent=json.loads(intent_path.read_text())
+            if intent['request']!=request:raise ValueError('owned reconciliation intent belongs to another request')
+        else:
+            before={name:binding(path)for name,path in paths.items()}
+            cursor=json.loads(paths['cursor'].read_text());state=json.loads(paths['state'].read_text())
+            if cursor.get('phase')not in('rl','sft'):raise ValueError('owned reconciliation needs an actual recipe cycle')
+            if state.get('phase')!='collect':
+                raise ValueError('owned reconciliation cannot replace an active central operation')
+            if cursor.get('pending_rl_round') is not None and state.get('round',0)<cursor['pending_rl_round']:
+                raise ValueError('owned reconciliation cannot discard an unearned sealed policy round')
+            old_recipe=resolve_recipe_data(config['production_recipe']);recipe=resolve_recipe_data(_bound(recipe_reference))
+            old_stages=_supervised_stage_inventory(old_recipe,config['production_stage'])
+            stages=_supervised_stage_inventory(recipe,config['production_stage']);ids=[stage['id']for stage in stages]
+            if (type(cursor.get('next_stage',0))is not int or not 0<=cursor.get('next_stage',0)<=len(old_stages)
+                    or any(not any(stage['id']==old['id']and stage['kind']==old['kind']for stage in stages)for old in old_stages)):
+                raise ValueError('owned reconciliation changed or lost its old stage inventory')
+            published=binding(state['checkpoint'])
+            chain=_owned_operation_chain(operations,published,config['raw_model_id'],config['recipe_lineage_sha256'])
+            record,saved=_loaded_handoff(operations[-1]['handoff'],verified_handoff)
+            from ..train.native_resident import code_inventory
+            authority={**bare_direct_owner,'code':code_inventory(Path(bare_direct_owner['package'])),
+                       'model_config_sha256':digest(saved['model_config'])}
+            if authority['recipe']!=recipe_reference:raise ValueError('owned reconciliation recipe differs from actual latest owner')
+            _bare_authority(authority,record,saved,config)
+            _acknowledged_owned_stage_ids(chain,stages)
+            from ..train.native_continuation import collect_sft_progress
+            from ..train.recipe import native_recipe_binding
+            progress=collect_sft_progress(saved['training'],borrow_frames=True)
+            for stage in stages:
+                frame=progress.get(stage['id'])or{};rb=(frame.get('options')or{}).get('recipe_binding')
+                if isinstance(rb,str):rb=json.loads(rb)
+                if not rb:raise ValueError('owned reconciliation lost a carried stage and its obligations')
+                stage_recipe=_bound({'path':rb['path'],'sha256':rb.get('file_sha256',rb['sha256'])})
+                if (native_recipe_binding(stage_recipe,config['recipe_lineage_sha256'])!=rb
+                        or [item for item in resolve_recipe_data(stage_recipe)['stages']if item['id']==stage['id']]!=[stage]):
+                    raise ValueError('owned reconciliation changed a carried stage instead of preserving its debt')
+            next_state=_published_checkpoint_state(state,record['checkpoint'])
+            next_cursor={**cursor,'phase':'sft','next_stage':len(stages),'current_checkpoint':record['checkpoint'],
+                'owned_operation_reconciliation':{'receipt':str(out),'request_sha256':digest(request),
+                    'recipe_sha256':recipe_reference['sha256'],'runtime_configuration_required':True,
+                    'acknowledged_finite_stages':ids}}
+            next_cursor.pop('pending_rl_round',None);next_cursor.pop('readiness',None)
+            directory.mkdir(parents=True,exist_ok=True)
+            snapshots={};candidates={}
+            for name,path in paths.items():
+                snapshot=directory/('original-'+name+'.json');write_bytes_durable(snapshot,_bound(before[name]).read_bytes());snapshots[name]=binding(snapshot)
+            for name,value in (('state',next_state),('cursor',next_cursor)):
+                path=directory/('candidate-'+name+'.json');write_json_durable(path,value);candidates[name]=binding(path)
+            if any(binding(path)!=before[name]for name,path in paths.items()):raise ValueError('owned control changed before durable intent')
+            intent={'schema':'natlang.native-owned-operation-reconciliation/1','request':request,
+                'before':before,'snapshots':snapshots,'candidates':candidates,'operations':chain,
+                'old_stage_ids':[stage['id']for stage in old_stages],'new_stage_ids':ids,
+                'global_step':saved['training'].get('global_step',saved['training'].get('step')),
+                'whole_recipe_completed':False}
+            write_json_durable(intent_path,intent)
+        if binding(paths['config'])!=intent['before']['config']:raise ValueError('owned controller config changed during commit')
+        for name in('state','cursor'):
+            actual=binding(paths[name]);candidate=intent['candidates'][name]
+            if actual['sha256']!=candidate['sha256'] and actual!=intent['before'][name]:
+                raise ValueError('owned reconciliation found an unknown successor')
+        for name in('state','cursor'):
+            candidate=intent['candidates'][name]
+            if binding(paths[name])['sha256']!=candidate['sha256']:
+                write_bytes_durable(paths[name],_bound(candidate).read_bytes())
+        write_json_durable(out,{'schema':intent['schema'],'request_sha256':digest(request),
+            'intent':binding(intent_path),'published_checkpoint':intent['operations'][-1]['checkpoint'],
+            'global_step':intent['global_step'],'acknowledged_finite_stages':intent['new_stage_ids'],
+            'whole_recipe_completed':False})
+    return binding(out)
+
+
 def _publish_checkpoint(config,checkpoint):
     """Only the drained worker's actual checkpoint becomes the sole current parent."""
     out=Path(config['out']);out.mkdir(parents=True,exist_ok=True);path=out/'state.json'
@@ -224,8 +417,7 @@ def _publish_checkpoint(config,checkpoint):
         fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
         from .production import initial_controller_state
         state=json.loads(path.read_text()) if path.exists() else initial_controller_state(config)
-        state.update(checkpoint=str(_bound(checkpoint)),phase='collect',actor_policy_pending_load=checkpoint['sha256'])
-        write_json_durable(path,state)
+        write_json_durable(path,_published_checkpoint_state(state,checkpoint))
 
 
 def _current_checkpoint(config):
@@ -277,6 +469,11 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         raise StudentConfigurationError(str(error)) from error
     cursor_path=directory/'cycle.json'
     cursor=json.loads(cursor_path.read_text()) if cursor_path.exists() else {'cycle':0,'phase':'rl','next_stage':0}
+    reconciliation=cursor.get('owned_operation_reconciliation')or{}
+    if reconciliation.get('runtime_configuration_required'):
+        if binding(config['production_recipe'])['sha256']!=reconciliation['recipe_sha256']:
+            raise StudentConfigurationError('owned completed work requires its actual current runtime configuration')
+        reconciliation['runtime_configuration_required']=False;write_json_durable(cursor_path,cursor)
     cycle=cursor['cycle'];work=directory/'cycles'/f'{cycle:06d}'
     if cursor['phase']=='rl':
         if stop.requested:return cursor
@@ -293,13 +490,8 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
         cursor.pop('pending_rl_round',None)
         write_json_durable(cursor_path,cursor)
     recipe=resolve_recipe_data(config['production_recipe'])
-    stages=[stage for stage in recipe['stages']
-            if stage['kind'] in MANDATORY_STAGE_KINDS and stage.get('admitted') is not False]
+    stages=_supervised_stage_inventory(recipe,config['production_stage'])
     foundation=[stage for stage in stages if stage['id']==config['production_stage']]
-    if len(foundation)!=1:raise ValueError('raw continuation lost its actual foundation recipe stage')
-    # The actual foundation trainer is last, so its receipt certifies the current
-    # post-preference/RL weights rather than a stale earlier parent.
-    stages=[stage for stage in stages if stage['id']!=foundation[0]['id']]+foundation
     for index in range(cursor.get('next_stage',0),len(stages)):
         if stop.requested:return cursor
         stage=stages[index];checkpoint=_current_checkpoint(config)

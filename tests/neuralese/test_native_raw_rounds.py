@@ -487,3 +487,23 @@ def test_raw_continuation_does_not_execute_inactive_future_preference_stage(tmp_
     assert result['cycle']==1
     supervised=[value for kind,value in calls if kind=='sft']
     assert supervised and all(value['production_stage']=='full'for value in supervised)
+
+
+def test_declared_stage_quanta_keep_preference_and_foundation_cadences_distinct():
+    config={'production_stage':'ordinary','supervised_quantum_updates':128,
+            'supervised_stage_quantum_updates':{'ordinary':1000,'preference':250}}
+    ordinary={'stage_id':'ordinary','eval_every':250}
+    preference={'stage_id':'preference','eval_every':50}
+    from natlang_neuralese.rl.native_raw_rounds import _supervised_quantum
+    _supervised_quantum(config,ordinary);_supervised_quantum(config,preference)
+    assert ordinary=={'stage_id':'ordinary','eval_every':250,'checkpoint_every':1000,'refresh_at_checkpoint':True}
+    assert preference=={'stage_id':'preference','eval_every':50,'checkpoint_every':250,'refresh_at_checkpoint':True}
+    fallback={'stage_id':'legacy','eval_every':16};_supervised_quantum(config,fallback)
+    assert fallback['checkpoint_every']==128
+
+
+@pytest.mark.parametrize('mapping',[[],{'ordinary':True},{'ordinary':0},{'':250}])
+def test_bad_stage_quanta_reject_before_worker_or_checkpoint_read(mapping):
+    from natlang_neuralese.rl.native_raw_rounds import _supervised_quantum
+    with pytest.raises(ValueError,match='stage quanta'):
+        _supervised_quantum({'supervised_stage_quantum_updates':mapping},{'stage_id':'ordinary','eval_every':250})

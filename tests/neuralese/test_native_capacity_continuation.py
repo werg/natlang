@@ -430,3 +430,18 @@ def test_historical_cli_executes_the_shared_verifier(tmp_path):
     assert mechanism._proof_cases(value['evidence'], identity=review['identity'],
         code_sha=digest(code_inventory(new)), parent=review['new_parent_checkpoint_sha256'])
     assert evidence['new_parent_measured'] is False
+
+
+@pytest.mark.parametrize('change',['unpassed-numerics','inflated-limit','wrong-parent'])
+def test_public_certificate_verifier_checks_measured_evidence_not_just_root(tmp_path,change):
+    old, _, review, proof = fixture(tmp_path)
+    certificate_path=Path(review['source_certificate']['path'])
+    certificate=json.loads(certificate_path.read_text())
+    if change=='unpassed-numerics':
+        value=json.loads(proof.read_text());value['numerical_reference']['passed']=False
+        proof.write_text(json.dumps(value));certificate['evidence']=binding(proof)
+    elif change=='inflated-limit':certificate['limits']['kv_slots']+=1
+    certificate_path.write_text(json.dumps(certificate))
+    with pytest.raises(ValueError):
+        mechanism.verify_capacity_certificate(binding(certificate_path),identity=review['identity'],
+            code=code_inventory(old),parent='0'*64 if change=='wrong-parent' else review['old_parent_checkpoint_sha256'])

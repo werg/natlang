@@ -62,6 +62,80 @@ def _transition(reference,handoff,record,saved):
     return transition
 
 
+def _owned_launch_chain(record, snapshots=None):
+    """Follow only the byte-bound launch observed during genuine live capture."""
+    captured=_read(record['intent']);observed=_read(captured['launch'])
+    def read(name,reference):
+        selected=(snapshots or {}).get(name,reference)
+        if selected['sha256']!=reference['sha256']:
+            raise ValueError('ordinary owner launch snapshot differs from captured authority')
+        return _read(selected),reference
+    original,original_ref=read('original',observed['original_launch'])
+    spawn,spawn_ref=read('spawn',observed['spawn'])
+    launch_intent,intent_ref=read('intent',original['intent'])
+    continuation,continuation_ref=read('continuation',launch_intent['continuation'])
+    argv,argv_ref=read('argv',launch_intent['argv_binding'])
+    supervisor_ref=launch_intent['supervisor'];supervisor=(snapshots or {}).get('supervisor',supervisor_ref)
+    if supervisor['sha256']!=supervisor_ref['sha256']:
+        raise ValueError('ordinary owner supervisor snapshot differs from captured authority')
+    _bound(supervisor)
+    from .native_raw_handoff import same_process
+    if (not same_process(original['owner'],captured['owner'])
+            or not same_process(spawn['identity'],captured['owner'])
+            or original['intent']!=spawn['intent'] or original['argv']!=argv
+            or spawn.get('script')!=launch_intent.get('supervisor')
+            or supervisor_ref['path'] not in
+                [part.decode() for part in bytes.fromhex(captured['owner']['argv_hex']).split(b'\0') if part]
+            or not any(child['ppid']==captured['owner']['pid'] and
+                [part.decode() for part in bytes.fromhex(child['argv_hex']).split(b'\0') if part]==argv
+                for child in captured['children'])):
+        raise ValueError('ordinary capacity lacks its exact captured supervisor and trainer argv')
+    refs=dict(original=original_ref,spawn=spawn_ref,intent=intent_ref,
+              continuation=continuation_ref,argv=argv_ref,supervisor=supervisor_ref)
+    return continuation,argv,refs
+
+
+def _ordinary_capacity_authority(authority,record,saved,options,code):
+    from ..train.native_capacity_continuation import verify_capacity_certificate
+    continuation,argv,launch_refs=_owned_launch_chain(record,authority.get('launch_control'))
+    certificate_ref=authority['ordinary_capacity']
+    original=authority.get('requested',authority)['ordinary_capacity']
+    def argument(flag):
+        if argv.count(flag)!=1 or argv.index(flag)+1>=len(argv):
+            raise ValueError('ordinary owner needs one explicit '+flag)
+        return argv[argv.index(flag)+1]
+    actual_recipe=options['recipe_binding']
+    if isinstance(actual_recipe,str):actual_recipe=json.loads(actual_recipe)
+    parent=(options.get('continuation') or {}).get('checkpoint_sha256')
+    if (options.get('objective_spec') or (saved['training'].get('identity') or {}).get('objective')
+            or options.get('memory_qualification') or not parent
+            or options.get('resident_geometry_qualification')!=original['path']
+            or argument('--resident-geometry-qualification')!=original['path']
+            or continuation['certificate']!=original or original['sha256']!=certificate_ref['sha256']
+            or continuation['parent']['sha256']!=parent or continuation['recipe']!=actual_recipe
+            or json.loads(argument('--recipe-binding'))!=actual_recipe
+            or argument('--stage-id')!=options.get('stage_id')):
+        raise ValueError('ordinary capacity differs from its executed recipe/parent/certificate')
+    launch_intent=_read((authority.get('launch_control') or launch_refs)['intent'])
+    # The captured supervisor executes this exact configured import environment.
+    import_path=(launch_intent.get('env') or {}).get('PYTHONPATH','').split(':')
+    selected=next((Path(path)/'natlang_neuralese' for path in import_path
+                   if path and (Path(path)/'natlang_neuralese').is_dir()),None)
+    if selected is None or selected.resolve()!=Path(authority['package']).resolve():
+        raise ValueError('ordinary capacity owner did not execute its declared package')
+    certificate=_read(certificate_ref);identity=certificate['identity']
+    expected={key:options.get(key) for key in
+        ('batch_graphs','batch_tokens','checkpoint_layers','chunk_tokens','checkpoint_input_offload')}
+    if (identity.get('model_config')!=saved['model_config'] or identity.get('objective') is not None
+            or any(identity.get(key)!=value for key,value in expected.items())
+            or bool(identity.get('share_causal_prefixes'))!=bool(options.get('share_causal_prefixes'))
+            or identity.get('checkpoint_input_offload_directory')!=options.get('checkpoint_input_offload_directory')
+            or any(identity.get('fp8',{}).get(key)!=options.get(option) for key,option in
+                (('kind','fp8_training'),('recipe','fp8_recipe'),('amax_history_len','fp8_amax_history_len')))):
+        raise ValueError('ordinary capacity changed its saved model/packing/backend identity')
+    verify_capacity_certificate(certificate_ref,identity=identity,code=code,parent=parent)
+
+
 def _bare_authority(authority,record,saved,config):
     """Authenticate an already executed policy, never manufacture a resident plan."""
     from ..train.native_resident import code_inventory
@@ -99,14 +173,19 @@ def _bare_authority(authority,record,saved,config):
     receipts=frame.get('source_receipts') or []
     if len(receipts)<2 or any(receipts[i].get('sha256')!=inputs[role]['sha256'] for i,role in enumerate(('native_graphs','held_native_graphs'))):
         raise ValueError('bare runtime authority production sources differ from saved credits')
-    qualification=_read(authority['qualification']);remembered=options.get('memory_qualification') or {}
-    if (remembered.get('passed') is not True or qualification.get('passed') is not True
-            or any(remembered.get(key)!=qualification.get(key) for key in ('request','parent_checkpoint_sha256'))):
-        raise ValueError('bare runtime authority requires the actual saved passed qualification')
-    checks=qualification.get('checks',[qualification])
-    if not checks or any(check.get('passed') is not True or check.get('runtime_code_sha256')!=digest(code)
-            or check.get('identity',{}).get('model_config')!=saved['model_config'] for check in checks):
-        raise ValueError('bare runtime authority qualification changed its runtime/model/profile')
+    if bool(authority.get('qualification'))==bool(authority.get('ordinary_capacity')):
+        raise ValueError('bare runtime authority needs exactly one executed capacity authority')
+    if authority.get('ordinary_capacity'):
+        _ordinary_capacity_authority(authority,record,saved,options,code)
+    else:
+        qualification=_read(authority['qualification']);remembered=options.get('memory_qualification') or {}
+        if (remembered.get('passed') is not True or qualification.get('passed') is not True
+                or any(remembered.get(key)!=qualification.get(key) for key in ('request','parent_checkpoint_sha256'))):
+            raise ValueError('bare runtime authority requires the actual saved passed qualification')
+        checks=qualification.get('checks',[qualification])
+        if not checks or any(check.get('passed') is not True or check.get('runtime_code_sha256')!=digest(code)
+                or check.get('identity',{}).get('model_config')!=saved['model_config'] for check in checks):
+            raise ValueError('bare runtime authority qualification changed its runtime/model/profile')
     return {'recipe':authority['recipe'],'new_package':str(package),'new_code':code,
             'lineage':lineage,'inputs':inputs,'bare':True}
 
@@ -119,7 +198,16 @@ def _authority(value,handoff,record,saved,config):
     return _transition(value['recipe_handoff'],handoff,record,saved)
 
 
-def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,operation=None,bare_direct_owner=None):
+def _loaded_handoff(reference,verified=None):
+    """Reuse this invocation's exact decoded immutable pin, never a disk cache."""
+    if verified is None:return verify_handoff(reference)
+    record,saved=verified
+    if record!=_read(reference) or binding(record['checkpoint']['path'])!=record['checkpoint']:
+        raise ValueError('reused handoff decode differs from its exact bound immutable parent')
+    return record,saved
+
+
+def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,operation=None,bare_direct_owner=None,owned_operations=None,verified_handoff=None):
     """Snapshot an actual later drain under the existing coordinator/worker leases."""
     config_path=Path(config_path);out=Path(out)
     if out.exists():
@@ -127,6 +215,7 @@ def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,o
         if (value['handoff']!=handoff or value['recipe_handoff']!=recipe_handoff
                 or (value.get('bare_direct_owner') or {}).get('requested')!=bare_direct_owner
                 or (value.get('operation') or {}).get('original')!=operation
+                or value.get('owned_operations')!=owned_operations
                 or value['sources']['config']['path']!=str(config_path.resolve())):
             raise ValueError('runtime handoff retry changed its requested authority')
         return binding(out)
@@ -140,7 +229,7 @@ def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,o
             lease=stack.enter_context(path.open('a'));fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
         sources={'config':binding(config_path),'cursor':binding(cursor),'state':binding(state)}
         current=json.loads(state.read_text());published=binding(current['checkpoint'])
-        record,saved=verify_handoff(handoff)
+        record,saved=_loaded_handoff(handoff,verified_handoff)
         verify_handoff_metadata(bootstrap)
         authority={'recipe_handoff':recipe_handoff}
         if bare_direct_owner is not None:
@@ -148,10 +237,17 @@ def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,o
             from ..train.native_resident import code_inventory
             from ..common.hashing import canonical_json_sha256_hex as digest
             directory=out.parent/(out.stem+'-control');directory.mkdir(parents=True,exist_ok=True)
+            if bool(bare_direct_owner.get('qualification'))==bool(bare_direct_owner.get('ordinary_capacity')):
+                raise ValueError('bare runtime authority needs exactly one executed capacity authority')
+            selected='ordinary_capacity' if bare_direct_owner.get('ordinary_capacity') else 'qualification'
             authority['bare_direct_owner']={**bare_direct_owner,'requested':bare_direct_owner,
-                'qualification':_snap(bare_direct_owner['qualification'],directory,'qualification.json'),
+                selected:_snap(bare_direct_owner[selected],directory,selected+'.json'),
                 'code':code_inventory(Path(bare_direct_owner['package'])),
                 'model_config_sha256':digest(saved['model_config'])}
+            if selected=='ordinary_capacity':
+                _,_,refs=_owned_launch_chain(record)
+                authority['bare_direct_owner']['launch_control']={name:_snap(ref,directory,'owner-'+name+'.json')
+                    for name,ref in refs.items()}
         transition=_authority(authority,handoff,record,saved,config)
         if operation:
             from .native_bridge import verify_result
@@ -178,7 +274,7 @@ def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,o
         value={'schema':SCHEMA,'bootstrap':bootstrap,'handoff':handoff,'recipe_handoff':recipe_handoff,
             'bare_direct_owner':authority.get('bare_direct_owner'),
             'checkpoint':record['checkpoint'],'published_checkpoint':published,'sources':sources,
-            'snapshots':snapshots,'operation':operation_snapshot,'model_id':config.get('raw_model_id'),
+            'snapshots':snapshots,'operation':operation_snapshot,'owned_operations':owned_operations,'model_id':config.get('raw_model_id'),
             'lineage':config.get('recipe_lineage_sha256'),'previous':config.get('runtime_handoff')}
         _verify(value,bootstrap,record,saved,transition)
         if any(binding(ref['path'])!=ref for ref in sources.values()):
@@ -216,6 +312,22 @@ def _verify(value,bootstrap,record,saved,transition):
         if (previous.get('schema')!=SCHEMA or previous.get('bootstrap')!=bootstrap
                 or previous.get('model_id')!=actual or previous.get('lineage')!=value['lineage']):
             raise ValueError('runtime handoff previous authority belongs to another lineage')
+    if value.get('owned_operations'):
+        owned=_read(value['owned_operations']);intent=_read(owned['intent'])
+        from ..common.hashing import canonical_json_sha256_hex as digest
+        if (owned.get('schema')!='natlang.native-owned-operation-reconciliation/1'
+                or intent.get('schema')!=owned.get('schema')
+                or owned.get('request_sha256')!=digest(intent['request'])
+                or owned.get('global_step')!=saved['training'].get('global_step',saved['training'].get('step'))
+                or owned.get('acknowledged_finite_stages')!=intent.get('new_stage_ids')
+                or intent['request']['operations'][-1]['handoff']!=value['handoff']
+                or owned.get('published_checkpoint')!=record['checkpoint']
+                or owned.get('whole_recipe_completed')is not False
+                or intent['request']['config']!=value['sources']['config']['path']
+                or intent['request']['recipe']!=transition.get('recipe')
+                or any(intent['candidates'][key]['sha256']!=value['snapshots'][key]['sha256']for key in('state','cursor'))
+                or intent['before']['config']['sha256']!=value['snapshots']['config']['sha256']):
+            raise ValueError('runtime handoff lost its exact owned-operation publication and stage acknowledgement')
     if value.get('operation'):
         from .native_bridge import read_request,RESULT_SCHEMA
         request=read_request(_bound(value['operation']['request']))
@@ -364,10 +476,12 @@ def main(argv=None):
     parser.add_argument('--bare-recipe',type=Path)
     parser.add_argument('--package',type=Path)
     parser.add_argument('--qualification',type=Path)
+    parser.add_argument('--ordinary-capacity',type=Path)
     parser.add_argument('--config',type=Path)
     parser.add_argument('--out',type=Path)
     parser.add_argument('--operation-request',type=Path)
     parser.add_argument('--operation-result',type=Path)
+    parser.add_argument('--owned-operations',type=Path,help='bound completed owned operation-chain JSON; no stage is marked complete')
     args=parser.parse_args(argv)
     bootstrap=binding(args.bootstrap)
     if args.verify:
@@ -376,16 +490,36 @@ def main(argv=None):
     else:
         if not all((args.handoff,args.config,args.out)) or bool(args.recipe_handoff)==bool(args.bare_recipe):
             parser.error('prepare requires --handoff, --config, --out and exactly one of --recipe-handoff/--bare-recipe')
-        if args.bare_recipe and not (args.package and args.qualification):
-            parser.error('bare authority requires --package and actual --qualification')
+        if args.bare_recipe and (not args.package or bool(args.qualification)==bool(args.ordinary_capacity)):
+            parser.error('bare authority requires --package and exactly one actual --qualification/--ordinary-capacity')
         if bool(args.operation_request)!=bool(args.operation_result):
             parser.error('partial operation requires both exact request and result')
         operation=({'request':binding(args.operation_request),'result':binding(args.operation_result)}
                    if args.operation_request else None)
         bare=({'recipe':binding(args.bare_recipe),'package':str(args.package.resolve()),
-               'qualification':binding(args.qualification)} if args.bare_recipe else None)
+               **({'qualification':binding(args.qualification)} if args.qualification else
+                  {'ordinary_capacity':binding(args.ordinary_capacity)})} if args.bare_recipe else None)
+        owned=None;verified=None
+        if args.owned_operations:
+            if not bare or operation:parser.error('owned operations require a bare current owner and no bridge substitute')
+            manifest_path=_bound(binding(args.owned_operations));manifest=json.loads(manifest_path.read_text())
+            if manifest.get('schema')!='natlang.native-owned-training-operations/1':
+                parser.error('owned operations require an explicit completed operation-chain manifest')
+            operations=manifest.get('operations')
+            if (not isinstance(operations,list) or not operations
+                    or any(not isinstance(item,dict) or not item.get('handoff')or not item.get('receipt')for item in operations)
+                    or operations[-1]['handoff']!=binding(args.handoff)):
+                parser.error('owned operation chain must end at the actual requested full handoff')
+            for item in operations:
+                _bound(item['handoff']);_bound(item['receipt'])
+            verified=verify_handoff(binding(args.handoff))
+            from .native_raw_rounds import reconcile_owned_operations
+            owned=reconcile_owned_operations(args.config,manifest['operations'],bare['recipe'],
+                args.out.with_name(args.out.stem+'-owned-reconciliation.json'),
+                bare_direct_owner=bare,verified_handoff=verified)
         reference=prepare_runtime_handoff(bootstrap,binding(args.handoff),binding(args.recipe_handoff) if args.recipe_handoff else None,
-            args.config,args.out,operation=operation,bare_direct_owner=bare)
+            args.config,args.out,operation=operation,bare_direct_owner=bare,
+            owned_operations=owned,verified_handoff=verified)
     print(json.dumps(reference,sort_keys=True))
     return 0
 

@@ -323,6 +323,18 @@ def _proof_cases(reference, *, identity, code_sha, parent, seen=()):
     return cases
 
 
+def verify_capacity_certificate(reference, *, identity, code, parent):
+    """Verify the complete existing evidence chain for its actual start parent."""
+    from .native_resident import geometry_capacity
+    limits = geometry_capacity(reference, identity=identity, code=code)
+    certificate = json.loads(bound(reference).read_text())
+    cases = _proof_cases(certificate['evidence'], identity=identity,
+                         code_sha=digest(code), parent=parent)
+    if {key: max(case[key] for case in cases) for key in ('forward_tokens', 'kv_slots')} != limits:
+        raise ValueError('capacity certificate limits differ from its complete measured cases')
+    return limits
+
+
 def continue_capacity(review_binding, *, old_package, new_package, out):
     review = json.loads(bound(review_binding).read_text())
     if (review.get('schema') != 'natlang.native-capacity-continuation-review/1'
