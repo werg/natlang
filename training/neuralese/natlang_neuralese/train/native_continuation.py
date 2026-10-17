@@ -162,8 +162,8 @@ def collect_sft_progress(training, *, borrow_frames=False):
     # The current frame replaces its historical snapshot. Copy only the other
     # stages; the pending merge below owns the few prior values still needed.
     result=(dict(historical) if borrow_frames else
-            copy.deepcopy({name:frame for name,frame in historical.items()
-                           if not capture or name!=key}))
+            copy.deepcopy({name:None if capture and name==key else frame
+                           for name,frame in historical.items()}))
     if capture:
         previous=historical.get(key) or {}
         frame={key:value if borrow_frames else copy.deepcopy(value)

@@ -46,7 +46,8 @@ def test_borrowed_metadata_matches_owned_pending_merge_without_mutating_checkpoi
     assert collect_sft_progress(policy,borrow_frames=True)['full'] is prior['full']
 
 
-def test_current_frame_replaces_old_snapshot_without_copying_discarded_payload():
+@pytest.mark.parametrize('prefix_stage',[False,True])
+def test_current_frame_replaces_old_snapshot_without_copying_discarded_payload(prefix_stage):
     class DiscardedSnapshot:
         def __deepcopy__(self, memo):
             raise AssertionError('superseded active snapshot must not be copied')
@@ -61,6 +62,7 @@ def test_current_frame_replaces_old_snapshot_without_copying_discarded_payload()
     history['full']['completed_foundations']=[{'cohort':'earned'}]
     other=copy.deepcopy(history['full'])
     history['other']=other
+    if prefix_stage:history={'before':other,**history}
     current=progress()
     current['sft_progress']=history
     current['exposure_counts']={'old':1}
@@ -68,6 +70,8 @@ def test_current_frame_replaces_old_snapshot_without_copying_discarded_payload()
     history['full']['obsolete_snapshot_payload']=DiscardedSnapshot()
     result=collect_sft_progress(current)
     assert result==expected
+    assert list(result)==list(expected)
+    if prefix_stage:assert result['before'] is result['other']
     assert result['full']['required_visits']=={'old':1,'new':2}
     assert result['full']['exposure_counts']=={'old':1,'new':0}
     result['full']['completed_foundations'][0]['cohort']='changed'
