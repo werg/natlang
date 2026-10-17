@@ -6,7 +6,7 @@ import pytest
 
 from scripts.coreweave import source_archive
 from scripts.coreweave.teacher_incremental_export import (
-    accept_private_receipt, completed_entries, export_finished_tranches,
+    accept_private_receipt, aggregate_worker_journals, completed_entries, export_finished_tranches,
     prune_verified_local_tranche, seal_boundary, seal_tranche,
 )
 
@@ -174,6 +174,293 @@ def test_owner_poller_fails_closed_on_restarted_sandbox_boot(tmp_path, monkeypat
                                        allowed_spool_root=tmp_path)
     state = json.loads((tmp_path/'exports/service-state.json').read_text())
     assert 'boot identity differs' in state['identity_error']
+
+
+def test_guardian_discovery_accepts_exact_anchor_without_started_receipt():
+    from types import SimpleNamespace
+    from scripts.coreweave.teacher_incremental_export import discover_guardian_batch
+    import hashlib
+    cases_path = '/work/generation/evidence-collections-v2/batch-0021/source-cases.jsonl'
+    queue_path = '/work/generation/evidence-collections-v2/batch-0021/queue.jsonl'
+    teacher_path = '/work/generation/evidence-collections-v2/batch-0021/teacher-source.json'
+    cases = b''.join((json.dumps({'program_ir': {'id': f'task-{index}'}})+'\n').encode()
+                     for index in range(24))
+    queue_rows = [{'key':f's7-task-{index:03d}-00','index':index,'count':1,'sample':0,'seed':index,
+        'source':cases_path,'output':f'/work/generation/evidence-collections-v2/batch-0021/out/{index}/results.jsonl',
+        'jobs':f'/work/generation/evidence-collections-v2/batch-0021/out/{index}/jobs',
+        'task_id':f'task-{index}'} for index in range(24)]
+    queue = b''.join((json.dumps(row)+'\n').encode() for row in queue_rows)
+    teacher = {'schema':'natlang.sandbox-strong-teacher-collection/1','batch':21,
+        'source_cases_sha256':hashlib.sha256(cases).hexdigest(),
+        'teacher':{'model':'qwen-test'},
+        'actor':{'sha256':'a'*64},'actual_teacher_execution_identity':{'sha256':'b'*64},
+        'actual_task_runtime':'/work/runtime','collection_controller':{'sha256':'c'*64},
+        'runtime_source_receipt':{'sha256':'d'*64},'teacher_configuration_source':{'sha256':'e'*64},
+        'source_provenance':{'sha256':'f'*64}}
+    teacher_raw=json.dumps(teacher).encode()
+    guardian={'control':'/work/control','root':'/work/generation','feeder':'/work/control/feed.py',
+        'task_runtime':'/work/runtime','teacher_identity':{'sha256':'b'*64},
+        'source_sequence':{'anchor':{'batch':21,'cases_sha256':hashlib.sha256(cases).hexdigest()}}}
+    guardian_raw=json.dumps(guardian).encode()
+    guardian_ref={'path':'/work/control/config.json','bytes':len(guardian_raw),
+        'sha256':hashlib.sha256(guardian_raw).hexdigest()}
+    state={'schema':'natlang.teacher-generation-guardian/1','config':guardian_ref,
+        'owner':{'pid':123,'start_ticks':'456','boot_id':'boot-1'},'active_batch':21}
+    remote={guardian_ref['path']:guardian_raw,'/work/control/state.json':json.dumps(state).encode(),
+        cases_path:cases,queue_path:queue,teacher_path:teacher_raw,
+        '/work/generation/feed-evidence-phase.json':json.dumps({'batch':21,'phase':'collecting','worker_count':24,
+            'worker_pids':list(range(100,124)),'out':'/work/generation/evidence-collections-v2/batch-0021',
+            'cases':24,'teacher':'qwen-test'}).encode()}
+    worker_names=[]
+    for index,row in enumerate(queue_rows):
+        qname=f'queue-worker-{index}.jsonl';jname=f'journal-worker-{index}.jsonl'
+        remote[f'/work/generation/evidence-collections-v2/batch-0021/{qname}']=(json.dumps(row)+'\n').encode()
+        remote[f'/work/generation/evidence-collections-v2/batch-0021/{jname}']=b''
+        worker_names.append((qname,jname))
+    def exec_(argv,**kwargs):
+        if argv[0]=='cat': out='boot-1\n'
+        elif argv[1]=='-c' and 'glob' in argv[2]: out=json.dumps({'queues':[x[0] for x in worker_names],
+            'journals':[x[1] for x in worker_names]})
+        else: out=json.dumps({'valid':True,'identity':{'pid':123,'start_ticks':'456','boot_id':'boot-1',
+            'argv':['python','/work/control/feed.py']}})
+        return SimpleNamespace(result=lambda **_:SimpleNamespace(returncode=0,stdout=out,stderr=''))
+    sandbox=SimpleNamespace(exec=exec_)
+    publisher={'schema':'natlang.teacher-incremental-export-publisher/1','sandbox_id':'sid',
+        'sandbox_boot_id':'boot-1','guardian_config':guardian_ref,'control_dir':'/work/control',
+        'generation_root':'/work/generation','anchor_batch':21,
+        'anchor_cases_sha256':hashlib.sha256(cases).hexdigest(),
+        'directory_root':'/external/export','role':'bulk','chunk_size':32,'exporter_path':'/owner/export.py',
+        'identity':{'sandbox_boot_id':'boot-1','actor_sha256':'a'*64,
+            'execution_identity_sha256':'b'*64,'teacher_config_sha256':'e'*64,'runtime_path':'/work/runtime'}}
+    active=discover_guardian_batch(publisher,sandbox,remote.__getitem__)
+    assert active['batch']==21 and active['queue_path']==queue_path
+    assert active['source_sequence_started_sha256'] is None
+    assert active['identity']['source_cases_sha256']==hashlib.sha256(cases).hexdigest()
+    assert active['worker_queue_paths']==[f'/work/generation/evidence-collections-v2/batch-0021/queue-worker-{i}.jsonl'
+                                          for i in range(24)]
+
+
+def test_guardian_discovery_requires_exact_started_receipt_after_anchor():
+    from types import SimpleNamespace
+    from scripts.coreweave.teacher_incremental_export import discover_guardian_batch
+    guardian={'control':'/work/control','root':'/work/generation','feeder':'/work/control/feed.py',
+        'task_runtime':'/work/runtime','teacher_identity':{'sha256':'b'*64},
+        'source_sequence':{'anchor':{'batch':21,'cases_sha256':'a'*64}}}
+    guardian_raw=json.dumps(guardian).encode()
+    ref={'path':'/work/control/config.json','bytes':len(guardian_raw),
+        'sha256':hashlib.sha256(guardian_raw).hexdigest()}
+    state={'schema':'natlang.teacher-generation-guardian/1','config':ref,
+        'owner':{'pid':123,'start_ticks':'456','boot_id':'boot-1'},'active_batch':22,
+        'source_sequence':{'started':{}}}
+    remote={ref['path']:guardian_raw,'/work/control/state.json':json.dumps(state).encode()}
+    def exec_(argv,**kwargs):
+        out='boot-1\n' if argv[0]=='cat' else json.dumps({'valid':True})
+        return SimpleNamespace(result=lambda **_:SimpleNamespace(returncode=0,stdout=out,stderr=''))
+    publisher={'schema':'natlang.teacher-incremental-export-publisher/1','sandbox_id':'sid',
+        'sandbox_boot_id':'boot-1','guardian_config':ref,'control_dir':'/work/control',
+        'generation_root':'/work/generation','anchor_batch':21,'anchor_cases_sha256':'a'*64,
+        'directory_root':'/external/export','role':'bulk','chunk_size':32,'exporter_path':'/owner/export.py',
+        'identity':{'sandbox_boot_id':'boot-1','actor_sha256':'a'*64,'execution_identity_sha256':'b'*64,
+            'teacher_config_sha256':'e'*64,'runtime_path':'/work/runtime'}}
+    with pytest.raises(ValueError,match='started receipt'):
+        discover_guardian_batch(publisher,SimpleNamespace(exec=exec_),remote.__getitem__)
+
+
+def test_worker_journal_aggregation_checks_exact_24_way_partition_and_trailing_append():
+    rows=[]; worker_queues=[]; worker_journals=[]
+    for index in range(24):
+        row={'key':f's7-task-{index:03d}-00','index':index,'count':1,'sample':0,'seed':index,
+            'task_id':f'task-{index}','group':index,'source':'/cases.jsonl',
+            'output':f'/out/{index}/results.jsonl','jobs':f'/out/{index}/jobs'}
+        rows.append(row)
+        q=json.dumps(row).encode()+b'\n';worker_queues.append((f'queue-worker-{index}.jsonl',q))
+        events=[{'event':'start','key':row['key']},{'event':'finish','key':row['key']}]
+        journal=b''.join(json.dumps(event).encode()+b'\n' for event in events)
+        if index==23: journal+=b'{"event":"finish"'  # in-progress append is withheld
+        worker_journals.append((f'journal-worker-{index}.jsonl',journal))
+    master=b''.join(json.dumps(row).encode()+b'\n' for row in rows)
+    aggregate=aggregate_worker_journals(master,worker_queues,worker_journals)
+    parsed=[json.loads(line) for line in aggregate.splitlines()]
+    assert len(parsed)==48 and parsed[-1]['event']=='finish' and parsed[-1]['key']==rows[-1]['key']
+    duplicate=list(worker_queues);duplicate[-1]=(duplicate[-1][0],duplicate[0][1])
+    with pytest.raises(ValueError,match='foreign or duplicated'):
+        aggregate_worker_journals(master,duplicate,worker_journals)
+    reordered=list(worker_queues)
+    reordered[1],reordered[10]=reordered[10],reordered[1]
+    with pytest.raises(ValueError,match='numeric contiguous order'):
+        aggregate_worker_journals(master,reordered,worker_journals)
+    changed=json.loads(worker_queues[0][1]);changed['temperature']=0.2
+    altered=list(worker_queues);altered[0]=(altered[0][0],(json.dumps(changed)+'\n').encode())
+    with pytest.raises(ValueError,match='identity differs'):
+        aggregate_worker_journals(master,altered,worker_journals)
+
+
+def test_guardian_publisher_resumes_tuple_frontier_and_flushes_idle_partial(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import time
+    import scripts.coreweave.teacher_incremental_export as module
+    publisher={'schema':'natlang.teacher-incremental-export-publisher/1',
+        'sandbox_id':'sid','directory_root':str(tmp_path/'spool'),'role':'bulk','exporter_path':'/owner/export.py',
+        'idle_flush_after_seconds':1,'chunk_size':32}
+    publisher_path=tmp_path/'publisher.json';publisher_path.write_text(json.dumps(publisher))
+    active={'batch':21,'directory':str(tmp_path/'spool'/'batch-0021'),'queue_path':'/batch/queue.jsonl',
+        'journal_path':'/batch/journal.jsonl','context_paths':{'teacher-source.json':'/batch/source.json',
+        'source-cases.jsonl':'/batch/cases.jsonl'},'chunk_size':32,'role':'bulk','exporter_path':'/owner/export.py',
+        'identity':{'sandbox_boot_id':'boot','teacher_source_sha256':'t'*64},
+        'queue_sha256':hashlib.sha256(b'queue').hexdigest(),'guardian_state_sha256':'g'*64,'source_sequence_started_sha256':None,
+        'worker_queue_paths':[],'worker_journal_paths':{}}
+    sandbox=object();remote={'/batch/queue.jsonl':b'queue','/batch/journal.jsonl':b'journal'}
+    monkeypatch.setattr(module,'_cwctl_module',lambda:SimpleNamespace(load_env_file=lambda:None))
+    monkeypatch.setattr(module,'scoped_sdk_session',lambda *_a,**_k:(sandbox,remote.__getitem__))
+    monkeypatch.setattr(module,'discover_guardian_batch',lambda *_a:active)
+    monkeypatch.setattr(module,'_validate_live_identity',lambda *_a:active['identity'])
+    spool=tmp_path/'spool'/'batch-0021';spool.mkdir(parents=True)
+    (tmp_path/'spool'/'publisher-state.json').write_text(json.dumps({'active_identity':['sid',21,'t'*64],
+        'journal_sha256':hashlib.sha256(b'journal').hexdigest(),'journal_changed_at':time.time()-10}))
+    flushes=[]
+    monkeypatch.setattr(module,'export_finished_tranches',lambda **kw:flushes.append(kw['flush_partial']) or {
+        'state':{'completed_keys':[],'tranches':[]},'queue_count':0,'new_tranches':0,
+        'durable_completed_keys':0,'training_admission':False,'exposure':False})
+    result=module.run_guardian_export_service(publisher_path,poll_seconds=0,max_polls=1,
+        allowed_spool_root=tmp_path)
+    assert flushes==[True]
+    assert result['active'] is True and result['training_admission'] is False
+
+
+def test_guardian_discovery_advances_from_anchor_to_started_batch_with_same_stable_identity():
+    from types import SimpleNamespace
+    from scripts.coreweave.teacher_incremental_export import discover_guardian_batch
+    root='/work/generation'; control='/work/control'; batch=22
+    source_root=f'{root}/evidence-collections-v2/batch-0022'
+    cases_path=f'{source_root}/source-cases.jsonl'; queue_path=f'{source_root}/queue.jsonl'
+    teacher_path=f'{source_root}/teacher-source.json'
+    cases=b'{"program_ir":{"id":"new-task"}}\n'
+    queue_row={'key':'s7-task-000-00','index':0,'count':1,'sample':0,'seed':7,'task_id':'new-task',
+        'source':cases_path,'output':source_root+'/out/0/results.jsonl','jobs':source_root+'/out/0/jobs'}
+    queue=json.dumps(queue_row).encode()+b'\n'
+    teacher={'schema':'natlang.sandbox-strong-teacher-collection/1','batch':batch,
+        'source_cases_sha256':hashlib.sha256(cases).hexdigest(),'actor':{'sha256':'a'*64},
+        'teacher':{'model':'qwen-test'},
+        'actual_teacher_execution_identity':{'sha256':'b'*64},'actual_task_runtime':'/work/runtime',
+        'collection_controller':{'sha256':'c'*64},'runtime_source_receipt':{'sha256':'d'*64},
+        'teacher_configuration_source':{'sha256':'e'*64},'source_provenance':{'sha256':'f'*64}}
+    teacher_raw=json.dumps(teacher).encode()
+    sealed={'source-cases.jsonl':{'path':cases_path,'bytes':len(cases),'sha256':hashlib.sha256(cases).hexdigest()},
+        'queue.jsonl':{'path':queue_path,'bytes':len(queue),'sha256':hashlib.sha256(queue).hexdigest()},
+        'teacher-source.json':{'path':teacher_path,'bytes':len(teacher_raw),'sha256':hashlib.sha256(teacher_raw).hexdigest()}}
+    receipt=json.dumps({'batch':batch,'ordinal':1,'sealed':sealed,'selection_intent':{'sha256':'1'*64},
+        'claim':'actual sealed batch'}).encode()
+    started_path=control+'/source-sequence/started/batch-0022.json'
+    started={'path':started_path,'bytes':len(receipt),'sha256':hashlib.sha256(receipt).hexdigest()}
+    guardian={'control':control,'root':root,'feeder':control+'/feed.py','task_runtime':'/work/runtime',
+        'teacher_identity':{'sha256':'b'*64},'source_sequence':{'anchor':{'batch':21,'cases_sha256':'a'*64}}}
+    guardian_raw=json.dumps(guardian).encode(); config_path=control+'/config.json'
+    config_ref={'path':config_path,'bytes':len(guardian_raw),'sha256':hashlib.sha256(guardian_raw).hexdigest()}
+    state={'schema':'natlang.teacher-generation-guardian/1','config':config_ref,
+        'owner':{'pid':42,'start_ticks':'777','boot_id':'boot'},'active_batch':batch,
+        'source_sequence':{'started':{'22':started}}}
+    remote={config_path:guardian_raw,control+'/state.json':json.dumps(state).encode(),started_path:receipt,
+        cases_path:cases,queue_path:queue,teacher_path:teacher_raw,
+        root+'/feed-evidence-phase.json':json.dumps({'batch':batch,'phase':'collecting','worker_count':1,
+            'worker_pids':[500],'out':source_root,'cases':1,'teacher':'qwen-test'}).encode(),
+        source_root+'/queue-worker-0.jsonl':queue,source_root+'/journal-worker-0.jsonl':b''}
+    def exec_(argv,**kwargs):
+        out='boot\n' if argv[0]=='cat' else (
+            json.dumps({'queues':['queue-worker-0.jsonl'],'journals':['journal-worker-0.jsonl']})
+            if 'glob' in argv[2] else json.dumps({'valid':True}))
+        return SimpleNamespace(result=lambda **_:SimpleNamespace(returncode=0,stdout=out,stderr=''))
+    publisher={'schema':'natlang.teacher-incremental-export-publisher/1','sandbox_id':'sid',
+        'sandbox_boot_id':'boot','guardian_config':config_ref,'control_dir':control,'generation_root':root,
+        'anchor_batch':21,'anchor_cases_sha256':'a'*64,'directory_root':'/external/export','role':'bulk',
+        'chunk_size':32,'exporter_path':'/owner/export.py','identity':{'sandbox_boot_id':'boot',
+        'actor_sha256':'a'*64,'execution_identity_sha256':'b'*64,'teacher_config_sha256':'e'*64,
+        'runtime_path':'/work/runtime'}}
+    active=discover_guardian_batch(publisher,SimpleNamespace(exec=exec_),remote.__getitem__)
+    assert active['batch']==22 and active['source_sequence_started_sha256']==started['sha256']
+    assert active['identity']['source_cases_sha256']==hashlib.sha256(cases).hexdigest()
+
+
+def test_guardian_closed_boundary_flushes_partial_and_seals_exact_outcomes(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import scripts.coreweave.teacher_incremental_export as module
+    from scripts.coreweave.teacher_generation_guardian import assess
+    entries, queue, journal, context, _, finish = _fixture()
+    teacher_value=json.loads(context['teacher-source.json']);teacher_value['actual_task_runtime']='/work/runtime'
+    context['teacher-source.json']=json.dumps(teacher_value).encode()
+    score={'schema':'natlang.s7-task-rollout-score/1','rollouts':2,'outcome_counts':{'task_success':2}}
+    completion=assess(entries,[json.loads(line) for line in journal.splitlines() if json.loads(line).get('event')=='finish'],[0],score)
+    source_root='/generation/evidence-collections-v2/batch-0019'
+    completion.update(batch=19,bindings={name:{'path':path,'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()}
+        for name,path,raw in [('queue.jsonl',source_root+'/queue.jsonl',queue),
+            ('journal.jsonl',source_root+'/journal.jsonl',journal),
+            ('score.json',source_root+'/score.json',json.dumps(score).encode()),
+            ('teacher-source.json',source_root+'/teacher-source.json',context['teacher-source.json'])]})
+    completion_raw=json.dumps(completion).encode()
+    paths={'teacher-source.json':source_root+'/teacher-source.json',
+        'source-cases.jsonl':source_root+'/source-cases.jsonl',
+        'queue.jsonl':source_root+'/queue.jsonl',
+        'journal.jsonl':source_root+'/journal.jsonl',
+        'score.json':source_root+'/score.json',
+        'rewards.jsonl':source_root+'/rewards.jsonl',
+        'completion.json':'/control/boundaries/batch-0019.json',
+        'repair-queue.jsonl':'/control/repairs/batch-0019/queue.jsonl'}
+    cases=context['source-cases.jsonl'];teacher=context['teacher-source.json']
+    remote={paths['teacher-source.json']:teacher,paths['source-cases.jsonl']:cases,
+        paths['queue.jsonl']:queue,paths['journal.jsonl']:journal,
+        paths['score.json']:json.dumps(score).encode(),paths['rewards.jsonl']:b'{}\n',
+        paths['completion.json']:completion_raw}
+    boundary_ref={'path':paths['completion.json'],'bytes':len(completion_raw),
+        'sha256':hashlib.sha256(completion_raw).hexdigest()}
+    publisher={'anchor_batch':19,'anchor_cases_sha256':hashlib.sha256(cases).hexdigest(),
+        'directory_root':str(tmp_path/'spool'),
+        'generation_root':'/generation','control_dir':'/control','chunk_size':32,
+        'exporter_path':'/owner/export.py','role':'bulk','identity':{'actor_sha256':'a'*64,
+        'execution_identity_sha256':'b'*64,'teacher_config_sha256':'f'*64,'runtime_path':'/work/runtime'}}
+    active={'closed_boundary':boundary_ref,'guardian_state':{'last_boundary':boundary_ref},
+        'guardian_state_sha256':'b'*64}
+    flush=[]; sealed=[]
+    monkeypatch.setattr(module,'export_finished_tranches',lambda **kw:flush.append(kw) or {'training_admission':False})
+    def export_boundary(**kw):
+        sealed.append(kw)
+        folder=kw['directory'];folder.mkdir(parents=True,exist_ok=True)
+        (folder/'boundary-private-export.json').write_text(json.dumps({'private_export':{'identity':{'bytes':123,'sha256':'c'*64}}}))
+    monkeypatch.setattr(module,'export_final_boundary',export_boundary)
+    sandbox=SimpleNamespace(exec=lambda *_a,**_k:SimpleNamespace(result=lambda **_r:SimpleNamespace(returncode=1)))
+    result=module.export_guardian_closed_boundary(publisher,active,sandbox=sandbox,
+        read_file=remote.__getitem__,spool_root=tmp_path/'spool')
+    assert flush[0]['flush_partial'] is True
+    assert flush[0]['journal_snapshot']==journal and flush[0]['queue_snapshot']==queue
+    assert sealed[0]['exported_keys']==[row['key'] for row in entries]
+    assert sealed[0]['repair_keys']==[] and sealed[0]['unstarted_keys']==[]
+    assert result['training_admission'] is False and result['exposure'] is False
+
+
+def test_guardian_exporter_persists_and_drains_every_closed_boundary_once(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import scripts.coreweave.teacher_incremental_export as module
+    publisher={'schema':'natlang.teacher-incremental-export-publisher/1','sandbox_id':'sid',
+        'directory_root':str(tmp_path/'spool'),'role':'bulk','exporter_path':'/owner/export.py',
+        'chunk_size':32}
+    publisher_path=tmp_path/'publisher.json';publisher_path.write_text(json.dumps(publisher))
+    refs=[{'path':f'/work/control/boundaries/batch-{batch:04d}.json',
+           'sha256':str(batch)*64,'bytes':batch} for batch in (21,22,23)]
+    active={'draining':True,'batch':24,'guardian_state':{},'guardian_state_sha256':'g'*64,
+            'closed_boundaries':refs}
+    calls=[]
+    monkeypatch.setattr(module,'_cwctl_module',lambda:SimpleNamespace(load_env_file=lambda:None))
+    monkeypatch.setattr(module,'scoped_sdk_session',lambda *_a,**_k:(object(),lambda _p:b''))
+    monkeypatch.setattr(module,'discover_guardian_batch',lambda *_a:active)
+    monkeypatch.setattr(module,'export_guardian_closed_boundary',
+        lambda _pub, value, **_kw: calls.append(value['closed_boundary']['path']) or
+            {'batch':int(value['closed_boundary']['path'][-9:-5]),'training_admission':False,'exposure':False})
+    first=module.run_guardian_export_service(publisher_path,poll_seconds=0,max_polls=1,
+        allowed_spool_root=tmp_path)
+    assert len(calls)==3
+    assert set(first['closed_boundaries'])=={'0021','0022','0023'}
+    second=module.run_guardian_export_service(publisher_path,poll_seconds=0,max_polls=1,
+        allowed_spool_root=tmp_path)
+    assert len(calls)==3
+    assert second['closed_boundaries']==first['closed_boundaries']
 
 
 @pytest.mark.parametrize('mutation', ['foreign-key', 'duplicate-finish', 'unsafe-key'])
@@ -444,7 +731,8 @@ def test_final_boundary_preserves_actual_repair_error_without_complete_batch_cla
             'sha256': hashlib.sha256(context['teacher-source.json']).hexdigest()}})
     files = {**context, 'queue.jsonl': queue, 'journal.jsonl': journal_bytes,
         'score.json': json.dumps(score).encode(), 'rewards.jsonl': b'{}\n',
-        'completion.json': json.dumps(completion).encode(), 'repair-queue.jsonl': b'{}\n',
+        'completion.json': json.dumps(completion).encode(), 'repair-queue.jsonl': (json.dumps(
+            {'key': f"batch-0019:{row['key']}"})+'\n').encode(),
         f"repair-payloads/{row['key']}/000000.error.json": error_raw}
     boundary = seal_boundary(batch=19, queue_raw=queue, exported_keys=[],
         repair_keys=[row['key']], unstarted_keys=[entries[1]['key']], files=files,

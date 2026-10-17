@@ -126,6 +126,65 @@ def completed_entries(queue_raw: bytes, journal_raw: bytes, *, after: set[str] |
     return selected
 
 
+def aggregate_worker_journals(queue_raw: bytes, worker_queues: list[tuple[str, bytes]],
+                              worker_journals: list[tuple[str, bytes | None]]) -> bytes:
+    """Join the real per-worker journals after proving their queue partition.
+
+    Active collectors append to ``journal-worker-N.jsonl``; the shared
+    ``journal.jsonl`` is only a drained-boundary artifact. This validates the
+    exact worker queue cover and that every complete journal event belongs to
+    its worker. A trailing non-LF fragment is an in-progress append and is
+    withheld until the next poll; malformed complete records fail closed.
+    """
+    master_rows = _jsonl_rows(queue_raw, 'master teacher queue')
+    master = {row.get('key'): row for row in master_rows}
+    if not master_rows or None in master or len(master) != len(master_rows):
+        raise ValueError('master queue keys must be unique')
+    # The collector assigns worker-local output/job/log locations when it
+    # partitions the original queue. Every other field is semantic request
+    # identity (including less common sampling/runtime knobs), so compare the
+    # complete rows after removing only those three plumbing paths.
+    worker_local_fields = {'output', 'jobs', 'log'}
+    worker_owner = {}
+    worker_numbers = []
+    for name, raw in worker_queues:
+        if not re.fullmatch(r'queue-worker-[0-9]+\.jsonl', name):
+            raise ValueError('worker queue has an unexpected filename')
+        worker_numbers.append(int(name[len('queue-worker-'):-len('.jsonl')]))
+        rows = _jsonl_rows(raw, name)
+        if not rows:
+            raise ValueError('worker queue partition is empty')
+        for row in rows:
+            key = row.get('key')
+            if key not in master or key in worker_owner:
+                raise ValueError('worker queue keys are foreign or duplicated')
+            master_identity = {field: value for field, value in master[key].items()
+                               if field not in worker_local_fields}
+            worker_identity = {field: value for field, value in row.items()
+                               if field not in worker_local_fields}
+            if worker_identity != master_identity:
+                raise ValueError('worker queue identity differs from master queue')
+            worker_owner[key] = name
+    if set(worker_owner) != set(master):
+        raise ValueError('worker queues do not exactly partition the master queue')
+    if len(worker_numbers) != len(set(worker_numbers)) or worker_numbers != list(range(len(worker_numbers))):
+        raise ValueError('worker queues are not in exact numeric contiguous order')
+    journal_map = dict(worker_journals)
+    expected_names = {name.replace('queue-worker-', 'journal-worker-') for name, _ in worker_queues}
+    if set(journal_map) != expected_names:
+        raise ValueError('worker journals do not match exact queue worker set')
+    combined = bytearray()
+    for queue_name, _ in worker_queues:
+        journal_name = queue_name.replace('queue-worker-', 'journal-worker-')
+        raw = journal_map[journal_name] or b''
+        complete = raw if not raw or raw.endswith(b'\n') else raw[:raw.rfind(b'\n') + 1]
+        for row in _jsonl_rows(complete, journal_name):
+            if row.get('key') not in master or worker_owner.get(row.get('key')) != queue_name:
+                raise ValueError('worker journal event is foreign to its exact queue shard')
+        combined.extend(complete)
+    return bytes(combined)
+
+
 def _teacher_source_binding(raw: bytes, *, batch: int, source_sha256: str) -> dict:
     source = _json(raw, 'teacher source')
     required = ('actor', 'actual_teacher_execution_identity', 'actual_task_runtime',
@@ -605,6 +664,13 @@ def seal_boundary(*, batch: int, queue_raw: bytes, exported_keys: list[str],
     repair_reported = {row['key'] for row in repair_rows if isinstance(row, dict)
                        and isinstance(row.get('key'), str)}
     required_repairs = repair_reported - unstarted_expected
+    repair_queue = _jsonl_rows(files['repair-queue.jsonl'], 'final repair queue')
+    expected_retry_keys = {f"batch-{batch:04d}:{key}" for key in required_repairs}
+    actual_retry_keys = [row.get('key') for row in repair_queue]
+    if (any(not isinstance(key, str) for key in actual_retry_keys)
+            or len(actual_retry_keys) != len(set(actual_retry_keys))
+            or set(actual_retry_keys) != expected_retry_keys):
+        raise ValueError('final repair queue does not exactly preserve the guardian repair frontier')
     if (set(exported_keys) != complete_keys or set(repair_keys) != required_repairs
             or repair_actual != required_repairs or set(unstarted_keys) != unstarted_expected):
         raise ValueError('final boundary key partitions differ from actual per-key batch accounting')
@@ -730,6 +796,370 @@ def _validate_live_identity(config: dict, sandbox, read_file: Callable[[str], by
             'runtime_path': expected['runtime_path']}
 
 
+def discover_guardian_batch(publisher: dict, sandbox,
+                            read_file: Callable[[str], bytes]) -> dict | None:
+    """Derive a poll config only from the exact live guardian owner and sealed batch.
+
+    The publisher file is owner-host authority. The remote guardian config,
+    state, process identity, and source-sequence receipt are independently
+    checked on every poll; a stale batch config cannot follow a new owner.
+    The configured anchor is intentionally special: it is sealed by the
+    original source-selection binding and has no ``started`` receipt.
+    """
+    if publisher.get('schema') != 'natlang.teacher-incremental-export-publisher/1':
+        raise ValueError('automatic publisher schema differs')
+    required = {'sandbox_id', 'sandbox_boot_id', 'guardian_config', 'control_dir',
+                'generation_root', 'anchor_batch', 'anchor_cases_sha256',
+                'directory_root', 'role', 'chunk_size', 'exporter_path', 'identity'}
+    if not required <= publisher.keys():
+        raise ValueError('automatic publisher lacks exact guardian and spool authority')
+    if type(publisher['anchor_batch']) is not int or type(publisher['chunk_size']) is not int:
+        raise ValueError('publisher anchor and chunk size must be integers')
+    boot = sandbox.exec(['cat', '/proc/sys/kernel/random/boot_id'], timeout_seconds=30).result(timeout=45)
+    if boot.returncode != 0 or boot.stdout.strip() != publisher['sandbox_boot_id']:
+        raise ValueError('replacement teacher boot differs from publisher authority')
+
+    guardian_ref = publisher['guardian_config']
+    if not isinstance(guardian_ref, dict) or not {'path', 'sha256', 'bytes'} <= guardian_ref.keys():
+        raise ValueError('publisher must bind exact remote guardian config bytes')
+    guardian_raw = read_file(guardian_ref['path'])
+    if len(guardian_raw) != guardian_ref['bytes'] or _sha(guardian_raw) != guardian_ref['sha256']:
+        raise ValueError('remote guardian config differs from publisher binding')
+    guardian = _json(guardian_raw, 'remote guardian config')
+    if (guardian.get('control') != publisher['control_dir']
+            or guardian.get('root') != publisher['generation_root']
+            or not isinstance(guardian.get('source_sequence'), dict)):
+        raise ValueError('guardian control, generation root, or source-sequence authority differs')
+    source_sequence = guardian['source_sequence']
+
+    control = publisher['control_dir']
+    state_raw = read_file(f'{control}/state.json')
+    state = _json(state_raw, 'guardian state')
+    if state.get('schema') != 'natlang.teacher-generation-guardian/1':
+        raise ValueError('active guardian state schema differs')
+    config_binding = state.get('config')
+    if config_binding != {'path': guardian_ref['path'], 'sha256': guardian_ref['sha256'],
+                          'bytes': guardian_ref['bytes']}:
+        raise ValueError('guardian state does not bind the publisher config revision')
+    batch, owner = state.get('active_batch'), state.get('owner')
+    closed_refs = {}
+    sequence_state = state.get('source_sequence') or {}
+    for key, closed_ref in (sequence_state.get('closed') or {}).items():
+        if not isinstance(closed_ref, dict) or not {'path', 'sha256', 'bytes'} <= closed_ref.keys():
+            raise ValueError('guardian closed-sequence history has an incomplete receipt binding')
+        closed_raw = read_file(closed_ref['path'])
+        if len(closed_raw) != closed_ref['bytes'] or _sha(closed_raw) != closed_ref['sha256']:
+            raise ValueError('guardian closed-sequence history receipt changed')
+        closed_receipt = _json(closed_raw, 'guardian closed-sequence receipt')
+        boundary_ref = closed_receipt.get('boundary')
+        if (str(closed_receipt.get('batch')) != key or not isinstance(boundary_ref, dict)
+                or not {'path', 'sha256', 'bytes'} <= boundary_ref.keys()
+                or boundary_ref['path'] != f"{publisher['control_dir']}/boundaries/batch-{int(key):04d}.json"):
+            raise ValueError('guardian closed-sequence history does not bind its exact boundary file')
+        closed_refs[key] = boundary_ref
+    latest_boundary = state.get('last_boundary')
+    if latest_boundary is not None:
+        if not isinstance(latest_boundary, dict) or not {'path', 'sha256', 'bytes'} <= latest_boundary.keys():
+            raise ValueError('guardian latest boundary lacks exact file binding')
+        name = Path(latest_boundary['path']).name
+        match = re.fullmatch(r'batch-([0-9]{4})\.json', name)
+        if (not match or latest_boundary['path'] != f"{publisher['control_dir']}/boundaries/{name}"):
+            raise ValueError('guardian latest boundary path is outside its control directory')
+        closed_refs[match.group(1)] = latest_boundary
+    closed_boundaries = [closed_refs[key] for key in sorted(closed_refs, key=int)]
+    if batch is None:
+        if owner is not None:
+            raise ValueError('guardian has an owner without an active batch')
+        if not closed_boundaries:
+            return None
+        return {'closed_boundaries': closed_boundaries, 'guardian_state_sha256': _sha(state_raw),
+                'guardian_state': state, 'sandbox_id': publisher['sandbox_id']}
+    if type(batch) is not int or batch < publisher['anchor_batch'] or not isinstance(owner, dict):
+        raise ValueError('guardian active batch/owner is outside the authorized source sequence')
+    if (owner.get('boot_id') != publisher['sandbox_boot_id']
+            or not isinstance(owner.get('pid'), int) or not str(owner.get('start_ticks', '')).isdigit()):
+        raise ValueError('guardian feeder owner lacks exact process/boot identity')
+
+    # Check PID/start-time/boot and feeder argv inside the sandbox rather than
+    # trusting a stale state file. Values are validated integers/strings above.
+    probe = ("import pathlib,json,sys; p=int(sys.argv[1]); ticks=sys.argv[2]; boot=sys.argv[3]; "
+             "feeder=sys.argv[4]; batch=sys.argv[5]; r=pathlib.Path('/proc')/str(p); "
+             "s=(r/'stat').read_text().rsplit(')',1)[1].split(); "
+             "a=(r/'cmdline').read_bytes().split(b'\\0')[:-1]; env=(r/'environ').read_bytes().split(b'\\0'); "
+             "actual={'pid':p,'start_ticks':s[19],'boot_id':pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip(),"
+             "'argv':[x.decode(errors='replace') for x in a]}; "
+             "ok=s[0]!='Z' and actual['start_ticks']==ticks and actual['boot_id']==boot and "
+             "feeder in actual['argv'] and ('NATLANG_TEACHER_START_BATCH='+batch).encode() in env; "
+             "print(json.dumps({'valid':ok,'identity':actual}))")
+    checked = sandbox.exec(['python', '-c', probe, str(owner['pid']), str(owner['start_ticks']),
+                            owner['boot_id'], guardian['feeder'], str(batch)], timeout_seconds=20).result(timeout=30)
+    if checked.returncode != 0:
+        raise ValueError('could not verify live guardian feeder identity')
+    process = _json(checked.stdout.encode(), 'live guardian feeder probe')
+    if process.get('valid') is not True:
+        phase_path = f"{publisher['generation_root']}/feed-evidence-phase.json"
+        phase = _json(read_file(phase_path), 'drained teacher feed phase')
+        if phase.get('batch') == batch and phase.get('phase') == 'batch_complete':
+            # The feeder has exited but the guardian has not yet atomically
+            # published last_boundary. Keep polling this exact epoch; the next
+            # state transition will expose the immutable boundary receipt.
+            return {'draining': True, 'batch': batch, 'guardian_state': state,
+                    'guardian_state_sha256': _sha(state_raw), 'sandbox_id': publisher['sandbox_id'],
+                    'closed_boundaries': closed_boundaries}
+        raise ValueError('guardian feeder PID/start/boot/argv/batch differs from active state')
+
+    source_root = f"{publisher['generation_root']}/evidence-collections-v2/batch-{batch:04d}"
+    cases_path = f'{source_root}/source-cases.jsonl'
+    queue_path = f'{source_root}/queue.jsonl'
+    teacher_path = f'{source_root}/teacher-source.json'
+    started = None
+    expected_sealed = None
+    if batch == publisher['anchor_batch']:
+        if source_sequence.get('anchor') != {'batch': batch, 'cases_sha256': publisher['anchor_cases_sha256']}:
+            raise ValueError('protected anchor source differs from its exact packet binding')
+    else:
+        started = (state.get('source_sequence') or {}).get('started', {}).get(str(batch))
+        if not isinstance(started, dict) or not {'path', 'sha256', 'bytes'} <= started.keys():
+            raise ValueError('non-anchor batch lacks its guardian source-sequence started receipt')
+        receipt_raw = read_file(started['path'])
+        if len(receipt_raw) != started['bytes'] or _sha(receipt_raw) != started['sha256']:
+            raise ValueError('source-sequence started receipt differs from state binding')
+        receipt = _json(receipt_raw, 'source-sequence started receipt')
+        if receipt.get('batch') != batch:
+            raise ValueError('source-sequence started receipt is for a different batch')
+        expected_sealed = receipt.get('sealed') or {}
+        expected_paths = {'source-cases.jsonl': cases_path, 'queue.jsonl': queue_path,
+                          'teacher-source.json': teacher_path}
+        if set(expected_sealed) != set(expected_paths) or any(
+                expected_sealed[name].get('path') != path for name, path in expected_paths.items()):
+            raise ValueError('source-sequence receipt names unexpected batch files')
+    cases_raw = read_file(cases_path)
+    queue_raw = read_file(queue_path)
+    teacher_raw = read_file(teacher_path)
+    cases_sha, queue_sha, teacher_sha = _sha(cases_raw), _sha(queue_raw), _sha(teacher_raw)
+    teacher = _teacher_source_binding(teacher_raw, batch=batch, source_sha256=cases_sha)
+    if batch == publisher['anchor_batch']:
+        if cases_sha != publisher['anchor_cases_sha256']:
+            raise ValueError('protected anchor source differs from its exact packet binding')
+    else:
+        actual = {'source-cases.jsonl': {'path': cases_path, 'bytes': len(cases_raw), 'sha256': cases_sha},
+                  'queue.jsonl': {'path': queue_path, 'bytes': len(queue_raw), 'sha256': queue_sha},
+                  'teacher-source.json': {'path': teacher_path, 'bytes': len(teacher_raw), 'sha256': teacher_sha}}
+        if expected_sealed != actual:
+            raise ValueError('active batch source bytes differ from its immutable started receipt')
+
+    entries = _jsonl_rows(queue_raw, 'active teacher queue')
+    if not entries or any(row.get('source') != cases_path for row in entries):
+        raise ValueError('active queue rows do not bind the one sealed source-case file')
+    if (teacher.get('actual_teacher_execution_identity', {}).get('sha256')
+            != guardian['teacher_identity'].get('sha256')):
+        raise ValueError('teacher source execution identity differs from active guardian config')
+    runtime = guardian['task_runtime']
+    if teacher.get('actual_task_runtime') != runtime:
+        raise ValueError('teacher source runtime differs from active guardian config')
+    phase_path = f"{publisher['generation_root']}/feed-evidence-phase.json"
+    phase_raw = read_file(phase_path)
+    phase = _json(phase_raw, 'live teacher feed phase')
+    worker_count = phase.get('worker_count')
+    if phase.get('batch') != batch or type(worker_count) is not int or worker_count < 1:
+        raise ValueError('live feed phase does not bind active batch and worker count')
+    worker_pids = phase.get('worker_pids')
+    output_root = phase.get('out')
+    source_model = (teacher.get('teacher') or {}).get('model')
+    if (type(phase.get('cases')) is not int or phase.get('cases') != len(entries)
+            or not isinstance(source_model, str) or phase.get('teacher') != source_model
+            or output_root != source_root
+            or not isinstance(worker_pids, list) or len(worker_pids) != worker_count
+            or any(type(pid) is not int or pid <= 0 for pid in worker_pids)
+            or len(set(worker_pids)) != len(worker_pids)):
+        raise ValueError('live feed phase lacks exact case, teacher, output-root or worker identities')
+    for row in entries:
+        for field in ('output', 'jobs', 'log'):
+            path = row.get(field)
+            if path is not None and (not isinstance(path, str)
+                    or not Path(os.path.normpath(path)).is_relative_to(os.path.normpath(output_root))):
+                raise ValueError('queue worker output path escapes the exact feed output root')
+    list_code = ("import pathlib,json,sys; p=pathlib.Path(sys.argv[1]); "
+        "n=lambda x:int(x.name.rsplit('-',1)[1].split('.',1)[0]); "
+        "q=sorted((x.name for x in p.glob('queue-worker-*.jsonl')),key=n); "
+        "j=sorted((x.name for x in p.glob('journal-worker-*.jsonl')),key=n); "
+        "print(json.dumps({'queues':q,'journals':j}))")
+    listed = sandbox.exec(['python', '-c', list_code, source_root], timeout_seconds=20).result(timeout=30)
+    if listed.returncode != 0:
+        raise ValueError('could not list active worker queues and journals')
+    workers = _json(listed.stdout.encode(), 'active worker file listing')
+    expected_queue_names = [f'queue-worker-{index}.jsonl' for index in range(worker_count)]
+    expected_journal_names = [f'journal-worker-{index}.jsonl' for index in range(worker_count)]
+    if workers.get('queues') != expected_queue_names or not set(workers.get('journals', [])) <= set(expected_journal_names):
+        raise ValueError('live worker queue/journal files differ from declared contiguous worker set')
+    worker_queue_paths = [f'{source_root}/{name}' for name in expected_queue_names]
+    worker_journal_paths = {f'journal-worker-{index}.jsonl':
+        (f'{source_root}/journal-worker-{index}.jsonl' if f'journal-worker-{index}.jsonl' in workers['journals'] else None)
+        for index in range(worker_count)}
+    identity = {'sandbox_boot_id': publisher['sandbox_boot_id'],
+        'teacher_source_sha256': teacher_sha, 'source_cases_sha256': cases_sha,
+        'actor_sha256': teacher['actor']['sha256'],
+        'execution_identity_sha256': teacher['actual_teacher_execution_identity']['sha256'],
+        'teacher_config_sha256': teacher['teacher_configuration_source']['sha256'],
+        'runtime_path': runtime}
+    expected_identity = publisher['identity']
+    stable_fields = {'sandbox_boot_id', 'actor_sha256', 'execution_identity_sha256',
+                     'teacher_config_sha256', 'runtime_path'}
+    if (not isinstance(expected_identity, dict) or not stable_fields <= expected_identity.keys()
+            or any(identity.get(key) != expected_identity[key] for key in stable_fields)):
+        raise ValueError('active actor/config/runtime identity differs from publisher authority')
+    return {'sandbox_id': publisher['sandbox_id'], 'batch': batch,
+        'queue_path': queue_path, 'journal_path': f'{source_root}/journal.jsonl',
+        'context_paths': {'teacher-source.json': teacher_path,
+                          'source-cases.jsonl': cases_path},
+        'directory': f"{publisher['directory_root']}/batch-{batch:04d}",
+        'role': publisher['role'], 'chunk_size': publisher['chunk_size'],
+        'exporter_path': publisher['exporter_path'], 'identity': identity,
+        'worker_queue_paths': worker_queue_paths, 'worker_journal_paths': worker_journal_paths,
+        'queue_sha256': queue_sha, 'guardian_state_sha256': _sha(state_raw),
+        'source_sequence_started_sha256': None if batch == publisher['anchor_batch'] else started['sha256'],
+        'guardian_state': state, 'control_dir': control, 'closed_boundaries': closed_boundaries}
+
+
+def export_guardian_closed_boundary(publisher: dict, active: dict, *, sandbox,
+                                    read_file: Callable[[str], bytes], spool_root: Path) -> dict:
+    """Seal and privately export the guardian's exact drained boundary.
+
+    This preserves failed and unstarted work as repair/control data. It is
+    deliberately separate from tranche completion and never grants admission.
+    """
+    reference = active.get('closed_boundary')
+    state = active.get('guardian_state') or {}
+    if not isinstance(reference, dict) or not {'path', 'sha256', 'bytes'} <= reference.keys():
+        raise ValueError('guardian closed boundary lacks exact file binding')
+    boundary_raw = read_file(reference['path'])
+    if len(boundary_raw) != reference['bytes'] or _sha(boundary_raw) != reference['sha256']:
+        raise ValueError('guardian closed boundary differs from its state binding')
+    boundary = _json(boundary_raw, 'guardian closed boundary')
+    batch = boundary.get('batch')
+    if (type(batch) is not int or batch < publisher['anchor_batch']
+            or reference['path'] != f"{publisher['control_dir']}/boundaries/batch-{batch:04d}.json"):
+        raise ValueError('guardian boundary path or batch is outside the authorized sequence')
+    completion = boundary.get('completion') or {}
+    if completion.get('schema') != 'natlang.strong-teacher-batch-completion/1':
+        raise ValueError('guardian boundary lacks exact batch completion accounting')
+    started_receipt = None
+    if batch > publisher['anchor_batch']:
+        started = (state.get('source_sequence') or {}).get('started', {}).get(str(batch))
+        if not isinstance(started, dict) or not {'path', 'sha256', 'bytes'} <= started.keys():
+            raise ValueError('closed non-anchor batch lacks its started source-sequence receipt')
+        started_raw = read_file(started['path'])
+        if len(started_raw) != started['bytes'] or _sha(started_raw) != started['sha256']:
+            raise ValueError('closed batch started receipt differs from guardian state')
+        started_receipt = _json(started_raw, 'closed batch source sequence')
+        if started_receipt.get('batch') != batch:
+            raise ValueError('closed batch started receipt names another batch')
+
+    source_root = f"{publisher['generation_root']}/evidence-collections-v2/batch-{batch:04d}"
+    control = publisher['control_dir']
+    queue_path = f'{source_root}/queue.jsonl'
+    queue_raw = read_file(queue_path)
+    source_cases = f'{source_root}/source-cases.jsonl'
+    teacher_source = f'{source_root}/teacher-source.json'
+    cases_raw, teacher_raw = read_file(source_cases), read_file(teacher_source)
+    teacher = _teacher_source_binding(teacher_raw, batch=batch, source_sha256=_sha(cases_raw))
+    authority = publisher.get('identity') or {}
+    if (teacher['actor'].get('sha256') != authority.get('actor_sha256')
+            or teacher['actual_teacher_execution_identity'].get('sha256') != authority.get('execution_identity_sha256')
+            or teacher['teacher_configuration_source'].get('sha256') != authority.get('teacher_config_sha256')
+            or teacher.get('actual_task_runtime') != authority.get('runtime_path')):
+        raise ValueError('closed batch actor, execution, configuration or runtime differs from publisher authority')
+    bindings = boundary.get('bindings') or {}
+    for name, raw, path in (('queue.jsonl', queue_raw, queue_path),
+                            ('teacher-source.json', teacher_raw, teacher_source)):
+        binding = bindings.get(name)
+        if not isinstance(binding, dict) or binding.get('path') != path or binding.get('bytes') != len(raw) or binding.get('sha256') != _sha(raw):
+            raise ValueError(f'closed guardian boundary does not bind exact {name} source')
+    if batch == publisher['anchor_batch']:
+        if _sha(cases_raw) != publisher['anchor_cases_sha256']:
+            raise ValueError('closed anchor source differs from the exact publisher packet')
+    else:
+        sealed = (started_receipt or {}).get('sealed') or {}
+        case_binding = sealed.get('source-cases.jsonl')
+        if (case_binding != {'path': source_cases, 'bytes': len(cases_raw), 'sha256': _sha(cases_raw)}
+                or sealed.get('queue.jsonl') != {'path': queue_path, 'bytes': len(queue_raw), 'sha256': _sha(queue_raw)}
+                or sealed.get('teacher-source.json') != {'path': teacher_source, 'bytes': len(teacher_raw), 'sha256': _sha(teacher_raw)}):
+            raise ValueError('closed batch files differ from its exact source-sequence seal')
+
+    journal_path = f'{source_root}/journal.jsonl'
+    score_path = f'{source_root}/score.json'
+    rewards_path = f'{source_root}/rewards.jsonl'
+    repair_queue_path = f'{control}/repairs/batch-{batch:04d}/queue.jsonl'
+    queue_rows = _jsonl_rows(queue_raw, 'closed guardian queue')
+    queue_keys = [row.get('key') for row in queue_rows]
+    outcomes = boundary.get('individual_outcomes') or []
+    outcome_by_key = {row.get('key'): row for row in outcomes if isinstance(row, dict)}
+    if len(outcome_by_key) != len(outcomes) or set(outcome_by_key) != set(queue_keys):
+        raise ValueError('closed guardian outcomes do not cover the exact queue')
+    journal_raw = read_file(journal_path)
+    journal_rows = _jsonl_rows(journal_raw, 'closed guardian journal')
+    started_keys = {row.get('key') for row in journal_rows if row.get('event') == 'start'}
+    complete_keys = set()
+    for key, outcome in outcome_by_key.items():
+        finish = outcome.get('finish')
+        states = ((finish or {}).get('output_accounting') or {}).get('job_states') or []
+        if (finish and (finish.get('output_accounting') or {}).get('complete') is True
+                and states and all(row.get('state') in ('result', 'generation_held') for row in states)):
+            complete_keys.add(key)
+    unfinished = set(outcome_by_key) - {key for key, row in outcome_by_key.items() if row.get('finish') is not None}
+    unstarted_keys = unfinished - started_keys
+    reported_repairs = {row.get('key') for row in completion.get('repair_required') or []
+                        if isinstance(row, dict) and isinstance(row.get('key'), str)}
+    repair_keys = sorted(reported_repairs - unstarted_keys)
+    exported_keys = [row['key'] for row in queue_rows if row['key'] in complete_keys]
+    unstarted_ordered = [row['key'] for row in queue_rows if row['key'] in unstarted_keys]
+    # The guardian creates this queue before publishing last_boundary. If it
+    # has no repairs, an absent file is represented by the exact empty queue.
+    exists = sandbox.exec(['test', '-f', repair_queue_path], timeout_seconds=20).result(timeout=30)
+    if exists.returncode not in (0, 1):
+        raise OSError('could not check exact guardian repair-queue snapshot')
+    if exists.returncode == 0:
+        repair_queue_raw = read_file(repair_queue_path)
+    elif repair_keys:
+        raise ValueError('guardian boundary has repairs but no durable repair queue')
+    else:
+        repair_queue_raw = b''
+    files = {'teacher-source.json': teacher_source, 'source-cases.jsonl': source_cases,
+        'queue.jsonl': queue_path, 'journal.jsonl': journal_path, 'score.json': score_path,
+        'rewards.jsonl': rewards_path, 'completion.json': reference['path'],
+        'repair-queue.jsonl': repair_queue_path}
+    for name, binding in _repair_payload_bindings(boundary).items():
+        files[name] = binding['source_path']
+    # Keep the no-repair empty snapshot local to this call; read_file remains
+    # the scoped remote reader for all source-bound payloads.
+    def boundary_reader(path: str) -> bytes:
+        if path == repair_queue_path and exists.returncode == 1:
+            return repair_queue_raw
+        return read_file(path)
+    directory = Path(publisher['directory_root']) / f'batch-{batch:04d}' / 'final-boundary'
+    batch_directory = Path(publisher['directory_root']) / f'batch-{batch:04d}'
+    def export_file(tranche: dict, receipt_path: Path) -> dict:
+        return export_private_tranche(tranche, exporter=Path(publisher['exporter_path']),
+            role=publisher['role'], receipt_path=receipt_path)
+    # A batch may finish with fewer than the normal tranche size remaining.
+    # Flush those exact completed rows against the guardian's bound final
+    # journal before sealing the repair/unstarted control boundary.
+    export_finished_tranches(batch=batch, queue_path=queue_path, journal_path=journal_path,
+        context_paths={'teacher-source.json': teacher_source, 'source-cases.jsonl': source_cases},
+        directory=batch_directory, read_file=boundary_reader, export_file=export_file,
+        chunk_size=publisher['chunk_size'], flush_partial=True,
+        prune_after_private_verification=True, queue_snapshot=queue_raw,
+        journal_snapshot=journal_raw)
+    export_final_boundary(batch=batch, queue_path=queue_path, exported_keys=exported_keys,
+        repair_keys=repair_keys, unstarted_keys=unstarted_ordered, file_paths=files,
+        read_file=boundary_reader, directory=directory,
+        exporter=Path(publisher['exporter_path']), role=publisher['role'])
+    return {'batch': batch, 'directory': str(directory), 'boundary_sha256': reference['sha256'],
+            'private': json.loads((directory/'boundary-private-export.json').read_text()).get('private_export'),
+            'batch_can_advance': completion.get('can_advance') is True,
+            'training_admission': False, 'exposure': False}
+
+
 def run_incremental_service(config_path: Path, *, poll_seconds: float = 15,
                             max_polls: int | None = None,
                             allowed_spool_root: Path | None = None) -> dict:
@@ -842,6 +1272,158 @@ def run_incremental_once(config_path: Path) -> dict:
         chunk_size=config['chunk_size'], flush_partial=bool(config.get('flush_partial', False)))
 
 
+def run_guardian_export_service(publisher_path: Path, *, poll_seconds: float = 15,
+                                max_polls: int | None = None,
+                                allowed_spool_root: Path | None = None) -> dict:
+    """Poll the current guardian owner and follow its sealed active batch.
+
+    This is the automatic publisher path: it does not require an operator to
+    rewrite a batch config after every guardian transition. It only exports
+    live finished tranches; batch close/accounting remains a separate receipt
+    and never implies training admission.
+    """
+    if poll_seconds < 0 or (max_polls is not None and max_polls < 1):
+        raise ValueError('poll interval and poll count must be nonnegative/positive')
+    publisher_path = Path(publisher_path).resolve(strict=True)
+    publisher_raw = publisher_path.read_bytes()
+    publisher = _json(publisher_raw, 'teacher export publisher')
+    if not isinstance(publisher, dict):
+        raise ValueError('teacher export publisher must be a JSON object')
+    spool_root = (Path(allowed_spool_root).resolve(strict=True) if allowed_spool_root is not None
+                  else _external_data_root())
+    state_path = Path(publisher['directory_root']).resolve() / 'publisher-state.json'
+    root = Path(publisher['directory_root']).resolve()
+    if not root.is_relative_to(spool_root):
+        raise ValueError('teacher export publisher spool must live under external data root')
+    polls, last = 0, None
+    while max_polls is None or polls < max_polls:
+        try:
+            cwctl = _cwctl_module()
+            cwctl.load_env_file()
+            sandbox, reader = scoped_sdk_session(publisher['sandbox_id'])
+            active = discover_guardian_batch(publisher, sandbox, reader)
+            prior = json.loads(state_path.read_text()) if state_path.exists() else {}
+            closed_exports = dict(prior.get('closed_boundaries') or {})
+            if any(not str(key).isdigit() or not isinstance(value, dict)
+                   or not isinstance(value.get('sha256'), str)
+                   for key, value in closed_exports.items()):
+                raise ValueError('publisher durable closed-boundary map is malformed')
+
+            def export_unseen_closed(boundary_refs, guardian_state, *, active_batch=None):
+                exported = []
+                for reference in boundary_refs or []:
+                    path = reference.get('path', '') if isinstance(reference, dict) else ''
+                    match = re.fullmatch(r'batch-([0-9]{4})\.json', Path(path).name)
+                    if not match:
+                        raise ValueError('closed-boundary backlog contains an unexpected path')
+                    batch_key = match.group(1)
+                    if active_batch is not None and int(batch_key) >= active_batch:
+                        continue
+                    previous = closed_exports.get(batch_key)
+                    if previous is not None:
+                        if previous.get('sha256') != reference.get('sha256'):
+                            raise ValueError('guardian rewrote a previously exported closed boundary')
+                        continue
+                    closed = export_guardian_closed_boundary(publisher,
+                        {'closed_boundary': reference, 'guardian_state': guardian_state},
+                        sandbox=sandbox, read_file=reader, spool_root=spool_root)
+                    closed_exports[batch_key] = {'sha256': reference['sha256'], 'result': closed}
+                    exported.append(closed)
+                return exported
+
+            if active is None or active.get('batch') is None:
+                closed = export_unseen_closed(
+                    active.get('closed_boundaries') if active else [],
+                    active.get('guardian_state', {}) if active else {})
+                last = {'schema': 'natlang.teacher-incremental-export-publisher-state/1',
+                    'at': time.time(), 'publisher_sha256': _sha(publisher_raw),
+                    'active': False, 'reason': 'guardian has no active feeder/batch',
+                    'closed_exports_this_poll': closed,
+                    'training_admission': False, 'exposure': False}
+            elif active.get('draining') is True:
+                closed = export_unseen_closed(active.get('closed_boundaries'), active.get('guardian_state') or {},
+                                              active_batch=active['batch'])
+                last = {'schema': 'natlang.teacher-incremental-export-publisher-state/1',
+                    'at': time.time(), 'publisher_sha256': _sha(publisher_raw),
+                    'active': False, 'draining_batch': active['batch'],
+                    'guardian_state_sha256': active['guardian_state_sha256'],
+                    'reason': 'feeder boundary complete; waiting for guardian last_boundary publication',
+                    'closed_exports_this_poll': closed,
+                    'training_admission': False, 'exposure': False}
+            else:
+                # Re-read all identity-bound bytes through the ordinary poll
+                # validator immediately before queue/journal/output collection.
+                identity = _validate_live_identity(active, sandbox, reader)
+                directory = Path(active['directory']).resolve()
+                directory.mkdir(parents=True, exist_ok=True)
+                active_identity = {'sandbox_id': publisher['sandbox_id'], 'batch': active['batch'],
+                                   'teacher_source_sha256': identity['teacher_source_sha256']}
+                queue_snapshot = reader(active['queue_path'])
+                if _sha(queue_snapshot) != active['queue_sha256']:
+                    raise ValueError('active queue changed after guardian discovery')
+                if active['worker_queue_paths']:
+                    worker_queues = [(Path(path).name, reader(path)) for path in active['worker_queue_paths']]
+                    worker_journals = [(name, reader(path) if path is not None else None)
+                        for name, path in active['worker_journal_paths'].items()]
+                    journal_snapshot = aggregate_worker_journals(queue_snapshot, worker_queues, worker_journals)
+                else:
+                    journal_snapshot = reader(active['journal_path'])
+                journal_sha = _sha(journal_snapshot)
+                prior_identity = prior.get('active_identity')
+                if isinstance(prior_identity, list) and len(prior_identity) == 3:
+                    # Compatibility with the earlier tuple serialized by JSON.
+                    prior_identity = {'sandbox_id': prior_identity[0], 'batch': prior_identity[1],
+                                      'teacher_source_sha256': prior_identity[2]}
+                changed = active_identity != prior_identity or journal_sha != prior.get('journal_sha256')
+                changed_at = time.time() if changed else float(prior.get('journal_changed_at', time.time()))
+                idle_flush = time.time() - changed_at >= float(publisher.get('idle_flush_after_seconds', 300))
+
+                def export_file(tranche: dict, receipt_path: Path) -> dict:
+                    return export_private_tranche(tranche, exporter=Path(publisher['exporter_path']),
+                        role=publisher['role'], receipt_path=receipt_path)
+
+                result = export_finished_tranches(batch=active['batch'],
+                    queue_path=active['queue_path'], journal_path=active['journal_path'],
+                    context_paths=active['context_paths'], directory=directory,
+                    read_file=reader, export_file=export_file, chunk_size=active['chunk_size'],
+                    flush_partial=bool(publisher.get('flush_partial', False)) or idle_flush,
+                    prune_after_private_verification=True, queue_snapshot=queue_snapshot,
+                    journal_snapshot=journal_snapshot)
+                closed = export_unseen_closed(active.get('closed_boundaries'), active.get('guardian_state') or {},
+                                              active_batch=active['batch'])
+                last = {'schema': 'natlang.teacher-incremental-export-publisher-state/1',
+                    'at': time.time(), 'publisher_sha256': _sha(publisher_raw),
+                    'active': True, 'active_identity': active_identity,
+                    'guardian_state_sha256': active['guardian_state_sha256'],
+                    'source_sequence_started_sha256': active['source_sequence_started_sha256'],
+                    'journal_sha256': journal_sha, 'journal_changed_at': changed_at,
+                    'identity': identity, 'result': result,
+                    'closed_exports_this_poll': closed,
+                    'training_admission': False, 'exposure': False}
+            # Persist every verified boundary, not just the most recent one.
+            # This makes restarts and slow polls recover all completed tails.
+            last['closed_boundaries'] = closed_exports
+        except (ValueError, KeyError, TypeError) as error:
+            last = {'schema': 'natlang.teacher-incremental-export-publisher-state/1',
+                'at': time.time(), 'publisher_sha256': _sha(publisher_raw),
+                'identity_error': f'{type(error).__name__}: {error}',
+                'closed_boundaries': locals().get('closed_exports', {}),
+                'training_admission': False, 'exposure': False}
+            _write(state_path, (json.dumps(last, sort_keys=True, indent=2) + '\n').encode())
+            raise
+        except Exception as error:
+            last = {'schema': 'natlang.teacher-incremental-export-publisher-state/1',
+                'at': time.time(), 'publisher_sha256': _sha(publisher_raw),
+                'transport_error': f'{type(error).__name__}: {error}',
+                'closed_boundaries': locals().get('closed_exports', {}),
+                'training_admission': False, 'exposure': False}
+        _write(state_path, (json.dumps(last, sort_keys=True, indent=2) + '\n').encode())
+        polls += 1
+        if max_polls is None or polls < max_polls:
+            time.sleep(poll_seconds)
+    return last or {}
+
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
@@ -849,8 +1431,13 @@ if __name__ == '__main__':
                         help='owner-host JSON with the exact sandbox, batch, context and spool paths')
     parser.add_argument('--continuous', action='store_true',
                         help='reload the active-batch config each poll and require exact live identity bindings')
+    parser.add_argument('--follow-guardian', action='store_true',
+                        help='discover and follow only the exact live guardian batch from a publisher authority file')
     parser.add_argument('--poll-seconds', type=float, default=15)
     args = parser.parse_args()
-    result = (run_incremental_service(args.config, poll_seconds=args.poll_seconds)
+    if args.continuous and args.follow_guardian:
+        parser.error('choose --continuous or --follow-guardian')
+    result = (run_guardian_export_service(args.config, poll_seconds=args.poll_seconds)
+              if args.follow_guardian else run_incremental_service(args.config, poll_seconds=args.poll_seconds)
               if args.continuous else run_incremental_once(args.config))
     print(json.dumps(result, sort_keys=True, indent=2))
