@@ -996,6 +996,50 @@ def _closed_guardian_transition(publisher, guardian_raw, state, batch, read_file
     raise ValueError('missing guardian feeder has no authenticated closed transition')
 
 
+def _publisher_batch_runtime(publisher: dict, batch: int, read_file: Callable[[str], bytes]) -> str:
+    """Resolve explicitly bound runtime epochs without relabeling started work."""
+    original = (publisher.get('identity') or {}).get('runtime_path')
+    epochs = publisher.get('runtime_epochs')
+    if epochs is None:
+        return original
+    if not isinstance(epochs, list) or len(epochs) < 2:
+        raise ValueError('runtime epochs need original and current guardian configurations')
+    previous = None
+    selected = None
+    for index, epoch in enumerate(epochs):
+        if not isinstance(epoch, dict) or set(epoch) != {'first_batch', 'guardian_config'}:
+            raise ValueError('runtime epoch lacks exact batch and guardian configuration')
+        first, reference = epoch['first_batch'], epoch['guardian_config']
+        if (type(first) is not int or (index == 0 and first != publisher['anchor_batch'])
+                or previous is not None and first <= previous):
+            raise ValueError('runtime epochs must start at the anchor and strictly increase')
+        if (not isinstance(reference, dict) or set(reference) != {'path', 'sha256', 'bytes'}
+                or not isinstance(reference['path'], str) or type(reference['bytes']) is not int
+                or reference['bytes'] < 0):
+            raise ValueError('runtime epoch lacks an exact guardian file binding')
+        raw = read_file(reference['path'])
+        if len(raw) != reference['bytes'] or _sha(raw) != reference['sha256']:
+            raise ValueError('runtime epoch guardian configuration changed')
+        configuration = _json(raw, 'runtime epoch guardian configuration')
+        runtime = configuration.get('task_runtime')
+        if (not isinstance(runtime, str) or not runtime
+                or configuration.get('control') != publisher['control_dir']
+                or configuration.get('root') != publisher['generation_root']
+                or (configuration.get('teacher_identity') or {}).get('sha256')
+                    != publisher['identity']['execution_identity_sha256']):
+            raise ValueError('runtime epoch changed controller, generation root or teacher identity')
+        if index == 0 and runtime != original:
+            raise ValueError('first runtime epoch differs from original publisher identity')
+        if index == len(epochs) - 1 and reference != publisher['guardian_config']:
+            raise ValueError('last runtime epoch must bind the current guardian configuration')
+        if first <= batch:
+            selected = runtime
+        previous = first
+    if selected is None:
+        raise ValueError('teacher batch precedes its authorized runtime epochs')
+    return selected
+
+
 def discover_guardian_batch(publisher: dict, sandbox,
                             read_file: Callable[[str], bytes]) -> dict | None:
     """Derive a poll config only from the exact live guardian owner and sealed batch.
@@ -1166,7 +1210,9 @@ except (FileNotFoundError,ProcessLookupError):
     if (teacher.get('actual_teacher_execution_identity', {}).get('sha256')
             != guardian['teacher_identity'].get('sha256')):
         raise ValueError('teacher source execution identity differs from active guardian config')
-    runtime = guardian['task_runtime']
+    runtime = _publisher_batch_runtime(publisher, batch, read_file)
+    if publisher.get('runtime_epochs') is None and runtime != guardian['task_runtime']:
+        raise ValueError('publisher runtime differs from active guardian config')
     if teacher.get('actual_task_runtime') != runtime:
         raise ValueError('teacher source runtime differs from active guardian config')
     phase_path = f"{publisher['generation_root']}/feed-evidence-phase.json"
@@ -1214,7 +1260,7 @@ except (FileNotFoundError,ProcessLookupError):
         'execution_identity_sha256': teacher['actual_teacher_execution_identity']['sha256'],
         'teacher_config_sha256': teacher['teacher_configuration_source']['sha256'],
         'runtime_path': runtime}
-    expected_identity = publisher['identity']
+    expected_identity = {**publisher['identity'], 'runtime_path': runtime}
     stable_fields = {'sandbox_boot_id', 'actor_sha256', 'execution_identity_sha256',
                      'teacher_config_sha256', 'runtime_path'}
     if (not isinstance(expected_identity, dict) or not stable_fields <= expected_identity.keys()
@@ -1275,7 +1321,8 @@ def export_guardian_closed_boundary(publisher: dict, active: dict, *, sandbox,
     teacher_source = f'{source_root}/teacher-source.json'
     cases_raw, teacher_raw = read_file(source_cases), read_file(teacher_source)
     teacher = _teacher_source_binding(teacher_raw, batch=batch, source_sha256=_sha(cases_raw))
-    authority = publisher.get('identity') or {}
+    authority = {**(publisher.get('identity') or {}),
+                 'runtime_path': _publisher_batch_runtime(publisher, batch, read_file)}
     if (teacher['actor'].get('sha256') != authority.get('actor_sha256')
             or teacher['actual_teacher_execution_identity'].get('sha256') != authority.get('execution_identity_sha256')
             or teacher['teacher_configuration_source'].get('sha256') != authority.get('teacher_config_sha256')

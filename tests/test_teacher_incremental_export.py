@@ -330,7 +330,31 @@ def test_guardian_publisher_resumes_tuple_frontier_and_flushes_idle_partial(tmp_
     assert result['active'] is True and result['training_admission'] is False
 
 
-def test_guardian_discovery_advances_from_anchor_to_started_batch_with_same_stable_identity():
+def _arm_runtime_epochs(publisher, remote, first_new_batch):
+    """Keep original config custody while adopting a future runtime config."""
+    path = publisher['guardian_config']['path']
+    original = remote[path]
+    old_path = publisher['control_dir'] + '/original-guardian.json'
+    remote[old_path] = original
+    old_ref = {'path': old_path, 'bytes': len(original), 'sha256': hashlib.sha256(original).hexdigest()}
+    current = json.loads(original)
+    current['task_runtime'] = '/work/runtime-new'
+    raw = json.dumps(current).encode()
+    remote[path] = raw
+    new_ref = {'path': path, 'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()}
+    publisher['guardian_config'] = new_ref
+    publisher['runtime_epochs'] = [
+        {'first_batch': publisher['anchor_batch'], 'guardian_config': old_ref},
+        {'first_batch': first_new_batch, 'guardian_config': new_ref}]
+    state_path = publisher['control_dir'] + '/state.json'
+    if state_path in remote:
+        state = json.loads(remote[state_path]); state['config'] = new_ref
+        remote[state_path] = json.dumps(state).encode()
+
+
+@pytest.mark.parametrize('first_new_batch', [None, 22, 23])
+@pytest.mark.parametrize('tamper_runtime', [False, True])
+def test_guardian_discovery_advances_from_anchor_to_started_batch_with_same_stable_identity(first_new_batch, tamper_runtime):
     from types import SimpleNamespace
     from scripts.coreweave.teacher_incremental_export import discover_guardian_batch
     root='/work/generation'; control='/work/control'; batch=22
@@ -344,7 +368,7 @@ def test_guardian_discovery_advances_from_anchor_to_started_batch_with_same_stab
     teacher={'schema':'natlang.sandbox-strong-teacher-collection/1','batch':batch,
         'source_cases_sha256':hashlib.sha256(cases).hexdigest(),'actor':{'sha256':'a'*64},
         'teacher':{'model':'qwen-test'},
-        'actual_teacher_execution_identity':{'sha256':'b'*64},'actual_task_runtime':'/work/runtime',
+        'actual_teacher_execution_identity':{'sha256':'b'*64},'actual_task_runtime':'/work/runtime-new' if (first_new_batch == 22) != tamper_runtime else '/work/runtime',
         'collection_controller':{'sha256':'c'*64},'runtime_source_receipt':{'sha256':'d'*64},
         'teacher_configuration_source':{'sha256':'e'*64},'source_provenance':{'sha256':'f'*64}}
     teacher_raw=json.dumps(teacher).encode()
@@ -378,19 +402,29 @@ def test_guardian_discovery_advances_from_anchor_to_started_batch_with_same_stab
         'chunk_size':32,'exporter_path':'/owner/export.py','identity':{'sandbox_boot_id':'boot',
         'actor_sha256':'a'*64,'execution_identity_sha256':'b'*64,'teacher_config_sha256':'e'*64,
         'runtime_path':'/work/runtime'}}
+    if first_new_batch is not None:
+        _arm_runtime_epochs(publisher, remote, first_new_batch)
+    if tamper_runtime:
+        with pytest.raises(ValueError, match='runtime'):
+            discover_guardian_batch(publisher,SimpleNamespace(exec=exec_),remote.__getitem__)
+        return
     active=discover_guardian_batch(publisher,SimpleNamespace(exec=exec_),remote.__getitem__)
     assert active['batch']==22 and active['source_sequence_started_sha256']==started['sha256']
     assert active['identity']['source_cases_sha256']==hashlib.sha256(cases).hexdigest()
 
+    assert active['identity']['runtime_path'] == ('/work/runtime-new' if first_new_batch == 22 else '/work/runtime')
 
-def test_guardian_closed_boundary_flushes_partial_and_seals_exact_outcomes(tmp_path, monkeypatch):
+
+@pytest.mark.parametrize('runtime_upgrade', [False, True])
+@pytest.mark.parametrize('tamper_runtime', [False, True])
+def test_guardian_closed_boundary_flushes_partial_and_seals_exact_outcomes(tmp_path, monkeypatch, runtime_upgrade, tamper_runtime):
     from types import SimpleNamespace
     import scripts.coreweave.teacher_incremental_export as module
     from scripts.coreweave.teacher_generation_guardian import assess
     entries, queue, journal, context, _, finish = _fixture()
     for row in entries:row['source']='/generation/evidence-collections-v2/batch-0019/source-cases.jsonl'
     queue=b''.join(json.dumps(row).encode()+b'\n'for row in entries);context['queue.jsonl']=queue
-    teacher_value=json.loads(context['teacher-source.json']);teacher_value['actual_task_runtime']='/work/runtime'
+    teacher_value=json.loads(context['teacher-source.json']);teacher_value['actual_task_runtime']='/work/runtime-new' if tamper_runtime else '/work/runtime'
     context['teacher-source.json']=json.dumps(teacher_value).encode()
     score={'schema':'natlang.s7-task-rollout-score/1','rollouts':2,'outcome_counts':{'task_success':2}}
     completion=assess(entries,[json.loads(line) for line in journal.splitlines() if json.loads(line).get('event')=='finish'],[0],score)
@@ -421,6 +455,13 @@ def test_guardian_closed_boundary_flushes_partial_and_seals_exact_outcomes(tmp_p
         'generation_root':'/generation','control_dir':'/control','chunk_size':32,
         'exporter_path':'/owner/export.py','role':'bulk','identity':{'actor_sha256':'a'*64,
         'execution_identity_sha256':'b'*64,'teacher_config_sha256':'f'*64,'runtime_path':'/work/runtime'}}
+    if runtime_upgrade:
+        guardian = {'control': '/control', 'root': '/generation', 'task_runtime': '/work/runtime',
+                    'teacher_identity': {'sha256': 'b'*64}}
+        raw = json.dumps(guardian).encode(); path = '/control/config.json'
+        remote[path] = raw
+        publisher['guardian_config'] = {'path': path, 'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()}
+        _arm_runtime_epochs(publisher, remote, 20)
     active={'closed_boundary':boundary_ref,'guardian_state':{'last_boundary':boundary_ref},
         'guardian_state_sha256':'b'*64}
     flush=[]; sealed=[]
@@ -431,6 +472,12 @@ def test_guardian_closed_boundary_flushes_partial_and_seals_exact_outcomes(tmp_p
         (folder/'boundary-private-export.json').write_text(json.dumps({'private_export':{'identity':{'bytes':123,'sha256':'c'*64}}}))
     monkeypatch.setattr(module,'export_final_boundary',export_boundary)
     sandbox=SimpleNamespace(exec=lambda *_a,**_k:SimpleNamespace(result=lambda **_r:SimpleNamespace(returncode=1)))
+    if tamper_runtime:
+        with pytest.raises(ValueError, match='runtime'):
+            module.export_guardian_closed_boundary(publisher,active,sandbox=sandbox,
+                read_file=remote.__getitem__,spool_root=tmp_path/'spool')
+        assert not flush and not sealed
+        return
     result=module.export_guardian_closed_boundary(publisher,active,sandbox=sandbox,
         read_file=remote.__getitem__,spool_root=tmp_path/'spool')
     assert flush[0]['flush_partial'] is True
@@ -1091,3 +1138,26 @@ def test_budget_payload_queue_key_cannot_be_a_path_component(key):
     completion['completion']['model_budget_failures'][0]['key'] = key
     with pytest.raises(ValueError, match='terminal budget queue identity'):
         _budget_payload_bindings(completion, entries)
+
+
+@pytest.mark.parametrize('mutation', ['snapshot', 'unsorted', 'actor', 'current_config', 'original_runtime'])
+def test_runtime_epochs_reject_changed_or_ambiguous_custody(mutation):
+    from scripts.coreweave.teacher_incremental_export import _publisher_batch_runtime
+    guardian = {'control': '/control', 'root': '/generation', 'task_runtime': '/work/runtime',
+                'teacher_identity': {'sha256': 'b'*64}}
+    raw = json.dumps(guardian).encode()
+    publisher = {'anchor_batch': 19, 'control_dir': '/control', 'generation_root': '/generation',
+                 'identity': {'runtime_path': '/work/runtime', 'execution_identity_sha256': 'b'*64},
+                 'guardian_config': {'path': '/control/config.json', 'bytes': len(raw),
+                                     'sha256': hashlib.sha256(raw).hexdigest()}}
+    remote = {'/control/config.json': raw}
+    _arm_runtime_epochs(publisher, remote, 29)
+    assert _publisher_batch_runtime(publisher, 28, remote.__getitem__) == '/work/runtime'
+    assert _publisher_batch_runtime(publisher, 29, remote.__getitem__) == '/work/runtime-new'
+    if mutation == 'snapshot': remote['/control/original-guardian.json'] += b' '
+    if mutation == 'unsorted': publisher['runtime_epochs'][1]['first_batch'] = 19
+    if mutation == 'actor': publisher['identity']['execution_identity_sha256'] = 'c'*64
+    if mutation == 'current_config': publisher['guardian_config'] = publisher['runtime_epochs'][0]['guardian_config']
+    if mutation == 'original_runtime': publisher['identity']['runtime_path'] = '/other'
+    with pytest.raises(ValueError):
+        _publisher_batch_runtime(publisher, 28, remote.__getitem__)
