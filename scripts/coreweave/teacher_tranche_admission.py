@@ -189,3 +189,50 @@ def preceding_tranches(root, spool, tranche):
         rejected.append({'batch': tranche.batch, 'number': number, 'proof': reference,
                          'reason': 'Every original outcome explicitly rejected; no source fabricated'})
     return admitted, rejected
+
+
+def materialization_partition(raw_rows, decision_keys, omissions, emitted_keys, deduplicated_keys=()):
+    """Conserve every original action when a materializer holds whole source rows.
+
+    This grants no decision approval: the existing materializer, converter and
+    graph verifier remain responsible for each emitted target. Missing source
+    rows remain explicit repair debt and cannot contribute a graph.
+    """
+    wanted = {(ident, index) for ident, row in raw_rows.items()
+              for index in range(len(row['trajectory']))}
+
+    def keys(values):
+        result = list(values)
+        if (any(not isinstance(key, tuple) or len(key) != 2
+                or not isinstance(key[0], str) or type(key[1]) is not int for key in result)
+                or len(set(result)) != len(result) or not set(result) <= wanted):
+            raise ValueError('materialization partition has duplicate or unknown action identities')
+        return set(result)
+
+    decisions = keys(decision_keys)
+    emitted, deduplicated = keys(emitted_keys), keys(deduplicated_keys)
+    omitted = keys((row.get('source_row_id'), row.get('teacher_turn_index')) for row in omissions)
+    accepted = {ident for ident, _ in decisions}
+    held = set(raw_rows) - accepted
+    if any((ident, index) not in decisions for ident in accepted
+           for index in range(len(raw_rows[ident]['trajectory']))):
+        raise ValueError('materializer partially lost an accepted source trajectory')
+    held_keys = {key for key in wanted if key[0] in held}
+    if (not held_keys <= omitted or emitted & held_keys or deduplicated & held_keys
+            or emitted & omitted or deduplicated & omitted or emitted & deduplicated
+            or emitted | omitted | deduplicated != wanted):
+        raise ValueError('materialization action partition does not conserve the full source')
+    missing_reason = 'shared native materializer did not qualify this original decision'
+    for omission in omissions:
+        if omission['source_row_id'] in held:
+            expected = {'source_row_id': omission['source_row_id'],
+                        'teacher_turn_index': omission['teacher_turn_index'],
+                        'reason': missing_reason, 'decision': {'reason': missing_reason}}
+            if _exact(omission) != _exact(expected):
+                raise ValueError('held source action lacks its exact materializer omission')
+    return {'source_rows': len(raw_rows), 'materialized_source_rows': len(accepted),
+            'repair_source_rows': sorted(held), 'repair_source_actions': len(held_keys),
+            'source_actions': len(wanted), 'emitted_actions': len(emitted),
+            'deduplicated_actions': len(deduplicated),
+            'other_omitted_actions': len(omitted - held_keys),
+            'training_admission': False}

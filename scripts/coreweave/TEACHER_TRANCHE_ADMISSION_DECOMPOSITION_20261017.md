@@ -22,3 +22,10 @@ export nor reference qualification grants training admission or exposure.
    registration and BOTH staging remain the executable mechanisms. Operations
    pass the shared namespace and packet bindings into them. Teacher processes,
    model-facing tasks, queued samples and their seeds are unchanged.
+5. If the existing materializer rejects whole trajectories, conserve each
+   original action by exact source-row/turn identity across emitted graphs,
+   exact duplicates and explicit omissions. Require every missing source row
+   to be completely absent from graph targets and completely recorded as repair
+   debt; partial missing trajectories fail closed. Keep useful independently
+   verified graphs from other rows without claiming the held rows were admitted.
+   This is an exact partition verifier, not an approval waiver.

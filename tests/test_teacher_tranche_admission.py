@@ -5,6 +5,7 @@ import pytest
 
 from scripts.coreweave.teacher_tranche_admission import (
     Tranche, admitted_predecessors, file_binding, packet_references, preceding_tranches,
+    materialization_partition,
 )
 
 
@@ -161,3 +162,49 @@ def test_exact_rejected_predecessor_retains_raw_outcomes(tmp_path):
     put(proof_path, proof)
     with pytest.raises(ValueError, match='preserved source'):
         preceding_tranches(tmp_path, spool, Tranche(22, 1))
+
+
+def partition_fixture():
+    raw = {'good': {'trajectory': [None, None]}, 'held': {'trajectory': [None, None, None]}}
+    reason = 'shared native materializer did not qualify this original decision'
+    omitted = [{'source_row_id': 'good', 'teacher_turn_index': 1, 'reason': 'failed proposal'}]
+    omitted += [{'source_row_id': 'held', 'teacher_turn_index': index, 'reason': reason,
+                 'decision': {'reason': reason}} for index in range(3)]
+    return raw, omitted
+
+
+def test_partial_batch_preserves_good_graphs_and_all_repair_actions():
+    raw, omitted = partition_fixture()
+    proof = materialization_partition(raw, [('good', 0), ('good', 1)], omitted, [('good', 0)])
+    assert proof == dict(source_rows=2, materialized_source_rows=1, repair_source_rows=['held'],
+                        repair_source_actions=3, source_actions=5, emitted_actions=1,
+                        deduplicated_actions=0, other_omitted_actions=1, training_admission=False)
+
+
+def test_held_source_can_never_supply_graph_or_lose_action():
+    raw, omitted = partition_fixture()
+    with pytest.raises(ValueError, match='conserve'):
+        materialization_partition(raw, [('good', 0), ('good', 1)], omitted[1:], [('good', 0)])
+    with pytest.raises(ValueError, match='conserve'):
+        materialization_partition(raw, [('good', 0), ('good', 1)], omitted, [('good', 0), ('held', 0)])
+
+
+def test_partition_rejects_partial_materializer_row_and_duplicate_omission():
+    raw, omitted = partition_fixture()
+    with pytest.raises(ValueError, match='partially lost'):
+        materialization_partition(raw, [('good', 0)], omitted, [('good', 0)])
+    with pytest.raises(ValueError, match='duplicate'):
+        materialization_partition(raw, [('good', 0), ('good', 1)], omitted + omitted[-1:], [('good', 0)])
+
+
+def test_held_omission_reason_and_types_cannot_be_rewritten():
+    raw, omitted = partition_fixture()
+    omitted[-1]['decision']['reason'] = 'approved'
+    with pytest.raises(ValueError, match='exact materializer omission'):
+        materialization_partition(raw, [('good', 0), ('good', 1)], omitted, [('good', 0)])
+
+
+def test_deduplicated_action_is_counted_once_without_a_second_graph():
+    raw, omitted = partition_fixture()
+    proof = materialization_partition(raw, [('good', 0), ('good', 1)], omitted, [], [('good', 0)])
+    assert proof['emitted_actions'] == 0 and proof['deduplicated_actions'] == 1
