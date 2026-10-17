@@ -1527,9 +1527,14 @@ def render_shard(job):
     # trajectory outputs and receipts remain under `outer`.
     if sqlite_temp_root is not None:
         sqlite_temp_root.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=f'natlang-{stem}-',
-                                     dir=sqlite_temp_root or outer) as temporary:
+    # Close SQLite before TemporaryDirectory removes its scratch path, even
+    # when parsing or rendering raises.  A failed cleanup can otherwise leave
+    # deleted worker databases open through retained process-pool tracebacks.
+    with ExitStack() as scratch:
+        temporary = scratch.enter_context(tempfile.TemporaryDirectory(
+            prefix=f'natlang-{stem}-', dir=sqlite_temp_root or outer))
         db = sqlite3.connect(str(Path(temporary) / 'rows.sqlite'))
+        scratch.callback(db.close)
         db.execute('PRAGMA journal_mode=OFF')
         db.execute('PRAGMA synchronous=OFF')
         # Keep the per-worker page cache bounded while sorting/indexing a large
@@ -1803,6 +1808,33 @@ def write_done(work: Path, tok_name: str, stem: str, result: dict):
     tmp = done.with_suffix('.tmp')
     tmp.write_text(json.dumps(result))
     os.replace(tmp, done)
+
+
+def _run_bounded_render_jobs(pool, jobs, workers, on_result):
+    """Bound queued work and stop submitting after the first shard failure."""
+    pending_jobs = iter(jobs)
+    futures = set()
+    for _ in range(min(workers, len(jobs))):
+        try:
+            futures.add(pool.submit(render_shard, next(pending_jobs)))
+        except StopIteration:
+            break
+    completed = 0
+    while futures:
+        future = next(as_completed(futures))
+        futures.remove(future)
+        try:
+            result = future.result()
+        except BaseException:
+            for outstanding in futures:
+                outstanding.cancel()
+            raise
+        completed += 1
+        on_result(completed, result)
+        try:
+            futures.add(pool.submit(render_shard, next(pending_jobs)))
+        except StopIteration:
+            pass
 
 
 # ---------------------------------------------------------------- merge
@@ -2126,13 +2158,12 @@ def main(argv=None):
         # raise BrokenProcessPool (the unit fails visibly and a relaunch resumes the finished shards) instead of
         # waiting forever for the lost shard (view-ask render, 2026-10-12).
         with ProcessPoolExecutor(a.workers, initializer=_init, initargs=(tokenizers, pieces)) as pool:
-            futures = [pool.submit(render_shard, job) for job in jobs]
-            for i, future in enumerate(as_completed(futures)):
-                res = future.result()
+            def record_result(completed, res):
                 results.append(res)
-                if i % 8 == 0:
-                    print(json.dumps({'done': i + 1, 'of': len(jobs), 'last': res.get('shard'),
+                if (completed - 1) % 8 == 0:
+                    print(json.dumps({'done': completed, 'of': len(jobs), 'last': res.get('shard'),
                                       'seconds': round(time.time() - t0)}), flush=True)
+            _run_bounded_render_jobs(pool, jobs, a.workers, record_result)
         if a.render_only:
             print(json.dumps({'render_only_complete': True, 'shards': sorted(set(a.render_shards)),
                               'outputs': len(results)}), flush=True)

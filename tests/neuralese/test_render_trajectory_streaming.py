@@ -210,6 +210,17 @@ def test_streamed_trajectory_groups_are_exact_and_resume_after_interruption(tmp_
     selected = tmp_path / 'selected.jsonl.zst'
     source_rows = _source(selected)
     calls = []
+    connections = []
+    sqlite_paths = []
+    real_connect = renderer.sqlite3.connect
+
+    def traced_connect(*args, **kwargs):
+        sqlite_paths.append(Path(args[0]))
+        connection = real_connect(*args, **kwargs)
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(renderer.sqlite3, 'connect', traced_connect)
 
     def materialized(job):
         shard_path, out_dir, tokenizer, _blocked, _corpus, _held, _decision, _header, _full, modes, compressed, *_storage = job
@@ -236,12 +247,16 @@ def test_streamed_trajectory_groups_are_exact_and_resume_after_interruption(tmp_
 
     monkeypatch.setattr(renderer, '_render_shard_materialized', materialized)
     work = tmp_path / 'work'
+    sqlite_scratch = tmp_path / 'sqlite-scratch'
     job = (str(selected), str(work), 'lfm25', {}, 'fixture', set(), set(), False, None,
-           ('whole-trajectory',), True, set())
+           ('whole-trajectory',), True, set(), None, None, sqlite_scratch)
     import pytest
     with pytest.raises(RuntimeError, match='simulated worker interruption'):
         renderer.render_shard(job)
     assert len(list((work / 'trajectory-stream' / 'lfm25' / 'selected').glob('receipts/*.json'))) == 1
+    assert sqlite_paths and not sqlite_paths[0].exists()
+    with pytest.raises(renderer.sqlite3.ProgrammingError, match='closed database'):
+        connections[0].execute('SELECT 1')
 
     calls.clear()
     result = renderer.render_shard(job)
@@ -452,3 +467,27 @@ def test_done_receipts_verify_output_checksums_without_rewriting_them(tmp_path):
     with __import__('pytest').raises(ValueError, match='trajectory output checksum mismatch'):
         renderer._verify_trajectory_receipts(job, result, {
             renderer.file_sha(Path(renderer.__file__).resolve()), old_sha})
+
+
+def test_bounded_render_jobs_cancel_outstanding_and_do_not_queue_entire_corpus():
+    from concurrent.futures import Future
+    import pytest
+
+    class ImmediateFailurePool:
+        def __init__(self):
+            self.futures = []
+            self.submitted_jobs = []
+
+        def submit(self, _function, job):
+            future = Future()
+            self.submitted_jobs.append(job)
+            self.futures.append(future)
+            if len(self.futures) == 1:
+                future.set_exception(RuntimeError('first shard failed'))
+            return future
+
+    pool = ImmediateFailurePool()
+    with pytest.raises(RuntimeError, match='first shard failed'):
+        renderer._run_bounded_render_jobs(pool, list(range(1000)), 4, lambda *_: None)
+    assert pool.submitted_jobs == [0, 1, 2, 3]
+    assert all(future.cancelled() for future in pool.futures[1:])
