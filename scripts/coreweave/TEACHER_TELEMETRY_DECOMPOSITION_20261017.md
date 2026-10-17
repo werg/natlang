@@ -20,3 +20,5 @@ driver may have registered pages.
    diagnostic duration. No detached children are started.
 5. Preserve the entire received stream and terminal/error record if the provider
    destroys the container. A later boot starts a different observer, not a rewrite.
+
+Actual third-role reset left a 45-second observer gap despite a ten-second interval. The cause remains unknown; synchronous `smaps_rollup` and GPU-driver queries can block. An explicit `--fast-host-only` mechanism omits those operations, while retaining host/cgroup counters, process status, birth checks and bounded engine-log tails. The existing detailed mode remains the default. Records name their sampling scope; terminal receipts retain a bounded stderr tail. This is observer plumbing, with no recovery/serving decision or model-facing change.

@@ -126,3 +126,36 @@ def test_process_state_change_keeps_same_live_birth(tmp_path, monkeypatch):
     result = t.snapshot(proc=proc, cgroup=tmp_path / 'missing', gpu=False)
     assert result['processes'][0]['pid'] == 123
     assert result['processes'][0]['status_bytes']['VmPin'] == 7168
+
+
+def test_fast_host_mode_never_reads_smaps_or_queries_gpu(tmp_path, monkeypatch):
+    proc = tmp_path / 'proc'
+    (proc / 'sys/kernel/random').mkdir(parents=True)
+    (proc / 'sys/kernel/random/boot_id').write_text('test-boot')
+    (proc / 'meminfo').write_text('MemFree: 10 kB\nMemAvailable: 20 kB\nSlab: 3 kB\n')
+    (proc / 'vmstat').write_text('nr_mlock 0\n')
+    child = proc / '123'
+    child.mkdir()
+    (child / 'cmdline').write_bytes(b'EngineCore')
+    (child / 'comm').write_bytes(b'EngineCore')
+    (child / 'stat').write_text('123 (EngineCore) S 1 ' + '0 ' * 17 + '55 0')
+    (child / 'status').write_text('VmRSS: 8 kB\nVmPin: 0 kB\n')
+    original = t.counters
+    def checked(path, *args, **kwargs):
+        assert path.name != 'smaps_rollup'
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(t, 'counters', checked)
+    monkeypatch.setattr(t.subprocess, 'run', lambda *a, **k: (_ for _ in ()).throw(AssertionError('GPU query')))
+    result = t.snapshot(proc=proc, cgroup=tmp_path / 'missing', gpu=False, smaps=False)
+    assert result['meminfo_bytes']['MemFree'] == 10240
+    assert result['processes'][0]['smaps_bytes'] is None
+    assert result['processes'][0]['status_bytes']['VmRSS'] == 8192
+
+
+def test_actual_fast_host_cli_scope():
+    boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+    child = subprocess.run([sys.executable, str(SCRIPT), '--boot-id', boot, '--seconds', '.01', '--fast-host-only'], capture_output=True, text=True, timeout=5)
+    assert child.returncode == 0
+    record = json.loads(child.stdout.splitlines()[0])
+    assert record['sampling_scope'] == 'host-status-and-logs'
+    assert 'gpu' not in record and 'MemFree' in record['meminfo_bytes']

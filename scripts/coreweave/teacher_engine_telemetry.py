@@ -8,7 +8,7 @@ import signal
 import subprocess
 import time
 
-MEMINFO = {'MemTotal', 'MemAvailable', 'Mlocked', 'Unevictable', 'Shmem', 'Cached', 'Dirty', 'Writeback', 'SwapFree'}
+MEMINFO = {'MemTotal', 'MemFree', 'MemAvailable', 'Buffers', 'AnonPages', 'Slab', 'SReclaimable', 'Mlocked', 'Unevictable', 'Shmem', 'Cached', 'Dirty', 'Writeback', 'SwapFree'}
 PROC_STATUS = {'VmRSS', 'VmLck', 'VmPin', 'RssAnon', 'RssFile', 'RssShmem', 'VmSwap'}
 
 
@@ -51,7 +51,7 @@ def log_delta(path: Path, offsets: dict, limit=4096):
         return {'path': str(path), 'missing': True}
 
 
-def snapshot(proc=Path('/proc'), cgroup=Path('/sys/fs/cgroup'), logs=(), offsets=None, gpu=True):
+def snapshot(proc=Path('/proc'), cgroup=Path('/sys/fs/cgroup'), logs=(), offsets=None, gpu=True, smaps=True):
     offsets = offsets if offsets is not None else {}
     boot = (proc / 'sys/kernel/random/boot_id').read_text().strip()
     result = {'schema': 'natlang.teacher-engine-telemetry/1', 'at': time.time(), 'boot_id': boot,
@@ -74,7 +74,7 @@ def snapshot(proc=Path('/proc'), cgroup=Path('/sys/fs/cgroup'), logs=(), offsets
                 continue
             before = process_identity(path)
             status = counters(path / 'status', PROC_STATUS, True)
-            rollup = counters(path / 'smaps_rollup', {'Rss', 'Pss', 'Locked', 'Private_Dirty', 'Anonymous'}, True)
+            rollup = counters(path / 'smaps_rollup', {'Rss', 'Pss', 'Locked', 'Private_Dirty', 'Anonymous'}, True) if smaps else None
             after = process_identity(path)
             if before and after and all(before[key] == after[key] for key in ('pid', 'ppid', 'start_ticks')):
                 result['processes'].append({**before, 'status_bytes': status, 'smaps_bytes': rollup})
@@ -126,7 +126,7 @@ def mirror(process, target: Path, boot_id: str):
             if pending:
                 raise ValueError('telemetry stream ended with a partial record')
             result = process.result(timeout=30)
-            append_record(output, {'terminal_at': time.time(), 'returncode': result.returncode, 'samples': count})
+            append_record(output, {'terminal_at': time.time(), 'returncode': result.returncode, 'samples': count, 'stderr_tail': (getattr(result, 'stderr', '') or '')[-4096:]})
             if result.returncode or not count:
                 raise RuntimeError('telemetry sampler did not complete successfully')
         except BaseException as error:
@@ -141,6 +141,7 @@ def main():
     parser.add_argument('--seconds', type=float, required=True)
     parser.add_argument('--interval', type=float, default=10)
     parser.add_argument('--log', action='append', default=[])
+    parser.add_argument('--fast-host-only', action='store_true', help='Keep the periodic host stream independent of smaps mmap locks and GPU-driver queries.')
     args = parser.parse_args()
     if args.seconds <= 0 or args.interval <= 0:
         parser.error('duration and interval must be positive')
@@ -154,7 +155,8 @@ def main():
     offsets = {}
     while not stopped and time.monotonic() < deadline:
         start = time.monotonic()
-        record = snapshot(logs=args.log, offsets=offsets)
+        record = snapshot(logs=args.log, offsets=offsets, gpu=not args.fast_host_only, smaps=not args.fast_host_only)
+        record['sampling_scope'] = 'host-status-and-logs' if args.fast_host_only else 'host-smaps-gpu-and-logs'
         if record['boot_id'] != args.boot_id:
             raise RuntimeError('observer boot differs from its declared container')
         print(json.dumps(record, separators=(',', ':')), flush=True)
