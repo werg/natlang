@@ -17,3 +17,11 @@ Closed boundaries apply the same exact raw-source/student-root preparation verif
 Create the owned private-receipt directory before invoking the existing exporter: its upload-phase and verification receipts are durable children of that directory. A successful PUT without the subsequent full GET never advances the frontier.
 
 Idle flushing measures absence of new eligible completed outputs, independently of activity heartbeats from still-running workers. Keep the complete journal SHA as telemetry. Both existing publisher loops use one exact completed-output identity helper; completion/accounting validation and every repeated queue job remain unchanged.
+
+Canonical guardian repair queues namespace original jobs as
+`batch-0021:s7-task-069-00`. Preserve that exact key in queue, journal and tranche
+receipts. A colon is a literal safe POSIX filename character inside the existing
+`outputs/<ordinal>-<key>` prefix; permit it without accepting separators,
+backslashes, whitespace or escape characters. This is filename custody only,
+not a new sample or repair-success classification. A separate existing publisher
+frontier can export the bound repair attempt while the next main batch runs.

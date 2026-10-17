@@ -538,6 +538,42 @@ def test_seal_rejects_output_manifest_mismatch_without_rewriting_tranche(tmp_pat
                      outputs=broken, directory=tmp_path/'tranche')
 
 
+def test_canonical_repair_keys_survive_real_archive_roundtrip(tmp_path):
+    entries, _, journal, context, outputs, _ = _fixture()
+    rename = {row['key']: 'batch-0019:' + row['key'] for row in entries}
+    queue = [{**row, 'key': rename[row['key']]} for row in entries]
+    events = [{**json.loads(line), 'key': rename[json.loads(line)['key']]}
+              for line in journal.splitlines()]
+    queue_raw = b''.join(json.dumps(row).encode() + b'\n' for row in queue)
+    journal_raw = b''.join(json.dumps(row).encode() + b'\n' for row in events)
+    context = {**context, 'queue.jsonl': queue_raw}
+    selected = completed_entries(queue_raw, journal_raw)
+    tranche = seal_tranche(batch=19, number=0, entries=selected, context=context,
+                          outputs={rename[key]: value for key, value in outputs.items()},
+                          directory=tmp_path/'tranche-0000')
+    assert tranche['keys'] == [row['key'] for row in queue]
+    assert tranche['archive_proof']['status'] == 'passed'
+    name = 'teacher-batch-0019-tranche-0000'
+    target = tmp_path/'restored'
+    source_archive.restore(tmp_path, name, target)
+    manifest = json.loads((target/'tranche-manifest.json').read_text())
+    assert [row['key'] for row in manifest['outputs']] == tranche['keys']
+    for index, row in enumerate(queue):
+        assert (target/f"outputs/{index:04d}-{row['key']}.results.jsonl").read_bytes() == outputs[entries[index]['key']][0]
+
+
+@pytest.mark.parametrize('key', ['batch-0019:../escape', 'batch-0019:\\escape', 'batch-0019:\njob'])
+def test_repair_key_support_does_not_accept_filename_escapes(tmp_path, key):
+    entries, queue, journal, context, outputs, _ = _fixture()
+    selected = completed_entries(queue, journal)
+    original = selected[0]['key']
+    selected[0]['key'] = key
+    with pytest.raises(ValueError, match='safe tranche filename'):
+        seal_tranche(batch=19, number=0, entries=selected, context=context,
+                     outputs={key if name == original else name: value for name, value in outputs.items()},
+                     directory=tmp_path/'tranche')
+
+
 def test_retry_with_changed_tranche_bytes_does_not_mutate_sealed_payload(tmp_path):
     entries, queue, journal, context, outputs, _ = _fixture()
     selected = completed_entries(queue, journal)

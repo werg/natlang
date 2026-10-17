@@ -318,7 +318,7 @@ def seal_tranche(*, batch: int, number: int, entries: list[dict], context: dict[
     rows = []
     for index, entry in enumerate(entries):
         key = entry['key']
-        if not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9._-]+', key):
+        if not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9._:-]+', key):
             raise ValueError('queue key is not a safe tranche filename component')
         supplied = outputs[key]
         if len(supplied) not in (2, 3):
