@@ -236,19 +236,28 @@ def _bind_backbone_revision(model, checkpoint_sha256):
     }
 
 
-def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, participant=None, allow_weights_only=False):
+def load_native_checkpoint(path, *, base=None, device='cpu', dtype=None, participant=None, allow_weights_only=False,
+                           actor_view=None):
     """Return (model, tokenizer, roles, model_config, full_checkpoint_state)."""
     from pathlib import Path
     path = Path(path).resolve(strict=True)
+    if actor_view is not None and (not allow_weights_only or participant is not None):
+        raise ValueError('actor view is only for explicit read-only native inference')
     with path.open('rb') as stream:
         prefix = stream.read(1)
     if prefix == b'{':
         manifest = json.loads(path.read_text())
         if manifest.get('schema') == COMPOSITE_CHECKPOINT_SCHEMA:
+            if actor_view is not None:
+                raise ValueError('composite actor keeps the complete checkpoint loader')
             from .native_composite import load_native_composite_checkpoint
             return load_native_composite_checkpoint(path, base=base, device=device, dtype=dtype)
     from ..train.checkpoint_policy import CheckpointPolicy
-    state = CheckpointPolicy.load(path, shared_participant=participant)
+    if actor_view is None:
+        state = CheckpointPolicy.load(path, shared_participant=participant)
+    else:
+        from .native_bundle import load_actor_view
+        state = load_actor_view(path,actor_view)
     if state.get('optimizer_pruned') and not allow_weights_only:
         from ..train.checkpoint_offload import require_optimizer
         require_optimizer(state, path)

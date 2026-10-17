@@ -30,6 +30,8 @@ def main() -> None:
     parser.add_argument('--heads-sha256')
     parser.add_argument('--native-state', action='store_true', help='serve the native-state checkpoint without legacy heads')
     parser.add_argument('--native-participant', help='named model within a shared native checkpoint')
+    parser.add_argument('--native-actor-view',type=Path,help='optional exact source-bound compact actor receipt')
+    parser.add_argument('--native-actor-view-sha256')
     parser.add_argument('--semantic-adapter', type=Path, help='checkpoint-bound shared semantic adapter receipt')
     parser.add_argument('--semantic-adapter-sha256')
     parser.add_argument('--coefficient-policy',type=Path)
@@ -56,6 +58,8 @@ def main() -> None:
         parser.error('coefficient policy requires its exact --coefficient-policy-sha256')
     if args.coefficient_policy and not args.native_state:
         parser.error('coefficient policies require native-state serving')
+    if bool(args.native_actor_view)!=bool(args.native_actor_view_sha256) or (args.native_actor_view and not args.native_state):
+        parser.error('native actor view requires native state and its exact receipt SHA-256')
     if bool(args.semantic_adapter) != bool(args.semantic_adapter_sha256):
         parser.error('semantic adapter needs its exact --semantic-adapter-sha256')
 
@@ -72,6 +76,7 @@ def main() -> None:
     if args.semantic_adapter:
         bindings.append(('semantic adapter', args.semantic_adapter.resolve(strict=True), args.semantic_adapter_sha256))
     if args.coefficient_policy:bindings.append(('coefficient policy',args.coefficient_policy.resolve(strict=True),args.coefficient_policy_sha256))
+    if args.native_actor_view:bindings.append(('actor view',args.native_actor_view.resolve(strict=True),args.native_actor_view_sha256))
     for label, path, expected in bindings:
         actual = sha256_file_hex(path)
         if actual != expected:
@@ -80,10 +85,13 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix='natlang-direct-serve-') as temp:
         if args.native_state:
             from natlang_neuralese.serve import load_native_engine
+            view_options=({'actor_view':{'path':str(args.native_actor_view.resolve(strict=True)),
+                'sha256':args.native_actor_view_sha256,'bytes':args.native_actor_view.stat().st_size}}
+                if args.native_actor_view else {})
             engine = load_native_engine(str(checkpoint), base=str(args.base) if args.base else None,
                 device=args.device, prompt_rendering=args.prompt_rendering,
                 participant=args.native_participant,
-                semantic_adapter=str(args.semantic_adapter) if args.semantic_adapter else None)
+                semantic_adapter=str(args.semantic_adapter) if args.semantic_adapter else None,**view_options)
         else:
             (Path(temp) / 'request.json').write_text(json.dumps({'weights': str(checkpoint)}))
             engine = restore_engine({'dir': temp, 'heads': str(heads), 'device': args.device,

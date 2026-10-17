@@ -85,6 +85,10 @@ def run_once(directory, role, *, observe, export):
     result = {'last_verified_step': chosen['step'], 'receipt': receipt, 'at': time.time(),
               'source_authority': f'actual full optimizer/RNG checkpoint in canonical {role} model worker/cursor namespace',
               'source': chosen['source']}
+    if chosen.get('actor_view') is not None:
+        result['actor_view'] = chosen['actor_view']
+    if chosen.get('actor_view_error') is not None:
+        result['actor_view_error'] = chosen['actor_view_error']
     save(paths['state'], result)
     paths['pending'].unlink()
     fd = os.open(paths['pending'].parent, os.O_DIRECTORY)
@@ -93,11 +97,37 @@ def run_once(directory, role, *, observe, export):
     return {'verified_step': chosen['step'], 'sha256': identity['sha256'], 'source': chosen['source']}
 
 
-def remote_code(*, role, root, known, last, extra, pin_directory, minimum_available_bytes):
+def remote_code(*, role, root, known, last, extra, pin_directory, minimum_available_bytes,
+                actor_view_directory=None, actor_view_runtime=None):
+    source = REMOTE_SOURCE
+    if bool(actor_view_directory) != bool(actor_view_runtime):
+        raise ValueError('actor view export requires its directory and explicit runtime package')
+    if actor_view_directory:
+        # Keep the already-validated actual mmap state alive only until the
+        # selected immutable full pin has also produced its optional actor view.
+        source = source.replace('del value,training;gc.collect();','')
+        source = source.replace("  with torch.serialization.safe_globals(",
+            "  decoded_stat=temp.stat();decoded_source_stat=(decoded_stat.st_dev,decoded_stat.st_ino,decoded_stat.st_size,decoded_stat.st_mtime_ns)\n  with torch.serialization.safe_globals(")
+        marker="'bytes':target.stat().st_size};break"
+        assert source.count(marker)==1
+        source = source.replace(marker,"'bytes':target.stat().st_size}\n   "
+            +"import sys;sys.path.insert(0,"+repr(str(actor_view_runtime))+")\n   "
+            +"pin_stat=target.stat();pin_signature=(pin_stat.st_dev,pin_stat.st_ino,pin_stat.st_size,pin_stat.st_mtime_ns)\n   "
+            +"try:\n    from natlang_neuralese.model import native_bundle as view_module\n    "
+            +"if pathlib.Path(view_module.__file__).resolve()!=pathlib.Path("+repr(str(actor_view_runtime))+",'natlang_neuralese/model/native_bundle.py').resolve():raise ValueError('optional view helper origin differs')\n    "
+            +"chosen['actor_view']=view_module.write_actor_view(target,"+repr(str(actor_view_directory))
+            +",validated_state=value,decoded_source_stat=decoded_source_stat)\n   "
+            +"except Exception as error:chosen['actor_view_error']={'type':type(error).__name__,'fallback':'complete-checkpoint','assigned_repair':True}\n   "
+            +"pin_stat=target.stat()\n   if (pin_stat.st_dev,pin_stat.st_ino,pin_stat.st_size,pin_stat.st_mtime_ns)!=pin_signature:raise ValueError('validated full pin changed during optional view extraction')\n   "
+            +"del value,training;gc.collect();break")
+        source = source.replace('  temp.unlink()\n finally:',
+                                '  del value,training;gc.collect()\n  temp.unlink()\n finally:')
+        source = source.replace('    temp.unlink()\n   else:',
+            '    actual_stat=target.stat();decoded_source_stat=(actual_stat.st_dev,actual_stat.st_ino,actual_stat.st_size,actual_stat.st_mtime_ns)\n    temp.unlink()\n   else:')
     return ('import pathlib,json,hashlib,re\n'+inspect.getsource(bound_output_checkpoint)+'\n'
             +'ROLE='+repr(role)+'\nROOT='+repr(str(root))+'\nKNOWN='+repr(known)
             +'\nLAST='+repr(last)+'\nEXTRA='+repr(extra)+'\nPIN_DIRECTORY='+repr(str(pin_directory))
-            +'\nMIN_AVAILABLE_BYTES='+repr(minimum_available_bytes)+'\n'+REMOTE_SOURCE)
+            +'\nMIN_AVAILABLE_BYTES='+repr(minimum_available_bytes)+'\n'+source)
 
 
 def main(argv=None):
@@ -110,9 +140,14 @@ def main(argv=None):
     parser.add_argument('--bound-output', help='JSON immutable argv binding and allowed_output_root')
     parser.add_argument('--pin-directory', default='/work/production/durable-exports')
     parser.add_argument('--minimum-available-bytes', type=int, default=16*1024**3)
+    parser.add_argument('--actor-view-directory', type=pathlib.Path)
+    parser.add_argument('--actor-view-runtime', type=pathlib.Path,
+                        help='explicit qualified training/neuralese package for optional view extraction')
     parser.add_argument('--interval', type=float, default=120)
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args(argv)
+    if bool(args.actor_view_directory) != bool(args.actor_view_runtime):
+        parser.error('actor view export needs directory and explicit runtime together')
     command = json.loads(args.export_command)
     if not isinstance(command, list) or not command or any(not isinstance(x, str) for x in command):
         parser.error('export command must be an explicit nonempty JSON argv')
@@ -128,7 +163,8 @@ def main(argv=None):
     fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
     def observe(**kwargs):
         code = remote_code(role=args.role, root=args.root, extra=extra,
-                           pin_directory=args.pin_directory, minimum_available_bytes=args.minimum_available_bytes, **kwargs)
+                           pin_directory=args.pin_directory, minimum_available_bytes=args.minimum_available_bytes,
+                           actor_view_directory=args.actor_view_directory,actor_view_runtime=args.actor_view_runtime,**kwargs)
         result = cwctl.read_sandbox(args.sandbox_id, patience=60).exec(
             ['python', '-c', code], timeout_seconds=600).result(timeout=690)
         if result.returncode: raise RuntimeError('owned remote checkpoint observation failed: '+str(result.stderr)[-3000:])

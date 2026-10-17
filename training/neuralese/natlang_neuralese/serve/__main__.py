@@ -25,6 +25,8 @@ def main(argv=None):
     parser.add_argument("--native-checkpoint", default=None,
                         help="complete native shared-state model checkpoint; restores without projected PortHeads")
     parser.add_argument('--native-participant', help='model identity selected from a complete shared semantic checkpoint')
+    parser.add_argument('--native-actor-view', help='optional source-bound compact inference receipt')
+    parser.add_argument('--native-actor-view-sha256', help='exact independently bound inference receipt SHA-256')
     parser.add_argument('--semantic-adapter', help='identity-bound shared semantic adapter export receipt')
     parser.add_argument("--recurrence-checkpoint", default=None,
                         help="complete learned recurrent checkpoint; requires its exact runtime qualification")
@@ -60,6 +62,13 @@ def main(argv=None):
     parser.add_argument("--guidance", default=None,
                         help="guidance for requests that do not set one: JSON (serve/guidance.py), e.g. '{\"repeat\": 3}' or true")
     args = parser.parse_args(argv)
+    if bool(args.native_actor_view) != bool(args.native_actor_view_sha256) or (args.native_actor_view and not args.native_checkpoint):
+        parser.error('native actor view requires its receipt SHA-256 and original full native checkpoint')
+    actor_view = None
+    if args.native_actor_view:
+        from pathlib import Path
+        actor_view = {'path':str(Path(args.native_actor_view).resolve(strict=True)),
+                      'sha256':args.native_actor_view_sha256,'bytes':Path(args.native_actor_view).stat().st_size}
     if args.direct_base_snapshot and not args.direct_artifact:
         parser.error('--direct-base-snapshot requires --direct-artifact')
     if args.native_checkpoint and (args.direct_artifact or args.recurrence_checkpoint or args.runtime_qualification or
@@ -83,7 +92,7 @@ def main(argv=None):
     if args.native_checkpoint:
         engine = load_native_engine(args.native_checkpoint, base=args.base, device=args.device, dtype=model_dtype,
                                     prompt_rendering=args.prompt_rendering or "full", participant=args.native_participant,
-                                    semantic_adapter=args.semantic_adapter)
+                                    semantic_adapter=args.semantic_adapter,actor_view=actor_view)
     elif args.recurrence_checkpoint:
         if model_dtype is not None:
             parser.error('--dtype cannot override a recurrence checkpoint runtime qualification')

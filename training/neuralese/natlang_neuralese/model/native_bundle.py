@@ -17,6 +17,135 @@ from ..common.jsonio import write_json_durable
 from .native_composite import SCHEMA, resolve_composite_artifact
 
 BUNDLE_SCHEMA = 'natlang.native-checkpoint-bundle/1'
+ACTOR_VIEW_SCHEMA = 'natlang.native-actor-view/1'
+
+
+def _file_binding(path):
+    path = Path(path).resolve(strict=True)
+    return {'path':str(path),'sha256':sha256_file_hex_cached(path),'bytes':path.stat().st_size}
+
+
+def write_actor_view(checkpoint, out, *, validated_state, decoded_source_stat=None):
+    """Extract exact actor tensors from the exporter's already-validated decode.
+
+    The caller must pass the actual state decoded from this immutable source,
+    after its normal full-state validation. Unsupported source forms retain the
+    existing full-checkpoint path by returning None, without writing a view.
+    """
+    from .native_model import CHECKPOINT_SCHEMA
+    from ..train.checkpoint_policy import CheckpointPolicy
+    from ..train.checkpoint_offload import _same_values
+    from ..train.trajectory_state import atomic_checkpoint
+    from .native_composite import _durable_immutable
+    source = Path(checkpoint).resolve(strict=True)
+    if validated_state.get('schema') != CHECKPOINT_SCHEMA:
+        return None
+    with source.open('rb') as stream:
+        if stream.read(1) == b'{':
+            return None  # Existing composite/shared closure remains the full actor path.
+    if validated_state.get('optimizer_pruned') or validated_state.get('inference_only'):
+        raise ValueError('actor view requires its complete resumable native source')
+    training = validated_state.get('training') or {}
+    if not all(training.get(key) for key in ('optimizer','rng','source_receipts')):
+        raise ValueError('actor view source lacks its actual optimizer/RNG/source validation')
+    before = source.stat()
+    signature = (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns)
+    if signature != decoded_source_stat:
+        raise ValueError('actor view source is not the unchanged file used for the validated decode')
+    source_binding = _file_binding(source)
+    selected = {key:validated_state[key] for key in
+                ('schema','model_config','backbone_state','interface_state','step')}
+    if type(selected['step']) is not int or selected['step'] < 0:
+        raise ValueError('actor view source has no actual saved integer step')
+    selected.update(inference_only=True,optimizer_pruned=True,
+        optimizer_pruned_keys=['training'],inference_source={
+            'schema':'natlang.native-inference-source/1',
+            'training_checkpoint_sha256':source_binding['sha256'],
+            'training_checkpoint_bytes':source_binding['bytes'],'step':selected['step']})
+    mechanism = _file_binding(__file__)
+    out = Path(out).resolve()/source_binding['sha256']
+    out.mkdir(parents=True,exist_ok=True)
+    fd,name = tempfile.mkstemp(prefix='.actor-view-',suffix='.pt',dir=out)
+    os.close(fd)
+    pending = Path(name)
+    try:
+        atomic_checkpoint(pending,selected)
+        written = CheckpointPolicy.load(pending)
+        _same_values(selected,written)
+        del written
+        digest = sha256_file_hex_cached(pending)
+        target = out/(digest+'.pt')
+        try:os.link(pending,target)
+        except FileExistsError:
+            if sha256_file_hex_cached(target) != digest:
+                raise ValueError('immutable actor view collision')
+        directory = os.open(out,os.O_RDONLY|os.O_DIRECTORY)
+        try:os.fsync(directory)
+        finally:os.close(directory)
+    finally:
+        pending.unlink(missing_ok=True)
+    after = source.stat()
+    if (after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns) != signature:
+        raise ValueError('actor view source changed during extraction')
+    receipt = {'schema':ACTOR_VIEW_SCHEMA,'source':source_binding,'view':{
+        **_file_binding(target),'path':target.name},'step':selected['step'],
+        'model_config':selected['model_config'],'mechanism':mechanism,
+        'verification':'safe reread and bitwise comparison of every selected value',
+        'training_resume':False,'logical_identity':'original full source checkpoint'}
+    raw = (json.dumps(receipt,sort_keys=True,indent=2)+'\n').encode()
+    import hashlib
+    proof = out/(hashlib.sha256(raw).hexdigest()+'.json')
+    _durable_immutable(proof,raw)
+    return _file_binding(proof)
+
+
+def load_actor_view(checkpoint, reference):
+    """Verify an explicitly bound actor view while keeping full-source identity."""
+    from ..train.checkpoint_policy import CheckpointPolicy
+    from .native_model import CHECKPOINT_SCHEMA
+    if not isinstance(reference,dict) or set(reference) != {'path','sha256','bytes'}:
+        raise ValueError('actor view needs an explicit exact receipt binding')
+    if type(reference['bytes']) is not int or reference['bytes'] <= 0:
+        raise ValueError('actor view receipt requires its exact integer byte count')
+    proof = Path(reference['path']).resolve(strict=True)
+    if _file_binding(proof) != reference:
+        raise ValueError('actor view receipt binding changed')
+    receipt = json.loads(proof.read_text())
+    if (receipt.get('schema') != ACTOR_VIEW_SCHEMA or receipt.get('training_resume') is not False
+            or receipt.get('logical_identity') != 'original full source checkpoint'
+            or type(receipt.get('step')) is not int
+            or type(receipt.get('source',{}).get('bytes')) is not int
+            or type(receipt.get('view',{}).get('bytes')) is not int):
+        raise ValueError('actor view receipt is not a read-only full-source binding')
+    source = _file_binding(checkpoint)
+    if any(source[key] != receipt['source'].get(key) for key in ('sha256','bytes')):
+        raise ValueError('actor view belongs to another complete checkpoint')
+    view = resolve_composite_artifact(receipt['view'],proof,sibling=True)
+    if view.stat().st_size != receipt['view']['bytes']:
+        raise ValueError('actor view byte length differs from receipt')
+    state = CheckpointPolicy.load(view)
+    if (state.get('schema') != CHECKPOINT_SCHEMA or state.get('inference_only') is not True
+            or state.get('optimizer_pruned') is not True or 'training' in state
+            or state.get('model_config') != receipt['model_config']
+            or state.get('step') != receipt['step']
+            or state.get('inference_source') != {
+                'schema':'natlang.native-inference-source/1',
+                'training_checkpoint_sha256':source['sha256'],
+                'training_checkpoint_bytes':source['bytes'],'step':receipt['step']}):
+        raise ValueError('actor view payload differs from its exact source receipt')
+    state['actor_view'] = {'receipt':reference,'view':_file_binding(view),'source':source,
+                           'training_resume':False}
+    return state
+
+
+def actor_view_dependencies(reference):
+    """Exact explicitly consumed proof/view closure; full source stays separate."""
+    proof = Path(reference['path']).resolve(strict=True)
+    if _file_binding(proof) != reference:
+        raise ValueError('actor view receipt binding changed')
+    receipt = json.loads(proof.read_text())
+    state = load_actor_view(receipt['source']['path'],reference)
+    return [reference,state['actor_view']['view'],state['actor_view']['source']]
 
 
 def composite_dependencies(checkpoint, *, participant=None, semantic_only=False, checkpoint_loader=None):

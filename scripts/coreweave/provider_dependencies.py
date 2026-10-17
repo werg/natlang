@@ -217,6 +217,10 @@ def dependency_closure(request, *, namespace='/work/native-production', readonly
         # Exact fields consumed by production.run/native semantic refresh.
         for reference in value.get('operational_inputs', []):
             bound(reference)
+        if value.get('native_actor_view'):
+            from natlang_neuralese.model.native_bundle import actor_view_dependencies
+            for reference in actor_view_dependencies(value['native_actor_view']):
+                bound(reference)
         if value.get('pending_native_sources'):
             from natlang_neuralese.train.native_pending_sources import pending_source_dependencies
             reference = value['pending_native_sources']

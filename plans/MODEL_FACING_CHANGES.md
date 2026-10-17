@@ -1,5 +1,15 @@
 # Model-facing changes and their measurement
 
+### 2026-10-17 — optional compact native actors retain full training authority
+
+An explicitly selected compact actor view rejects service optimizer updates
+through the existing `neuralese-native-optim-invalid` error and asks to restore
+the complete parent checkpoint. Both authoring/integration skills give this
+recovery. This optional actor mode has no live adoption yet. Measurement debt:
+exercise the read-only-view recovery in the next 48 live own-model TRAIN turns
+before exposing that mode to programs which request native optimizer updates.
+Ordinary actors using complete checkpoints retain their existing behavior.
+
 ### 2026-10-16 — assistant producer returns preserve typed transport
 
 LF6620 exposed four opaque native-ID string returns despite the tool-return
