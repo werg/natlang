@@ -63,7 +63,7 @@ def ordinary(bare,tmp_path):
     config=json.loads(x['config'].read_text());rb=native_recipe_binding(recipe_path,config['recipe_lineage_sha256'])
     options.update(resident_geometry_qualification=str(certificate),recipe_binding=rb)
     trainer_argv=[sys.executable,'-c','import sys;sys.stdin.buffer.read()',
-        '--out',str(root),'--resident-geometry-qualification',str(certificate),'--stage-id','sft','--recipe-binding',json.dumps(rb)]
+        '--out',str(root),'--resident-geometry-qualification',str(certificate),'--stage-id','sft','--recipe-binding',json.dumps(rb),'--task-eval','']
     argv_path=root/'argv.json';write(argv_path,trainer_argv)
     continuation=root/'continuation.json';write(continuation,{'parent':parent,'recipe':rb,'certificate':resident.binding(certificate)})
     script=root/'supervisor.py';script.write_text("import subprocess,sys,json;p=subprocess.Popen(json.loads(sys.argv[1]),stdin=subprocess.PIPE);print('ready',flush=True);sys.stdin.buffer.read();p.communicate()")
@@ -96,6 +96,9 @@ def ordinary(bare,tmp_path):
 
 def test_ordinary_capacity_rejoins_without_fabricated_new_max_or_resident(ordinary):
     x=ordinary;before={p:p.read_bytes()for p in(x['pin'],x['config'],x['root']/'cycle.json',x['out']/'state.json')}
+    argv=json.loads(x['owner_argv'].read_text());assert argv[-2:]==['--task-eval','']
+    record=json.loads(Path(x['handoff']['path']).read_text());captured=json.loads(Path(record['intent']['path']).read_text())
+    assert any(handoff.process_argv(child)==argv for child in captured['children'])
     value=runtime.verify_runtime_handoff(x['proof'],bootstrap=x['bootstrap'])
     assert value['bare_direct_owner']['ordinary_capacity']
     assert not value['bare_direct_owner'].get('qualification')

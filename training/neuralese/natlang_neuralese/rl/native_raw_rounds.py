@@ -306,7 +306,8 @@ def _owned_operation_chain(operations,published,model_id,lineage):
             raise ValueError('owned operation lost its real parent/recipe/model/update ancestry')
         matching=[]
         for child in intent['children']:
-            argv=[part.decode()for part in bytes.fromhex(child['argv_hex']).split(b'\0')if part]
+            from .native_raw_handoff import process_argv
+            argv=process_argv(child)
             argv,observer=_owned_training_invocation(argv,prior,parent_bytes=prior_bytes)
             def argument(flag):
                 if argv.count(flag)!=1 or argv.index(flag)+1>=len(argv):return None

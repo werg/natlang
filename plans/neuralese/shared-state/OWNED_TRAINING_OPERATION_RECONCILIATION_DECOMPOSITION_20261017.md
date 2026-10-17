@@ -114,3 +114,18 @@ verifier in a scoped context; do not duplicate its recursive policy rules or
 walk unrelated requests/checkpoint payloads. Cache the exact launch snapshots,
 capacity evidence closure and owned publication/intent. Real collector evidence
 tests must reach this branch rather than return early for an incomplete fixture.
+
+## Empty POSIX arguments in captured process identities
+
+The actual LF10407 owner proves a verifier defect: its bound command includes
+`--task-eval` followed by an empty string, while the process-tree decoder dropped
+all empty NUL fields. Identity and file/recipe bindings agree; the decoder alone
+changed the invocation. This is exact Linux transport plumbing, not model policy.
+Reuse one `process_argv` decoder from native_raw_handoff in capture, historical
+control verification, owned operation ancestry, and ordinary runtime authority.
+Require one terminal NUL and decode UTF-8 strictly; remove only that terminator,
+retaining every interior empty argument. Existing SDK provider paths do not decode
+this hex format. A real subprocess fixture with the empty task argument must pass
+both full ordinary authority and earned-operation reconciliation; changed argv,
+malformed termination, and invalid UTF-8 remain rejected. No trainer arithmetic,
+checkpoint tensor/state, source-policy, or qualification condition changes.

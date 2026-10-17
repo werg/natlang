@@ -310,3 +310,12 @@ def test_historical_drain_intent_keeps_original_evidence_scope(actual_drain):
     write_json_durable(path,intent);record['intent']=binding(path)
     path=Path(reference['path']);write_json_durable(path,record)
     verify_handoff(binding(path))
+
+
+def test_process_argv_preserves_all_empty_arguments_and_requires_terminator():
+    from natlang_neuralese.rl.native_raw_handoff import process_argv
+    assert process_argv({'argv_hex':b'python\0--task-eval\0\0--out\0x\0'.hex()})==['python','--task-eval','','--out','x']
+    assert process_argv({'argv_hex':b'python\0\0\0'.hex()})==['python','','']
+    for value in (b'',b'python',b'python\0\xff\0'):
+        with pytest.raises((ValueError,UnicodeDecodeError)):
+            process_argv({'argv_hex':value.hex()})

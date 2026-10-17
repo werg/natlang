@@ -42,6 +42,14 @@ def same_process(expected,actual):
     return actual is not None and all(actual.get(key)==expected.get(key) for key in ('pid','boot_id','start_ticks'))
 
 
+def process_argv(identity):
+    """Decode exact /proc cmdline, preserving empty POSIX argument values."""
+    raw=bytes.fromhex(identity['argv_hex'])
+    if not raw or not raw.endswith(b'\0'):
+        raise ValueError('captured live process argv needs its terminal NUL')
+    return [part.decode() for part in raw[:-1].split(b'\0')]
+
+
 def _thread_children(pid):
     try:tasks=list(Path('/proc',str(pid),'task').iterdir())
     except (FileNotFoundError,ProcessLookupError,PermissionError):return set()
@@ -114,7 +122,7 @@ def capture_drain_intent(launch, out):
     owner=observe(record['pid'])
     if owner is None or owner['state'] in ('Z','X'):
         raise ValueError('raw handoff needs its actual live original optimizer owner')
-    argv=[part.decode() for part in bytes.fromhex(owner['argv_hex']).split(b'\0') if part]
+    argv=process_argv(owner)
     if argv!=record.get('argv') or record.get('identity') and not same_process(record['identity'],owner):
         raise ValueError('raw handoff launch argv or identity differs from its actual process')
     children,links=_capture_process_tree(owner)
@@ -220,7 +228,7 @@ def verify_handoff_controls(reference, *, requirement=None):
     if (not all(_identity(item) for item in identities) or launch.get('pid')!=owner['pid']
             or len({item['pid'] for item in identities})!=len(identities)
             or any(item['boot_id']!=owner['boot_id'] for item in identities)
-            or [part.decode() for part in bytes.fromhex(owner['argv_hex']).split(b'\0') if part]!=launch.get('argv')):
+            or process_argv(owner)!=launch.get('argv')):
         raise ValueError('raw handoff changed its exact boot/start/PID/argv owner binding')
     _verify_process_tree(intent)
     terminal=json.loads(_bound(record['terminal']).read_text())

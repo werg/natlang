@@ -93,6 +93,7 @@ def invoke(x):
 
 def test_earned_quantum_publishes_current_optimizer_without_marking_stage_complete(owned):
     x=owned;original_config=x['config'].read_bytes();pin=x['pin'].read_bytes()
+    assert json.loads(x['owner_argv'].read_text())[-2:]==['--task-eval','']
     original=json.loads((x['out']/'state.json').read_text())
     result=invoke(x);value=json.loads(Path(result['path']).read_text())
     state=json.loads((x['out']/'state.json').read_text());cursor=json.loads((x['root']/'cycle.json').read_text())

@@ -79,15 +79,15 @@ def _owned_launch_chain(record, snapshots=None):
     if supervisor['sha256']!=supervisor_ref['sha256']:
         raise ValueError('ordinary owner supervisor snapshot differs from captured authority')
     _bound(supervisor)
-    from .native_raw_handoff import same_process
+    from .native_raw_handoff import same_process,process_argv
     if (not same_process(original['owner'],captured['owner'])
             or not same_process(spawn['identity'],captured['owner'])
             or original['intent']!=spawn['intent'] or original['argv']!=argv
             or spawn.get('script')!=launch_intent.get('supervisor')
             or supervisor_ref['path'] not in
-                [part.decode() for part in bytes.fromhex(captured['owner']['argv_hex']).split(b'\0') if part]
+                process_argv(captured['owner'])
             or not any(child['ppid']==captured['owner']['pid'] and
-                [part.decode() for part in bytes.fromhex(child['argv_hex']).split(b'\0') if part]==argv
+                process_argv(child)==argv
                 for child in captured['children'])):
         raise ValueError('ordinary capacity lacks its exact captured supervisor and trainer argv')
     refs=dict(original=original_ref,spawn=spawn_ref,intent=intent_ref,
