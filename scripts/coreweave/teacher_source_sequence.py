@@ -246,7 +246,17 @@ def observe_source_sequence(folder, state, config):
         'boundary':boundary, **({'drained_with_repair_debt':closure} if closure else {}),
         'claim':'existing guardian closure; individual outcomes/admission unchanged'})
     sequence.setdefault('closed',{})[key]=binding(receipt)
-    sequence['next_ordinal']=pending['ordinal']+1;sequence.pop('pending')
+    priority=intent.get('priority')
+    if priority is not None:
+        if (type(priority.get('resume_ordinal'))is not int
+                or not 0<=priority['resume_ordinal']<pending['ordinal']):
+            raise ValueError('priority packet lost its original ordinary cursor')
+        sequence['next_ordinal']=priority['resume_ordinal']
+        sequence['priority_streak']=sequence.get('priority_streak',0)+1
+    else:
+        sequence['next_ordinal']=pending['ordinal']+1
+        if 'priority_streak'in sequence:sequence['priority_streak']=0
+    sequence.pop('pending')
     write(Path(folder)/'state.json',state)
 
 
@@ -331,6 +341,52 @@ def _defer_context_packet(folder,state,declaration,entry,item,reference,programs
     write(Path(folder)/'state.json',state)
 
 
+def _priority_policy(reference,declaration,entries):
+    proof=_json(reference,declaration)
+    original=_json(proof['original_ready'],declaration)
+    exact=lambda value:json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'))
+    if (proof.get('schema')!='natlang.teacher-priority-packet-continuation/1'
+            or proof.get('training_admission')is not False
+            or type(proof.get('minimum_original_ordinal'))is not int
+            or not 0<=proof['minimum_original_ordinal']<=len(original['entries'])
+            or type(proof.get('max_consecutive'))is not int or proof['max_consecutive']<1
+            or exact(entries[:len(original['entries'])])!=exact(original['entries'])):
+        raise ValueError('priority packet authority differs from retained original work')
+    selected={}
+    for item in proof['entries']:
+        ordinal=item.get('ordinal')
+        if (type(ordinal)is not int or ordinal<len(original['entries'])or ordinal>=len(entries)
+                or ordinal in selected
+                or any(item.get(k)!=entries[ordinal].get(k)for k in('candidate_packet','qualified_packet'))):
+            raise ValueError('priority packet must be an exact newly appended entry')
+        selected[ordinal]=item
+    return proof,selected
+
+
+def _closed_packet_ordinals(folder,sequence,declaration,entries):
+    result={}
+    for key,reference in sequence.get('closed',{}).items():
+        closed=_json(reference,declaration);ordinal=closed['ordinal'];batch=closed['batch']
+        if (key!=str(batch)or type(batch)is not int or type(ordinal)is not int
+                or not 0<=ordinal<len(entries)or ordinal in result
+                or Path(reference['path']).resolve()!=(Path(folder)/'source-sequence/closed'/f'batch-{batch:04d}.json').resolve()):
+            raise ValueError('closed packet cursor authority changed')
+        started=_json(closed['started'],declaration);intent=_json(started['selection_intent'],declaration)
+        if (started.get('batch')!=batch or intent.get('batch')!=batch
+                or started.get('ordinal')!=ordinal or intent.get('ordinal')!=ordinal
+                or any(intent.get(k)!=entries[ordinal].get(k)for k in('candidate_packet','qualified_packet'))):
+            raise ValueError('closed packet differs from its actual selected entry')
+        priority=intent.get('priority')
+        if priority is not None:
+            proof,selected=_priority_policy(priority['policy'],declaration,entries)
+            resume=priority.get('resume_ordinal')
+            if (ordinal not in selected or type(resume)is not int
+                    or not proof['minimum_original_ordinal']<=resume<ordinal):
+                raise ValueError('closed priority packet lost its original cursor/policy')
+        result[ordinal]=dict(reference=reference,intent=intent)
+    return result
+
+
 def prepare_source_sequence(folder, state, config, batch):
     declaration=config.get('source_sequence')
     if declaration is None:return
@@ -363,9 +419,37 @@ def prepare_source_sequence(folder, state, config, batch):
     for index,entry in enumerate(entries):
         if entry.get('ordinal')!=index or entry['candidate_packet']!=inventory['packets'][index]:
             raise ValueError('ready sequence is not the declared candidate order')
-    sequence['observed_entries']=entries
     ordinal=sequence['next_ordinal']
     deferral_reference,deferrals,excluded_programs=_source_context_deferrals(declaration,entries,sequence)
+    closed_ordinals=_closed_packet_ordinals(folder,sequence,declaration,entries)
+    actual_streak=0
+    for item in sorted(closed_ordinals.values(),key=lambda item:item['intent']['batch'],reverse=True):
+        if item['intent'].get('priority')is None:break
+        actual_streak+=1
+    if type(sequence.get('priority_streak',0))is not int or sequence.get('priority_streak',0)!=actual_streak:
+        raise ValueError('priority service differs from actual closed packet history')
+    priority_reference=declaration.get('priority_packets')
+    priority_proof,priority_entries=(_priority_policy(priority_reference,declaration,entries)if priority_reference else(None,{}))
+    policies=sequence.setdefault('priority_policies',{})
+    original_bindings=[]
+    for digest,reference in policies.items():
+        if digest!=reference['sha256']:raise ValueError('priority policy history changed')
+        historical,_=_priority_policy(reference,declaration,entries)
+        original_bindings.append(historical['original_ready'])
+    for item in closed_ordinals.values():
+        past=item['intent'].get('priority')
+        if past is not None and policies.get(past['policy']['sha256'])!=past['policy']:
+            raise ValueError('closed priority packet lost its observed-prefix history')
+    if priority_reference and priority_reference['sha256']not in policies:
+        original=_json(priority_proof['original_ready'],declaration)['entries']
+        exact=lambda value:json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'))
+        if (priority_proof['original_ready']not in original_bindings
+                and exact(original)!=exact(previous)):
+            raise ValueError('priority original ready differs from actual observed prefix')
+        policies[priority_reference['sha256']]=priority_reference
+    elif priority_reference and policies[priority_reference['sha256']]!=priority_reference:
+        raise ValueError('priority policy history reference changed')
+    sequence['observed_entries']=entries
     lock=(Path(config['root'])/'next-source-selection.lock').open('a')
     with lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
@@ -379,9 +463,27 @@ def prepare_source_sequence(folder, state, config, batch):
             _reconcile_publication(pending,declaration)
             sequence['configuration']=binding(declaration['source_configuration'])
             write(Path(folder)/'state.json',state);return
-        while ordinal in deferrals:
-            _defer_context_packet(folder,state,declaration,entries[ordinal],deferrals[ordinal],deferral_reference,excluded_programs)
+        while ordinal in deferrals or ordinal in closed_ordinals:
+            if ordinal in deferrals:
+                _defer_context_packet(folder,state,declaration,entries[ordinal],deferrals[ordinal],deferral_reference,excluded_programs)
+            else:
+                if closed_ordinals[ordinal]['intent'].get('priority')is None:
+                    raise ValueError('ordinary cursor cannot silently skip a non-priority closed packet')
+                sequence['next_ordinal']=ordinal+1;write(Path(folder)/'state.json',state)
             ordinal=sequence['next_ordinal']
+        priority_selection=None
+        if priority_proof and ordinal>=priority_proof['minimum_original_ordinal']:
+            streak=sequence.get('priority_streak',0)
+            if type(streak)is not int or streak<0:raise ValueError('priority service counter changed')
+            if streak<priority_proof['max_consecutive']:
+                started_ordinals={_json(ref,declaration)['ordinal']for ref in sequence.get('started',{}).values()}
+                for candidate in priority_entries:
+                    if candidate in closed_ordinals:continue
+                    if candidate<ordinal or candidate in started_ordinals or candidate in deferrals:
+                        raise ValueError('priority declaration cannot reclassify started, past or deferred work')
+                    if candidate==ordinal:break
+                    priority_selection=dict(policy=priority_reference,resume_ordinal=ordinal)
+                    ordinal=candidate;break
         if ordinal>=len(entries):
             if declaration.get('on_unready')!='retain-current':raise ValueError('next declared packet is not ready')
             write(Path(folder)/'state.json',state);return
@@ -402,7 +504,8 @@ def prepare_source_sequence(folder, state, config, batch):
         _immutable(intent,{'batch':batch,'ordinal':ordinal,'old_configuration':actual,
             'old_snapshot':binding(snapshot),'new_configuration':binding(candidate),
             'manifest':binding(manifest_snapshot),'candidate_packet':entries[ordinal]['candidate_packet'],
-            'qualified_packet':entries[ordinal]['qualified_packet']})
+            'qualified_packet':entries[ordinal]['qualified_packet'],
+            **({'priority':priority_selection}if priority_selection is not None else{})})
         pending={'batch':batch,'ordinal':ordinal,'intent':binding(intent),'cases_sha256':value['cases_sha256']}
         sequence['pending']=pending;write(Path(folder)/'state.json',state)
         _reconcile_publication(pending,declaration)
