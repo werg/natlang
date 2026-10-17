@@ -291,6 +291,8 @@ def collect_with_actor(config, values, **kwargs):
                 except (OSError, ValueError):
                     pass
                 time.sleep(.2)
+            if config.get('after_actor_ready'):
+                run_command(config['after_actor_ready'], values)
             return collect(**kwargs)
         finally:
             if process.poll() is None:

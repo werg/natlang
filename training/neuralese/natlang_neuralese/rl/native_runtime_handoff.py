@@ -456,10 +456,10 @@ def configure_runtime_handoff(plan_path,declaration,bootstrap,config_path):
     config['runtime_handoff']=reference
     config['runtime_binding']={'plan_sha256':binding(plan_path)['sha256'],'handoff':bootstrap}
     original=config['bootstrap_binding']
-    protected={key:config[key] for key in ('cases','runtime','task_source','source_admission','actor_command','before_collect') if key in config}
+    protected={key:config[key] for key in ('cases','runtime','task_source','source_admission','actor_command','before_collect','after_actor_ready') if key in config}
     configure_provider(config,declaration,{},original,path,write=False)
     if pending:
-        for key in ('cases','runtime','task_source','source_admission','actor_command','before_collect'):
+        for key in ('cases','runtime','task_source','source_admission','actor_command','before_collect','after_actor_ready'):
             if key in protected:config[key]=protected[key]
             else:config.pop(key,None)
     else:

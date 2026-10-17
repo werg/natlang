@@ -319,3 +319,36 @@ def test_empty_source_waits_without_freezing_selection(tmp_path):
         'endpoints': ['unused'], 'after_update': ['publish']}))
     assert production.run(config, rounds=1)['phase'] == 'await_new_train_tasks'
     assert not list(out.glob('*selection.json'))
+
+
+
+@pytest.mark.parametrize('hook_error',[False,True])
+def test_managed_ready_hook_uses_same_live_actor_before_collection(tmp_path,monkeypatch,hook_error):
+    from natlang_neuralese.rl import grpo
+    events=[]
+    class Process:
+        pid=123
+        def __init__(self,*a,**kw):events.append('spawn');self.stopped=False
+        def poll(self):return 0 if self.stopped else None
+        def terminate(self):events.append('terminate');self.stopped=True
+        def wait(self,*a,**kw):return 0
+    class Server:
+        def __init__(self,*a,**kw):pass
+        def get_bytes(self,path):events.append('ready');return json.dumps({'rl_policy_binding':{'checkpoint_sha256':'exact-current'}}).encode()
+    monkeypatch.setattr(production.subprocess,'Popen',Process)
+    monkeypatch.setattr(grpo,'Server',Server)
+    def command(argv,values):
+        assert argv==['held-only'] and values['policy_id']=='exact-current'
+        events.append('held')
+        if hook_error:raise RuntimeError('held monitor error')
+    monkeypatch.setattr(production,'run_command',command)
+    monkeypatch.setattr(production,'collect',lambda **kw:events.append('train')or {'done':True})
+    config={'actor_command':['actor'],'after_actor_ready':['held-only']}
+    values={'out':str(tmp_path),'policy_id':'exact-current'}
+    if hook_error:
+        with pytest.raises(RuntimeError,match='held monitor'):production.collect_with_actor(config,values,out=tmp_path,endpoints=['http://same'])
+    else:assert production.collect_with_actor(config,values,out=tmp_path,endpoints=['http://same'])=={'done':True}
+    assert events==(['spawn','ready','held','terminate']if hook_error else ['spawn','ready','held','train','terminate'])
+    events.clear();(tmp_path/'score.json').write_text(json.dumps({'collection_complete':True}))
+    assert production.collect_with_actor(config,values,out=tmp_path,endpoints=['http://same'])=={'done':True}
+    assert events==['train']

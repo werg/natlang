@@ -115,7 +115,7 @@ def configure_provider(config,declaration,plan,binding,config_path,*,write=True)
     """One exact provider/actor command contract for raw and joint bootstrap."""
     overrides = declaration.get('commands') or {}
     if set(overrides) - {'actor_command', 'learner_command', 'seed_command', 'round_command',
-                         'refresh_command', 'before_collect', 'before_update', 'after_update'}:
+                         'refresh_command', 'before_collect', 'after_actor_ready', 'before_update', 'after_update'}:
         raise ValueError('native RL bootstrap has an unsupported provider command hook')
     for name, argv in overrides.items():
         if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) for arg in argv):

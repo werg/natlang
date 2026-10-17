@@ -338,6 +338,16 @@ print(json.dumps(value))
                          '--request', request_path, '--result', result_path],
                 'env': {**self._runtime_environment(sid), 'PYTHONSAFEPATH': '1',
                         'PYTHONPATH': resource['runtime']+'/training/neuralese'}}
+        if resource.get('worker_entry'):
+            entry = checked_binding(resource['worker_entry'])
+            code = ('import pathlib,hashlib,json;p=pathlib.Path('+repr(entry['path'])+');'
+                    'print(json.dumps(p.is_file() and p.stat().st_size=='+str(entry['bytes'])+
+                    ' and hashlib.sha256(p.read_bytes()).hexdigest()=='+repr(entry['sha256'])+'))')
+            if not self.remote(sid, code):
+                raise ValueError('provider bound worker control entry changed')
+            spec['argv'] = [resource.get('python', 'python'), '-u', entry['path'],
+                            '--request', request_path, '--result', result_path]
+            spec['env']['NATLANG_WORKER_ENTRY_SHA256'] = entry['sha256']
         old = self.read_optional(sid, directory+'/launch.json')
         if old:
             value = json.loads(old)

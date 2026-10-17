@@ -369,3 +369,32 @@ def test_configured_readonly_roots_reach_both_remote_asset_operations(tmp_path):
     client.config['sandboxes']['worker']={}
     client.dependency_closure('worker',{})
     assert 'readonly_input_roots' not in client.code
+
+
+
+@pytest.mark.parametrize('changed',[False,True])
+def test_bound_worker_control_entry_is_verified_before_detached_launch(tmp_path,changed):
+    entry={'path':'/work/native-production/control/shared-entry.py','bytes':123,'sha256':'e'*64}
+    class Sandbox:
+        def __init__(self):self.files={}
+        def write_file(self,path,raw):self.files[path]=raw;return SimpleNamespace(result=lambda **kw:None)
+    class Client(worker.SDKIO):
+        def remote(self,sid,code,**kw):
+            if 'hashlib.sha256(p.read_bytes())'in code:return not changed
+            return None
+        def read_optional(self,sid,path):
+            self.reads=getattr(self,'reads',0)+1
+            return json.dumps({'request_id':'bound-request'})if self.reads>1 else None
+    client=Client({'receipts':str(tmp_path),'sandboxes':{'worker':{'runtime':'/exact/numeric','worker_entry':entry}}})
+    sandbox=Sandbox();client.sandbox=lambda sid:sandbox
+    if changed:
+        with pytest.raises(ValueError,match='control entry changed'):
+            client.launch('worker',{'request_id':'bound-request','kind':'round'},'/work/native-production/request.json','/work/native-production/worker/result.json')
+        assert sandbox.files=={}
+    else:
+        assert client.launch('worker',{'request_id':'bound-request','kind':'round'},'/work/native-production/request.json','/work/native-production/worker/result.json')=={'request_id':'bound-request'}
+        saved=json.loads(sandbox.files['/work/native-production/worker/worker-spec.json'])
+        assert saved['argv']==['python','-u',entry['path'],'--request','/work/native-production/request.json','--result','/work/native-production/worker/result.json']
+        assert saved['env']['NATLANG_WORKER_ENTRY_SHA256']==entry['sha256']
+        assert saved['runtime']=='/exact/numeric'
+        assert sandbox.files['/work/native-production/worker/runner.py']==worker.RUNNER.encode()

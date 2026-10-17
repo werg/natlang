@@ -178,13 +178,14 @@ def require_native_transport(spec):
 class TaskEval:
     """Serve ``engine`` on loopback and execute the fixed held subset against it."""
 
-    def __init__(self, spec: dict, out: Path, engine, *, prompt_rendering: str):
+    def __init__(self, spec: dict, out: Path, engine, *, prompt_rendering: str, external_actor=None):
         from ..common.hashing import sha256_file_hex
         from .task_packet import read_jsonl
 
         if getattr(engine, 'native_state_enabled', False):
             require_native_transport(spec)
         self.spec, self.out, self.engine = spec, Path(out), engine
+        self.external_actor = external_actor
         self.prompt_rendering = spec.get('prompt_rendering') or prompt_rendering or 'full'
         from ..common.paths import root as logical_root
         # Repo-relative paths resolve against the live checkout (a training run executes a code snapshot that
@@ -263,25 +264,28 @@ class TaskEval:
         from ..serve.http import serve
         from .task_packet import read_jsonl, score_rows
 
-        if run.exists():
+        external = getattr(self, 'external_actor', None)
+        if run.exists() and external is None:
             shutil.rmtree(run)  # a rerun of the same step (resume) replaces an interrupted attempt
-        run.mkdir(parents=True)
-        engine, hf = self.engine, getattr(self.engine.backbone, 'hf', None)
+        run.mkdir(parents=True, exist_ok=external is not None)
+        engine, hf = self.engine, getattr(getattr(self.engine, 'backbone', None), 'hf', None)
         was_training = bool(hf is not None and hf.training)
         previous_mode = engine.prompt_rendering
         server = None
         try:
-            if hf is not None:
-                hf.eval()
-            engine.prompt_rendering = self.prompt_rendering
-            # Engine.stop() leaves its stop flag set; reset it so the training engine serves once per evaluation.
-            # (Done here, not in serve/engine.py, whose bytes are part of the prompt-rendering identity.)
-            import queue as queue_module
-            engine._stopping, engine._incoming, engine._active = False, queue_module.Queue(), []
-            engine.start()
-            server = serve(engine, '127.0.0.1', 0)
-            threading.Thread(target=server.serve_forever, name='task-eval-http', daemon=True).start()
-            url = f'http://127.0.0.1:{server.server_address[1]}'
+            if external is None:
+                if hf is not None:
+                    hf.eval()
+                engine.prompt_rendering = self.prompt_rendering
+                # Engine.stop() leaves its stop flag set; reset it once per evaluation.
+                import queue as queue_module
+                engine._stopping, engine._incoming, engine._active = False, queue_module.Queue(), []
+                engine.start()
+                server = serve(engine, '127.0.0.1', 0)
+                threading.Thread(target=server.serve_forever, name='task-eval-http', daemon=True).start()
+                url = f'http://127.0.0.1:{server.server_address[1]}'
+            else:
+                url = external['url']
             env = node_path_env()
             runtime = Path(self.spec.get('runtime') or self.repo / 'ts-host')
             env['NATLANG_SOURCE_REVIEWS'] = str(runtime.parent / 'training' / 'source-reviews')
@@ -314,10 +318,11 @@ class TaskEval:
             if server is not None:
                 server.shutdown()
                 server.server_close()
-            engine.stop()
-            engine.prompt_rendering = previous_mode
-            if hf is not None and was_training:
-                hf.train()
+            if external is None:
+                engine.stop()
+                engine.prompt_rendering = previous_mode
+                if hf is not None and was_training:
+                    hf.train()
         finishes, results, keys = {}, [], {}
         for queue, journal, entries in queues:
             if journal.is_file():
