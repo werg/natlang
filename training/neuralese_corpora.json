@@ -125287,6 +125287,141 @@
         "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0012",
         "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0013"
       ]
+    },
+    {
+      "id": "lfm797-flat-positive-whole-graphs-20261017-v1",
+      "owner": "dgx",
+      "path": "runs/lfm797-flat-positive-whole-graphs-20261017-v1",
+      "include": [
+        "lfm25/receipt.json",
+        "lfm25/train/native-graphs.jsonl.zst",
+        "lfm25/train/fit.jsonl.zst",
+        "lfm25/train/remaining-long.jsonl.zst",
+        "lfm25/test/native-graphs.jsonl.zst",
+        "validation-proof.json",
+        "capacity-partition.json",
+        "candidate-provenance.json",
+        "candidate-native-graphs.jsonl",
+        "native_positive_reuse.py",
+        "current-protection.json",
+        "selected-cases.json",
+        "candidate.json",
+        "transfer.json",
+        "source/original-rollouts.jsonl",
+        "source/repaired-rollouts.jsonl",
+        "source/repair-receipt.json",
+        "source/native_occurrence_repair.py",
+        "source/prior-grpo-objective.json",
+        "source/original-score.json",
+        "source/blocks-manifest.json",
+        "source/current-capacity.json"
+      ],
+      "source_class": "verified-old-student-positive-native-whole-graph-off-policy-SFT",
+      "training_admission": true,
+      "training_admission_reason": "Eight exact scored TRAIN flat-correct episodes omitted from original797 GRPO, original/repaired full-rollout custody, regenerated prior-objective coverage and current protection verified. Whole graphs retain all actual invocations and sampled-action masks; no old external states.",
+      "admission": "Eight quality-admitted LF-only whole sampled graphs; six fit current measured geometry, two remain untruncated required-visit obligations. All exposure is zero until actual current-parent updates.",
+      "models": [
+        "lfm25"
+      ],
+      "training_entrypoints": {
+        "lfm25": {
+          "path": "runs/lfm797-flat-positive-whole-graphs-20261017-v1/lfm25/train/fit.jsonl.zst",
+          "sha256": "684fdaeeee9fc70e3af6c260afcbd569df85547b2cd0197de02ea207095cc8c4",
+          "rows": 6
+        }
+      },
+      "pending_native_sources": {
+        "lfm25": {
+          "path": "runs/lfm797-flat-positive-whole-graphs-20261017-v1/lfm25/train/remaining-long.jsonl.zst",
+          "sha256": "868e4fffaec7c376733aa12ef6fa2e0f142371663c8ef55dbf5aaf84bf5ae22e",
+          "rows": 2,
+          "obligations": [
+            {
+              "execution_qualified": false,
+              "geometry": {
+                "forward_tokens": 114994,
+                "kv_slots": 116004
+              },
+              "id": "a0af61bd86102f75797a6c7684a63608927029ab2359ac8762b89914a7bca962",
+              "imports": 0,
+              "reason": "whole graph exceeds current measured forward token limit",
+              "required_visits": 1
+            },
+            {
+              "execution_qualified": false,
+              "geometry": {
+                "forward_tokens": 119091,
+                "kv_slots": 120240
+              },
+              "id": "2a97a2ea66c5fd450463a37335f63c9d00eb014d2f998e4b70443bd0e35fa2ee",
+              "imports": 4,
+              "reason": "whole graph exceeds current measured forward token limit",
+              "required_visits": 1
+            }
+          ]
+        }
+      },
+      "source_binding": {
+        "receipt": {
+          "path": "/home/werg/natlang/runs/lfm797-flat-positive-whole-graphs-20261017-v1/lfm25/receipt.json",
+          "sha256": "45f23f8c3cea8daad986c0aa00391a9aaba8c83bb7ff183262ada2d0d9297c7f",
+          "bytes": 6990
+        },
+        "validation": {
+          "path": "/home/werg/natlang/runs/lfm797-flat-positive-whole-graphs-20261017-v1/validation-proof.json",
+          "sha256": "0bca17c650bfabacdf99b58944c56eeeb42b47ad11db23a4679650b1a6f595a7",
+          "bytes": 599
+        },
+        "capacity_partition": {
+          "path": "/home/werg/natlang/runs/lfm797-flat-positive-whole-graphs-20261017-v1/capacity-partition.json",
+          "sha256": "e7f8a05b9b5dc804c5d52321e2aa5ff965213a72a3267f8daa2c21c56145247a",
+          "bytes": 4022
+        },
+        "sampled_actor": {
+          "architecture": "lfm2",
+          "checkpoint_sha256": "0d781ea562e1d0c664ae11b835296c584c061bc2c84eeb775703722c76158d2e",
+          "embedding_weight_sha256": "835084e57e28459d0d70ff6b4a4dcf85387999aa68d8c6fca0af8f9be77452b8",
+          "tokenizer_fingerprint": "be949ec48f44e17b2b17e1131aeb1dab4262175ba20f9783ecd8e59c27a58105"
+        },
+        "source_repair": {
+          "bytes": 7874,
+          "path": "/home/werg/natlang/runs/lfm797-flat-positive-whole-graphs-20261017-v1/source/repair-receipt.json",
+          "sha256": "4c6a7920ca171a56e24d7a093680a581181fd7bd57e3f021f5741e296eaf5b72"
+        },
+        "prior_objective": {
+          "bytes": 1041187,
+          "path": "/home/werg/natlang/runs/lfm797-flat-positive-whole-graphs-20261017-v1/source/prior-grpo-objective.json",
+          "sha256": "2afcacab9df684c40d6c41fc54240796a344f44b172eebbcbf76afa8ca72f32d"
+        },
+        "current_protection": {
+          "bytes": 3018,
+          "path": "/home/werg/natlang/runs/lfm797-flat-positive-whole-graphs-20261017-v1/current-protection.json",
+          "sha256": "fafb5dfc55c97273d03765a3b666a86a2cbff18a78169719b7f191c9ad710803"
+        },
+        "original_case_rows": {
+          "bytes": 2308,
+          "path": "/home/werg/natlang/runs/lfm797-flat-positive-whole-graphs-20261017-v1/selected-cases.json",
+          "sha256": "8df2f2a36c95d43bab1970a304020e2f4b88e52d5beb23594dc16b90665b5155"
+        },
+        "original_rollouts": {
+          "path": "/home/werg/natlang/runs/lfm797-flat-positive-whole-graphs-20261017-v1/source/original-rollouts.jsonl",
+          "sha256": "026f5622a9765a0bdccfeae8cff2261a5630300049c00fcbada2243b1d4778fd",
+          "bytes": 19121082
+        },
+        "repaired_rollouts": {
+          "bytes": 19170262,
+          "path": "/home/werg/natlang/runs/lfm797-flat-positive-whole-graphs-20261017-v1/source/repaired-rollouts.jsonl",
+          "sha256": "3c046c8031988de851fbb0a63180facc6c6ab0de5bea2c4ff94ae5531527962e"
+        },
+        "transfer": {
+          "path": "/home/werg/natlang/runs/lfm797-flat-positive-whole-graphs-20261017-v1/transfer.json",
+          "sha256": "2efbb754c92b4e3fe13fd974b224cefc5a2f0afa6fc88a72ce84d9cb6130c6c1",
+          "bytes": 4293
+        }
+      },
+      "license_provenance": "Project-collected old student samples of pinned LiquidAI LFM2.5 QAD lineage; source base/model license provenance retained as fact.",
+      "split": "TRAIN only, empty test view; original task source groups independently checked against current held/quality/pending and decision/family holds.",
+      "note": "Not stronger-teacher generation and not on-policy for a later checkpoint. No rewind, sampler/model call, optimizer/RNG/exposure mutation, new capacity qualification or readiness grant. LF tokenizer/state identity is explicit; no cross-tokenizer Mellum reuse claim."
     }
   ],
   "coverage_backlog": [
