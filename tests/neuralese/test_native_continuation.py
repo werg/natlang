@@ -46,6 +46,38 @@ def test_borrowed_metadata_matches_owned_pending_merge_without_mutating_checkpoi
     assert collect_sft_progress(policy,borrow_frames=True)['full'] is prior['full']
 
 
+def test_current_frame_replaces_old_snapshot_without_copying_discarded_payload():
+    class DiscardedSnapshot:
+        def __deepcopy__(self, memo):
+            raise AssertionError('superseded active snapshot must not be copied')
+
+    old=progress()
+    old['source_row_bindings']={'old':'binding0'}
+    old['source_row_order']=['old']
+    old['options']['_pending_native_source_declarations']=[{
+        'binding':{'path':'pending.json','sha256':'a'*64},
+        'rows':{'new':{'binding':'binding1','required_visits':2}}}]
+    history=collect_sft_progress(old)
+    history['full']['completed_foundations']=[{'cohort':'earned'}]
+    other=copy.deepcopy(history['full'])
+    history['other']=other
+    current=progress()
+    current['sft_progress']=history
+    current['exposure_counts']={'old':1}
+    expected=collect_sft_progress(current,borrow_frames=True)
+    history['full']['obsolete_snapshot_payload']=DiscardedSnapshot()
+    result=collect_sft_progress(current)
+    assert result==expected
+    assert result['full']['required_visits']=={'old':1,'new':2}
+    assert result['full']['exposure_counts']=={'old':1,'new':0}
+    result['full']['completed_foundations'][0]['cohort']='changed'
+    result['other']['completed_foundations'][0]['cohort']='also changed'
+    result['full']['exposure_counts']['old']=99
+    assert history['full']['completed_foundations']==[{'cohort':'earned'}]
+    assert history['other']['completed_foundations']==[{'cohort':'earned'}]
+    assert current['exposure_counts']=={'old':1}
+
+
 @pytest.mark.parametrize('epochs',[0.5,1,1.5,2])
 @pytest.mark.parametrize('counts',[{}, {'old':1}, {'old':9,'new':2}])
 def test_metadata_completion_matches_full_exposure_report(epochs,counts):

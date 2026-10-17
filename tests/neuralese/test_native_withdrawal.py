@@ -39,6 +39,9 @@ def test_exact_withdrawal_preserves_optimizer_rng_good_credits_and_carried_oblig
     history=new['options']['withdrawal_history'][0]
     assert history['rows'][0]['consumed_visits']==2 and not history['prior_updates_undone']
     assert history['rows'][0]['consumed_visits_by_stage']=={'full':2,'earlier':5}
+    assert old['sft_progress']['full']['exposure_counts']['bad']==2
+    assert old['sft_progress']['earlier']['exposure_counts']['bad']==5
+    assert 'withdrawal_history' not in old['options']
     assert withdraw_ordinary_rows(new,path,current_bindings={'good':'g','comm':'c'},model_id='model:pin') is new
     with pytest.raises(ValueError,match='reintroduced'):
         reject_withdrawn_targets(new,{'bad':'b'})

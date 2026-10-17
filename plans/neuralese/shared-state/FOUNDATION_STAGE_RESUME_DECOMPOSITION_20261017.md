@@ -9,6 +9,12 @@ optimizer/RNG history.
 1. The existing collect_sft_progress call authenticates/selects the checkpoint's
    effective stage frames. Reuse that already materialized result; do not decode
    or deep-copy the checkpoint again.
+   When the current supervised stage replaces its historical frame, copy only
+   the other historical stages. Preserve that stage's prior quotas, pending
+   declarations and completed foundations through their existing merge, without
+   copying its superseded source snapshot. Returned training frames still own
+   their mutable metadata. Withdrawal evidence reads borrowed frames and changes
+   only its separately owned result; earned visits and optimizer/RNG stay exact.
 2. At the exact initial-cohort verifier, look up only the requested stage key
    (including its existing native-graph-ce default). Read its saved foundation
    declaration. A different stage's flag or the current policy's top-level flag

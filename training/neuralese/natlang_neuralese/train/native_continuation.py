@@ -65,7 +65,7 @@ def withdraw_ordinary_rows(training, proof_path, *, current_bindings, model_id, 
     result=dict(training)
     result['options']=copy.deepcopy(training.get('options') or {})
     history=list(result['options'].get('withdrawal_history') or [])
-    historical_frames=collect_sft_progress(training)
+    historical_frames=collect_sft_progress(training,borrow_frames=True)
     history.append({'proof_sha256':proof_sha,'evidence':proof['evidence'],
         'rows':[{**row,'consumed_visits':int((training.get('exposure_counts') or {}).get(key,0)),
                  'consumed_visits_by_stage':{stage:int((frame.get('exposure_counts') or {}).get(key,0))
@@ -156,18 +156,26 @@ def collect_sft_progress(training, *, borrow_frames=False):
     decoded checkpoint. Training callers retain fully independent deep copies.
     """
     historical=training.get('sft_progress') or {}
-    result=dict(historical) if borrow_frames else copy.deepcopy(historical)
-    if training.get('schema')==TRAINING_SCHEMA and ((training.get('identity') or {}).get('objective') is None
-            or (training.get('identity') or {}).get('objective_kind')=='native-offline-pairwise'):
+    capture=training.get('schema')==TRAINING_SCHEMA and ((training.get('identity') or {}).get('objective') is None
+            or (training.get('identity') or {}).get('objective_kind')=='native-offline-pairwise')
+    key=stage_key(training) if capture else None
+    # The current frame replaces its historical snapshot. Copy only the other
+    # stages; the pending merge below owns the few prior values still needed.
+    result=(dict(historical) if borrow_frames else
+            copy.deepcopy({name:frame for name,frame in historical.items()
+                           if not capture or name!=key}))
+    if capture:
+        previous=historical.get(key) or {}
         frame={key:value if borrow_frames else copy.deepcopy(value)
                for key,value in training.items() if key not in _TRANSIENT}
         if borrow_frames:
             # _retain_pending_sources updates only these existing nested values;
             # quotas and pending declarations are allocated by that helper.
             frame['exposure_counts']=dict(training.get('exposure_counts') or {})
-        key=stage_key(training)
-        _retain_pending_sources(frame,result.get(key) or {})
-        frame.setdefault('completed_foundations',(result.get(key) or {}).get('completed_foundations',[]))
+        _retain_pending_sources(frame,previous)
+        if 'completed_foundations' not in frame:
+            completed=previous.get('completed_foundations',[])
+            frame['completed_foundations']=completed if borrow_frames else copy.deepcopy(completed)
         result[key]=frame
     return result
 
