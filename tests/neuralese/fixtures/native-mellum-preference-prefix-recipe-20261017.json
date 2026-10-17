@@ -1,0 +1,155 @@
+{
+  "description": "Append44945 admitted ordinary rows at priority3, retain exact entire old ordinary/DPO cohorts and pending obligations; fixed genuine communication foundation4:1 unchanged. Preserve current optimizer/RNG/credits and continuous useful SGD.",
+  "id": "native-state-production-mellum-verified-teacher-v7-11687-20261016-v1-ordinary-return-v21-search80-85",
+  "identity_qualification": "native_state_runtime_qualified",
+  "input_bindings": {
+    "d24_pending_native_sources": {
+      "bytes": 89444,
+      "path": "/work/data-preparation/d24-whole-pending-20261017-v1/mellum21/pending-native-sources.json",
+      "sha256": "7fb40c17de1fa83c95ee35f18504d813a6f22e020952539c67ccef224857162c"
+    },
+    "d24_preference_objective": {
+      "path": "/work/data-preparation/acquired-d24-native-20261016-v2/preference-graphs-v6/capacity-envelope-candidate-v2/mellum21/objective.json",
+      "sha256": "c383a9a98e206edf5265109d89a6e8a004ab55fd9c2581eaf915a887c53d865b"
+    },
+    "d24_preference_train": {
+      "path": "/work/data-preparation/acquired-d24-native-20261016-v2/preference-graphs-v6/capacity-envelope-candidate-v2/mellum21/train-sources.json",
+      "sha256": "0a7670f41f384b3e908e987e812b2ff0d5dc47f299127d81aebc2da3be883d7c"
+    },
+    "foundation_native_graphs": {
+      "path": "/work/native-production/data/native-state-pair-v3-recovery512-append-20261015-v1/mellum21/foundation-sources.json",
+      "sha256": "1781a87ebbb79fa48d2e37534a90ead641d5752dcf3210cc110535e8fa0595da"
+    },
+    "mandatory_pending_native_sources": {
+      "path": "/work/native-production/control/mellum-next-admitted-resident-20261016-v1/all-pending-native-sources.json",
+      "sha256": "8f38ec39e885a9d235bf7969854a5c2329cd5b1627cb749c4e233572f6f06c81"
+    },
+    "native_held_graphs": {
+      "path": "/work/native-production/control/mellum-resident-io-handoff-20261016-v1/appended-held-sources.json",
+      "sha256": "433085c282b0d6b515e3001b79b92e5cdf6dacc1ec2a2d21bca4dcd1c1457bec"
+    },
+    "native_train_graphs": {
+      "path": "/work/native-production/control/mellum-ordinary-v21-search80-85-live-append-20261017-v1/appended-train-sources.json",
+      "sha256": "ddb576472a6d3c6ddcece81c8f7d156b184557291ec3f31be3f5caf1f1991a27"
+    },
+    "pre_append_native_train_graphs": {
+      "path": "/work/native-production/control/mellum-priority2-scaffold3-sourcebound-v2-20261017/appended-train-sources.json",
+      "sha256": "19550b7fd1bc99f6174f0964e828705df2b1b27fa1d3591c925104121b259cdb"
+    },
+    "previous_native_held_graphs": {
+      "path": "/work/native-production/control/mellum-resident-io-handoff-20261016-v1/appended-held-sources.json",
+      "sha256": "433085c282b0d6b515e3001b79b92e5cdf6dacc1ec2a2d21bca4dcd1c1457bec"
+    },
+    "previous_native_train_graphs": {
+      "path": "/work/native-production/control/mellum-v20-resident-20261016-v1/appended-train-sources.json",
+      "sha256": "026c5e3a7fd0723cad0c999516bf009dac299a76591cf9e46f084a3d4eca75c0"
+    },
+    "withdrawn_native_graphs": {
+      "path": "/work/native-production/data/qwen-positive-clean-actions-20261015-v1/mellum21/withdrawal-runtime-proof.json",
+      "sha256": "3de461b46d118e606f3acb0274c87f530483cec40c01fddc99e72a9038d26c3d"
+    }
+  },
+  "schema": "natlang.neuralese-training-recipe/1",
+  "stages": [
+    {
+      "id": "native_full_sft",
+      "inputs": {
+        "continued_held_native_graphs": "previous_native_held_graphs",
+        "continued_native_graphs": "pre_append_native_train_graphs",
+        "foundation_native_graphs": "foundation_native_graphs",
+        "held_native_graphs": "native_held_graphs",
+        "native_graphs": "native_train_graphs",
+        "pending_native_sources": "mandatory_pending_native_sources",
+        "withdrawn_native_graphs": "withdrawn_native_graphs"
+      },
+      "kind": "native_state_sft",
+      "parameters": {
+        "base": "/work/native-production/models/mellum21",
+        "batch_graphs": 1,
+        "batch_tokens": 32768,
+        "checkpoint_every": 1000,
+        "checkpoint_input_offload": true,
+        "checkpoint_layers": true,
+        "checkpoint_seconds": 3600,
+        "chunk_tokens": 1024,
+        "communication_foundation": true,
+        "dtype": "bfloat16",
+        "epochs": 1.0,
+        "eval_every": 250,
+        "forward_atol": 0.0001,
+        "foundation_communication_batches": 4,
+        "fp8_recipe": "current-bf16-dx",
+        "fp8_training": "triton-experts",
+        "gradient_atol": 1e-05,
+        "held_eval_graphs": 2,
+        "held_eval_tokens": 32768,
+        "interface_row_learning_rate": 0.0003,
+        "latent_ns": "cubic5",
+        "learn_reasoning_boundaries": true,
+        "learned_row_learning_rate": 0.0003,
+        "learning_rate": 3e-06,
+        "native_linear_precision": "bf16x6",
+        "native_optimizer_migration": "native-ordinary-to-adamw-new-history-v1",
+        "native_ordinary_precision": "fp32-norms-v1",
+        "qualify_training_backend": false,
+        "rank": 8,
+        "refresh_at_checkpoint": false,
+        "resident_geometry_qualification": "/work/native-production/control/mellum-ordinary-v21-search80-85-live-append-20261017-v1/capacity/7193b7224a60269d1a03bf66de74ac3c1712c500b84cde549bd7c184255a2a0c/capacity.json",
+        "seed": 20261015,
+        "task_eval": "",
+        "task_eval_every": 0,
+        "weight_decay": 0.1
+      },
+      "requires": []
+    },
+    {
+      "id": "d24_offline_preference",
+      "inputs": {
+        "held_native_graphs": "native_held_graphs",
+        "native_graphs": "d24_preference_train",
+        "objective_spec": "d24_preference_objective",
+        "pending_native_sources": "d24_pending_native_sources"
+      },
+      "kind": "native_offline_preference",
+      "parameters": {
+        "base": "/work/native-production/models/mellum21",
+        "batch_graphs": 1,
+        "batch_tokens": 32768,
+        "checkpoint_every": 250,
+        "checkpoint_input_offload": true,
+        "checkpoint_layers": true,
+        "checkpoint_seconds": 3600,
+        "chunk_tokens": 1024,
+        "dtype": "bfloat16",
+        "epochs": 1.0,
+        "eval_every": 50,
+        "forward_atol": 0.0001,
+        "fp8_recipe": "current-bf16-dx",
+        "fp8_training": "triton-experts",
+        "gradient_atol": 1e-05,
+        "held_eval_graphs": 2,
+        "held_eval_tokens": 32768,
+        "interface_row_learning_rate": 0.0003,
+        "latent_ns": "cubic5",
+        "learn_reasoning_boundaries": true,
+        "learning_rate": 3e-06,
+        "memory_qualification": {
+          "path": "/work/data-preparation/acquired-d24-native-20261016-v2/preference-graphs-v6/capacity-envelope-candidate-v2/capacity-descriptors-v3/mellum21.json",
+          "sha256": "88188dde0bb31596155f2d2599bc542110c266eef795d8fc3b6c9a390e856d40"
+        },
+        "native_linear_precision": "bf16x6",
+        "native_optimizer_migration": "native-ordinary-to-adamw-new-history-v1",
+        "native_ordinary_precision": "fp32-norms-v1",
+        "preference_beta": 0.1,
+        "preference_margin": 0,
+        "qualify_training_backend": false,
+        "rank": 8,
+        "seed": 20261015,
+        "task_eval": "",
+        "task_eval_every": 0,
+        "weight_decay": 0.1
+      },
+      "requires": []
+    }
+  ]
+}

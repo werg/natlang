@@ -399,3 +399,39 @@ def test_actual_preference_deficits_survive_three_phase_semantic_training_and_ne
         restored['exposure_counts'][example.id]+=1
         restored['step']+=1;restored['global_step']+=1
         assert progress_obligations(collect_sft_progress(restored))['complete']
+
+
+@pytest.mark.parametrize('role', ['lfm', 'mellum'])
+def test_actual_preference_prefix_recipe_parser_keeps_parameters_command_and_identity(tmp_path, role):
+    from pathlib import Path
+    from natlang_neuralese.train import recipe
+    path=Path(__file__).parent/'fixtures'/f'native-{role}-preference-prefix-recipe-20261017.json'
+    original=json.loads(path.read_text())
+    # The production standalone source retained a size witness in one catalog
+    # entry. The new canonical recipe keeps path/SHA; its continuation receipt
+    # separately retains and verifies the original byte witness.
+    normalized=copy.deepcopy(original)
+    used={name for stage in normalized['stages'] for name in stage.get('inputs',{}).values()}
+    normalized['input_bindings']={name:ref for name,ref in normalized['input_bindings'].items() if name in used}
+    for reference in normalized['input_bindings'].values():
+        if set(reference)=={'path','sha256','bytes'}:
+            assert type(reference['bytes']) is int and reference['bytes']>0
+            reference.pop('bytes')
+    normalized_path=tmp_path/'canonical-inputs.json'
+    normalized_path.write_text(json.dumps(normalized))
+    identity=recipe.recipe_identity_sha256(normalized_path)
+    loaded=recipe.load_recipe(normalized_path)
+    assert loaded==normalized
+    stage=next(s for s in loaded['stages'] if s['kind']=='native_offline_preference')
+    before=next(s for s in original['stages'] if s['id']==stage['id'])
+    assert stage['parameters']==before['parameters']
+    assert recipe.stage_parameter_args(stage['parameters'])==recipe.stage_parameter_args(before['parameters'])
+    args=recipe.stage_parameter_args(stage['parameters'])
+    assert ('--share-causal-prefixes' in args) is (role=='lfm')
+    assert stage['parameters'].get('share_causal_prefixes',False) is (role=='lfm')
+    assert recipe.recipe_identity_sha256(normalized_path)==identity
+    bad=copy.deepcopy(normalized)
+    bad['stages'][-1]['parameters']['unsupported_preference_parameter']=True
+    rejected=tmp_path/'unsupported.json';rejected.write_text(json.dumps(bad))
+    with pytest.raises(ValueError,match='unknown stage parameters'):
+        recipe.load_recipe(rejected)

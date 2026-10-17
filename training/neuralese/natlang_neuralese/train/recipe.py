@@ -340,7 +340,7 @@ HANDLERS['native_offline_preference'] = {
     'required_inputs':{'native_graphs','held_native_graphs','objective_spec'},
     'optional_inputs':{'continue_from','continued_native_graphs','continued_held_native_graphs','pending_native_sources'},
     'parameters':(set(HANDLERS['native_state_sft']['parameters']) -
-        {'communication_foundation','foundation_communication_batches','share_causal_prefixes'}) |
+        {'communication_foundation','foundation_communication_batches'}) |
         {'preference_beta','preference_margin'},
     'result':'checkpoint.pt'}
 
@@ -579,7 +579,7 @@ def effective_stage_parameters(stage, reports, recipe=None):
     inherited=parameter_defaults.get(RL_DEFAULTS_FROM.get(stage['kind']), {})
     if stage['kind']=='native_offline_preference':
         inherited={key:value for key,value in inherited.items()
-                   if key in HANDLERS[stage['kind']]['parameters']}
+                   if key in HANDLERS[stage['kind']]['parameters'] and key!='share_causal_prefixes'}
     parameters = dict(inherited)
     parameters.update(parameter_defaults.get(stage['kind'], {}))
     parameters.update(stage['parameters'])

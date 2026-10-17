@@ -16,3 +16,13 @@ model. This was caught while reviewing the queued command, before launch.
 4. Existing objective validation and loss/gradient checks remain unchanged.
    Both model recipes use this shared serializer; queued immutable commands
    are repaired explicitly rather than silently modifying their old bindings.
+
+## Explicit causal-prefix parameter parity (2026-10-17)
+
+The actual LFM preference command and saved recipe already declare the existing
+`share_causal_prefixes` setting, but the preference recipe handler rejected that
+supported parameter. Accept its explicit declaration using the same shared
+handler/serializer. Preserve the previous default inheritance filter: ordinary
+prefix settings do not silently enable preference sharing. LFM's explicit true
+and Mellum's absent/off policy remain unchanged; unsupported fields still fail.
+This is crisp recipe validation, with no new model behavior or numerical path.

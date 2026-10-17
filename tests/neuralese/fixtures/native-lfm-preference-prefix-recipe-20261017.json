@@ -1,0 +1,154 @@
+{
+  "description": "Append44945 admitted ordinary rows at priority3, retain exact entire old ordinary/DPO cohorts and pending obligations; fixed genuine communication foundation4:1 unchanged. Preserve current optimizer/RNG/credits and continuous useful SGD.",
+  "id": "native-state-production-lfm-verified-teacher-v7-11687-20261016-v1-ordinary-return9728-v21-search80-85",
+  "identity_qualification": "native_state_runtime_qualified",
+  "input_bindings": {
+    "d24_pending_native_sources": {
+      "bytes": 105548,
+      "path": "/work/data-preparation/d24-whole-pending-20261017-v1/lfm25/pending-native-sources.json",
+      "sha256": "957d03afd7a280d6d5e56ff1afce79767f2fd47a4559fa9347fe91725ba2b746"
+    },
+    "d24_preference_objective": {
+      "path": "/work/data-preparation/acquired-d24-native-20261016-v2/preference-graphs-v6/capacity-envelope-candidate-v2/lfm25/objective.json",
+      "sha256": "8811f4eb813c3c956dc17561ba5f9433c3b45fdea83eee3ca68f2edcd44b7433"
+    },
+    "d24_preference_train": {
+      "path": "/work/data-preparation/acquired-d24-native-20261016-v2/preference-graphs-v6/capacity-envelope-candidate-v2/lfm25/train-sources.json",
+      "sha256": "4c4c3dbfe0222a1d2f158259e785ca8e82795e6f61aade8b13e7c74663841327"
+    },
+    "foundation_native_graphs": {
+      "path": "/work/native-production/data/native-state-pair-v3-recovery512-append-20261015-v1/lfm25/foundation-sources.json",
+      "sha256": "f3640c71cbcf13a738b6f8e5533d15ad4dc9ef756d3dfa1c4cef6d585c242c33"
+    },
+    "mandatory_pending_native_sources": {
+      "path": "/work/native-production/control/lfm-next-admitted-resident-20261016-v2/all-pending-native-sources.json",
+      "sha256": "5c0ee4f31bb2fba287a77b76f178ef0e5b2ec6c32c0e88b3a1a5152e9c863574"
+    },
+    "native_held_graphs": {
+      "path": "/work/native-production/control/lfm-next-cohort-capacity-20261016-v1/appended-held-sources.json",
+      "sha256": "70fa094f4e0488bd78d61ac33f101d134b9acb2c57084483223880cd61dd34b4"
+    },
+    "native_train_graphs": {
+      "path": "/work/native-production/control/lfm-ordinary-v21-search80-85-live-append-20261017-v1/appended-train-sources.json",
+      "sha256": "c3c8219d27c4d2279edc0a9c196b57ff37995fc7a4a4010abf2e06bfd66903cb"
+    },
+    "pre_append_native_train_graphs": {
+      "path": "/work/native-production/control/lfm-scaffold93-sourcebound-v2-append-20261017/appended-train-sources.json",
+      "sha256": "8a86cc0781617c8822caa40f79594d29b22b62423c16356883d3b127786dd389"
+    },
+    "previous_native_held_graphs": {
+      "path": "/work/native-production/control/lfm-next-cohort-capacity-20261016-v1/appended-held-sources.json",
+      "sha256": "70fa094f4e0488bd78d61ac33f101d134b9acb2c57084483223880cd61dd34b4"
+    },
+    "previous_native_train_graphs": {
+      "path": "/work/native-production/control/lfm-seed-priority-raw-handoff-20261016-v1/manifest-57e10c5427de4e468b628de8918bd30ef2233ea5a773d7c1b79fea87c1ade666.json",
+      "sha256": "d14051cb5a55070f19788d29431553c94d1eae9f544f730ba20302d9e7a43289"
+    },
+    "withdrawn_native_graphs": {
+      "path": "/work/native-production/data/qwen-positive-clean-actions-20261015-v1/lfm25/withdrawal-runtime-proof.json",
+      "sha256": "72703f9ac7b52d26ab3baca87a19f3b194fd35e09b869d631d409adfc56c5421"
+    }
+  },
+  "schema": "natlang.neuralese-training-recipe/1",
+  "stages": [
+    {
+      "id": "native_full_sft",
+      "inputs": {
+        "continued_held_native_graphs": "previous_native_held_graphs",
+        "continued_native_graphs": "pre_append_native_train_graphs",
+        "foundation_native_graphs": "foundation_native_graphs",
+        "held_native_graphs": "native_held_graphs",
+        "native_graphs": "native_train_graphs",
+        "pending_native_sources": "mandatory_pending_native_sources",
+        "withdrawn_native_graphs": "withdrawn_native_graphs"
+      },
+      "kind": "native_state_sft",
+      "parameters": {
+        "base": "/work/native-production/models/lfm25-qad",
+        "batch_graphs": 1,
+        "batch_tokens": 65536,
+        "checkpoint_every": 1000,
+        "checkpoint_input_offload": false,
+        "checkpoint_layers": true,
+        "checkpoint_seconds": 3600,
+        "chunk_tokens": 1024,
+        "communication_foundation": true,
+        "dtype": "float32",
+        "epochs": 1.0,
+        "eval_every": 250,
+        "forward_atol": 0.0001,
+        "foundation_communication_batches": 4,
+        "fp8_training": "off",
+        "gradient_atol": 1e-05,
+        "held_eval_graphs": 2,
+        "held_eval_tokens": 32768,
+        "interface_row_learning_rate": 0.0003,
+        "latent_ns": "cubic5",
+        "learn_reasoning_boundaries": true,
+        "learned_row_learning_rate": 0.0003,
+        "learning_rate": 3e-06,
+        "native_linear_precision": "bf16x6",
+        "native_optimizer_migration": "native-ordinary-to-adamw-new-history-v1",
+        "qualify_training_backend": false,
+        "rank": 8,
+        "refresh_at_checkpoint": false,
+        "resident_geometry_qualification": "/work/native-production/control/lfm-ordinary-v21-search80-85-live-append-20261017-v1/capacity/be7931d62e479cbae0af127272c65a26164d4c80884535c292a9d22cf8eeb0ae/capacity.json",
+        "seed": 20261015,
+        "share_causal_prefixes": true,
+        "task_eval": "",
+        "task_eval_every": 0,
+        "weight_decay": 0.1
+      },
+      "requires": []
+    },
+    {
+      "id": "d24_offline_preference",
+      "inputs": {
+        "held_native_graphs": "native_held_graphs",
+        "native_graphs": "d24_preference_train",
+        "objective_spec": "d24_preference_objective",
+        "pending_native_sources": "d24_pending_native_sources"
+      },
+      "kind": "native_offline_preference",
+      "parameters": {
+        "base": "/work/native-production/models/lfm25-qad",
+        "batch_graphs": 1,
+        "batch_tokens": 65536,
+        "checkpoint_every": 250,
+        "checkpoint_input_offload": false,
+        "checkpoint_layers": true,
+        "checkpoint_seconds": 3600,
+        "chunk_tokens": 1024,
+        "dtype": "float32",
+        "epochs": 1.0,
+        "eval_every": 50,
+        "forward_atol": 0.0001,
+        "fp8_training": "off",
+        "gradient_atol": 1e-05,
+        "held_eval_graphs": 2,
+        "held_eval_tokens": 32768,
+        "interface_row_learning_rate": 0.0003,
+        "latent_ns": "cubic5",
+        "learn_reasoning_boundaries": true,
+        "learned_row_learning_rate": 0.0003,
+        "learning_rate": 3e-06,
+        "memory_qualification": {
+          "path": "/work/data-preparation/acquired-d24-native-20261016-v2/preference-graphs-v6/capacity-envelope-candidate-v2/capacity-descriptors-v3/lfm25.json",
+          "sha256": "1aa13a2371c3d5bb297aaf62ffb7829f6f9ff7bdf08b900188c4633c29d4fbbe"
+        },
+        "native_linear_precision": "bf16x6",
+        "native_optimizer_migration": "native-ordinary-to-adamw-new-history-v1",
+        "preference_beta": 0.1,
+        "preference_margin": 0,
+        "qualify_training_backend": false,
+        "rank": 8,
+        "seed": 20261015,
+        "share_causal_prefixes": true,
+        "task_eval": "",
+        "task_eval_every": 0,
+        "weight_decay": 0.1
+      },
+      "requires": []
+    }
+  ]
+}
