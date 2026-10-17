@@ -409,6 +409,10 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
         bootstrap=declaration.get('handoff_receipt') or value.get('handoff') or runtime['bootstrap']
         proof=verify_runtime_handoff(declaration['runtime_handoff'],bootstrap=bootstrap)
         transition_ref=proof['recipe_handoff'];transition_handoff=proof['handoff']
+        if proof.get('bare_direct_owner'):
+            from ..train.recipe import recipe_identity_sha256
+            requirement['recipe_sha256']=recipe_identity_sha256(_bound(proof['bare_direct_owner']['recipe']))
+            requirement['recipe_lineage_sha256']=proof['lineage']
         retired_cursor=json.loads(_bound(proof['snapshots']['cursor']).read_text()).get('resident_current')
     if transition_ref:
         from .native_raw_handoff import verify_drained_recipe_handoff

@@ -62,12 +62,68 @@ def _transition(reference,handoff,record,saved):
     return transition
 
 
-def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,operation=None):
+def _bare_authority(authority,record,saved,config):
+    """Authenticate an already executed policy, never manufacture a resident plan."""
+    from ..train.native_resident import code_inventory
+    from ..train.recipe import resolve_recipe_data,resolve_stage_inputs,native_recipe_binding
+    from ..common.hashing import canonical_json_sha256_hex as digest
+    if record.get('resident'):
+        raise ValueError('bare runtime authority cannot replace a genuine resident plan')
+    training=saved['training'];options=training.get('options') or {}
+    actual=options.get('recipe_binding')
+    if isinstance(actual,str):actual=json.loads(actual)
+    lineage=config.get('recipe_lineage_sha256')
+    expected=native_recipe_binding(_bound(authority['recipe']),lineage)
+    if actual!=expected:
+        raise ValueError('bare runtime authority must bind the actual saved current recipe and lineage')
+    package=Path(authority['package']);code=code_inventory(package)
+    if code!=authority['code'] or digest(saved['model_config'])!=authority['model_config_sha256']:
+        raise ValueError('bare runtime authority changed its executed package or model/profile identity')
+    stage_id=config['production_stage'];recipe=resolve_recipe_data(expected['path'])
+    stages=[item for item in recipe['stages'] if item['id']==stage_id]
+    if len(stages)!=1:raise ValueError('bare runtime authority lost its production stage')
+    stage=stages[0];frame=training if options.get('stage_id')==stage_id else (training.get('sft_progress') or {}).get(stage_id)
+    if not isinstance(frame,dict):raise ValueError('bare runtime authority lost its actual carried production stage')
+    frame_options=frame.get('options') or {};frame_recipe=frame_options.get('recipe_binding')
+    if isinstance(frame_recipe,str):frame_recipe=json.loads(frame_recipe)
+    if not frame_recipe or frame_options.get('stage_id')!=stage_id:
+        raise ValueError('bare runtime authority has no authenticated production stage recipe')
+    frame_path=_bound({'path':frame_recipe['path'],'sha256':frame_recipe.get('file_sha256',frame_recipe['sha256'])})
+    if native_recipe_binding(frame_path,lineage)!=frame_recipe:
+        raise ValueError('bare runtime authority changed its carried recipe lineage')
+    if [item for item in resolve_recipe_data(frame_path)['stages'] if item['id']==stage_id]!=[stage]:
+        raise ValueError('bare runtime authority cannot silently change a carried production stage')
+    inputs=resolve_stage_inputs(recipe,stage,{})
+    receipts=frame.get('source_receipts') or []
+    if len(receipts)<2 or any(receipts[i].get('sha256')!=inputs[role]['sha256'] for i,role in enumerate(('native_graphs','held_native_graphs'))):
+        raise ValueError('bare runtime authority production sources differ from saved credits')
+    qualification=_read(authority['qualification']);remembered=options.get('memory_qualification') or {}
+    if (remembered.get('passed') is not True or qualification.get('passed') is not True
+            or any(remembered.get(key)!=qualification.get(key) for key in ('request','parent_checkpoint_sha256'))):
+        raise ValueError('bare runtime authority requires the actual saved passed qualification')
+    checks=qualification.get('checks',[qualification])
+    if not checks or any(check.get('passed') is not True or check.get('runtime_code_sha256')!=digest(code)
+            or check.get('identity',{}).get('model_config')!=saved['model_config'] for check in checks):
+        raise ValueError('bare runtime authority qualification changed its runtime/model/profile')
+    return {'recipe':authority['recipe'],'new_package':str(package),'new_code':code,
+            'lineage':lineage,'inputs':inputs,'bare':True}
+
+
+def _authority(value,handoff,record,saved,config):
+    if value.get('bare_direct_owner') is not None:
+        if value.get('recipe_handoff') is not None:
+            raise ValueError('runtime handoff cannot mix bare and resident authority')
+        return _bare_authority(value['bare_direct_owner'],record,saved,config)
+    return _transition(value['recipe_handoff'],handoff,record,saved)
+
+
+def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,operation=None,bare_direct_owner=None):
     """Snapshot an actual later drain under the existing coordinator/worker leases."""
     config_path=Path(config_path);out=Path(out)
     if out.exists():
         value=verify_runtime_handoff(binding(out),bootstrap=bootstrap)
         if (value['handoff']!=handoff or value['recipe_handoff']!=recipe_handoff
+                or (value.get('bare_direct_owner') or {}).get('requested')!=bare_direct_owner
                 or (value.get('operation') or {}).get('original')!=operation
                 or value['sources']['config']['path']!=str(config_path.resolve())):
             raise ValueError('runtime handoff retry changed its requested authority')
@@ -84,7 +140,17 @@ def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,o
         current=json.loads(state.read_text());published=binding(current['checkpoint'])
         record,saved=verify_handoff(handoff)
         verify_handoff_metadata(bootstrap)
-        transition=_transition(recipe_handoff,handoff,record,saved)
+        authority={'recipe_handoff':recipe_handoff}
+        if bare_direct_owner is not None:
+            if recipe_handoff is not None:raise ValueError('choose bare or resident runtime authority')
+            from ..train.native_resident import code_inventory
+            from ..common.hashing import canonical_json_sha256_hex as digest
+            directory=out.parent/(out.stem+'-control');directory.mkdir(parents=True,exist_ok=True)
+            authority['bare_direct_owner']={**bare_direct_owner,'requested':bare_direct_owner,
+                'qualification':_snap(bare_direct_owner['qualification'],directory,'qualification.json'),
+                'code':code_inventory(Path(bare_direct_owner['package'])),
+                'model_config_sha256':digest(saved['model_config'])}
+        transition=_authority(authority,handoff,record,saved,config)
         if operation:
             from .native_bridge import verify_result
             result=verify_result(_bound(operation['request']),_bound(operation['result']))
@@ -108,6 +174,7 @@ def prepare_runtime_handoff(bootstrap,handoff,recipe_handoff,config_path,out,*,o
                 'result':_snap(operation['result'],directory,'operation-result.json'),
                 'state':_snap(result['state'],directory,'operation-state.json')}
         value={'schema':SCHEMA,'bootstrap':bootstrap,'handoff':handoff,'recipe_handoff':recipe_handoff,
+            'bare_direct_owner':authority.get('bare_direct_owner'),
             'checkpoint':record['checkpoint'],'published_checkpoint':published,'sources':sources,
             'snapshots':snapshots,'operation':operation_snapshot,'model_id':config.get('raw_model_id'),
             'lineage':config.get('recipe_lineage_sha256'),'previous':config.get('runtime_handoff')}
@@ -129,11 +196,11 @@ def _verify(value,bootstrap,record,saved,transition):
             or value['sources']['state']['path']!=str(state_path)):
         raise ValueError('runtime handoff changed its exact original control snapshots')
     actual=saved['model_config']['architecture']+':'+saved['model_config']['base_inventory_sha256']
-    plan=_read(transition['new_plan'])
+    plan=None if transition.get('bare') else _read(transition['new_plan'])
     if (config.get('bootstrap_binding',{}).get('handoff')!=bootstrap
             or config.get('raw_model_id')!=actual or value.get('model_id')!=actual
             or value.get('lineage')!=config.get('recipe_lineage_sha256')
-            or value['lineage']!=plan['recipe_sha256']):
+            or value['lineage']!=(transition['lineage'] if transition.get('bare') else plan['recipe_sha256'])):
         raise ValueError('runtime handoff replaced its student/base or preserved recipe lineage')
     from .native_supervised import recipe_lineage
     if recipe_lineage(config)!=value['lineage']:
@@ -186,7 +253,7 @@ def verify_runtime_handoff(reference,*,bootstrap):
     value=_read(reference)
     verify_handoff_metadata(bootstrap)
     record,saved=verify_handoff(value['handoff'])
-    transition=_transition(value['recipe_handoff'],value['handoff'],record,saved)
+    transition=_authority(value,value['handoff'],record,saved,_read(value['snapshots']['config']))
     _verify(value,bootstrap,record,saved,transition)
     return value
 
@@ -199,8 +266,15 @@ def configure_runtime_handoff(plan_path,declaration,bootstrap,config_path):
         raise ValueError('runtime handoff belongs to another current controller namespace')
     if any(prior.get(key)!=old.get(key) for key in ('bootstrap_binding','raw_model_id','out','checkpoint')):
         raise ValueError('runtime handoff replaced its original bootstrap/controller parent')
-    transition=_read(proof['recipe_handoff']);plan=_read(transition['new_plan'])
-    stage_id=declaration['production_stage'];inputs=plan['stage_inputs'][stage_id]
+    bare=proof.get('bare_direct_owner')
+    transition=({'recipe':bare['recipe'],'new_code':bare['code']} if bare else _read(proof['recipe_handoff']))
+    stage_id=declaration['production_stage']
+    if bare:
+        from ..train.recipe import resolve_recipe_data,resolve_stage_inputs
+        recipe=resolve_recipe_data(_bound(bare['recipe']));stage=next(item for item in recipe['stages'] if item['id']==stage_id)
+        inputs=resolve_stage_inputs(recipe,stage,{})
+    else:
+        plan=_read(transition['new_plan']);inputs=plan['stage_inputs'][stage_id]
     if (declaration['handoff_requirement']['model_id']!=proof['model_id']
             or stage_id!=old['production_stage']):
         raise ValueError('runtime handoff declaration replaced its actual student')
@@ -213,6 +287,7 @@ def configure_runtime_handoff(plan_path,declaration,bootstrap,config_path):
                 raise ValueError('runtime handoff current operation changed before application')
     config=json.loads(json.dumps(prior if already else old))
     if already and binding(config['production_recipe'])['sha256']!=transition['recipe']['sha256']:
+        if bare:raise ValueError('bare runtime handoff current recipe changed without new authority')
         from ..train.native_resident import current
         from ..train.recipe import recipe_identity_sha256
         resident_reference=json.loads(Path(proof['sources']['cursor']['path']).read_text()).get('resident_current')
@@ -278,6 +353,9 @@ def main(argv=None):
     parser.add_argument('--verify',type=Path)
     parser.add_argument('--handoff',type=Path)
     parser.add_argument('--recipe-handoff',type=Path)
+    parser.add_argument('--bare-recipe',type=Path)
+    parser.add_argument('--package',type=Path)
+    parser.add_argument('--qualification',type=Path)
     parser.add_argument('--config',type=Path)
     parser.add_argument('--out',type=Path)
     parser.add_argument('--operation-request',type=Path)
@@ -288,14 +366,18 @@ def main(argv=None):
         verify_runtime_handoff(binding(args.verify),bootstrap=bootstrap)
         reference=binding(args.verify)
     else:
-        if not all((args.handoff,args.recipe_handoff,args.config,args.out)):
-            parser.error('prepare requires --handoff, --recipe-handoff, --config and --out')
+        if not all((args.handoff,args.config,args.out)) or bool(args.recipe_handoff)==bool(args.bare_recipe):
+            parser.error('prepare requires --handoff, --config, --out and exactly one of --recipe-handoff/--bare-recipe')
+        if args.bare_recipe and not (args.package and args.qualification):
+            parser.error('bare authority requires --package and actual --qualification')
         if bool(args.operation_request)!=bool(args.operation_result):
             parser.error('partial operation requires both exact request and result')
         operation=({'request':binding(args.operation_request),'result':binding(args.operation_result)}
                    if args.operation_request else None)
-        reference=prepare_runtime_handoff(bootstrap,binding(args.handoff),binding(args.recipe_handoff),
-            args.config,args.out,operation=operation)
+        bare=({'recipe':binding(args.bare_recipe),'package':str(args.package.resolve()),
+               'qualification':binding(args.qualification)} if args.bare_recipe else None)
+        reference=prepare_runtime_handoff(bootstrap,binding(args.handoff),binding(args.recipe_handoff) if args.recipe_handoff else None,
+            args.config,args.out,operation=operation,bare_direct_owner=bare)
     print(json.dumps(reference,sort_keys=True))
     return 0
 

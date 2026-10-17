@@ -51,20 +51,29 @@ def evidence(plan_path,declaration,handoff,config):
         if value.get('previous'):add(value['previous'])
         if value.get('operation'):
             for key in ('request','result','state'):add(value['operation'][key])
-        transition=json.loads(add(value['recipe_handoff']).read_text())
-        for handoff_ref in [value['handoff'],transition['handoff']]:
+        bare=value.get('bare_direct_owner')
+        if bare:
+            add(bare['recipe']);add(bare['qualification'])
+            packages['later_bare_package']=code_inventory(Path(bare['package']))
+            if packages['later_bare_package']!=bare['code']:
+                raise ValueError('bare runtime proof package identity changed')
+            transition=None
+        else:
+            transition=json.loads(add(value['recipe_handoff']).read_text())
+        for handoff_ref in [value['handoff']]+([transition['handoff']] if transition else []):
             current_record=json.loads(add(handoff_ref).read_text())
             intent=json.loads(add(current_record['intent']).read_text())
             add(intent['launch']);add(current_record['terminal']);add(current_record['checkpoint'])
             for reference in (current_record.get('resident') or {}).values():
                 if isinstance(reference,dict) and reference.get('path') and reference.get('sha256'):add(reference)
-        for key in ('old_plan','new_plan'):plan(json.loads(add(transition[key]).read_text()))
-        for key in ('recipe','retirement'):
-            if transition.get(key):add(transition[key])
-        for key in ('old_package','new_package'):
-            packages['later_'+key]=code_inventory(Path(transition[key]))
-            if packages['later_'+key]!=transition[key.replace('_package','_code')]:
-                raise ValueError('later runtime proof package identity changed')
+        if transition:
+            for key in ('old_plan','new_plan'):plan(json.loads(add(transition[key]).read_text()))
+            for key in ('recipe','retirement'):
+                if transition.get(key):add(transition[key])
+            for key in ('old_package','new_package'):
+                packages['later_'+key]=code_inventory(Path(transition[key]))
+                if packages['later_'+key]!=transition[key.replace('_package','_code')]:
+                    raise ValueError('later runtime proof package identity changed')
     cursor_path=Path(config['out']).parent/'cycle.json'
     if cursor_path.exists():
         cursor=json.loads(cursor_path.read_text())

@@ -121,3 +121,40 @@ Final partial-alias durability rerun:
 `native-later-runtime-final-boundary-20261017`, 24 passed/23.76s/1.1GiB;
 `native-later-runtime-quick-sealed-20261017`, 22 ratchets plus TS green.
 No production model qualification, cloud adoption, or extra exposure is claimed.
+
+## Bare directly owned continuation
+
+A genuine current owner may have no resident plan. In that case, authenticate
+its actual saved current recipe separately from the preserved lineage; do not
+construct a resident plan. Resolve the existing production stage from that same
+recipe, require its exact source receipts in the current or carried saved SFT
+frame, and bind the full current model configuration and runtime inventory.
+An actual saved objective may carry the production SFT frame only when that
+frame's authenticated recipe declares the identical production stage.
+
+The existing drain, independent full pin, published-current or verified-operation
+join, original bootstrap, config/cursor/state snapshots and dead-owner leases
+remain mandatory. The crisp verifier adds only this explicit authority variant;
+it neither changes training state nor authorizes an unexecuted recipe/profile.
+The next invocation uses the authenticated saved recipe and package. Existing
+operation snapshots and the original bootstrap survive unchanged. Source data,
+optimizer moments, RNG, per-row credits, pending packets and unknown control
+fields stay in the original checkpoint/control state. No synthetic resident
+plan or new qualification is created.
+
+Bare authority CLI supplies `--bare-recipe ACTUAL_SAVED_RECIPE --package
+ACTUAL_EXECUTED_PACKAGE --qualification MEMORY_QUALIFICATION_JSON` in place of
+`--recipe-handoff`. Qualification bytes are snapshotted durably before commit;
+their passed request/parent must equal the actual saved options, and every check
+must bind the same runtime inventory and complete model/profile configuration.
+No future runtime or merely declared profile can borrow that evidence. Direct
+outputs use the existing current-checkpoint publication under the controller
+lease before preparation; genuine bridge partials retain their existing exact
+request/result verification. Preparation itself never publishes a checkpoint.
+
+`native-bare-runtime-handoff-final2-3576`: 59 CPU tests passed, 64.38s,
+1.5GiB observed peak; includes both actual tiny model optimizers' bitwise next
+update, genuine process drains, carried-stage authentication, false/profile/code
+qualification rejection, immutable qualification reuse and metadata closure.
+`native-bare-runtime-quick-3577`: 22 ratchets and TypeScript check passed.
+These checks are control/continuation evidence, not production capacity claims.
