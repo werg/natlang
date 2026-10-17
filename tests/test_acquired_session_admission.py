@@ -238,6 +238,15 @@ def test_invalid_original_tool_argument_is_explicit_pending_and_admission_rechec
     checked,_,proofs,_=verify_conversion(output,export,protection=protection,held_sources=set(),
         decision_bindings=[],source_rows=[row])
     assert checked['counts']['source-render-pending:tool-arguments']==1 and not proofs
+    # A valid shard-level omission record is not enough if the published
+    # aggregate ledger silently drops it. Rebind the aggregate hash so this
+    # exercises semantic source accounting rather than only byte integrity.
+    (output/'omissions.jsonl').write_text('')
+    checked['omissions_sha256']=sha256_file_hex(output/'omissions.jsonl')
+    (output/'receipt.json').write_text(json.dumps(checked))
+    with pytest.raises(ValueError,match='aggregate omission ledger lost'):
+        verify_conversion(output,export,protection=protection,held_sources=set(),
+            decision_bindings=[],source_rows=[row])
 
 
 @pytest.mark.parametrize(('backbone','pending'), [('lfm2', True), ('mellum', False)])

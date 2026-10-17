@@ -669,6 +669,20 @@ def verify_conversion(directory, export_path, *, protection, held_sources, decis
             expected_sources[canonical_json_sha256_hex(value)] = value
     if len(expected_sources) != expected_counts['positive_sessions']:
         raise ValueError('normalized source repeats exact positive session occurrences')
+    # The aggregate omission ledger is a published artifact too. Per-shard
+    # checks below prove each shard's omissions, but do not establish that the
+    # aggregate file retained those same source occurrences. Recheck its
+    # semantic contents against the independently derived full-source ledger.
+    seen_aggregate_omissions = set()
+    for row in sessions(directory / 'omissions.jsonl'):
+        key = canonical_json_sha256_hex([row['id'], row['source_row']])
+        expected = expected_omissions.get(key)
+        if (key in seen_aggregate_omissions or expected is None
+                or any(row.get(name) != value for name, value in expected.items())):
+            raise ValueError('native aggregate omission ledger differs from exact source omissions')
+        seen_aggregate_omissions.add(key)
+    if seen_aggregate_omissions != set(expected_omissions):
+        raise ValueError('native aggregate omission ledger lost source omissions')
     # Validate every committed shard independently and durably checkpoint its
     # complete graph/source proof. A preemption therefore repeats only the
     # unfinished shard, while the cohort-level duplicate, accounting, split,
