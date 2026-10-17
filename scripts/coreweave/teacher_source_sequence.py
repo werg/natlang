@@ -41,7 +41,7 @@ def _immutable(path, value):
     else:write(path,value)
 
 
-def _packet(entry, declaration):
+def _packet(entry, declaration, *, allow_empty=False):
     candidate=_json(entry['candidate_packet'],declaration)
     prepared=_json(entry['qualified_packet'],declaration)
     qualification=_json(prepared['qualification'],declaration)
@@ -94,7 +94,7 @@ def _packet(entry, declaration):
     if set(verdicts)!=set(originals):raise ValueError('sequence reference verdict inventory differs')
     expected=[raw for key,raw in originals.items()if verdicts[key].get('passed')is True]
     actual=[raw for raw in cases_raw.splitlines()if raw]
-    if not actual or actual!=expected:raise ValueError('sequence cases are not the complete unchanged qualified subset')
+    if (not actual and not allow_empty) or actual!=expected:raise ValueError('sequence cases are not the complete unchanged qualified subset')
     programs=[json.loads(raw)for raw in actual]
     if (selection.get('cases')!=len(programs) or qualification.get('qualified_cases')!=len(programs)
             or len({row.get('id')for row in programs})!=len(programs)
