@@ -264,6 +264,10 @@ def test_sparse_master_upgrade_real_full_and_both_composite_scopes(tmp_path,fami
         tiny_mellum(base)
         tokenizer=PreTrainedTokenizerFast(tokenizer_object=Tokenizer(WordLevel(
             {f't{i}':i for i in range(128)},unk_token='t0')),unk_token='t0',bos_token='t1',eos_token='t2',pad_token='t3')
+        # A native Mellum source needs its real KEEP rendering contract even
+        # when this fixture is exercising sparse master/moment upgrades.
+        tokenizer.chat_template = ("{% for m in messages %}{{ m['role'] }}:"
+            "{{ m.get('reasoning_content', '') }}{{ m.get('content', '') }};{% endfor %}")
         tokenizer.save_pretrained(base)
     path=base/'tokenizer.json';raw=json.loads(path.read_text())
     raw['model']['vocab']['<think>']=raw['model']['vocab'].pop('t54')
@@ -272,6 +276,7 @@ def test_sparse_master_upgrade_real_full_and_both_composite_scopes(tmp_path,fami
     dtype=torch.float32 if family=='lfm' else torch.bfloat16
     old,tokenizer,roles,config=load_native_model(base,dtype=dtype,rank=4,
         token_override_ids=(54,55) if existing_reasoning else (),sparse_row_dtype=dtype,token_override_dtype=dtype)
+    assert tokenizer.natlang_history_reasoning['policy'] == ('keep' if family == 'mellum' else 'last_turn_only')
     config.pop('sparse_row_dtype')
     config.pop('token_override_dtype',None)
     payload={'schema':CHECKPOINT_SCHEMA,'model_config':config,**model_state(old)}
