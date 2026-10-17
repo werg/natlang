@@ -201,6 +201,69 @@ def test_census_never_admits_unrelated_process_or_stale_thread_pid(monkeypatch):
         handoff._capture_process_tree(owner)
 
 
+@pytest.mark.parametrize('missing_children',[False,True])
+def test_actual_unreaped_zombie_does_not_hide_live_descendant(tmp_path,monkeypatch,missing_children):
+    import subprocess,sys
+    from natlang_neuralese.rl import native_raw_handoff as handoff
+    code="""import os,subprocess,sys,json
+zombie=os.fork()
+if zombie==0:os._exit(0)
+os.waitid(os.P_PID,zombie,os.WEXITED|os.WNOWAIT)
+live=subprocess.Popen([sys.executable,'-c','import sys;sys.stdin.buffer.read()'],stdin=subprocess.PIPE)
+print(json.dumps({'zombie':zombie,'live':live.pid}),flush=True)
+try:sys.stdin.buffer.read()
+finally:live.communicate();os.waitpid(zombie,0)
+"""
+    argv=[sys.executable,'-c',code]
+    process=subprocess.Popen(argv,stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+    try:
+        children=json.loads(process.stdout.readline())
+        assert handoff.observe(children['zombie'])['state']=='Z'
+        if missing_children:monkeypatch.setattr(handoff,'_thread_children',lambda pid:set())
+        launch=tmp_path/'zombie-parent-launch.json'
+        write_json_durable(launch,{'at':time.time(),'pid':process.pid,'argv':argv})
+        result=capture_drain_intent(binding(launch),tmp_path/'zombie-parent-intent.json')
+        intent=json.loads(Path(result['path']).read_text())
+        assert [item['pid'] for item in intent['children']]==[children['live']]
+        assert intent['process_tree']['links'][0]['child']['pid']==children['live']
+    finally:process.communicate()
+    assert process.returncode==0
+
+
+@pytest.mark.parametrize('state',['Z','X'])
+@pytest.mark.parametrize('discovery',['ppid','thread'])
+@pytest.mark.parametrize('becomes_live',[False,True])
+def test_final_census_excludes_only_observed_finished_children(monkeypatch,state,discovery,becomes_live):
+    from natlang_neuralese.rl import native_raw_handoff as handoff
+    owner={'pid':101,'ppid':1,'boot_id':'boot','start_ticks':'10','state':'S','argv_hex':'6100'}
+    child={**owner,'pid':102,'ppid':101,'start_ticks':'11','state':state}
+    scans=0;child_observations=0;thread_reads=0
+    def scan():
+        nonlocal scans
+        scans+=1
+        return {101:owner,**({102:child} if discovery=='ppid' else {})}
+    def observe(pid):
+        nonlocal child_observations
+        if pid==101:return owner
+        assert pid==102
+        child_observations+=1
+        # A zombie PID reused after initial traversal must not be excluded
+        # merely because the final PPID snapshot still describes the zombie.
+        if becomes_live and (discovery=='thread' or child_observations>1):
+            return {**child,'state':'S','start_ticks':'99'}
+        return child
+    def threads(pid):
+        nonlocal thread_reads
+        thread_reads+=1
+        return {102} if discovery=='thread' and thread_reads>1 else set()
+    monkeypatch.setattr(handoff,'_process_table',scan)
+    monkeypatch.setattr(handoff,'_thread_children',threads)
+    monkeypatch.setattr(handoff,'observe',observe)
+    if becomes_live:
+        with pytest.raises(ValueError,match='tree grew'):handoff._capture_process_tree(owner)
+    else:assert handoff._capture_process_tree(owner)==([],[])
+
+
 @pytest.mark.parametrize('tamper',['parent','omit','origin','reuse','missing'])
 def test_census_parent_evidence_survives_archive_validation(actual_drain,tamper):
     from natlang_neuralese.rl import native_raw_handoff as handoff

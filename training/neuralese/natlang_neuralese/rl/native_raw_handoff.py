@@ -88,6 +88,9 @@ def _capture_process_tree(owner):
     final=_process_table()
     for ident,value in final.items():
         if value['ppid'] in identities and ident not in identities:
+            if value['state'] in ('Z','X'):
+                actual=observe(ident)
+                if actual is None or actual['state'] in ('Z','X'):continue
             raise ValueError('raw handoff process tree grew during census; capture again')
     for ident,previous in identities.items():
         actual=observe(ident)
@@ -98,8 +101,10 @@ def _capture_process_tree(owner):
                 or previous['ppid']!=actual['ppid']):
             raise ValueError('raw handoff process identity or parent changed during census')
         for child in _thread_children(ident):
-            if child not in identities and observe(child) is not None:
-                raise ValueError('raw handoff process tree grew during census; capture again')
+            if child not in identities:
+                actual=observe(child)
+                if actual is not None and actual['state'] not in ('Z','X'):
+                    raise ValueError('raw handoff process tree grew during census; capture again')
     return [value for ident,value in identities.items() if ident!=owner['pid']],links
 
 

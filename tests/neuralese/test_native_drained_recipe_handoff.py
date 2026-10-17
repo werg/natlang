@@ -81,7 +81,8 @@ def test_drained_resident_selects_new_priority_plan_and_preserves_exact_parent(a
     def configure(args):
         calls.append(args)
         return {'native_state':True,'checkpoint':str(args.checkpoint),'out':str(args.out),
-            'production_recipe':str(args.production_recipe),'seed_trainer_parameters':{},'trainer_parameters':{}}
+            'production_recipe':str(args.production_recipe),'production_stage':args.production_stage,
+            'seed_trainer_parameters':{},'trainer_parameters':{}}
     monkeypatch.setattr(production,'configure_native',configure)
     plan=tmp_path/'bootstrap.json';write(plan,{'models':[declaration]})
     config_path=raw.configure_model(plan,declaration,original,tmp_path/'raw')
@@ -186,6 +187,7 @@ def test_initial_only_owner_carries_certificate_successor_into_raw_recipe(actual
     from natlang_neuralese.rl import production
     def configure(args):
         return {'native_state':True,'production_recipe':str(args.production_recipe),'seed_native_graphs':str(args.seed_native_graphs),
+            'production_stage':args.production_stage,
             'checkpoint':str(args.checkpoint),'out':str(args.out),'trainer_parameters':{},'seed_trainer_parameters':{}}
     monkeypatch.setattr(production,'configure_native',configure)
     bootstrap=tmp_path/'bootstrap.json';write(bootstrap,{'models':[declaration]})
