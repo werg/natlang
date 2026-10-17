@@ -253,3 +253,103 @@ def test_cli_rejects_missing_operation_controls_before_checkpoint_decode(owned,t
             '--bare-recipe',x['bare']['recipe']['path'],'--package',x['bare']['package'],
             '--ordinary-capacity',x['bare']['ordinary_capacity']['path'],'--config',str(x['config']),
             '--owned-operations',str(manifest),'--out',str(tmp_path/'not-written.json')])
+
+
+@pytest.mark.parametrize('family',['lfm','mellum'])
+@pytest.mark.parametrize('rate',[None,1e-6,6e-6])
+def test_verified_stopped_owner_tuning_keeps_earned_old_contracts(tmp_path,monkeypatch,family,rate):
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import native_raw_handoff as handoff,native_runtime_handoff as runtime
+    from natlang_neuralese.train.recipe import resolve_recipe_data
+    import subprocess,sys
+    import test_native_later_runtime_handoff as fixtures
+    setup=fixtures.setup;captured={};popen=subprocess.Popen
+    def observed_setup(*args,**kwargs):
+        value=setup(*args,**kwargs);captured['recipe']=json.loads((value[1]/'initial.json').read_text())['recipe'];return value
+    def observed_parent(argv,*args,**kwargs):
+        literal="[sys.executable,'-c','import sys;sys.stdin.buffer.read()']"
+        if captured and isinstance(argv,list)and len(argv)>2 and literal in argv[2]:
+            command=[sys.executable,'-c','import sys;sys.stdin.buffer.read()',
+                '--out',str(tmp_path/'owner'),'--continue-from',str(tmp_path/'bootstrap/parent.pt'),
+                '--stage-id','sft','--recipe-binding',json.dumps(captured['recipe'])]
+            argv[2]=argv[2].replace(literal,repr(command))
+        return popen(argv,*args,**kwargs)
+    monkeypatch.setattr(fixtures,'setup',observed_setup);monkeypatch.setattr(subprocess,'Popen',observed_parent)
+    prepare=handoff.prepare_drained_recipe_handoff
+    def tuned(reference,recipe,out,**kwargs):
+        value=json.loads(Path(recipe).read_text())
+        if rate is None:value['stages'][0]['parameters'].pop('resident_geometry_qualification')
+        else:value['stages'][0]['parameters']['learning_rate']=rate
+        write(recipe,value);return prepare(reference,recipe,out,**kwargs)
+    monkeypatch.setattr(handoff,'prepare_drained_recipe_handoff',tuned)
+    x=later.__wrapped__(tmp_path,monkeypatch,SimpleNamespace(param=family))
+    record,saved=handoff.verify_handoff(x['handoff']);before=x['pin'].read_bytes()
+    transition=runtime._authority({'recipe_handoff':x['transition']},x['handoff'],record,saved,json.loads(x['config'].read_text()))
+    future=raw._supervised_stage_inventory(resolve_recipe_data(resident.bound(transition['recipe'])),'sft')
+    earned,evidence=raw._owned_earned_stage_inventory(transition,future,'sft')
+    binding=saved['training']['options']['recipe_binding'];binding=json.loads(binding)if isinstance(binding,str)else binding
+    actual=raw._supervised_stage_inventory(resolve_recipe_data(binding['path']),'sft')
+    assert earned==actual
+    if rate is None:assert earned==future and evidence is None
+    else:
+        assert earned!=future and future[0]['parameters']['learning_rate']==rate
+        assert evidence['future_recipe_credit_granted']is False
+    assert raw._acknowledged_owned_stage_ids([{'stage_id':'sft','stage':actual[0]}],earned)==['sft']
+    if rate is not None:
+        with pytest.raises(ValueError,match='earned stage contract'):
+            raw._acknowledged_owned_stage_ids([{'stage_id':'sft','stage':actual[0]}],future)
+    state=json.loads((x['out']/'state.json').read_text());parent=json.loads(Path(x['bootstrap']['path']).read_text())['checkpoint'];state.update(checkpoint=parent['path'],phase='collect');write(x['out']/'state.json',state)
+    cursor=json.loads((x['root']/'cycle.json').read_text());cursor.update(phase='rl',next_stage=0);write(x['root']/'cycle.json',cursor)
+    receipt=tmp_path/'owner/native-training-receipt.json'
+    write(receipt,{'schema':'natlang.native-training-readiness/1','model_id':json.loads(x['config'].read_text())['raw_model_id'],
+        'stage_id':'sft','recipe':binding,'checkpoint':resident.binding(x['slot']),
+        'native_identity':{'checkpoint_sha256':resident.binding(x['slot'])['sha256']},
+        'continuation':{'checkpoint_sha256':parent['sha256']},
+        'continuation_boundary':{'new_optimizer_updates':1,'checkpoint_sha256':resident.binding(x['slot'])['sha256']},
+        'completed':False,'foundation_ready':False})
+    result=raw.reconcile_owned_operations(x['config'],[{'handoff':x['handoff'],'receipt':resident.binding(receipt)}],
+        transition['recipe'],tmp_path/'actual-reconciliation.json',recipe_handoff=x['transition'],verified_handoff=(record,saved))
+    committed=json.loads(Path(result['path']).read_text());intent=json.loads(Path(committed['intent']['path']).read_text())
+    assert intent['verified_operational_tuning']==evidence and committed['whole_recipe_completed']is False
+    assert json.loads((x['root']/'cycle.json').read_text())['next_stage']==1
+    assert x['pin'].read_bytes()==before
+    if rate is None:
+        # Equal stage dictionaries cannot hide changed source bindings. Exercise
+        # both the early-return guard and the complete authority/reconcile path.
+        new_plan=json.loads(resident.bound(transition['new_plan']).read_text())
+        new_plan['stage_inputs']['sft']['native_graphs']=resident.binding(x['paths']['new'])
+        forged_plan=tmp_path/'forged-new-plan.json';write(forged_plan,new_plan)
+        forged=copy.deepcopy(transition);forged['new_plan']=resident.binding(forged_plan)
+        with pytest.raises(ValueError,match='new sources or stages'):
+            raw._owned_earned_stage_inventory(forged,future,'sft')
+        forged_path=tmp_path/'forged-transition.json';write(forged_path,forged)
+        write(x['out']/'state.json',state);write(x['root']/'cycle.json',cursor)
+        original_controls={p:p.read_bytes()for p in(x['config'],x['out']/'state.json',x['root']/'cycle.json')}
+        with pytest.raises(ValueError):
+            raw.reconcile_owned_operations(x['config'],[{'handoff':x['handoff'],'receipt':resident.binding(receipt)}],
+                transition['recipe'],tmp_path/'false-source-reconciliation.json',recipe_handoff=resident.binding(forged_path),verified_handoff=(record,saved))
+        assert all(p.read_bytes()==b for p,b in original_controls.items())
+    # A changed old contract cannot borrow the verified handoff's authority.
+    old=Path(transition['old_plan']['path']);value=json.loads(old.read_text());value['recipe']['stages'][0]['parameters']['learning_rate']=123
+    write(old,value)
+    with pytest.raises(ValueError):
+        raw._owned_earned_stage_inventory(transition,future,'sft')
+
+
+def test_verified_source_append_cannot_be_acknowledged_as_operational_tuning(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from natlang_neuralese.rl import native_raw_handoff as handoff,native_runtime_handoff as runtime
+    from natlang_neuralese.train.recipe import resolve_recipe_data
+    prepare=handoff.prepare_drained_recipe_handoff
+    def appended(reference,recipe,out,**kwargs):
+        value=json.loads(Path(recipe).read_text());value['input_bindings']['prior']=value['input_bindings']['train']
+        value['input_bindings']['train']=resident.binding(tmp_path/'source/new.jsonl')
+        value['stages'][0]['inputs']['continued_native_graphs']='prior';write(recipe,value)
+        return prepare(reference,recipe,out,**kwargs)
+    monkeypatch.setattr(handoff,'prepare_drained_recipe_handoff',appended)
+    x=later.__wrapped__(tmp_path,monkeypatch,SimpleNamespace(param=None))
+    record,saved=handoff.verify_handoff(x['handoff'])
+    transition=runtime._authority({'recipe_handoff':x['transition']},x['handoff'],record,saved,json.loads(x['config'].read_text()))
+    future=raw._supervised_stage_inventory(resolve_recipe_data(resident.bound(transition['recipe'])),'sft')
+    with pytest.raises(ValueError,match='new sources or stages'):
+        raw._owned_earned_stage_inventory(transition,future,'sft')

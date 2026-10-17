@@ -396,6 +396,29 @@ def _acknowledged_owned_stage_ids(chain,stages):
     return ids
 
 
+def _owned_earned_stage_inventory(transition,stages,stage_id):
+    """Separate earned old contracts from verified future operational tuning.
+
+    The caller has already run the full existing runtime/recipe handoff verifier.
+    No new source or stage can borrow credits through this metadata-only seam.
+    """
+    if transition.get('bare'):return stages,None
+    old_plan=json.loads(_bound(transition['old_plan']).read_text())
+    new_plan=json.loads(_bound(transition['new_plan']).read_text())
+    old=_supervised_stage_inventory(old_plan['recipe'],stage_id)
+    future=_supervised_stage_inventory(new_plan['recipe'],stage_id)
+    if future!=stages:raise ValueError('owned reconciliation future recipe differs from verified handoff')
+    if ([(x['id'],x['kind'])for x in old]!=[(x['id'],x['kind'])for x in future]
+            or old_plan['stage_inputs']!=new_plan['stage_inputs']
+            or old_plan['inputs']!=new_plan['inputs']):
+        raise ValueError('owned operational tuning cannot credit new sources or stages')
+    if old==future:return stages,None
+    return old,{'old_plan':transition['old_plan'],'new_plan':transition['new_plan'],
+        'earned_stage_contracts':old,'future_stage_contracts':future,
+        'future_recipe_credit_granted':False,
+        'authority':'existing verified lineage_handoff operational tuning'}
+
+
 def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bare_direct_owner=None,recipe_handoff=None,verified_handoff=None):
     """Leased, durable acknowledgement of earned work, never stage completion."""
     import contextlib
@@ -458,11 +481,12 @@ def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bar
             transition=_authority(authority,operations[-1]['handoff'],record,saved,config)
             if transition['recipe']!=recipe_reference:
                 raise ValueError('owned reconciliation recipe differs from actual latest owner')
-            _acknowledged_owned_stage_ids(chain,stages)
+            earned_stages,operational_tuning=_owned_earned_stage_inventory(transition,stages,config['production_stage'])
+            _acknowledged_owned_stage_ids(chain,earned_stages)
             from ..train.native_continuation import collect_sft_progress
             from ..train.recipe import native_recipe_binding
             progress=collect_sft_progress(saved['training'],borrow_frames=True)
-            for stage in stages:
+            for stage in earned_stages:
                 frame=progress.get(stage['id'])or{};rb=(frame.get('options')or{}).get('recipe_binding')
                 if isinstance(rb,str):rb=json.loads(rb)
                 if not rb:raise ValueError('owned reconciliation lost a carried stage and its obligations')
@@ -486,6 +510,7 @@ def reconcile_owned_operations(config_path,operations,recipe_reference,out,*,bar
             intent={'schema':'natlang.native-owned-operation-reconciliation/1','request':request,
                 'before':before,'snapshots':snapshots,'candidates':candidates,'operations':chain,
                 'old_stage_ids':[stage['id']for stage in old_stages],'new_stage_ids':ids,
+                'verified_operational_tuning':operational_tuning,
                 'global_step':saved['training'].get('global_step',saved['training'].get('step')),
                 'whole_recipe_completed':False}
             write_json_durable(intent_path,intent)
