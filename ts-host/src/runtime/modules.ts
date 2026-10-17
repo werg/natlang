@@ -56,7 +56,10 @@ function moduleRealm(): EvalEnvironment {
 
 // A loop over a value whose type decides whether it is a bounded collection needs the checker.
 const FOR_OF = /\bfor\s*(?:await\s*)?\([^;)]*\bof\b/;
-const NL_TAG = /\bnl\s*(?:<[^`]*>)?\s*`/;
+// The exact intrinsic resolver decides what a tag means. A text prefilter missed nl.with tags and aliases.
+function containsTaggedTemplate(node: ts.Node): boolean {
+  return ts.isTaggedTemplateExpression(node) || !!ts.forEachChild(node, containsTaggedTemplate);
+}
 const FOLDER = '/__natlang__/folder';
 
 function natlangDeclaration(record: ItemRecord): string {
@@ -91,7 +94,8 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
   const softTypes = JSON.stringify(record.types);
   // A sibling with a representation-generic result: its call sites need the checker to pick their instance.
   const generic = Object.values(level).some(item => item.kind === 'natlang' && !!item.generic);
-  if (NL_TAG.test(record.text) || FOR_OF.test(record.text) || /\bNeuralese\s*</.test(`${record.text}\n${softTypes}`) || generic) {
+  const parsed = ts.createSourceFile(path, record.text, ts.ScriptTarget.ES2022, true);
+  if (containsTaggedTemplate(parsed) || FOR_OF.test(record.text) || /\bNeuralese\s*</.test(`${record.text}\n${softTypes}`) || generic) {
     const files: Record<string, string> = { [path]: record.text };
     for (const [name, item] of Object.entries(level)) {
       if (name === record.name) continue;
@@ -106,7 +110,6 @@ export function compileModule(record: ModuleRecord, level: Record<string, ItemRe
     files[`${FOLDER}/types.ts`] ??= Object.entries(record.types)
       .map(([name, text]) => `export type ${name} = ${typeScriptText(text, known)};`).join('\n') + '\nexport {};\n';
     const external = new Map<string, Set<string>>();
-    const parsed = ts.createSourceFile(path, record.text, ts.ScriptTarget.ES2022, true);
     for (const statement of parsed.statements) if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) &&
         !statement.moduleSpecifier.text.startsWith('.')) {
       const names = external.get(statement.moduleSpecifier.text) ?? new Set<string>();

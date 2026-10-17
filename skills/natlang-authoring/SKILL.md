@@ -550,3 +550,5 @@ or tokenizer reports a conflicting history policy, restore the matching
 checkpoint/tokenizer binding rather than forcing a different template switch.
 The opt-in profile remains unmeasured until its live executor comparison is
 recorded.
+
+TypeScript ambient callable declarations of the built-in `nl` supply types and are erased; they do not replace its runtime tag. Real runtime bindings named `nl` still hide the built-in. If that shadow diagnostic appears, preserve the built-in and rename the runtime binding; do not create a replacement implementation.

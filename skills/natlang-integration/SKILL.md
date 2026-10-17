@@ -565,3 +565,5 @@ checkpoint and tokenizer disagree, load the matching tokenizer/template or
 restore the original checkpoint profile; do not override the template locally.
 The opt-in profile changes model-visible history and needs its live executor
 comparison before production adoption.
+
+Compiler integration must distinguish erased ambient callable `nl` declarations from runtime shadows. Keep direct ambient typing attached to the existing built-in tag and its `.with` capture form; custom imports, initialized variables, function bodies, classes, and parameters remain independent bindings. Recheck every source-owned authoring run after a compiler repair, preserving the original captured verdict and source oracle.

@@ -176,6 +176,31 @@ export function intrinsicOf(declaration: ts.Node | undefined): string | undefine
   return;
 }
 
+/** An erased callable declaration supplies types for the existing built-in, not a runtime replacement. */
+function ambientNlDeclaration(declaration: ts.Declaration, checker: ts.TypeChecker): boolean {
+  if (!ts.isVariableDeclaration(declaration) && !ts.isFunctionDeclaration(declaration)) return false;
+  if (!declaration.name || !ts.isIdentifier(declaration.name) || declaration.name.text !== 'nl') return false;
+  if (ts.isVariableDeclaration(declaration) && declaration.initializer ||
+    ts.isFunctionDeclaration(declaration) && declaration.body) return false;
+  const statement = ts.isVariableDeclaration(declaration) ? declaration.parent.parent : declaration;
+  const ambient = declaration.getSourceFile().isDeclarationFile ||
+    !!(ts.getCombinedModifierFlags(statement as ts.Declaration) & ts.ModifierFlags.Ambient);
+  if (!ambient) return false;
+  const type = checker.getTypeAtLocation(declaration.name);
+  const withMember = type.getProperty('with');
+  return type.getCallSignatures().length > 0 || !!(withMember &&
+    checker.getTypeOfSymbolAtLocation(withMember, declaration.name).getCallSignatures().length > 0);
+}
+
+function ambientNlBinding(checker: ts.TypeChecker, expression: ts.Expression): boolean {
+  if (!ts.isIdentifier(expression) || expression.text !== 'nl') return false;
+  const symbol = checker.getSymbolAtLocation(expression);
+  // Imported custom declarations describe a different binding, even if their implementation is ambient here.
+  if (!symbol || symbol.flags & ts.SymbolFlags.Alias) return false;
+  const declarations = symbol.declarations ?? [];
+  return declarations.length > 0 && declarations.every(declaration => ambientNlDeclaration(declaration, checker));
+}
+
 /** Resolve an expression to the intrinsic it references, following import aliases. */
 export function resolveIntrinsic(checker: ts.TypeChecker, expression: ts.Expression): string | undefined {
   let symbol = checker.getSymbolAtLocation(ts.isPropertyAccessExpression(expression) ? expression.name : expression);
@@ -184,6 +209,9 @@ export function resolveIntrinsic(checker: ts.TypeChecker, expression: ts.Express
     const name = intrinsicOf(declaration);
     if (name) return name;
   }
+  if (ambientNlBinding(checker, expression)) return 'nl';
+  if (ts.isPropertyAccessExpression(expression) && expression.name.text === 'with' &&
+    ambientNlBinding(checker, expression.expression)) return 'nl.with';
   return;
 }
 
@@ -828,6 +856,7 @@ export function analyzeInlineLambdas(program: ts.Program, files: readonly ts.Sou
           ts.isClassDeclaration(parent)) && parent.name === node;
         // Importing or re-exporting nl names it, which is how application code gets it.
         if (ts.isImportSpecifier(parent) || ts.isExportSpecifier(parent) || ts.isImportClause(parent) || ts.isNamespaceImport(parent)) {}
+        else if (declared && ambientNlDeclaration(parent as ts.Declaration, checker)) {}
         else if (declared) report(node, 'nl-shadowed', `nl is built in; declaring your own nl hides it. ${TAG_FORM}`);
         else if (ts.isPropertyAccessExpression(parent) && parent.expression === node && parent.name.text === 'with' &&
           ts.isCallExpression(parent.parent) && parent.parent.expression === parent && ts.isTaggedTemplateExpression(parent.parent.parent) &&
