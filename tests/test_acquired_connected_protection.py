@@ -14,6 +14,7 @@ from scripts.neuralese_data import prepare_acquired_session_admission as admissi
 from scripts.neuralese_data.prepare_acquired_session_admission import verify_global_source_closure
 from scripts.neuralese_data.continue_acquired_protection import verify_protection_transition
 from scripts.neuralese_data import write_acquired_source_closure_receipt as closure_writer
+from scripts.neuralese_data.conversion_output_lease import acquire_output_lease
 from scripts.neuralese_data.splits import close_group_sets
 
 
@@ -95,8 +96,20 @@ def test_closure_receipt_writer_force_mode_hashes_without_cache(tmp_path,monkeyp
     monkeypatch.setattr(admission,'acquired_source_closure',observe_closure)
     monkeypatch.setattr(admission,'_source_closure_artifacts',observe_artifacts)
     output=tmp_path/'closure-receipt.json'
+    protection_calls=[]
+    real_current=closure_writer.current_protection
+    def observe_current(path):
+        protection_calls.append(path)
+        return real_current(path)
+    monkeypatch.setattr(closure_writer,'current_protection',observe_current)
+    with acquire_output_lease(tmp_path):
+        with pytest.raises(RuntimeError,match='already owns'):
+            closure_writer.main(['--protection',str(projection),'--output',str(output),
+                                 '--force-full-validation'])
+    assert protection_calls==[]
     closure_writer.main(['--protection',str(projection),'--output',str(output),
                          '--force-full-validation'])
+    assert protection_calls==[projection]
     assert closure_calls==[False]
     assert artifact_calls==[False]
     receipt=json.loads(output.read_text())
