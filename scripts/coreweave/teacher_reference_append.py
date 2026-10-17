@@ -48,6 +48,75 @@ def registry_append(before_reference,after_reference):
         'scope':'exact registry append only; runtime/protection/program/source guards remain caller requirements'}
 
 
+
+def registry_cache_cleanup(before_reference,after_reference):
+    """Authenticate only retained-receipt/deleted-cache bookkeeping."""
+    before,after=read(before_reference),read(after_reference)
+    canonical=lambda value:json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False)
+    if not isinstance(before,dict)or not isinstance(after,dict):
+        raise ValueError('source registries must be objects')
+    original,current=before.get('corpora'),after.get('corpora')
+    if not isinstance(original,list)or not isinstance(current,list)or len(original)!=len(current):
+        raise ValueError('cache cleanup cannot add or remove corpus declarations')
+    names=[row.get('id')if isinstance(row,dict)else None for row in original]
+    if any(not isinstance(name,str)or not name for name in names)or len(set(names))!=len(names):
+        raise ValueError('source registry corpus identities must be distinct')
+    changes=[]
+    normalized=[]
+    for old,new in zip(original,current):
+        if canonical(old)==canonical(new):
+            normalized.append(new);continue
+        try:
+            prior=old['source_binding']['decision_admission']
+            actual=new['source_binding']['decision_admission']
+            receipt_reference=binding(Path(actual['receipt_path']))
+            if receipt_reference['sha256']!=prior['receipt_sha256']:
+                raise ValueError('retained decision receipt changed')
+            receipt=read(receipt_reference)
+            if receipt.get('schema')!='natlang.verified-teacher-decision-materialization/1'or receipt.get('output_sha256')!=prior['output_sha256']:
+                raise ValueError('retained receipt output differs')
+            plan_declaration=actual['cache_cleanup_plan']
+            if set(plan_declaration)!={'path','sha256','status'}:
+                raise ValueError('unexpected decision cache cleanup fields')
+            plan_reference=binding(Path(plan_declaration['path']))
+            if plan_reference['sha256']!=plan_declaration['sha256']or plan_declaration['status']!='cache-key-removed-after-output-hash-verification':
+                raise ValueError('decision cache cleanup plan changed')
+            plan=read(plan_reference)
+            if plan.get('schema')!='natlang.rebuildable-decision-cache-retention/1':
+                raise ValueError('decision cache cleanup schema differs')
+            size=actual['output_bytes']
+            if type(size)is not int or size<0:
+                raise ValueError('decision cache output size must be a nonnegative integer')
+            matching=[item for item in plan['items']if item.get('output_path')==prior['output_path']]
+            if len(matching)!=1:
+                raise ValueError('decision cache cleanup needs one exact output witness')
+            item=matching[0]
+            if type(item.get('output_bytes'))is not int:
+                raise ValueError('decision cache witness output size must be an integer')
+            if any(item.get(key)!=value for key,value in {
+                'output_bytes':size,'output_sha256':prior['output_sha256'],
+                'receipt_sha256':prior['receipt_sha256'],'retained_receipt':actual['receipt_path'],
+                'key_dir':str(Path(prior['output_path']).parent)}.items()):
+                raise ValueError('decision cache cleanup output or receipt differs')
+            expected={key:value for key,value in prior.items()if key!='output_path'}
+            expected.update(receipt_path=actual['receipt_path'],output_storage_status='deleted_rebuildable_generated_cache',
+                output_original_path=prior['output_path'],output_bytes=size,cache_cleanup_plan=plan_declaration)
+            if canonical(actual)!=canonical(expected):
+                raise ValueError('decision cache cleanup changed admission metadata')
+            restored={**new,'source_binding':{**new['source_binding'],'decision_admission':prior}}
+            if canonical(restored)!=canonical(old):
+                raise ValueError('decision cache cleanup changed a source declaration')
+        except (KeyError,TypeError,AttributeError) as error:
+            raise ValueError('invalid decision cache cleanup declaration')from error
+        normalized.append(restored)
+        changes.append({'corpus_id':old['id'],'retained_receipt':receipt_reference,'cleanup_plan':plan_reference})
+    if canonical({**after,'corpora':normalized})!=canonical(before):
+        raise ValueError('decision cache cleanup changed registry fields')
+    return {'schema':'natlang.teacher-source-registry-cache-cleanup/1','before':before_reference,'after':after_reference,
+        'changes':changes,'training_admission':False,
+        'scope':'authenticated generated-cache bookkeeping only; all source/runtime/protection/admission guards remain unchanged'}
+
+
 def immutable(path,value):
     raw=value if isinstance(value,bytes)else(json.dumps(value,indent=2)+'\n').encode()
     if path.exists():

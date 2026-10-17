@@ -24,3 +24,15 @@ work or restart a durable catalog whose original source decisions are unchanged.
 The registry append predicate is exact JSON structure verification and artifact
 plumbing, so it is a crisp helper in the existing reference-append mechanism.
 It makes no curation decision and introduces no model-facing text or GPU work.
+
+## Retained decision receipt after authorized cache cleanup
+
+A generated decision cache's storage location is bookkeeping, not a new source or
+an admission decision. Continue only when the retained receipt is byte-identical,
+its output digest agrees, and the bound cleanup plan identifies that exact cache,
+output size/digest and retained receipt. Record the deleted/rebuildable status
+honestly. Every other typed declaration stays exact, including source files,
+admission, splits and policy. New sources still use the separate strict append
+verifier. The crisp helper verifies these joins; callers retain their complete
+runtime, source, protection and execution guards. This grants no training admission
+and does not recreate deleted outputs or rerun reference executions.
