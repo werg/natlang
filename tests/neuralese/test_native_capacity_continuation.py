@@ -198,13 +198,14 @@ def test_metadata_chain_rejects_changed_optimizer_unbound_math_and_lost_reserves
     with pytest.raises(ValueError):invoke(phase,old,new,review)
 
 
-@pytest.mark.parametrize('name',['train/native_source_preparation.py','data/native_source_tree.py','data/native_sources.py'])
+@pytest.mark.parametrize('name',['train/native_source_preparation.py','train/native_cohort_schedule.py',
+    'data/native_source_tree.py','data/native_sources.py','model/shared_state.py','train/optim.py'])
 def test_metadata_helpers_require_review_and_leaf_parser_still_cannot_inherit(tmp_path,name):
     phase,old,new,review,_=metadata_chain(tmp_path)
     path=new/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('# reviewed CPU metadata helper\n')
     review['new_code']=code_inventory(new)
     review['changes'][name]={'old':review['old_code'].get(name),'new':review['new_code'][name]}
-    if name=='data/native_sources.py':
+    if name in {'data/native_sources.py','model/shared_state.py','train/optim.py'}:
         with pytest.raises(ValueError,match='unreviewed forward/runtime'):
             invoke(phase,old,new,review)
     else:

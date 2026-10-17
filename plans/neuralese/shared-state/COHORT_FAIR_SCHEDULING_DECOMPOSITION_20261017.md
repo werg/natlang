@@ -43,3 +43,9 @@ unfinished-recipe tuning coverage. The quick main check passed its 22 checks
 and TypeScript validation. Independent cloud-owner source review found no
 blocking gap and clarified that indexed token service precedes prefix sharing.
 Actual production deployment and observed cohort visits remain separate work.
+
+Capacity continuation classifies only the new `train/native_cohort_schedule.py`
+helper as scheduling metadata. The existing verifier still requires the exact
+reviewed old/new inventories, unchanged execution identity and actual latest
+saved parent. Numerical model and optimizer modules remain outside that policy;
+adding the helper does not create a new memory measurement.
