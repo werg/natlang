@@ -36,6 +36,15 @@ def _cwctl_module():
     return cwctl
 
 
+def _external_data_root() -> Path:
+    """Resolve the machine's configured external-data root from shared paths."""
+    package_root = Path(__file__).resolve().parents[2] / 'training' / 'neuralese'
+    if package_root.is_dir() and str(package_root) not in sys.path:
+        sys.path.insert(0, str(package_root))
+    from natlang_neuralese.common.paths import root
+    return root('data_hdd').expanduser().resolve()
+
+
 def _write(path: Path, raw: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + '.pending')
@@ -723,7 +732,7 @@ def _validate_live_identity(config: dict, sandbox, read_file: Callable[[str], by
 
 def run_incremental_service(config_path: Path, *, poll_seconds: float = 15,
                             max_polls: int | None = None,
-                            allowed_spool_root: Path = Path('/mnt/external')) -> dict:
+                            allowed_spool_root: Path | None = None) -> dict:
     """Continuously follow an atomically replaced active-batch config.
 
     Each poll rebinds the sandbox boot, source packet, teacher actor/config and
@@ -734,7 +743,8 @@ def run_incremental_service(config_path: Path, *, poll_seconds: float = 15,
     if poll_seconds < 0 or (max_polls is not None and max_polls < 1):
         raise ValueError('poll interval and poll count must be nonnegative/positive')
     config_path = Path(config_path).resolve(strict=True)
-    allowed_spool_root = Path(allowed_spool_root).resolve(strict=True)
+    allowed_spool_root = (Path(allowed_spool_root).resolve(strict=True) if allowed_spool_root is not None
+                          else _external_data_root())
     prior_config_sha = None
     completed_polls = 0
     last = None
