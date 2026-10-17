@@ -92,6 +92,17 @@ def test_actual_optimizer_resume_with_removed_target_and_new_good_row(tmp_path):
     # Restart does not reapply withdrawals or repeat good targets.
     assert main(args)==0
     assert torch.load(tmp_path/'out/checkpoint.pt',weights_only=False)['training']['step']==3
+    # A new owner resumes the filtered current source without the obsolete
+    # predecessor flag. The immutable proof still authenticates its prior use.
+    del args[args.index('--continued-native-graphs'):args.index('--continued-native-graphs')+2]
+    old.unlink()
+    assert main(args)==0
+    resumed=torch.load(tmp_path/'out/checkpoint.pt',weights_only=False)['training']
+    assert resumed['step']==3 and resumed['exposure_counts']==actual['exposure_counts']
+    assert resumed['options']['withdrawal_history']==actual['options']['withdrawal_history']
+    (tmp_path/'audit.json').write_text('changed after application')
+    with pytest.raises(ValueError,match='evidence hash'):
+        main(args)
 
 
 def test_recipe_withdrawal_keeps_exact_predecessor_and_evidence_closure(tmp_path):

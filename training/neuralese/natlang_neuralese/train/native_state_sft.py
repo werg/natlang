@@ -984,17 +984,22 @@ def main(argv=None):
         resume = restored_frame
         restored_progress = True
     if args.withdrawn_native_graphs:
-        if resume is None or args.continued_native_graphs is None:
+        if resume is None:
             raise ValueError('native withdrawal needs the actual checkpoint and exact predecessor source')
         from .native_continuation import withdraw_ordinary_rows
-        old_source=NativeGraphSource(args.continued_native_graphs, fingerprint,
-            required_split='train',role_ids=roles.ids)
         origins={}
-        def leaf_origins(source):
-            if source.kind=='manifest':
-                for child in source.children:leaf_origins(child)
-            else:origins.update({key:source.file_sha256 for key in source.bindings})
-        leaf_origins(old_source)
+        applied=any(item.get('proof_sha256')==sha256_file_hex_cached(args.withdrawn_native_graphs)
+            for item in (resume.get('options') or {}).get('withdrawal_history') or [])
+        if not applied:
+            if args.continued_native_graphs is None:
+                raise ValueError('native withdrawal needs the actual checkpoint and exact predecessor source')
+            old_source=NativeGraphSource(args.continued_native_graphs, fingerprint,
+                required_split='train',role_ids=roles.ids)
+            def leaf_origins(source):
+                if source.kind=='manifest':
+                    for child in source.children:leaf_origins(child)
+                else:origins.update({key:source.file_sha256 for key in source.bindings})
+            leaf_origins(old_source)
         resume=withdraw_ordinary_rows(resume,args.withdrawn_native_graphs,
             current_bindings=source_row_bindings,
             model_id=config['architecture']+':'+config['base_inventory_sha256'],source_origins=origins)
