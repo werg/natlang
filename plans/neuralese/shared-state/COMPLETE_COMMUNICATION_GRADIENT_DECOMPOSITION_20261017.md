@@ -194,3 +194,34 @@ Receipt `lfm9478-only-stock-ffn-reference-root-20261017.json` records the
 unchanged original parent and this exact intervention. The ledgered execution
 took 131.86 seconds and used 6.1 GB peak host memory. No production arithmetic,
 readiness threshold, optimizer history or source checkpoint was changed.
+
+Fused-norm combined reference and actual optimizer dtypes (2026-10-17, 20:58 UTC)
+-------------------------------------------------------------------------------
+
+Replacing the serial source-norm diagnostic with the existing shared Triton
+fused RMSNorm, while retaining the explicit double reference projections,
+visible attention and stock feed-forward products, passes all 151 complete
+gradient comparisons. Forward, incremental and consumer-loss differences are
+zero. This demonstrates that serial token execution is unnecessary for that
+combined diagnostic result; it does not qualify production arithmetic or make
+the expensive double products a production proposal.
+
+The same run restores and verifies the actual step9478 optimizer by parameter
+name before observing its tensor dtypes. All 92 matrix momentum buffers belong
+to **MuonSR** and are BF16; the 58 AdamW parameters have FP32 first/second moments
+and step buffers. This resolves the previous unmeasured route/dtype question
+for this exact checkpoint. It must not be generalized to a different saved
+optimizer or used to silently convert moments during a resume.
+
+Under the unchanged strict diagnostic stored-update gates, 101/150 comparisons
+still fail. Source RNG is preserved, all inherited tensors are checked exactly,
+and no source optimizer update occurs. Thus passing complete derivatives under
+reference arithmetic does not establish identical shadow updates. Further
+localization should use these actual MuonSR BF16 momentum and recurrence
+semantics rather than assuming stock torch Muon.
+
+Receipt `lfm9478-fusednorm-combined-reference-updates-root-20261017.json` binds
+the original parent, all module names and per-parameter buffer inventories.
+The ledgered run took152.1 seconds, allocated at most8.40GB CUDA and completed
+without an exception. Existing active student training and readiness thresholds
+were unchanged.
