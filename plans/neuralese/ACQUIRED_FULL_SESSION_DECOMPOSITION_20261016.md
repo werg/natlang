@@ -25,6 +25,14 @@ source receipt. Existing corpus registration/whole-union split validation and
 resident continuation own final admission and actual training exposure. Conversion
 alone does not grant admission.
 
+Tool-argument prevalidation uses the actual prepared-tokenizer receipt's
+`history_reasoning.backbone`. The shared serving normalizer decodes JSON once;
+the LFM2 template's object-only argument contract is an exact crisp preflight,
+while Mellum retains valid scalar arguments. Admission repeats that same
+template-bound preflight from the conversion receipt and reconciles every
+positive or pending source occurrence against its unchanged source hash and
+target IDs. This prevents cross-model policy leakage and invented repairs.
+
 The pinned source-ref to complete-session adapter lookup is shared in
 `acquired_agents.FULL_TRAJECTORY_CORPORA`; the exporter resolves that lookup
 through the existing `agents.CORPORA` registry. The lookup is crisp plumbing

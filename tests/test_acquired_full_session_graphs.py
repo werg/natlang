@@ -268,7 +268,9 @@ def test_cli_routes_complete_groups_and_omits_held_targets(tmp_path,monkeypatch,
         'outputs':{source.name:sha256_file_hex(source)},'complete_sessions':len(rows)}))
     from types import SimpleNamespace
     prepared=SimpleNamespace(tokenizer=object(),source_fingerprint='a'*64,expanded_fingerprint='a'*64,
-        binding={'schema':'test-prepared-tokenizer'},validate=lambda base:None)
+        rendering_configuration={'history_reasoning':{'backbone':'mellum'}},
+        binding={'schema':'test-prepared-tokenizer','rendering_configuration':
+            {'history_reasoning':{'backbone':'mellum'}}},validate=lambda base:None)
     monkeypatch.setattr(builder,'prepare_tokenizer',lambda base:prepared)
     leases=[];acquire=builder.acquire_output_lease
     def acquire_tracked(output):

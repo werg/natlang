@@ -54,9 +54,24 @@ def held_session_targets(value, held_sources):
     return sorted(identities & held_sources)
 
 
-def prevalidate_session_tool_arguments(value):
-    """Run the serving validator on original session messages without changing them."""
-    return normalize_tool_call_arguments(value['trajectory']['messages'])
+def prevalidate_session_tool_arguments(value, *, template_backbone=None):
+    """Validate source arguments against the exact tokenizer template contract.
+
+    The serving normalizer decodes JSON once.  LFM2's chat template additionally
+    requires tool arguments to be mappings; Mellum accepts scalar JSON values.
+    Keep that distinction tied to the prepared tokenizer receipt, never the
+    source name or output directory.
+    """
+    normalized, conversions = normalize_tool_call_arguments(value['trajectory']['messages'])
+    if template_backbone == 'lfm2':
+        for message_index, message in enumerate(normalized):
+            for call_index, call in enumerate(message.get('tool_calls') or []):
+                function = call.get('function', call)
+                if 'arguments' in function and not isinstance(function['arguments'], dict):
+                    raise RequestError('tool-arguments',
+                        f'tool-call arguments at messages/{message_index}/tool_calls/{call_index} '
+                        'must decode to a mapping for the lfm2 tokenizer template')
+    return normalized, conversions
 
 
 def source_render_pending_omission(value, error):
@@ -290,7 +305,8 @@ def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint
         raise ValueError('non-positive source session is not positive SFT')
     # Validate every tool call before the first graph can be yielded. This is
     # the same exact validator used by serving; the returned copy is discarded.
-    prevalidate_session_tool_arguments(value)
+    prevalidate_session_tool_arguments(value,
+        template_backbone=getattr(tokenizer, 'natlang_history_reasoning', {}).get('backbone'))
     from natlang_neuralese.serve.chat import bind_history_reasoning
     bind_history_reasoning(tokenizer)
     history_policy = tokenizer.natlang_history_reasoning['policy']
@@ -457,6 +473,9 @@ def _convert(args, prepared):
     prepared.validate(args.base_tokenizer)
     tokenizer = prepared.tokenizer
     source_fp, expanded_fp = prepared.source_fingerprint, prepared.expanded_fingerprint
+    template_backbone = prepared.rendering_configuration.get('history_reasoning', {}).get('backbone')
+    if template_backbone not in ('lfm2', 'mellum'):
+        raise ValueError('prepared tokenizer receipt lacks a supported template backbone')
     # Complete source-file held-group closure before writing any shard. Final
     # corpus admission also closes groups across all source files and views.
     held = set(protection['held'])
@@ -513,7 +532,7 @@ def _convert(args, prepared):
                 if session_exclusion(value, protection, held_sources):
                     continue
                 try:
-                    prevalidate_session_tool_arguments(value)
+                    prevalidate_session_tool_arguments(value, template_backbone=template_backbone)
                 except RequestError as error:
                     if error.code == 'tool-arguments':
                         raise ValueError('prior committed source prefix contains a newly render-pending row') from error
@@ -563,7 +582,7 @@ def _convert(args, prepared):
             shard_counts[reason] += 1
             return
         try:
-            prevalidate_session_tool_arguments(value)
+            prevalidate_session_tool_arguments(value, template_backbone=template_backbone)
         except RequestError as error:
             pending = source_render_pending_omission(value, error)
             omissions.write(json.dumps(pending, ensure_ascii=False, sort_keys=True) + '\n')

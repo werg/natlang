@@ -308,11 +308,29 @@ def verify_graph_source(graph, value, *, protection, held_sources, fingerprint):
     return expected_ids, len(example.target_weights), split
 
 
+def _prepared_template_backbone(receipt):
+    """Read the actual template selector from the conversion's tokenizer binding."""
+    try:
+        backbone = receipt['prepared_tokenizer']['rendering_configuration']['history_reasoning']['backbone']
+    except (KeyError, TypeError) as error:
+        raise ValueError('native conversion lacks its prepared tokenizer template binding') from error
+    if backbone not in ('lfm2', 'mellum'):
+        raise ValueError('native conversion has an unsupported prepared tokenizer template')
+    return backbone
+
+
+def _prevalidate_source_for_conversion(value, receipt):
+    """Re-run the converter's exact model-bound source preflight."""
+    return prevalidate_session_tool_arguments(
+        value, template_backbone=_prepared_template_backbone(receipt))
+
+
 def verify_conversion(directory, export_path, *, protection, held_sources, decision_bindings, source_rows, conversion_protection=None):
     directory = Path(directory).resolve(strict=True); receipt_path = directory / 'receipt.json'
     receipt = json.loads(receipt_path.read_text())
     if receipt.get('schema') != 'natlang.acquired-full-session-graphs/1':
         raise ValueError('cohort member needs a completed native conversion receipt')
+    _prepared_template_backbone(receipt)  # fail closed before validating any source rows
     bound(export_path, receipt['export_receipt'])
     source = bound(export_path.parent / 'full-trajectories.jsonl.zst', receipt['source'])
     numeric_protection = conversion_protection or protection
@@ -370,7 +388,7 @@ def verify_conversion(directory, export_path, *, protection, held_sources, decis
             expected_omissions[key] = {'reason': reason, 'original_target_ids': source_target_ids(value)}
         else:
             try:
-                prevalidate_session_tool_arguments(value)
+                _prevalidate_source_for_conversion(value, receipt)
             except RequestError as error:
                 if error.code != 'tool-arguments':
                     raise

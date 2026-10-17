@@ -150,7 +150,9 @@ def test_invalid_original_tool_argument_is_explicit_pending_and_admission_rechec
         'contract':{'source':row['source_file'],'revision':row['source_revision']},
         'outputs':{source.name:sha256_file_hex(source)},'complete_sessions':1}))
     prepared=SimpleNamespace(tokenizer=object(),source_fingerprint='a'*64,expanded_fingerprint='a'*64,
-        binding={'schema':'test-prepared-tokenizer'},validate=lambda base:None)
+        rendering_configuration={'history_reasoning':{'backbone':'lfm2'}},
+        binding={'schema':'test-prepared-tokenizer','rendering_configuration':
+            {'history_reasoning':{'backbone':'lfm2'}}},validate=lambda base:None)
     monkeypatch.setattr(builder,'prepare_tokenizer',lambda base:prepared)
     monkeypatch.setattr(builder.AutoTokenizer,'from_pretrained',lambda *a,**k:object())
     monkeypatch.setattr(builder,'tokenizer_fingerprint',lambda t:'a'*64)
@@ -173,3 +175,27 @@ def test_invalid_original_tool_argument_is_explicit_pending_and_admission_rechec
     checked,_,proofs,_=verify_conversion(output,export,protection=protection,held_sources=set(),
         decision_bindings=[],source_rows=[row])
     assert checked['counts']['source-render-pending:tool-arguments']==1 and not proofs
+
+
+@pytest.mark.parametrize(('backbone','pending'), [('lfm2', True), ('mellum', False)])
+def test_admission_prevalidation_is_bound_to_actual_template_and_conserves_scalar_source(backbone,pending):
+    from natlang_neuralese.common.hashing import canonical_json_sha256_hex
+    from scripts.neuralese_data.prepare_acquired_session_admission import _prevalidate_source_for_conversion
+    from natlang_neuralese.serve.chat import RequestError
+    row=value()
+    row['trajectory']['messages'][1]['tool_calls'][0]['function']['arguments']='"plain scalar"'
+    source_sha=canonical_json_sha256_hex(row)
+    target_ids=['source-session:1','source-session:3']
+    receipt={'prepared_tokenizer':{'rendering_configuration':{
+        'history_reasoning':{'backbone':backbone}}}}
+    if pending:
+        with pytest.raises(RequestError) as error:
+            _prevalidate_source_for_conversion(row,receipt)
+        assert error.value.code=='tool-arguments'
+    else:
+        normalized,conversions=_prevalidate_source_for_conversion(row,receipt)
+        assert normalized[1]['tool_calls'][0]['function']['arguments']=='plain scalar'
+        assert conversions
+    assert canonical_json_sha256_hex(row)==source_sha
+    assert [row['trajectory']['id']+':'+str(i) for i,m in enumerate(row['trajectory']['messages'])
+        if m.get('role')=='assistant']==target_ids
