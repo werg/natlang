@@ -36,7 +36,7 @@ def test_prefix_logits_loss_and_all_gradients_match_disjoint_packing(family,chec
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
     with torch.no_grad():model.adapter.up.weight.normal_(std=.1)
     # The tiny Mellum loader freezes base weights; exercise real ordinary
-    # derivatives rather than only unused sparse marker/adapter parameters.
+    # derivatives rather than only sparse head/adapter parameters.
     for parameter in model.port.parameters():parameter.requires_grad_(True)
     reference=copy.deepcopy(model);rows=examples()
     shared,maps=pack_causal_prefixes(rows)

@@ -15,8 +15,9 @@ The numbered policy remains natural language. Tensor comparisons and the test
 fixture's explicit trainable-parameter inventory are crisp exact verifiers.
 The existing tiny Mellum loader freezes its base parameters. The ordinary
 prefix gradient regression must explicitly enable those parameters and assert
-that at least one backbone derivative is nonzero; otherwise its ordinary
-examples contain no learned marker inputs and can compare only zero gradients.
+that at least one backbone derivative is nonzero. Sparse output rows can receive
+nonzero cross-entropy gradients without learned marker inputs; those gradients
+alone do not exercise ordinary backbone derivatives.
 The separate optimizer-update regression already enables parameters through the
 real optimizer constructor and remains unchanged.
 
