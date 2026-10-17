@@ -35,6 +35,9 @@ def test_prefix_layout_retains_duplicates_and_internal_terminal_queries_without_
 def test_prefix_logits_loss_and_all_gradients_match_disjoint_packing(family,checkpoint_layers):
     model=SharedStateModel(tiny(family),(58,59,60,61),rank=4)
     with torch.no_grad():model.adapter.up.weight.normal_(std=.1)
+    # The tiny Mellum loader freezes base weights; exercise real ordinary
+    # derivatives rather than only unused sparse marker/adapter parameters.
+    for parameter in model.port.parameters():parameter.requires_grad_(True)
     reference=copy.deepcopy(model);rows=examples()
     shared,maps=pack_causal_prefixes(rows)
     disjoint,_,ownership,_=pack_native_graphs(rows)
@@ -51,6 +54,8 @@ def test_prefix_logits_loss_and_all_gradients_match_disjoint_packing(family,chec
     assert [row['weight'] for row in details] == [row['weight'] for row in reference_details]
     assert [row['supervised_tokens'] for row in details] == [row['supervised_tokens'] for row in reference_details]
     loss.backward();reference_loss.backward()
+    assert any(parameter.grad is not None and torch.count_nonzero(parameter.grad)
+               for parameter in model.port.parameters())
     for (name,parameter),(other_name,other) in zip(model.named_parameters(),reference.named_parameters()):
         assert name==other_name
         assert (parameter.grad is None)==(other.grad is None),name
