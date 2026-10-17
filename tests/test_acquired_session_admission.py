@@ -49,13 +49,24 @@ def test_incremental_member_requires_one_exact_projected_export_and_lists_pendin
 def test_incremental_member_accepts_declared_complete_trajectory_without_broadening_other_sources():
     from scripts.neuralese_data.prepare_acquired_session_admission import incremental_member_source_kind
     d13={'contract':{'source':{'path':'qwen35-cooperdata/agent_traj.json'},
-        'source_rows':1,'trajectory_representation':'existing complete Trajectory dataclass'}}
+        'source_rows':1,'trajectory_representation':'existing complete Trajectory dataclass'},
+        'complete_sessions':1}
     assert incremental_member_source_kind(d13)=='complete-trajectory-single-source-row'
+    assert incremental_member_source_kind({**d13,'complete_sessions':4})=='complete-trajectory-single-source-row'
     assert incremental_member_source_kind({'contract':{'source':{'path':'jsonl_sft/train.jsonl'}}})=='jsonl_sft'
-    assert incremental_member_source_kind({**d13,'contract':{**d13['contract'],'source_rows':2}}) is None
+    assert incremental_member_source_kind({**d13,'contract':{**d13['contract'],'source_rows':2}})=='complete-trajectory-source-export'
     assert incremental_member_source_kind({**d13,'contract':{**d13['contract'],'source_rows':True}}) is None
+    d32={'contract':{'source':{'path':'seed_42/train-00002-of-00003.parquet'},
+        'source_rows':2034,'trajectory_representation':'existing complete Trajectory dataclass'},
+        'complete_sessions':1803}
+    assert incremental_member_source_kind(d32)=='complete-trajectory-source-export'
+    assert incremental_member_source_kind({**d32,'complete_sessions':True}) is None
+    assert incremental_member_source_kind({**d32,'complete_sessions':0}) is None
+    assert incremental_member_source_kind({**d32,'contract':{**d32['contract'],'source_rows':True}}) is None
+    assert incremental_member_source_kind({**d32,'contract':{**d32['contract'],'source_rows':0}}) is None
     assert incremental_member_source_kind({'contract':{'source':{'path':'dpo/train.jsonl'},
-        'source_rows':1,'trajectory_representation':'existing complete Trajectory dataclass'}}) is None
+        'source_rows':1,'trajectory_representation':'existing complete Trajectory dataclass'},
+        'complete_sessions':1}) is None
 
 
 def test_native_conversion_directory_resolves_source_sha_and_legacy_export_identity(tmp_path):

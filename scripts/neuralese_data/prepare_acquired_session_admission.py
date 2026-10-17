@@ -308,8 +308,15 @@ def incremental_member_source_kind(export):
         return 'jsonl_sft'
     if (isinstance(source.get('path'), str) and not source['path'].startswith('dpo/')
             and contract.get('trajectory_representation') == 'existing complete Trajectory dataclass'
-            and type(contract.get('source_rows')) is int and contract['source_rows'] == 1):
-        return 'complete-trajectory-single-source-row'
+            and type(contract.get('source_rows')) is int and contract['source_rows'] > 0
+            and type(export.get('complete_sessions')) is int and export['complete_sessions'] > 0):
+        # Preserve the historical one-row contract's precise meaning. A
+        # normalized export can also be one complete member of the global
+        # source projection while containing many sessions from one pinned
+        # source file (for example a parquet member); it is not a single row.
+        if contract['source_rows'] == 1:
+            return 'complete-trajectory-single-source-row'
+        return 'complete-trajectory-source-export'
     return None
 
 
