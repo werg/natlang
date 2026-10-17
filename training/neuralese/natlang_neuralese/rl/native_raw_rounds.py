@@ -327,11 +327,18 @@ def _owned_recipe_invocation(argv, child, record, actual_recipe, stage_id, linea
 
 def _owned_operation_chain(operations,published,model_id,lineage):
     """Authenticate completed finite work without decoding historical optimizers."""
-    from .native_raw_handoff import verify_handoff_controls
+    from .native_raw_handoff import verify_handoff_controls,verify_saved_update_acknowledgement
     from ..train.recipe import native_recipe_binding,resolve_recipe_data
     prior=published;prior_bytes=published.get('bytes');result=[]
-    for operation in operations:
-        record=verify_handoff_controls(operation['handoff'])
+    for index,operation in enumerate(operations):
+        if bool(operation.get('handoff'))==bool(operation.get('saved_update_recovery')):
+            raise ValueError('owned operation needs exactly one successful handoff or explicit saved-update recovery')
+        recovered=operation.get('saved_update_recovery')
+        if recovered:
+            if index==len(operations)-1:
+                raise ValueError('owned recovery is historical only; the final current owner needs a successful full handoff')
+            record=verify_saved_update_acknowledgement(recovered,receipt=operation['receipt'])
+        else:record=verify_handoff_controls(operation['handoff'])
         receipt=json.loads(_bound(operation['receipt']).read_text())
         intent=json.loads(_bound(record['intent']).read_text())
         recipe_ref=receipt.get('recipe') or {}
@@ -365,7 +372,9 @@ def _owned_operation_chain(operations,published,model_id,lineage):
                     and _owned_recipe_invocation(argv,child,record,actual_recipe,stage_id,lineage)):matching.append({'child':child,'restore_observer':observer})
         if len(matching)!=1:
             raise ValueError('owned operation receipt lacks its exact captured trainer invocation')
-        result.append({'handoff':operation['handoff'],'receipt':operation['receipt'],
+        result.append({**({'saved_update_recovery':recovered,'original_failed_result':record['original_failed_result'],
+                          'outcome':record['outcome']}if recovered else{'handoff':operation['handoff']}),
+            'receipt':operation['receipt'],
             'parent':prior,'checkpoint':checkpoint,'stage_id':stage_id,'stage':stages[0],
             'recipe':actual_recipe,'new_optimizer_updates':updates,
             **({'restore_observer':matching[0]['restore_observer']}if matching[0]['restore_observer']else{})})

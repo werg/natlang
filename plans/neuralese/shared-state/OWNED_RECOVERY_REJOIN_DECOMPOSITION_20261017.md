@@ -56,3 +56,14 @@ Bootstrap metadata cache evidence also binds every captured external launch cont
 snapshot. Both direct and later runtime-transition closures include these files;
 changing a supervisor snapshot invalidates the cache instead of bypassing the
 full authority verifier. This adds control dependencies only.
+
+Typed saved-update recovery extends historical owned-operation accounting only.
+The existing normal handoff and final current checkpoint verifier still require a
+successful real terminal and full saved optimizer/RNG state. The explicit recovery
+branch binds the original failed bridge request/result inventory, captured live
+owner tree, actual failed terminal, independently pinned saved update and original
+training readiness receipt. It never converts failure into exit zero. Exact small
+control artifacts are checked against the failed result inventory; obsolete tensor
+payloads are not decoded. Final ancestry and current full state remain checked by
+the ordinary reconciliation path. This is crisp custody/accounting, not a new
+training-selection policy or communication qualification rule.

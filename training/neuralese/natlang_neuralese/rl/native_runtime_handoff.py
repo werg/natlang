@@ -525,11 +525,12 @@ def main(argv=None):
                 parser.error('owned operations require an explicit completed operation-chain manifest')
             operations=manifest.get('operations')
             if (not isinstance(operations,list) or not operations
-                    or any(not isinstance(item,dict) or not item.get('handoff')or not item.get('receipt')for item in operations)
-                    or operations[-1]['handoff']!=binding(args.handoff)):
+                    or any(not isinstance(item,dict)or not item.get('receipt')
+                        or bool(item.get('handoff'))==bool(item.get('saved_update_recovery'))for item in operations)
+                    or operations[-1].get('handoff')!=binding(args.handoff)):
                 parser.error('owned operation chain must end at the actual requested full handoff')
             for item in operations:
-                _bound(item['handoff']);_bound(item['receipt'])
+                _bound(item.get('handoff')or item['saved_update_recovery']);_bound(item['receipt'])
             verified=verify_handoff(binding(args.handoff))
             from .native_raw_rounds import reconcile_owned_operations
             recipe_reference=bare['recipe'] if bare else _read(binding(args.recipe_handoff))['recipe']

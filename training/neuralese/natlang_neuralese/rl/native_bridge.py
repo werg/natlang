@@ -91,7 +91,12 @@ def verify_raw_checkpoint(reference,parent):
         raise ValueError('raw bridge learner lacks its exact parent/full optimizer/RNG continuation')
 
 
-def verify_result(request_path, result_path):
+def verify_result_inventory(request_path, result_path):
+    """Historical request/result identity and inventory, without payload access.
+
+    This does not establish a successful operation or a resumable checkpoint.
+    The default full verifier below still verifies every artifact and state.
+    """
     request = read_request(request_path)
     result = json.loads(Path(result_path).read_text())
     if (result.get('schema') != RESULT_SCHEMA or result.get('kind') != request['kind']
@@ -110,15 +115,25 @@ def verify_result(request_path, result_path):
         # the bridge fetches their verified bytes to that same output namespace.
         if '..' in path.parts or root not in path.parents or path in paths:
             raise ValueError('native bridge artifact escaped output namespace or was repeated')
-        _bound(item)
-        if path.stat().st_size != item['bytes']:
-            raise ValueError('native bridge artifact size changed')
+        if (type(item.get('bytes'))is not int or item['bytes']<0
+                or not isinstance(item.get('sha256'),str)or len(item['sha256'])!=64
+                or any(c not in '0123456789abcdef'for c in item['sha256'])):
+            raise ValueError('native bridge artifact inventory binding is invalid')
         paths.add(path)
     for key in ('state', 'checkpoint', 'deployment'):
         if result.get(key) and Path(result[key]['path']).absolute() not in paths:
             raise ValueError('native bridge declared result is absent from fetched artifact inventory: ' + key)
-        if result.get(key):
-            _bound(result[key])
+    return request,result
+
+
+def verify_result(request_path, result_path):
+    request,result=verify_result_inventory(request_path,result_path)
+    for item in result['artifacts']:
+        path=_bound(item)
+        if path.stat().st_size!=item['bytes']:
+            raise ValueError('native bridge artifact size changed')
+    for key in ('state','checkpoint','deployment'):
+        if result.get(key):_bound(result[key])
     if request['kind'] == 'round' and result.get('state'):
         state = json.loads(_bound(result['state']).read_text())
         advanced=sha256_file_hex_cached(state['checkpoint']) != request['parent_checkpoint']['sha256']

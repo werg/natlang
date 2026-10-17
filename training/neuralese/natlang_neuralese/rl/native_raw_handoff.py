@@ -15,6 +15,8 @@ from ..train.native_resident import binding
 SCHEMA='natlang.native-raw-optimizer-handoff/1'
 INTENT='natlang.native-raw-optimizer-drain/2'
 LEGACY_INTENT='natlang.native-raw-optimizer-drain/1'
+SAVED_UPDATE_RECOVERY='natlang.native-owned-saved-update-recovery/1'
+SAVED_UPDATE_ACK='natlang.native-owned-saved-update-acknowledgement/1'
 
 
 def _process_stat(pid):
@@ -214,11 +216,9 @@ def complete_drain(intent, terminal, checkpoint, out, *, original_slot, resident
     return binding(out)
 
 
-def verify_handoff_controls(reference, *, requirement=None):
-    """Authenticate historical owner/drain controls without obsolete payloads."""
-    record=json.loads(_bound(reference).read_text())
-    if record.get('schema')!=SCHEMA:raise ValueError('raw bootstrap needs an exact original-owner handoff receipt')
-    intent=json.loads(_bound(record['intent']).read_text())
+def _captured_owner_controls(reference):
+    """One exact captured-launch/tree verifier for successful and failed owners."""
+    intent=json.loads(_bound(reference).read_text())
     if intent.get('schema') not in (INTENT,LEGACY_INTENT) or not isinstance(intent.get('children'),list):
         raise ValueError('raw handoff needs its original pre-signal process tree')
     launch=json.loads(_bound(intent['launch']).read_text())
@@ -231,6 +231,30 @@ def verify_handoff_controls(reference, *, requirement=None):
             or process_argv(owner)!=launch.get('argv')):
         raise ValueError('raw handoff changed its exact boot/start/PID/argv owner binding')
     _verify_process_tree(intent)
+    return intent,launch,identities
+
+
+def _checkpoint_pin_controls(record):
+    pin=record.get('checkpoint_pin') or {}
+    checkpoint=record.get('checkpoint')or{}
+    if (not isinstance(checkpoint.get('path'),str)or not Path(checkpoint['path']).is_absolute()
+            or not isinstance(checkpoint.get('sha256'),str)or len(checkpoint['sha256'])!=64
+            or any(char not in '0123456789abcdef'for char in checkpoint['sha256'])
+            or pin.get('original_slot',{}).get('sha256')!=checkpoint['sha256']
+            or not isinstance(pin.get('original_slot',{}).get('path'),str)
+            or not Path(pin['original_slot']['path']).is_absolute()
+            or type(pin.get('bytes')) is not int or pin['bytes']<=0
+            or any(not isinstance(pin.get(key),list) or len(pin[key])!=2
+                   or any(type(item) is not int or item<0 for item in pin[key]) for key in ('original_inode','pin_inode'))
+            or pin['original_inode']==pin['pin_inode']):
+        raise ValueError('raw handoff lost its exact independently pinned checkpoint evidence')
+
+
+def verify_handoff_controls(reference, *, requirement=None):
+    """Authenticate historical owner/drain controls without obsolete payloads."""
+    record=json.loads(_bound(reference).read_text())
+    if record.get('schema')!=SCHEMA:raise ValueError('raw bootstrap needs an exact original-owner handoff receipt')
+    intent,launch,identities=_captured_owner_controls(record['intent'])
     terminal=json.loads(_bound(record['terminal']).read_text())
     if record.get('source_terminal',record['terminal'])['sha256']!=record['terminal']['sha256']:
         raise ValueError('raw handoff terminal snapshot differs from original source')
@@ -254,19 +278,7 @@ def verify_handoff_controls(reference, *, requirement=None):
             raise ValueError('raw handoff belongs to another declared original trainer launch')
         if Path(requirement['trainer_exit']).resolve()!=Path(record.get('source_terminal',record['terminal'])['path']).resolve():
             raise ValueError('raw handoff terminal belongs to another original optimizer owner')
-    pin=record.get('checkpoint_pin') or {}
-    checkpoint=record.get('checkpoint')or{}
-    if (not isinstance(checkpoint.get('path'),str)or not Path(checkpoint['path']).is_absolute()
-            or not isinstance(checkpoint.get('sha256'),str)or len(checkpoint['sha256'])!=64
-            or any(char not in '0123456789abcdef'for char in checkpoint['sha256'])
-            or pin.get('original_slot',{}).get('sha256')!=checkpoint['sha256']
-            or not isinstance(pin.get('original_slot',{}).get('path'),str)
-            or not Path(pin['original_slot']['path']).is_absolute()
-            or type(pin.get('bytes')) is not int or pin['bytes']<=0
-            or any(not isinstance(pin.get(key),list) or len(pin[key])!=2
-                   or any(type(item) is not int or item<0 for item in pin[key]) for key in ('original_inode','pin_inode'))
-            or pin['original_inode']==pin['pin_inode']):
-        raise ValueError('raw handoff lost its exact independently pinned checkpoint evidence')
+    _checkpoint_pin_controls(record)
     return record
 
 
@@ -276,6 +288,138 @@ def verify_handoff_metadata(reference, *, requirement=None):
     checkpoint=_bound(record['checkpoint'])
     if record['checkpoint_pin']['bytes']!=checkpoint.stat().st_size:
         raise ValueError('raw handoff lost its exact independently pinned checkpoint evidence')
+    return record
+
+
+def _saved_update_recovery_controls(reference,receipt):
+    """Authenticate earned historical work without treating failure as success."""
+    from .native_bridge import verify_result_inventory
+    from ..train.native_resident import code_inventory
+    from ..common.hashing import canonical_json_sha256_hex as digest
+    recovery=json.loads(_bound(reference).read_text())
+    if (recovery.get('schema')!=SAVED_UPDATE_RECOVERY
+            or recovery.get('original_operation_still_failed')is not True
+            or recovery.get('complete_optimizer_rng_and_ordinary_exposure_verified')is not True):
+        raise ValueError('saved-update recovery needs its explicit original failed-operation evidence')
+    intent,launch,identities=_captured_owner_controls(recovery['captured_owner_intent'])
+    terminal=json.loads(_bound(recovery['actual_failed_terminal']).read_text())
+    exit_record=json.loads(_bound(terminal['actual_provider_exit']).read_text())
+    spec=json.loads(_bound(recovery['original_request']).read_text());argv=spec.get('argv') or []
+    def argument(flag):
+        if argv.count(flag)!=1 or argv.index(flag)+1>=len(argv):
+            raise ValueError('saved-update recovery lost its exact failed bridge invocation')
+        return argv[argv.index(flag)+1]
+    request_path=Path(argument('--request'));result_path=_bound(recovery['actual_failed_result'])
+    request,result=verify_result_inventory(request_path,result_path)
+    # The provider's mutable launch file can acquire later bookkeeping. The
+    # captured observed launch already proves its actual PID/boot/start/argv;
+    # retain the original source binding as provenance without reopening it.
+    provider_launch=launch.get('original_provider_launch')or{}
+    if (spec.get('kind')!='round' or request['kind']!='round' or result.get('status')!='failed'
+            or spec.get('request_id')!=request['request_id'] or launch.get('request')!=request['request_id']
+            or argv!=launch['argv'] or argv[1:4]!=['-u','-m','natlang_neuralese.rl.native_bridge']
+            or Path(argument('--result')).resolve()!=result_path.resolve()
+            or terminal.get('actual_operation_result')!=recovery['actual_failed_result']
+            or type(terminal.get('returncode'))is not int or terminal['returncode']==0
+            or exit_record.get('exit_code')!=terminal['returncode']
+            or not isinstance(provider_launch.get('sha256'),str)or len(provider_launch['sha256'])!=64
+            or Path(provider_launch.get('path','')).parent!=Path(terminal['actual_provider_exit']['path']).parent
+            or not launch['at']<=intent['at']<=terminal['at']<=recovery['at']
+            or exit_record.get('at')!=terminal['at']):
+        raise ValueError('saved-update recovery changed its original failed request/owner/terminal')
+    artifacts={item['path']:item for item in result['artifacts']}
+    def artifact(reference,*,read=True):
+        actual=artifacts.get(reference.get('path'))
+        if not actual or actual['sha256']!=reference.get('sha256'):
+            raise ValueError('saved-update recovery control is absent from the original failed inventory')
+        if read:
+            path=_bound(actual)
+            if path.stat().st_size!=actual['bytes']:raise ValueError('saved-update recovery control size changed')
+            return json.loads(path.read_text())
+        return actual
+    artifact({'path':str(request_path),'sha256':result['request_sha256']})
+    artifact(request['config'])
+    slot=artifact(recovery['original_slot'],read=False)
+    report=artifact(recovery['report']);readiness=artifact(receipt)
+    certificate=artifact(recovery['runtime_certificate']);artifact(recovery['partial_quality'],read=False)
+    updates=recovery.get('actual_new_optimizer_updates');boundary=readiness.get('continuation_boundary')or{}
+    checkpoint=recovery['checkpoint'];parent=request['parent_checkpoint']['sha256']
+    if (type(updates)is not int or updates<=0 or type(recovery.get('saved_global_step'))is not int
+            or type(recovery.get('saved_stage_step'))is not int
+            or slot['bytes']!=recovery['checkpoint_bytes']
+            or report.get('schema')!='natlang.neuralese-native-sft-report/1'
+            or report.get('step')!=recovery['saved_stage_step']
+            or report.get('checkpoint')!=slot['path'] or report.get('checkpoint_sha256')!=checkpoint['sha256']
+            or (report.get('continuation')or{}).get('checkpoint_sha256')!=parent
+            or boundary.get('new_optimizer_updates')!=updates or boundary.get('reached')is not True
+            or boundary.get('checkpoint_sha256')!=checkpoint['sha256']
+            or (readiness.get('checkpoint')or{}).get('sha256')!=checkpoint['sha256']
+            or (certificate.get('native_identity')or{}).get('checkpoint_sha256')!=checkpoint['sha256']):
+        raise ValueError('saved-update recovery lost its actual saved parent/update/identity evidence')
+    progress=artifact(binding(Path(slot['path']).with_name('progress.json')))
+    if progress.get('global_step')!=recovery['saved_global_step'] or progress.get('step')!=recovery['saved_stage_step']:
+        raise ValueError('saved-update recovery counters differ from the failed operation inventory')
+    wrapper=artifact(binding(Path(slot['path']).with_name('memory-qualification.json')))
+    proof=artifact(wrapper['proof']);prepared=artifact(wrapper['request'])
+    observation=json.loads(_bound(recovery['saved_frame_observation']).read_text())
+    remembered=observation.get('current_memory_qualification',observation.get('memory_qualification'))
+    if (wrapper.get('passed')is not True or proof.get('passed')is not True
+            or wrapper.get('parent_checkpoint_sha256')!=parent
+            or any(proof.get(key)!=wrapper.get(key)for key in('parent_checkpoint_sha256','request'))
+            or proof.get('runtime_code_sha256')!=prepared.get('runtime_code_sha256')
+            or proof.get('identity')!=prepared.get('identity')
+            or proof.get('runtime_code_sha256')!=digest(code_inventory(Path(spec['runtime'])/'training/neuralese/natlang_neuralese'))
+            or proof.get('identity',{}).get('model_config')!=report.get('model_config')
+            or remembered is not None and (remembered.get('passed')is not True
+                or any(remembered.get(key)!=wrapper.get(key)for key in('parent_checkpoint_sha256','request')))):
+        raise ValueError('saved-update recovery lost its actual physical memory qualification')
+    record={'schema':SAVED_UPDATE_RECOVERY,'at':recovery['at'],'intent':recovery['captured_owner_intent'],
+        'checkpoint':checkpoint,'checkpoint_pin':{'original_slot':recovery['original_slot'],
+            'bytes':recovery['checkpoint_bytes'],'original_inode':recovery['original_slot_inode'],
+            'pin_inode':recovery['independent_pin_inode']},'resident':None,'recovery':reference,
+        'original_failed_result':recovery['actual_failed_result'],
+        'outcome':{'status':'failed','returncode':terminal['returncode'],'recovered_optimizer_updates':updates,
+                   'communication_runtime_qualified':certificate.get('passed')is True}}
+    _checkpoint_pin_controls(record)
+    return record,identities
+
+
+def prepare_saved_update_acknowledgement(recovery,receipt,out):
+    """Record actual dead-owner observations on the owning host; no tensor load."""
+    record,identities=_saved_update_recovery_controls(recovery,receipt)
+    boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+    if any(item['boot_id']!=boot for item in identities):
+        raise ValueError('saved-update recovery drain observations must be captured on the original source host')
+    observations=[observe(item['pid'])for item in identities]
+    if any(same_process(old,new)and new['state']not in('Z','X')for old,new in zip(identities,observations)):
+        raise ValueError('saved-update recovery owner or captured child remains alive')
+    value={'schema':SAVED_UPDATE_ACK,'at':time.time(),'recovery':recovery,'receipt':receipt,
+           'observations':observations,'source_boot_id':boot,'outcome':record['outcome']}
+    out=Path(out)
+    if out.exists():
+        existing=json.loads(out.read_text())
+        if existing.get('recovery')!=recovery or existing.get('receipt')!=receipt:
+            raise ValueError('saved-update acknowledgement belongs to another recovery')
+    else:write_json_durable(out,value)
+    verify_saved_update_acknowledgement(binding(out),receipt=receipt)
+    return binding(out)
+
+
+def verify_saved_update_acknowledgement(reference,*,receipt):
+    value=json.loads(_bound(reference).read_text())
+    if value.get('schema')!=SAVED_UPDATE_ACK or value.get('receipt')!=receipt:
+        raise ValueError('saved-update acknowledgement differs from its original training receipt')
+    record,identities=_saved_update_recovery_controls(value['recovery'],receipt)
+    observations=value.get('observations');boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+    if (not isinstance(observations,list)or len(observations)!=len(identities)
+            or type(value.get('at'))not in(int,float)or value['at']<record['at']
+            or value.get('outcome')!=record['outcome']
+            or any(old['boot_id']!=value.get('source_boot_id')for old in identities)):
+        raise ValueError('saved-update acknowledgement lost its actual source-host drain evidence')
+    for old,new in zip(identities,observations):
+        if (new is not None and (new.get('pid')!=old['pid']or same_process(old,new)and new.get('state')not in('Z','X'))
+                or old['boot_id']==boot and same_process(old,observe(old['pid']))and (observe(old['pid'])or{}).get('state')not in('Z','X')):
+            raise ValueError('saved-update acknowledgement includes a live original owner')
     return record
 
 
