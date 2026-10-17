@@ -1,8 +1,55 @@
 """Exact bare native policy/tokenizer binding without constructing a second model."""
 from pathlib import Path
 from types import SimpleNamespace
+import json
 
 from ..common.hashing import sha256_file_hex_cached
+from ..common.jsonio import write_json_durable
+
+
+HISTORY_BINDING_SCHEMA = 'natlang.raw-native-tokenizer-history/1'
+
+
+def bind_saved_history_reasoning(tokenizer, *, tokenizer_path, checkpoint_sha256,
+                                 tokenizer_fingerprint,
+                                 expected_history_reasoning_policy=None,
+                                 expected_binding_sha256=None,
+                                 expected_binding_path=None):
+    """Restore and verify the exact chat-history profile beside an RL tokenizer."""
+    from ..serve.chat import bind_history_reasoning
+    binding_path = (Path(expected_binding_path) if expected_binding_path is not None else
+                    Path(tokenizer_path) / 'natlang-history-reasoning.json')
+    if not binding_path.is_file():
+        if expected_history_reasoning_policy is not None or expected_binding_sha256 is not None:
+            raise ValueError('explicit checkpoint history profile requires its saved tokenizer sidecar')
+        # Historical/user-supplied tokenizer directories retain their declared
+        # backbone default. Production raw-policy directories always carry the
+        # explicit sidecar written below.
+        bind_history_reasoning(tokenizer, require_declared=False)
+        return dict(tokenizer.natlang_history_reasoning)
+    if (expected_binding_sha256 is not None
+            and sha256_file_hex_cached(binding_path) != expected_binding_sha256):
+        raise ValueError('saved tokenizer history sidecar differs from the authenticated checkpoint control')
+    binding = json.loads(binding_path.read_text(encoding='utf-8'))
+    if (binding.get('schema') != HISTORY_BINDING_SCHEMA
+            or binding.get('checkpoint_sha256') != checkpoint_sha256
+            or binding.get('tokenizer_fingerprint') != tokenizer_fingerprint
+            or not isinstance(binding.get('history_reasoning'), dict)):
+        raise ValueError('saved raw RL tokenizer history profile is not bound to this checkpoint/tokenizer')
+    expected = binding['history_reasoning']
+    if expected_history_reasoning_policy is not None:
+        if expected.get('policy') != expected_history_reasoning_policy:
+            raise ValueError('saved raw RL tokenizer history profile differs from checkpoint profile')
+        policy = expected_history_reasoning_policy
+    else:
+        # A legacy/default checkpoint gets the tokenizer's declared backbone
+        # policy. A sidecar cannot silently opt that checkpoint into KEEP.
+        policy = None
+    bound = bind_history_reasoning(tokenizer, policy=policy,
+                                   model_type=expected.get('backbone'), require_declared=True)
+    if bound.natlang_history_reasoning != expected:
+        raise ValueError('reloaded raw RL tokenizer history profile differs from its saved binding')
+    return dict(expected)
 
 
 def require_raw_training(state):
@@ -58,6 +105,10 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
         extra_input_rows=interface.get('extra_input_rows'), extra_output_rows=interface.get('extra_output_rows'))
     identity = native_identity(proxy, config, checkpoint_sha256=sha256_file_hex_cached(checkpoint))
     tokenizer = AutoTokenizer.from_pretrained(base, local_files_only=True)
+    from ..serve.chat import bind_history_reasoning
+    bind_history_reasoning(tokenizer, policy=config.get('history_reasoning_policy'), require_declared=True,
+                           allow_transition=config.get('history_reasoning_policy') is not None)
+    history_reasoning = dict(tokenizer.natlang_history_reasoning)
     roles = provision_role_tokenizer(tokenizer)
     if (tuple(roles) != tuple(config['marker_ids'])
             or tokenizer_fingerprint(tokenizer) != identity['tokenizer_fingerprint']):
@@ -65,5 +116,18 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
     tokenizer_out = Path(tokenizer_out)
     tokenizer_out.mkdir(parents=True, exist_ok=True)
     tokenizer.save_pretrained(tokenizer_out)
+    history_binding = {'schema': HISTORY_BINDING_SCHEMA,
+        'checkpoint_sha256': identity['checkpoint_sha256'],
+        'tokenizer_fingerprint': identity['tokenizer_fingerprint'],
+        'history_reasoning': history_reasoning}
+    history_path = tokenizer_out / 'natlang-history-reasoning.json'
+    if history_path.exists():
+        if json.loads(history_path.read_text(encoding='utf-8')) != history_binding:
+            raise ValueError('immutable raw RL tokenizer history binding changed')
+    else:
+        write_json_durable(history_path, history_binding)
     return {'native_identity': identity, 'native_participant': None, 'semantic_adapter_sha256': None,
-            'tokenizer': str(tokenizer_out.resolve()), 'checkpoint': str(checkpoint)}
+            'tokenizer': str(tokenizer_out.resolve()), 'checkpoint': str(checkpoint),
+            'history_reasoning': history_reasoning,
+            'history_reasoning_binding': {'path': str(history_path.resolve()),
+                'sha256': sha256_file_hex_cached(history_path)}}

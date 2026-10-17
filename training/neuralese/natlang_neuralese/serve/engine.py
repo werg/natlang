@@ -266,11 +266,14 @@ class Engine:
                  prompt_rendering: str = "full", *, shared_model=None, role_tokens=None, model_config=None,
                  checkpoint_sha256: str | None = None, embedding_weight_sha256: str | None = None):
         from .chat import bind_history_reasoning
-        # Serving renders history as the backbone's training text does (its declared chat.BACKBONE_HISTORY_REASONING).
-        tokenizer = bind_history_reasoning(tokenizer, model_type=getattr(getattr(backbone, "config", None), "model_type", None))
+        self.model_config = dict(model_config or {})
+        # Explicit checkpoint profiles override the backbone default; old
+        # checkpoints without this field retain their historical rendering.
+        tokenizer = bind_history_reasoning(tokenizer,
+            policy=self.model_config.get('history_reasoning_policy'),
+            model_type=getattr(getattr(backbone, "config", None), "model_type", None))
         self.backbone, self.heads, self.tokenizer, self.store = backbone, heads, tokenizer, store
         self.shared_model, self.role_tokens = shared_model, role_tokens
-        self.model_config = dict(model_config or {})
         self.native_state_enabled = shared_model is not None
         self.native_execution_lock = threading.RLock()
         self.checkpoint_sha256 = checkpoint_sha256

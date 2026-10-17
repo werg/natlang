@@ -24,6 +24,10 @@ class Template:
     """Keeps only the latest assistant reasoning unless told `preserve_thinking` (as LFM2.5's template)."""
     def __init__(self, chat_template):
         self.chat_template = chat_template
+        self.eos_token_id = None
+
+    def convert_tokens_to_ids(self, token):
+        return None
 
     def apply_chat_template(self, messages, *, tokenize=False, add_generation_prompt=False, **kwargs):
         keep = kwargs.get('preserve_thinking', False)
@@ -55,6 +59,59 @@ def test_bound_policy_is_pinned_and_asserted():
         bind_history_reasoning(tokenizer, 'keep')
     kept = bind_history_reasoning(Template('preserve_thinking'), 'keep')
     assert 'EARLIER-THOUGHT' in kept.apply_chat_template(HISTORY, tokenize=False)
+
+
+def test_checkpoint_profile_transition_rebinds_only_when_explicitly_authorized():
+    tokenizer = bind_history_reasoning(Template('preserve_thinking'), model_type='lfm2')
+    original = tokenizer._natlang_history_reasoning_original_apply_chat_template
+    with pytest.raises(ValueError, match='not .keep.'):
+        bind_history_reasoning(tokenizer, 'keep')
+    bind_history_reasoning(tokenizer, 'keep', allow_transition=True)
+    assert tokenizer.natlang_history_reasoning['policy'] == 'keep'
+    assert 'EARLIER-THOUGHT' in tokenizer.apply_chat_template(HISTORY, tokenize=False)
+    bind_history_reasoning(tokenizer, 'last_turn_only', allow_transition=True)
+    assert tokenizer.natlang_history_reasoning['policy'] == 'last_turn_only'
+    assert tokenizer.apply_chat_template.__closure__ is not None
+    assert tokenizer._natlang_history_reasoning_original_apply_chat_template is original
+    text = tokenizer.apply_chat_template(HISTORY, tokenize=False)
+    assert 'EARLIER-THOUGHT' not in text and 'LATEST-THOUGHT' in text
+
+
+def test_native_serving_engine_uses_explicit_checkpoint_keep_profile():
+    from types import SimpleNamespace
+    from natlang_neuralese.serve.engine import Engine
+    from natlang_neuralese.serve.store import TensorStore
+    backbone = SimpleNamespace(config=SimpleNamespace(model_type='lfm2', hidden_size=8,
+                                                       max_position_embeddings=1024))
+    tokenizer = Template('preserve_thinking')
+    engine = Engine(backbone, None, tokenizer, TensorStore(), 'test', context=64,
+                    model_config={'history_reasoning_policy':'keep'})
+    assert engine.tokenizer.natlang_history_reasoning['policy'] == 'keep'
+    assert 'EARLIER-THOUGHT' in engine.tokenizer.apply_chat_template(HISTORY, tokenize=False)
+
+
+def test_native_serving_engine_keeps_legacy_backbone_default_without_profile():
+    from types import SimpleNamespace
+    from natlang_neuralese.serve.engine import Engine
+    from natlang_neuralese.serve.store import TensorStore
+    backbone = SimpleNamespace(config=SimpleNamespace(model_type='lfm2', hidden_size=8,
+                                                       max_position_embeddings=1024))
+    engine = Engine(backbone, None, Template('preserve_thinking'), TensorStore(), 'test', context=64,
+                    model_config={})
+    assert engine.tokenizer.natlang_history_reasoning['policy'] == 'last_turn_only'
+    rendered = engine.tokenizer.apply_chat_template(HISTORY, tokenize=False)
+    assert 'EARLIER-THOUGHT' not in rendered and 'LATEST-THOUGHT' in rendered
+
+
+def test_native_training_recipe_and_cli_bind_only_explicit_keep_profile():
+    from natlang_neuralese.train.native_state_sft import build_parser
+    from natlang_neuralese.train.recipe import validate_stage_parameters
+    args=build_parser().parse_args(['--native-graphs','train','--held-native-graphs','held',
+        '--out','out','--history-reasoning-policy','keep'])
+    assert args.history_reasoning_policy=='keep'
+    validate_stage_parameters('native_state_sft',{'history_reasoning_policy':'keep'})
+    with pytest.raises(ValueError,match='keep profile only'):
+        validate_stage_parameters('native_state_sft',{'history_reasoning_policy':'last_turn_only'})
 
 
 def test_template_contradicting_its_declaration_fails_loudly():

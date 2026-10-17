@@ -88,7 +88,8 @@ def _render_with_payload(tokenizer, messages, tools, payload_ids, role_open, rol
     """Render structured serving messages while replacing one explicit block part with a native span."""
     from ..serve.chat import bind_history_reasoning, render_messages, split_escaped
 
-    bind_history_reasoning(tokenizer)
+    bound = getattr(tokenizer, 'natlang_history_reasoning', {})
+    bind_history_reasoning(tokenizer, policy=bound.get('policy'))
     declared = [part.get("id") for message in messages
                 for part in (message.get("content") if isinstance(message.get("content"), list) else [])
                 if isinstance(part, Mapping) and part.get("type") == "neuralese"]

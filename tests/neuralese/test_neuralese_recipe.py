@@ -63,6 +63,21 @@ def test_explicit_reasoning_row_upgrade_is_a_supported_native_continuation(tmp_p
         recipe.direct_windowing_handoffs(before,after,tmp_path)
 
 
+@pytest.mark.parametrize('kind',['native_state_sft','native_offline_preference','native_state_rl'])
+def test_history_reasoning_profile_is_an_explicit_native_recipe_handoff(tmp_path,kind):
+    from copy import deepcopy
+    from natlang_neuralese.train import recipe
+    before={'stages':[{'id':'full','kind':kind,'parameters':{'epochs':1}}]}
+    after=deepcopy(before)
+    after['stages'][0]['parameters']['history_reasoning_policy']='keep'
+    changes,left,right=recipe.direct_windowing_handoffs(before,after,tmp_path)
+    assert changes=={'full':{'history_reasoning_policy':[None,'keep']}}
+    assert left==right
+    (tmp_path/'full-report.json').write_text('{}')
+    with pytest.raises(ValueError,match='finished stage'):
+        recipe.direct_windowing_handoffs(before,after,tmp_path)
+
+
 @pytest.mark.parametrize('enabled',[False,True])
 def test_native_boolean_recipe_flags_parse_both_declared_values(tmp_path,enabled):
     from natlang_neuralese.train.native_state_sft import build_parser

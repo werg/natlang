@@ -557,3 +557,11 @@ return, restore the complete original raw tool call, invocation output and
 block-write trace; do not replace the sampled body with an artifact ID or
 invent a successful outcome. The converter authenticates the exact declared
 callable type, body hash and producing turn before linking the return.
+
+The native checkpoint's optional `history_reasoning_policy: keep` must bind
+the same tokenizer template in training evaluation and serving. Old
+checkpoints without the field use the backbone-declared default. If the
+checkpoint and tokenizer disagree, load the matching tokenizer/template or
+restore the original checkpoint profile; do not override the template locally.
+The opt-in profile changes model-visible history and needs its live executor
+comparison before production adoption.

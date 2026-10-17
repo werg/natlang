@@ -89,6 +89,16 @@ LEGACY_SEARCH_CODE_BINDING = {
     str(_LEGACY_REPO / 'scripts/neuralese_data/strip_generic_system_prompt.py'):
         'ebedd490684608188473f19eaa214d7be39dbf762a57d20e8955893741727838',
 }
+# Exact, reviewed semantic transition for the profile-aware shared text renderer.
+# An unconfigured/default-profile load still invokes bind_history_reasoning()
+# with the same backbone declaration; only a tokenizer carrying an explicit
+# checkpoint profile takes the new path. Legacy Search rows can therefore reuse
+# their old receipts only under the exact current file bytes below and only for
+# the default profile. This is not a general dependency waiver.
+LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION = {
+    'historical_sha256': '004659afb57d4c23dd64262ed49ca4b3964938b60e701789a61b63091464773a',
+    'current_sha256': '622b4ad08257ed09d0dd10d52d97adfa1c45cc8b9c8c46bbeef57fae6caff63b',
+}
 # Upstream held-out split names rendered as test (recorded as selection counts split_mapped:<name>->test and as each
 # row's source_split). Any other split other than train/test stays an omission with its reason.
 HELD_SPLIT_ALIASES = ('validation', 'valid', 'val', 'dev')
@@ -833,7 +843,7 @@ def full_sample(strata: dict, fraction: float) -> list[str] | None:
 
 # ---------------------------------------------------------------- rendering (workers)
 
-def _init(tokenizers, pieces=None):
+def _init(tokenizers, pieces=None, history_policies=None):
     from build_neuralese_gold_text_delta import load_pinned_tokenizer
     from natlang_neuralese.serve.chat import bind_history_reasoning
     from strip_generic_system_prompt import strip_row
@@ -841,19 +851,50 @@ def _init(tokenizers, pieces=None):
     _G['pieces'] = pieces or {}  # exact source pieces, keyed by their registered names
     _G['tok'] = {}
     _G['tokenizer_paths'] = {}
+    history_policies = history_policies or {}
+    if set(history_policies) - set(tokenizers):
+        raise ValueError('history-reasoning policy names must have a configured tokenizer')
+    _G['history_policies'] = dict(history_policies)
     for name, path in tokenizers.items():
         tok = load_pinned_tokenizer(Path(path))
-        bind_history_reasoning(tok, require_declared=True)
+        policy = history_policies.get(name)
+        bind_history_reasoning(tok, policy=policy, require_declared=True,
+                               allow_transition=policy is not None)
         _G['tok'][name] = tok
         _G['tokenizer_paths'][name] = Path(path).resolve()
 
 
-def _render_input_binding(tokenizers, pieces):
+def _render_input_binding(tokenizers, pieces, history_policies=None):
     from natlang_neuralese.data.text_corpus import tokenizer_fingerprint
     tokenizer_inputs = {name: _tokenizer_input_binding(name, path, tokenizer_fingerprint)
                         for name, path in sorted(tokenizers.items())}
-    return {'tokenizers': tokenizer_inputs,
-            'pieces_sha256': sha(canonical(pieces or {}).encode()) if pieces else None}
+    history_policies = history_policies or {}
+    result = {'tokenizers': tokenizer_inputs,
+              'pieces_sha256': sha(canonical(pieces or {}).encode()) if pieces else None}
+    if history_policies:
+        result['history_reasoning_policies'] = {
+            name: history_policies.get(name, 'backbone-default') for name in sorted(tokenizers)}
+    return result
+
+
+def _history_profiles_for_tokenizers(tokenizer_paths, history_policies):
+    return {name: history_policies.get(name, 'backbone-default')
+            for name in sorted(tokenizer_paths)}
+
+
+def _parse_history_reasoning_policies(values, tokenizer_names):
+    parsed = {}
+    for item in values:
+        if '=' not in item:
+            raise ValueError('--history-reasoning-policy expects NAME=POLICY')
+        name, policy = item.split('=', 1)
+        if not name or policy not in ('keep', 'last_turn_only') or name in parsed:
+            raise ValueError(f'invalid or duplicate history-reasoning policy: {item!r}')
+        parsed[name] = policy
+    unknown = set(parsed) - set(tokenizer_names)
+    if unknown:
+        raise ValueError(f'history-reasoning policy names have no tokenizer: {sorted(unknown)}')
+    return parsed
 
 
 def _tokenizer_input_binding(name, path, fingerprint=None):
@@ -1086,6 +1127,25 @@ def qualified_whole_trajectory_row(row):
     return {**row, 'source_row_id': legacy_id, 'id': legacy_id + ':source-sha256:' + digest}
 
 
+def apply_explicit_history_profile_ids(rows, profile):
+    """Give a changed explicit rendering its own IDs while retaining source IDs."""
+    if profile in (None, 'last_turn_only'):
+        return rows
+    if profile != 'keep':
+        raise ValueError('unsupported explicit history-reasoning ID profile')
+    for row in rows:
+        original_id = row['id']
+        expected = original_id + ':history-reasoning:keep'
+        if row.get('history_reasoning_policy') not in (None, 'keep'):
+            raise ValueError('rendered row profile conflicts with the tokenizer profile')
+        if original_id.endswith(':history-reasoning:keep'):
+            raise ValueError('rendered row already has a history-reasoning profile ID')
+        row.setdefault('source_row_id', original_id)
+        row['id'] = expected
+        row['history_reasoning_policy'] = 'keep'
+    return rows
+
+
 def _render_shard_materialized(job):
     (shard_path, out_dir, tok_name, blocked, corpus, held_groups, decision_exclude, header_as_full, full_programs,
      renderings, *storage_options) = job
@@ -1254,6 +1314,10 @@ def _render_shard_materialized(job):
     rows['whole-trajectory'] = wt
     for mode in [m for m in rows if m not in renderings]:  # rendered only for the parity check
         del rows[mode]
+    explicit_profile = (_G.get('history_policies') or {}).get(tok_name)
+    if explicit_profile is not None:
+        for rs in rows.values():
+            apply_explicit_history_profile_ids(rs, explicit_profile)
     for mode, rs in rows.items():
         path = Path(out_dir) / mode / tok_name / (f'{stem}.jsonl.zst' if compress_text else f'{stem}.jsonl')
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1336,7 +1400,20 @@ def _legacy_render_job_binding(job, source_sha, renderer_sha):
     }
     for name, path in dependency_paths.items():
         old_path = next(Path(key) for key in LEGACY_SEARCH_CODE_BINDING if key.endswith('/' + name))
-        if file_sha(path) != LEGACY_SEARCH_CODE_BINDING[str(old_path)]:
+        actual_sha = file_sha(path)
+        expected_sha = LEGACY_SEARCH_CODE_BINDING[str(old_path)]
+        if actual_sha == expected_sha:
+            continue
+        if name == 'text_corpus.py':
+            profile_bindings = [part.get('history_reasoning_policies') for part in job
+                                if isinstance(part, dict) and 'history_reasoning_policies' in part]
+            _shard, _out, tok_name = job[:3]
+            selected_profile = (profile_bindings[-1].get(tok_name)
+                                if profile_bindings and isinstance(profile_bindings[-1], dict) else None)
+            transition = LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION
+            if actual_sha == transition['current_sha256'] and selected_profile in (None, 'backbone-default'):
+                continue
+        if actual_sha != expected_sha:
             raise ValueError(f'legacy renderer dependency differs from its historical binding: {name}')
     (_shard_path, _out_dir, tok_name, blocked, corpus, held_groups, decision_exclude,
      header_as_full, full_programs, renderings, compress_text, target_exclude, *_rest) = job
@@ -1542,10 +1619,15 @@ def render_shard(job):
             'pieces_sha256': sha(canonical(_G.get('pieces') or {}).encode())
             if _G.get('pieces') else None,
         }
+        if _G.get('history_policies'):
+            actual_input_binding['history_reasoning_policies'] = _history_profiles_for_tokenizers(
+                _G['tokenizer_paths'], _G['history_policies'])
         expected_model_binding = input_binding.get('tokenizers', {}).get(tok_name)
         if (not isinstance(expected_model_binding, dict)
                 or expected_model_binding != actual_input_binding['tokenizers'][tok_name]
-                or input_binding.get('pieces_sha256') != actual_input_binding['pieces_sha256']):
+                or input_binding.get('pieces_sha256') != actual_input_binding['pieces_sha256']
+                or input_binding.get('history_reasoning_policies') != actual_input_binding.get(
+                    'history_reasoning_policies')):
             raise ValueError(f'loaded tokenizer or piece inventory changed for {tok_name}')
     code_binding = _render_code_binding()
     renderer_code_sha = code_binding[str(Path(__file__).resolve())]
@@ -1567,9 +1649,11 @@ def render_shard(job):
     # trajectory outputs and receipts remain under `outer`.
     if sqlite_temp_root is not None:
         sqlite_temp_root.mkdir(parents=True, exist_ok=True)
-    # Close SQLite before TemporaryDirectory removes its scratch path, even
-    # when parsing or rendering raises.  A failed cleanup can otherwise leave
-    # deleted worker databases open through retained process-pool tracebacks.
+    # Register the DB close after the temporary-directory cleanup callback so
+    # ExitStack runs db.close() first on every exit path.  If rendering raises,
+    # TemporaryDirectory must never try to remove an open SQLite database: the
+    # failed cleanup can otherwise leave the deleted database reachable through
+    # an unlinked worker fd for the lifetime of a retained future traceback.
     with ExitStack() as scratch:
         temporary = scratch.enter_context(tempfile.TemporaryDirectory(
             prefix=f'natlang-{stem}-', dir=sqlite_temp_root or outer))
@@ -1859,7 +1943,7 @@ def write_done(work: Path, tok_name: str, stem: str, result: dict):
 
 
 def _run_bounded_render_jobs(pool, jobs, workers, on_result):
-    """Bound queued work and stop submitting after the first shard failure."""
+    """Submit at most one worker-width of renders and stop submission on error."""
     pending_jobs = iter(jobs)
     futures = set()
     for _ in range(min(workers, len(jobs))):
@@ -2024,6 +2108,8 @@ def main(argv=None):
     p.add_argument('--corpus-id', required=True)
     p.add_argument('--source', type=Path, nargs='+', required=True)
     p.add_argument('--tokenizer', action='append', default=[], help='NAME=DIR')
+    p.add_argument('--history-reasoning-policy', action='append', default=[], metavar='NAME=POLICY',
+                   help='opt in to a history policy for this tokenizer; omitted names use the backbone default')
     p.add_argument('--out-dir', type=Path)
     p.add_argument('--verify-admission-only', action='store_true',
                    help='verify the complete registered candidate admission without rendering or model loading')
@@ -2092,6 +2178,10 @@ def main(argv=None):
     if not a.tokenizer or a.out_dir is None:
         p.error('rendering requires --tokenizer and --out-dir')
     tokenizers = dict(item.split('=', 1) for item in a.tokenizer)
+    try:
+        history_policies = _parse_history_reasoning_policies(a.history_reasoning_policy, tokenizers)
+    except ValueError as exc:
+        p.error(str(exc))
     pieces, piece_bindings = registered_source_pieces(a.source)
     a.candidate_selection_admission = registered_candidate_selection_admission(a.corpus_id, a.source)
     if a.candidate_selection_admission and a.include_admits:
@@ -2155,8 +2245,8 @@ def main(argv=None):
         for path in a.target_exclude_ids:
             target_exclude.update(json.loads(line)['id'] for line in jsonl_lines(path) if line.strip())
         full_set = None if full_programs is None else set(full_programs)
-        _init(tokenizers, pieces)
-        input_binding = _render_input_binding(tokenizers, pieces)
+        _init(tokenizers, pieces, history_policies)
+        input_binding = _render_input_binding(tokenizers, pieces, history_policies)
         all_jobs = [(str(shard_paths[s]), str(out / 'work'), name, blocked, a.corpus_id, held_groups, decision_exclude,
                      a.program_header_as_full, full_set, tuple(a.renderings), a.compress_text, target_exclude,
                      a.legacy_renderer_sha256, input_binding, str(a.sqlite_temp_root) if a.sqlite_temp_root else None,
@@ -2222,10 +2312,15 @@ def main(argv=None):
         # ProcessPoolExecutor, not multiprocessing.Pool: a worker killed by the container's OOM killer makes the pool
         # raise BrokenProcessPool (the unit fails visibly and a relaunch resumes the finished shards) instead of
         # waiting forever for the lost shard (view-ask render, 2026-10-12).
-        with ProcessPoolExecutor(a.workers, initializer=_init, initargs=(tokenizers, pieces)) as pool:
+        # Keep only one worker-width of tasks submitted at a time.  If a shard
+        # fails, queued work can be cancelled and the parent reports the error
+        # without first draining a corpus-sized executor queue.  Completed
+        # shard receipts remain the durable resume frontier.
+        with ProcessPoolExecutor(a.workers, initializer=_init,
+                                 initargs=(tokenizers, pieces, history_policies)) as pool:
             def record_result(completed, res):
                 results.append(res)
-                if (completed - 1) % 8 == 0:
+                if completed % 8 == 1:
                     print(json.dumps({'done': completed, 'of': len(jobs), 'last': res.get('shard'),
                                       'seconds': round(time.time() - t0)}), flush=True)
             _run_bounded_render_jobs(pool, jobs, a.workers, record_result)

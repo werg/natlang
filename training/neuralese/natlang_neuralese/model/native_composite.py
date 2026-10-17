@@ -183,6 +183,8 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
     if 'native_ordinary_precision' in model_config:
         manifest['model_config']['native_ordinary_precision'] = model_config['native_ordinary_precision']
         manifest['ordinary_precision_upgrade'] = getattr(model, '_native_ordinary_precision_upgrade', None)
+    if 'history_reasoning_policy' in model_config:
+        manifest['model_config']['history_reasoning_policy'] = model_config['history_reasoning_policy']
     manifest['model_config']['native_linear_precision'] = model_config.get('native_linear_precision','ieee')
     if 'native_norm_execution' in model_config:
         manifest['model_config']['native_norm_execution'] = model_config['native_norm_execution']
@@ -300,6 +302,10 @@ def _apply_native_composite_checkpoint(path, restored):
         raise ValueError('native composite parent checkpoint bytes changed')
     from .native_model import native_identity
     model, tokenizer, roles, config, parent_state = restored
+    history_profile = manifest['model_config'].get('history_reasoning_policy')
+    if history_profile is not None:
+        if history_profile != 'keep':
+            raise ValueError('native composite has an unsupported history-reasoning policy')
     parent_identity = native_identity(model, config, checkpoint_sha256=parent['sha256'])
     artifact_binding = manifest['parameter_artifact']
     artifact_path = resolve_composite_artifact(artifact_binding,manifest_path,sibling=True)
@@ -310,6 +316,12 @@ def _apply_native_composite_checkpoint(path, restored):
         raise ValueError('native composite patch artifact binding or kind is invalid')
     if artifact.native_identity != parent_identity:
         raise ValueError('native composite patch belongs to another exact parent model')
+    # Apply the child's serving/rendering profile only after authenticating its
+    # exact parent and patch against the restored parent identity.
+    if history_profile is not None:
+        config['history_reasoning_policy'] = history_profile
+        from ..serve.chat import bind_history_reasoning
+        bind_history_reasoning(tokenizer, policy=history_profile, allow_transition=True)
     from .native_parameter_precision import configure_norm_execution
     configure_norm_execution(model, manifest['model_config'].get('native_norm_execution'))
     if 'native_norm_execution' in manifest['model_config']:

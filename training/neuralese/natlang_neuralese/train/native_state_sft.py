@@ -742,6 +742,8 @@ def build_parser():
         help='explicit per-model attention arithmetic; restores optimizer, RNG and row exposure before qualification')
     from .native_optimizer_migration import POLICY as NATIVE_OPTIMIZER_MIGRATION
     parser.add_argument('--native-norm-execution', choices=('source-v1','stable-v1'))
+    parser.add_argument('--history-reasoning-policy', choices=('keep',), default=None,
+        help='explicitly render earlier assistant reasoning in complete training and serving histories')
     parser.add_argument('--native-ordinary-precision', choices=('fp32-norms-v1',))
     parser.add_argument('--native-optimizer-migration',choices=(NATIVE_OPTIMIZER_MIGRATION,),default=None,
         help='explicit new AdamW history for formerly misrouted ordinary parameters; preserves original Muon buffers and all unaffected state')
@@ -790,6 +792,7 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    history_reasoning_transition = None
     if args.foundation_communication_batches is not None and args.foundation_communication_batches < 1:
         raise ValueError('foundation communication batches must be a positive integer')
     resident_state = None
@@ -850,7 +853,22 @@ def main(argv=None):
             raise ValueError('fresh native SFT requires explicit --dtype (QAD LFM float32; Mellum bfloat16)')
         model, tokenizer, roles, config = load_native_model(args.base, rank=args.rank,
             device=args.device, dtype=getattr(torch, args.dtype),
-            native_norm_execution=args.native_norm_execution or 'stable-v1')
+            native_norm_execution=args.native_norm_execution or 'stable-v1',
+            history_reasoning_policy=args.history_reasoning_policy)
+    if args.history_reasoning_policy is not None:
+        previous_history_policy = config.get('history_reasoning_policy')
+        if previous_history_policy != args.history_reasoning_policy:
+            config['history_reasoning_policy'] = args.history_reasoning_policy
+            history_reasoning_transition = {
+                'from': previous_history_policy or 'backbone-default',
+                'to': args.history_reasoning_policy,
+                'model_weights_optimizer_rng_exposure': 'preserved',
+                'rendering_change': True}
+            # A restored parent tokenizer is already bound to its historical
+            # profile. Apply an explicit continuation profile through the
+            # shared binder only after recording the transition above.
+            from ..serve.chat import bind_history_reasoning
+            bind_history_reasoning(tokenizer, policy=args.history_reasoning_policy, allow_transition=True)
     previous_norm_declaration = config.get('native_norm_execution')
     previous_norm_execution = config.get('native_norm_execution', 'source-v1')
     if args.native_norm_execution is not None:
@@ -906,6 +924,11 @@ def main(argv=None):
             'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0))),
             'weights_optimizer_rng_exposure':'preserved'})
     checkpoint_options['native_norm_execution_history'] = execution_history
+    history_profile_history = list((saved_training.get('options') or {}).get('history_reasoning_policy_history') or [])
+    if history_reasoning_transition is not None:
+        history_profile_history.append({**history_reasoning_transition,
+            'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0)))})
+    checkpoint_options['history_reasoning_policy_history'] = history_profile_history
     carried_progress = collect_sft_progress(saved_training)
     restored_progress = False
     precision_history = list((saved_training.get('options') or {}).get('native_precision_history') or [])
@@ -964,7 +987,8 @@ def main(argv=None):
     checkpoint_options['_pending_native_source_declarations'] = [
         load_pending_sources(path, tokenizer_fingerprint=fingerprint) for path in args.pending_native_sources]
     checkpoint_options['_communication_ids']=[entry['id'] for entry in train.entries if entry.get('communication')]
-    foundation_source = (NativeGraphSource(args.foundation_native_graphs, fingerprint, required_split='train', role_ids=roles.ids)
+    foundation_source = (NativeGraphSource(args.foundation_native_graphs, fingerprint,
+                                           required_split='train', role_ids=roles.ids)
                          if args.foundation_native_graphs else train)
     if args.foundation_communication_batches is not None and args.foundation_native_graphs is None:
         raise ValueError('foundation scheduling requires the exact declared foundation source')
@@ -1080,6 +1104,9 @@ def main(argv=None):
             previous_config = {**previous_config, 'native_ordinary_precision':config['native_ordinary_precision']}
         if args.native_norm_execution is not None:
             previous_config = {**previous_config, 'native_norm_execution':config['native_norm_execution']}
+        if args.history_reasoning_policy is not None:
+            previous_config = {**previous_config,
+                'history_reasoning_policy':config['history_reasoning_policy']}
         if not same_source_precision_identity(previous_config, config):
             raise ValueError('native SFT continuation changes model identity beyond declared GEMM arithmetic')
         if previous.get('schedule') not in {'source-order-stream/1', 'row-visit-deficit/2'}:

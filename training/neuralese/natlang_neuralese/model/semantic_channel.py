@@ -64,6 +64,27 @@ class SemanticChannel:
             tokenizer = AutoTokenizer.from_pretrained(root, local_files_only=True)
             if tokenizer_fingerprint(tokenizer) != identity['tokenizer_fingerprint']:
                 raise ValueError('semantic adapter source tokenizer differs from its exact model binding')
+            history_binding = binding.get('history_reasoning_binding')
+            expected_profile = model.get('history_reasoning_policy')
+            if history_binding is None:
+                if expected_profile is not None:
+                    raise ValueError('semantic adapter history profile lacks its checkpoint-bound sidecar')
+            else:
+                relative = history_binding.get('path')
+                if not isinstance(relative,str) or not relative or Path(relative).is_absolute():
+                    raise ValueError('semantic history sidecar path must be relative to its tokenizer export')
+                history_path = (root/relative).resolve(strict=True)
+                if root not in history_path.parents or relative not in binding.get('files',{}):
+                    raise ValueError('semantic history sidecar is outside the authenticated tokenizer inventory')
+                if binding['files'][relative] != history_binding.get('sha256'):
+                    raise ValueError('semantic history sidecar binding differs from tokenizer inventory')
+                from ..rl.native_raw_policy import bind_saved_history_reasoning
+                bind_saved_history_reasoning(tokenizer, tokenizer_path=root,
+                    checkpoint_sha256=receipt['checkpoint']['sha256'],
+                    tokenizer_fingerprint=identity['tokenizer_fingerprint'],
+                    expected_history_reasoning_policy=expected_profile,
+                    expected_binding_sha256=history_binding['sha256'],
+                    expected_binding_path=history_path)
             tokenizers[name], bindings[name] = tokenizer, identity
         return cls(vae, bindings, tokenizers, adapter_sha256=sha256_file_hex_cached(path))
 

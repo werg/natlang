@@ -324,7 +324,14 @@ def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_
     source_digest = renderer.file_sha(selected)
     old_renderer_sha = renderer.LEGACY_SEARCH_RENDERER_SHA256
     code_binding = renderer.LEGACY_SEARCH_CODE_BINDING
-    old_binding = renderer._legacy_render_job_binding(job, source_digest, old_renderer_sha)
+    old_binding = renderer._render_job_binding(source_digest, 'lfm25', {}, 'fixture', set(), set(), set(),
+                                               False, None, renderings, False, code_binding)
+    # The one text-corpus dependency transition is allowed only for the
+    # unchanged default profile. A KEEP render must never reuse old default
+    # receipts even when the renderer bytes match this reviewed transition.
+    with __import__('pytest').raises(ValueError, match='dependency differs'):
+        renderer._legacy_render_job_binding(
+            (*job, {'history_reasoning_policies': {'lfm25': 'keep'}}), source_digest, old_renderer_sha)
     assert set(code_binding) == set(renderer.LEGACY_SEARCH_CODE_BINDING)
     current_code_binding = renderer._render_code_binding()
     lease_path = str(renderer.ROOT / 'scripts/neuralese_data/conversion_output_lease.py')
@@ -429,6 +436,51 @@ def test_render_subset_selects_only_named_shards():
     assert renderer._filter_render_jobs(jobs, None) == jobs
     with __import__('pytest').raises(ValueError, match='unknown selected shard stems'):
         renderer._filter_render_jobs(jobs, ['0002'])
+
+
+def test_history_reasoning_opt_in_is_explicit_and_part_of_render_binding(tmp_path):
+    default = renderer._render_input_binding({'lfm25': tmp_path}, {})
+    keep = renderer._render_input_binding({'lfm25': tmp_path}, {}, {'lfm25': 'keep'})
+    assert set(default) == {'tokenizers', 'pieces_sha256'}
+    assert 'history_reasoning_policies' not in default
+    assert keep['history_reasoning_policies'] == {'lfm25': 'keep'}
+    assert default != keep
+    assert renderer._parse_history_reasoning_policies(['lfm25=keep'], {'lfm25'}) == {'lfm25': 'keep'}
+    for values, names in [(['lfm25=keep', 'lfm25=last_turn_only'], {'lfm25'}),
+                          (['other=keep'], {'lfm25'}), (['lfm25=unknown'], {'lfm25'}),
+                          (['keep'], {'lfm25'})]:
+        with __import__('pytest').raises(ValueError):
+            renderer._parse_history_reasoning_policies(values, names)
+
+
+def test_renderer_worker_binds_explicit_profile_and_keeps_default(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    (tmp_path / 'config.json').write_text('{"model_type":"lfm2"}')
+
+    class Switchable:
+        def __init__(self):
+            self.name_or_path = str(tmp_path)
+            self.chat_template = '{{ preserve_thinking }}'
+
+        def apply_chat_template(self, messages, **options):
+            assistants = [m.get('reasoning_content', '') for m in messages if m.get('role') == 'assistant']
+            if not options.get('preserve_thinking', False):
+                assistants = assistants[-1:]
+            return ' '.join(assistants)
+
+    gold = sys.modules.get('build_neuralese_gold_text_delta')
+    if gold is None:
+        import importlib
+        gold = importlib.import_module('build_neuralese_gold_text_delta')
+    monkeypatch.setattr(gold, 'load_pinned_tokenizer', lambda _path: Switchable())
+    renderer._G.clear()
+    renderer._init({'lfm25': str(tmp_path)}, {})
+    assert renderer._G['tok']['lfm25'].natlang_history_reasoning['policy'] == 'last_turn_only'
+    renderer._G.clear()
+    renderer._init({'lfm25': str(tmp_path)}, {}, {'lfm25': 'keep'})
+    assert renderer._G['tok']['lfm25'].natlang_history_reasoning['policy'] == 'keep'
 
 
 def test_done_receipts_verify_output_checksums_without_rewriting_them(tmp_path):
@@ -596,3 +648,21 @@ def test_bounded_render_jobs_cancel_outstanding_and_do_not_queue_entire_corpus()
         renderer._run_bounded_render_jobs(pool, list(range(1000)), 4, lambda *_: None)
     assert pool.submitted_jobs == [0, 1, 2, 3]
     assert all(future.cancelled() for future in pool.futures[1:])
+
+
+def test_explicit_keep_native_turn_ids_are_distinct_and_preserve_source_identity():
+    row = {'id': 'text:task-1', 'source_record_ids': ['task-1'], 'text': 'changed KEEP bytes'}
+    default = dict(row)
+    renderer.apply_explicit_history_profile_ids([default], None)
+    keep = dict(row)
+    renderer.apply_explicit_history_profile_ids([keep], 'keep')
+    assert default == row
+    assert keep['id'] == 'text:task-1:history-reasoning:keep'
+    assert keep['source_row_id'] == row['id']
+    assert keep['source_record_ids'] == row['source_record_ids']
+    assert keep['history_reasoning_policy'] == 'keep'
+
+
+def test_actual_render_input_profile_map_covers_all_configured_tokenizers():
+    assert renderer._history_profiles_for_tokenizers({'lfm': 'a', 'mellum': 'b'}, {'lfm': 'keep'}) == {
+        'lfm': 'keep', 'mellum': 'backbone-default'}

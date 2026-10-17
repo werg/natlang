@@ -28,7 +28,9 @@ from scripts.neuralese_data.build_verified_teacher_trajectory_graphs import curr
 from scripts.neuralese_data.decision_holds import load_decision_holds
 from scripts.neuralese_data.conversion_output_lease import acquire_output_lease
 
-_SESSION_GRAPH_RENDER_AST_SHA256 = '7b73bf21659f50fbee4c8b990b0ab0895c7d880d25a368b70986ba1d0c8a76bc'
+_SESSION_GRAPH_RENDER_AST_SHA256 = '0a7fbad4a9c3c1e86bf136b24f294668d247adbdaebc6badc8856e6342705ef5'
+_SESSION_GRAPH_CONTINUATION_DELTA = ('pre-render source-argument validation and pending accounting; '
+    'optional explicit history profile binding and unique graph IDs, with the default profile unchanged')
 _SESSION_GRAPH_PREVALIDATION_PARENT_BUILDER_SHA256 = 'cf4346e17dcc2c9f4770e2d8fb142cf597563e6551b8d51329c5c224ba5aaf1b'
 _SESSION_GRAPH_CONTINUATION_PROOF = Path(__file__).resolve().with_name(
     'acquired_session_render_pending_continuation_20261017.json')
@@ -149,8 +151,8 @@ def prove_render_pending_runtime_continuation(parent_binding, current_binding, p
             or proof != {'schema': 'natlang.acquired-session-render-pending-runtime-continuation-proof/1',
                 'parent_builder_sha256': _SESSION_GRAPH_PREVALIDATION_PARENT_BUILDER_SHA256,
                 'current_builder_sha256': new_files['builder'].get('sha256'),
-                'unchanged_session_graph_renderer_ast_sha256': _SESSION_GRAPH_RENDER_AST_SHA256,
-                'allowed_delta': 'pre-render serving tool-argument validation and explicit pending-source accounting'}):
+                'session_graph_renderer_ast_sha256': _SESSION_GRAPH_RENDER_AST_SHA256,
+                'allowed_delta': _SESSION_GRAPH_CONTINUATION_DELTA}):
         raise ValueError('runtime continuation proof does not bind the exact code transition')
     if old_runtime.get('fingerprint') != canonical_json_sha256_hex(old_files):
         raise ValueError('runtime continuation parent fingerprint is invalid')
@@ -180,8 +182,8 @@ def prove_render_pending_runtime_continuation(parent_binding, current_binding, p
         'parent_frontier': parent_frontier,
         'parent_builder_sha256': old_files['builder']['sha256'],
         'current_builder_sha256': new_files['builder']['sha256'],
-        'unchanged_session_graph_renderer_ast_sha256': render_ast_sha,
-        'allowed_delta': 'pre-render serving tool-argument validation and explicit pending-source accounting'}
+        'session_graph_renderer_ast_sha256': render_ast_sha,
+        'allowed_delta': _SESSION_GRAPH_CONTINUATION_DELTA}
 
 
 def _record_uncommitted_cleanup(shard_root, directory):
@@ -295,7 +297,8 @@ def _sync_concat(destination, inputs):
         raise
 
 
-def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint, split):
+def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint, split,
+                   explicit_history_reasoning_policy=None):
     """Keep the full session and add packets only for reasoning hidden by serving."""
     if (value.get('schema') != 'natlang.normalized-agent-trajectory/1'
             or value.get('whole_trajectory') is not True or value.get('windowed') is not False):
@@ -308,7 +311,10 @@ def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint
     prevalidate_session_tool_arguments(value,
         template_backbone=getattr(tokenizer, 'natlang_history_reasoning', {}).get('backbone'))
     from natlang_neuralese.serve.chat import bind_history_reasoning
-    bind_history_reasoning(tokenizer)
+    # A prepared tokenizer can carry an explicit recipe override. Rebinding
+    # with the backbone default here would silently reject that profile.
+    bound_history = getattr(tokenizer, 'natlang_history_reasoning', {})
+    bind_history_reasoning(tokenizer, policy=bound_history.get('policy'))
     history_policy = tokenizer.natlang_history_reasoning['policy']
     messages = []
     for original in trajectory['messages']:
@@ -321,6 +327,10 @@ def session_graphs(value, tokenizer, *, source_fingerprint, expanded_fingerprint
         raise ValueError('source session has no assistant targets')
     occurrence = canonical_json_sha256_hex([value['source_file']['sha256'], value['source_row']])
     identifier = trajectory['id'] + ':source-occurrence:' + occurrence
+    if explicit_history_reasoning_policy is not None:
+        if explicit_history_reasoning_policy != history_policy:
+            raise ValueError('explicit source rendering profile differs from its prepared tokenizer')
+        identifier += ':history-reasoning:' + explicit_history_reasoning_policy
     common = {'split': split, 'source_groups': trajectory['split_groups'],
               'tokenizer_sha256': source_fingerprint, 'source_record_ids': [trajectory['id']]}
     convert = {'source_tokenizer_fingerprint': source_fingerprint, 'tokenizer': tokenizer,
@@ -401,13 +411,16 @@ class PreparedTokenizer:
     rendering_configuration: dict
     render_method: object
     binding_sha256: str
+    explicit_history_reasoning_policy: str | None = None
 
     @property
     def binding(self):
         return {'schema': 'natlang.prepared-native-tokenizer/1',
             'base_files': self.base_files, 'source_fingerprint': self.source_fingerprint,
             'expanded_fingerprint': self.expanded_fingerprint,
-            'rendering_configuration': self.rendering_configuration}
+            'rendering_configuration': self.rendering_configuration,
+            **({'explicit_history_reasoning_policy': self.explicit_history_reasoning_policy}
+               if self.explicit_history_reasoning_policy is not None else {})}
 
     def validate(self, base):
         if canonical_json_sha256_hex(self.binding) != self.binding_sha256:
@@ -421,22 +434,33 @@ class PreparedTokenizer:
             raise ValueError('prepared tokenizer rendering configuration was mutated')
 
 
-def prepare_tokenizer(base):
+def prepare_tokenizer(base, *, history_reasoning_policy=None):
     base = Path(base).resolve(strict=True)
     files = tokenizer_inventory(base)
     tokenizer = AutoTokenizer.from_pretrained(base, local_files_only=True, trust_remote_code=False)
     source_fp = tokenizer_fingerprint(tokenizer)
     provision(tokenizer)
     expanded_fp = tokenizer_fingerprint(tokenizer)
-    bind_history_reasoning(tokenizer)
+    bind_history_reasoning(tokenizer, policy=history_reasoning_policy)
     configuration = json.loads(json.dumps(_tokenizer_rendering_configuration(tokenizer)))
     binding = {'schema': 'natlang.prepared-native-tokenizer/1', 'base_files': files,
         'source_fingerprint': source_fp, 'expanded_fingerprint': expanded_fp,
         'rendering_configuration': configuration}
+    if history_reasoning_policy is not None:
+        binding['explicit_history_reasoning_policy'] = history_reasoning_policy
     context = PreparedTokenizer(tokenizer, base, source_fp, expanded_fp, files,
-        configuration, tokenizer.apply_chat_template, canonical_json_sha256_hex(binding))
+        configuration, tokenizer.apply_chat_template, canonical_json_sha256_hex(binding),
+        history_reasoning_policy)
     context.validate(base)
     return context
+
+
+def resolve_explicit_history_profile(requested, prepared):
+    """Never emit legacy IDs for a tokenizer prepared under an explicit profile."""
+    prepared_profile = getattr(prepared, 'explicit_history_reasoning_policy', None)
+    if requested is not None and requested != prepared_profile:
+        raise ValueError('explicit conversion profile differs from its prepared tokenizer binding')
+    return prepared_profile
 
 
 def main(argv=None, *, prepared=None):
@@ -447,6 +471,8 @@ def main(argv=None, *, prepared=None):
     parser.add_argument('--decision-hold', type=Path, action='append', required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--chunk-sessions', type=int, default=100)
+    parser.add_argument('--history-reasoning-policy', choices=('keep',), default=None,
+        help='explicitly render prior assistant reasoning in the complete trajectory')
     args = parser.parse_args(argv)
     if args.chunk_sessions <= 0:
         raise ValueError('--chunk-sessions must be a positive integer')
@@ -469,9 +495,15 @@ def _convert(args, prepared):
         raise ValueError('decision hold bindings must include the complete current file set')
     decision_ids, decision_bindings = load_decision_holds(current_holds)
     held_sources = {identifier.split(':decision:', 1)[0] for identifier in decision_ids} | decision_ids
-    prepared = prepare_tokenizer(args.base_tokenizer) if prepared is None else prepared
+    requested_profile = getattr(args, 'history_reasoning_policy', None)
+    prepared = prepare_tokenizer(args.base_tokenizer,
+        history_reasoning_policy=requested_profile) if prepared is None else prepared
     prepared.validate(args.base_tokenizer)
     tokenizer = prepared.tokenizer
+    prepared_profile = resolve_explicit_history_profile(requested_profile, prepared)
+    if (prepared_profile is not None
+            and tokenizer.natlang_history_reasoning.get('policy') != prepared_profile):
+        raise ValueError('prepared tokenizer history-reasoning profile differs from requested source conversion')
     source_fp, expanded_fp = prepared.source_fingerprint, prepared.expanded_fingerprint
     template_backbone = prepared.rendering_configuration.get('history_reasoning', {}).get('backbone')
     if template_backbone not in ('lfm2', 'mellum'):
@@ -511,6 +543,8 @@ def _convert(args, prepared):
         'runtime': {'files': runtime['files'], 'fingerprint': runtime['fingerprint']},
         'chunk_sessions': args.chunk_sessions,
         'held_group_closure_sha256': canonical_json_sha256_hex(sorted(held))}
+    if prepared_profile is not None:
+        binding['explicit_history_reasoning_policy'] = prepared_profile
     shard_root = args.output / 'session-shards'
     state_path = args.output / 'resume-state.json'
     previous_state_frontier = 0
@@ -590,7 +624,8 @@ def _convert(args, prepared):
             return
         split = 'test' if groups & held else 'train'
         for graph in session_graphs(value, tokenizer, source_fingerprint=source_fp,
-                                    expanded_fingerprint=expanded_fp, split=split):
+                                    expanded_fingerprint=expanded_fp, split=split,
+                                    explicit_history_reasoning_policy=prepared_profile):
             writers[split].write(graph)
             shard_counts['graphs:'+split] += 1
             if graph.get('conversion', {}).get('acquired_session', {}).get('view') == 'full-prefix-reasoning-target':
@@ -695,6 +730,8 @@ def _convert(args, prepared):
         'source_tokenizer_fingerprint': source_fp, 'expanded_tokenizer_fingerprint': expanded_fp,
         'builder_sha256': sha256_file_hex(__file__), 'runtime': runtime,
         'prepared_tokenizer': prepared.binding,
+        **({'explicit_history_reasoning_policy': prepared_profile}
+           if prepared_profile is not None else {}),
         'counts': dict(counts), 'outputs': outputs, 'training_admission': False,
         'source_record_count': source_rows, 'held_group_closure_sha256': binding['held_group_closure_sha256'],
         'shards': shard_receipts, 'runtime_continuation': runtime_continuation,

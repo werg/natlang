@@ -354,14 +354,43 @@ def save_shared(policy, participants, vae, optimizer, *, training, device):
             continue  # mechanism tests may use a small in-memory tokenizer
         directory = policy.out/'semantic-tokenizers'/canonical_json_sha256_hex(name)
         entry.tokenizer.save_pretrained(directory)
+        from ..data.text_corpus import tokenizer_fingerprint
+        history_profile = getattr(entry.tokenizer, 'natlang_history_reasoning', None)
+        declared_profile = entry.config.get('history_reasoning_policy')
+        if declared_profile is not None and (not isinstance(history_profile, dict)
+                or history_profile.get('policy') != declared_profile):
+            raise ValueError('semantic participant tokenizer profile differs from its checkpoint configuration')
+        if isinstance(history_profile, dict):
+            history_binding = {'schema': 'natlang.raw-native-tokenizer-history/1',
+                'checkpoint_sha256': checkpoint_sha,
+                'tokenizer_fingerprint': tokenizer_fingerprint(entry.tokenizer),
+                'history_reasoning': dict(history_profile)}
+            history_path = directory / f'natlang-history-reasoning-{checkpoint_sha}.json'
+            if history_path.exists():
+                if json.loads(history_path.read_text(encoding='utf-8')) != history_binding:
+                    raise ValueError('immutable semantic tokenizer history binding changed')
+            else:
+                write_json_durable(history_path, history_binding)
+        selected_sidecar = (history_path.name if isinstance(history_profile, dict) else None)
         tokenizers[name] = {'path': str(directory.relative_to(policy.out)),
+            **({'history_reasoning_binding': {
+                'path': selected_sidecar,
+                'sha256': sha256_file_hex_cached(history_path)}} if selected_sidecar else {}),
+            # The selected checkpoint's profile is a normal immutable tokenizer
+            # dependency. Older checkpoint-named sidecars stay out of this
+            # export so a later save cannot mutate an earlier adapter closure.
             'files': {str(path.relative_to(directory)): sha256_file_hex_cached(path)
-                      for path in directory.rglob('*') if path.is_file()}}
+                      for path in directory.rglob('*') if path.is_file()
+                      and (not path.name.startswith('natlang-history-reasoning-')
+                           or path.name == selected_sidecar)
+                      and path.name != 'natlang-history-reasoning.json'}}
     from .native_continuation import progress_obligations, raw_communication_rows
     export = {'schema': 'natlang.native-semantic-adapter/1',
         'checkpoint': {'path': str(policy.slot.resolve()), 'sha256': checkpoint_sha},
         'specification_sha256': canonical_json_sha256_hex(vae.specification()),
         'models': {name: {'native_identity': identity,
+                        **({'history_reasoning_policy': participants[name].tokenizer.natlang_history_reasoning['policy']}
+                           if isinstance(getattr(participants[name].tokenizer,'natlang_history_reasoning',None),dict) else {}),
                         'mandatory_sft':progress_obligations(participants[name].sft_progress),
                         'raw_communication_rows':raw_communication_rows(participants[name].sft_progress),
                         'marker_ids':list(participants[name].model.marker_ids),

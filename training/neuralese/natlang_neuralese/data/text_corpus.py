@@ -482,7 +482,10 @@ def _native_gold_segments(tokenizer, turns, tools, *, empty_thought=True, prompt
     """Run the shared serving/native renderer and return its escaped segments."""
     from ..serve.chat import bind_history_reasoning, render_messages, render_with_empty_thought
     from .prompt_rendering import apply_prompt_rendering
-    bind_history_reasoning(tokenizer)
+    # Prepared/checkpoint-bound profiles are explicit recipe state. Preserve
+    # them across each shared serving render instead of reapplying defaults.
+    bound = getattr(tokenizer, 'natlang_history_reasoning', {})
+    bind_history_reasoning(tokenizer, policy=bound.get('policy'))
     turns, tools = apply_prompt_rendering(turns, tools, prompt_rendering)
     def apply_template(turns, schemas):
         return tokenizer.apply_chat_template(
@@ -1560,7 +1563,8 @@ def native_gold_packet(tokenizer, messages, target, tools, *, prompt_rendering="
     """
     from ..serve.chat import assistant_reply_segments, bind_history_reasoning, render_messages, split_escaped
     from .prompt_rendering import apply_prompt_rendering
-    bind_history_reasoning(tokenizer)
+    bound = getattr(tokenizer, 'natlang_history_reasoning', {})
+    bind_history_reasoning(tokenizer, policy=bound.get('policy'))
     messages, tools = apply_prompt_rendering(messages, tools, prompt_rendering)
     if list(_message_neuralese_ids(target)):
         raise ValueError("ordinary gold text target contains unresolved neuralese blocks")
@@ -1839,7 +1843,8 @@ def _gold_text_rows(records, pieces, *, tokenizer, preview_only, require_indepen
     if not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
         raise ValueError("precomputed tokenizer fingerprint must be a lowercase SHA-256")
     # The backbone's declared history-reasoning policy (chat.BACKBONE_HISTORY_REASONING), asserted by a probe.
-    history_reasoning = dict(bind_history_reasoning(tokenizer).natlang_history_reasoning)
+    bound = getattr(tokenizer, 'natlang_history_reasoning', {})
+    history_reasoning = dict(bind_history_reasoning(tokenizer, policy=bound.get('policy')).natlang_history_reasoning)
     record_rows = list(records)
     static_derivations=dict(static_derivations or {})
     if preview_only and static_derivations:raise ValueError("static training derivations cannot use preview admission")

@@ -27,6 +27,25 @@ def test_shared_file_digest_does_not_qualify_wrong_participant_or_adapter(tmp_pa
             validate_actor_receipts({'endpoint': {**receipt, **change}}, policy_id=binding['sha256'], neuralese_server=True, expected_native=expected)
 
 
+def test_authenticated_history_profile_must_match_actual_actor_renderer():
+    identity = {'checkpoint_sha256':'a'*64, 'tokenizer_fingerprint':'b'*64,
+        'embedding_weight_sha256':'c'*64, 'architecture':'lfm2'}
+    profile = {'policy':'keep','backbone':'lfm2','template_kwargs':{},'probe':'keep'}
+    expected = {'native_identity':identity,'native_participant':'lfm',
+        'semantic_adapter_sha256':'d'*64,'history_reasoning':profile}
+    receipt = {'schema':'natlang.rl-policy-binding/2','communication':'native-state',
+        'checkpoint_sha256':'a'*64,'native_identity':identity,'native_participant':'lfm',
+        'semantic_adapter_sha256':'d'*64,'history_reasoning':profile}
+    validate_actor_receipts({'endpoint':receipt},policy_id='a'*64,neuralese_server=True,
+        expected_native=expected)
+    for wrong in ({**profile,'policy':'last_turn_only'},
+                  {**profile,'probe':'drops-history'},
+                  {**profile,'template_kwargs':{'preserve_thinking':False}}):
+        with pytest.raises(ValueError,match='requested shared participant'):
+            validate_actor_receipts({'endpoint':{**receipt,'history_reasoning':wrong}},
+                policy_id='a'*64,neuralese_server=True,expected_native=expected)
+
+
 @pytest.mark.parametrize('rl,failure_kind', [(False, 'exit'), (True, 'exit'),
     (False, 'launch'), (True, 'launch'), (False, 'missing-completion'), (False, 'invalid-completion')])
 def test_failed_child_retries_preserved_work_without_marking_success(tmp_path, monkeypatch, rl, failure_kind):
@@ -209,6 +228,13 @@ def test_actual_shared_actor_attests_loaded_participant_and_adapter(tmp_path):
     expected = expected_native_actor(adapter, 'student', digest)
     validate_actor_receipts({'actual-engine': engine.rl_policy_binding}, policy_id=digest,
                            neuralese_server=True, expected_native=expected)
+    assert engine.rl_policy_binding['history_reasoning'] == engine.tokenizer.natlang_history_reasoning
+    if 'history_reasoning' in expected:
+        forged_profile = dict(engine.rl_policy_binding)
+        forged_profile['history_reasoning'] = {**expected['history_reasoning'], 'policy': 'keep'}
+        with pytest.raises(ValueError, match='requested shared participant'):
+            validate_actor_receipts({'actual-engine': forged_profile}, policy_id=digest,
+                neuralese_server=True, expected_native=expected)
     assert engine.dialect == 'semantic-state/' + expected['semantic_adapter_sha256']
     with pytest.raises(ValueError, match='requested shared participant'):
         validate_actor_receipts({'actual-engine': engine.rl_policy_binding}, policy_id=digest,

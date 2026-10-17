@@ -72,6 +72,41 @@ def test_actual_reusable_context_rejects_backend_render_and_binding_mutation(bas
     tokenizer.apply_chat_template=old;prepared.validate(base)
 
 
+@pytest.mark.skipif(not (BASES[0]/'tokenizer.json').is_file(), reason='LFM tokenizer unavailable')
+def test_explicit_keep_profile_is_bound_into_prepared_source_renderer():
+    prepared=builder.prepare_tokenizer(BASES[0],history_reasoning_policy='keep')
+    assert prepared.tokenizer.natlang_history_reasoning['policy']=='keep'
+    messages=[{'role':'user','content':'task'},
+        {'role':'assistant','reasoning_content':'earlier sentinel','content':'step'},
+        {'role':'tool','content':'result'},
+        {'role':'assistant','reasoning_content':'latest sentinel','content':'done'}]
+    rendered=prepared.tokenizer.apply_chat_template(messages,tokenize=False,add_generation_prompt=False)
+    assert 'earlier sentinel' in rendered and 'latest sentinel' in rendered
+
+
+@pytest.mark.skipif(not (BASES[0]/'tokenizer.json').is_file(), reason='LFM tokenizer unavailable')
+def test_keep_profile_moves_all_reasoning_targets_into_the_single_whole_graph():
+    value=normalized('profile-source')
+    default=builder.prepare_tokenizer(BASES[0])
+    kept=builder.prepare_tokenizer(BASES[0],history_reasoning_policy='keep')
+    default_graphs=list(builder.session_graphs(value,default.tokenizer,
+        source_fingerprint=default.source_fingerprint,expanded_fingerprint=default.expanded_fingerprint,
+        split='train'))
+    keep_graphs=list(builder.session_graphs(value,kept.tokenizer,
+        source_fingerprint=kept.source_fingerprint,expanded_fingerprint=kept.expanded_fingerprint,
+        split='train'))
+    assert len(default_graphs)==2
+    assert [row['conversion']['acquired_session']['view'] for row in default_graphs]==[
+        'whole-trajectory','full-prefix-reasoning-target']
+    assert len(keep_graphs)==1
+    proof=keep_graphs[0]['conversion']['acquired_session']
+    assert proof['view']=='whole-trajectory'
+    assert proof['auxiliary_reasoning_assistant_ordinals']==[]
+    assert all(item['present_in_whole_view'] is True
+               for item in proof['reasoning_coverage'].values())
+    assert proof['original_target_ids']==default_graphs[0]['conversion']['acquired_session']['original_target_ids']
+
+
 def test_shared_inventory_preserves_base_result_without_tokenizer_weight_reads(tmp_path,monkeypatch):
     for name in ('config.json','tokenizer.json','tokenizer_config.json','chat_template.jinja','model.safetensors','irrelevant.txt'):
         (tmp_path/name).write_text(name)

@@ -220,7 +220,7 @@ def _semantic_dependencies(adapter,checkpoint_sha256):
         raise ValueError('portable semantic adapter must bind the exact bundled participants/checkpoint')
     resolve_composite_artifact(receipt['checkpoint'],adapter)
     result = {}
-    for binding in receipt['tokenizers'].values():
+    for name,binding in receipt['tokenizers'].items():
         directory = (adapter.parent/binding['path']).resolve(strict=True)
         if adapter.parent not in directory.parents:
             raise ValueError('semantic tokenizer escaped its exact export directory')
@@ -230,6 +230,27 @@ def _semantic_dependencies(adapter,checkpoint_sha256):
                 raise ValueError('semantic tokenizer content differs from its adapter export')
             logical = str(source.relative_to(adapter.parent))
             result[logical] = (source,digest)
+        history = binding.get('history_reasoning_binding')
+        expected_profile = receipt['models'][name].get('history_reasoning_policy')
+        if history is None:
+            if expected_profile is not None:
+                raise ValueError('semantic participant history profile has no portable tokenizer sidecar')
+        else:
+            relative = history.get('path')
+            if not isinstance(relative,str) or not relative or Path(relative).is_absolute():
+                raise ValueError('semantic tokenizer history sidecar path must be relative')
+            sidecar = (directory/relative).resolve(strict=True)
+            if directory not in sidecar.parents or relative not in binding['files']:
+                raise ValueError('semantic tokenizer history sidecar is outside its declared portable inventory')
+            digest = binding['files'][relative]
+            if history.get('sha256') != digest or sha256_file_hex_cached(sidecar) != digest:
+                raise ValueError('semantic tokenizer history sidecar differs from its authenticated inventory')
+            detail = json.loads(sidecar.read_text(encoding='utf-8'))
+            if (detail.get('schema') != 'natlang.raw-native-tokenizer-history/1'
+                    or detail.get('checkpoint_sha256') != checkpoint_sha256
+                    or detail.get('tokenizer_fingerprint') != receipt['models'][name]['native_identity']['tokenizer_fingerprint']
+                    or detail.get('history_reasoning',{}).get('policy') != expected_profile):
+                raise ValueError('semantic tokenizer history sidecar differs from its exact checkpoint profile')
     return result
 
 
