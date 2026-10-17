@@ -548,7 +548,19 @@ def test_resource_only_renderer_parent_continues_exact_trajectory_receipts(tmp_p
     parent_sha = renderer.SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256
     job = (str(selected), str(out), 'lfm25', {}, 'fixture', set(), set(), False,
            None, ('whole-trajectory',), False, set(), None, input_binding, None, parent_sha)
-    parent_code = renderer._resource_parent_code_binding(parent_sha)
+    parent_code = renderer._resource_parent_code_binding(parent_sha, job)
+    text_corpus_path = str(renderer.ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py')
+    assert parent_code[text_corpus_path] == renderer.LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION[
+        'historical_sha256']
+    explicit_inputs = dict(input_binding)
+    explicit_inputs['history_reasoning_policies'] = {'lfm25': 'keep'}
+    explicit_job = (*job[:13], explicit_inputs, *job[14:])
+    explicit_parent_code = renderer._resource_parent_code_binding(parent_sha, explicit_job)
+    assert explicit_parent_code[text_corpus_path] == renderer.LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION[
+        'current_sha256']
+    assert renderer._render_job_binding_from_job(
+        explicit_job, renderer.file_sha(selected), explicit_parent_code) != renderer._render_job_binding_from_job(
+            job, renderer.file_sha(selected), parent_code)
     source_digest = renderer.file_sha(selected)
     parent_job_binding = renderer._render_job_binding_from_job(job, source_digest, parent_code)
     rows_by_trajectory = {}
@@ -585,7 +597,7 @@ def test_resource_only_renderer_parent_continues_exact_trajectory_receipts(tmp_p
         expected_job_binding=renderer._render_job_binding_from_job(
             job, renderer.file_sha(selected), renderer._render_code_binding()))
     with __import__('pytest').raises(ValueError, match='exact reviewed resource-only continuation'):
-        renderer._resource_parent_code_binding('f' * 64)
+        renderer._resource_parent_code_binding('f' * 64, job)
 
 
 def test_legacy_search_binding_matches_historical_equation_without_null_render_inputs(tmp_path):

@@ -1377,11 +1377,27 @@ def _render_code_binding():
     return binding
 
 
-def _resource_parent_code_binding(parent_renderer_sha256):
+def _resource_parent_code_binding(parent_renderer_sha256, job=None):
     if parent_renderer_sha256 != SEARCH_RESOURCE_ONLY_PARENT_RENDERER_SHA256:
         raise ValueError('renderer parent SHA lacks the exact reviewed resource-only continuation')
     binding = _render_code_binding()
-    binding[str(Path(__file__).resolve())] = parent_renderer_sha256
+    renderer_path = str(Path(__file__).resolve())
+    text_corpus_path = str(ROOT / 'training/neuralese/natlang_neuralese/data/text_corpus.py')
+    binding[renderer_path] = parent_renderer_sha256
+    # The active Search done receipts were created before the KEEP profile
+    # integration, with the exact default-profile text-corpus dependency from
+    # the reviewed b054→6b59 parent chain. Reuse that binding only when this
+    # tokenizer has no explicit profile; explicit KEEP jobs must never borrow
+    # the default-profile output identity.
+    transition = LEGACY_SEARCH_TEXT_CORPUS_DEFAULT_PROFILE_TRANSITION
+    if binding.get(text_corpus_path) == transition['current_sha256']:
+        profiles = [part.get('history_reasoning_policies') for part in (job or ())
+                    if isinstance(part, dict) and 'history_reasoning_policies' in part]
+        tokenizer_name = job[2] if job and len(job) > 2 else None
+        selected_profile = (profiles[-1].get(tokenizer_name)
+                            if profiles and isinstance(profiles[-1], dict) else None)
+        if selected_profile in (None, 'backbone-default'):
+            binding[text_corpus_path] = transition['historical_sha256']
     return binding
 
 
@@ -1643,7 +1659,7 @@ def render_shard(job):
     resource_parent_job_binding = None
     if resource_parent_sha:
         resource_parent_job_binding = _render_job_binding_from_job(
-            job, source_file_sha, _resource_parent_code_binding(resource_parent_sha))
+            job, source_file_sha, _resource_parent_code_binding(resource_parent_sha, job))
 
     # The SQLite row index is wholly rebuildable from the selected shard. Keep
     # it on a caller-selected fast local scratch volume when supplied; durable
@@ -2289,7 +2305,7 @@ def main(argv=None):
                         if parent_sha is None or result['renderer_code_sha256'] != parent_sha:
                             raise ValueError(f'completed shard renderer identity is neither current nor explicitly continued: {done}')
                         parent_binding = _render_job_binding_from_job(
-                            job, source_digest, _resource_parent_code_binding(parent_sha))
+                            job, source_digest, _resource_parent_code_binding(parent_sha, job))
                         if result.get('render_job_binding') != parent_binding:
                             raise ValueError(f'completed shard resource-parent job binding mismatch: {done}')
                     if result.get('source_sha256') is None:
