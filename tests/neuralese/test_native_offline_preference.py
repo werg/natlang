@@ -36,6 +36,22 @@ def example_spec(tmp_path,*,split='train',fingerprint='tokenizer',source_sha='a'
     return example,NativePreferenceObjective(path)
 
 
+def test_recipe_input_reaches_actual_preference_entrypoint(tmp_path,monkeypatch):
+    from natlang_neuralese.train import native_preference,native_state_sft
+    from natlang_neuralese.train.recipe import stage_input_args
+    _,objective=example_spec(tmp_path)
+    arguments=stage_input_args({'objective_spec':{'path':str(objective.path)}},'native_offline_preference')
+    received=[]
+    def trainer(argv):
+        path=argv[argv.index('--objective-spec')+1]
+        received.append(NativePreferenceObjective(path).binding())
+        assert '--objective-continuation' in argv
+        return 0
+    monkeypatch.setattr(native_state_sft,'main',trainer)
+    assert native_preference.main(arguments)==0
+    assert received==[objective.binding()]
+
+
 class TinyGraphModel(nn.Module):
     def __init__(self):
         super().__init__();self.embedding=nn.Embedding(16,7);self.readout=nn.Linear(7,16,bias=False)

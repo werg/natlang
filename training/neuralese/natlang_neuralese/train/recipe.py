@@ -537,7 +537,7 @@ def stage_input_args(resolved, kind):
             args += [flag, resolved[role]['path']]
     for role in ('rollouts', 'records', 'pieces', 'text_data', 'continued_text_data', 'native_graphs',
                  'held_native_graphs', 'continued_native_graphs', 'continued_held_native_graphs', 'foundation_native_graphs', 'withdrawn_native_graphs', 'pending_native_sources',
-                 'rl_block_bundle', 'continue_from', 'continue_identity',
+                 'objective_spec', 'rl_block_bundle', 'continue_from', 'continue_identity',
                  'continue_monitor_reference', 'student_checkpoint', 'warmup_checkpoint',
                  'warmup_manifest', 'warmup_heads', 'warmup_runtime_report', 'harness_records', 'harness_pieces',
                  'direct_parent_proof', 'aligned_projection'):
