@@ -179580,6 +179580,83 @@
         "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0026",
         "qwen-verified-positive-native-graphs-20261017-recovery7853-tranche0027"
       ]
+    },
+    {
+      "build": {
+        "audit": "admission-d32-source04-member-v1/audit.json",
+        "audit_sha256": "52a5653c4ebe9f5af09f19561ac352cf74ba27ef8b8933e5644d6f772fe7a26f"
+      },
+      "documents": {
+        "lfm25": {
+          "auxiliary_reasoning_graphs:train": 81093,
+          "graphs:train": 82877,
+          "max_row_tokens": 124533,
+          "positive_sessions": 1784,
+          "source-render-pending:tool-arguments": 29,
+          "tokens:test": 0,
+          "tokens:train": 3077354573
+        },
+        "mellum21": {
+          "graphs:train": 1784,
+          "max_row_tokens": 155413,
+          "positive_sessions": 1784,
+          "source-render-pending:tool-arguments": 29,
+          "tokens:test": 0,
+          "tokens:train": 84773781
+        }
+      },
+      "id": "d32-source04-member-v1",
+      "include": [
+        "96e2f587c5df0be831a36c15c5fa81e0fc0419ffb6b78f0d4f1a95660abd584b/lfm25/omissions.jsonl",
+        "96e2f587c5df0be831a36c15c5fa81e0fc0419ffb6b78f0d4f1a95660abd584b/lfm25/receipt.json",
+        "96e2f587c5df0be831a36c15c5fa81e0fc0419ffb6b78f0d4f1a95660abd584b/lfm25/resume-state.json",
+        "96e2f587c5df0be831a36c15c5fa81e0fc0419ffb6b78f0d4f1a95660abd584b/lfm25/test/native-graphs.jsonl.zst",
+        "96e2f587c5df0be831a36c15c5fa81e0fc0419ffb6b78f0d4f1a95660abd584b/lfm25/train/native-graphs.jsonl.zst",
+        "96e2f587c5df0be831a36c15c5fa81e0fc0419ffb6b78f0d4f1a95660abd584b/mellum21/omissions.jsonl",
+        "96e2f587c5df0be831a36c15c5fa81e0fc0419ffb6b78f0d4f1a95660abd584b/mellum21/receipt.json",
+        "96e2f587c5df0be831a36c15c5fa81e0fc0419ffb6b78f0d4f1a95660abd584b/mellum21/resume-state.json",
+        "96e2f587c5df0be831a36c15c5fa81e0fc0419ffb6b78f0d4f1a95660abd584b/mellum21/test/native-graphs.jsonl.zst",
+        "96e2f587c5df0be831a36c15c5fa81e0fc0419ffb6b78f0d4f1a95660abd584b/mellum21/train/native-graphs.jsonl.zst",
+        "admission-d32-source04-member-v1/audit.json",
+        "admission-d32-source04-member-v1/lfm25-train-sources.json",
+        "admission-d32-source04-member-v1/mellum21-train-sources.json",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/decision-holds/native-non-success-20261015-v1.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/acquired-connected-source-groups.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/acquired-remaining-complete-source/source-groups.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/full/source-groups/text-data.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/program-header/source-groups/text-data.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/held-union/whole-trajectory/source-groups/text-data.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/protection-manifest.json",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/quality-groups.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-group-components.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-reviews/datasets.json",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-reviews/family-holds.json",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/1d5b29b2e099229bee9bcc2562aee967ecc4666d211b2ade9873c597a0542704/source-reviews/holds.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/decision-holds/native-non-success-20261015-v1.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/decision-holds/semantic-ticket-crisp-bypass-20261015-v3.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/acquired-connected-source-groups.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/acquired-remaining-complete-source/source-groups.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/full/source-groups/text-data.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/program-header/source-groups/text-data.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/held-union/whole-trajectory/source-groups/text-data.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/inherited-components.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/inherited-projection.json",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/protection-manifest.json",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/quality-groups.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-group-components.jsonl",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-reviews/datasets.json",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-reviews/family-holds.json",
+        "admission-d32-source04-member-v1/protection-continuation-evidence/f085b5dc18d3d40b3536d7374e9418d5933635966d5dc9b3010c1b4b91137349/source-reviews/holds.jsonl",
+        "admission-d32-source04-member-v1/row-proof.jsonl"
+      ],
+      "license": "exact source license facts retained in each graph acquired_session provenance",
+      "owner": "dgx",
+      "path": "runs/acquired-connected-native-graphs-20261017-v2/D32",
+      "source_class": "source-curated-complete-acquired-agent-native-session-graphs",
+      "split": "original source split and complete cross-source global held-group closure; no truncation",
+      "training_admission": true,
+      "training_admission_reason": "One complete normalized source member is source-curated, not oracle or native-execution verified. Both pinned tokenizer views preserve the full global normalized-source held/quality/pending closure and exact decision holds. Other normalized source members remain explicitly pending."
     }
   ],
   "coverage_backlog": [
