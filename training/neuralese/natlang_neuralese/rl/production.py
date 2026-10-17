@@ -647,6 +647,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 if not checkpoint.is_file() or not learner_report.is_file():
                     raise RuntimeError('learner produced no recoverable full checkpoint/progress report')
                 progress = json.loads(learner_report.read_text())
+                from ..train.native_operation_report import control_progress
                 coefficient_update=bool(config.get('coefficient_policy') and mode!='seed')
                 if coefficient_update:
                     if (progress.get('schema')!='natlang.native-coefficient-training-report/1'
@@ -662,7 +663,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 per_stage[str(stage_out)] = counts
                 write_json_durable(state_path, state)
                 if not progress.get('completed') and not qualified_seed_boundary(config,mode,progress,checkpoint):
-                    state.update(phase='learner_pending', partial_checkpoint=str(checkpoint), last_learner_progress=progress)
+                    state.update(phase='learner_pending', partial_checkpoint=str(checkpoint), last_learner_progress=control_progress(progress,learner_report))
                     write_json_durable(state_path, state)
                     pending = True
                     break  # shared trainer resumes this exact substage/output on retry
@@ -677,7 +678,7 @@ def run(config_path, *, rounds=None, defer_native_refresh=False, stop=None):
                 if str(stage_out) not in accounted:
                     accounted.add(str(stage_out))
                     state.update(trained_task_ids=sorted(trained_ids), accounted_stages=sorted(accounted),
-                        last_learner_progress=progress, phase='publishing')
+                        last_learner_progress=control_progress(progress,learner_report), phase='publishing')
                     write_json_durable(state_path, state)
                 # Next full substage continues exact P/TCP + optimizer from this one.
                 if coefficient_update:

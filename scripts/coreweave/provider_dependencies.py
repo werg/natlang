@@ -245,6 +245,8 @@ def dependency_closure(request, *, namespace='/work/native-production'):
         state = json.loads(bound(request['state']).read_text())
         for key in ('checkpoint', 'pending_native_checkpoint', 'partial_checkpoint'):
             if state.get(key): checkpoint(state[key])
+        progress=state.get('last_learner_progress') or {}
+        if progress.get('full_report'):bound(progress['full_report'])
         if state.get('pending_semantic_source'):
             policy_sources([state['pending_semantic_source']])
     if request.get('semantic_adapter'):

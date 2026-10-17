@@ -208,7 +208,11 @@ def _current_checkpoint(config):
 def _progress(checkpoint):
     from ..train.checkpoint_policy import CheckpointPolicy
     from ..train.native_continuation import progress_obligations
-    state=CheckpointPolicy.load(_bound(checkpoint))
+    path=_bound(checkpoint)
+    from ..train.native_operation_report import saved_progress
+    summary=saved_progress(checkpoint)
+    if summary is not None:return summary
+    state=CheckpointPolicy.load(path)
     return progress_obligations(state['training']['sft_progress'])
 
 

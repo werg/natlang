@@ -162,6 +162,8 @@ def execute(config,state,state_path,control):
             state['phase']='requested_stop';write_json_durable(state_path,state);return state
         raise RuntimeError('mandatory supervised continuation produced no durable checkpoint/report')
     report=json.loads(report_path.read_text())
+    from ..train.native_operation_report import control_progress
+    summary=control_progress(report,report_path)
     boundary=report.get('continuation_boundary') or {}
     admission = report.get('pending_source_admission') or {}
     declared = config.get('pending_native_sources')
@@ -176,13 +178,13 @@ def execute(config,state,state_path,control):
     usable=(metadata_admitted or report.get('completed') is True or (boundary.get('kind')=='semantic-refresh'
         and boundary.get('reached') is True and boundary.get('new_optimizer_updates',0)>0))
     if not usable or report.get('numerics_ok') is not True:
-        state.update(phase='mandatory_sft_pending',last_learner_progress=report)
+        state.update(phase='mandatory_sft_pending',last_learner_progress=summary)
         write_json_durable(state_path,state)
         if control is not None and control.stop.requested:return state
         raise RuntimeError('mandatory supervised continuation needs its actual qualified refresh boundary')
     state.update(phase='awaiting_semantic_refresh',pending_native_checkpoint=str(checkpoint),
-        pending_native_round_dir=str(Path(config['out'])),last_learner_progress=report,
-        mandatory_sft=report.get('mandatory_sft'))
+        pending_native_round_dir=str(Path(config['out'])),last_learner_progress=summary,
+        mandatory_sft=summary.get('mandatory_sft'))
     if config.get('native_actor_mode')=='raw-state' and report.get('resident_adoption'):
         from ..train.native_resident import current,binding,bound
         from ..common.jsonio import write_bytes_durable
