@@ -1128,8 +1128,10 @@ def main(argv=None):
         promoted_names += tuple(
             'interface.'+name for name in (token_upgrade or {}).get('promoted_parameters', {}))
         added_names = ('interface.extra_input_rows', 'interface.extra_output_rows') if token_upgrade and token_upgrade['added'] else ()
-        optimizer.load_state_dict(resume['optimizer'], allow_added_names=added_names,
-            allow_promoted_names=promoted_names, native_optimizer_migration=args.native_optimizer_migration)
+        load_options = {'native_optimizer_migration': args.native_optimizer_migration}
+        if added_names:load_options['allow_added_names'] = added_names
+        if promoted_names:load_options['allow_promoted_names'] = promoted_names
+        optimizer.load_state_dict(resume['optimizer'], **load_options)
         # Adaptive production may tune the step size without discarding moments.
         # The new value is recorded in optimizer_options while moments/RNG stay exact.
         from .native_learning_rates import apply_native_learning_rates
