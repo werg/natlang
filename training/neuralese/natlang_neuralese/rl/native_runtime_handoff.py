@@ -70,6 +70,8 @@ def _bare_authority(authority,record,saved,config):
     if record.get('resident'):
         raise ValueError('bare runtime authority cannot replace a genuine resident plan')
     training=saved['training'];options=training.get('options') or {}
+    if options.get('resident_data_directory') or options.get('resident_adoption'):
+        raise ValueError('bare runtime authority omitted its actual resident owner evidence')
     actual=options.get('recipe_binding')
     if isinstance(actual,str):actual=json.loads(actual)
     lineage=config.get('recipe_lineage_sha256')

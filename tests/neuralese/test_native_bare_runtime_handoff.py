@@ -89,11 +89,12 @@ def test_bare_policy_owner_keeps_authentic_carried_production_stage(bare):
     assert bare['pin'].read_bytes()==before
 
 
-@pytest.mark.parametrize('change',['stage','sources','missing-qualification','failed-qualification','wrong-qualified-profile'])
+@pytest.mark.parametrize('change',['resident','stage','sources','missing-qualification','failed-qualification','wrong-qualified-profile'])
 def test_bare_saved_stage_and_profile_evidence_cannot_be_invented(bare,change):
     saved=copy.deepcopy(bare['saved']);record,_=handoff.verify_handoff(bare['handoff'])
     authority=json.loads(Path(bare['proof']['path']).read_text())['bare_direct_owner']
-    if change=='stage':saved['training']['options']['stage_id']='missing';saved['training']['sft_progress']={}
+    if change=='resident':saved['training']['options']['resident_data_directory']='/actual/resident'
+    elif change=='stage':saved['training']['options']['stage_id']='missing';saved['training']['sft_progress']={}
     elif change=='sources':saved['training']['source_receipts'][0]['sha256']='0'*64
     elif change=='missing-qualification':saved['training']['options'].pop('memory_qualification')
     elif change=='failed-qualification':saved['training']['options']['memory_qualification']['passed']=False
