@@ -76,6 +76,25 @@ def test_publish_then_extend_without_original_normalized_text(tmp_path,monkeypat
     with pytest.raises(ValueError,match='differs'):teacher.current_protection(second)
 
 
+def test_extension_resolves_declared_receipts_through_verified_mount_alias(tmp_path,monkeypatch):
+    original=base(tmp_path,monkeypatch)
+    first=project(original,tmp_path/'closed')
+    extra=tmp_path/'new-machine'/'D17'
+    export(extra,[(['B','D'],'train'),(['P2','P3'],'train')])
+    actual=extra/'one'/'export.json'
+    alias=tmp_path/'normalized-alias'
+    alias.symlink_to(extra,target_is_directory=True)
+    complete=json.loads((extra/'complete.json').read_text())
+    complete['files'][0]['receipt']=str(alias/'one'/'export.json')
+    (extra/'complete.json').write_text(json.dumps(complete))
+
+    second=project(first,tmp_path/'extended',exports=[extra])
+    projected=teacher.current_protection(second)
+    assert projected['held']=={'A','B','C','D'}
+    assert projected['pending']=={'P1','P2','P3'}
+    assert verify_global_source_closure(second,projected)['normalized_sessions']==2
+
+
 def test_durable_source_closure_receipt_reuses_only_exact_current_inputs(tmp_path,monkeypatch):
     original=base(tmp_path,monkeypatch)
     first=project(original,tmp_path/'closed')

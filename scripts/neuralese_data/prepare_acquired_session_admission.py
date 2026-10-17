@@ -82,7 +82,12 @@ def acquired_source_closure(path, protection):
     for directory in {export_path.parent.parent for export_path in seen}:
         complete_path = directory / 'complete.json'
         complete = json.loads(complete_path.read_text())
-        declared.update(Path(item['receipt']) for item in complete['files'] if item['status'] in {'exported', 'reused'})
+        # Complete inventories may retain a logical mount alias while a
+        # verified projection binds the canonical target path. Compare the
+        # actual files, not their spelling, after resolving every declared
+        # receipt; the receipt bytes remain checked by the bindings above.
+        declared.update(Path(item['receipt']).resolve(strict=True) for item in complete['files']
+                        if item['status'] in {'exported', 'reused'})
     if declared != seen:
         raise ValueError('global held closure omits a declared normalized source-file inventory')
     from scripts.neuralese_data.splits import close_group_sets
@@ -256,6 +261,19 @@ def source_member_scope(projection, selected_bindings):
             {'path': item['path'], 'sha256': item['sha256'], 'source_sha256': item['source_sha256']}
             for item in declared if (item.get('sha256'), item.get('source_sha256')) != selected],
         'pending_export_count': len(declared) - 1}
+
+
+def incremental_member_source_kind(export):
+    """Return the declared complete-member contract admitted by the incremental path."""
+    contract = export.get('contract', {})
+    source = contract.get('source', {})
+    if isinstance(source.get('path'), str) and source['path'].startswith('jsonl_sft/'):
+        return 'jsonl_sft'
+    if (isinstance(source.get('path'), str) and not source['path'].startswith('dpo/')
+            and contract.get('trajectory_representation') == 'existing complete Trajectory dataclass'
+            and type(contract.get('source_rows')) is int and contract['source_rows'] == 1):
+        return 'complete-trajectory-single-source-row'
+    return None
 
 
 def verify_graph_source(graph, value, *, protection, held_sources, fingerprint):
@@ -535,9 +553,8 @@ def main(argv=None):
         projection = json.loads(args.protection.read_text())
         member_scope = source_member_scope(projection, [{'path': str(export_path.resolve()),
             'sha256': sha256_file_hex(export_path), 'source_sha256': sha256_file_hex(source_path)}])
-        source_kind = export.get('contract', {}).get('source', {}).get('path', '')
-        if not source_kind.startswith('jsonl_sft/'):
-            raise ValueError('incremental SFT member admission cannot consume a preference or non-SFT source')
+        if incremental_member_source_kind(export) is None:
+            raise ValueError('incremental member needs an exact released SFT or single-row complete-trajectory contract')
     held_ids, decision_bindings = load_decision_holds(sorted((ROOT / 'training/decision-holds').glob('*.jsonl')))
     held_sources = held_ids | {value.split(':decision:', 1)[0] for value in held_ids}
     out = args.native_root / ('admission-' + args.id)
@@ -642,8 +659,8 @@ def main(argv=None):
             'new_global_source_closure': global_accounting}
     write_json_durable(out / 'audit.json', audit)
     include.extend(str(path.relative_to(args.native_root)) for path in out.iterdir() if path.is_file())
-    reason = ('One complete normalized SFT source member is source-curated, not oracle or native-execution verified. '
-        'Both pinned tokenizer views preserve the full global 15-export held/quality/pending closure and exact decision holds. '
+    reason = ('One complete normalized source member is source-curated, not oracle or native-execution verified. '
+        'Both pinned tokenizer views preserve the full global normalized-source held/quality/pending closure and exact decision holds. '
         'Other normalized source members remain explicitly pending.') if member_scope is not None else (
         'Source-curated third-party SFT, not oracle or native-execution verified. Exact complete source sessions, '
         'full reasoning views and both pinned tokenizer variants preserve current global held/quality/pending '

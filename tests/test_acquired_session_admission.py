@@ -46,6 +46,18 @@ def test_incremental_member_requires_one_exact_projected_export_and_lists_pendin
         {**selected[0],'source_sha256':'f'*64}])
 
 
+def test_incremental_member_accepts_declared_complete_trajectory_without_broadening_other_sources():
+    from scripts.neuralese_data.prepare_acquired_session_admission import incremental_member_source_kind
+    d13={'contract':{'source':{'path':'qwen35-cooperdata/agent_traj.json'},
+        'source_rows':1,'trajectory_representation':'existing complete Trajectory dataclass'}}
+    assert incremental_member_source_kind(d13)=='complete-trajectory-single-source-row'
+    assert incremental_member_source_kind({'contract':{'source':{'path':'jsonl_sft/train.jsonl'}}})=='jsonl_sft'
+    assert incremental_member_source_kind({**d13,'contract':{**d13['contract'],'source_rows':2}}) is None
+    assert incremental_member_source_kind({**d13,'contract':{**d13['contract'],'source_rows':True}}) is None
+    assert incremental_member_source_kind({'contract':{'source':{'path':'dpo/train.jsonl'},
+        'source_rows':1,'trajectory_representation':'existing complete Trajectory dataclass'}}) is None
+
+
 @pytest.fixture(scope='module',params=BASES,ids=['lfm','mellum'])
 def admitted(request):
     base=request.param

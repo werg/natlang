@@ -247,3 +247,16 @@ Search/OWL migration accepts one exact historical code-binding inventory with
 canonical path labels; its renderer identity is allowlisted and its current
 dependencies must still match the recorded historical bytes. This lets a
 frozen new checkout resume completed work without relabelling old receipts.
+
+## Incremental acquired-session admission
+
+The admission verifier can publish one complete normalized source member while
+retaining the full cohort's global protection closure. It accepts either the
+existing released `jsonl_sft/` contract or one source row whose export explicitly
+declares the existing complete `Trajectory` representation. In both cases it
+binds the member's exact normalized export and source hashes to the full parent
+inventory, checks every paired tokenizer view and every complete session, and
+keeps all sibling exports pending. It does not infer admission from a path name
+alone, waive source identity or split checks, or count registration as exposure.
+This is an extension of the existing exact verifier, not a new source parser or
+training policy.
