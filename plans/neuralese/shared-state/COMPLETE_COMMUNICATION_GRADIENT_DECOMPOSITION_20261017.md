@@ -159,3 +159,19 @@ actual original parent, all module names, inherited state, preserved source RNG
 and zero source updates. It ran in 171.1 seconds with 6.9 GB peak host memory
 and 8.41 GB CUDA allocation. This is a diagnostic execution, not production
 qualification or evidence of task-quality improvement. Production continues.
+
+Feed-forward-only isolation (2026-10-17, 16:25 UTC)
+-------------------------------------------------
+
+Replacing only the 48 stock feed-forward linear products with the float64
+reference, while keeping all other production arithmetic, leaves 53/151
+complete communication gradient comparisons failing. Forward maximum absolute
+error is 1.13249e-6 and cross-entropy absolute difference is 2.86102e-6.
+Thus feed-forward products contribute to the discrepancy, but their isolated
+replacement does not establish complete equivalence. The combined reference
+result above remains distinct from this narrower test.
+
+Receipt `lfm9478-only-stock-ffn-reference-root-20261017.json` records the
+unchanged original parent and this exact intervention. The ledgered execution
+took 131.86 seconds and used 6.1 GB peak host memory. No production arithmetic,
+readiness threshold, optimizer history or source checkpoint was changed.
