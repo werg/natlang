@@ -323,15 +323,14 @@ def test_streamed_resume_preserves_old_group_receipt_and_records_mixed_renderer_
 
     source_digest = renderer.file_sha(selected)
     old_renderer_sha = renderer.LEGACY_SEARCH_RENDERER_SHA256
-    code_binding = renderer.LEGACY_SEARCH_CODE_BINDING
-    old_binding = renderer._render_job_binding(source_digest, 'lfm25', {}, 'fixture', set(), set(), set(),
-                                               False, None, renderings, False, code_binding)
+    old_binding = renderer._legacy_render_job_binding(job, source_digest, old_renderer_sha)
     # The one text-corpus dependency transition is allowed only for the
     # unchanged default profile. A KEEP render must never reuse old default
     # receipts even when the renderer bytes match this reviewed transition.
     with __import__('pytest').raises(ValueError, match='dependency differs'):
         renderer._legacy_render_job_binding(
             (*job, {'history_reasoning_policies': {'lfm25': 'keep'}}), source_digest, old_renderer_sha)
+    code_binding = renderer.LEGACY_SEARCH_CODE_BINDING
     assert set(code_binding) == set(renderer.LEGACY_SEARCH_CODE_BINDING)
     current_code_binding = renderer._render_code_binding()
     lease_path = str(renderer.ROOT / 'scripts/neuralese_data/conversion_output_lease.py')
@@ -661,6 +660,20 @@ def test_explicit_keep_native_turn_ids_are_distinct_and_preserve_source_identity
     assert keep['source_row_id'] == row['id']
     assert keep['source_record_ids'] == row['source_record_ids']
     assert keep['history_reasoning_policy'] == 'keep'
+
+
+def test_explicit_mellum_last_turn_only_ids_are_distinct_from_default_keep():
+    row = {'id': 'text:task-1', 'source_record_ids': ['task-1'], 'text': 'changed last-turn-only bytes'}
+    default_keep = dict(row)
+    renderer.apply_explicit_history_profile_ids([default_keep], None)
+    explicit_last_turn = dict(row)
+    renderer.apply_explicit_history_profile_ids([explicit_last_turn], 'last_turn_only')
+    assert default_keep == row
+    assert explicit_last_turn['id'] == 'text:task-1:history-reasoning:last_turn_only'
+    assert explicit_last_turn['id'] != default_keep['id']
+    assert explicit_last_turn['source_row_id'] == row['id']
+    assert explicit_last_turn['source_record_ids'] == row['source_record_ids']
+    assert explicit_last_turn['history_reasoning_policy'] == 'last_turn_only'
 
 
 def test_actual_render_input_profile_map_covers_all_configured_tokenizers():

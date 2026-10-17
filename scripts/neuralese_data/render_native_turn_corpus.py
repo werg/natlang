@@ -1129,20 +1129,21 @@ def qualified_whole_trajectory_row(row):
 
 def apply_explicit_history_profile_ids(rows, profile):
     """Give a changed explicit rendering its own IDs while retaining source IDs."""
-    if profile in (None, 'last_turn_only'):
+    if profile is None:
         return rows
-    if profile != 'keep':
+    if profile not in ('keep', 'last_turn_only'):
         raise ValueError('unsupported explicit history-reasoning ID profile')
     for row in rows:
         original_id = row['id']
-        expected = original_id + ':history-reasoning:keep'
-        if row.get('history_reasoning_policy') not in (None, 'keep'):
+        expected = original_id + ':history-reasoning:' + profile
+        if row.get('history_reasoning_policy') not in (None, profile):
             raise ValueError('rendered row profile conflicts with the tokenizer profile')
-        if original_id.endswith(':history-reasoning:keep'):
+        if any(original_id.endswith(':history-reasoning:' + name)
+               for name in ('keep', 'last_turn_only')):
             raise ValueError('rendered row already has a history-reasoning profile ID')
         row.setdefault('source_row_id', original_id)
         row['id'] = expected
-        row['history_reasoning_policy'] = 'keep'
+        row['history_reasoning_policy'] = profile
     return rows
 
 

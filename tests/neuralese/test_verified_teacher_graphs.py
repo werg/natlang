@@ -107,6 +107,7 @@ def test_teacher_action_identity_is_bound_to_exact_source_trajectory():
     assert first != converter.teacher_action_graph_id('teacher-program:shared', source_b, 0)
     assert first != converter.teacher_action_graph_id('teacher-program:shared', source_a, 1)
     assert converter.teacher_action_graph_id('teacher-program:shared', source_a, 0, 'keep') == first + ':history-reasoning:keep'
+    assert converter.teacher_action_graph_id('teacher-program:shared', source_a, 0, 'last_turn_only') == first + ':history-reasoning:last_turn_only'
     with pytest.raises(ValueError, match='source record ID'):
         converter.teacher_action_graph_id('teacher-program:shared', 'A' * 64, 0)
 

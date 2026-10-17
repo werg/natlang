@@ -799,7 +799,8 @@ def teacher_action_graph_id(source_record_id: str, source_record_sha256: str, tu
             or rendering_profile not in (None, 'keep', 'last_turn_only')):
         raise ValueError('teacher action identity requires a source record ID, lowercase SHA-256, and nonnegative turn index')
     identifier = f'{source_record_id}:source-row:{source_record_sha256}:action:{turn_index:04d}'
-    return identifier if rendering_profile in (None, 'last_turn_only') else identifier + ':history-reasoning:keep'
+    return (identifier if rendering_profile is None else
+            identifier + ':history-reasoning:' + rendering_profile)
 
 
 def unresolved_neuralese_references(value):
