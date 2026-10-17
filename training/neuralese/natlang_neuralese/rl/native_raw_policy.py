@@ -47,6 +47,9 @@ def prepare_raw_policy(checkpoint, *, base, tokenizer_out, require_optimizer=Tru
     proxy = SimpleNamespace(port=SimpleNamespace(embedding_weight=state['backbone_state'][embedding_keys[0]].to(dtype),
         native_attention_precision=attention_mode),
         native_attention_precision=attention_mode,
+        native_ordinary_precision=config.get('native_ordinary_precision'),
+        _native_norm_parameter_dtypes=tuple(value.dtype for name,value in state['backbone_state'].items()
+            if name.startswith('model.layers.') and name.endswith('norm.weight') and value.ndim == 1),
         input_rows=interface['input_rows'], adapter=SimpleNamespace(state_dict=lambda: interface['adapter']),
         native_linear_precision=interface.get('native_linear_precision', 'ieee'),
         token_override_ids=tuple(interface.get('token_override_ids', ())),

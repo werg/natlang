@@ -85,6 +85,8 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
         if (not isinstance(binding, dict) or binding.get('checkpoint_sha256') != base_sha
                 or binding.get('parameters') != current_parameters):
             raise ValueError('interface-only composite update requires the unchanged backbone loaded from this exact parent checkpoint')
+        if binding.get('native_ordinary_precision') != model_config.get('native_ordinary_precision'):
+            raise ValueError('interface-only composite cannot change backbone ordinary precision')
         channel, tensors, has_output_rows = _channel_tensors(model)
         expected_names = {'input_rows', 'adapter.down.weight', 'adapter.up.weight'}
         if has_output_rows:
@@ -119,7 +121,12 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
             parent = parent_parameters[name]
             if name in names:
                 promotion = (explicit_upgrade or {}).get('promoted_parameters', {}).get(name)
-                promoted_ok = (name in {'input_rows','output_rows','extra_input_rows','extra_output_rows'}
+                norm_event = getattr(model, '_native_ordinary_precision_upgrade', None) or {}
+                norm_promotion = norm_event.get('promoted_parameters', {}).get(
+                    'backbone.' + name.removeprefix('port.hf.'))
+                norm_ok = (name.startswith('port.hf.') and norm_promotion == {'from':str(parent.dtype),'to':'torch.float32'}
+                    and parent.dtype in (torch.bfloat16,torch.float16) and value.dtype == torch.float32)
+                promoted_ok = norm_ok or (name in {'input_rows','output_rows','extra_input_rows','extra_output_rows'}
                     and promotion == {'from':str(parent.dtype),'to':'torch.float32'}
                     and parent.dtype in (torch.bfloat16,torch.float16) and value.dtype == torch.float32)
                 if value is parent or value.shape != parent.shape or value.dtype != parent.dtype and not promoted_ok:
@@ -173,6 +180,9 @@ def write_native_composite_checkpoint(base_checkpoint, output_dir, model, model_
             'tokenizer_fingerprint', 'base_inventory_sha256', 'precision', 'dtype')},
         'output_embedding_weight_sha256': output_embed_sha,
         'optimizer': optimizer or {}, 'update_provenance': update_provenance or {}}
+    if 'native_ordinary_precision' in model_config:
+        manifest['model_config']['native_ordinary_precision'] = model_config['native_ordinary_precision']
+        manifest['ordinary_precision_upgrade'] = getattr(model, '_native_ordinary_precision_upgrade', None)
     manifest['model_config']['native_linear_precision'] = model_config.get('native_linear_precision','ieee')
     if 'native_attention_precision' in model_config:
         manifest['model_config']['native_attention_precision'] = model_config['native_attention_precision']
@@ -298,6 +308,13 @@ def _apply_native_composite_checkpoint(path, restored):
         raise ValueError('native composite patch artifact binding or kind is invalid')
     if artifact.native_identity != parent_identity:
         raise ValueError('native composite patch belongs to another exact parent model')
+    profile = manifest['model_config'].get('native_ordinary_precision')
+    if profile != config.get('native_ordinary_precision'):
+        from .native_parameter_precision import upgrade_norm_precision
+        declared = manifest.get('ordinary_precision_upgrade')
+        actual = upgrade_norm_precision(model, config, profile)
+        if actual != declared:
+            raise ValueError('native composite ordinary precision upgrade differs from parent')
     if manifest.get('token_row_upgrade'):
         from .native_model import upgrade_reasoning_tokens
         declared = manifest['token_row_upgrade']

@@ -702,6 +702,7 @@ def build_parser():
     parser.add_argument('--native-attention-precision', choices=NATIVE_ATTENTION_PRECISIONS, default=None,
         help='explicit per-model attention arithmetic; restores optimizer, RNG and row exposure before qualification')
     from .native_optimizer_migration import POLICY as NATIVE_OPTIMIZER_MIGRATION
+    parser.add_argument('--native-ordinary-precision', choices=('fp32-norms-v1',))
     parser.add_argument('--native-optimizer-migration',choices=(NATIVE_OPTIMIZER_MIGRATION,),default=None,
         help='explicit new AdamW history for formerly misrouted ordinary parameters; preserves original Muon buffers and all unaffected state')
     parser.add_argument('--learning-rate', type=float, default=3e-6)
@@ -809,6 +810,11 @@ def main(argv=None):
             raise ValueError('fresh native SFT requires explicit --dtype (QAD LFM float32; Mellum bfloat16)')
         model, tokenizer, roles, config = load_native_model(args.base, rank=args.rank,
             device=args.device, dtype=getattr(torch, args.dtype))
+    norm_upgrade = None
+    if args.native_ordinary_precision is not None:
+        from ..model.native_parameter_precision import upgrade_norm_precision
+        norm_upgrade = upgrade_norm_precision(model, config, args.native_ordinary_precision)
+        checkpoint_options['ordinary_precision_upgrade'] = norm_upgrade
     token_upgrade = None
     if args.learn_reasoning_boundaries:
         from ..model.native_model import upgrade_reasoning_tokens
@@ -843,6 +849,10 @@ def main(argv=None):
         token_history.append({**token_upgrade, 'at_global_step': int(saved_training.get('global_step', saved_training.get('step', 0))),
                               'weights_optimizer_rng_exposure': 'preserved'})
     checkpoint_options['token_row_upgrade_history'] = token_history
+    norm_history = list((saved_training.get('options') or {}).get('ordinary_precision_history') or [])
+    if norm_upgrade and norm_upgrade['previous_profile'] != norm_upgrade['profile']:
+        norm_history.append({**norm_upgrade, 'at_global_step':int(saved_training.get('global_step',saved_training.get('step',0)))})
+    checkpoint_options['ordinary_precision_history'] = norm_history
     carried_progress = collect_sft_progress(saved_training)
     restored_progress = False
     precision_history = list((saved_training.get('options') or {}).get('native_precision_history') or [])
@@ -1005,6 +1015,8 @@ def main(argv=None):
         # idempotent; no new model promotion is needed to adopt that contract.
         if token_upgrade and 'sparse_row_dtype' in config:
             previous_config = {**previous_config, 'sparse_row_dtype':config['sparse_row_dtype']}
+        if norm_upgrade:
+            previous_config = {**previous_config, 'native_ordinary_precision':config['native_ordinary_precision']}
         if not same_source_precision_identity(previous_config, config):
             raise ValueError('native SFT continuation changes model identity beyond declared GEMM arithmetic')
         if previous.get('schedule') not in {'source-order-stream/1', 'row-visit-deficit/2'}:
@@ -1110,13 +1122,14 @@ def main(argv=None):
     metrics = {}
     exposure_counts = {key: 0 for key in source_row_bindings}
     if resume is not None:
-        if token_upgrade and (token_upgrade['added'] or token_upgrade.get('promoted_parameters')):
-            optimizer.load_state_dict(resume['optimizer'], allow_added_names=(
-                'interface.extra_input_rows', 'interface.extra_output_rows'),
-                allow_promoted_names=tuple('interface.'+name for name in token_upgrade.get('promoted_parameters', {})),
-                native_optimizer_migration=args.native_optimizer_migration)
-        else:
-            optimizer.load_state_dict(resume['optimizer'],native_optimizer_migration=args.native_optimizer_migration)
+        if norm_upgrade:
+            from ..model.native_parameter_precision import norm_parameters
+        promoted_names = tuple('backbone.'+name for name in norm_parameters(model)) if norm_upgrade else ()
+        promoted_names += tuple(
+            'interface.'+name for name in (token_upgrade or {}).get('promoted_parameters', {}))
+        added_names = ('interface.extra_input_rows', 'interface.extra_output_rows') if token_upgrade and token_upgrade['added'] else ()
+        optimizer.load_state_dict(resume['optimizer'], allow_added_names=added_names,
+            allow_promoted_names=promoted_names, native_optimizer_migration=args.native_optimizer_migration)
         # Adaptive production may tune the step size without discarding moments.
         # The new value is recorded in optimizer_options while moments/RNG stay exact.
         from .native_learning_rates import apply_native_learning_rates
@@ -1258,6 +1271,7 @@ def main(argv=None):
     if admission_record is not None:
         checkpoint_options['_pending_source_admission'] = admission_record
     metadata_dirty = (last_saved_step < 0 or args.native_optimizer_migration is not None
+        or norm_upgrade is not None and norm_upgrade['previous_profile'] != norm_upgrade['profile']
         or pending_frame.get('pending_source_declarations') !=
         (carried_progress.get(args.stage_id or 'native-graph-ce') or {}).get('pending_source_declarations'))
     eval_at = max(1, args.eval_every)
