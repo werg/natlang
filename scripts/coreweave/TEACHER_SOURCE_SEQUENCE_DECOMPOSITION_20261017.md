@@ -14,7 +14,7 @@ source publication as generation or training exposure.
    path. The mechanism follows that order; it invents no selection priorities.
 3. Before the existing guardian launches a new batch, exact verifiers check the
    manifest's append-only prefix, every packet/certificate binding, unchanged
-   candidate programs, actual anchor bytes and the previous completed boundary.
+   candidate programs, actual anchor bytes and the previous drained boundary.
    Files may be relocated only through explicitly bound asset mappings.
 4. Crisp durability snapshots the old configuration and a publication intent,
    then CAS-replaces the regular next-source config under the existing source
@@ -25,6 +25,14 @@ source publication as generation or training exposure.
    durable receipts. No packet cursor advances merely because config was written.
 6. Unavailable packets keep the existing source only when the declared policy
    says retain-current. Such repeats never advance the new-source cursor.
+7. A drained batch with unresolved collectors may yield to the next independent
+   packet only after the existing completion verifier reproduces its exact
+   original accounting and every unresolved queue key has the guardian's
+   immutable retry queue and original-to-retry witness. Keep that repair lane
+   running separately. Record closed, incomplete and repair debt separately;
+   never change the original boundary into a successful completion. A missing
+   repair witness, changed sample/source/seed or unassigned global error blocks
+   advancement. This is an exact custody verifier, not an acceptance waiver.
 
 This changes task scheduling metadata, not prompts, actor/runtime, external
 teacher allocation, sample admission or model arithmetic. Production adoption

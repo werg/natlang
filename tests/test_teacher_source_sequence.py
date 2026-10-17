@@ -267,3 +267,87 @@ def test_reference_runtime_continuation_rejects_malformed_authority(tmp_path,bin
     declaration['authority']['reference_runtime_by_candidate']=binding
     with pytest.raises(ValueError,match='malformed'):
         sequence._packet(manifest['entries'][0],declaration)
+
+
+def incomplete_boundary(folder, state, config, batch):
+    """Use the real guardian accounting and retry preparer, never a success label."""
+    source=Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}'
+    entries=[dict(key=f'task-{index}',source=str(source/'source-cases.jsonl'),index=index,
+        count=1,seed=400000+index,jobs=str(source/f'jobs-{index}'),
+        output=str(source/f'results-{index}.jsonl'),log=str(source/f'collector-{index}.log'))
+        for index in range(2)]
+    (source/'queue.jsonl').write_text(''.join(json.dumps(row)+'\n'for row in entries))
+    journal=[dict(key=entries[0]['key'],event='finish',output_accounting=dict(
+        version='natlang.supervisor_output_accounting/2',manifest_valid=True,manifest_errors=[],
+        expected_jobs=1,complete=True,job_states=[dict(state='result')]))]
+    (source/'journal.jsonl').write_text(''.join(json.dumps(row)+'\n'for row in journal))
+    score=dict(schema='natlang.s7-task-rollout-score/1',rollouts=2,
+               outcome_counts=dict(semantic_mismatch=1,infrastructure=1))
+    put(source/'score.json',score)
+    decision=guardian.assess(entries,journal,[0,2],score)
+    decision.update(batch=batch,bindings={name:guardian.binding(source/name)
+        for name in('queue.jsonl','journal.jsonl','score.json','teacher-source.json')})
+    state['last_boundary']=put(folder/'boundaries'/f'batch-{batch:04d}.json',decision)
+    guardian.prepare_retry(folder,decision,entries)
+    return source,entries,decision
+
+
+def test_drained_anchor_with_bound_repair_debt_starts_independent_next_packet(tmp_path):
+    folder,state,config=setup(tmp_path)
+    source,entries,decision=incomplete_boundary(folder,state,config,21)
+    originals={p.name:p.read_bytes()for p in source.iterdir()}
+    boundary=copy.deepcopy(state['last_boundary'])
+    sequence.prepare_source_sequence(folder,state,config,22)
+    assert state['source_sequence']['pending']['ordinal']==0
+    assert guardian.binding(Path(boundary['path']))==boundary
+    assert {p.name:p.read_bytes()for p in source.iterdir()}==originals
+    closure=json.loads((folder/'source-sequence/drained-boundaries/batch-0021.json').read_text())
+    assert closure['batch_complete']is False and closure['training_admission']is False
+    assert closure['repair_required_keys']==['task-1']
+    assert decision['completion']['exact_completed_queue_keys']==1
+    assert decision['batch_complete']is False
+    assert state['unknown_owner_field']=={'keep':'exact'}
+
+
+def test_started_packet_closes_with_repair_debt_without_claiming_completion(tmp_path):
+    folder,state,config=setup(tmp_path)
+    sequence.prepare_source_sequence(folder,state,config,22)
+    seal(folder,state,config,22)
+    # Observe the actual sealed queue before collection, just as the guardian does.
+    source,entries,decision=incomplete_boundary(folder,state,config,22)
+    sequence.observe_source_sequence(folder,state,config)
+    assert state['source_sequence']['next_ordinal']==1
+    closed=json.loads(Path(state['source_sequence']['closed']['22']['path']).read_text())
+    assert 'drained_with_repair_debt'in closed
+    assert json.loads(Path(closed['boundary']['path']).read_text())['batch_complete']is False
+    sequence.prepare_source_sequence(folder,state,config,23)
+    assert state['source_sequence']['pending']['ordinal']==1
+
+
+@pytest.mark.parametrize('tamper',['missing_queue','changed_seed','changed_prepared_original','missing_prepared','changed_journal'])
+def test_incomplete_boundary_requires_exact_repair_and_original_custody(tmp_path,tamper):
+    folder,state,config=setup(tmp_path)
+    source,entries,decision=incomplete_boundary(folder,state,config,21)
+    repair=folder/'repairs/batch-0021';queue=repair/'queue.jsonl';prepared=repair/'task-1/prepared.json'
+    if tamper=='missing_queue':queue.unlink()
+    elif tamper=='missing_prepared':prepared.unlink()
+    elif tamper=='changed_seed':
+        row=json.loads(queue.read_text());row['seed']+=1;queue.write_text(json.dumps(row)+'\n')
+    elif tamper=='changed_prepared_original':
+        value=json.loads(prepared.read_text());value['original']['seed']=float(value['original']['seed']);put(prepared,value)
+    else:(source/'journal.jsonl').write_text('')
+    before=Path(config['source_sequence']['source_configuration']).read_bytes()
+    with pytest.raises((ValueError,FileNotFoundError)):
+        sequence.prepare_source_sequence(folder,state,config,22)
+    assert Path(config['source_sequence']['source_configuration']).read_bytes()==before
+    assert not state.get('source_sequence')
+
+
+def test_unassigned_global_accounting_error_cannot_be_called_drained_with_repair(tmp_path):
+    folder,state,config=setup(tmp_path)
+    source,entries,decision=incomplete_boundary(folder,state,config,21)
+    decision['completion']['repair_required'].append(dict(key=None,reason='unassigned global failure'))
+    decision['repair_required']=decision['completion']['repair_required']
+    state['last_boundary']=put(folder/'boundaries/batch-0021.json',decision)
+    with pytest.raises(ValueError,match='accounting changed'):
+        sequence.prepare_source_sequence(folder,state,config,22)

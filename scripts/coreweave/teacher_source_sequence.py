@@ -41,6 +41,73 @@ def _immutable(path, value):
     else:write(path,value)
 
 
+def _drained_boundary(folder, state, config, batch, terminal):
+    """Keep incomplete original outcomes while authenticating their repair lane."""
+    if terminal.get('batch') != batch:
+        raise ValueError('source selection needs the actual preceding completed boundary')
+    if terminal.get('batch_complete') is True:
+        return None  # Preserve the existing successful-boundary contract.
+    declaration = config['source_sequence']
+    reference = state['last_boundary']
+    expected = Path(folder)/'boundaries'/f'batch-{batch:04d}.json'
+    if (terminal.get('schema') != 'natlang.teacher-generation-boundary/1'
+            or Path(reference['path']).resolve() != expected.resolve()):
+        raise ValueError('sequence incomplete boundary lacks its actual guardian authority')
+    source = Path(config['root'])/'evidence-collections-v2'/f'batch-{batch:04d}'
+    refs = terminal['bindings']
+    for name in ('queue.jsonl', 'journal.jsonl', 'score.json', 'teacher-source.json'):
+        if Path(refs[name]['path']).resolve() != (source/name).resolve():
+            raise ValueError('sequence boundary belongs to another source batch')
+        _read(refs[name], declaration)
+    entries = [json.loads(line) for line in _read(refs['queue.jsonl'], declaration)[1].splitlines() if line]
+    journal = [json.loads(line) for line in _read(refs['journal.jsonl'], declaration)[1].splitlines() if line]
+    try:
+        from .teacher_batch_completion import batch_completion
+    except ImportError:
+        from teacher_batch_completion import batch_completion
+    completion = batch_completion(entries, journal, terminal['completion']['worker_returncodes'],
+                                  _json(refs['score.json'], declaration))
+    exact = lambda value: json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':'))
+    if (exact(completion) != exact(terminal['completion'])
+            or exact(completion['repair_required']) != exact(terminal['repair_required'])
+            or completion['can_advance'] is not False):
+        raise ValueError('sequence incomplete boundary accounting changed')
+    wanted = [row['key'] for row in completion['repair_required']]
+    if not wanted or None in wanted or len(wanted) != len(set(wanted)):
+        raise ValueError('sequence boundary has unassigned repair obligations')
+    originals = {row['key']: row for row in entries}
+    repair = Path(folder)/'repairs'/f'batch-{batch:04d}'
+    repair_ref = binding(repair/'queue.jsonl')
+    retries = [json.loads(line) for line in _read(repair_ref, declaration)[1].splitlines() if line]
+    if len(retries) != len(wanted):
+        raise ValueError('sequence repair queue omits original obligations')
+    by_key = {row['key']: row for row in retries}
+    if len(by_key) != len(retries) or set(by_key) != {f'batch-{batch:04d}:'+key for key in wanted}:
+        raise ValueError('sequence repair queue differs from original obligations')
+    prepared_refs = []
+    for key in wanted:
+        if key not in originals or Path(key).name != key or key in ('.', '..'):
+            raise ValueError('sequence repair key escaped its original queue')
+        prepared_ref = binding(repair/key/'prepared.json')
+        prepared = _json(prepared_ref, declaration)
+        retry = by_key[f'batch-{batch:04d}:'+key]
+        leaf = repair/key
+        expected_retry = {**originals[key], 'key':f'batch-{batch:04d}:'+key,
+            'jobs':str(leaf/'jobs'), 'output':str(leaf/'results.jsonl'), 'log':str(leaf/'collector.log')}
+        if (exact(prepared.get('original')) != exact(originals[key])
+                or exact(prepared.get('retry')) != exact(expected_retry)
+                or exact(retry) != exact(expected_retry)
+                or prepared.get('boundary') != reference):
+            raise ValueError('sequence repair changed its original sample/source/seed')
+        prepared_refs.append(prepared_ref)
+    receipt = Path(folder)/'source-sequence/drained-boundaries'/f'batch-{batch:04d}.json'
+    _immutable(receipt, dict(batch=batch, boundary=reference, original_bindings=refs,
+        repair_queue=repair_ref, repair_preparations=prepared_refs, repair_required_keys=wanted,
+        batch_complete=False, training_admission=False,
+        claim='Original batch drained with exact repair debt; no completion or success reclassification'))
+    return binding(receipt)
+
+
 def _packet(entry, declaration, *, allow_empty=False):
     candidate=_json(entry['candidate_packet'],declaration)
     prepared=_json(entry['qualified_packet'],declaration)
@@ -156,12 +223,13 @@ def observe_source_sequence(folder, state, config):
     if boundary is None:return
     terminal=_json(boundary,declaration)
     if terminal.get('batch')!=batch:return
-    if terminal.get('batch_complete')is not True:raise ValueError('sequence batch is not genuinely closed')
+    closure = _drained_boundary(folder, state, config, batch, terminal)
     if any(terminal['bindings'].get(name)!=sealed[name]for name in ('queue.jsonl','teacher-source.json')):
         raise ValueError('sequence terminal boundary differs from its sealed batch')
     receipt=Path(folder)/'source-sequence/closed'/f'batch-{batch:04d}.json'
     _immutable(receipt,{'batch':batch,'ordinal':pending['ordinal'],'started':started[key],
-        'boundary':boundary,'claim':'existing guardian completion; individual outcomes/admission unchanged'})
+        'boundary':boundary, **({'drained_with_repair_debt':closure} if closure else {}),
+        'claim':'existing guardian closure; individual outcomes/admission unchanged'})
     sequence.setdefault('closed',{})[key]=binding(receipt)
     sequence['next_ordinal']=pending['ordinal']+1;sequence.pop('pending')
     write(Path(folder)/'state.json',state)
@@ -185,8 +253,7 @@ def prepare_source_sequence(folder, state, config, batch):
             or not (anchor_root/'queue.jsonl').is_file()):
         raise ValueError('sequence anchor packet was not actually sealed')
     terminal=_json(state['last_boundary'],declaration)
-    if terminal.get('batch')!=batch-1 or terminal.get('batch_complete')is not True:
-        raise ValueError('source selection needs the actual preceding completed boundary')
+    _drained_boundary(folder, state, config, batch-1, terminal)
     observe_source_sequence(folder,state,config)
     sequence=state.setdefault('source_sequence',{'next_ordinal':0})
     manifest_path=Path(declaration['ready_manifest']);manifest_raw=manifest_path.read_bytes();manifest=json.loads(manifest_raw)
