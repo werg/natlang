@@ -18,6 +18,17 @@ from .native_raw_handoff import binding,verify_handoff
 SCHEMA='natlang.native-raw-rounds/1'
 
 
+class StudentConfigurationError(Exception):
+    """No operation has been launched by this cycle; other students remain useful."""
+
+
+def _configuration_signature(declaration,directory):
+    from ..common.hashing import canonical_json_sha256_hex
+    path=Path(directory)/'config.json'
+    return canonical_json_sha256_hex({'declaration':declaration,
+        'config':binding(path) if path.is_file() else None})
+
+
 def raw_out(config):
     return Path(config.get('raw_rl_out',str(Path(config.get('rl_out',Path(config['out'])/'rl')).parent/'native_raw_rl'))).resolve()
 
@@ -258,8 +269,12 @@ def student_cycle(plan_path,declaration,handoff,directory,*,stop):
     from .native_rounds import round_job
     from .native_supervised import continuation_config,stage_pending,MANDATORY_STAGE_KINDS
     from ..train.recipe import resolve_recipe_data
-    directory=Path(directory);config_path=configure_model(plan_path,declaration,handoff,directory)
-    config=resolve_recipe_data(config_path)
+    directory=Path(directory)
+    try:
+        config_path=configure_model(plan_path,declaration,handoff,directory)
+        config=resolve_recipe_data(config_path)
+    except Exception as error:
+        raise StudentConfigurationError(str(error)) from error
     cursor_path=directory/'cycle.json'
     cursor=json.loads(cursor_path.read_text()) if cursor_path.exists() else {'cycle':0,'phase':'rl','next_stage':0}
     cycle=cursor['cycle'];work=directory/'cycles'/f'{cycle:06d}'
@@ -386,7 +401,7 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
     """Recheck the existing resident append contract, preserving fixed foundation."""
     requirement={**declaration['handoff_requirement'],'trainer_exit':None,'trainer_launch':None,'resident_adoption':None}
     transition_ref=declaration.get('drained_recipe_handoff')
-    transition_handoff=None;retired_cursor=None
+    transition_handoff=None;retired_cursor=None;transition=None
     if declaration.get('runtime_handoff'):
         from .native_runtime_handoff import verify_runtime_handoff
         runtime=json.loads(_bound(declaration['runtime_handoff']).read_text())
@@ -419,7 +434,6 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
     if stage not in requirement['stage_ids']:raise ValueError('raw release adopted another production stage')
     bindings=[payload['prior_recipe'],*[item['recipe'] for item in state['history']]]
     start=next((index for index,item in enumerate(bindings) if item['sha256']==requirement['recipe_sha256']),None)
-    if start is None:raise ValueError('raw release resident history omitted its declared original recipe')
     def plan(reference):
         recipe_path=_bound({'path':reference['path'],'sha256':reference.get('file_sha256',reference['sha256'])})
         if reference.get('lineage_sha256',reference['sha256'])!=lineage:
@@ -428,8 +442,30 @@ def _release_requirement(declaration,value,*,verified_handoff=None):
         recipe=resolve_recipe_data(recipe_path)
         inputs={item['id']:({} if item.get('admitted') is False else resolve_stage_inputs(recipe,item,{})) for item in recipe['stages']}
         return {**payload['plan'],'recipe':recipe,'stage_inputs':inputs}
-    prior=plan(bindings[start])
-    for reference in bindings[start+1:]:
+    if start is None:
+        if transition is None:
+            raise ValueError('raw release resident history omitted its declared original recipe')
+        old_plan=json.loads(_bound(transition['old_plan']).read_text())
+        installed=json.loads(_bound(transition['new_plan']).read_text())
+        actual_prior=plan(bindings[0])
+        previous=installed.get('resident_adoptions',[])
+        adoptions=payload['plan'].get('resident_adoptions',[])
+        from ..common.hashing import canonical_json_sha256_hex
+        suffix=adoptions[len(previous):]
+        if (actual_prior['recipe']!=old_plan['recipe'] or actual_prior['stage_inputs']!=old_plan['stage_inputs']
+                or installed['recipe_sha256']!=lineage or installed['code']!=payload['plan']['code']
+                or installed.get('device')!=payload['plan'].get('device')
+                or payload['plan'].get('handoffs',[])!=installed.get('handoffs',[])
+                or adoptions[:len(previous)]!=previous or not suffix
+                or suffix[0]['predecessor']!=canonical_json_sha256_hex(installed)
+                or [item['recipe'] for item in suffix]!=bindings[1:]
+                or any(item['stage_id']!=stage for item in suffix)):
+            raise ValueError('raw release omitted recipe lacks its exact installed-plan adoption bridge')
+        prior=installed
+        remaining=bindings[1:]
+    else:
+        prior=plan(bindings[start]);remaining=bindings[start+1:]
+    for reference in remaining:
         proposed=plan(reference);_contract(prior,proposed,stage);prior=proposed
     if payload['recipe']!=bindings[-1] or prior['recipe']!=payload['plan']['recipe'] or prior['stage_inputs']!=payload['plan']['stage_inputs']:
         raise ValueError('raw release resident history differs from its actual current source plan')
@@ -493,7 +529,7 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
             state={'schema':SCHEMA,'plan_sha256':sha256_file_hex_cached(plan_path),'owner':process_owner(),
                 'released':False,'models':{},'production_complete':False}
             counts={row['model']:0 for row in plan['models']}
-            eligible=set();rendezvous=False;active={}
+            eligible=set();rendezvous=False;active={};blocked={}
             with ThreadPoolExecutor(max_workers=len(plan['models'])) as pool:
                 try:
                     while True:
@@ -512,6 +548,9 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
                         if not stop.requested and not rendezvous:
                             for name,model in models.items():
                                 if name in active or (cycles is not None and counts[name]>=cycles):continue
+                                if blocked.get(name)==_configuration_signature(model,out/name):continue
+                                blocked.pop(name,None)
+                                state.get('configuration_errors',{}).pop(name,None)
                                 witness=model.get('handoff_receipt')
                                 if witness is None:
                                     candidate=out/'handoffs'/(name+'.json')
@@ -519,7 +558,7 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
                                 if witness is not None:
                                     # Published eligibility is informational while this
                                     # student's optimizer is owned by another cycle.
-                                    active[name]=(pool.submit(student_cycle,plan_path,model,witness,out/name,stop=stop),witness)
+                                    active[name]=(pool.submit(student_cycle,plan_path,model,witness,out/name,stop=stop),witness,model)
                         write_json_durable(state_path,state)
                         if not active:
                             if rendezvous and eligible!=set(models):
@@ -528,13 +567,23 @@ def run(plan_path,out,*,cycles=None,stop=None,poll_seconds=60):
                                 state['released']=True;write_json_durable(state_path,state)
                                 if validate_release(state_path,plan_path,allow_live=True) is not None:return state
                                 state['released']=False;rendezvous=False;eligible.clear()
-                            if stop.requested or (cycles is not None and all(counts[name]>=cycles for name in models)):
+                            if stop.requested or (cycles is not None and all(counts[name]>=cycles or name in blocked for name in models)):
                                 write_json_durable(state_path,state);return state
                             time.sleep(poll_seconds);continue
                         finished,_=wait([value[0] for value in active.values()],timeout=poll_seconds,return_when=FIRST_COMPLETED)
-                        for name,(future,witness) in list(active.items()):
+                        for name,(future,witness,submitted) in list(active.items()):
                             if future not in finished:continue
-                            cursor=future.result()
+                            try:
+                                cursor=future.result()
+                            except StudentConfigurationError as error:
+                                del active[name];eligible.discard(name)
+                                blocked[name]=_configuration_signature(submitted,out/name)
+                                cause=error.__cause__ or error
+                                state.setdefault('configuration_errors',{})[name]={
+                                    'input_sha256':blocked[name],'phase':'configuration',
+                                    'error_type':type(cause).__name__,'error':str(cause)}
+                                write_json_durable(state_path,state)
+                                continue
                             del active[name];counts[name]+=1
                             config=json.loads((out/name/'config.json').read_text())
                             state['models'][name]={'handoff':witness,'checkpoint':_current_checkpoint(config),
