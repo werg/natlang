@@ -606,7 +606,7 @@ def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, so
 
 def qualify_precision_transition(model, tokenizer, roles, config, *, previous_precision,
                                  checkpoint_sha256, forward_atol, gradient_atol, device, backend=None,
-                                 previous_attention_precision=None, previous_norm_execution=None):
+                                 previous_attention_precision=None, previous_norm_execution=None, optimizer=None):
     """Check changed production arithmetic on the restored live weights, once."""
     linear_changed = config.get('native_linear_precision', 'ieee') == 'bf16x6' and previous_precision != 'bf16x6'
     attention_changed = (previous_attention_precision is not None
@@ -620,12 +620,26 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
         raise ValueError('native arithmetic transition requires declared forward and gradient tolerances')
     from ..eval.native_state import qualify_existing
     saved_rng = capture_training_rng_state(device)
+    attention_report=None
     try:
-        with backend.native_modules() if backend is not None else contextlib.nullcontext():
-            report = qualify_existing(model, tokenizer, roles, config,
-                checkpoint_sha256=checkpoint_sha256, forward_atol=forward_atol, gradient_atol=gradient_atol)
+        if attention_changed:
+            if optimizer is None:
+                raise ValueError('attention transition requires its actual production optimizer inventory')
+            from ..eval.native_attention_transition import qualify_attention_transition
+            attention_report=qualify_attention_transition(model,tokenizer,roles,config,optimizer=optimizer,
+                previous_mode=previous_attention_precision,candidate_mode=config['native_attention_precision'],
+                checkpoint_sha256=checkpoint_sha256,forward_atol=forward_atol,gradient_atol=gradient_atol,
+                backend=backend)
+            report=attention_report['candidate_cached_reference']
+            if not attention_report['passed']:
+                raise ValueError('native attention transition failed unchanged cached-reference and complete cross-mode checks: '+
+                    json.dumps(attention_report,sort_keys=True))
+        else:
+            with backend.native_modules()if backend is not None else contextlib.nullcontext():
+                report=qualify_existing(model,tokenizer,roles,config,
+                    checkpoint_sha256=checkpoint_sha256,forward_atol=forward_atol,gradient_atol=gradient_atol)
     finally:
-        restore_training_rng_state(saved_rng, device)
+        restore_training_rng_state(saved_rng,device)
     if not report['passed']:
         raise ValueError('native arithmetic transition failed the unchanged cached-reference checks: ' +
                          json.dumps(report, sort_keys=True))
@@ -635,6 +649,7 @@ def qualify_precision_transition(model, tokenizer, roles, config, *, previous_pr
     if attention_changed:
         result['attention'] = {'from': previous_attention_precision,
                                'to': config['native_attention_precision']}
+        result['attention_complete_comparison']=attention_report
     if norm_changed:
         result['norm_execution'] = {'from':previous_norm_execution,'to':model.native_norm_execution}
     return result
@@ -1222,7 +1237,7 @@ def main(argv=None):
         checkpoint_sha256=sha256_file_hex_cached(args.continue_from if parent_continuation else policy.slot)
             if parent_continuation or policy.slot.exists() else config['base_inventory_sha256'],
         forward_atol=args.forward_atol, gradient_atol=args.gradient_atol,
-        device=args.device, backend=backend)
+        device=args.device, backend=backend, optimizer=optimizer)
     if transition_check is not None:
         checkpoint_options['native_precision_transition']['reference_check'] = transition_check
         write_json(args.out / 'precision-transition.json', transition_check)

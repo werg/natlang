@@ -122,7 +122,7 @@ def test_real_both_port_graph_cached_adjoints_and_incremental_serving(family,dty
 
 def test_attention_transition_rejects_without_tolerances_and_restores_failed_rng(monkeypatch):
     from natlang_neuralese.train.native_state_sft import qualify_precision_transition
-    from natlang_neuralese.eval import native_state
+    from natlang_neuralese.eval import native_attention_transition
     kwargs=dict(previous_precision='ieee',previous_attention_precision='ieee',
         checkpoint_sha256='a'*64,device='cpu')
     config={'native_linear_precision':'ieee','native_attention_precision':'tf32x3'}
@@ -131,10 +131,10 @@ def test_attention_transition_rejects_without_tolerances_and_restores_failed_rng
     rng=torch.get_rng_state().clone()
     def failed(*args,**kwargs):
         torch.rand(19)
-        return {'passed':False}
-    monkeypatch.setattr(native_state,'qualify_existing',failed)
+        return {'passed':False,'candidate_cached_reference':{'passed':False}}
+    monkeypatch.setattr(native_attention_transition,'qualify_attention_transition',failed)
     with pytest.raises(ValueError,match='unchanged cached-reference'):
-        qualify_precision_transition(None,None,None,config,forward_atol=1e-4,gradient_atol=1e-5,**kwargs)
+        qualify_precision_transition(None,None,None,config,forward_atol=1e-4,gradient_atol=1e-5,optimizer=object(),**kwargs)
     assert torch.equal(torch.get_rng_state(),rng)
 
 
