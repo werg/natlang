@@ -121698,6 +121698,60 @@
       },
       "admission_proof": "admission-proof.json",
       "notes": "Incremental completed shard only; remaining source shards and actual training exposure are separate obligations."
+    },
+    {
+      "id": "acquired-d24-native-offline-preference-20261017-v1",
+      "owner": "dgx",
+      "path": "runs/acquired-d24-native-offline-preference-20261017-v1",
+      "include": [
+        "fit/**",
+        "whole-pair-pending/**"
+      ],
+      "split": "source-bound training preference candidates; pair split and full held/decision closure are bound inside exact view manifests; oversized complete pairs remain mandatory pending",
+      "source_class": "acquired-agent native offline-preference graph/objective candidate",
+      "license": "Source license facts remain bound in the full cohort and original acquired-session provenance manifests; this packaging does not replace them.",
+      "training_admission": false,
+      "training_admission_reason": "Source-bound whole-pair DPO candidate graphs and full oversized-pair obligation closure are registered for executable recipe composition; source admission, current restored-optimizer capacity, numerical objective execution, native preference training and earned pair visits remain unqualified.",
+      "capacity_qualified": false,
+      "native_execution_verified": false,
+      "oracle_verified": false,
+      "admission": "Candidate sources are registered and staged on both existing student sandboxes. Actual per-model restored-optimizer capacity, numerical/native objective checks and recipe integration remain pending; source selection does not count as pair visits or training exposure.",
+      "build": {
+        "fit_closure_spec_sha256": "fb0c32a88b26c04952d7840a149584a4ceff25b57ee8c8cf958d5195e6f36a9a",
+        "fit_closure_archive_sha256": "3003f7617e539a3f4f912c19c4e3b81831f31986c4b8bac8b87e9b1eb676ae7f",
+        "fit_closure_archive_bytes": 204369920,
+        "fit_closure_stage_sha256": "19837a53b096319689c7da42761adca41f6cafee5bba01f1dd453bd16d344be7",
+        "pending_package_receipt_sha256": "97b284fe874f61496ce7ed127d820e37a0f324af91793881e2bfc93709182ff6",
+        "pending_archive_sha256": "4aeb4827a2c7a915bedaffc5ebd129e621a7455427f8c7b086d24f7a21dc530c",
+        "pending_archive_bytes": 48343466,
+        "pending_both_stage_sha256": "646e7bcf75bf28c2afdc383d3d6ec73a1fb3086910ab9c59abeb584fbe77a9aa",
+        "staged_targets": [
+          "lfm25:7ee701ae-8e56-49d8-b97a-594f7eb33fe9",
+          "mellum21:c8a1da97-83cb-4a33-a0b3-f8611ed30acc"
+        ],
+        "source_audit_sha256": "c8ac16dd06f3edbc2469e9c3dbe258ba356e27642cedc02e480112ec98924f6d",
+        "fit_counts": {
+          "lfm25": 11988,
+          "mellum21": 12054
+        },
+        "whole_pending_counts": {
+          "lfm25": 425,
+          "mellum21": 359
+        },
+        "per_view_rows": {
+          "lfm25": [
+            5061,
+            4217,
+            2710
+          ],
+          "mellum21": [
+            5084,
+            4244,
+            2726
+          ]
+        }
+      },
+      "notes": "Both tokenizer views retain 12,413 total whole pairs/model. Fit subsets are 11,988 LFM and 12,054 Mellum; over-envelope pairs remain complete as 425/359 explicit pending obligations. No pair or trajectory is truncated; no capacity/execution/admission/exposure claim."
     }
   ],
   "coverage_backlog": [

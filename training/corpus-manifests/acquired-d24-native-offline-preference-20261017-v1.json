@@ -1,0 +1,219 @@
+{
+  "build": {
+    "fit_closure_archive_bytes": 204369920,
+    "fit_closure_archive_sha256": "3003f7617e539a3f4f912c19c4e3b81831f31986c4b8bac8b87e9b1eb676ae7f",
+    "fit_closure_spec_sha256": "fb0c32a88b26c04952d7840a149584a4ceff25b57ee8c8cf958d5195e6f36a9a",
+    "fit_closure_stage_sha256": "19837a53b096319689c7da42761adca41f6cafee5bba01f1dd453bd16d344be7",
+    "fit_counts": {
+      "lfm25": 11988,
+      "mellum21": 12054
+    },
+    "pending_archive_bytes": 48343466,
+    "pending_archive_sha256": "4aeb4827a2c7a915bedaffc5ebd129e621a7455427f8c7b086d24f7a21dc530c",
+    "pending_both_stage_sha256": "646e7bcf75bf28c2afdc383d3d6ec73a1fb3086910ab9c59abeb584fbe77a9aa",
+    "pending_package_receipt_sha256": "97b284fe874f61496ce7ed127d820e37a0f324af91793881e2bfc93709182ff6",
+    "per_view_rows": {
+      "lfm25": [
+        5061,
+        4217,
+        2710
+      ],
+      "mellum21": [
+        5084,
+        4244,
+        2726
+      ]
+    },
+    "source_audit_sha256": "c8ac16dd06f3edbc2469e9c3dbe258ba356e27642cedc02e480112ec98924f6d",
+    "staged_targets": [
+      "lfm25:7ee701ae-8e56-49d8-b97a-594f7eb33fe9",
+      "mellum21:c8a1da97-83cb-4a33-a0b3-f8611ed30acc"
+    ],
+    "whole_pending_counts": {
+      "lfm25": 425,
+      "mellum21": 359
+    }
+  },
+  "bytes": 402857147,
+  "capacity_qualified": false,
+  "files": [
+    {
+      "bytes": 1953,
+      "path": "fit/capacity-descriptors/lfm25.json",
+      "sha256": "34d2c7f6e626196adef466ed4e72976b49848cfba3f2090188e35c1e4b5e8fd0"
+    },
+    {
+      "bytes": 1961,
+      "path": "fit/capacity-descriptors/mellum21.json",
+      "sha256": "fce78d7f649273e5d68422ae20e12db496918fa1290b834949de1828bc31b128"
+    },
+    {
+      "bytes": 45054453,
+      "path": "fit/lfm25/objective.json",
+      "sha256": "8811f4eb813c3c956dc17561ba5f9433c3b45fdea83eee3ca68f2edcd44b7433"
+    },
+    {
+      "bytes": 790,
+      "path": "fit/lfm25/train-sources.json",
+      "sha256": "4c4c3dbfe0222a1d2f158259e785ca8e82795e6f61aade8b13e7c74663841327"
+    },
+    {
+      "bytes": 22712749,
+      "path": "fit/lfm25/view-0/train/native-graphs.jsonl.zst",
+      "rows": 5061,
+      "sha256": "1cfc8abdf13fd1abef6e7493227e801ee4530c737b60785361efa291fa26953f"
+    },
+    {
+      "bytes": 19827890,
+      "path": "fit/lfm25/view-1/train/native-graphs.jsonl.zst",
+      "rows": 4217,
+      "sha256": "b26570aa93323d1bbd8c36e84d9c4dcff1c8e54ed1ea0efcdfd7fcdec6a07e0a"
+    },
+    {
+      "bytes": 14908089,
+      "path": "fit/lfm25/view-2/train/native-graphs.jsonl.zst",
+      "rows": 2710,
+      "sha256": "29bdb394071b12a0230d42df7fc3c7a0aeb4e329c6f1b26744054896863db2b6"
+    },
+    {
+      "bytes": 45451987,
+      "path": "fit/mellum21/objective.json",
+      "sha256": "c383a9a98e206edf5265109d89a6e8a004ab55fd9c2581eaf915a887c53d865b"
+    },
+    {
+      "bytes": 790,
+      "path": "fit/mellum21/train-sources.json",
+      "sha256": "0a7670f41f384b3e908e987e812b2ff0d5dc47f299127d81aebc2da3be883d7c"
+    },
+    {
+      "bytes": 22317855,
+      "path": "fit/mellum21/view-0/train/native-graphs.jsonl.zst",
+      "rows": 5084,
+      "sha256": "9793673bc64b95ada2c1e1f15fb48de9512882139d7c338f27c4c1da8b9ac4c0"
+    },
+    {
+      "bytes": 19383187,
+      "path": "fit/mellum21/view-1/train/native-graphs.jsonl.zst",
+      "rows": 4244,
+      "sha256": "c7ac899ab933c41b9fa2ac2519252faac38f21207c2cca43c17b7f218369fd07"
+    },
+    {
+      "bytes": 14693311,
+      "path": "fit/mellum21/view-2/train/native-graphs.jsonl.zst",
+      "rows": 2726,
+      "sha256": "e413c70ac26ef6fb0fd3d1359d45d17b06a0bdef04b1d46e7daa101479db9f85"
+    },
+    {
+      "bytes": 60908627,
+      "path": "whole-pair-pending/evidence/admission-audit.json",
+      "sha256": "c8ac16dd06f3edbc2469e9c3dbe258ba356e27642cedc02e480112ec98924f6d"
+    },
+    {
+      "bytes": 6146,
+      "path": "whole-pair-pending/evidence/capacity-candidate-receipt.json",
+      "sha256": "07185e9e549b47da53b9e777887105d3ecfd284559c2da81e9d39b795968c46a"
+    },
+    {
+      "bytes": 21819653,
+      "path": "whole-pair-pending/evidence/pair-geometry-inventory.jsonl",
+      "sha256": "d9af831e40189606f9d496e6b68a53d5e1c56e3b29ab25e3e2eceb908d95cd33"
+    },
+    {
+      "bytes": 48443476,
+      "path": "whole-pair-pending/lfm25/complete-objective-source.json",
+      "sha256": "dbb2e3019a4b962ef95cafed27c10a79526b6f9b6d8c93892f6adf82bd51e55f"
+    },
+    {
+      "bytes": 1422,
+      "path": "whole-pair-pending/lfm25/full-cohort-native-graphs.json",
+      "sha256": "5de85da5bec8636a737ec3c15847c5dc6c0fe7164c483ae92d4d60673baf20c3"
+    },
+    {
+      "bytes": 3280,
+      "path": "whole-pair-pending/lfm25/pair-cohort.json",
+      "sha256": "9d384f6db312c488c0a262392877cf10331b862b2b36c8238d9b02bcf56f3268"
+    },
+    {
+      "bytes": 301,
+      "path": "whole-pair-pending/lfm25/pending-native-graphs.json",
+      "sha256": "b9dbeba5bd953826a6f68b2aab3d894e2953df58b73760eb6cb6f5c17199d0d2"
+    },
+    {
+      "bytes": 105548,
+      "path": "whole-pair-pending/lfm25/pending-native-sources.json",
+      "sha256": "957d03afd7a280d6d5e56ff1afce79767f2fd47a4559fa9347fe91725ba2b746"
+    },
+    {
+      "bytes": 3389217,
+      "path": "whole-pair-pending/lfm25/pending-objective.json",
+      "sha256": "0f75643fd5b9722772911cc89450873bdd685dec3c3192d0e1a45ea10791d2ef"
+    },
+    {
+      "bytes": 393144,
+      "path": "whole-pair-pending/lfm25/pending-pair-inventory.jsonl",
+      "sha256": "84839631022043f3477c1b09487ea67317280387a12449a23e2e56c9914ecfad"
+    },
+    {
+      "bytes": 6292020,
+      "path": "whole-pair-pending/lfm25/remaining-long-pairs.jsonl.zst",
+      "sha256": "eff913d2d8df36a53aa97f9c541ee10ff4769dc3fe411bc8f498233bf70e8a04"
+    },
+    {
+      "bytes": 48444870,
+      "path": "whole-pair-pending/mellum21/complete-objective-source.json",
+      "sha256": "25dfd6f97b823db06cee8de6b6f0ef818aaf32109e0f99494095bb650ff8c1e6"
+    },
+    {
+      "bytes": 1434,
+      "path": "whole-pair-pending/mellum21/full-cohort-native-graphs.json",
+      "sha256": "a6fcc407d145b053c96e429a007b45c85676eaca9c0a1386e034723ca0cb2887"
+    },
+    {
+      "bytes": 3307,
+      "path": "whole-pair-pending/mellum21/pair-cohort.json",
+      "sha256": "94fa8d8746c9f0f012b395e70f87c81f9ce58377ac83f699c538bda8784bb22e"
+    },
+    {
+      "bytes": 301,
+      "path": "whole-pair-pending/mellum21/pending-native-graphs.json",
+      "sha256": "aa0c6c6577ca9e9ebae850ff4eda24d9168ba846f54b0c214456c6e4b8d3d1c5"
+    },
+    {
+      "bytes": 89444,
+      "path": "whole-pair-pending/mellum21/pending-native-sources.json",
+      "sha256": "7fb40c17de1fa83c95ee35f18504d813a6f22e020952539c67ccef224857162c"
+    },
+    {
+      "bytes": 2993077,
+      "path": "whole-pair-pending/mellum21/pending-objective.json",
+      "sha256": "9e15337326e258bd666c86d625d70c41f6abbceda8567e0f5e6b27d9a44933b5"
+    },
+    {
+      "bytes": 334369,
+      "path": "whole-pair-pending/mellum21/pending-pair-inventory.jsonl",
+      "sha256": "9548c4d12b8eda77e7ebdd925c979c6b1eb918a00e398dda4952e5fcafc4d054"
+    },
+    {
+      "bytes": 5263618,
+      "path": "whole-pair-pending/mellum21/remaining-long-pairs.jsonl.zst",
+      "sha256": "0ab4d83296f463c160b325194054e62284cad47f9d98ba62e945ac93123b8265"
+    },
+    {
+      "bytes": 8878,
+      "path": "whole-pair-pending/receipt.json",
+      "sha256": "97b284fe874f61496ce7ed127d820e37a0f324af91793881e2bfc93709182ff6"
+    }
+  ],
+  "id": "acquired-d24-native-offline-preference-20261017-v1",
+  "license": "Source license facts remain bound in the full cohort and original acquired-session provenance manifests; this packaging does not replace them.",
+  "native_execution_verified": false,
+  "notes": "Both tokenizer views retain 12,413 total whole pairs/model. Fit subsets are 11,988 LFM and 12,054 Mellum; over-envelope pairs remain complete as 425/359 explicit pending obligations. No pair or trajectory is truncated; no capacity/execution/admission/exposure claim.",
+  "oracle_verified": false,
+  "owner": "dgx",
+  "path": "runs/acquired-d24-native-offline-preference-20261017-v1",
+  "schema": "natlang.corpus-snapshot/1",
+  "source_class": "acquired-agent native offline-preference graph/objective candidate",
+  "split": "source-bound training preference candidates; pair split and full held/decision closure are bound inside exact view manifests; oversized complete pairs remain mandatory pending",
+  "training_admission": false,
+  "training_admission_reason": "Source-bound whole-pair DPO candidate graphs and full oversized-pair obligation closure are registered for executable recipe composition; source admission, current restored-optimizer capacity, numerical objective execution, native preference training and earned pair visits remain unqualified."
+}
