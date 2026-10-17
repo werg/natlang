@@ -98,11 +98,28 @@ def run_once(directory, role, *, observe, export):
 
 
 def remote_code(*, role, root, known, last, extra, pin_directory, minimum_available_bytes,
-                actor_view_directory=None, actor_view_runtime=None):
+                actor_view_directory=None, actor_view_runtime=None,
+                actor_view_sidecar=None, actor_view_sidecar_sha256=None):
     source = REMOTE_SOURCE
     if bool(actor_view_directory) != bool(actor_view_runtime):
         raise ValueError('actor view export requires its directory and explicit runtime package')
+    if bool(actor_view_sidecar) != bool(actor_view_sidecar_sha256):
+        raise ValueError('actor view sidecar needs its exact SHA256')
+    if actor_view_sidecar and (not actor_view_directory or not re.fullmatch(r'[0-9a-f]{64}',actor_view_sidecar_sha256)):
+        raise ValueError('actor view sidecar needs its directory/runtime and lowercase SHA256')
     if actor_view_directory:
+        helper_loading = ("from natlang_neuralese.model import native_bundle as view_module\n    "
+            +"if pathlib.Path(view_module.__file__).resolve()!=pathlib.Path("+repr(str(actor_view_runtime))+",'natlang_neuralese/model/native_bundle.py').resolve():raise ValueError('optional view helper origin differs')\n    ")
+        if actor_view_sidecar:
+            helper_loading = ("import types,hashlib,natlang_neuralese\n    "
+                +"if pathlib.Path(natlang_neuralese.__file__).resolve().parent!=pathlib.Path("+repr(str(actor_view_runtime))+",'natlang_neuralese').resolve():raise ValueError('optional view dependency package origin differs')\n    "
+                +"sidecar=pathlib.Path("+repr(str(actor_view_sidecar))+").resolve(strict=True);sidecar_raw=sidecar.read_bytes()\n    "
+                +"if hashlib.sha256(sidecar_raw).hexdigest()!="+repr(actor_view_sidecar_sha256)+":raise ValueError('optional view sidecar SHA256 differs')\n    "
+                +"view_module=types.ModuleType('natlang_neuralese.model.native_bundle_actor_view_"+actor_view_sidecar_sha256+"');view_module.__package__='natlang_neuralese.model';view_module.__file__=str(sidecar)\n    "
+                +"exec(compile(sidecar_raw,str(sidecar),'exec'),view_module.__dict__)\n    "
+                +"sidecar_writer=view_module.write_actor_view\n    "
+                +"def checked_sidecar_writer(*args,**kwargs):\n     result=sidecar_writer(*args,**kwargs)\n     if hashlib.sha256(sidecar.read_bytes()).hexdigest()!="+repr(actor_view_sidecar_sha256)+":raise ValueError('optional view sidecar changed during extraction')\n     if result is not None and json.loads(pathlib.Path(result['path']).read_text())['mechanism']['sha256']!="+repr(actor_view_sidecar_sha256)+":raise ValueError('optional view receipt changed its executed sidecar identity')\n     return result\n    "
+                +"view_module.write_actor_view=checked_sidecar_writer\n    ")
         # Keep the already-validated actual mmap state alive only until the
         # selected immutable full pin has also produced its optional actor view.
         source = source.replace('del value,training;gc.collect();','')
@@ -113,8 +130,7 @@ def remote_code(*, role, root, known, last, extra, pin_directory, minimum_availa
         source = source.replace(marker,"'bytes':target.stat().st_size}\n   "
             +"import sys;sys.path.insert(0,"+repr(str(actor_view_runtime))+")\n   "
             +"pin_stat=target.stat();pin_signature=(pin_stat.st_dev,pin_stat.st_ino,pin_stat.st_size,pin_stat.st_mtime_ns)\n   "
-            +"try:\n    from natlang_neuralese.model import native_bundle as view_module\n    "
-            +"if pathlib.Path(view_module.__file__).resolve()!=pathlib.Path("+repr(str(actor_view_runtime))+",'natlang_neuralese/model/native_bundle.py').resolve():raise ValueError('optional view helper origin differs')\n    "
+            +"try:\n    "+helper_loading
             +"chosen['actor_view']=view_module.write_actor_view(target,"+repr(str(actor_view_directory))
             +",validated_state=value,decoded_source_stat=decoded_source_stat)\n   "
             +"except Exception as error:chosen['actor_view_error']={'type':type(error).__name__,'fallback':'complete-checkpoint','assigned_repair':True}\n   "
@@ -143,11 +159,15 @@ def main(argv=None):
     parser.add_argument('--actor-view-directory', type=pathlib.Path)
     parser.add_argument('--actor-view-runtime', type=pathlib.Path,
                         help='explicit qualified training/neuralese package for optional view extraction')
+    parser.add_argument('--actor-view-sidecar', type=pathlib.Path, help='optional immutable native_bundle.py writer using the explicit existing runtime dependencies')
+    parser.add_argument('--actor-view-sidecar-sha256', help='exact SHA256 of the optional writer sidecar')
     parser.add_argument('--interval', type=float, default=120)
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args(argv)
     if bool(args.actor_view_directory) != bool(args.actor_view_runtime):
         parser.error('actor view export needs directory and explicit runtime together')
+    if bool(args.actor_view_sidecar) != bool(args.actor_view_sidecar_sha256) or (args.actor_view_sidecar and (not args.actor_view_directory or not re.fullmatch(r'[0-9a-f]{64}',args.actor_view_sidecar_sha256))):
+        parser.error('optional actor view sidecar requires directory/runtime and its exact lowercase SHA256')
     command = json.loads(args.export_command)
     if not isinstance(command, list) or not command or any(not isinstance(x, str) for x in command):
         parser.error('export command must be an explicit nonempty JSON argv')
@@ -164,7 +184,8 @@ def main(argv=None):
     def observe(**kwargs):
         code = remote_code(role=args.role, root=args.root, extra=extra,
                            pin_directory=args.pin_directory, minimum_available_bytes=args.minimum_available_bytes,
-                           actor_view_directory=args.actor_view_directory,actor_view_runtime=args.actor_view_runtime,**kwargs)
+                           actor_view_directory=args.actor_view_directory,actor_view_runtime=args.actor_view_runtime,
+                           actor_view_sidecar=args.actor_view_sidecar,actor_view_sidecar_sha256=args.actor_view_sidecar_sha256,**kwargs)
         result = cwctl.read_sandbox(args.sandbox_id, patience=60).exec(
             ['python', '-c', code], timeout_seconds=600).result(timeout=690)
         if result.returncode: raise RuntimeError('owned remote checkpoint observation failed: '+str(result.stderr)[-3000:])

@@ -58,3 +58,12 @@ training state, reject source/view/receipt/profile tampering, reject all resume
 and service-update uses, and verify that the exporter performs one full decode.
 The producer and actor must report full source and view identities distinctly.
 Do not claim production adoption or an actual startup speedup until measured.
+
+A future exporter may explicitly bind one immutable `native_bundle.py` writer
+sidecar and its SHA256 while retaining its already-qualified runtime package
+for dependencies. This avoids copying a numerical runtime merely to update CPU
+artifact selection. Read and hash the exact sidecar bytes before executing
+those same bytes in a private qualified namespace; verify the dependency
+package's origin. The default/runtime-module route is unchanged. Sidecar
+verification or extraction failure retains the same typed optional error and
+full-checkpoint private-backup path. This changes no model or training code.

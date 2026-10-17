@@ -214,3 +214,37 @@ def test_optional_view_failure_keeps_real_full_pin_and_export_highwater(source,t
     assert result['verified_step']==71
     state=json.loads(module.paths_for(tmp_path/'exports','lfm')['state'].read_text())
     assert state['last_verified_step']==71 and state['actor_view_error']==chosen['actor_view_error']
+
+
+@pytest.mark.parametrize('problem',[None,'wrong-sha','import-error','changes-during-write'])
+def test_actual_cursor_bound_writer_sidecar_preserves_full_backup(source,tmp_path,capsys,problem):
+    import hashlib,importlib.util,shutil
+    module_path=Path(__file__).parents[2]/'scripts/coreweave/cursor_checkpoint_export.py'
+    spec=importlib.util.spec_from_file_location('sidecar_actor_cursor',module_path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    _,path,_,_=source
+    root=tmp_path/'production';slot=root/'rounds/lfm/production/round-000/learner/checkpoint.pt'
+    slot.parent.mkdir(parents=True);shutil.copyfile(path,slot)
+    sidecar=tmp_path/'immutable-native_bundle.py'
+    raw=Path(__file__).parents[2].joinpath('training/neuralese/natlang_neuralese/model/native_bundle.py').read_bytes()
+    if problem=='import-error':raw=b"raise RuntimeError('optional writer unavailable')\n"
+    if problem=='changes-during-write':
+        raw+=b"\noriginal_writer=write_actor_view\ndef write_actor_view(*args,**kwargs):\n result=original_writer(*args,**kwargs)\n Path(__file__).write_bytes(b'changed')\n return result\n"
+    sidecar.write_bytes(raw);sha=hashlib.sha256(raw).hexdigest()
+    code=module.remote_code(role='lfm',root=root,known={},last=-1,extra=None,
+        pin_directory=tmp_path/'pins',minimum_available_bytes=0,
+        actor_view_directory=tmp_path/'views',actor_view_runtime=Path(__file__).parents[2]/'training/neuralese',
+        actor_view_sidecar=sidecar,actor_view_sidecar_sha256='0'*64 if problem=='wrong-sha'else sha)
+    scope={}
+    try:exec(compile(code,'<sidecar-cursor>','exec'),scope)
+    finally:
+        if 'remote_lock'in scope:scope['remote_lock'].close()
+    result=json.loads(capsys.readouterr().out.splitlines()[-1]);chosen=result['chosen']
+    assert Path(chosen['pin']).read_bytes()==slot.read_bytes()
+    assert CheckpointPolicy.load(chosen['pin'])['training']['optimizer']
+    if problem:
+        assert 'actor_view'not in chosen and chosen['actor_view_error']['fallback']=='complete-checkpoint'
+    else:
+        receipt=json.loads(Path(chosen['actor_view']['path']).read_text())
+        assert receipt['mechanism']['sha256']==sha and Path(receipt['mechanism']['path'])==sidecar
+        assert load_actor_view(chosen['pin'],chosen['actor_view'])['step']==71

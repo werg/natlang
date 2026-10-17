@@ -82,3 +82,23 @@ def test_canonical_glob_rejects_foreign_role_checkpoint_symlink_before_copy(tmp_
     result=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True,timeout=30)
     assert result.returncode!=0 and 'escaped its role namespace'in result.stderr
     assert not list(pins.iterdir())and foreign.read_bytes()==b'foreign checkpoint never decoded'
+
+
+@pytest.mark.parametrize('sidecar,sha',[('writer.py',None),(None,'f'*64),('writer.py','not-a-sha')])
+def test_sidecar_binding_requires_complete_explicit_options(sidecar,sha):
+    with pytest.raises(ValueError,match='sidecar'):
+        module.remote_code(role='lfm',root='/root',known={},last=0,extra=None,
+            pin_directory='/pins',minimum_available_bytes=0,actor_view_directory='/views',
+            actor_view_runtime='/runtime',actor_view_sidecar=sidecar,actor_view_sidecar_sha256=sha)
+
+
+def test_default_remote_code_is_byte_identical_when_sidecar_unused(tmp_path):
+    import subprocess
+    raw=subprocess.check_output(['git','show','904834c47:scripts/coreweave/cursor_checkpoint_export.py'],cwd=Path(__file__).parents[1],text=True)
+    original_path=tmp_path/'published_actor_exporter.py';original_path.write_text(raw)
+    spec=importlib.util.spec_from_file_location('published_actor_exporter',original_path)
+    original=importlib.util.module_from_spec(spec);spec.loader.exec_module(original)
+    options=dict(role='lfm',root='/root',known={},last=0,extra=None,pin_directory='/pins',minimum_available_bytes=0)
+    assert module.remote_code(**options)==original.remote_code(**options)
+    options.update(actor_view_directory='/views',actor_view_runtime='/runtime')
+    assert module.remote_code(**options)==original.remote_code(**options)
