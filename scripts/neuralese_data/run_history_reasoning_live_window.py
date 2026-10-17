@@ -229,6 +229,10 @@ def validate_case_packet(case_path: Path, exclusion_path: Path, *, exclusion_sha
             _verify_bound_file(proof["current_protection"], "current protection manifest", verified_artifact_hashes)
             _verify_bound_file(proof["current_global_source_closure"], "current global source closure",
                                verified_artifact_hashes)
+            _verify_bound_file(proof["decision_hold_closure"], "current decision-hold closure",
+                               verified_artifact_hashes)
+            _verify_bound_file(proof["canonical_source_verification"], "canonical source verification",
+                               verified_artifact_hashes)
             verified_proofs[proof_path] = proof
         proof = verified_proofs[proof_path]
         model_receipts = {}
@@ -243,6 +247,11 @@ def validate_case_packet(case_path: Path, exclusion_path: Path, *, exclusion_sha
                 raise ValueError(f"case {case_id} {model_name} conversion receipt is not admitted")
             if receipt.get("source", {}).get("sha256") != proof.get("source", {}).get("sha256"):
                 raise ValueError(f"case {case_id} {model_name} receipt differs from the validation source")
+            decision_proof = model_proof.get("decision_admission") or {}
+            decision_receipt = receipt.get("decision_admission") or {}
+            if any(decision_proof.get(field) != decision_receipt.get(field)
+                   for field in ("path", "sha256", "output_sha256")):
+                raise ValueError(f"case {case_id} {model_name} decision-admission proof/receipt differs")
             for split in ("train", "test"):
                 proof_output = model_proof.get("outputs", {}).get(split)
                 receipt_output = receipt.get("outputs", {}).get(split)
