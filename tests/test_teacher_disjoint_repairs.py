@@ -65,3 +65,23 @@ def test_invalid_parallel_setting_rejected_before_spawn(tmp_path,monkeypatch,lim
     monkeypatch.setattr(guardian.subprocess,'Popen',lambda *a,**k:pytest.fail('spawned'))
     with pytest.raises(ValueError,match='positive integer'):
         guardian.launch_repair(tmp_path,{}, {'repair_parallel_batches':limit})
+
+
+def test_live_flock_owner_and_recoverable_child_use_one_slot(tmp_path,monkeypatch):
+    config,receipt,other,old,live,calls=fixture(tmp_path,monkeypatch)
+    old['argv']=['flock','-n','/control/repair-collector.lock','nice','-n','19','python','run_bonsai_queue.py']
+    value=json.loads(receipt.read_text());value['current']['owner']=copy.deepcopy(old)
+    guardian.write(receipt,value);before=receipt.read_bytes()
+    child={'pid':151,'start_ticks':'15','boot_id':'boot','argv':[b'python',b'run_bonsai_queue.py']}
+    live.add(151);recoveries=[]
+    def recover(token,**kwargs):
+        recoveries.append(token)
+        return child if token=='old-token'else None
+    monkeypatch.setattr(guardian,'recover_token',recover)
+    state={'repair_owner':copy.deepcopy(old)}
+    guardian.launch_repair(tmp_path,state,config)
+    assert len(calls)==1 and len(state['repair_batch_owners'])==2
+    assert state['repair_owner']==old and receipt.read_bytes()==before
+    assert 'old-token'not in recoveries
+    guardian.launch_repair(tmp_path,state,config)
+    assert len(calls)==1 and receipt.read_bytes()==before

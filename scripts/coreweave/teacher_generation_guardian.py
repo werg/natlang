@@ -400,8 +400,13 @@ def launch_repair(folder, state, config):
         attempt = receipt.get('current')
         if not attempt:
             continue
-        recovered = recover_token(attempt['token'], script_prefix='run_bonsai_queue.py')
-        owner = public_identity(recovered) if recovered else attempt.get('owner')
+        owner = attempt.get('owner')
+        # A live flock wrapper and its token-bearing Python child are ONE
+        # trajectory. Preserve its authenticated stored owner before recovery.
+        recovered = None if alive(owner) else recover_token(
+            attempt['token'], script_prefix='run_bonsai_queue.py')
+        if recovered:
+            owner = public_identity(recovered)
         if not alive(owner):
             continue
         if recovered and attempt.get('owner') != owner:
