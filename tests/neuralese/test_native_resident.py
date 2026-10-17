@@ -546,3 +546,28 @@ def test_delta_helper_defers_full_held_separation_to_actual_resident(tmp_path,mo
     assert manager.poll(9)is None and resident.current(directory)is None
     errors=[json.loads(p.read_text())['error']for p in(directory/'rejections').glob('*.json')]
     assert errors and 'protected append'in errors[0]
+
+
+@pytest.mark.parametrize('explicit_side',['certificate','actual'])
+def test_geometry_identity_accepts_only_implicit_ieee_default(tmp_path,explicit_side):
+    import copy
+    identity={'model_config':{'architecture':'lfm2','native_linear_precision':'bf16x6'},
+              'batch_tokens':65536,'runtime':{'device':'cuda'}}
+    explicit=copy.deepcopy(identity);explicit['model_config']['native_attention_precision']='ieee'
+    evidence=tmp_path/'proof.json';write_json(evidence,{'passed':True})
+    certificate=tmp_path/'capacity.json'
+    value={'schema':'natlang.native-resident-geometry-qualification/1','passed':True,
+        'identity':explicit if explicit_side=='certificate'else identity,
+        'runtime_code_sha256':resident.digest({'module':'bound'}),
+        'limits':{'forward_tokens':94236,'kv_slots':157075},'evidence':resident.binding(evidence)}
+    write_json(certificate,value);original=certificate.read_bytes()
+    actual=identity if explicit_side=='certificate'else explicit
+    assert resident.geometry_capacity(resident.binding(certificate),identity=actual,code={'module':'bound'})==value['limits']
+    assert certificate.read_bytes()==original
+    for mode in ('tf32x3',None,'invalid'):
+        wrong=copy.deepcopy(actual);wrong['model_config']['native_attention_precision']=mode
+        with pytest.raises(ValueError,match='differs'):
+            resident.geometry_capacity(resident.binding(certificate),identity=wrong,code={'module':'bound'})
+    wrong=copy.deepcopy(actual);wrong['batch_tokens']+=1
+    with pytest.raises(ValueError,match='differs'):
+        resident.geometry_capacity(resident.binding(certificate),identity=wrong,code={'module':'bound'})

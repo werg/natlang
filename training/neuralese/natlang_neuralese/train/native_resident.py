@@ -180,10 +180,22 @@ def validate_source_obligations(plan, stage_id, train, declarations, withdrawal_
     return _retain_pending_sources(frame, {})
 
 
+def same_geometry_identity(previous, current):
+    """An omitted attention mode means IEEE; all other identity fields stay exact."""
+    def explicit(value):
+        if not isinstance(value,dict):return value
+        result=dict(value)
+        if isinstance(value.get('model_config'),dict):
+            result['model_config']=dict(value['model_config'])
+            result['model_config'].setdefault('native_attention_precision','ieee')
+        return result
+    return explicit(previous)==explicit(current)
+
+
 def geometry_capacity(value, *, identity, code):
     certificate = json.loads(bound(value).read_text())
     if (certificate.get('schema') != 'natlang.native-resident-geometry-qualification/1'
-            or certificate.get('passed') is not True or certificate.get('identity') != identity
+            or certificate.get('passed') is not True or not same_geometry_identity(certificate.get('identity'), identity)
             or certificate.get('runtime_code_sha256') != digest(code)):
         raise ValueError('resident geometry qualification differs from actual model/runtime/packing')
     bound(certificate['evidence'])
