@@ -358,6 +358,18 @@ def verify_model_source_parity(model_views):
             raise ValueError('cross-model source occurrence is missing from a complete or explicit pending view')
 
 
+def whole_trajectory_source_view(proofs):
+    """Project render proofs to the historical twin-comparison scope."""
+    whole = {}
+    for proof in proofs:
+        if proof['view'] != 'whole-trajectory':
+            continue
+        key = (proof['normalized_session_sha256'], proof['source_row'])
+        whole.setdefault(key, set()).add((proof['id'], proof['normalized_session_sha256'],
+            proof['split'], 'whole-trajectory'))
+    return whole
+
+
 def verify_conversion(directory, export_path, *, protection, held_sources, decision_bindings, source_rows, conversion_protection=None):
     directory = Path(directory).resolve(strict=True); receipt_path = directory / 'receipt.json'
     receipt = json.loads(receipt_path.read_text())
@@ -562,13 +574,7 @@ def main(argv=None):
                 conversion_protection=conversion_protection)
             if receipt['prepared_tokenizer']['base_files'] != inventories[model]:
                 raise ValueError('native cohort model selector differs from its exact tokenizer base inventory')
-            whole = {}
-            for proof in proofs:
-                if proof['view'] != 'whole-trajectory':
-                    continue
-                key = (proof['normalized_session_sha256'], proof['source_row'])
-                whole.setdefault(key, set()).add((proof['id'], proof['normalized_session_sha256'],
-                    proof['split'], 'whole-trajectory'))
+            whole = whole_trajectory_source_view(proofs)
             pending = set()
             for omission in sessions(directory / 'omissions.jsonl'):
                 if omission.get('reason') == 'source-render-pending:tool-arguments':

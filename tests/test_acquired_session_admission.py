@@ -202,9 +202,17 @@ def test_admission_prevalidation_is_bound_to_actual_template_and_conserves_scala
 
 
 def test_paired_admission_keeps_mellum_scalar_while_lfm2_records_exact_pending_occurrence():
-    from scripts.neuralese_data.prepare_acquired_session_admission import verify_model_source_parity
+    from scripts.neuralese_data.prepare_acquired_session_admission import (
+        verify_model_source_parity, whole_trajectory_source_view)
     key=('source-sha','source.parquet:17')
     accepted={('source-session:source-occurrence:x','source-sha','train','whole-trajectory')}
+    proofs=[
+        {'id':'source-session:source-occurrence:x','normalized_session_sha256':'source-sha',
+            'source_row':'source.parquet:17','split':'train','view':'whole-trajectory'},
+        {'id':'per-model-auxiliary-lfm','normalized_session_sha256':'source-sha',
+            'source_row':'source.parquet:17','split':'train','view':'full-prefix-reasoning-target'},
+    ]
+    assert whole_trajectory_source_view(proofs)=={key:accepted}
     verify_model_source_parity({
         'lfm25':{'backbone':'lfm2','accepted':{},'pending':{key},
             'auxiliary':{'view':'per-model-diagnostic','proofs':{'lfm-only'}}},
