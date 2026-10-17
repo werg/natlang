@@ -419,3 +419,27 @@ def test_tool_argument_native_state_parts_require_a_canonical_full_id():
     assert ordinary.blocks == []
     rendered_text = "".join(part for part in ordinary.segments if isinstance(part, str))
     assert truncated in rendered_text
+
+
+@pytest.mark.parametrize('bad_id', [None, 7, 'nzs1_w42ancp7k5', 'missing'])
+def test_malformed_nested_native_state_id_remains_ordinary_argument_data(bad_id):
+    calls = [{"type": "function", "function": {"name": "return_result", "arguments": json.dumps({
+        "value": [{"type": "native_state", "id": bad_id}]})}}]
+    rendered = render_messages([{"role": "assistant", "tool_calls": calls}], None, _template,
+                               native_state=True)
+    assert rendered.blocks == []
+    rendered_text = "".join(part for part in rendered.segments if isinstance(part, str))
+    assert 'native_state' in rendered_text
+
+
+def test_mixed_valid_and_invalid_nested_native_state_parts_remain_ordinary_as_a_whole():
+    valid_id = "nzs1_" + "b" * 52
+    calls = [{"type": "function", "function": {"name": "return_result", "arguments": json.dumps({
+        "value": [{"type": "native_state", "id": valid_id},
+                  {"type": "native_state", "id": "nzs1_short"}]})}}]
+    rendered = render_messages([{"role": "assistant", "tool_calls": calls}], None, _template,
+                               native_state=True)
+    # The list keeps its original JSON value shape; no member is imported.
+    assert rendered.blocks == []
+    rendered_text = "".join(part for part in rendered.segments if isinstance(part, str))
+    assert valid_id in rendered_text and "nzs1_short" in rendered_text

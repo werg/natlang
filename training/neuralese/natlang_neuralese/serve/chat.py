@@ -221,8 +221,12 @@ def render_messages(messages: list[dict], tools: list | None, apply_template, sp
                     # arguments remains ordinary data for runtime validation.
                     if any(part["type"] == "native_state" for part in value) and any(
                             part["type"] == "native_state" and
-                            not re.fullmatch(r"nzs1_[a-z2-7]{52}", part.get("id", ""))
+                            (not isinstance(part.get("id"), str) or
+                             not re.fullmatch(r"nzs1_[a-z2-7]{52}", part["id"]))
                             for part in value):
+                        # Keep the whole heterogeneous part-list as ordinary
+                        # argument data if any state reference is malformed;
+                        # partially importing it would change the value shape.
                         return value
                     value = flatten(value, escape=False)
                     marker = input_pattern.fullmatch(value)
