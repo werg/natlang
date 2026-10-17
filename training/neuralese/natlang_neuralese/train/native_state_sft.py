@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
 import hashlib
 import json
 import math
@@ -564,6 +565,13 @@ def _evaluate_cadence(model, source, *, args, coverage=None, final=False, backen
     return result, next_coverage
 
 
+def _retain_current_held_coverage(metrics, training, held):
+    metrics.pop('held_coverage',None)
+    coverage=(training.get('metrics') or {}).get('held_coverage')
+    if isinstance(coverage,dict) and coverage.get('source_sha256')==held.file_sha256:
+        metrics['held_coverage']=copy.deepcopy(coverage)
+
+
 def _save(policy, model, optimizer, *, config, identity, step, epoch, cursor, source_receipts,
           source_hash, source_row_bindings, held_row_bindings, exposure_counts, global_step, rng, metrics,
           architecture, options, fp8_state=None, sft_progress=None):
@@ -923,6 +931,7 @@ def main(argv=None):
                 if objective.identity != actual:
                     raise ValueError('native policy objective differs from the actual loaded actor embedding/checkpoint identity')
     mandatory_objective=bool(getattr(objective,'mandatory_progress',False))
+    policy_operation=objective is not None and not mandatory_objective
     held_objective=objective if mandatory_objective else None
     if (args.preference_beta is not None or args.preference_margin is not None) and not mandatory_objective:
         raise ValueError('preference beta/margin require the declared native offline pairwise objective')
@@ -1128,16 +1137,20 @@ def main(argv=None):
             # stage starts its own exposure counters at zero.
             global_step = int(resume.get('global_step', resume['step']))
             metrics = {}
+            if policy_operation:_retain_current_held_coverage(metrics,saved_training,held)
         else:
             step, epoch, cursor = int(resume['step']), int(resume['epoch']), int(resume['cursor'])
             global_step = int(resume.get('global_step', step))
             exposure_counts.update({key: int(value) for key, value in (resume.get('exposure_counts') or {}).items()
                                     if key in exposure_counts})
             metrics = dict(resume.get('metrics') or {})
-            if restored_progress and shared_resume is not None:
+            if restored_progress and (shared_resume is not None
+                    or (saved_training.get('options') or {}).get('stage_id')!=args.stage_id
+                    or (saved_training.get('identity') or {}).get('objective')!=objective_binding):
                 # Credits survive other objectives; evaluations belong to the new weights.
-                for key in ('held', 'held_coverage', 'task_checkpoint_sha256', 'task_native_identity'):
+                for key in ('held', 'task_eval', 'task_checkpoint_sha256', 'task_native_identity'):
                     metrics.pop(key, None)
+                _retain_current_held_coverage(metrics,saved_training,held)
         restore_training_rng_state(resume['rng'], args.device)
         resume['optimizer'] = None
         if 'state' in locals():
@@ -1371,14 +1384,14 @@ def main(argv=None):
             due_checkpoint = policy.due(step, end=step == total_end)
             if policy.signaled:
                 break
-            due_task = task_eval is not None and (step == total_end or
+            due_task = task_eval is not None and ((step == total_end and not policy_operation) or
                         bool(args.task_eval_every and step % args.task_eval_every == 0))
             due_eval = step % eval_at == 0 or step == total_end or due_task
             if due_eval:
                 evaluation_rng = capture_training_rng_state(args.device)
                 try:
                     held_metrics, held_coverage = _evaluate_cadence(model, held, args=args,
-                        coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end, backend=backend, objective=held_objective)
+                        coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective)
                 except Exception as error:
                     # This boundary follows a completed optimizer update and exact
                     # exposure accounting. Never checkpoint a partial failed update.
@@ -1431,9 +1444,9 @@ def main(argv=None):
                 try:
                     if backend is not None:
                         with backend.native_modules():
-                            metrics['task_eval'] = task_eval.cadence(step, final=step == total_end)
+                            metrics['task_eval'] = task_eval.cadence(step, final=step == total_end and not policy_operation)
                     else:
-                        metrics['task_eval'] = task_eval.cadence(step, final=step == total_end)
+                        metrics['task_eval'] = task_eval.cadence(step, final=step == total_end and not policy_operation)
                 finally:
                     model.train()
                     restore_training_rng_state(saved_rng, args.device)
@@ -1465,7 +1478,7 @@ def main(argv=None):
     if metadata_dirty or ((step != resumed_step or policy.signaled) and last_saved_step != step):
         if not policy.signaled and not metrics.get('held'):
             metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
-                coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end, backend=backend, objective=held_objective)
+                coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=step == total_end and not policy_operation, backend=backend, objective=held_objective)
         _save(policy, model, optimizer, config=config, identity=training_identity, step=step,
               global_step=global_step, epoch=epoch, cursor=cursor, source_receipts=source_receipts,
               source_hash=source_hash, source_row_bindings=source_row_bindings,
@@ -1475,7 +1488,7 @@ def main(argv=None):
               fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
         last_saved_step = step
     completed = all(exposure_counts[key] >= visits for key, visits in required_visits.items())
-    if completed and not policy.signaled and (metrics.get('held', {}).get('scope') != 'full'
+    if completed and not policy_operation and not policy.signaled and (metrics.get('held', {}).get('scope') != 'full'
             or metrics.get('held', {}).get('source_sha256') != held.file_sha256):
         metrics['held'], metrics['held_coverage'] = _evaluate_cadence(model, held, args=args,
             coverage=metrics.get('held_coverage'), previous_result=metrics.get('held'), final=True, backend=backend, objective=held_objective)
@@ -1488,7 +1501,7 @@ def main(argv=None):
             rng=capture_training_rng_state(args.device), metrics=metrics,
             architecture=config['architecture'], options={**checkpoint_options, '_source_row_order': source_order},
             fp8_state=backend.extra_state() if backend is not None else None, sft_progress=carried_progress)
-    completed = (completed and metrics.get('held', {}).get('scope') == 'full'
+    completed = (completed and (policy_operation or metrics.get('held', {}).get('scope') == 'full')
                  and metrics.get('held', {}).get('source_sha256') == held.file_sha256)
     foundation = foundation_exposure() if args.communication_foundation else None
     foundation_boundary = bool(foundation and foundation['complete'] and
@@ -1497,7 +1510,7 @@ def main(argv=None):
     # summaries were checkpointed. At the same final weights, make one real
     # cadence call; do not reuse an unbound log row or enter final_at's retry
     # loop merely to force an eligible score.
-    if not policy.signaled and task_eval is not None and (completed or foundation_boundary or refresh_boundary) and (
+    if not policy.signaled and task_eval is not None and ((completed and not policy_operation) or foundation_boundary) and (
             not metrics.get('task_checkpoint_sha256') or
             metrics['task_checkpoint_sha256'] != sha256_file_hex_cached(policy.slot)):
         current_sha = sha256_file_hex_cached(policy.slot)
@@ -1579,7 +1592,7 @@ def main(argv=None):
         ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
     communication = communication_exposure(train.entries, exposure_counts, required_visits)
     mandatory_sft = progress_obligations(carried_progress)
-    completed = completed and mandatory_sft['complete']
+    completed = completed and (policy_operation or mandatory_sft['complete'])
     pending_source_admission = ({**admission_record, 'checkpoint_sha256': checkpoint_sha}
         if admission_record and admission_record['global_step'] == global_step and step == resumed_step else None)
     continuation_boundary = {'kind': 'semantic-refresh', 'reached': bool(refresh_boundary and step>resumed_step),
@@ -1590,6 +1603,10 @@ def main(argv=None):
     report = {'schema': 'natlang.neuralese-native-sft-report/1',
               'resident_adoption': resident_receipt,
               'communication_exposure': communication, 'completed': completed,
+              'completion_scope':'policy-operation' if policy_operation else 'supervised-exposure',
+              'held_qualification':{'required_scope':'cadence' if policy_operation else 'full',
+                  'observed_scope':metrics.get('held',{}).get('scope'),
+                  'source_sha256':metrics.get('held',{}).get('source_sha256')},
               'foundation_ready': foundation_ready, 'communication_foundation': foundation, 'mandatory_sft': mandatory_sft,
               'pending_source_admission': pending_source_admission,
               'continuation_boundary': continuation_boundary,
@@ -1624,7 +1641,8 @@ def main(argv=None):
                                 'sha256': sha256_file_hex_cached(runtime_path),
                                 'passed': runtime_report.get('passed') is True},
         'prerequisite_stages': prerequisites, 'recipe': recipe_binding,
-        'completed': bool(completed and communication['complete'] and
+        'policy_operation_completed':bool(policy_operation and completed),
+        'completed': bool(not policy_operation and completed and communication['complete'] and
                           runtime_report.get('passed') is True and task_receipt_ok and
                           all(item.get('completed') is True for item in prerequisites)),
         'task_eval': task_summary,

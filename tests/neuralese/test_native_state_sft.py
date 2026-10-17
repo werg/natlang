@@ -944,3 +944,57 @@ def test_held_failure_preserves_completed_optimizer_rng_and_exposure_for_exact_r
         equal(actual['training'][key], expected['training'][key])
     for key in actual.keys() - {'training'}:
         equal(actual[key], expected[key])
+
+
+@pytest.mark.parametrize('refresh',[True,False])
+def test_refresh_only_boundary_does_not_force_task_window(tmp_path,monkeypatch,refresh):
+    import json
+    import torch
+    from test_native_serve import _tiny_source as tiny_source
+    from natlang_neuralese.model.native_model import load_native_model
+    from natlang_neuralese.train import native_state_sft as trainer
+    from natlang_neuralese.eval import task_cadence
+    base=tmp_path/'base';tiny_source(base)
+    _,_,_,config=load_native_model(base,dtype=torch.float32,rank=4)
+    paths={}
+    for split in ('train','test'):
+        row=dict(graph(split),split=split,source_groups=[split],tokenizer_fingerprint=config['tokenizer_fingerprint'])
+        paths[split]=tmp_path/(split+'.jsonl');paths[split].write_text(json.dumps(row)+'\n')
+    calls=[]
+    def cadence(step,*,final=False):
+        calls.append((step,final))
+        return None
+    monkeypatch.setattr(task_cadence,'TaskEval',lambda spec,out,engine,**kwargs:
+        SimpleNamespace(engine=engine,cadence=cadence))
+    out=tmp_path/'run'
+    argv=['--base',str(base),'--dtype','float32','--rank','4','--device','cpu',
+        '--native-graphs',str(paths['train']),'--held-native-graphs',str(paths['test']),
+        '--epochs','2','--checkpoint-every','1','--eval-every','1',
+        '--task-eval-every','0','--out',str(out),
+        '--task-eval',json.dumps({'packet':{'path':'unused','sha256':'s'},'cases':[0]})]
+    if refresh:argv+=['--refresh-at-checkpoint']
+    assert trainer.main(argv)==0
+    report=json.loads((out/'report.json').read_text())
+    if refresh:
+        assert not calls
+        assert report['completed'] is False
+        assert report['continuation_boundary']['reached'] is True
+        assert report['continuation_boundary']['new_optimizer_updates']==1
+        assert torch.load(out/'checkpoint.pt',weights_only=False)['training']['exposure_counts']=={'train':1}
+    else:
+        assert calls and all(final for _,final in calls)
+        assert report['completed'] is True
+        assert report['metrics']['held']['scope']=='full'
+
+
+def test_current_held_coverage_retention_is_exact_and_does_not_reuse_certificates():
+    from natlang_neuralese.train.native_state_sft import _retain_current_held_coverage
+    prior={'metrics':{'held_coverage':{'source_sha256':'same','classes':{'ordinary':{'visits':[2]}}},
+                      'held':{'loss':-999},'task_eval':{'passed':True}}}
+    metrics={'held_coverage':{'source_sha256':'stale-frame'}}
+    _retain_current_held_coverage(metrics,prior,SimpleNamespace(file_sha256='different'))
+    assert metrics=={}
+    _retain_current_held_coverage(metrics,prior,SimpleNamespace(file_sha256='same'))
+    assert list(metrics)==['held_coverage']
+    metrics['held_coverage']['classes']['ordinary']['visits'][0]=3
+    assert prior['metrics']['held_coverage']['classes']['ordinary']['visits']==[2]

@@ -103,7 +103,7 @@ def test_actual_shared_optimizer_updates_native_policy_graph_for_both_ports(tmp_
 
 
 @pytest.mark.parametrize('shared_parent',[True,False])
-def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,shared_parent):
+def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,shared_parent, *, parent_setup=None, extra_args=()):
     """Actual tiny LFM full trainer; fixture reward is NOT an environment result."""
     from test_native_model import tiny_source
     from natlang_neuralese.model.native_model import load_native_model, model_state, native_identity, SHARED_CHECKPOINT_SCHEMA
@@ -144,6 +144,7 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
         from natlang_neuralese.data.native_sources import NativeGraphSource
         saved['training']['held_row_bindings']=NativeGraphSource(held,config['tokenizer_fingerprint'],
             required_split='test',role_ids=roles.ids).bindings
+    if parent_setup is not None:parent_setup(saved,held,roles,config)
     torch.save(saved, parent)
     identity = native_identity(model, config, checkpoint_sha256=sha256_file_hex(parent))
     with torch.no_grad():
@@ -170,13 +171,17 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
         '--communication-foundation', '--foundation-native-graphs', str(tmp_path/'parent-only-source'),
         '--foundation-communication-batches','4',
         '--resident-data-directory',str(tmp_path/'parent-only-resident'),
-        '--resident-geometry-qualification',str(tmp_path/'parent-only-capacity.json')]
+        '--resident-geometry-qualification',str(tmp_path/'parent-only-capacity.json'), *extra_args]
     assert main(argv) == 0
     slot = tmp_path/'learner/checkpoint.pt'
     state = torch.load(slot, map_location='cpu', weights_only=False)
     assert state['training']['step'] == 1 and state['training']['global_step'] == 2
     assert state['training']['options']['continuation']['checkpoint_sha256'] == sha256_file_hex(parent)
     assert state['training']['optimizer']
+    report=json.loads((tmp_path/'learner/report.json').read_text())
+    assert report['completed'] is True
+    assert report['completion_scope']=='policy-operation'
+    if not shared_parent:assert report['mandatory_sft']['complete'] is False
     assert state['training']['options']['resident_data_directory'] is None
     assert state['training']['options']['foundation_communication_batches'] is None
     assert state['training']['options']['resident_geometry_qualification'] is None
@@ -193,6 +198,68 @@ def test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,s
     prior_sha = sha256_file_hex(slot)
     assert main(argv) == 0
     assert sha256_file_hex(slot) == prior_sha  # no repeated update/checkpoint rewrite
+
+
+def test_policy_completion_uses_bounded_rotating_numeric_held_graphs(tmp_path,monkeypatch):
+    from natlang_neuralese.data.native_sources import NativeGraphSource
+    from natlang_neuralese.train.native_held import held_selection
+    def setup(saved,held,roles,config):
+        original=json.loads(held.read_text())
+        po,pc,co,cc=config['marker_ids']
+        rows=[]
+        for index in range(3):
+            ordinary=copy.deepcopy(original)
+            ordinary['id']='held-fixture' if index==0 else 'ordinary-'+str(index)
+            rows.append(ordinary)
+            communication={**copy.deepcopy(original),'id':'communication-'+str(index),'nodes':[
+                {'name':'writer','token_ids':[1,po,5,6,pc],
+                 'target_weights':[0,1,1,1,1],'producing':[[2,4]]},
+                {'name':'reader','token_ids':[3,co,cc,11,2],
+                 'target_weights':[0,0,0,1,1],
+                 'imports':[{'at':2,'source':'writer','start':2,'stop':4}]}]}
+            rows.append(communication)
+        held.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+        source=NativeGraphSource(held,config['tokenizer_fingerprint'],required_split='test',role_ids=roles.ids)
+        saved['training']['held_row_bindings']=source.bindings
+        _,coverage,_=held_selection(source.entries,source_sha256=source.file_sha256,token_budget=1,graph_budget=2)
+        saved['training']['metrics']={'held_coverage':coverage,'held':{'loss':-999,'scope':'full'}}
+    test_native_stage_real_shared_parent_update_and_exact_noop_resume(tmp_path,False,
+        parent_setup=setup,extra_args=['--held-eval-tokens','1','--held-eval-graphs','2'])
+    report=json.loads((tmp_path/'learner/report.json').read_text())
+    state=torch.load(tmp_path/'learner/checkpoint.pt',weights_only=False)
+    held=state['training']['metrics']['held']
+    assert held['scope']=='cadence-subset' and held['examples']==1 and held['source_graphs']==6
+    assert held['loss']>=0
+    assert held['selection']['classes']['ordinary']['selected_ids']==['communication-0']
+    # Frozen numeric JSONL source indexes classify all rows as ordinary; no parser policy change here.
+    assert held['selection']['classes']['communication']['selected_ids']==[]
+    assert report['mandatory_sft']['remaining_graph_visits']==1
+    readiness=json.loads((tmp_path/'learner/native-training-receipt.json').read_text())
+    assert readiness['completed'] is False and readiness['policy_operation_completed'] is True
+    # Consume the actual trainer report through the production controller, rather
+    # than a synthetic completed flag that could conceal learner_pending loops.
+    import shutil
+    from natlang_neuralese.rl import native_raw_policy
+    cases=tmp_path/'cases.jsonl';cases.write_text(json.dumps({'id':'fixture-only','split':'train'})+'\n')
+    config_path=tmp_path/'production.json'
+    config_path.write_text(json.dumps({'native_state':True,'out':str(tmp_path/'production'),
+        'checkpoint':str(tmp_path/'shared.pt'),'cases':str(cases),'endpoints':['unused'],
+        'rows_per_round':1,'learner_command':['actual-report-fixture'],'after_update':['publish'],'base':'unused'}))
+    monkeypatch.setattr(native_raw_policy,'prepare_raw_policy',lambda *a,**kw:{'tokenizer':'bound-parent'})
+    def collect(**kwargs):
+        shutil.copyfile(tmp_path/'rollouts.jsonl',kwargs['out']/'rollouts.jsonl')
+        return {'scored':1,'successes':1,'groups_with_spread':0,
+                'groups':[{'task_id':'fixture-only','scored':1,'mean':1.}]}
+    def learner(argv,values):
+        if argv==['publish']:return
+        assert argv==['actual-report-fixture']
+        shutil.copytree(tmp_path/'learner',Path(values['learner_out']))
+    monkeypatch.setattr(production,'collect',collect)
+    monkeypatch.setattr(production,'run_command',learner)
+    result=production.run(config_path,rounds=1)
+    assert result['round']==1 and result['trained_rounds']==1
+    assert result['phase']!='learner_pending'
+    assert result['last_learner_progress']['mandatory_sft']['remaining_graph_visits']==1
 
 
 @pytest.mark.parametrize('foundation',[False,True])
