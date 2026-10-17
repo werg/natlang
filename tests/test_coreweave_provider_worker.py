@@ -123,10 +123,13 @@ def test_detached_runner_lock_and_receipt_prevent_duplicate_execution(tmp_path,m
                "p.open('a').write('once\\n');time.sleep(.2)"]
     (tmp_path / 'worker-spec.json').write_text(json.dumps({'request_id': 'exact-request',
         'runtime': repo, 'kind': 'round', 'argv': command,
-        'env': {**client._runtime_environment('worker'),'CUDA_VISIBLE_DEVICES': ''}}))
+        'env': {**client._runtime_environment('worker'),'CUDA_VISIBLE_DEVICES': '',
+                'PYTHONPATH':repo+'/training/neuralese'}}))
     first = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     second = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    first.communicate(timeout=10); second.communicate(timeout=10)
+    first_output=first.communicate(timeout=10);second_output=second.communicate(timeout=10)
+    assert first.returncode==second.returncode==0,(first_output,second_output)
+    assert json.loads((tmp_path/'child-exit.json').read_text())['exit_code']==0
     assert counter.read_text() == 'once\n'
     receipt = json.loads((tmp_path / 'launch.json').read_text())
     assert receipt['wrapper_pid'] in {first.pid, second.pid}

@@ -65,6 +65,11 @@ this service does not decide training policy or allocate resources.
 | Cross-sandbox artifacts | Existing private scoped artifact transport | Credentials remain on DGX; source and target bytes must match the declared SHA/size, with results exposed last. |
 | Recovery | Durable per-request provider receipts | Reattach to the same owned process; never duplicate a model worker after a controller interruption. |
 
+Authenticated request stops are exact provider plumbing: check the request-bound
+stop before resolving dependencies, between staged files, and before launch.
+An already stopped request must not load an actor merely to terminate it. For
+an existing actor, retain exact process ownership and drain its closed artifacts.
+
 The provider validates the declared resource against an explicit existing-ID
 allowlist, stages bound inputs at their unchanged absolute namespaces, starts
 one detached worker, and records its PID plus process start time. A stop request

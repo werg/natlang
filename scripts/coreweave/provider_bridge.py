@@ -134,6 +134,8 @@ class ProviderBridge:
         if receipt.get('phase') in {'launched', 'stop_sent', 'complete'}:
             return request, target, receipt
         self.io.save_receipt(key, {**ownership, 'phase': 'staging'})
+        if should_stop():
+            return request, target, {**ownership, 'phase': 'staging_stopped'}
         closure = self.io.dependency_closure(self.coordinator, request)
         if not self.mirror_inventory(self.coordinator,target,[*closure['files'],envelope['request']],should_stop):
             return request,target,{**ownership,'phase':'staging_stopped'}
@@ -149,18 +151,18 @@ class ProviderBridge:
         return request, target, receipt
 
     def tick(self, envelope, *, host_stop=False):
-        should_stop = host_stop if callable(host_stop) else lambda: host_stop
+        def should_stop():
+            stop_data = self.io.read_optional(self.coordinator, envelope['stop_file'])
+            if stop_data:
+                stop = json.loads(stop_data)
+                if (stop.get('schema') != STOP_SCHEMA or stop.get('checkpoint_requested') is not True
+                        or stop.get('request') != envelope['request']):
+                    raise ValueError('provider stop does not belong to the active request')
+            return bool(stop_data) or (host_stop() if callable(host_stop) else host_stop)
         request, target, receipt = self.prepare(envelope, should_stop=should_stop)
         if receipt['phase'] in {'complete', 'staging_stopped'}:
             return True
-        stop_data = self.io.read_optional(self.coordinator, envelope['stop_file'])
-        if stop_data:
-            stop = json.loads(stop_data)
-            if (stop.get('schema') != STOP_SCHEMA or stop.get('checkpoint_requested') is not True
-                    or stop.get('request') != envelope['request']):
-                raise ValueError('provider stop does not belong to the active request')
-        stop_requested = host_stop() if callable(host_stop) else host_stop
-        if (stop_requested or stop_data) and receipt['phase'] != 'stop_sent':
+        if should_stop() and receipt['phase'] != 'stop_sent':
             # The concrete service verifies PID and /proc start time before TERM.
             self.io.terminate(target, receipt['process'])
             receipt = {**receipt, 'phase': 'stop_sent'}

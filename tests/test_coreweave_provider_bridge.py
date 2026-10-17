@@ -116,6 +116,7 @@ def test_results_are_exposed_only_after_verified_artifacts_and_restart_reuses_wo
 def test_stop_is_bound_to_request_and_drains_without_result_commit():
     io, request, envelope = fixture()
     service = bridge.ProviderBridge(io, 'mellum', {'lfm'})
+    assert service.tick(envelope) is False
     io.files['mellum', envelope['stop_file']] = payload({'schema': bridge.STOP_SCHEMA,
         'checkpoint_requested': True, 'request': envelope['request']})
     assert service.tick(envelope) is False
@@ -131,6 +132,29 @@ def test_foreign_stop_cannot_signal_worker():
     with pytest.raises(ValueError, match='stop'):
         bridge.ProviderBridge(io, 'mellum', {'lfm'}).tick(envelope)
     assert not any(e[0] == 'term' for e in io.events)
+    assert not any(e[0] in {'mirror','launch'} for e in io.events)
+
+
+@pytest.mark.parametrize('during_staging', [False, True])
+def test_request_stop_prevents_staging_or_launch_without_committing_a_result(during_staging):
+    io, request, envelope = fixture()
+    stop = payload({'schema': bridge.STOP_SCHEMA, 'checkpoint_requested': True,
+                    'request': envelope['request']})
+    if during_staging:
+        original = io.mirror
+        def mirror(*args):
+            original(*args)
+            io.files['mellum', envelope['stop_file']] = stop
+        io.mirror = mirror
+    else:
+        io.files['mellum', envelope['stop_file']] = stop
+        def unexpected_closure(*args):
+            raise AssertionError('stopped request must not resolve expensive closure')
+        io.dependency_closure = unexpected_closure
+    assert bridge.ProviderBridge(io, 'mellum', {'lfm'}).tick(envelope) is True
+    assert not any(e[0] in {'launch', 'term', 'commit'} for e in io.events)
+    if not during_staging:assert not io.events
+    assert io.receipt(request['request_id'])['phase'] == 'staging'
 
 
 def test_unowned_resource_and_result_escape_are_rejected():
